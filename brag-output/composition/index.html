@@ -1,0 +1,1567 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>InboxCA brag</title>
+    <script src="assets/js/gsap.min.js"></script>
+    <script src="assets/data/audio-data.js"></script>
+    <style>
+      @font-face {
+        font-family: "Plus Jakarta Sans";
+        font-weight: 500;
+        src: url("assets/fonts/plus-jakarta-sans-latin-500-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Plus Jakarta Sans";
+        font-weight: 700;
+        src: url("assets/fonts/plus-jakarta-sans-latin-700-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Plus Jakarta Sans";
+        font-weight: 800;
+        src: url("assets/fonts/plus-jakarta-sans-latin-800-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "IBM Plex Mono";
+        font-weight: 500;
+        src: url("assets/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+      }
+      :root {
+        --navy: #0b1f3a;
+        --blue: #1a4bb0;
+        --blue-deep: #153e94;
+        --tint: #c2d3f7;
+        --wash: #e8eefb;
+        --grey: #f2f5f9;
+        --line: #dfe5ee;
+        --slate: #51607a;
+        --green: #12905f;
+        --green-deep: #0b7a51;
+        --green-wash: #e6f4ee;
+        --white: #ffffff;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #0b1f3a;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: "Plus Jakarta Sans", sans-serif;
+        color: var(--white);
+      }
+      .mono {
+        font-family: "IBM Plex Mono", monospace;
+        font-weight: 500;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* background */
+      #bg {
+        position: absolute;
+        inset: 0;
+        background: var(--navy);
+        overflow: hidden;
+      }
+      #glow {
+        position: absolute;
+        left: -210px;
+        top: 330px;
+        width: 1500px;
+        height: 1500px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(26, 75, 176, 0.8) 0%, rgba(26, 75, 176, 0) 64%);
+      }
+      .rules {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 2112px;
+        background-image: repeating-linear-gradient(
+          to bottom,
+          rgba(194, 211, 247, 0) 0px,
+          rgba(194, 211, 247, 0) 94px,
+          rgba(194, 211, 247, 0.13) 94px,
+          rgba(194, 211, 247, 0.13) 96px
+        );
+      }
+      .margin-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 58px;
+        width: 2px;
+        background: rgba(194, 211, 247, 0.2);
+      }
+
+      /* shared */
+      .cap {
+        position: absolute;
+        left: 90px;
+        right: 90px;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+        line-height: 1.06;
+        color: var(--white);
+      }
+      .w {
+        display: inline-block;
+        white-space: pre;
+      }
+      .hl {
+        background: var(--blue);
+        border-radius: 18px;
+        padding: 0 18px 6px;
+        margin-left: -10px;
+      }
+      .sample {
+        position: absolute;
+        left: 90px;
+        top: 1584px;
+        font-size: 28px;
+        letter-spacing: 0.04em;
+        color: var(--tint);
+      }
+      .mark {
+        display: block;
+        overflow: visible;
+      }
+      .mark .tile {
+        fill: #f7f9fc;
+      }
+      .mark .tray {
+        fill: none;
+        stroke: var(--navy);
+        stroke-width: 10;
+        stroke-linecap: round;
+      }
+      .mark .tick {
+        fill: none;
+        stroke: var(--green);
+        stroke-width: 8.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 100;
+      }
+      .mark.dark .tile {
+        fill: var(--navy);
+      }
+      .mark.dark .tray {
+        stroke: #ffffff;
+      }
+
+      /* scene 1: hook */
+      #pov {
+        position: absolute;
+        left: 90px;
+        top: 196px;
+        display: inline-block;
+        padding: 14px 28px;
+        border-radius: 999px;
+        background: var(--blue);
+        font-size: 34px;
+        letter-spacing: 0.06em;
+        color: var(--white);
+      }
+      #cap1a,
+      #cap1b {
+        top: 306px;
+        font-size: 108px;
+      }
+      #pile {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1080px;
+        height: 1920px;
+        transform-origin: 540px 900px;
+      }
+      #mail {
+        position: absolute;
+        left: 70px;
+        top: 640px;
+        width: 940px;
+        height: 892px;
+        padding: 30px 40px 0;
+        border-radius: 44px;
+        background: var(--white);
+        box-shadow: 0 40px 90px rgba(2, 10, 26, 0.55);
+        color: var(--navy);
+        overflow: hidden;
+      }
+      .mail-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 104px;
+        border-bottom: 3px solid var(--line);
+      }
+      .mail-title {
+        font-size: 50px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+      .badge {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 26px;
+        border-radius: 999px;
+        background: var(--blue);
+        color: var(--white);
+        font-size: 36px;
+      }
+      .num {
+        position: relative;
+        display: block;
+        width: 3ch;
+        height: 1.25em;
+      }
+      .num span {
+        position: absolute;
+        right: 0;
+        top: 0;
+        line-height: 1.25;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 26px;
+        height: 124px;
+        border-bottom: 2px solid var(--line);
+      }
+      .row:last-child {
+        border-bottom: 0;
+      }
+      .av {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 78px;
+        height: 78px;
+        border-radius: 50%;
+        background: var(--wash);
+        color: var(--blue-deep);
+        font-size: 30px;
+        font-weight: 800;
+      }
+      .who {
+        flex: 1;
+        min-width: 0;
+      }
+      .who b {
+        display: block;
+        font-size: 35px;
+        font-weight: 700;
+        letter-spacing: -0.015em;
+        white-space: nowrap;
+      }
+      .who i {
+        display: block;
+        margin-top: 4px;
+        font-size: 30px;
+        font-style: normal;
+        font-weight: 500;
+        color: var(--slate);
+        white-space: nowrap;
+      }
+      .time {
+        flex: none;
+        font-size: 27px;
+        color: var(--slate);
+      }
+      .loose {
+        position: absolute;
+        left: 150px;
+        width: 800px;
+        height: 124px;
+        padding: 0 34px;
+        border: 0;
+        border-radius: 30px;
+        background: var(--white);
+        box-shadow: 0 24px 60px rgba(2, 10, 26, 0.5);
+        color: var(--navy);
+      }
+      #loose1 {
+        top: 840px;
+      }
+      #loose2 {
+        top: 1070px;
+        left: 110px;
+      }
+      #loose3 {
+        top: 1290px;
+        left: 170px;
+      }
+
+      /* scene 2: reveal */
+      #meet {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 430px;
+        text-align: center;
+        font-size: 92px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        color: var(--tint);
+      }
+      #mark2 {
+        position: absolute;
+        left: 314px;
+        top: 590px;
+        width: 480px;
+        height: 444px;
+      }
+      #word2 {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 1090px;
+        text-align: center;
+        font-size: 172px;
+        font-weight: 800;
+        letter-spacing: -0.05em;
+        line-height: 1.1;
+      }
+      #sub2 {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 1320px;
+        text-align: center;
+        font-size: 52px;
+        font-weight: 500;
+        color: var(--tint);
+      }
+
+      /* scene 3: flow */
+      #rail {
+        position: absolute;
+        left: 90px;
+        top: 190px;
+        display: flex;
+        align-items: center;
+        gap: 30px;
+      }
+      #stepnum {
+        position: relative;
+        width: 250px;
+        height: 50px;
+        font-size: 38px;
+        letter-spacing: 0.04em;
+        color: var(--tint);
+      }
+      #stepnum span {
+        position: absolute;
+        left: 0;
+        top: 0;
+        white-space: nowrap;
+      }
+      .segs {
+        display: flex;
+        gap: 12px;
+      }
+      .seg {
+        position: relative;
+        width: 100px;
+        height: 10px;
+        border-radius: 5px;
+        background: rgba(194, 211, 247, 0.28);
+        overflow: hidden;
+      }
+      .seg b {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: var(--white);
+        transform-origin: 0 50%;
+      }
+      .cap3 {
+        top: 290px;
+        font-size: 88px;
+      }
+      #win {
+        position: absolute;
+        left: 60px;
+        top: 660px;
+        width: 960px;
+        height: 880px;
+        border-radius: 46px;
+        background: var(--white);
+        box-shadow: 0 44px 100px rgba(2, 10, 26, 0.55);
+        color: var(--navy);
+        overflow: hidden;
+      }
+      .win-head {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        height: 110px;
+        padding: 0 44px;
+        border-bottom: 3px solid var(--line);
+        background: var(--grey);
+      }
+      .win-head .name {
+        flex: 1;
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+      }
+      .win-head .date {
+        font-size: 28px;
+        color: var(--slate);
+      }
+      .pane {
+        position: absolute;
+        left: 0;
+        top: 110px;
+        width: 960px;
+        height: 770px;
+        padding: 44px;
+      }
+      .em {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+      }
+      .em .av {
+        width: 92px;
+        height: 92px;
+        font-size: 34px;
+      }
+      .em b {
+        display: block;
+        font-size: 44px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .em i {
+        display: block;
+        margin-top: 4px;
+        font-size: 34px;
+        font-style: normal;
+        font-weight: 500;
+        color: var(--slate);
+      }
+      .em .who {
+        flex: 1;
+      }
+      .em .time {
+        font-size: 30px;
+      }
+      .attach {
+        display: inline-flex;
+        align-items: center;
+        gap: 16px;
+        margin: 40px 0 0 120px;
+        padding: 16px 28px;
+        border-radius: 18px;
+        background: var(--grey);
+        border: 2px solid var(--line);
+        font-size: 32px;
+        color: var(--navy);
+      }
+      .icon {
+        flex: none;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      #scan {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 960px;
+        height: 150px;
+        background: linear-gradient(
+          to bottom,
+          rgba(26, 75, 176, 0) 0%,
+          rgba(26, 75, 176, 0.22) 80%,
+          rgba(26, 75, 176, 0.75) 100%
+        );
+      }
+      .label {
+        margin-top: 76px;
+        font-size: 28px;
+        letter-spacing: 0.06em;
+        color: var(--slate);
+      }
+      .tags {
+        display: flex;
+        gap: 16px;
+        margin-top: 18px;
+      }
+      .tag {
+        display: block;
+        padding: 14px 26px;
+        border-radius: 16px;
+        background: var(--wash);
+        color: var(--blue-deep);
+        font-size: 34px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .done {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 70px;
+        padding: 18px 38px 18px 26px;
+        border-radius: 999px;
+        background: var(--green-deep);
+        color: var(--white);
+        font-size: 40px;
+        font-weight: 800;
+      }
+      .file {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        height: 150px;
+        padding: 0 30px;
+        border-radius: 24px;
+        background: var(--grey);
+        border: 2px solid var(--line);
+        color: var(--navy);
+      }
+      .file .names {
+        position: relative;
+        flex: 1;
+        height: 96px;
+      }
+      .file .names span {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+      #oldname {
+        top: 24px;
+        font-size: 36px;
+        color: var(--slate);
+        line-height: 48px;
+      }
+      #newname {
+        font-size: 31px;
+        line-height: 48px;
+        color: var(--navy);
+      }
+      .tree {
+        margin-top: 56px;
+      }
+      .fold {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        height: 104px;
+        padding: 0 22px;
+        border-radius: 20px;
+        font-size: 40px;
+        font-weight: 700;
+        letter-spacing: -0.015em;
+        color: var(--navy);
+      }
+      .fold .icon {
+        color: var(--blue);
+      }
+      #f2 {
+        margin-left: 60px;
+      }
+      #f3 {
+        position: relative;
+        margin-left: 120px;
+      }
+      #f3bg {
+        position: absolute;
+        inset: 0;
+        border-radius: 20px;
+        background: var(--green-wash);
+      }
+      #f3 .icon,
+      #f3 .ft,
+      #saved {
+        position: relative;
+      }
+      .ft {
+        flex: 1;
+      }
+      #saved {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 30px;
+        font-weight: 800;
+        color: var(--green-deep);
+      }
+      .drive {
+        position: absolute;
+        left: 44px;
+        bottom: 44px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        font-size: 34px;
+        font-weight: 700;
+        color: var(--slate);
+      }
+      #reply {
+        margin: 38px 0 0 60px;
+        padding: 30px 34px 34px;
+        border-radius: 30px;
+        background: var(--wash);
+        color: var(--navy);
+      }
+      #reply small {
+        display: block;
+        font-size: 27px;
+        letter-spacing: 0.05em;
+        color: var(--blue-deep);
+      }
+      #reply b {
+        display: block;
+        margin-top: 10px;
+        font-size: 37px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .rrow {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        margin-top: 24px;
+      }
+      #reply .attach {
+        margin: 0;
+        background: var(--white);
+        font-size: 30px;
+      }
+      .rtag {
+        display: block;
+        font-size: 29px;
+        font-weight: 800;
+        color: var(--blue-deep);
+        white-space: nowrap;
+      }
+      #autosent {
+        margin-top: 40px;
+      }
+      .ptitle {
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .psub {
+        margin-top: 10px;
+        font-size: 28px;
+        color: var(--slate);
+      }
+      .checks {
+        margin-top: 30px;
+      }
+      .chk {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        height: 110px;
+        border-bottom: 2px solid var(--line);
+        font-size: 40px;
+        font-weight: 700;
+        letter-spacing: -0.015em;
+      }
+      .chk .ft {
+        flex: 1;
+      }
+      .dot {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        background: var(--green);
+        color: var(--white);
+      }
+      .dot.open {
+        background: var(--white);
+        border: 4px solid var(--slate);
+      }
+      .pill {
+        display: block;
+        padding: 10px 24px;
+        border-radius: 999px;
+        font-size: 30px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .pill.ok {
+        background: var(--green-wash);
+        color: var(--green-deep);
+      }
+      .swap {
+        position: relative;
+        width: 290px;
+        height: 62px;
+      }
+      .swap .pill {
+        position: absolute;
+        right: 0;
+        top: 0;
+      }
+      #missing {
+        border: 3px solid var(--navy);
+        padding: 7px 21px;
+        color: var(--navy);
+      }
+      #sent {
+        background: var(--blue);
+        color: var(--white);
+      }
+      #bubble {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        margin-top: 34px;
+        padding: 26px 30px;
+        border-radius: 24px;
+        background: var(--wash);
+        color: var(--navy);
+      }
+      #bubble .icon {
+        color: var(--blue);
+      }
+      #bubble small {
+        display: block;
+        font-size: 27px;
+        color: var(--slate);
+      }
+      #bubble b {
+        display: block;
+        margin-top: 4px;
+        font-size: 36px;
+        font-weight: 800;
+        letter-spacing: -0.015em;
+      }
+      .ready {
+        margin-top: 10px;
+        font-size: 34px;
+        font-weight: 800;
+        color: var(--blue-deep);
+      }
+      .figs {
+        margin-top: 26px;
+      }
+      .fig {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 96px;
+        border-bottom: 2px solid var(--line);
+        font-size: 36px;
+        font-weight: 500;
+        color: var(--slate);
+      }
+      .fig span {
+        display: block;
+        font-size: 38px;
+        color: var(--navy);
+      }
+      .btn {
+        position: absolute;
+        left: 44px;
+        right: 44px;
+        bottom: 44px;
+        height: 120px;
+        border-radius: 30px;
+        background: var(--blue);
+        overflow: hidden;
+      }
+      .btn div {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        font-size: 46px;
+        font-weight: 800;
+        color: var(--white);
+      }
+      #btn-ok {
+        background: var(--green-deep);
+      }
+      #ripple {
+        position: absolute;
+        left: 356px;
+        top: -20px;
+        width: 160px;
+        height: 160px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.55);
+      }
+      #cursor {
+        position: absolute;
+        left: 470px;
+        top: 676px;
+        width: 64px;
+        height: 64px;
+      }
+
+      /* scene 4: payoff */
+      #s4 {
+        z-index: 5;
+      }
+      #blue {
+        position: absolute;
+        inset: 0;
+        background: var(--blue);
+        overflow: hidden;
+      }
+      #blue .rules {
+        background-image: repeating-linear-gradient(
+          to bottom,
+          rgba(255, 255, 255, 0) 0px,
+          rgba(255, 255, 255, 0) 94px,
+          rgba(255, 255, 255, 0.16) 94px,
+          rgba(255, 255, 255, 0.16) 96px
+        );
+      }
+      #blue .margin-line {
+        background: rgba(255, 255, 255, 0.24);
+      }
+      #lab4 {
+        position: absolute;
+        left: 90px;
+        top: 330px;
+        font-size: 36px;
+        letter-spacing: 0.1em;
+        color: var(--white);
+      }
+      #count4 {
+        position: absolute;
+        left: 90px;
+        top: 390px;
+        width: 480px;
+        height: 330px;
+        font-size: 264px;
+        letter-spacing: -0.04em;
+        color: var(--white);
+      }
+      #count4 span {
+        position: absolute;
+        left: 0;
+        top: 0;
+        line-height: 330px;
+      }
+      #zero-tick {
+        position: absolute;
+        left: 290px;
+        top: 468px;
+        width: 176px;
+        height: 176px;
+        border-radius: 50%;
+        background: var(--white);
+        display: grid;
+        place-items: center;
+        color: var(--green);
+      }
+      .brand {
+        position: absolute;
+        left: 82px;
+        font-size: 192px;
+        font-weight: 800;
+        letter-spacing: -0.05em;
+        line-height: 1;
+        transform-origin: 0 60%;
+      }
+      #b1 {
+        top: 900px;
+        color: var(--white);
+      }
+      #b2 {
+        top: 1094px;
+        color: var(--tint);
+      }
+
+      /* scene 5: outro */
+      #mark5 {
+        position: absolute;
+        left: 378px;
+        top: 470px;
+        width: 350px;
+        height: 324px;
+      }
+      #word5 {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 820px;
+        text-align: center;
+        font-size: 160px;
+        font-weight: 800;
+        letter-spacing: -0.05em;
+        line-height: 1.1;
+      }
+      .tag5 {
+        position: absolute;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 86px;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+        line-height: 1.1;
+      }
+      #t5a {
+        top: 1070px;
+      }
+      #t5b {
+        top: 1172px;
+        color: var(--tint);
+      }
+      #for5 {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 1340px;
+        text-align: center;
+        font-size: 30px;
+        letter-spacing: 0.1em;
+        color: var(--tint);
+      }
+      #by5 {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 1500px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        font-size: 36px;
+        font-weight: 500;
+        color: var(--tint);
+      }
+      #by5 img {
+        display: block;
+        width: 220px;
+        height: 63px;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="31.5"
+      data-width="1080"
+      data-height="1920"
+    >
+      <div id="bg">
+        <div id="glow"></div>
+        <div class="rules" id="rules-bg"></div>
+        <div class="margin-line"></div>
+      </div>
+
+      <!-- Scene 1: hook -->
+      <section id="s1" class="clip" data-start="0" data-duration="4.64" data-track-index="0">
+        <div id="pov" class="mono">POV: YOU RUN A CA FIRM</div>
+        <div id="cap1a" class="cap">
+          <span class="w">It's </span><span class="w">filing </span><span class="w">week.</span>
+        </div>
+        <div id="cap1b" class="cap">
+          <span class="w">And </span><span class="w">your </span><span class="w">inbox </span
+          ><span class="w">just </span><span class="w hl">blew up.</span>
+        </div>
+        <div id="pile">
+          <div id="mail">
+            <div class="mail-head">
+              <div class="mail-title">Inbox</div>
+              <div class="badge mono"><span class="num" id="count1"></span><span>unread</span></div>
+            </div>
+            <div class="row">
+              <div class="av">PT</div>
+              <div class="who"><b>Patel Textiles</b><i>Purchase bills for September</i></div>
+              <div class="time mono">09:12</div>
+            </div>
+            <div class="row">
+              <div class="av">RM</div>
+              <div class="who"><b>R. Mehta</b><i>Form 16 attached</i></div>
+              <div class="time mono">09:14</div>
+            </div>
+            <div class="row">
+              <div class="av">SS</div>
+              <div class="who"><b>Shah &amp; Sons</b><i>Bank statement, sending again</i></div>
+              <div class="time mono">09:15</div>
+            </div>
+            <div class="row">
+              <div class="av">AK</div>
+              <div class="who"><b>A. Kulkarni</b><i>Sir, what is still pending?</i></div>
+              <div class="time mono">09:17</div>
+            </div>
+            <div class="row">
+              <div class="av">NI</div>
+              <div class="who"><b>N. Iyer</b><i>GST notice received. Urgent</i></div>
+              <div class="time mono">09:18</div>
+            </div>
+            <div class="row">
+              <div class="av">DE</div>
+              <div class="who"><b>D'Souza Exports</b><i>Need my ITR copy today</i></div>
+              <div class="time mono">09:21</div>
+            </div>
+          </div>
+          <div class="loose row" id="loose1" data-layout-allow-overlap data-layout-allow-occlusion>
+            <div class="av" data-layout-allow-overlap>KJ</div>
+            <div class="who"><b data-layout-allow-overlap>K. Joshi</b><i data-layout-allow-overlap>Re: Re: Fwd: documents</i></div>
+            <div class="time mono" data-layout-allow-overlap>09:22</div>
+          </div>
+          <div class="loose row" id="loose2" data-layout-allow-overlap data-layout-allow-occlusion>
+            <div class="av" data-layout-allow-overlap>VS</div>
+            <div class="who"><b data-layout-allow-overlap>Verma Steel</b><i data-layout-allow-overlap>TDS query, please call</i></div>
+            <div class="time mono" data-layout-allow-overlap>09:22</div>
+          </div>
+          <div class="loose row" id="loose3" data-layout-allow-overlap data-layout-allow-occlusion>
+            <div class="av" data-layout-allow-overlap>MF</div>
+            <div class="who"><b data-layout-allow-overlap>M. Fernandes</b><i data-layout-allow-overlap>Any update?</i></div>
+            <div class="time mono" data-layout-allow-overlap>09:23</div>
+          </div>
+        </div>
+        <div class="sample mono" id="sample1">Illustration · sample data</div>
+      </section>
+
+      <!-- Scene 2: reveal -->
+      <section id="s2" class="clip" data-start="4.64" data-duration="3.15" data-track-index="0">
+        <div id="meet">Meet</div>
+        <div id="mark2">
+          <svg class="mark" viewBox="0 0 108 100" width="480" height="444">
+            <rect class="tile" x="5" y="5" width="90" height="90" rx="21" />
+            <path class="tray" d="M28 45V60a10 10 0 0 0 10 10H62a10 10 0 0 0 10-10V45" />
+            <path class="tick" id="tick2" pathLength="100" d="M100 18L40 41L52 57" />
+          </svg>
+        </div>
+        <div id="word2"><span class="w" id="w2a">Inbox</span><span class="w" id="w2b">CA</span></div>
+        <div id="sub2">AI back office for CA firms</div>
+      </section>
+
+      <!-- Scene 3: the flow -->
+      <section id="s3" class="clip" data-start="7.79" data-duration="16.39" data-track-index="0">
+        <div id="rail">
+          <div id="stepnum" class="mono">
+            <span id="sn1">01 / 05</span><span id="sn2">02 / 05</span><span id="sn3">03 / 05</span
+            ><span id="sn4">04 / 05</span><span id="sn5">05 / 05</span>
+          </div>
+          <div class="segs">
+            <div class="seg"><b id="sg1"></b></div>
+            <div class="seg"><b id="sg2"></b></div>
+            <div class="seg"><b id="sg3"></b></div>
+            <div class="seg"><b id="sg4"></b></div>
+            <div class="seg"><b id="sg5"></b></div>
+          </div>
+        </div>
+
+        <div id="cap3a" class="cap cap3">
+          <span class="w">Reads </span><span class="w">every </span><span class="w">client </span
+          ><span class="w hl">email.</span>
+        </div>
+        <div id="cap3b" class="cap cap3">
+          <span class="w">Files </span><span class="w">every </span><span class="w">paper </span
+          ><span class="w">in </span><span class="w">the </span><span class="w">right </span
+          ><span class="w hl">folder.</span>
+        </div>
+        <div id="cap3r" class="cap cap3">
+          <span class="w hl">Replies</span><span class="w"> to </span><span class="w">clients </span
+          ><span class="w">on </span><span class="w">its </span><span class="w">own.</span>
+        </div>
+        <div id="cap3c" class="cap cap3">
+          <span class="w">Reminds </span><span class="w">clients </span><span class="w">only </span
+          ><span class="w">for </span><span class="w">what's </span><span class="w hl">missing.</span>
+        </div>
+        <div id="cap3d" class="cap cap3">
+          <span class="w">Keeps </span><span class="w">forms </span><span class="w">ready </span
+          ><span class="w">for </span><span class="w">your </span><span class="w hl">approval.</span>
+        </div>
+
+        <div id="win">
+          <div class="win-head">
+            <svg class="mark dark" viewBox="0 0 108 100" width="65" height="60">
+              <rect class="tile" x="5" y="5" width="90" height="90" rx="21" />
+              <path class="tray" d="M28 45V60a10 10 0 0 0 10 10H62a10 10 0 0 0 10-10V45" />
+              <path class="tick" pathLength="100" d="M100 18L40 41L52 57" />
+            </svg>
+            <div class="name">InboxCA</div>
+            <div class="date mono">10 Oct 2026</div>
+          </div>
+
+          <!-- 01 reads -->
+          <div class="pane" id="pa">
+            <div class="em">
+              <div class="av">PT</div>
+              <div class="who"><b>Patel Textiles</b><i>Purchase bills for September</i></div>
+              <div class="time mono">09:12</div>
+            </div>
+            <div class="attach mono">
+              <svg class="icon" viewBox="0 0 24 24" width="36" height="36">
+                <path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />
+              </svg>
+              IMG_2291.pdf
+            </div>
+            <div class="label mono">INBOXCA FOUND</div>
+            <div class="tags">
+              <div class="tag" id="tg1">Patel Textiles</div>
+              <div class="tag" id="tg2">GST</div>
+              <div class="tag" id="tg3">Sep 2026</div>
+            </div>
+            <div class="done" id="sorted">
+              <svg class="icon" viewBox="0 0 24 24" width="44" height="44" style="stroke-width: 3.4">
+                <path d="M5 12.5l4.5 4.5L19 7.5" />
+              </svg>
+              Sorted
+            </div>
+            <div id="scan"></div>
+          </div>
+
+          <!-- 02 saves -->
+          <div class="pane" id="pb">
+            <div class="file" id="filecard">
+              <svg class="icon" viewBox="0 0 24 24" width="62" height="62" style="stroke-width: 2">
+                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                <path d="M14 3v5h5" />
+              </svg>
+              <div class="names mono">
+                <span id="oldname">IMG_2291.pdf</span>
+                <span id="newname">Patel Textiles - Purchase bills - Sep 2026 - 10 Oct 2026.pdf</span>
+              </div>
+            </div>
+            <div class="tree">
+              <div class="fold" id="f1">
+                <svg class="icon" viewBox="0 0 24 24" width="50" height="50">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                </svg>
+                <div class="ft">GST</div>
+              </div>
+              <div class="fold" id="f2">
+                <svg class="icon" viewBox="0 0 24 24" width="50" height="50">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                </svg>
+                <div class="ft mono">FY 2026-27</div>
+              </div>
+              <div class="fold" id="f3">
+                <div id="f3bg"></div>
+                <svg class="icon" viewBox="0 0 24 24" width="50" height="50">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                </svg>
+                <div class="ft">Patel Textiles</div>
+                <div id="saved">
+                  <svg class="icon" viewBox="0 0 24 24" width="38" height="38" style="stroke-width: 3.4">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                  Saved
+                </div>
+              </div>
+            </div>
+            <div class="drive" id="drive">
+              <svg class="icon" viewBox="0 0 24 24" width="46" height="46">
+                <path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10.5a3.75 3.75 0 0 1-.5 7.5z" />
+              </svg>
+              In your own OneDrive or Dropbox
+            </div>
+          </div>
+
+          <!-- 03 replies -->
+          <div class="pane" id="pr">
+            <div class="em">
+              <div class="av">DE</div>
+              <div class="who"><b>D'Souza Exports</b><i>Need my ITR copy today</i></div>
+              <div class="time mono">09:21</div>
+            </div>
+            <div id="reply">
+              <small class="mono">INBOXCA REPLIED · 09:22</small>
+              <b>Your ITR acknowledgement is attached.</b>
+              <div class="rrow">
+                <div class="attach mono">
+                  <svg class="icon" viewBox="0 0 24 24" width="36" height="36">
+                    <path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />
+                  </svg>
+                  ITR-V AY 2026-27.pdf
+                </div>
+                <div class="rtag">Routine paper</div>
+              </div>
+            </div>
+            <div class="done" id="autosent">
+              <svg class="icon" viewBox="0 0 24 24" width="44" height="44" style="stroke-width: 3.4">
+                <path d="M5 12.5l4.5 4.5L19 7.5" />
+              </svg>
+              Sent automatically
+            </div>
+          </div>
+
+          <!-- 04 reminds -->
+          <div class="pane" id="pc">
+            <div class="ptitle">Patel Textiles · GST · September</div>
+            <div class="psub mono">Due 20 Oct 2026</div>
+            <div class="checks">
+              <div class="chk" id="c1">
+                <div class="dot">
+                  <svg class="icon" viewBox="0 0 24 24" width="36" height="36" style="stroke-width: 3.6">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                </div>
+                <div class="ft">Sales register</div>
+                <div class="pill ok">Received</div>
+              </div>
+              <div class="chk" id="c2">
+                <div class="dot">
+                  <svg class="icon" viewBox="0 0 24 24" width="36" height="36" style="stroke-width: 3.6">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                </div>
+                <div class="ft">Purchase bills</div>
+                <div class="pill ok">Received</div>
+              </div>
+              <div class="chk" id="c3">
+                <div class="dot open"></div>
+                <div class="ft">Bank statement</div>
+                <div class="swap">
+                  <div class="pill" id="missing">Missing</div>
+                  <div class="pill" id="sent" data-layout-allow-overlap>Reminder sent</div>
+                </div>
+              </div>
+            </div>
+            <div id="bubble">
+              <svg class="icon" viewBox="0 0 24 24" width="60" height="60" style="stroke-width: 2">
+                <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                <path d="M3.5 7l8.5 6.5L20.5 7" />
+              </svg>
+              <div>
+                <small class="mono">To Patel Textiles · 10:42</small>
+                <b>Still needed: Bank statement</b>
+              </div>
+            </div>
+          </div>
+
+          <!-- 05 approves -->
+          <div class="pane" id="pd">
+            <div class="ptitle">GSTR-3B · September</div>
+            <div class="ready" id="ready">Ready for your approval</div>
+            <div class="figs">
+              <div class="fig" id="g1">Tax on sales<span class="mono">3,31,610</span></div>
+              <div class="fig" id="g2">Input tax credit<span class="mono">2,96,150</span></div>
+              <div class="fig" id="g3">Tax to pay<span class="mono">35,460</span></div>
+            </div>
+            <div class="btn" id="btn">
+              <div id="btn-go">Approve</div>
+              <div id="btn-ok" data-layout-allow-overlap>
+                <svg class="icon" viewBox="0 0 24 24" width="52" height="52" style="stroke-width: 3.4">
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+                Approved
+              </div>
+              <div id="ripple"></div>
+            </div>
+            <svg id="cursor" viewBox="0 0 28 34">
+              <path
+                d="M4 2v24l6.2-5.6 4.6 10.4 4-1.8-4.6-10.2H23z"
+                fill="#0b1f3a"
+                stroke="#ffffff"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+        <div class="sample mono" id="sample3">Illustration · sample data</div>
+      </section>
+
+      <!-- Scene 4: payoff -->
+      <section id="s4" class="clip" data-start="24.01" data-duration="3.4" data-track-index="1">
+        <div id="blue">
+          <div class="rules"></div>
+          <div class="margin-line"></div>
+          <div id="lab4" class="mono">INBOX · UNREAD</div>
+          <div id="count4" class="mono"></div>
+          <div id="zero-tick">
+            <svg class="icon" viewBox="0 0 24 24" width="112" height="112" style="stroke-width: 3.2">
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </div>
+          <div class="brand" id="b1">Nothing</div>
+          <div class="brand" id="b2">pending.</div>
+        </div>
+      </section>
+
+      <!-- Scene 5: outro -->
+      <section id="s5" class="clip" data-start="27.14" data-duration="4.36" data-track-index="0">
+        <div id="mark5">
+          <svg class="mark" viewBox="0 0 108 100" width="350" height="324">
+            <rect class="tile" x="5" y="5" width="90" height="90" rx="21" />
+            <path class="tray" d="M28 45V60a10 10 0 0 0 10 10H62a10 10 0 0 0 10-10V45" />
+            <path class="tick" id="tick5" pathLength="100" d="M100 18L40 41L52 57" />
+          </svg>
+        </div>
+        <div id="word5">InboxCA</div>
+        <div class="tag5" id="t5a">Less chasing.</div>
+        <div class="tag5" id="t5b">More doing.</div>
+        <div id="for5" class="mono">AI BACK OFFICE FOR INDIAN CA FIRMS</div>
+        <div id="by5">A product by <img src="assets/img/orelu-light.png" alt="Orelu" /></div>
+      </section>
+
+      <!-- audio: music bed, narration, effects -->
+      <audio id="bg-music" data-start="0" data-duration="31.5" data-track-index="10" data-volume="1" data-fade-out="1" data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:0.34},{&quot;t&quot;:0.5,&quot;v&quot;:0.34},{&quot;t&quot;:0.6,&quot;v&quot;:0.16},{&quot;t&quot;:3.45,&quot;v&quot;:0.16},{&quot;t&quot;:3.6,&quot;v&quot;:0.3},{&quot;t&quot;:4.85,&quot;v&quot;:0.3},{&quot;t&quot;:4.95,&quot;v&quot;:0.16},{&quot;t&quot;:6.35,&quot;v&quot;:0.16},{&quot;t&quot;:6.5,&quot;v&quot;:0.28},{&quot;t&quot;:7.9,&quot;v&quot;:0.28},{&quot;t&quot;:8.04,&quot;v&quot;:0.16},{&quot;t&quot;:9.9,&quot;v&quot;:0.16},{&quot;t&quot;:10.05,&quot;v&quot;:0.24},{&quot;t&quot;:11.05,&quot;v&quot;:0.24},{&quot;t&quot;:11.18,&quot;v&quot;:0.16},{&quot;t&quot;:13.55,&quot;v&quot;:0.16},{&quot;t&quot;:13.7,&quot;v&quot;:0.24},{&quot;t&quot;:14.32,&quot;v&quot;:0.24},{&quot;t&quot;:14.45,&quot;v&quot;:0.16},{&quot;t&quot;:16.3,&quot;v&quot;:0.16},{&quot;t&quot;:16.45,&quot;v&quot;:0.24},{&quot;t&quot;:17.6,&quot;v&quot;:0.24},{&quot;t&quot;:17.72,&quot;v&quot;:0.16},{&quot;t&quot;:20.15,&quot;v&quot;:0.16},{&quot;t&quot;:20.3,&quot;v&quot;:0.24},{&quot;t&quot;:20.86,&quot;v&quot;:0.24},{&quot;t&quot;:20.99,&quot;v&quot;:0.16},{&quot;t&quot;:23.12,&quot;v&quot;:0.16},{&quot;t&quot;:23.27,&quot;v&quot;:0.26},{&quot;t&quot;:23.92,&quot;v&quot;:0.26},{&quot;t&quot;:24.05,&quot;v&quot;:0.16},{&quot;t&quot;:25.2,&quot;v&quot;:0.16},{&quot;t&quot;:25.35,&quot;v&quot;:0.3},{&quot;t&quot;:27.37,&quot;v&quot;:0.3},{&quot;t&quot;:27.5,&quot;v&quot;:0.16},{&quot;t&quot;:30.42,&quot;v&quot;:0.16},{&quot;t&quot;:30.57,&quot;v&quot;:0.34},{&quot;t&quot;:31.5,&quot;v&quot;:0.34}]}]}" src="assets/music/happy-beats-business-moves-vol-10-by-ende-dot-app.mp3"></audio>
+
+      <audio id="vo1" data-start="0.6" data-duration="2.83" data-track-index="3" data-volume="1" src="assets/vo/l1.wav"></audio>
+      <audio id="vo2" data-start="4.95" data-duration="1.4" data-track-index="3" data-volume="1" src="assets/vo/l2.wav"></audio>
+      <audio id="vo3" data-start="8.04" data-duration="1.83" data-track-index="3" data-volume="1" src="assets/vo/l3.wav"></audio>
+      <audio id="vo4" data-start="11.18" data-duration="2.33" data-track-index="3" data-volume="1" src="assets/vo/l4.wav"></audio>
+      <audio id="vo5" data-start="14.45" data-duration="1.82" data-track-index="3" data-volume="1" src="assets/vo/l5.wav"></audio>
+      <audio id="vo6" data-start="17.72" data-duration="2.39" data-track-index="3" data-volume="1" src="assets/vo/l6.wav"></audio>
+      <audio id="vo7" data-start="20.99" data-duration="2.1" data-track-index="3" data-volume="1" src="assets/vo/l7.wav"></audio>
+      <audio id="vo8" data-start="24.05" data-duration="1.11" data-track-index="3" data-volume="1" src="assets/vo/l8.wav"></audio>
+      <audio id="vo9" data-start="27.5" data-duration="2.88" data-track-index="3" data-volume="1" src="assets/vo/l9.wav"></audio>
+
+      <audio id="sfx01" data-start="0.25" data-duration="0.1" data-track-index="11" data-volume="0.32" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx02" data-start="0.8" data-duration="0.19" data-track-index="12" data-volume="0.28" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="sfx03" data-start="1.35" data-duration="0.1" data-track-index="13" data-volume="0.28" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx04" data-start="1.88" data-duration="0.19" data-track-index="14" data-volume="0.28" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="sfx05" data-start="2.44" data-duration="0.1" data-track-index="15" data-volume="0.28" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx06" data-start="2.99" data-duration="0.19" data-track-index="16" data-volume="0.28" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="sfx07" data-start="3.22" data-duration="0.18" data-track-index="17" data-volume="0.35" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx08" data-start="4.18" data-duration="0.44" data-track-index="18" data-volume="0.4" src="assets/sfx/casino/card-slide-1.ogg"></audio>
+      <audio id="sfx09" data-start="4.62" data-duration="0.18" data-track-index="19" data-volume="0.7" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx10" data-start="9.63" data-duration="0.01" data-track-index="20" data-volume="0.55" src="assets/sfx/interface/click_003.ogg"></audio>
+      <audio id="sfx11" data-start="13.0" data-duration="0.19" data-track-index="21" data-volume="0.4" src="assets/sfx/interface/drop_002.ogg"></audio>
+      <audio id="sfx12" data-start="15.9" data-duration="0.1" data-track-index="22" data-volume="0.42" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx13" data-start="19.56" data-duration="0.1" data-track-index="23" data-volume="0.4" src="assets/sfx/interface/drop_001.ogg"></audio>
+      <audio id="sfx14" data-start="22.73" data-duration="0.05" data-track-index="24" data-volume="0.75" src="assets/sfx/ui/mouseclick1.ogg"></audio>
+      <audio id="sfx15" data-start="24.03" data-duration="0.54" data-track-index="25" data-volume="0.65" src="assets/sfx/impact/impactSoft_heavy_003.ogg"></audio>
+      <audio id="sfx16" data-start="25.17" data-duration="1.2" data-track-index="26" data-volume="0.32" src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+      <audio id="sfx17" data-start="27.26" data-duration="0.65" data-track-index="27" data-volume="0.45" src="assets/sfx/impact/impactBell_heavy_003.ogg"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const FPS = 30;
+
+      // word-by-word captions: each word lands just before it is spoken
+      function words(sel, times) {
+        gsap.utils.toArray(sel + " .w").forEach((el, i) => {
+          tl.fromTo(
+            el,
+            { opacity: 0, y: 36, scale: 0.9 },
+            { opacity: 1, y: 0, scale: 1, duration: 0.2, ease: "back.out(2)" },
+            times[i] - 0.05,
+          );
+        });
+      }
+      function leave(sel, t, d) {
+        tl.to(sel, { opacity: 0, y: -26, duration: d || 0.16, ease: "power2.in" }, t);
+      }
+      function pop(sel, t, vars) {
+        tl.fromTo(
+          sel,
+          Object.assign({ opacity: 0, y: 26, scale: 0.94 }, vars || {}),
+          { opacity: 1, x: 0, y: 0, scale: 1, rotation: 0, duration: 0.3, ease: "back.out(1.7)" },
+          t,
+        );
+      }
+      // counter built from stacked numbers switched frame by frame (seek-safe)
+      function counter(id, from, to, t0, t1, easeName) {
+        const box = document.getElementById(id);
+        const ease = gsap.parseEase(easeName);
+        const frames = Math.round((t1 - t0) * FPS);
+        const make = (v, shown) => {
+          const s = document.createElement("span");
+          s.textContent = String(v);
+          s.style.opacity = shown ? "1" : "0";
+          box.appendChild(s);
+          return s;
+        };
+        let prev = make(from, true);
+        let last = from;
+        for (let i = 1; i <= frames; i++) {
+          const v = Math.round(from + (to - from) * ease(i / frames));
+          if (v === last) continue;
+          const s = make(v, false);
+          const t = t0 + i / FPS;
+          tl.set(prev, { opacity: 0 }, t);
+          tl.set(s, { opacity: 1 }, t);
+          prev = s;
+          last = v;
+        }
+      }
+      function drawTick(sel, t) {
+        tl.fromTo(
+          sel,
+          { strokeDashoffset: 100, opacity: 0 },
+          { strokeDashoffset: 0, opacity: 1, duration: 0.42, ease: "power2.out" },
+          t,
+        );
+      }
+
+      // ambient: ledger lines drift, glow breathes with the bass of the music
+      tl.fromTo("#rules-bg", { y: 0 }, { y: -96, duration: 31.5, ease: "none" }, 0);
+      const bass = window.AUDIO_DATA.bass;
+      for (let f = 0; f < 945; f += 2) {
+        const b = bass[f] || 0;
+        tl.to(
+          "#glow",
+          { opacity: 0.34 + b * 0.6, scale: 1 + b * 0.16, duration: 2 / FPS - 0.004, ease: "none" },
+          f / FPS,
+        );
+      }
+
+      // ---------- Scene 1: hook (0 to 4.64) ----------
+      pop("#pov", 0.08, { y: -20 });
+      words("#cap1a", [0.6, 0.84, 1.1]);
+      leave("#cap1a", 1.7, 0.14);
+      words("#cap1b", [1.86, 1.98, 2.1, 2.44, 2.76]);
+      tl.fromTo("#mail", { opacity: 0, y: 90 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, 0);
+      // beat-grid: email rows land at 0.27, 0.82, 1.37, 1.90, 2.46, 3.01
+      [0.27, 0.82, 1.37, 1.9, 2.46, 3.01].forEach((t, i) => {
+        tl.fromTo(
+          "#mail .row:nth-of-type(" + (i + 2) + ")",
+          { x: 36, scale: 0.94 },
+          { x: 0, scale: 1, duration: 0.24, ease: "back.out(2)" },
+          t - 0.04,
+        );
+        tl.fromTo("#mail .row:nth-of-type(" + (i + 2) + ")", { opacity: 0 }, { opacity: 1, duration: 0.02, ease: "none" }, t - 0.04);
+      });
+      counter("count1", 12, 248, 0.27, 3.6, "power2.in");
+      tl.to("#mail", { keyframes: { x: [0, -5, 6, -8, 9, -10, 8, -6, 0] }, duration: 1.0, ease: "none" }, 2.6);
+      tl.fromTo("#loose1", { opacity: 0, y: -620, rotation: -16 }, { opacity: 1, y: 0, rotation: -5, duration: 0.26, ease: "power3.in" }, 3.0);
+      tl.fromTo("#loose2", { opacity: 0, y: -760, rotation: 15 }, { opacity: 1, y: 0, rotation: 4, duration: 0.26, ease: "power3.in" }, 3.16);
+      tl.fromTo("#loose3", { opacity: 0, y: -900, rotation: -12 }, { opacity: 1, y: 0, rotation: -3, duration: 0.26, ease: "power3.in" }, 3.32);
+      tl.fromTo("#sample1", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 0.3);
+      // swept away
+      leave("#cap1b", 4.18, 0.2);
+      leave("#pov", 4.18, 0.2);
+      tl.to("#sample1", { opacity: 0, duration: 0.2 }, 4.18);
+      tl.to("#pile", { scale: 0.06, opacity: 0, duration: 0.42, ease: "power3.in" }, 4.2);
+
+      // ---------- Scene 2: reveal (4.64 to 7.79) ----------
+      // beat-locked: 4.64s
+      tl.fromTo("#mark2", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.42, ease: "back.out(1.8)" }, 4.64);
+      drawTick("#tick2", 4.84);
+      tl.to("#mark2", { keyframes: { scale: [1, 1.06, 1] }, duration: 0.3, ease: "power1.inOut" }, 5.24);
+      pop("#meet", 4.92);
+      pop("#w2a", 5.24, { y: 60 });
+      pop("#w2b", 5.66, { y: 60 });
+      tl.fromTo("#sub2", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" }, 5.8);
+      ["#meet", "#mark2", "#word2", "#sub2"].forEach((s, i) => leave(s, 7.56 + i * 0.02, 0.18));
+
+      // ---------- Scene 3: the flow (7.79 to 24.01) ----------
+      const steps = [
+        { at: 7.79, end: 10.93, cap: "#cap3a", pane: "#pa", n: 1 },
+        { at: 10.93, end: 14.2, cap: "#cap3b", pane: "#pb", n: 2 },
+        { at: 14.2, end: 17.47, cap: "#cap3r", pane: "#pr", n: 3 },
+        { at: 17.47, end: 20.74, cap: "#cap3c", pane: "#pc", n: 4 },
+        { at: 20.74, end: 24.01, cap: "#cap3d", pane: "#pd", n: 5 },
+      ];
+      tl.fromTo("#rail", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.3, ease: "power2.out" }, 7.79);
+      tl.fromTo("#win", { opacity: 0, y: 160 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 7.79);
+      tl.fromTo("#sample3", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 8.1);
+      steps.forEach((s, i) => {
+        // beat-grid: steps change at 7.79, 10.93, 14.20, 17.47, 20.74
+        tl.fromTo("#sn" + s.n, { opacity: 0 }, { opacity: 1, duration: 0.1 }, s.at);
+        tl.fromTo("#sg" + s.n, { scaleX: 0 }, { scaleX: 1, duration: s.end - s.at, ease: "none" }, s.at);
+        tl.fromTo(s.pane, { opacity: 0, x: 70 }, { opacity: 1, x: 0, duration: 0.32, ease: "power3.out" }, s.at + (i ? 0.02 : 0.15));
+        if (i < steps.length - 1) {
+          tl.to("#sn" + s.n, { opacity: 0, duration: 0.1 }, s.end - 0.1);
+          tl.to(s.pane, { opacity: 0, x: -70, duration: 0.18, ease: "power2.in" }, s.end - 0.18);
+          leave(s.cap, s.end - 0.17, 0.15);
+        }
+      });
+
+      // 01 reads
+      words("#cap3a", [8.16, 8.46, 8.9, 9.22]);
+      tl.fromTo("#scan", { opacity: 0, y: -150 }, { opacity: 1, y: -60, duration: 0.12, ease: "none" }, 8.3);
+      tl.to("#scan", { y: 150, duration: 0.58, ease: "power1.inOut" }, 8.42);
+      tl.to("#scan", { opacity: 0, duration: 0.12, ease: "none" }, 8.92);
+      pop("#tg1", 9.0);
+      pop("#tg2", 9.18);
+      pop("#tg3", 9.36);
+      pop("#sorted", 9.62, { scale: 0.6 });
+
+      // 02 files
+      words("#cap3b", [11.18, 11.56, 11.94, 12.28, 12.56, 12.66, 12.86]);
+      tl.fromTo("#drive", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 11.28);
+      tl.to("#oldname", { opacity: 0, y: -18, duration: 0.16, ease: "power2.in" }, 11.82);
+      tl.fromTo("#newname", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.22, ease: "power2.out" }, 11.94);
+      tl.to("#filecard", { keyframes: { scale: [1, 1.03, 1] }, duration: 0.3, ease: "power1.inOut" }, 11.94);
+      pop("#f1", 12.28, { x: -30, y: 0 });
+      pop("#f2", 12.52, { x: -30, y: 0 });
+      pop("#f3", 12.76, { x: -30, y: 0 });
+      tl.fromTo("#f3bg", { opacity: 0 }, { opacity: 1, duration: 0.2 }, 12.98);
+      pop("#saved", 12.98, { scale: 0.6, y: 0 });
+
+      // 03 replies
+      words("#cap3r", [14.45, 14.95, 15.13, 15.47, 15.67, 15.81]);
+      tl.fromTo("#reply", { opacity: 0, x: 120 }, { opacity: 1, x: 0, duration: 0.34, ease: "power3.out" }, 14.9);
+      pop("#autosent", 15.88, { scale: 0.6 });
+
+      // 04 reminds
+      words("#cap3c", [17.72, 18.3, 18.62, 19.04, 19.28, 19.56]);
+      pop("#c1", 17.62, { x: 40, y: 0 });
+      pop("#c2", 17.84, { x: 40, y: 0 });
+      pop("#c3", 18.06, { x: 40, y: 0 });
+      tl.fromTo("#bubble", { opacity: 0, x: 120 }, { opacity: 1, x: 0, duration: 0.34, ease: "power3.out" }, 18.85);
+      tl.to("#missing", { opacity: 0, duration: 0.12 }, 19.52);
+      tl.fromTo("#sent", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.24, ease: "back.out(2)" }, 19.54);
+
+      // 05 approves
+      words("#cap3d", [21.15, 21.37, 21.75, 22.01, 22.29, 22.45]);
+      pop("#g1", 20.95, { x: 40, y: 0 });
+      pop("#g2", 21.15, { x: 40, y: 0 });
+      pop("#g3", 21.35, { x: 40, y: 0 });
+      tl.fromTo("#btn", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, 21.45);
+      tl.fromTo("#ready", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.26, ease: "power2.out" }, 21.72);
+      tl.fromTo("#cursor", { opacity: 0, x: 330, y: 190 }, { opacity: 1, x: 0, y: 0, duration: 0.55, ease: "power2.inOut" }, 22.1);
+      tl.to("#btn", { keyframes: { scale: [1, 0.95, 1] }, duration: 0.2, ease: "power1.inOut" }, 22.72);
+      tl.fromTo("#ripple", { opacity: 0.9, scale: 0.1 }, { opacity: 0, scale: 2.4, duration: 0.45, ease: "power2.out" }, 22.73);
+      tl.fromTo("#btn-ok", { opacity: 0 }, { opacity: 1, duration: 0.14, ease: "none" }, 22.82);
+      tl.to("#btn-go", { opacity: 0, duration: 0.1, ease: "none" }, 22.86);
+      tl.to("#cursor", { opacity: 0, duration: 0.2 }, 23.4);
+
+      // ---------- Scene 4: payoff (24.01 to 27.28) ----------
+      // beat-locked: 24.01s
+      tl.fromTo("#blue", { yPercent: 100 }, { yPercent: 0, duration: 0.16, ease: "power3.out" }, 23.95);
+      tl.fromTo("#b1", { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: 0.2, ease: "power4.out" }, 24.05);
+      tl.fromTo("#b2", { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: 0.2, ease: "power4.out" }, 24.46);
+      tl.fromTo("#lab4", { opacity: 0 }, { opacity: 1, duration: 0.2 }, 24.15);
+      counter("count4", 248, 0, 24.2, 25.15, "power2.out");
+      tl.fromTo("#count4", { opacity: 0 }, { opacity: 1, duration: 0.12 }, 24.15);
+      tl.fromTo("#zero-tick", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2.2)" }, 25.17);
+      tl.to("#blue", { yPercent: -100, duration: 0.24, ease: "power3.in" }, 27.04);
+
+      // ---------- Scene 5: outro (27.28 to 31.5) ----------
+      // beat-locked: 27.28s
+      tl.fromTo("#mark5", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)" }, 27.26);
+      drawTick("#tick5", 27.44);
+      pop("#word5", 27.47, { y: 50 });
+      tl.fromTo("#for5", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 28.05);
+      pop("#t5a", 28.87, { y: 40 });
+      pop("#t5b", 29.61, { y: 40 });
+      tl.fromTo("#by5", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, 30.1);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

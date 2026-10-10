@@ -1,0 +1,17 @@
+.DS_Store
+node_modules/
+.next/
+.open-next/
+.wrangler/
+out/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.render/
+.dist/
+.claude/settings.local.json
+brag-output/brag-vscode-preview.mp4
+brag-output/composition/snapshots/
