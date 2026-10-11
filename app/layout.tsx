@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { SITE_PUBLIC, siteDescription } from "@/src/lib/site";
+import Script from "next/script";
+import { SITE_PUBLIC, analyticsToken, siteDescription } from "@/src/lib/site";
 import "./globals.css";
 
 const words = localFont({
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
         url: "/brand/social.png",
         width: 1200,
         height: 630,
-        alt: "InboxCA. Less chasing. More doing.",
+        alt: "InboxCA. Every client email, read, filed and answered.",
       },
     ],
   },
@@ -49,7 +50,17 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${words.variable} ${figures.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        {analyticsToken && (
+          // Cloudflare Web Analytics: counts visits without cookies. Off until a token is set.
+          <Script
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            strategy="afterInteractive"
+            data-cf-beacon={JSON.stringify({ token: analyticsToken })}
+          />
+        )}
+      </body>
     </html>
   );
 }

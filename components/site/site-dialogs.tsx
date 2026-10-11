@@ -1,34 +1,26 @@
 "use client";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-const DialogContents = dynamic(() => import("./dialog-contents"));
+
+const InviteDialog = dynamic(() => import("./dialog-contents"));
+
+// Any element with data-open-dialog="invite" opens the invite form.
+// Without JavaScript the same links jump to the contact details at #invite.
 export function SiteDialogs() {
-  const [dialog, setDialog] = useState<{
-    kind: "invite" | "film";
-    trigger: HTMLElement;
-  } | null>(null);
+  const [trigger, setTrigger] = useState<HTMLElement | null>(null);
   useEffect(() => {
     const click = (event: MouseEvent) => {
-      const trigger = (event.target as Element).closest<HTMLElement>(
+      const el = (event.target as Element).closest<HTMLElement>(
         "[data-open-dialog]",
       );
-      if (!trigger) return;
+      if (!el) return;
       event.preventDefault();
-      setDialog({
-        kind: trigger.dataset.openDialog as "invite" | "film",
-        trigger,
-      });
+      setTrigger(el);
     };
     document.addEventListener("click", click);
     return () => document.removeEventListener("click", click);
   }, []);
   return (
-    dialog && (
-      <DialogContents
-        kind={dialog.kind}
-        trigger={dialog.trigger}
-        close={() => setDialog(null)}
-      />
-    )
+    trigger && <InviteDialog trigger={trigger} close={() => setTrigger(null)} />
   );
 }

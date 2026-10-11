@@ -26,8 +26,29 @@ export function inviteMailto(input: Invite) {
   const body = `Hello Orelu,\n\nI would like to ask for an InboxCA invite.\n\nName: ${values.name}\nFirm name: ${values.firm}\nCity: ${values.city}\nEmail: ${values.email}\nNumber of clients: ${values.clients}`;
   return `mailto:${contactEmail}?subject=${encodeURIComponent("Ask for an InboxCA invite")}&body=${encodeURIComponent(body)}`;
 }
+// Posts the request to the invite endpoint. True only when the server says it was saved.
+// Sent as plain text so that a simple receiver (a Google Apps Script, a small worker)
+// needs no extra permission step in the browser.
+export async function sendInvite(
+  endpoint: string,
+  input: Invite,
+  send: typeof fetch = fetch,
+) {
+  const values = inviteSchema.parse(input);
+  try {
+    const response = await send(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ ...values, sentAt: new Date().toISOString() }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+// With no endpoint set, this opens a draft in the visitor's own email app.
+// Never claim delivery here: the visitor must send the email themselves.
 export function submitInvite(input: Invite) {
-  // Connect the real invite endpoint here later. Until then this opens a draft only.
-  // Never claim delivery: the visitor must send the email in their own app.
   window.location.href = inviteMailto(input);
 }

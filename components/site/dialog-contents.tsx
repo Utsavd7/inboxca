@@ -6,12 +6,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { InviteForm } from "./invite-form";
-export default function DialogContents({
-  kind,
+
+export default function InviteDialog({
   trigger,
   close,
 }: {
-  kind: "invite" | "film";
   trigger: HTMLElement;
   close: () => void;
 }) {
@@ -22,40 +21,12 @@ export default function DialogContents({
         if (!open) close();
       }}
     >
-      <DialogContent
-        className={kind === "film" ? "film-dialog" : "invite-dialog"}
-        finalFocus={() => trigger}
-      >
-        <DialogTitle>
-          {kind === "film" ? "Meet InboxCA" : "Ask for an invite"}
-        </DialogTitle>
+      <DialogContent finalFocus={() => trigger}>
+        <DialogTitle>Ask for an invite</DialogTitle>
         <DialogDescription>
-          {kind === "film"
-            ? "Illustration · sample data"
-            : "In development. First firms by invitation."}
+          InboxCA is in development. The first firms join by invitation.
         </DialogDescription>
-        {kind === "film" ? (
-          <video
-            controls
-            playsInline
-            preload="metadata"
-            poster="/media/inboxca-film.webp"
-            width="540"
-            height="960"
-            aria-label="InboxCA product film"
-          >
-            <source src="/media/inboxca-film.mp4" type="video/mp4" />
-            <track
-              default
-              kind="captions"
-              src="/media/inboxca-film.vtt"
-              srcLang="en"
-              label="English"
-            />
-          </video>
-        ) : (
-          <InviteForm />
-        )}
+        <InviteForm />
       </DialogContent>
     </Dialog>
   );

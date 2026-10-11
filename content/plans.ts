@@ -1,12 +1,18 @@
-// All pricing, allowances and plan-related figures live here. Deck page 8.
-// Estimates only. Set false to hide the section AND its navigation link.
+// All pricing, allowances and plan figures live here. Estimates only, before GST.
+// Keep every number in step with the business plan. No price is typed in a component.
+// Set false to hide the section AND its navigation link.
 export const SHOW_PLANS = true;
+
+// `clients` is a guide for a mixed practice, never a limit: clients are unlimited.
+// `maxReturns` and `people` are what the plan includes; they drive the estimate.
 export const plans = [
   {
     name: "Solo",
-    clients: "70 clients",
+    clients: 70,
     monthly: 1499,
     yearly: 16499,
+    maxReturns: 800,
+    people: 1,
     returns: "800",
     storage: "4 GB",
     ai: "4,000",
@@ -14,61 +20,97 @@ export const plans = [
   },
   {
     name: "Growth",
-    clients: "170 clients",
-    monthly: 3799,
-    yearly: 41799,
+    clients: 170,
+    monthly: 3499,
+    yearly: 38499,
+    maxReturns: 2000,
+    people: 10,
     returns: "2,000",
     storage: "10 GB",
     ai: "10,000",
-    team: "up to 10",
+    team: "Up to 10",
   },
   {
     name: "Scale",
-    clients: "340 clients",
-    monthly: 7649,
-    yearly: 84149,
+    clients: 340,
+    monthly: 7499,
+    yearly: 82499,
+    maxReturns: 4000,
+    people: 20,
     returns: "4,000",
     storage: "20 GB",
     ai: "24,000",
-    team: "up to 20",
+    team: "Up to 20",
   },
   {
     name: "Enterprise",
-    clients: "700 clients",
-    monthly: 15299,
-    yearly: 168299,
+    clients: 700,
+    monthly: 15499,
+    yearly: 170499,
+    maxReturns: 8000,
+    people: 40,
     returns: "8,000",
     storage: "40 GB",
     ai: "60,000",
-    team: "up to 40",
-  },
-  {
-    name: "Custom (yours)",
-    clients: "800 to 1,000 clients",
-    monthly: 19499,
-    yearly: 214499,
-    returns: "about 10,300",
-    storage: "about 54 GB",
-    ai: "81,000",
-    team: "up to 40",
-    estimate: true,
+    team: "Up to 40",
   },
 ] as const;
-export const planIntro =
-  "Every plan: unlimited clients and every feature. Pay yearly: 1 month free. Money back within 14 days on your first plan payment.";
-export const planNotes = [
-  "Custom plan, for firms bigger than Enterprise: enter your clients, kind of practice and team size on our website and see your price at once.",
-  "InboxCA storage: InboxCA's own working space for your client list, records and the numbers it reads from your files. A new file waits there only until its folder is made in your drive, and that wait is not counted.",
-  "Your files: they stay in your own OneDrive or Dropbox. Clients are unlimited; “suits about” is only a guide.",
-  "Later: if your firm grows, your dashboard shows the new plan and price. One time setup: about ₹5,080. Extra a month: one more person ₹399, more AI ₹399.",
+
+// Returns a client in a year, by kind of practice (working values from the business plan).
+// The mixed rate is 8,000 ÷ 700, so it always agrees with the "suits about" figures.
+export const practices = [
+  ["salaried", "Mostly salaried", 2],
+  ["mixed", "Mixed", 8000 / 700],
+  ["gst", "Mostly GST and audit", 18],
 ] as const;
+
+// One more person on a fixed plan, a month.
+export const extraPerson = 399;
+
+// The Custom plan, for firms above Enterprise on work or people. One size step is
+// 200 returns a year. Slabs work like income tax slabs: [up to, rate a month].
+export const custom = {
+  base: 15499,
+  floor: 16499,
+  ending: 499,
+  returnsPerStep: 200,
+  includedSteps: 40,
+  includedPeople: 40,
+  workSlabs: [
+    [80, 305],
+    [Infinity, 275],
+  ],
+  peopleSlabs: [
+    [60, 399],
+    [100, 349],
+    [Infinity, 299],
+  ],
+  aiCredits: 60000,
+  aiPerStep: 1500,
+  yearlyMonths: 11,
+  yearlyAdd: 10,
+} as const;
+
 export const planRows = [
-  ["Suits about", "clients"],
-  ["Price a month", "monthly"],
-  ["Price a year (1 month free)", "yearly"],
-  ["Returns you file in a year", "returns"],
-  ["InboxCA storage in a year", "storage"],
-  ["AI allowance a month (credits)", "ai"],
-  ["Your whole team, you included", "team"],
+  ["Returns a year", "returns"],
+  ["Storage a year", "storage"],
+  ["AI credits a month", "ai"],
+  ["Team, you included", "team"],
 ] as const;
+
+export const planNotes = [
+  [
+    "Your files are not counted",
+    "They stay in your own drive. InboxCA storage is only its working space for your client list and the figures it reads.",
+  ],
+  [
+    "Money back in 14 days",
+    "Cancel within 14 days of your first plan payment and get it back in full.",
+  ],
+  [
+    "Grow when you need to",
+    "One more person is ₹399 a month. More AI is ₹399 a month. A one time setup fee is shown before you pay.",
+  ],
+] as const;
+
 export const rupees = (value: number) => `₹${value.toLocaleString("en-IN")}`;

@@ -33,33 +33,13 @@ try {
         path: join(output, `screenshots/${width}-${motion}-top.png`),
       });
       await page
-        .locator(".lazy-story")
+        .locator("#control")
         .evaluate((el) =>
           el.scrollIntoView({ block: "start", behavior: "instant" }),
         );
-      await page.waitForSelector("[data-step='2']", { timeout: 10000 });
-      await page
-        .locator("[data-step='2']")
-        .evaluate((el) =>
-          el.scrollIntoView({ block: "center", behavior: "instant" }),
-        );
-      if (width > 900)
-        await page.waitForFunction(
-          () =>
-            document
-              .querySelector(".story-rail")
-              ?.textContent?.includes("03 / 05"),
-          null,
-          { timeout: 10000 },
-        );
-      await page.evaluate(
-        () =>
-          new Promise((resolve) =>
-            requestAnimationFrame(() => requestAnimationFrame(resolve)),
-          ),
-      );
+      await page.waitForTimeout(900);
       await page.screenshot({
-        path: join(output, `screenshots/${width}-${motion}-story.png`),
+        path: join(output, `screenshots/${width}-${motion}-control.png`),
         animations: "disabled",
       });
       await page.locator("#invite").scrollIntoViewIfNeeded();

@@ -1,17 +1,20 @@
 "use client";
 import { useState, useId } from "react";
-import { Mail } from "lucide-react";
+import { Check, Mail, Send } from "lucide-react";
 import type { Invite } from "@/src/lib/submit-invite";
 import { clientRanges } from "@/content/site";
-import { contactEmail } from "@/src/lib/site";
+import { contactEmail, inviteEndpoint } from "@/src/lib/site";
 export function InviteForm() {
   const id = useId();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState<string | null>(null);
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">(
+    "idle",
+  );
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const { inviteSchema, submitInvite, inviteMailto } =
+    const { inviteSchema, submitInvite, inviteMailto, sendInvite } =
       await import("@/src/lib/submit-invite");
     const parsed = inviteSchema.safeParse(
       Object.fromEntries(new FormData(form)),
@@ -30,9 +33,29 @@ export function InviteForm() {
       return;
     }
     setErrors({});
+    if (inviteEndpoint) {
+      // "Sent" is shown only when the server confirms it. If it does not, the
+      // visitor is offered the email draft so the request is not lost.
+      setState("sending");
+      const saved = await sendInvite(inviteEndpoint, parsed.data);
+      setState(saved ? "sent" : "failed");
+      if (!saved) setDraft(inviteMailto(parsed.data));
+      return;
+    }
     setDraft(inviteMailto(parsed.data));
     submitInvite(parsed.data);
   }
+  if (state === "sent")
+    return (
+      <div className="invite-done" role="status">
+        <span className="invite-tick">
+          <Check size={22} strokeWidth={3} aria-hidden />
+        </span>
+        <p>
+          <strong>We have your request.</strong> We will reply to you by email.
+        </p>
+      </div>
+    );
   const fields: {
     key: keyof Invite;
     label: string;
@@ -108,15 +131,31 @@ export function InviteForm() {
           </p>
         )}
       </div>
-      <button className="action" type="submit">
-        <Mail size={19} aria-hidden="true" />
-        Open email draft
-      </button>
-      <p className="form-note">
-        This opens your email app with your answers. You still need to send the
-        email.
-      </p>
-      {draft && (
+      {inviteEndpoint ? (
+        <button className="btn" type="submit" disabled={state === "sending"}>
+          <Send size={18} aria-hidden="true" />
+          {state === "sending" ? "Sending" : "Send request"}
+        </button>
+      ) : (
+        <>
+          <button className="btn" type="submit">
+            <Mail size={19} aria-hidden="true" />
+            Open email draft
+          </button>
+          <p className="form-note">
+            This opens your email app with your answers. You still need to send
+            the email.
+          </p>
+        </>
+      )}
+      {state === "failed" && draft && (
+        <p role="alert" className="draft-note">
+          Your request did not go through. <a href={draft}>Send it by email</a>{" "}
+          instead, or write to{" "}
+          <a href={`mailto:${contactEmail}`}>{contactEmail}</a>.
+        </p>
+      )}
+      {state === "idle" && draft && (
         <p role="status" className="draft-note">
           No email has been sent by this page.{" "}
           <a href={draft}>Open the draft again</a>, or email{" "}
