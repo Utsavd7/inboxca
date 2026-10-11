@@ -1,6 +1,23 @@
 import { facts, controls, future, setup } from "@/content/site";
 import Image from "next/image";
-import { ArrowUpRight, Play, Check, FolderLock, Mail, Monitor, ShieldCheck, Undo2, Eye, SlidersHorizontal, FileCheck2, CalendarDays, Bell, Sunrise, ListChecks, Fingerprint, RefreshCw } from "lucide-react";
+import {
+  ArrowUpRight,
+  Play,
+  Check,
+  FolderLock,
+  Mail,
+  Monitor,
+  ShieldCheck,
+  Undo2,
+  Eye,
+  SlidersHorizontal,
+  FileCheck2,
+  CalendarDays,
+  Bell,
+  Sunrise,
+  ListChecks,
+  Fingerprint,
+} from "lucide-react";
 import { Header } from "@/components/site/header";
 import { HeroMock } from "@/components/site/hero-mock";
 import { SiteDialogs } from "@/components/site/site-dialogs";
@@ -9,48 +26,562 @@ import { Questions } from "@/components/site/questions";
 import { InviteForm } from "@/components/site/invite-form";
 import { PageMotion } from "@/components/site/page-motion";
 import { Logo } from "@/components/site/logo";
-import { plans, planRows, planIntro, planNotes, rupees, SHOW_PLANS } from "@/content/plans";
+import {
+  plans,
+  planRows,
+  planIntro,
+  planNotes,
+  rupees,
+  SHOW_PLANS,
+} from "@/content/plans";
 import { contactEmail, SITE_PUBLIC, siteDescription } from "@/src/lib/site";
 import orelu from "@/public/brand/orelu.png";
-const controlIcons = [FolderLock, Check, ShieldCheck, Monitor, Eye, Undo2, Mail, SlidersHorizontal];
-const futureIcons = [Fingerprint, ListChecks, Sunrise, FileCheck2, ListChecks, Bell, CalendarDays];
+const controlIcons = [
+  FolderLock,
+  Check,
+  ShieldCheck,
+  Monitor,
+  Eye,
+  Undo2,
+  Mail,
+  SlidersHorizontal,
+];
+const futureIcons = [
+  Fingerprint,
+  ListChecks,
+  Sunrise,
+  FileCheck2,
+  ListChecks,
+  Bell,
+  CalendarDays,
+];
 export const dynamic = "force-static";
 
+function Figures({ text }: { text: string }) {
+  return text.split(/((?:₹\s*)?\d[\d,.]*)/g).map((part, i) => /\d/.test(part) ? <span className="mono" key={i}>{part}</span> : part);
+}
+
 export default function Home() {
-  return <><a className="skip-link" href="#main-content">Skip to main content</a><Header /><main id="main-content" tabIndex={-1}>
-    <section id="top" className="hero ledger"><div className="hero-inner wrap">
-      <div className="hero-copy"><p className="eyebrow mono">For Indian CA firms</p><h1><span className="headline-line">Less <span className="marker">chasing</span></span><span className="headline-line">for your CA firm.</span><span className="headline-line hero-more">More doing.</span></h1>
-      <p className="hero-description">InboxCA is an AI back office that works from your firm’s email: it reads every client email, files every paper in the right folder, replies to clients and reminds them only for what is missing.</p>
-      <div className="hero-actions"><a className="action light-action" href="#invite" data-open-dialog="invite" aria-haspopup="dialog">Ask for an invite<ArrowUpRight size={19} aria-hidden /></a><button className="film-button" data-open-dialog="film" aria-haspopup="dialog"><span className="play-circle"><Play size={16} fill="currentColor" aria-hidden /></span>Watch the 30 second film</button></div>
-      <p className="development mono">In development. First firms by invitation.</p>
-      <div className="maker"><span>A product by</span><Image src={orelu} alt="Orelu" width={88} height={25} sizes="88px" /></div></div>
-      <HeroMock />
-    </div><div className="hero-base wrap"><span className="mono">Your email. Your drive. Your approval.</span><a href="#how-it-works">See how it works <span aria-hidden>↓</span></a></div></section>
+  return (
+    <>
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
+      <Header />
+      <main id="main-content" tabIndex={-1}>
+        <section id="top" className="hero ledger">
+          <div className="hero-inner wrap">
+            <div className="hero-copy">
+              <p className="eyebrow mono">For Indian CA firms</p>
+              <h1>
+                <span className="headline-line">
+                  Less <span className="marker">chasing</span>
+                </span>{" "}
+                <span className="headline-line">for your CA firm.</span>{" "}
+                <span className="headline-line hero-more">More doing.</span>
+              </h1>
+              <p className="hero-description">
+                InboxCA is an AI back office that works from your firm’s email:
+                it reads every client email, files every paper in the right
+                folder, replies to clients and reminds them only for what is
+                missing.
+              </p>
+              <div className="hero-actions">
+                <a
+                  className="action light-action"
+                  href="#invite"
+                  data-open-dialog="invite"
+                  aria-haspopup="dialog"
+                >
+                  Ask for an invite
+                  <ArrowUpRight size={19} aria-hidden />
+                </a>
+                <button
+                  className="film-button"
+                  data-open-dialog="film"
+                  aria-haspopup="dialog"
+                >
+                  <span className="play-circle">
+                    <Play size={16} fill="currentColor" aria-hidden />
+                  </span>
+                  <span>Watch the <span className="mono">30</span> second film</span>
+                </button>
+              </div>
+              <p className="development mono">
+                In development. First firms by invitation.
+              </p>
+              <div className="maker">
+                <span>A product by</span>
+                <Image
+                  src={orelu}
+                  alt="Orelu"
+                  width={88}
+                  height={25}
+                  sizes="88px"
+                />
+              </div>
+            </div>
+            <HeroMock />
+          </div>
+          <div className="hero-base wrap">
+            <span className="mono">Your email. Your drive. Your approval.</span>
+            <a href="#how-it-works">
+              See how it works <span aria-hidden>↓</span>
+            </a>
+          </div>
+        </section>
 
-    <section className="section facts-section"><div className="wrap"><div className="section-heading" data-reveal><p className="eyebrow mono">Where the hours go</p><h2>Where a firm’s time<br className="desktop-break" /> goes today.</h2></div>
-      <div className="facts-grid">{facts.map(fact => <article className="fact" key={fact.text} data-reveal data-spotlight><a className="fact-number mono" href={fact.source} aria-label={`${fact.figure}${fact.suffix}. Source: ${fact.label}`}><span data-count={fact.figure}>{fact.figure}</span>{fact.suffix}</a><p>{fact.text}</p><div className="fact-with"><span className="mono">With InboxCA</span><p>{fact.with}</p></div></article>)}</div>
-      <p className="footnote">* From surveys published by other practice software companies: Canopy (October <span className="mono">2022</span>, <span className="mono">150</span> US accountants; and its <span className="mono">2024</span> practice management report) and Karbon (<span className="mono">2026</span>, its own customers). All are from outside India. InboxCA’s own time savings have not been measured yet.</p>
-    </div></section>
+        <section className="section facts-section">
+          <div className="wrap">
+            <div className="section-heading" data-reveal>
+              <p className="eyebrow mono">Where the hours go</p>
+              <h2>
+                Where a firm’s time
+                <br className="desktop-break" /> goes today.
+              </h2>
+            </div>
+            <div className="facts-grid">
+              {facts.map((fact) => (
+                <article
+                  className="fact"
+                  key={fact.text}
+                  data-reveal
+                  data-spotlight
+                >
+                  <a
+                    className="fact-number mono"
+                    href={fact.source}
+                    aria-label={`${fact.figure}${fact.suffix}. Source: ${fact.label}`}
+                  >
+                    <span data-count={fact.figure}>{fact.figure}</span>
+                    {fact.suffix}
+                  </a>
+                  <p>{fact.text}</p>
+                  <div className="fact-with">
+                    <span className="mono">With InboxCA</span>
+                    <p>{fact.with}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <p className="footnote">
+              * From surveys published by other practice software companies:
+              Canopy (October <span className="mono">2022</span>,{" "}
+              <span className="mono">150</span> US accountants; and its{" "}
+              <span className="mono">2024</span> practice management report) and
+              Karbon (<span className="mono">2026</span>, its own customers).
+              All are from outside India. InboxCA’s own time savings have not
+              been measured yet.
+            </p>
+          </div>
+        </section>
 
-    <section id="how-it-works" className="section story-section"><div className="wrap"><div className="section-heading" data-reveal><p className="eyebrow mono">Day to day</p><h2>How it works<br />for your firm.</h2><p>Sorting, saving and typing happen on their own. Your team checks, approves and files.</p></div><LazyStory /></div></section>
+        <section id="how-it-works" className="section story-section">
+          <div className="wrap">
+            <div className="section-heading" data-reveal>
+              <p className="eyebrow mono">Day to day</p>
+              <h2>
+                How it works
+                <br />
+                for your firm.
+              </h2>
+              <p>
+                Sorting, saving and typing happen on their own. Your team
+                checks, approves and files.
+              </p>
+            </div>
+            <LazyStory />
+          </div>
+        </section>
 
-    <section className="section client-section"><div className="wrap two-col"><div data-reveal><p className="eyebrow mono">What your clients see</p><h2>Your clients hear<br />from your firm<br />by email.</h2><div className="client-points"><article><h3>From your own email address</h3><p>Every message goes from your firm’s own email. You can see it in your Sent folder.</p></article><article><h3>Clients can simply reply</h3><p>Simple requests are answered at once. Private papers wait for one OK from your team. Anything unusual goes to your team.</p></article><article><h3>Your team replies by email</h3><p>InboxCA tells you when a reply is needed. You read and reply in your own email. InboxCA keeps no copy.</p></article></div></div>
-      <figure className="email-figure" data-reveal><div className="email-window"><div className="email-window-head"><Mail size={22} aria-hidden /><span>Your firm’s email</span></div><div className="email-thread"><div className="email-meta mono">From: D’Souza Exports</div><h3>Please send last year’s ITR acknowledgement.</h3><div className="email-reply"><span className="email-meta mono">From your firm’s email</span><p>Here is your ITR acknowledgement for FY <span className="mono">2025/26</span>, as a password protected PDF.</p><div className="email-attachment"><FileCheck2 size={20} aria-hidden /><span>ITR acknowledgement.pdf</span></div><span className="sent-chip mono"><Check size={15} aria-hidden />Reply sent</span></div></div></div><figcaption className="sample mono">Illustration · sample data</figcaption></figure>
-    </div></section>
+        <section className="section client-section">
+          <div className="wrap two-col">
+            <div data-reveal>
+              <p className="eyebrow mono">What your clients see</p>
+              <h2>
+                Your clients hear
+                <br />
+                from your firm
+                <br />
+                by email.
+              </h2>
+              <div className="client-points">
+                <article>
+                  <h3>From your own email address</h3>
+                  <p>
+                    Every message goes from your firm’s own email. You can see
+                    it in your Sent folder.
+                  </p>
+                </article>
+                <article>
+                  <h3>Clients can simply reply</h3>
+                  <p>
+                    Simple requests are answered at once. Private papers wait
+                    for one OK from your team. Anything unusual goes to your
+                    team.
+                  </p>
+                </article>
+                <article>
+                  <h3>Your team replies by email</h3>
+                  <p>
+                    InboxCA tells you when a reply is needed. You read and reply
+                    in your own email. InboxCA keeps no copy.
+                  </p>
+                </article>
+              </div>
+            </div>
+            <figure className="email-figure" data-reveal>
+              <div className="email-window">
+                <div className="email-window-head">
+                  <Mail size={22} aria-hidden />
+                  <span>Your firm’s email</span>
+                </div>
+                <div className="email-thread">
+                  <div className="email-meta mono">From: Sample client</div>
+                  <h3>Please send last year’s ITR acknowledgement.</h3>
+                  <div className="email-reply">
+                    <span className="email-meta mono">
+                      From your firm’s email
+                    </span>
+                    <p>
+                      Here is your ITR acknowledgement for FY{" "}
+                      <span className="mono">2025/26</span>, as a password
+                      protected PDF.
+                    </p>
+                    <div className="email-attachment">
+                      <FileCheck2 size={20} aria-hidden />
+                      <span>ITR acknowledgement.pdf</span>
+                    </div>
+                    <span className="sent-chip mono">
+                      <Check size={15} aria-hidden />
+                      Reply sent
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <figcaption className="sample mono">
+                Illustration · sample data
+              </figcaption>
+            </figure>
+          </div>
+        </section>
 
-    <section className="section dashboard-section"><div className="wrap"><div className="section-heading" data-reveal><p className="eyebrow mono">What you see</p><h2>Your whole firm on one screen,<br className="desktop-break" /> every morning.</h2></div><figure data-reveal className="dashboard-figure"><div className="dashboard"><div className="dashboard-top"><Logo /><span className="mono">10 Oct 2026</span></div><div className="dashboard-body"><div className="dashboard-title"><h3>Dashboard</h3><span className="mono">Your firm</span></div><div className="dashboard-stats">{[[18,"Due this week"],[3,"Overdue"],[42,"Documents pending"],[9,"Forms to approve"],[4,"Needs team reply"],[6,"Notices open"]].map(([n,text]) => <div key={text}><span className="mono">{n}</span><p>{text}</p></div>)}</div><div className="deadline-strip"><CalendarDays aria-hidden size={20} /><p>Next deadline: <span className="mono">GSTR-3B</span> for September · <span className="mono">20 Oct</span> · <span className="mono">14</span> clients still to file</p></div><h4>Needs your attention</h4><div className="attention-grid">{[["Patel Textiles","GSTR-1 overdue by 2 days","Needs your team"],["D’Souza Exports","Form 16 still pending","Still missing"],["Patel Textiles","Notice reply due in 3 days","Needs your team"],["D’Souza Exports","GSTR-1 ready for your approval","Ready to check"]].map(([name,text,tag]) => <div className="attention-row" key={text}><span className="attention-dot" /><div><b>{name}</b><p className="mono">{text}</p></div><span className="attention-tag mono">{tag}</span></div>)}</div></div></div><figcaption className="sample mono">Illustration · sample data</figcaption></figure></div></section>
+        <section className="section dashboard-section">
+          <div className="wrap">
+            <div className="section-heading" data-reveal>
+              <p className="eyebrow mono">What you see</p>
+              <h2>
+                Your whole firm on one screen,
+                <br className="desktop-break" /> every morning.
+              </h2>
+            </div>
+            <figure data-reveal className="dashboard-figure">
+              <div className="dashboard">
+                <div className="dashboard-top">
+                  <Logo />
+                  <span className="mono">10 Oct 2026</span>
+                </div>
+                <div className="dashboard-body">
+                  <div className="dashboard-title">
+                    <h3>Dashboard</h3>
+                    <span className="mono">Your firm</span>
+                  </div>
+                  <div className="dashboard-stats">
+                    {[
+                      [18, "Due this week"],
+                      [3, "Overdue"],
+                      [42, "Documents pending"],
+                      [9, "Forms to approve"],
+                      [4, "Needs team reply"],
+                      [6, "Notices open"],
+                    ].map(([n, text]) => (
+                      <div key={text}>
+                        <span className="mono">{n}</span>
+                        <p>{text}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="deadline-strip">
+                    <CalendarDays aria-hidden size={20} />
+                    <p>
+                      Next deadline: <span className="mono">GSTR-3B</span> for
+                      September · <span className="mono">20 Oct 2026</span> ·{" "}
+                      <span className="mono">14</span> clients still to file
+                    </p>
+                  </div>
+                  <h4>Needs your attention</h4>
+                  <div className="attention-grid">
+                    {[
+                      [
+                        "Sample client 01",
+                        "GSTR-1 overdue by 2 days",
+                        "Needs your team",
+                      ],
+                      [
+                        "Sample client 02",
+                        "Form 16 still pending",
+                        "Still missing",
+                      ],
+                      [
+                        "Sample client 03",
+                        "Notice reply due in 3 days",
+                        "Needs your team",
+                      ],
+                      [
+                        "Sample client 04",
+                        "GSTR-1 ready for your approval",
+                        "Ready to check",
+                      ],
+                    ].map(([name, text, tag]) => (
+                      <div className="attention-row" key={text}>
+                        <span className="attention-dot" />
+                        <div>
+                          <b><Figures text={name} /></b>
+                          <p className="mono">{text}</p>
+                        </div>
+                        <span className="attention-tag mono">{tag}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <figcaption className="sample mono">
+                Illustration · sample data
+              </figcaption>
+            </figure>
+          </div>
+        </section>
 
-    <section id="control" className="section control-section ledger"><div className="wrap"><div className="section-heading" data-reveal><p className="eyebrow mono">Peace of mind</p><h2>You stay<br />in control.</h2></div><div className="control-grid">{controls.map(([title,body],i) => { const Icon = controlIcons[i];return <article key={title} className="control-card" data-reveal data-spotlight><Icon aria-hidden size={25} /><h3>{title}</h3><p>{body}</p></article>; })}</div></div></section>
+        <section id="control" className="section control-section ledger">
+          <div className="wrap">
+            <div className="section-heading" data-reveal>
+              <p className="eyebrow mono">Peace of mind</p>
+              <h2>
+                You stay
+                <br />
+                in control.
+              </h2>
+            </div>
+            <div className="control-grid">
+              {controls.map(([title, body], i) => {
+                const Icon = controlIcons[i];
+                return (
+                  <article
+                    key={title}
+                    className="control-card"
+                    data-reveal
+                    data-spotlight
+                  >
+                    <Icon aria-hidden size={25} />
+                    <h3>{title}</h3>
+                    <p><Figures text={body} /></p>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
 
-    {SHOW_PLANS && <section id="plans" className="section plans-section"><div className="wrap"><div className="section-heading" data-reveal><p className="eyebrow mono">Plans · estimates · before GST</p><h2>Plans side by side.</h2><p className="plan-intro">{planIntro}</p><p className="mono planned-note">Planned for launch. InboxCA is in development.</p></div><div className="plans-scroll" role="region" aria-label="Plan estimates, scroll horizontally to see all plans" tabIndex={0}><table><caption className="sr-only">Estimated InboxCA plans before GST. Custom is a sample estimate.</caption><thead><tr><th scope="col">Every plan.<br />Every feature.</th>{plans.map(plan => <th key={plan.name} scope="col">{plan.name}</th>)}</tr></thead><tbody>{planRows.map(([label,key]) => <tr key={key}><th scope="row">{label}</th>{plans.map(plan => <td className="mono" key={plan.name}>{key === "monthly" || key === "yearly" ? <>{key === "monthly" && "estimate" in plan ? "about " : ""}{rupees(plan[key])}</> : plan[key]}</td>)}</tr>)}</tbody></table></div><div className="plan-notes">{planNotes.map(note => <p key={note}>{note}</p>)}</div></div></section>}
+        {SHOW_PLANS && (
+          <section id="plans" className="section plans-section">
+            <div className="wrap">
+              <div className="section-heading" data-reveal>
+                <p className="eyebrow mono">Plans · estimates · before GST</p>
+                <h2>Plans side by side.</h2>
+                <p className="plan-intro"><Figures text={planIntro} /></p>
+                <p className="mono planned-note">
+                  Planned for launch. InboxCA is in development.
+                </p>
+              </div>
+              <div
+                className="plans-scroll"
+                role="region"
+                aria-label="Plan estimates, scroll horizontally to see all plans"
+                tabIndex={0}
+              >
+                <table>
+                  <caption className="sr-only">
+                    Estimated InboxCA plans before GST. Custom is a sample
+                    estimate.
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">
+                        Every plan.
+                        <br />
+                        Every feature.
+                      </th>
+                      {plans.map((plan) => (
+                        <th key={plan.name} scope="col">
+                          {plan.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {planRows.map(([label, key]) => (
+                      <tr key={key}>
+                        <th scope="row">{label}</th>
+                        {plans.map((plan) => (
+                          <td className="mono" key={plan.name}>
+                            {key === "monthly" || key === "yearly" ? (
+                              <>
+                                {key === "monthly" && "estimate" in plan
+                                  ? "about "
+                                  : ""}
+                                {rupees(plan[key])}
+                              </>
+                            ) : (
+                              plan[key]
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="plan-notes">
+                {planNotes.map((note) => (
+                  <p key={note}><Figures text={note} /></p>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
-    <section id="coming-next" className="section future-section"><div className="wrap"><div className="section-heading" data-reveal><p className="eyebrow mono">After launch</p><h2>What we plan<br />to add next.</h2></div><div className="future-list">{future.map(([title,body],i) => {const Icon=futureIcons[i];return <article key={title} data-reveal><Icon aria-hidden size={24} /><h3>{title}</h3><p>{body}</p></article>;})}</div><div className="future-notes" data-reveal><p><strong>No passwords:</strong> all of this works from your firm’s email and your drive. InboxCA never asks for a tax portal password or OTP.</p><p><strong>Timing:</strong> these are planned for after launch. They are not in the first version; we will tell you as each one is ready.</p></div></div></section>
+        <section id="coming-next" className="section future-section">
+          <div className="wrap">
+            <div className="section-heading" data-reveal>
+              <p className="eyebrow mono">After launch</p>
+              <h2>
+                What we plan
+                <br />
+                to add next.
+              </h2>
+            </div>
+            <div className="future-list">
+              {future.map(([title, body], i) => {
+                const Icon = futureIcons[i];
+                return (
+                  <article key={title} data-reveal>
+                    <Icon aria-hidden size={24} />
+                    <h3>{title}</h3>
+                    <p><Figures text={body} /></p>
+                  </article>
+                );
+              })}
+            </div>
+            <div className="future-notes" data-reveal>
+              <p>
+                <strong>No passwords:</strong> all of this works from your
+                firm’s email and your drive. InboxCA never asks for a tax portal
+                password or OTP.
+              </p>
+              <p>
+                <strong>Timing:</strong> these are planned for after launch.
+                They are not in the first version; we will tell you as each one
+                is ready.
+              </p>
+            </div>
+          </div>
+        </section>
 
-    <section className="section setup-section"><div className="wrap two-col"><div className="setup-heading" data-reveal><p className="eyebrow mono">Getting started</p><h2>Set up online,<br />yourself, at<br />your own pace.</h2><p className="planned-note mono">Planned for launch.</p><RefreshCw className="setup-symbol" size={72} aria-hidden /></div><ol className="setup-path">{setup.map(([title,body],i) => <li key={title} data-reveal><span className="path-number mono">{i+1}</span><div><h3>{title}</h3><p>{body}</p></div></li>)}</ol></div></section>
+        <section className="section setup-section">
+          <div className="wrap two-col">
+            <div className="setup-heading" data-reveal>
+              <p className="eyebrow mono">Getting started</p>
+              <h2>
+                Set up online,
+                <br />
+                yourself, at
+                <br />
+                your own pace.
+              </h2>
+              <p className="planned-note mono">Planned for launch.</p>
+            </div>
+            <ol className="setup-path">
+              {setup.map(([title, body], i) => (
+                <li key={title} data-reveal>
+                  <span className="path-number mono">{i + 1}</span>
+                  <div>
+                    <h3>{title}</h3>
+                    <p><Figures text={body} /></p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
 
-    <section id="questions" className="section faq-section"><div className="wrap two-col"><div data-reveal><p className="eyebrow mono">Questions</p><h2>Before you<br />ask for an invite.</h2></div><Questions /></div></section>
+        <section id="questions" className="section faq-section">
+          <div className="wrap two-col">
+            <div data-reveal>
+              <p className="eyebrow mono">Questions</p>
+              <h2>
+                Before you
+                <br />
+                ask for an invite.
+              </h2>
+            </div>
+            <Questions />
+          </div>
+        </section>
 
-    <section id="invite" className="section closing-section ledger"><div className="wrap closing-grid"><div data-reveal><p className="eyebrow mono">InboxCA, a product by Orelu</p><h2>Less chasing.<br /><span>More doing.</span></h2><p className="closing-description">In development. The first firms join by invitation.</p><div className="founders"><p>Utsav Doshi<span className="mono">Founder · CEO &amp; CTO</span></p><p>Ria Chheda<span className="mono">Co founder · CMO</span></p></div></div><div className="invite-panel" data-reveal><h3>Ask for an invite</h3><p>Tell us about your firm.</p><InviteForm /></div></div></section>
-  </main><footer><div className="wrap footer-inner"><span>InboxCA, a product by Orelu</span><a href={`mailto:${contactEmail}`}>{contactEmail}</a></div></footer><PageMotion /><SiteDialogs />
-  {SITE_PUBLIC && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "SoftwareApplication", name: "InboxCA", description: siteDescription, applicationCategory: "BusinessApplication", operatingSystem: "Web", creator: { "@type": "Organization", name: "Orelu" } }).replace(/</g, "\\u003c") }} />}</>;
+        <section id="invite" className="section closing-section ledger">
+          <div className="wrap closing-grid">
+            <div data-reveal>
+              <p className="eyebrow mono">InboxCA, a product by Orelu</p>
+              <h2>
+                Less chasing.
+                <br />
+                <span>More doing.</span>
+              </h2>
+              <p className="closing-description">
+                In development. The first firms join by invitation.
+              </p>
+              <div className="founders">
+                <p>
+                  Utsav Doshi
+                  <span className="mono">Founder · CEO &amp; CTO</span>
+                </p>
+                <p>
+                  Ria Chheda<span className="mono">Co founder · CMO</span>
+                </p>
+              </div>
+            </div>
+            <div className="invite-panel" data-reveal>
+              <h3>Ask for an invite</h3>
+              <p>Tell us about your firm.</p>
+              <InviteForm />
+            </div>
+          </div>
+        </section>
+      </main>
+      <footer>
+        <div className="wrap footer-inner">
+          <span>InboxCA, a product by Orelu</span>
+          <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+        </div>
+      </footer>
+      <PageMotion />
+      <SiteDialogs />
+      {SITE_PUBLIC && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              name: "InboxCA",
+              description: siteDescription,
+              applicationCategory: "BusinessApplication",
+              operatingSystem: "Web",
+              creator: { "@type": "Organization", name: "Orelu" },
+            }).replace(/</g, "\\u003c"),
+          }}
+        />
+      )}
+    </>
+  );
 }

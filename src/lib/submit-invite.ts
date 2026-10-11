@@ -2,10 +2,22 @@ import { z } from "zod";
 import { contactEmail } from "./site";
 import { clientRanges } from "@/content/site";
 export const inviteSchema = z.object({
-  name: z.string().trim().min(2, "Enter your name.").max(100, "Keep your name under 100 characters."),
-  firm: z.string().trim().min(2, "Enter your firm name.").max(150, "Keep your firm name under 150 characters."),
-  city: z.string().trim().min(2, "Enter your city.").max(100, "Keep your city under 100 characters."),
-  email: z.email("Enter a valid email address.").max(254),
+  name: z
+    .string()
+    .trim()
+    .min(2, "Enter your name.")
+    .max(100, "Use a shorter name."),
+  firm: z
+    .string()
+    .trim()
+    .min(2, "Enter your firm name.")
+    .max(150, "Use a shorter firm name."),
+  city: z
+    .string()
+    .trim()
+    .min(2, "Enter your city.")
+    .max(100, "Use a shorter city name."),
+  email: z.email("Enter a valid email address.").max(254, "Use a shorter email address."),
   clients: z.enum(clientRanges, { error: "Choose a rough client range." }),
 });
 export type Invite = z.infer<typeof inviteSchema>;
