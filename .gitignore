@@ -15,3 +15,13 @@ coverage/
 .claude/settings.local.json
 brag-output/brag-vscode-preview.mp4
 brag-output/composition/snapshots/
+
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Browser review exports stay outside the source tree.
+reports/
+
+# Local graphify code map; rebuilt on demand.
+graphify-out/
