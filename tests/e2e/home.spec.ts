@@ -114,8 +114,11 @@ test("every plan price ends in 499 and the estimate follows the answers", async 
   await expect(plans.locator(".plan-custom")).toHaveClass(/is-fit/);
   await expect(quote).toContainText("Custom");
   await expect(quote).toContainText("₹19,499");
-  await quote.getByRole("button", { name: /Yearly/ }).click();
+  // The yearly saving is shown as a real figure: 12 monthly payments less the yearly one.
+  await expect(quote).toContainText("Pay yearly and save ₹19,489");
+  await quote.getByRole("button", { name: /Pay yearly and save/ }).click();
   await expect(quote).toContainText("₹2,14,499");
+  await expect(quote).toContainText("You save ₹19,489 a year.");
   await expect(prices).toHaveText([
     "₹16,499",
     "₹38,499",
@@ -150,6 +153,47 @@ test("the Custom formula matches the business plan and always ends in 499", () =
     expect(price.monthly).toBeGreaterThanOrEqual(last);
     last = price.monthly;
   }
+});
+
+test("the cost section multiplies out the visitor's own numbers", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const today = page.locator("#today");
+  await expect(today.locator(".quote")).toContainText("936");
+  await today.getByLabel(/How many people handle/).fill("5");
+  await today.getByLabel(/Hours a week each one spends/).fill("10");
+  // 5 people x 10 hours x 52 weeks, and that many hours at 8 hours a day.
+  await expect(today.locator(".quote")).toContainText("2,600");
+  await expect(today.locator(".quote")).toContainText("50 hours every week");
+  await expect(today.locator(".quote")).toContainText("325 working days");
+  await expect(today.locator(".quote")).toContainText(
+    "will be measured with the first firms",
+  );
+});
+
+test("the money back line sits beside the invite buttons", async ({ page }) => {
+  await page.goto("/");
+  const line = "14 day money back when you join";
+  await expect(page.locator(".hero").getByText(line)).toBeVisible();
+  await expect(page.locator("#today").getByText(line)).toBeVisible();
+  await expect(page.locator("#invite").getByText(line)).toBeVisible();
+});
+
+test("on a phone the invite button follows the scroll", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/", { waitUntil: "networkidle" });
+  const bar = page.locator(".sticky-invite");
+  await expect(bar).toHaveCount(0);
+  await page.locator("#control").scrollIntoViewIfNeeded();
+  await expect(bar).toBeVisible();
+  await expect(bar).toContainText("14 day money back when you join");
+  await bar.getByRole("link", { name: "Ask for an invite" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.locator("#invite").scrollIntoViewIfNeeded();
+  await expect(bar).toHaveCount(0);
 });
 
 test("questions open one at a time with the keyboard", async ({ page }) => {

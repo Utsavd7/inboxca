@@ -24,7 +24,8 @@ export default function InviteDialog({
       <DialogContent finalFocus={() => trigger}>
         <DialogTitle>Ask for an invite</DialogTitle>
         <DialogDescription>
-          InboxCA is in development. The first firms join by invitation.
+          InboxCA is in development. The first firms join by invitation, with a
+          14 day money back when you join.
         </DialogDescription>
         <InviteForm />
       </DialogContent>

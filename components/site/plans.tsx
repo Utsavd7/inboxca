@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useId, useRef, useState } from "react";
-import { animate, AnimatePresence, motion } from "motion/react";
+import { useId, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { Minus, Plus } from "lucide-react";
 import { custom, planRows, plans, practices, rupees } from "@/content/plans";
 import { estimate, type Practice } from "@/src/lib/estimate";
-import { useReduced } from "./use-reduced";
+import { Rolling } from "./rolling";
 
 const spring = { type: "spring", duration: 0.55, bounce: 0.16 } as const;
 const number = (value: number) => value.toLocaleString("en-IN");
@@ -16,24 +16,9 @@ const toClients = (position: number) =>
 const toPosition = (clients: number) =>
   Math.round(1000 * Math.sqrt(Math.min(clients, SLIDER_MAX) / SLIDER_MAX));
 
-// The figure rolls to its new value instead of jumping.
-function Price({ value }: { value: number }) {
-  const reduced = useReduced();
-  const [shown, setShown] = useState(value);
-  const from = useRef(value);
-  useEffect(() => {
-    const controls = animate(from.current, value, {
-      duration: reduced ? 0 : 0.6,
-      ease: [0.23, 1, 0.32, 1],
-      onUpdate: (next) => {
-        from.current = next;
-        setShown(Math.round(next));
-      },
-    });
-    return () => controls.stop();
-  }, [value, reduced]);
-  return <span className="num">{rupees(shown)}</span>;
-}
+const Price = ({ value }: { value: number }) => (
+  <Rolling value={value} format={rupees} />
+);
 
 function FitTag() {
   return (
@@ -63,6 +48,7 @@ export function Plans() {
 
   const name = result.custom ? "Custom" : plans[fit].name;
   const price = yearly ? result.yearly : result.monthly;
+  const saving = result.monthly * 12 - result.yearly;
   const returns = number(Math.round(result.returns / 10) * 10);
 
   return (
@@ -199,7 +185,7 @@ export function Plans() {
             {(
               [
                 [false, "Monthly"],
-                [true, "Yearly, 1 month free"],
+                [true, "Yearly"],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -215,10 +201,26 @@ export function Plans() {
                     transition={spring}
                   />
                 )}
-                <span>{label}</span>
+                <span>
+                  {label}
+                  {value && <em className="free">1 month free</em>}
+                </span>
               </button>
             ))}
           </div>
+          {/* The saving is the real difference: twelve monthly payments against one yearly one. */}
+          <p className="quote-save">
+            {yearly ? (
+              <>
+                You save <span className="num">{rupees(saving)}</span> a year.
+              </>
+            ) : (
+              <button type="button" onClick={() => setYearly(true)}>
+                Pay yearly and save{" "}
+                <span className="num">{rupees(saving)}</span>
+              </button>
+            )}
+          </p>
           <p className="sr-only" aria-live="polite">
             {name} fits your firm: {rupees(price)} {per}.
           </p>

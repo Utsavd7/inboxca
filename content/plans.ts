@@ -109,7 +109,7 @@ export const planNotes = [
   ],
   [
     "Grow when you need to",
-    "One more person is ₹399 a month. More AI is ₹399 a month. A one time setup fee is shown before you pay.",
+    "One more person in your team is ₹399 a month. More AI is ₹399 a month. A one time setup fee is shown before you pay.",
   ],
 ] as const;
 

@@ -76,6 +76,10 @@ export const questions = [
   ],
 ] as const;
 
+// Shown beside every invite button. From the business plan: the first plan payment
+// comes back in full if the firm cancels within 14 days.
+export const guarantee = "14 day money back when you join";
+
 // The two people behind Orelu, with the titles they use.
 export const makers = [
   ["Utsav Doshi", "Founder, CEO and CTO"],

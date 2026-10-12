@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
+  BadgeCheck,
   History,
   KeyRound,
   LockKeyhole,
@@ -9,10 +10,11 @@ import {
   Plus,
   ShieldCheck,
 } from "lucide-react";
-import { makers, questions, worksWith } from "@/content/site";
+import { guarantee, makers, questions, worksWith } from "@/content/site";
 import { planNotes, SHOW_PLANS } from "@/content/plans";
 import { contactEmail } from "@/src/lib/site";
 import { Control } from "@/components/site/control";
+import { Cost } from "@/components/site/cost";
 import { Demo } from "@/components/site/demo";
 import { DrawnMark } from "@/components/site/drawn-mark";
 import { Footer } from "@/components/site/footer";
@@ -20,6 +22,7 @@ import { Nav } from "@/components/site/nav";
 import { Plans } from "@/components/site/plans";
 import { MotionRoot, Reveal } from "@/components/site/reveal";
 import { SiteDialogs } from "@/components/site/site-dialogs";
+import { StickyInvite } from "@/components/site/sticky-invite";
 
 // The four promises a CA asks about first. Details are on the security policy page.
 const trust = [
@@ -81,9 +84,14 @@ export default function Home() {
               </a>
             </div>
             <p className="hero-trust">
-              <ShieldCheck size={18} aria-hidden />
-              Your emails stay in your mailbox. Your files stay in your own
-              drive.
+              <span>
+                <BadgeCheck size={18} aria-hidden />
+                {guarantee}
+              </span>
+              <span>
+                <ShieldCheck size={18} aria-hidden />
+                Your emails and files stay with you
+              </span>
             </p>
             <div className="demo-anchor" id="how-it-works">
               <h2 className="sr-only">How it works</h2>
@@ -112,6 +120,21 @@ export default function Home() {
                 ))}
               </ul>
             ))}
+          </div>
+        </section>
+
+        <section className="band band-grey" id="today">
+          <div className="wrap">
+            <Reveal className="band-head">
+              <h2>What does the chasing cost you today?</h2>
+              <p className="band-lead">
+                Put in your own numbers. This is your firm&apos;s time, worked
+                out from what you enter.
+              </p>
+            </Reveal>
+            <Reveal delay={0.1}>
+              <Cost />
+            </Reveal>
           </div>
         </section>
 
@@ -207,6 +230,7 @@ export default function Home() {
                 doing.
               </p>
               <InviteLink className="btn btn-light" />
+              <p className="guarantee closing-guarantee">{guarantee}</p>
               <p className="closing-mail">
                 Or write to{" "}
                 <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
@@ -235,6 +259,7 @@ export default function Home() {
         </section>
       </main>
       <Footer />
+      <StickyInvite />
       <SiteDialogs />
     </MotionRoot>
   );
