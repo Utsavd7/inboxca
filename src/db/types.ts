@@ -112,7 +112,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "cancel_jobs":
+            "accept_invite":
+{ Args: { "target_firm": string }; Returns: boolean
+                           },
+"cancel_jobs":
 { Args: { "below_version"?: number,"p_entity_id": string,"p_entity_type": string }; Returns: number
                            },
 "claim_jobs":
@@ -139,8 +142,16 @@ isOneToOne: false
 "finish_job":
 { Args: { "error_code"?: string,"job_id": number,"outcome": string,"retry_at"?: string }; Returns: boolean
                            },
+"firm_people":
+{ Args: { "target_firm": string }; Returns: {
+              "email": string,"role": string,"status": string,"user_id": string
+            }[]
+                           },
 "firm_state":
 { Args: { "f": Database["public"]['Tables']["firms"]['Row'] }; Returns: string
+                           },
+"invite_member":
+{ Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
                            },
 "maintain_activity_log":
 { Args: { "as_of"?: string }; Returns: undefined
@@ -150,6 +161,14 @@ isOneToOne: false
                            },
 "member_role":
 { Args: { "target_firm": string }; Returns: string
+                           },
+"my_invites":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "firm_id": string,"firm_name": string,"role": string
+            }[]
+                           },
+"user_id_for_email":
+{ Args: { "address": string }; Returns: string
                            }
           }
           Enums: {

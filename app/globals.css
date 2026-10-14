@@ -537,6 +537,29 @@ li { text-wrap: pretty; }
 .app-role { display: block; margin-top: 10px; font-size: 18px; font-weight: 600; letter-spacing: 0; color: var(--slate); }
 .btn-quiet { padding: 10px 16px; background: var(--white); color: var(--navy); border: 1px solid var(--line-strong); box-shadow: none; font-size: 15px; }
 .btn-quiet:hover { background: var(--grey); }
+.app-nav { display: flex; align-items: center; gap: 20px; font-size: 15px; font-weight: 700; }
+.app-nav a { color: var(--slate); text-decoration: none; transition: color 0.2s; }
+.app-nav a:hover { color: var(--navy); }
+.app-card { margin-top: 32px; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--white); }
+.app-card h2 { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.app-list { display: grid; margin-top: 12px; }
+.app-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.app-list li:first-child { border-top: 0; }
+.person { font-weight: 600; overflow-wrap: anywhere; }
+.person-role { display: flex; align-items: center; gap: 10px; color: var(--slate); }
+.tag { padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--grey); color: var(--slate); }
+.tag-invited { background: rgba(26, 75, 176, 0.1); color: var(--blue-deep); }
+.app-invite { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; align-items: end; }
+.app-invite label { display: block; margin: 0 0 7px; }
+.app-invite .btn { margin-top: 0; }
+.auth-form select { width: 100%; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; }
+.auth-form select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
+.app-done { margin-top: 14px; font-weight: 600; color: var(--green-deep); }
+@media (max-width: 640px) {
+  .app-invite { grid-template-columns: 1fr; }
+  .app-bar { padding-inline: 16px; }
+  .app-nav { gap: 14px; }
+}
 
 /* Invite dialog and form */
 .dialog-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(11, 31, 58, 0.5); backdrop-filter: blur(6px); }
