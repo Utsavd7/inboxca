@@ -170,7 +170,7 @@
 | AI | Provider-neutral adapter, OpenAI by default (D13) | Structured outputs, function tools |
 | Validation | zod at every boundary | Forms, webhooks, CSV rows, AI outputs, env |
 | Tests | Vitest, Playwright, AI eval suite (§5.11) | |
-| Errors and logs | Sentry and structured JSON logs, with redaction | |
+| Errors and logs | Sentry and structured JSON logs, with redaction | Server only, through a small reporter of our own instead of Sentry's SDK: no browser code, and it sends only an error's type, code frames and route (M0 step 7) |
 
 ### 4.2 Repository layout
 
@@ -1193,7 +1193,7 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 
 ### M0: Foundation
 - [ ] Next.js + TypeScript strict + Tailwind + shadcn/ui with InboxCA tokens (§9.1)
-- [ ] Supabase local dev, migrations, generated types; `jobs` + Supabase Cron wiring with a test harness
+- [x] Supabase local dev, migrations, generated types; `jobs` + Supabase Cron wiring with a test harness
   - [x] Step 2 (14 Oct 2026): Supabase local dev (`supabase/config.toml`, with realtime, storage, edge functions and log analytics off, since InboxCA uses none of them) and the first migration: `firms`, `groups`, `firm_members`, `activity_log`, with row level security on each. Runs on Docker through Colima on this Mac.
   - [x] Step 3 (14 Oct 2026): generated types (`src/db/types.ts`, `npm run db:types`, checked in CI), the `jobs` table with `claim_jobs`, `mark_job_sending`, `finish_job` and `cancel_jobs` (server only), and the runner with retries (`src/jobs`).
   - [x] Step 6 (14 Oct 2026): the `/api/jobs` worker endpoint (checks `JOB_WORKER_SECRET`, runs one sweep through Supabase's API with the server key, so the app holds no database password) and the Supabase Cron schedule that calls it every minute through pg_net, only while a job is due. The worker's address and secret are read from Supabase Vault, so nothing is called until they are stored. The list of job kinds (`src/jobs/handlers.ts`) is empty until the first kind is built.
@@ -1205,10 +1205,11 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 - [ ] **Access policies (§5.17):** policy editor with the presets (Standard by default; Office only, Office + approved remote, Remote-friendly, Solo CA), firm/role/branch/user scopes, office connections (§5.8), PC device keys with owner or deputy approval of every new PC (batch approval on setup day), chip-bound sessions where supported, passkeys for personal and owner devices, one-click revoke, hours and holidays, off-site view-only mode, remote-day requests, idle and session limits, policy tester, logging and owner alerts
 - [ ] `/src/lib/crypto`: KMS envelope encryption, per-firm keys, encrypted columns, blind indexes, chunked file encryption, with tamper, wrong-context and rotation tests
 - [ ] Workspace store on Backblaze B2 (S3 API): one private bucket, 24-hour temporary area, object lock for the 30-day safety copies; **drive adapter spike**: own-folder and whole-drive access on OneDrive and Dropbox (personal and business), the browser-to-drive uploader, the app folder, change notices, sharing read-back; file-worker spike (a 2 GB file into a drive, ZIP, streamed view from a drive) and host decision
-- [ ] zod env, redacting logger, Sentry scrubbing, `activity_log` (append-only; no update or delete grant for any role; retention by the firm's setting)
+- [x] zod env, redacting logger, Sentry scrubbing, `activity_log` (append-only; no update or delete grant for any role; retention by the firm's setting)
   - [x] Step 1 (14 Oct 2026): zod check of the server settings (`src/lib/env.ts`) and the redacting JSON logger (`src/lib/logger.ts`), with unit tests.
-  - [x] Step 2 (14 Oct 2026): `activity_log` in the first migration, append only (no update or delete grant for any role, and a trigger that refuses changes even from the database owner), partitioned by month. Still open: Sentry scrubbing.
+  - [x] Step 2 (14 Oct 2026): `activity_log` in the first migration, append only (no update or delete grant for any role, and a trigger that refuses changes even from the database owner), partitioned by month.
   - [x] Step 5 (14 Oct 2026): retention by the firm's setting. `maintain_activity_log()` runs daily at 02:00 India time through pg_cron: it makes this month's and next month's partitions, removes a firm's rows older than its 12, 24 or 36 months, and drops whole months older than 36. The partitions moved to a `private` schema, so nobody reaches them around row level security and the generated types stay the same each month.
+  - [x] Step 7 (14 Oct 2026): Sentry scrubbing. Every server error (pages, route handlers, server actions, the proxy, through Next's `onRequestError`) and every job that throws is sent to Sentry with its type, its code frames and the route's pattern only; never its message, the visited path, headers or cookies (`src/lib/error-report.ts`). No Sentry SDK, so the public pages carry no extra code. Off until `SENTRY_DSN` is set, so nothing is sent or paid for in development.
 - [ ] CI: lint, typecheck, unit tests, **RLS isolation test** (grows with every table)
   - [x] Step 1 (14 Oct 2026): GitHub Actions on every pull request and on main: lint, typecheck, unit tests (Vitest), build, browser tests.
   - [x] Step 2 (14 Oct 2026): a `database` job starts local Supabase, applies the migrations and runs the RLS isolation tests (`tests/db`, `npm run test:db`). It grows with every table.
