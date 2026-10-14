@@ -3,7 +3,7 @@ import type { Database } from "@/src/db/types";
 import type { JobStore } from "./runner";
 
 // The job store through Supabase's API with the server key, for the /api/jobs worker:
-// the same server only functions as pgJobStore, with no database password in the app.
+// the server only functions from the jobs migration, with no database password in the app.
 // Each call is its own transaction, so a job marked sending stays marked if the worker dies.
 export function apiJobStore(supabase: SupabaseClient<Database>): JobStore {
   return {

@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { test, expect, type Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
-import { Client } from "pg";
-import { latestEmail, localSupabase, totp } from "./local-supabase";
+import { test, expect } from "@playwright/test";
+import { askForCode, emailStep, localSupabase, seedFirm, totp } from "./local-supabase";
 
 // Signing in through the real pages against local Supabase: an email code, then a code
 // from an authenticator app. Skipped when local Supabase is not running.
@@ -10,48 +8,15 @@ const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 test.describe.configure({ mode: "serial", timeout: 90_000 });
 
-const admin = () =>
-  createClient(local.url, local.secretKey, { auth: { persistSession: false } });
 const email = `owner-${randomUUID().slice(0, 8)}@example.test`;
-let userId = "";
-let firmId = "";
+let firm: Awaited<ReturnType<typeof seedFirm>>;
 let secret = "";
 let lastCode = "";
-let lastRequest = 0;
-
-// Supabase refuses a second code to the same address within a second or so.
-async function askForCode(page: Page) {
-  const wait = lastRequest + 2000 - Date.now();
-  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-  lastRequest = Date.now();
-  await page.getByRole("button", { name: "Email me a code" }).click();
-}
 
 test.beforeAll(async () => {
-  const { data, error } = await admin().auth.admin.createUser({ email, email_confirm: true });
-  if (error) throw error;
-  userId = data.user.id;
-  const db = new Client({ connectionString: local.dbUrl });
-  await db.connect();
-  firmId = (
-    await db.query(
-      "insert into public.firms (name, state_code, status) values ('Test Firm', '27', 'active') returning id",
-    )
-  ).rows[0].id;
-  await db.query(
-    "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'owner', 'active')",
-    [firmId, userId],
-  );
-  await db.end();
+  firm = await seedFirm("Test Firm", email);
 });
-
-test.afterAll(async () => {
-  const db = new Client({ connectionString: local.dbUrl });
-  await db.connect();
-  await db.query("delete from public.firms where id = $1", [firmId]);
-  await db.end();
-  await admin().auth.admin.deleteUser(userId);
-});
+test.afterAll(() => firm.remove());
 
 // A fresh code, never the one used last: a code is accepted once.
 async function nextTotp() {
@@ -64,24 +29,13 @@ async function nextTotp() {
   return code;
 }
 
-async function emailStep(page: Page) {
-  const sent = Date.now() - 1000;
-  await page.goto("/sign-in");
-  await page.getByLabel("Your work email").fill(email);
-  await askForCode(page);
-  await expect(page.getByLabel("Code from the email")).toBeVisible();
-  const { code } = await latestEmail(local.mailUrl, email, sent);
-  await page.getByLabel("Code from the email").fill(code);
-  await page.getByRole("button", { name: "Continue" }).click();
-}
-
 test("the app sends a signed out visitor to sign in", async ({ page }) => {
   await page.goto("/app");
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
 test("first sign in: email code, then setting up the 2 step code", async ({ page }) => {
-  await emailStep(page);
+  await emailStep(page, email);
   await expect(page.getByRole("heading", { name: "Set up your 2 step code" })).toBeVisible();
   await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();
   secret = (await page.locator(".secret").textContent())!.trim();
@@ -101,7 +55,7 @@ test("first sign in: email code, then setting up the 2 step code", async ({ page
 });
 
 test("next sign in asks for the app's code, and firm data waits for it", async ({ page }) => {
-  await emailStep(page);
+  await emailStep(page, email);
   await expect(page.getByRole("heading", { name: "Enter your 2 step code" })).toBeVisible();
   await page.goto("/app");
   await expect(page).toHaveURL(/\/sign-in\/two-step$/);
@@ -111,12 +65,7 @@ test("next sign in asks for the app's code, and firm data waits for it", async (
 });
 
 test("the link in the email works on the same device", async ({ page, baseURL }) => {
-  const sent = Date.now() - 1000;
-  await page.goto("/sign-in");
-  await page.getByLabel("Your work email").fill(email);
-  await askForCode(page);
-  await expect(page.getByLabel("Code from the email")).toBeVisible();
-  const { link } = await latestEmail(local.mailUrl, email, sent);
+  const { link } = await askForCode(page, email);
   const target = new URL(link!);
   await page.goto(`${baseURL}${target.pathname}${target.search}`);
   await expect(page).toHaveURL(/\/sign-in\/two-step$/);

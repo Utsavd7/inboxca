@@ -1,6 +1,6 @@
 import type { Client } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { pgJobStore } from "@/src/jobs/pg-store";
+import { pgJobStore } from "./pg-store";
 import { runDueJobs } from "@/src/jobs/runner";
 import { actAs, asOwner, attempt, connect, rollback } from "./db";
 
