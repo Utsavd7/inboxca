@@ -1,5 +1,8 @@
 import { createHmac } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { expect, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+import { Client } from "pg";
 
 // The local Supabase connection, from .env.local (written by `npm run db:env`) or the
 // environment. Tests that need it skip themselves when it is missing.
@@ -56,4 +59,74 @@ export function totp(secret: string, at = Date.now()) {
   const offset = hash[hash.length - 1] & 0xf;
   const value = (hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
   return String(value).padStart(6, "0");
+}
+
+export async function query(dbUrl: string, sql: string, params: unknown[] = []) {
+  const client = new Client({ connectionString: dbUrl });
+  await client.connect();
+  try {
+    return (await client.query(sql, params)).rows;
+  } finally {
+    await client.end();
+  }
+}
+
+// An active firm and its owner, who can sign in by email. With a key, the owner's
+// authenticator app is already set up. remove() deletes the firm, its log lines (which
+// needs the purge flag) and the given people.
+export async function seedFirm(firmName: string, ownerEmail: string, totpKey?: string) {
+  const local = localSupabase();
+  const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
+  const { data, error } = await admin.auth.admin.createUser({ email: ownerEmail, email_confirm: true });
+  if (error) throw error;
+  const ownerId = data.user.id;
+  const [{ id: firmId }] = await query(
+    local.dbUrl,
+    "insert into public.firms (name, state_code, status) values ($1, '27', 'active') returning id",
+    [firmName],
+  );
+  await query(
+    local.dbUrl,
+    "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'owner', 'active')",
+    [firmId, ownerId],
+  );
+  if (totpKey)
+    await query(
+      local.dbUrl,
+      "insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, secret, created_at, updated_at) values (gen_random_uuid(), $1, 'Test app', 'totp', 'verified', $2, now(), now())",
+      [ownerId, totpKey],
+    );
+  const remove = async (...emails: string[]) => {
+    const client = new Client({ connectionString: local.dbUrl });
+    await client.connect();
+    await client.query("begin");
+    await client.query("select set_config('app.log_purge', 'on', true)");
+    await client.query("delete from public.firms where id = $1", [firmId]);
+    await client.query("delete from auth.users where email = any($1)", [[ownerEmail, ...emails]]);
+    await client.query("commit");
+    await client.end();
+  };
+  return { ownerId, firmId, remove };
+}
+
+// Asks the sign in page for a code and returns that email. Supabase refuses a second code
+// to the same address within a second or so, hence the wait.
+let lastRequest = 0;
+export async function askForCode(page: Page, email: string) {
+  const wait = lastRequest + 2000 - Date.now();
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  lastRequest = Date.now();
+  const sent = Date.now() - 1000;
+  await page.goto("/sign-in");
+  await page.getByLabel("Your work email").fill(email);
+  await page.getByRole("button", { name: "Email me a code" }).click();
+  await expect(page.getByLabel("Code from the email")).toBeVisible();
+  return latestEmail(localSupabase().mailUrl, email, sent);
+}
+
+// The email step of signing in, through the real page.
+export async function emailStep(page: Page, email: string) {
+  const { code } = await askForCode(page, email);
+  await page.getByLabel("Code from the email").fill(code);
+  await page.getByRole("button", { name: "Continue" }).click();
 }

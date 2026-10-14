@@ -1,7 +1,8 @@
 import type { ClientBase } from "pg";
-import type { Job, JobStore } from "./runner";
+import type { Job, JobStore } from "@/src/jobs/runner";
 
-// The job store on Postgres, through the server only functions in the jobs migration.
+// The job store on a direct Postgres connection, for tests inside a rolled back
+// transaction. The app itself uses apiJobStore.
 export function pgJobStore(db: ClientBase): JobStore {
   return {
     async claim(batch, leaseSeconds) {
