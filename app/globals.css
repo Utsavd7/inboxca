@@ -520,7 +520,7 @@ li { text-wrap: pretty; }
 .auth-form label { margin-top: 8px; font-size: 15px; font-weight: 700; }
 /* One field style for every product form: sign in, People, Settings. */
 .auth-form input,
-.app-page input:not([type="checkbox"]),
+.app-page input:not([type="checkbox"], [type="radio"]),
 .app-page select { height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }
 .auth-form input,
 .auth-form select { width: 100%; }
@@ -528,7 +528,7 @@ li { text-wrap: pretty; }
 .app-page input:focus,
 .app-page select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
 .auth-form input[aria-invalid="true"] { border-color: var(--error); }
-.app-page input[type="checkbox"] { flex: none; width: 18px; height: 18px; accent-color: var(--blue); }
+.app-page input:is([type="checkbox"], [type="radio"]) { flex: none; width: 18px; height: 18px; accent-color: var(--blue); }
 .auth-form .btn { margin-top: 8px; }
 .auth-form .text-button { justify-self: start; font-size: 15px; font-weight: 700; color: var(--blue-deep); text-decoration: underline; text-underline-offset: 4px; }
 .auth-lead { color: var(--slate); }

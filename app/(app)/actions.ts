@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
+import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
@@ -308,6 +308,15 @@ export async function manageClient(form: FormData) {
       .eq("id", id);
   } else if (intent === "archive" || intent === "restore") {
     await supabase.from("clients").update({ archived_at: intent === "archive" ? new Date().toISOString() : null }).eq("id", id);
+  } else if (intent === "assign") {
+    const role = String(form.get("role") ?? "");
+    if (!(role in assignmentRoles)) back("assign");
+    const { error } = await supabase
+      .from("client_assignments")
+      .insert({ firm_id: firm, client_id: id, user_id: String(form.get("person") ?? ""), role });
+    if (error) back(error.code === "23505" ? "assigned" : "assign");
+  } else if (intent === "unassign") {
+    await supabase.from("client_assignments").delete().eq("client_id", id).eq("user_id", String(form.get("person") ?? ""));
   } else if (intent === "remove-number") {
     await supabase.from("client_registrations").delete().eq("id", String(form.get("registration") ?? ""));
   } else if (intent === "add-number") {
@@ -333,4 +342,13 @@ export async function manageClient(form: FormData) {
     if (error) back(error.code === "23505" ? "taken" : "number");
   }
   back();
+}
+
+// Settings → Who sees which clients: everyone (open) or only those assigned (restricted).
+export async function saveVisibility(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const client_visibility = form.get("visibility") === "restricted" ? "restricted" : "open";
+  await supabase.from("firms").update({ settings: { ...membership.settings, client_visibility } }).eq("id", membership.firmId);
+  redirect("/app/settings?saved=visibility");
 }

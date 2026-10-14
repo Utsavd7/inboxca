@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { manageClient } from "@/app/(app)/actions";
-import { canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
+import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
@@ -12,6 +12,8 @@ const errors: Record<string, string> = {
   "one-pan": "This client already has a PAN.",
   "gstin-pan": "That GSTIN holds a different PAN from this client's.",
   taken: "Another client in your firm already has that number.",
+  assign: "Choose a person and what they do for this client.",
+  assigned: "That person is already assigned to this client.",
   role: "Only the owner, a partner or a manager can change clients.",
 };
 
@@ -28,7 +30,7 @@ export default async function Client({
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, kind, archived_at, email_enc, client_registrations(id, kind, number_enc)")
+    .select("id, name, kind, archived_at, email_enc, client_registrations(id, kind, number_enc), client_assignments(user_id, role)")
     .eq("id", id)
     .maybeSingle();
   if (!client) notFound();
@@ -41,6 +43,9 @@ export default async function Client({
   );
   const email = client.email_enc ? await crypto.decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc) : "";
   const manage = canManageClients(membership.role);
+  const { data: people } = await supabase.rpc("firm_people", { target_firm: membership.firmId });
+  const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
+  const unassigned = people?.filter((person) => person.status === "active" && !client.client_assignments.some((a) => a.user_id === person.user_id)) ?? [];
   const hidden = <input type="hidden" name="client" value={client.id} />;
 
   return (
@@ -103,6 +108,58 @@ export default async function Client({
             </div>
             <button className="btn btn-quiet" name="intent" value="add-number">
               Add number
+            </button>
+          </form>
+        )}
+      </section>
+
+      <section className="app-card" aria-labelledby="assigned">
+        <h2 id="assigned">Assigned to</h2>
+        <ul className="app-list">
+          {client.client_assignments.map((assignment) => (
+            <li key={assignment.user_id}>
+              <span className="person">{emailOf.get(assignment.user_id)}</span>
+              <span className="person-role">
+                {assignmentRoles[assignment.role as keyof typeof assignmentRoles]}
+                {manage && (
+                  <form action={manageClient}>
+                    {hidden}
+                    <input type="hidden" name="person" value={assignment.user_id} />
+                    <button className="btn btn-quiet" name="intent" value="unassign">
+                      Unassign
+                    </button>
+                  </form>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {!client.client_assignments.length && <p className="app-note">Nobody is assigned yet.</p>}
+        {manage && !!unassigned.length && (
+          <form action={manageClient} className="app-form-row">
+            {hidden}
+            <div>
+              <label htmlFor="assign-person">Person</label>
+              <select id="assign-person" name="person">
+                {unassigned.map((person) => (
+                  <option key={person.user_id} value={person.user_id}>
+                    {person.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="assign-role">Does</label>
+              <select id="assign-role" name="role" defaultValue="staff">
+                {Object.entries(assignmentRoles).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button className="btn btn-quiet" name="intent" value="assign">
+              Assign
             </button>
           </form>
         )}

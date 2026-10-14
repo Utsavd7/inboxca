@@ -24,6 +24,31 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"client_assignments": {
+                  Row: {
+                    "client_id": string,"firm_id": string,"role": string,"user_id": string
+                  }
+                  Insert: {
+                    "client_id": string,"firm_id": string,"role": string,"user_id": string
+                  }
+                  Update: {
+                    "client_id"?: string,"firm_id"?: string,"role"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "client_assignments_firm_id_client_id_fkey"
+      columns: ["firm_id","client_id"]
+isOneToOne: false
+      referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "client_assignments_firm_id_user_id_fkey"
+      columns: ["firm_id","user_id"]
+isOneToOne: false
+      referencedRelation: "firm_members"
+      referencedColumns: ["firm_id","user_id"]
+    }
+                  ]
                 },"client_registrations": {
                   Row: {
                     "client_id": string,"firm_id": string,"id": string,"kind": string,"number_bidx": string,"number_enc": string,"state_code": string | null
@@ -177,6 +202,9 @@ isOneToOne: false
                            },
 "add_clients":
 { Args: { "clients": Json,"target_firm": string }; Returns: number
+                           },
+"can_access_client":
+{ Args: { "client": string,"target_firm": string }; Returns: boolean
                            },
 "cancel_jobs":
 { Args: { "below_version"?: number,"p_entity_id": string,"p_entity_type": string }; Returns: number

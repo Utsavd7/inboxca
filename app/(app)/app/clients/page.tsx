@@ -33,7 +33,7 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
       <h1>Clients</h1>
       <section className="app-card" aria-labelledby="register">
         <h2 id="register">
-          {q ? `Clients matching “${q}”` : `${clients?.length ?? 0} ${archived ? "archived clients" : "clients"}`}
+          {q ? `Clients matching “${q}”` : `${clients?.length ?? 0} ${archived ? "archived " : ""}client${clients?.length === 1 ? "" : "s"}`}
         </h2>
         <form className="app-form-row" role="search">
           <div>

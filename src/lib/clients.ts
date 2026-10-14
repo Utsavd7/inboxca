@@ -12,6 +12,9 @@ export const clientKinds = {
 
 export type ClientKind = keyof typeof clientKinds;
 
+// What each person assigned to a client does for it.
+export const assignmentRoles = { partner_in_charge: "Partner in charge", manager: "Manager", staff: "Staff" } as const;
+
 // Who may add and change clients; staff view only (PLAN.md 5.17.2).
 export const canManageClients = (role: string) => ["owner", "partner", "manager"].includes(role);
 
