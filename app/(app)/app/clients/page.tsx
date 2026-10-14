@@ -5,6 +5,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { cleanNumber, isGstin, isPan } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
 import { AddClientForm } from "./add-client-form";
+import { ImportForm } from "./import-form";
 
 // The client register. Search finds a name, or a whole PAN or GSTIN through its blind
 // index, so numbers are never searched in plain text.
@@ -60,7 +61,12 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
           </Link>
         </p>
       </section>
-      {canManageClients(membership.role) && <AddClientForm />}
+      {canManageClients(membership.role) && (
+        <>
+          <AddClientForm />
+          <ImportForm />
+        </>
+      )}
     </>
   );
 }

@@ -75,3 +75,26 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await owner.getByRole("button", { name: "Restore client" }).click();
   await expect(owner.getByRole("heading", { level: 1 })).not.toContainText("Archived");
 });
+
+test("importing 500 clients adds them all and reports every bad row", async () => {
+  test.setTimeout(120_000);
+  // 500 good rows with distinct, valid PANs, then five rows with a problem each.
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const pan = (n: number) => `QRS${letters[Math.floor(n / 26) % 26]}${letters[n % 26]}${String(n).padStart(4, "0")}Z`;
+  const lines = ["Client name,Constitution,PAN,GST No"];
+  for (let n = 0; n < 500; n++) lines.push(`Client ${n},${n % 2 ? "Proprietor" : "Individual"},${pan(n)},`);
+  lines.push("Bad PAN,Individual,ABC123,", "Odd kind,Martian,QRSZZ9998Z,", `Repeat,Individual,${pan(7)},`, ",Individual,QRSZZ9997Z,", "Patel again,Business,,27AAPFU0939F1ZV");
+
+  await owner.goto("/app/clients");
+  await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "clients.csv", mimeType: "text/csv", buffer: Buffer.from(lines.join("\n")) });
+  await owner.getByRole("button", { name: "Check the file" }).click();
+  await expect(owner.getByText("500 ready to import, 5 with a problem and left out.")).toBeVisible({ timeout: 30_000 });
+  const problems = owner.getByRole("table");
+  for (const text of ["PAN is not valid", "not a kind InboxCA knows", "on an earlier row", "Enter the client's name", "already in your firm"])
+    await expect(problems).toContainText(text);
+
+  await owner.getByRole("button", { name: "Import 500 clients" }).click();
+  await expect(owner.getByText("Imported 500 clients.")).toBeVisible({ timeout: 30_000 });
+  await owner.goto(`/app/clients?q=${pan(321).toLowerCase()}`);
+  await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
+});

@@ -576,6 +576,10 @@ li { text-wrap: pretty; }
 .app-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; }
 .app-form-row > div > :is(input, select) { width: 100%; }
 .app-form-row > .app-note { align-self: center; margin: 0; }
+.table-scroll { margin-top: 14px; max-height: 360px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+.app-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.app-table th { position: sticky; top: 0; padding: 10px 14px; background: var(--grey); text-align: left; font-weight: 700; }
+.app-table td { padding: 10px 14px; border-top: 1px solid var(--line); vertical-align: top; }
 .app-role .tag { margin-left: 8px; vertical-align: middle; }
 .app-done { margin-top: 14px; font-weight: 600; color: var(--green-deep); }
 @media (max-width: 640px) {

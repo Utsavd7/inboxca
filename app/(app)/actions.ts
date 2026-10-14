@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { canManageClients, clientKinds } from "@/src/lib/clients";
+import { canManageClients, checkClient, clientKinds, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
-import { cleanNumber, isGstin, isPan, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
+import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
+import { readSheet } from "@/src/lib/sheet";
 import { log } from "@/src/lib/logger";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
@@ -157,48 +158,122 @@ export async function changeSpecialHours(form: FormData) {
 // On an error the form gets back what was typed, since React clears it after an action.
 export type ClientState = { error?: string; values?: Record<string, string> };
 
-// Adds a client with its PAN and GSTIN, encrypted with the firm's key. A GSTIN holds the
-// PAN, so the PAN can be left empty when a GSTIN is given.
-export async function addClient(_prev: ClientState, form: FormData): Promise<ClientState> {
-  const { supabase, membership } = await currentMember();
-  const values = Object.fromEntries(["name", "kind", "pan", "gstin"].map((field) => [field, String(form.get(field) ?? "")]));
-  const fail = (error: string) => ({ error, values });
-  if (!membership || !canManageClients(membership.role)) return fail("Only the owner, a partner or a manager can add clients.");
-  const name = String(form.get("name") ?? "").trim();
-  const kind = String(form.get("kind") ?? "");
-  const gstin = cleanNumber(String(form.get("gstin") ?? ""));
-  const pan = cleanNumber(String(form.get("pan") ?? "")) || (gstin && panOfGstin(gstin));
-  if (!name || name.length > 200) return fail("Enter the client's name.");
-  if (!(kind in clientKinds)) return fail("Choose what kind of client this is.");
-  if (gstin && !isGstin(gstin)) return fail("That GSTIN is not valid. Check it for a typing mistake.");
-  if (pan && !isPan(pan)) return fail("That PAN is not valid. A PAN is 5 letters, 4 digits and a letter.");
-  if (gstin && panOfGstin(gstin) !== pan) return fail("The PAN does not match the one inside the GSTIN.");
-
+// A client ready for add_clients: a new id, and its numbers encrypted with the firm's key,
+// bound to that id, with blind indexes.
+async function sealClient(firm: string, client: ClientInput) {
   const id = randomUUID();
-  const firm = membership.firmId;
   const crypto = serverCrypto();
   const numbers = [
-    ["pan", pan, null],
-    ["gstin", gstin, gstin.slice(0, 2)],
+    ["pan", client.pan, null],
+    ["gstin", client.gstin, client.gstin.slice(0, 2)],
   ].filter(([, number]) => number) as [string, string, string | null][];
   const registrations = await Promise.all(
-    numbers.map(async ([type, number, state_code]) => ({
-      kind: type,
-      number_enc: await crypto.encrypt(firm, `clients/${id}/${type}`, number),
-      number_bidx: await crypto.blindIndex(firm, type, number),
+    numbers.map(async ([kind, number, state_code]) => ({
+      kind,
+      number_enc: await crypto.encrypt(firm, `clients/${id}/${kind}`, number),
+      number_bidx: await crypto.blindIndex(firm, kind, number),
       state_code,
     })),
   );
-  const { data, error } = await supabase.rpc("add_client", {
-    target_firm: firm,
-    client: id,
-    client_name: name,
-    client_kind: kind,
-    registrations,
+  return { id, name: client.name, kind: client.kind, registrations };
+}
+
+// Adds one client from the form.
+export async function addClient(_prev: ClientState, form: FormData): Promise<ClientState> {
+  const { supabase, membership } = await currentMember();
+  const values = Object.fromEntries(["name", "kind", "pan", "gstin"].map((field) => [field, String(form.get(field) ?? "")]));
+  if (!membership || !canManageClients(membership.role))
+    return { error: "Only the owner, a partner or a manager can add clients.", values };
+  const checked = checkClient(values as ClientInput);
+  if ("error" in checked) return { error: checked.error, values };
+  const sealed = await sealClient(membership.firmId, checked.client);
+  const { data, error } = await supabase.rpc("add_clients", { target_firm: membership.firmId, clients: [sealed] });
+  if (error?.code === "23505") return { error: "A client with this PAN or GSTIN is already in your firm.", values };
+  if (error || !data) return { error: "The client could not be added. Try again.", values };
+  redirect(`/app/clients/${sealed.id}`);
+}
+
+export type ImportRow = ClientInput & { line: number; error?: string };
+export type ImportState = { rows?: ImportRow[]; error?: string; done?: number };
+
+// Column headings people use, as InboxCA reads them (any case).
+const headings: Record<keyof ClientInput, string[]> = {
+  name: ["name", "client name", "client", "party name"],
+  kind: ["kind", "type", "client type", "constitution", "category"],
+  pan: ["pan", "pan no", "pan number"],
+  gstin: ["gstin", "gst", "gst no", "gst number", "gstin/uin"],
+};
+
+// Import from a CSV or Excel file, in two passes: the first reads and checks every row and
+// shows the problems; the second (with the checked rows) checks them again and adds the
+// good ones in one batch. Rows with a problem are left out, never half added.
+export async function importClients(_prev: ImportState, form: FormData): Promise<ImportState> {
+  const { supabase, membership } = await currentMember();
+  if (!membership || !canManageClients(membership.role))
+    return { error: "Only the owner, a partner or a manager can import clients." };
+  const firm = membership.firmId;
+  const confirmed = form.get("rows");
+  let rows: ImportRow[];
+  if (confirmed) rows = (JSON.parse(String(confirmed)) as ImportRow[]).slice(0, 2000);
+  else {
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.size) return { error: "Choose a CSV or Excel file." };
+    if (!/\.(csv|xlsx)$/i.test(file.name)) return { error: "Choose a .csv or .xlsx file. For an old .xls file, save it as .xlsx first." };
+    let table: string[][];
+    try {
+      table = readSheet(Buffer.from(await file.arrayBuffer()), file.name);
+    } catch {
+      return { error: "That file could not be read. Save it again as .xlsx or .csv and try once more." };
+    }
+    const [header = [], ...body] = table;
+    const at = Object.fromEntries(
+      Object.entries(headings).map(([field, names]) => [field, header.findIndex((cell) => names.includes(cell.trim().toLowerCase()))]),
+    ) as Record<keyof ClientInput, number>;
+    if (at.name < 0) return { error: "The first row must name the columns, with one called Name or Client name." };
+    if (body.length > 2000) return { error: "Import at most 2,000 clients at a time." };
+    const cell = (cells: string[], field: keyof ClientInput) => (at[field] < 0 ? "" : (cells[at[field]] ?? "").trim());
+    rows = body.map((cells, index) => ({
+      line: index + 2,
+      name: cell(cells, "name"),
+      kind: cell(cells, "kind"),
+      pan: cell(cells, "pan"),
+      gstin: cell(cells, "gstin"),
+    }));
+  }
+
+  // Each row on its own, then numbers repeated in the file, then numbers already in the firm.
+  const seen = new Set<string>();
+  const checked: ImportRow[] = rows.map((row) => {
+    const kind = readKind(row.kind, !!cleanNumber(row.gstin));
+    if (!kind) return { ...row, error: `"${row.kind}" is not a kind InboxCA knows. Use Individual, Business, Company, LLP or Trust.` };
+    const result = checkClient({ ...row, kind });
+    if ("error" in result) return { ...row, error: result.error };
+    const numbers = [result.client.pan, result.client.gstin].filter(Boolean);
+    if (numbers.some((number) => seen.has(number))) return { ...row, ...result.client, error: "The same PAN or GSTIN is on an earlier row." };
+    numbers.forEach((number) => seen.add(number));
+    return { line: row.line, ...result.client };
   });
-  if (error?.code === "23505") return fail("A client with this PAN or GSTIN is already in your firm.");
-  if (error || !data) return fail("The client could not be added. Try again.");
-  redirect(`/app/clients/${id}`);
+  const crypto = serverCrypto();
+  const lines = new Map<string, number>();
+  for (const row of checked.filter((row) => !row.error))
+    for (const [kind, number] of [["pan", row.pan], ["gstin", row.gstin]])
+      if (number) lines.set(await crypto.blindIndex(firm, kind, number), row.line);
+  const indexes = [...lines.keys()];
+  for (let start = 0; start < indexes.length; start += 150) {
+    const { data } = await supabase.from("client_registrations").select("number_bidx").in("number_bidx", indexes.slice(start, start + 150));
+    for (const { number_bidx } of data ?? []) {
+      const row = checked.find((candidate) => candidate.line === lines.get(number_bidx));
+      if (row) row.error = "A client with this PAN or GSTIN is already in your firm.";
+    }
+  }
+  if (!confirmed) return { rows: checked };
+
+  const ready = checked.filter((row) => !row.error);
+  const clients = await Promise.all(ready.map((row) => sealClient(firm, row)));
+  const { data, error } = await supabase.rpc("add_clients", { target_firm: firm, clients });
+  if (error || !data) return { rows: checked, error: "The import did not go through, and nothing was added. Try again." };
+  revalidatePath("/app/clients");
+  return { done: data };
 }
 
 // Every change on a client's page: its name and kind, a number added or removed, archived
