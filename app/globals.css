@@ -518,9 +518,17 @@ li { text-wrap: pretty; }
 .auth-card h1 { margin-top: 28px; font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; }
 .auth-form { display: grid; gap: 12px; margin-top: 14px; }
 .auth-form label { margin-top: 8px; font-size: 15px; font-weight: 700; }
-.auth-form input { width: 100%; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 12px; font-size: 16px; color: var(--navy); transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }
-.auth-form input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
+/* One field style for every product form: sign in, People, Settings. */
+.auth-form input,
+.app-page input:not([type="checkbox"]),
+.app-page select { padding: 11px 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }
+.auth-form input,
+.auth-form select { width: 100%; }
+.auth-form input:focus,
+.app-page input:focus,
+.app-page select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
 .auth-form input[aria-invalid="true"] { border-color: var(--error); }
+.app-page input[type="checkbox"] { flex: none; width: 18px; height: 18px; accent-color: var(--blue); }
 .auth-form .btn { margin-top: 8px; }
 .auth-form .text-button { justify-self: start; font-size: 15px; font-weight: 700; color: var(--blue-deep); text-decoration: underline; text-underline-offset: 4px; }
 .auth-lead { color: var(--slate); }
@@ -539,7 +547,9 @@ li { text-wrap: pretty; }
 .btn-quiet:hover { background: var(--grey); }
 .app-nav { display: flex; align-items: center; gap: 20px; font-size: 15px; font-weight: 700; }
 .app-nav a { color: var(--slate); text-decoration: none; transition: color 0.2s; }
-.app-nav a:hover { color: var(--navy); }
+.app-nav a:hover,
+.app-nav a[aria-current="page"] { color: var(--navy); }
+.app-nav a[aria-current="page"] { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 8px; text-decoration-color: var(--blue); }
 .app-card { margin-top: 32px; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--white); }
 .app-card h2 { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
 .app-list { display: grid; margin-top: 12px; }
@@ -547,29 +557,30 @@ li { text-wrap: pretty; }
 .app-list li:first-child { border-top: 0; }
 .person { font-weight: 600; overflow-wrap: anywhere; }
 .person-role { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--slate); }
-.person-role select { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--white); color: var(--navy); font-size: 15px; }
-.person-role .btn-quiet { padding: 8px 12px; font-size: 14px; white-space: nowrap; }
+.btn-quiet { white-space: nowrap; }
+.app-body .btn-quiet { min-height: 48px; }
 .tag { padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--grey); color: var(--slate); }
 .tag-deactivated { background: rgba(180, 35, 24, 0.08); color: var(--error); }
 .tag-invited { background: rgba(26, 75, 176, 0.1); color: var(--blue-deep); }
 .app-invite { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; align-items: end; }
-.app-invite label { display: block; margin: 0 0 7px; }
+.app-invite label,
+.app-form-row label { display: block; margin: 0 0 7px; font-size: 15px; font-weight: 700; }
 .app-invite .btn { margin-top: 0; }
-.auth-form select { width: 100%; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; }
-.auth-form select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
 .app-note { margin-top: 6px; color: var(--slate); }
 .hours-table { margin-top: 16px; border-collapse: collapse; }
 .hours-table th { padding: 8px 24px 8px 0; text-align: left; font-weight: 600; }
 .hours-table td { padding: 8px 24px 8px 0; color: var(--slate); }
-.hours-table input[type="time"],
-.holiday-add input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--navy); font-size: 15px; }
 .app-check { display: flex; align-items: center; gap: 10px; margin: 20px 0; font-weight: 600; }
-.holiday-add { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; font-weight: 600; }
+.hours-table label { display: flex; align-items: center; gap: 8px; }
+.app-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; }
 .app-done { margin-top: 14px; font-weight: 600; color: var(--green-deep); }
 @media (max-width: 640px) {
   .app-invite { grid-template-columns: 1fr; }
-  .app-bar { padding-inline: 16px; }
+  .app-bar { flex-wrap: wrap; padding-inline: 16px; }
   .app-nav { gap: 14px; }
+  .hours-table th,
+  .hours-table td { display: block; padding: 4px 0; }
+  .hours-table tr { display: block; padding-block: 8px; }
 }
 
 /* Invite dialog and form */

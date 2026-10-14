@@ -80,9 +80,11 @@ export default async function Settings({
             </li>
           ))}
         </ul>
-        <form action={changeHoliday} className="holiday-add">
-          <label htmlFor="holiday">Add a holiday</label>
-          <input id="holiday" type="date" name="date" required />
+        <form action={changeHoliday} className="app-form-row">
+          <div>
+            <label htmlFor="holiday">Add a holiday</label>
+            <input id="holiday" type="date" name="date" required />
+          </div>
           <button className="btn btn-quiet" type="submit">
             Add holiday
           </button>

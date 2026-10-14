@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
-import { invitableRoles, roleLabel, roleNames } from "@/src/lib/roles";
+import { invitableRoles, roleLabel } from "@/src/lib/roles";
 import { InviteForm } from "./invite-form";
 
-const statusNames: Record<string, string> = { invited: "invited", deactivated: "removed" };
+const statusNames: Record<string, string> = { invited: "Invited", deactivated: "Removed" };
 
 // The firm's people. Everyone in the firm sees the list; only the owner invites, changes
 // roles and removes people.
@@ -54,7 +54,7 @@ export default async function People() {
                 </form>
               ) : (
                 <span className="person-role">
-                  {roleNames[person.role]}
+                  {roleLabel(person.role)}
                   {statusNames[person.status] && (
                     <span className={`tag tag-${person.status}`}>{statusNames[person.status]}</span>
                   )}
