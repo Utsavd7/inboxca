@@ -1,3 +1,4 @@
+import { reportError } from "@/src/lib/error-report";
 import { log } from "@/src/lib/logger";
 import type { Database } from "@/src/db/types";
 
@@ -59,6 +60,7 @@ export async function runDueJobs(
       } catch (error) {
         // The message may hold client details, so only its type is kept.
         log.error("job.threw", { jobId: job.id, kind: job.kind, error: (error as Error).name });
+        await reportError(error, { route: "job", kind: job.kind });
         outcome = { retry: "exception" };
       }
     }
