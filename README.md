@@ -14,7 +14,7 @@ npm run test:db             # row level security and job tests
 npm run build && PORT=3211 npx playwright test tests/e2e/sign-in.spec.ts
 ```
 
-Sign in is by invitation only, and invites are not built yet: `tests/e2e/sign-in.spec.ts` shows how a person, a firm and their membership are set up before signing in at `/sign-in`. The emailed code arrives in the mail catcher. After a migration, run `npx supabase migration up --local` and `npm run db:types`.
+Sign in is by invitation only, and invites are not built yet: `tests/e2e/sign-in.spec.ts` shows how a person, a firm and their membership are set up before signing in at `/sign-in`. The emailed code arrives in the mail catcher. After a migration, run `npx supabase migration up --local` and `npm run db:types`. Background jobs run when Supabase Cron calls `/api/jobs`; locally nothing calls it until the worker's address and secret are stored in Supabase Vault as `job_worker_url` and `job_worker_secret`.
 
 ## Run locally
 
