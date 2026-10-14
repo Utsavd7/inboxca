@@ -105,6 +105,17 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await expect(person.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm is closed now.");
   await owner.goto("/app");
   await expect(owner.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
+
+  // Special hours for today open the firm again, closed weekdays or not.
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  await owner.goto("/app/settings");
+  for (const [label, value] of [["From", today], ["To", today], ["Opens", "00:00"], ["Closes", "23:59"]])
+    await owner.getByLabel(label, { exact: true }).fill(value);
+  await owner.getByRole("button", { name: "Add special hours" }).click();
+  await expect(owner.getByText("00:00 to 23:59")).toBeVisible();
+  await person.reload();
+  await expect(person.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
+  await expect(person.getByRole("heading", { level: 1 })).not.toContainText("closed");
 });
 
 test("after the firm's idle limit, an unattended screen signs out", async () => {

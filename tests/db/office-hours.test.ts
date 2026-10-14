@@ -34,6 +34,14 @@ describe("office hours", () => {
     expect(await open("staff", "2026-10-18T05:00:00Z")).toBe(false); // Sunday has no hours
   });
 
+  it("follow special hours within their dates, and still close on holidays", async () => {
+    const season = { ...settings, special_hours: [{ from: "2026-10-14", to: "2026-10-18", open: "09:00", close: "21:00" }] };
+    expect(await open("staff", WEDNESDAY_18_30, null, season)).toBe(true);
+    expect(await open("staff", "2026-10-18T13:00:00Z", null, season)).toBe(true); // Sunday, 18:30
+    expect(await open("staff", THURSDAY_10_30, null, season)).toBe(false); // a holiday
+    expect(await open("staff", "2026-10-19T13:00:00Z", null, season)).toBe(false); // after the range
+  });
+
   it("never lock out the owner, and apply only when the firm switches them on", async () => {
     expect(await open("owner", WEDNESDAY_18_30)).toBe(true);
     expect(await open("staff", WEDNESDAY_18_30, null, { hours: settings.hours })).toBe(true);

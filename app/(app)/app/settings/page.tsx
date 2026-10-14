@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { changeHoliday, saveHours, saveLimits } from "@/app/(app)/actions";
-import { DAYS, SUGGESTED_HOURS, type Hours } from "@/src/lib/hours";
+import { changeHoliday, changeSpecialHours, saveHours, saveLimits } from "@/app/(app)/actions";
+import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
 
@@ -16,6 +16,7 @@ export default async function Settings({
   const settings = membership.settings;
   const hours = (settings.hours as Hours | undefined) ?? SUGGESTED_HOURS;
   const holidays = (settings.holidays as string[] | undefined) ?? [];
+  const special = (settings.special_hours as SpecialHours[] | undefined) ?? [];
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number };
   const hoursOnly = access.hours_only ?? false;
 
@@ -65,6 +66,48 @@ export default async function Settings({
         </form>
       </section>
 
+      <section className="app-card" aria-labelledby="special">
+        <h2 id="special">Special hours</h2>
+        <p className="app-note">A tax season or a late evening: these times replace the office hours on every day in the dates. Holidays stay closed.</p>
+        <ul className="app-list">
+          {special.map((range) => (
+            <li key={range.from + range.to}>
+              <span className="person">
+                {range.from === range.to ? longDate(range.from) : `${longDate(range.from)} to ${longDate(range.to)}`}: {range.open} to {range.close}
+              </span>
+              <form action={changeSpecialHours}>
+                <input type="hidden" name="from" value={range.from} />
+                <input type="hidden" name="to" value={range.to} />
+                <button className="btn btn-quiet" name="intent" value="remove">
+                  Remove
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+        <form action={changeSpecialHours} className="app-form-row">
+          {[
+            ["from", "From", "date"],
+            ["to", "To", "date"],
+            ["open", "Opens", "time"],
+            ["close", "Closes", "time"],
+          ].map(([name, label, type]) => (
+            <div key={name}>
+              <label htmlFor={`special-${name}`}>{label}</label>
+              <input id={`special-${name}`} name={name} type={type} required />
+            </div>
+          ))}
+          <button className="btn btn-quiet" type="submit">
+            Add special hours
+          </button>
+        </form>
+        {error === "special" && (
+          <p className="field-error" role="alert">
+            The dates must run forward and the closing time must be after the opening time.
+          </p>
+        )}
+      </section>
+
       <section className="app-card" aria-labelledby="limits">
         <h2 id="limits">Signing in</h2>
         <p className="app-note">For everyone in the firm, you included.</p>
@@ -106,7 +149,7 @@ export default async function Settings({
           {holidays.map((date) => (
             <li key={date}>
               <span className="person">
-                {new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                {new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { weekday: "long" })}, {longDate(date)}
               </span>
               <form action={changeHoliday}>
                 <input type="hidden" name="date" value={date} />
