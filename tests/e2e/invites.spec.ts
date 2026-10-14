@@ -118,13 +118,36 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await expect(person.getByRole("heading", { level: 1 })).not.toContainText("closed");
 });
 
+test("in restricted mode a person sees only the clients assigned to them", async () => {
+  await owner.goto("/app/clients");
+  await owner.getByLabel("Name", { exact: true }).fill("Shared Client");
+  await owner.getByRole("button", { name: "Add client" }).click();
+  await expect(owner.getByRole("heading", { level: 1 })).toContainText("Shared Client");
+  const client = owner.url();
+
+  await owner.goto("/app/settings");
+  await owner.getByLabel(/Only you, partners and the people assigned/).check();
+  await owner.getByRole("button", { name: "Save who sees clients" }).click();
+  await expect(owner.getByRole("status")).toHaveText("Who sees clients saved.");
+  await person.goto("/app/clients");
+  await expect(person.getByRole("heading", { name: "0 clients" })).toBeVisible();
+
+  await owner.goto(client);
+  await owner.getByLabel("Person").selectOption({ label: newEmail });
+  await owner.getByRole("button", { name: "Assign" }).click();
+  await expect(owner.getByRole("listitem").filter({ hasText: newEmail })).toContainText("Staff");
+  await person.reload();
+  await expect(person.getByRole("link", { name: "Shared Client" })).toBeVisible();
+  await expect(person.getByRole("heading", { name: "1 client", exact: true })).toBeVisible();
+});
+
 test("after the firm's idle limit, an unattended screen signs out", async () => {
   await owner.goto("/app/settings");
   await owner.getByLabel(/only during office hours/).uncheck();
   await owner.getByRole("button", { name: "Save office hours" }).click();
   await expect(owner.getByRole("status")).toHaveText("Office hours saved.");
   await owner.getByLabel("Sign out after no activity for").selectOption("15");
-  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await owner.getByRole("button", { name: "Save signing in limits" }).click();
   await expect(owner.getByRole("status")).toHaveText("Signing in limits saved.");
 
   await person.clock.install();

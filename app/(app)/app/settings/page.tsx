@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { changeHoliday, changeSpecialHours, saveHours, saveLimits } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, saveHours, saveLimits, saveVisibility } from "@/app/(app)/actions";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
@@ -23,6 +23,29 @@ export default async function Settings({
   return (
     <>
       <h1>Settings</h1>
+      <section className="app-card" aria-labelledby="visibility">
+        <h2 id="visibility">Who sees which clients</h2>
+        <form action={saveVisibility}>
+          {[
+            ["open", "Everyone in the firm sees every client"],
+            ["restricted", "Only you, partners and the people assigned to a client see it"],
+          ].map(([value, label]) => (
+            <label key={value} className="app-check">
+              <input type="radio" name="visibility" value={value} defaultChecked={(settings.client_visibility ?? "open") === value} />
+              {label}
+            </label>
+          ))}
+          <button className="btn" type="submit">
+            Save who sees clients
+          </button>
+          {saved === "visibility" && (
+            <p className="app-done" role="status">
+              Who sees clients saved.
+            </p>
+          )}
+        </form>
+      </section>
+
       <section className="app-card" aria-labelledby="hours">
         <h2 id="hours">Office hours</h2>
         <p className="app-note">India time. You can always sign in; these hours apply to everyone else.</p>
@@ -133,7 +156,7 @@ export default async function Settings({
             </select>
           </div>
           <button className="btn" type="submit">
-            Save
+            Save signing in limits
           </button>
         </form>
         {saved === "limits" && (

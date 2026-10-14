@@ -107,4 +107,29 @@ describe("the client register", () => {
         { action: "registration.removed", details: { kind: "pan" } },
       ]);
     }));
+
+  it("in restricted mode shows staff only their assigned clients; the owner still sees all", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER);
+      await add(FIRM, CLIENT, pan("i1"));
+      await add(FIRM, "00000000-0000-4000-8000-0000000004c4", pan("i4"));
+      const seen = async (person: string) => {
+        await actAs(db, person);
+        return [(await db.query("select 1 from public.clients")).rowCount, (await db.query("select 1 from public.client_registrations")).rowCount];
+      };
+      expect(await seen(STAFF)).toEqual([2, 2]); // open, the default
+
+      await actAs(db, OWNER);
+      await db.query("update public.firms set settings = settings || '{\"client_visibility\": \"restricted\"}' where id = $1", [FIRM]);
+      expect(await seen(STAFF)).toEqual([0, 0]);
+      expect(await seen(OWNER)).toEqual([2, 2]);
+
+      await actAs(db, STAFF);
+      const self = "insert into public.client_assignments (firm_id, client_id, user_id, role) values ($1, $2, $3, 'staff')";
+      expect((await attempt(db, self, [FIRM, CLIENT, STAFF])).ok).toBe(false);
+      await actAs(db, OWNER);
+      await db.query(self, [FIRM, CLIENT, STAFF]);
+      expect(await seen(STAFF)).toEqual([1, 1]);
+    }));
 });
