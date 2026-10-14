@@ -24,19 +24,6 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"activity_log_default": {
-                  Row: {
-                    "action": string,"actor_id": string | null,"at": string,"details": NonNullable<Json>,"entity_id": string | null,"entity_type": string | null,"firm_id": string
-                  }
-                  Insert: {
-                    "action": string,"actor_id"?: string | null,"at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type"?: string | null,"firm_id": string
-                  }
-                  Update: {
-                    "action"?: string,"actor_id"?: string | null,"at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type"?: string | null,"firm_id"?: string
-                  }
-                  Relationships: [
-                    
-                  ]
                 },"firm_members": {
                   Row: {
                     "access": Json | null,"branch_id": string | null,"firm_id": string,"role": string,"status": string,"team_id": string | null,"user_id": string
@@ -154,6 +141,9 @@ isOneToOne: false
                            },
 "firm_state":
 { Args: { "f": Database["public"]['Tables']["firms"]['Row'] }; Returns: string
+                           },
+"maintain_activity_log":
+{ Args: { "as_of"?: string }; Returns: undefined
                            },
 "mark_job_sending":
 { Args: { "job_id": number }; Returns: boolean
