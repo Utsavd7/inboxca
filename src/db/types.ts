@@ -24,6 +24,25 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"firm_keys": {
+                  Row: {
+                    "firm_id": string,"wrapped_key": string
+                  }
+                  Insert: {
+                    "firm_id": string,"wrapped_key": string
+                  }
+                  Update: {
+                    "firm_id"?: string,"wrapped_key"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "firm_keys_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: true
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"firm_members": {
                   Row: {
                     "access": Json | null,"branch_id": string | null,"firm_id": string,"role": string,"status": string,"team_id": string | null,"user_id": string
