@@ -216,7 +216,7 @@
 
 - **One job per entity action.** Creating or rescheduling a compliance task writes a `jobs` row with `run_at`, `entity_type`, `entity_id` and `schedule_version`. Workers claim due jobs atomically (`claim_jobs`: `FOR UPDATE SKIP LOCKED` and a lease; a job whose lease runs out goes back to the queue, or becomes `uncertain` if it had started its outside call), recheck the entity (stop if filed or rescheduled), then write a `send` job in the same transaction.
 - **Delivery contract:** transactionally write the domain change and the `send` job row; send with a deterministic idempotency key; states `pending`, `claimed`, `sending`, `done`, `failed`, `uncertain`, `cancelled`. An `uncertain` send (timeout after possible acceptance) is reconciled against the mailbox's Sent folder or provider status before any retry; it is never blindly resent.
-- **Cron:** Supabase Cron triggers the due-job sweep every minute, mailbox polling every 2 minutes (IMAP/Zoho), the nightly reconciliation, the weekly template watcher, the daily workspace and returns metering, the daily drive check (sharing and outside changes), the daily clean-up of 30-day copies and the monthly log-partition cleanup.
+- **Cron:** Supabase Cron triggers the due-job sweep every minute while a job is due (it checks the `jobs` table first, so an idle app is never woken), mailbox polling every 2 minutes (IMAP/Zoho), the nightly reconciliation, the weekly template watcher, the daily workspace and returns metering, the daily drive check (sharing and outside changes), the daily clean-up of 30-day copies and the daily activity-log retention (step 5).
 - **Flow control:** per-firm concurrency limit on workers; per-mailbox send pacing within the provider's daily cap (§5.13).
 - **Quiet hours:** client reminders go out 09:00–20:00 IST, spread across the window.
 
@@ -1195,7 +1195,8 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 - [ ] Next.js + TypeScript strict + Tailwind + shadcn/ui with InboxCA tokens (§9.1)
 - [ ] Supabase local dev, migrations, generated types; `jobs` + Supabase Cron wiring with a test harness
   - [x] Step 2 (14 Oct 2026): Supabase local dev (`supabase/config.toml`, with realtime, storage, edge functions and log analytics off, since InboxCA uses none of them) and the first migration: `firms`, `groups`, `firm_members`, `activity_log`, with row level security on each. Runs on Docker through Colima on this Mac.
-  - [x] Step 3 (14 Oct 2026): generated types (`src/db/types.ts`, `npm run db:types`, checked in CI), the `jobs` table with `claim_jobs`, `mark_job_sending`, `finish_job` and `cancel_jobs` (server only), and the runner with retries (`src/jobs`). Still open: the `/api/jobs` endpoint and the Supabase Cron schedule that calls it, which come with the first real job kind.
+  - [x] Step 3 (14 Oct 2026): generated types (`src/db/types.ts`, `npm run db:types`, checked in CI), the `jobs` table with `claim_jobs`, `mark_job_sending`, `finish_job` and `cancel_jobs` (server only), and the runner with retries (`src/jobs`).
+  - [x] Step 6 (14 Oct 2026): the `/api/jobs` worker endpoint (checks `JOB_WORKER_SECRET`, runs one sweep through Supabase's API with the server key, so the app holds no database password) and the Supabase Cron schedule that calls it every minute through pg_net, only while a job is due. The worker's address and secret are read from Supabase Vault, so nothing is called until they are stored. The list of job kinds (`src/jobs/handlers.ts`) is empty until the first kind is built.
 - [ ] Auth, invites, roles, mandatory TOTP 2FA
   - [x] Step 4 (14 Oct 2026): sign in with a code or a link sent by email, then a 2 step code from an authenticator app, set up on first sign in (`/sign-in`, `/sign-in/two-step`, `/auth/confirm`). Only existing members can sign in: there is no open sign up, and an unknown address gets the same answer and no email. The database shows firm data only after the 2 step code (`member_role` requires `aal2`). The app's first page shows the firm and the person's role. Browser tests run the whole flow against local Supabase, its mail catcher included, in CI. Still open: invites, and roles beyond reading one's own.
 - [ ] **Sign-up, billing and activation (D5, §5.14.1):** public sign-up with plan and billing-cycle choice and click-through acceptance of terms, privacy notice and DPA; Razorpay Subscriptions with card / UPI AutoPay or eNACH by amount; webhook-verified activation that makes the pending firm active and invites the owner; automatic renewals, failed-payment grace and read-only states, prorated upgrades, top-ups paid before they apply, invoices, daily reconciliation; admin override for pilots
@@ -1478,7 +1479,7 @@ DROPBOX_APP_KEY=                  # Dropbox connection, App folder access only
 DROPBOX_APP_SECRET=
 FILE_WORKER_URL=                  # file worker endpoint: AWS Lambda in ap-south-1 (D28), confirmed in the M0 spike
 FILE_WORKER_SECRET=               # service-to-service credential
-JOB_WORKER_SECRET=                # authenticates Supabase Cron / Queue calls to /api/jobs
+JOB_WORKER_SECRET=                # authenticates Supabase Cron's call to /api/jobs; the same value, and the endpoint's address, are kept in Supabase Vault (job_worker_secret, job_worker_url)
 TEMPLATE_WATCH_SOURCES=           # official download pages to watch (comma-separated)
 AWS_SES_REGION=ap-south-1         # Orelu system emails via Amazon SES (D28)
 EMAIL_FROM_DOMAIN=                # Orelu's own domain, verified in SES
