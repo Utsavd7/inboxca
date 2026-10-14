@@ -30,7 +30,7 @@ export default async function Client({
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, kind, archived_at, email_enc, client_registrations(id, kind, number_enc), client_assignments(user_id, team_id, role)")
+    .select("id, name, kind, archived_at, email_enc, group_id, client_registrations(id, kind, number_enc), client_assignments(user_id, team_id, role)")
     .eq("id", id)
     .maybeSingle();
   if (!client) notFound();
@@ -43,10 +43,13 @@ export default async function Client({
   );
   const email = client.email_enc ? await crypto.decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc) : "";
   const manage = canManageClients(membership.role);
-  const [{ data: people }, { data: teams }] = await Promise.all([
+  const [{ data: people }, { data: groups }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
-    supabase.from("groups").select("id, name").eq("kind", "team").order("name"),
+    supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group"]).order("name"),
   ]);
+  const teams = groups?.filter((group) => group.kind === "team");
+  const clientGroups = groups?.filter((group) => group.kind === "client_group") ?? [];
+  const groupName = clientGroups.find((group) => group.id === client.group_id)?.name;
   // Who can be assigned: teams and active people, each as "team:<id>" or "person:<id>".
   const choices = [
     ...(teams ?? []).map((team) => ({ value: `team:${team.id}`, label: `Team: ${team.name}` })),
@@ -68,6 +71,11 @@ export default async function Client({
           {clientKinds[client.kind as ClientKind]}
           {client.archived_at && <span className="tag tag-deactivated">Archived</span>}
           {email && <span className="app-email">{email}</span>}
+          {groupName && (
+            <Link className="app-email" href={`/app/clients?group=${client.group_id}`}>
+              Group: {groupName}
+            </Link>
+          )}
         </span>
       </h1>
       {error && errors[error] && (
@@ -177,7 +185,7 @@ export default async function Client({
       {manage && (
         <section className="app-card" aria-labelledby="details">
           <h2 id="details">Details</h2>
-          <form action={manageClient} className="app-form-row">
+          <form action={manageClient} className="app-grid-form">
             {hidden}
             <div>
               <label htmlFor="client-name">Name</label>
@@ -196,6 +204,21 @@ export default async function Client({
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label htmlFor="client-group">Group</label>
+              <select id="client-group" name="group" defaultValue={client.group_id ?? ""}>
+                <option value="">No group</option>
+                {clientGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="client-new-group">Or a new group</label>
+              <input id="client-new-group" name="new_group" maxLength={120} />
             </div>
             <button className="btn" name="intent" value="details">
               Save details

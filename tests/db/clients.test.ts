@@ -153,4 +153,22 @@ describe("the client register", () => {
       const log = await db.query("select action from public.activity_log where firm_id = $1 and action like 'member.%'", [FIRM]);
       expect(log.rowCount).toBe(2);
     }));
+
+  it("lets managers make client groups (not teams), and ungroups clients when a group goes", () =>
+    rollback(db, async () => {
+      await seed();
+      await db.query("update public.firm_members set role = 'manager' where user_id = $1", [STAFF]);
+      await actAs(db, OWNER);
+      await add(FIRM, CLIENT, pan("i1"));
+      await actAs(db, STAFF);
+      const make = (kind: string) => attempt(db, "insert into public.groups (firm_id, kind, name) values ($1, $2, 'Patel family') returning id", [FIRM, kind]);
+      expect((await make("team")).ok).toBe(false);
+      const group = await make("client_group");
+      expect(group.ok).toBe(true);
+      const id = group.ok ? group.rows[0].id : null;
+      await db.query("update public.clients set group_id = $1 where id = $2", [id, CLIENT]);
+      await actAs(db, OWNER);
+      await db.query("delete from public.groups where id = $1", [id]);
+      expect((await db.query("select group_id from public.clients where id = $1", [CLIENT])).rows).toEqual([{ group_id: null }]);
+    }));
 });

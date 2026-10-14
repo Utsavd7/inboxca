@@ -102,3 +102,19 @@ test("importing 500 clients with emails adds them all and reports every bad row"
   await owner.goto("/app/clients?q=client42@example.test");
   await expect(owner.getByRole("link", { name: "Client 42", exact: true })).toBeVisible();
 });
+
+test("clients in one group are listed together", async () => {
+  await owner.goto("/app/clients?q=patel");
+  await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
+  await owner.getByLabel("Or a new group").fill("Patel family");
+  await owner.getByRole("button", { name: "Save details" }).click();
+  await expect(owner.getByRole("link", { name: "Group: Patel family" })).toBeVisible();
+
+  await owner.goto("/app/clients?q=Client 321");
+  await owner.getByRole("link", { name: "Client 321" }).click();
+  await owner.getByLabel("Group", { exact: true }).selectOption({ label: "Patel family" });
+  await owner.getByRole("button", { name: "Save details" }).click();
+  await owner.getByRole("link", { name: "Group: Patel family" }).click();
+  await expect(owner.getByRole("heading", { name: "Patel family: 2 clients" })).toBeVisible();
+  await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
+});

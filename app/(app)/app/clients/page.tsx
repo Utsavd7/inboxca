@@ -9,7 +9,11 @@ import { ImportForm } from "./import-form";
 
 // The client register. Search finds a name, or a whole email, PAN or GSTIN through its
 // blind index, so those are never searched in plain text.
-export default async function Clients({ searchParams }: { searchParams: Promise<{ q?: string; archived?: string }> }) {
+export default async function Clients({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; archived?: string; group?: string }>;
+}) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
@@ -18,7 +22,13 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
   const number = cleanNumber(q);
   const kind = isGstin(number) ? "gstin" : isPan(number) ? "pan" : null;
 
-  let query = supabase.from("clients").select("id, name, kind").eq("firm_id", membership.firmId).order("name").limit(500);
+  let query = supabase
+    .from("clients")
+    .select("id, name, kind, group_id, groups(name)")
+    .eq("firm_id", membership.firmId)
+    .order("name")
+    .limit(500);
+  if (params.group) query = query.eq("group_id", params.group);
   query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
   if (q.includes("@")) query = query.eq("email_bidx", await serverCrypto().blindIndex(membership.firmId, "email", q));
   else if (kind) {
@@ -27,13 +37,18 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
     query = query.in("id", data?.map((row) => row.client_id) ?? []);
   } else if (q) query = query.ilike("name", `%${q.replace(/[\\%_]/g, "\\$&")}%`);
   const { data: clients } = await query;
+  const groupName = params.group ? clients?.[0]?.groups?.name : null;
 
   return (
     <>
       <h1>Clients</h1>
       <section className="app-card" aria-labelledby="register">
         <h2 id="register">
-          {q ? `Clients matching “${q}”` : `${clients?.length ?? 0} ${archived ? "archived " : ""}client${clients?.length === 1 ? "" : "s"}`}
+          {q
+            ? `Clients matching “${q}”`
+            : groupName
+              ? `${groupName}: ${clients?.length} client${clients?.length === 1 ? "" : "s"}`
+              : `${clients?.length ?? 0} ${archived ? "archived " : ""}client${clients?.length === 1 ? "" : "s"}`}
         </h2>
         <form className="app-form-row" role="search">
           <div>
@@ -51,14 +66,17 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
               <Link className="person" href={`/app/clients/${client.id}`}>
                 {client.name}
               </Link>
-              <span className="person-role">{clientKinds[client.kind as ClientKind]}</span>
+              <span className="person-role">
+                {client.groups && <Link href={`/app/clients?group=${client.group_id}`}>{client.groups.name}</Link>}
+                {clientKinds[client.kind as ClientKind]}
+              </span>
             </li>
           ))}
         </ul>
         {q && !clients?.length && <p className="app-note">No client matches. Check the spelling or the number.</p>}
         <p className="app-note">
-          <Link href={archived ? "/app/clients" : "/app/clients?archived=1"}>
-            {archived ? "Show current clients" : "Show archived clients"}
+          <Link href={archived || params.group ? "/app/clients" : "/app/clients?archived=1"}>
+            {archived || params.group ? "Show all current clients" : "Show archived clients"}
           </Link>
         </p>
       </section>
