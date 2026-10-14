@@ -32,7 +32,7 @@
 ### 1.2 How automation runs (no n8n)
 
 - **No n8n or other no-code tool (D2):** automation is code inside the app.
-- Durable work (reminders, follow-ups, email processing, file jobs, template runs) is recorded in one Postgres `jobs` table, driven by **Supabase Cron** (schedules) and **Supabase Queues** (`pgmq`), with idempotent workers.
+- Durable work (reminders, follow-ups, email processing, file jobs, template runs) is recorded in one Postgres `jobs` table, driven by **Supabase Cron** (schedules), with idempotent workers. Workers claim jobs straight from the table (`FOR UPDATE SKIP LOCKED` with a lease), so no separate queue service is needed (step 3, 14 Oct 2026).
 - Pay-as-you-go; no extra orchestration service.
 
 | Area | n8n workflow (the reel) | Our approach |
@@ -59,7 +59,7 @@
 | # | Decision | Value | Status |
 |---|---|---|---|
 | D1 | Release model | All features ship together in one launch (§2). | **Decided** |
-| D2 | Automation engine | Code in our app; one Postgres jobs table driven by Supabase Cron and Queues; no n8n (§1.2). | **Decided** |
+| D2 | Automation engine | Code in our app; one Postgres jobs table driven by Supabase Cron; workers claim from the table itself, with no separate queue service (Supabase Queues dropped in M0 step 3, 14 Oct 2026, as one moving part fewer); no n8n (§1.2). | **Decided** |
 | D3 | Channels | **Email only at launch**, through each firm's own mailbox. **Later add-ons, designed now but not built:** an AI WhatsApp assistant on the official WhatsApp Business Platform (Meta Cloud API, the firm's own number and Meta account, so Meta bills the firm directly) and AI phone calls through a telephony API, both metered and capped (§5.19). Never unofficial WhatsApp or WhatsApp Web automation. | **Decided by user** (30 Sep, 1 Oct 2026) |
 | D4 | Product name | **Replaced on 7 Oct 2026 by D35.** The product is named InboxCA. The name is still held in one config constant. | **Replaced** (7 Oct 2026) |
 | D5 | Plans and billing | Plans are sized by **the work Orelu does; clients are unlimited** on every plan (user, 1 Oct 2026). Solo, Growth, Scale and Enterprise each include a number of **users** (the final size of the whole team, the owner included: 1 on Solo, a single CA who is both the admin and the worker, and up to 10, 20 and 40 on Growth, Scale and Enterprise; user, 8 Oct 2026, replacing the earlier "owner free" rule), an **Orelu workspace a year**, a number of **returns a year** and **AI credits a month**; client files live in the firm's own drive, so storage does not size a plan (re-based on 8 Oct 2026, D36 and D37). **Custom** (above Enterprise on workspace, returns or people) is a plan builder where the owner enters clients, practice type and people, extending Enterprise (§5.14; Orelu works out the returns and measures the workspace): the firm's work sets the price, people up to 40 are included at no extra cost, and only people above 40 add to it; its extra work and extra people are priced in **slabs that get cheaper as the firm grows** (user, 7 Oct 2026). Any plan can add users one at a time. Extra AI credits come in fixed blocks that are **capped per plan**, so they give headroom for a busy month and can never replace an upgrade; storage blocks no longer exist. **The plan follows the firm's work and is not chosen down:** Orelu measures the workspace it keeps for the firm and the returns in the firm's calendar, each over a year, and places the firm on the plan that fits the higher of the two; above Enterprise's figure it is on Custom automatically, whatever its head-count, and having fewer people than a plan includes never lowers the price (user, 7 Oct 2026; §5.14). A one-time **setup fee** = the AI cost of the setup credit allowance (one month of the plan's AI credits, used to place past files, §5.16) plus 20%. Formula values and prices live in the business plan and admin configuration, never in code. Build entitlements, metering and alerts. **All payments run through Razorpay and are automatic (§5.14.1):** the owner picks monthly or yearly (yearly = 11 × monthly, i.e. 1 month free, then adjusted by the rounding rule so that it ends in the same last three digits as the monthly price, §5.14) and sets up Razorpay AutoPay once (card or UPI up to ₹15,000 a debit; bank e-mandate (eNACH) above that, because card and UPI debits over ₹15,000 need an OTP every time). The first successful debit activates the firm by webhook and emails the owner an invite (no manual onboarding); renewals debit automatically. Top-ups and add-ons are **paid first** and applied automatically when the payment is captured. Razorpay's fees are counted in Orelu's costs. | **Decided** |
@@ -160,7 +160,7 @@
 | UI | Tailwind CSS + shadcn/ui, InboxCA tokens (§9.1) | Lucide icons |
 | Database | **Supabase Postgres (Mumbai)** | RLS on every tenant table |
 | Auth | Supabase Auth, email magic link + TOTP 2FA + passkeys for registered devices | Plus access-policy checks (§4.4) |
-| Jobs | One Postgres `jobs` table (scheduled work and sends), **Supabase Cron** and **Supabase Queues** (`pgmq`) | Idempotent workers; `run_at`, cancellation by entity version |
+| Jobs | One Postgres `jobs` table (scheduled work and sends) and **Supabase Cron** | Idempotent workers; `run_at`; claims with `FOR UPDATE SKIP LOCKED` and a lease; cancellation by entity version |
 | Client files | **The firm's own drive**: OneDrive and Dropbox at launch (Google Drive later), others behind one adapter interface | Orelu touches only the folder it creates, with the narrowest own-folder permission; no drive link ever reaches staff (D36) |
 | Orelu workspace store | **Backblaze B2**, S3-compatible API, one private bucket | Temporary files in transit (24-hour lifecycle), the encrypted text read from files, locked 30-day safety copies (object lock), database exports; no India region (D12) |
 | File worker | **AWS Lambda in Mumbai** (`ap-south-1`), container image; free tier covers normal monthly volume; the M0 spike confirms 2 GB files fit Lambda's limits, otherwise large files use a short-lived container task | Malware scan, conversions, encryption, ZIP extraction, streaming downloads (§5.15) |
@@ -184,7 +184,7 @@
   /d/[token]          public secure download page (one-time code)
   /f/[formKey]        public enquiry form
   /signup             public sign-up, plan choice and Razorpay AutoPay
-  /api/jobs           job worker endpoints (called by Supabase Cron / Queues)
+  /api/jobs           job worker endpoint (called by Supabase Cron)
   /api/webhooks/email/google       Gmail Pub/Sub push
   /api/webhooks/email/microsoft    Graph change notifications
   /api/webhooks/razorpay/orelu      Orelu plan payments (activation, renewals)
@@ -214,8 +214,8 @@
 
 ### 4.3 How jobs run
 
-- **One job per entity action.** Creating or rescheduling a compliance task writes a `jobs` row with `run_at`, `entity_type`, `entity_id` and `schedule_version`. Workers claim due jobs atomically (`FOR UPDATE SKIP LOCKED` or a `pgmq` read with visibility timeout), recheck the entity (stop if filed or rescheduled), then write a `send` job in the same transaction.
-- **Delivery contract:** transactionally write the domain change and the `send` job row; send with a deterministic idempotency key; states `pending`, `claimed`, `sending`, `accepted`, `failed`, `uncertain`, `cancelled`. An `uncertain` send (timeout after possible acceptance) is reconciled against the mailbox's Sent folder or provider status before any retry; it is never blindly resent.
+- **One job per entity action.** Creating or rescheduling a compliance task writes a `jobs` row with `run_at`, `entity_type`, `entity_id` and `schedule_version`. Workers claim due jobs atomically (`claim_jobs`: `FOR UPDATE SKIP LOCKED` and a lease; a job whose lease runs out goes back to the queue, or becomes `uncertain` if it had started its outside call), recheck the entity (stop if filed or rescheduled), then write a `send` job in the same transaction.
+- **Delivery contract:** transactionally write the domain change and the `send` job row; send with a deterministic idempotency key; states `pending`, `claimed`, `sending`, `done`, `failed`, `uncertain`, `cancelled`. An `uncertain` send (timeout after possible acceptance) is reconciled against the mailbox's Sent folder or provider status before any retry; it is never blindly resent.
 - **Cron:** Supabase Cron triggers the due-job sweep every minute, mailbox polling every 2 minutes (IMAP/Zoho), the nightly reconciliation, the weekly template watcher, the daily workspace and returns metering, the daily drive check (sharing and outside changes), the daily clean-up of 30-day copies and the monthly log-partition cleanup.
 - **Flow control:** per-firm concurrency limit on workers; per-mailbox send pacing within the provider's daily cap (§5.13).
 - **Quiet hours:** client reminders go out 09:00–20:00 IST, spread across the window.
@@ -1138,7 +1138,7 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 | `payments` | firm_id, kind (plan/renewal/extra_user/ai_block/topup/addon/setup/refund), amount_paise, gst_paise, fee_paise, fee_tax_paise, razorpay_id, event_id, refund_of, reason (refunds: money_back/duplicate/charge_error), invoice_no, status, settled_at | `plan_payments`, `plan_refunds` |
 | `guarantee_claims` | identity_hash (one row each for the PAN, GSTIN, mailbox and owner-email hash), claimed_at; no firm data; outlives firm deletion to enforce once per firm (D33) | — |
 | `usage_ledger` | firm_id, meter (ai_credits/setup_credits/workspace_bytes/download_bytes/system_email/wa_message/call_minutes), quantity, kind (grant/reserve/settle/release/rollover/topup), ref_type, ref_id, at; append-only | `usage_balances`, `storage_usage_daily` |
-| `jobs` | firm_id, kind (reminder/send/extract/ocr/drive_save/drive_check and others), entity_type, entity_id, schedule_version, idempotency_key, channel, run_at, state, attempts, provider_id, last_error_code, skip_reason_code (reminders: filed, docs_received, data_received, staff_handling, paused, replied_recently); no message content | `outbox` |
+| `jobs` | firm_id (null for platform work), kind (reminder/send/extract/ocr/drive_save/drive_check and others), entity_type, entity_id, schedule_version, idempotency_key, run_at, state, claimed_until (the lease), attempts, last_error_code; no message content. Added by the step that brings the job kind needing them, not before: provider_id (sends) and skip_reason_code (reminders: filed, docs_received, data_received, staff_handling, paused, replied_recently). `channel` dropped: email is the only channel at launch, and the kind says it | `outbox` |
 | `firm_keys` | firm_id, wrapped_dek, index_key_wrapped, kms_key_version, rotated_at | — |
 
 **What `requests.details` holds, by kind:**
@@ -1193,8 +1193,9 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 
 ### M0: Foundation
 - [ ] Next.js + TypeScript strict + Tailwind + shadcn/ui with InboxCA tokens (§9.1)
-- [ ] Supabase local dev, migrations, generated types; `jobs` + Supabase Cron/Queues wiring with a test harness
-  - [x] Step 2 (14 Oct 2026): Supabase local dev (`supabase/config.toml`, with realtime, storage, edge functions and log analytics off, since InboxCA uses none of them) and the first migration: `firms`, `groups`, `firm_members`, `activity_log`, with row level security on each. Runs on Docker through Colima on this Mac. Still open: generated types, `jobs` with Cron and Queues.
+- [ ] Supabase local dev, migrations, generated types; `jobs` + Supabase Cron wiring with a test harness
+  - [x] Step 2 (14 Oct 2026): Supabase local dev (`supabase/config.toml`, with realtime, storage, edge functions and log analytics off, since InboxCA uses none of them) and the first migration: `firms`, `groups`, `firm_members`, `activity_log`, with row level security on each. Runs on Docker through Colima on this Mac.
+  - [x] Step 3 (14 Oct 2026): generated types (`src/db/types.ts`, `npm run db:types`, checked in CI), the `jobs` table with `claim_jobs`, `mark_job_sending`, `finish_job` and `cancel_jobs` (server only), and the runner with retries (`src/jobs`). Still open: the `/api/jobs` endpoint and the Supabase Cron schedule that calls it, which come with the first real job kind.
 - [ ] Auth, invites, roles, mandatory TOTP 2FA
 - [ ] **Sign-up, billing and activation (D5, §5.14.1):** public sign-up with plan and billing-cycle choice and click-through acceptance of terms, privacy notice and DPA; Razorpay Subscriptions with card / UPI AutoPay or eNACH by amount; webhook-verified activation that makes the pending firm active and invites the owner; automatic renewals, failed-payment grace and read-only states, prorated upgrades, top-ups paid before they apply, invoices, daily reconciliation; admin override for pilots
 - [ ] **Money-back guarantee (D33, §5.14.1):** eligibility check, self-serve cancel and refund, Razorpay refund and its webhooks, `guarantee_claims`, the read-only state and the owner's download of the client list, records and logs, the window's last day shown at sign-up and in Billing, admin refund report
