@@ -106,3 +106,22 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await owner.goto("/app");
   await expect(owner.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
 });
+
+test("after the firm's idle limit, an unattended screen signs out", async () => {
+  await owner.goto("/app/settings");
+  await owner.getByLabel(/only during office hours/).uncheck();
+  await owner.getByRole("button", { name: "Save office hours" }).click();
+  await expect(owner.getByRole("status")).toHaveText("Office hours saved.");
+  await owner.getByLabel("Sign out after no activity for").selectOption("15");
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(owner.getByRole("status")).toHaveText("Signing in limits saved.");
+
+  await person.clock.install();
+  await person.goto("/app");
+  await expect(person.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
+  await person.clock.fastForward("16:00");
+  await expect(person).toHaveURL(/\/sign-in\?reason=idle$/);
+  await expect(person.getByRole("status")).toContainText("signed out after a while without activity");
+  await person.goto("/app");
+  await expect(person).toHaveURL(/\/sign-in$/);
+});

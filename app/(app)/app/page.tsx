@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { joinFirm } from "@/app/(app)/actions";
 import { describeHours, type Hours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
@@ -9,6 +10,7 @@ export default async function AppHome() {
   const { supabase, membership } = await currentMember();
   const { data: invites } = await supabase.rpc("my_invites");
   const closed = membership ? null : (await supabase.rpc("closed_firms")).data?.[0];
+  if (closed?.reason === "session") redirect("/auth/sign-out?reason=session");
 
   return (
     <>

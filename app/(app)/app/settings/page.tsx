@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
-import { changeHoliday, saveHours } from "@/app/(app)/actions";
+import { changeHoliday, saveHours, saveLimits } from "@/app/(app)/actions";
 import { DAYS, SUGGESTED_HOURS, type Hours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
+import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
 
-// The owner's settings. For now: office hours and holidays (PLAN.md 5.17, "When").
+// The owner's settings. For now: office hours, holidays and signing in limits (PLAN.md 5.17).
 export default async function Settings({
   searchParams,
 }: {
@@ -15,7 +16,8 @@ export default async function Settings({
   const settings = membership.settings;
   const hours = (settings.hours as Hours | undefined) ?? SUGGESTED_HOURS;
   const holidays = (settings.holidays as string[] | undefined) ?? [];
-  const hoursOnly = (settings.access as { hours_only?: boolean } | undefined)?.hours_only ?? false;
+  const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number };
+  const hoursOnly = access.hours_only ?? false;
 
   return (
     <>
@@ -61,6 +63,41 @@ export default async function Settings({
             </p>
           )}
         </form>
+      </section>
+
+      <section className="app-card" aria-labelledby="limits">
+        <h2 id="limits">Signing in</h2>
+        <p className="app-note">For everyone in the firm, you included.</p>
+        <form action={saveLimits} className="app-form-row">
+          <div>
+            <label htmlFor="idle_minutes">Sign out after no activity for</label>
+            <select id="idle_minutes" name="idle_minutes" defaultValue={access.idle_minutes ?? 0}>
+              {IDLE_CHOICES.map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {minutes ? `${minutes} minutes` : "Never"}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="session_hours">Ask for the 2 step code again after</label>
+            <select id="session_hours" name="session_hours" defaultValue={access.session_hours ?? 0}>
+              {SESSION_CHOICES.map((hours) => (
+                <option key={hours} value={hours}>
+                  {hours ? `${hours} hours` : "Only at sign in"}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button className="btn" type="submit">
+            Save
+          </button>
+        </form>
+        {saved === "limits" && (
+          <p className="app-done" role="status">
+            Signing in limits saved.
+          </p>
+        )}
       </section>
 
       <section className="app-card" aria-labelledby="holidays">

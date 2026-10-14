@@ -1,8 +1,9 @@
 "use server";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { log } from "@/src/lib/logger";
+import { SEEN_COOKIE } from "@/src/lib/session";
 import { supabaseServer } from "@/src/lib/supabase";
 
 // Sign in: an email code first, then a code from an authenticator app (PLAN.md 4.4).
@@ -71,8 +72,10 @@ export async function verifyTwoStep(_prev: StepState, form: FormData): Promise<S
   redirect("/app");
 }
 
+// Signs out this browser only; the person's other devices stay signed in.
 export async function signOut() {
   const supabase = await supabaseServer();
-  await supabase.auth.signOut();
+  await supabase.auth.signOut({ scope: "local" });
+  (await cookies()).delete(SEEN_COOKIE);
   redirect("/sign-in");
 }

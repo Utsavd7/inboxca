@@ -532,6 +532,7 @@ li { text-wrap: pretty; }
 .auth-form .btn { margin-top: 8px; }
 .auth-form .text-button { justify-self: start; font-size: 15px; font-weight: 700; color: var(--blue-deep); text-decoration: underline; text-underline-offset: 4px; }
 .auth-lead { color: var(--slate); }
+.auth-note { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: var(--wash); color: var(--navy); font-size: 15px; }
 .auth-small { font-size: 14px; color: var(--slate); overflow-wrap: anywhere; }
 .code-input { font-size: 24px !important; letter-spacing: 0.3em; text-align: center; }
 .qr { justify-self: center; border: 1px solid var(--line); border-radius: 16px; padding: 8px; background: var(--white); }
@@ -573,6 +574,7 @@ li { text-wrap: pretty; }
 .app-check { display: flex; align-items: center; gap: 10px; margin: 20px 0; font-weight: 600; }
 .hours-table label { display: flex; align-items: center; gap: 8px; }
 .app-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; }
+.app-form-row > div > :is(input, select) { width: 100%; }
 .app-done { margin-top: 14px; font-weight: 600; color: var(--green-deep); }
 @media (max-width: 640px) {
   .app-invite { grid-template-columns: 1fr; }
