@@ -11,9 +11,10 @@ const schema = z
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     APP_BASE_URL: url,
 
-    NEXT_PUBLIC_SUPABASE_URL: url,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: secret,
-    SUPABASE_SERVICE_ROLE_KEY: secret,
+    // Read by the server at run time, so the browser bundle never holds them.
+    SUPABASE_URL: url,
+    SUPABASE_PUBLISHABLE_KEY: secret,
+    SUPABASE_SECRET_KEY: secret, // job workers and admin only
 
     KMS_KEY_ID: secret,
     KMS_CREDENTIALS: secret,

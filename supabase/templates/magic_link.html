@@ -1,0 +1,13 @@
+<!-- The InboxCA sign in email. Supabase fills in the code and the link. -->
+<div style="font-family: Arial, sans-serif; color: #0b1f3a; max-width: 480px">
+  <h2 style="margin: 0 0 16px">Your InboxCA sign in code</h2>
+  <p style="margin: 0 0 8px">Type this code on the sign in page:</p>
+  <p style="font-family: monospace; font-size: 30px; letter-spacing: 6px; margin: 0 0 20px">{{ .Token }}</p>
+  <p style="margin: 0 0 20px">
+    Or, on this same device,
+    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email" style="color: #1a4bb0">open InboxCA</a>.
+  </p>
+  <p style="color: #51607a; font-size: 14px; margin: 0">
+    The code works for 10 minutes and only once. If you did not ask to sign in, you can ignore this email.
+  </p>
+</div>
