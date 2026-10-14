@@ -175,8 +175,8 @@ isOneToOne: false
 "access_setting":
 { Args: { "key": string,"person": Json,"role": string,"settings": Json }; Returns: Json
                            },
-"add_client":
-{ Args: { "client": string,"client_kind": string,"client_name": string,"registrations": Json,"target_firm": string }; Returns: boolean
+"add_clients":
+{ Args: { "clients": Json,"target_firm": string }; Returns: number
                            },
 "cancel_jobs":
 { Args: { "below_version"?: number,"p_entity_id": string,"p_entity_type": string }; Returns: number

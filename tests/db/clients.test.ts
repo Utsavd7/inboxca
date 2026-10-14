@@ -33,8 +33,12 @@ async function seed() {
   );
 }
 const add = async (firm: string, client: string, registrations: object[]) =>
-  (await db.query("select public.add_client($1, $2, 'Patel Textiles', 'business', $3) as added", [firm, client, JSON.stringify(registrations)]))
-    .rows[0].added;
+  (
+    await db.query("select public.add_clients($1, $2) as added", [
+      firm,
+      JSON.stringify([{ id: client, name: "Patel Textiles", kind: "business", registrations }]),
+    ])
+  ).rows[0].added === 1;
 
 describe("the client register", () => {
   it("lets the owner add a client with its numbers, logged; staff only view", () =>
@@ -69,10 +73,9 @@ describe("the client register", () => {
       await seed();
       await actAs(db, OWNER);
       await add(FIRM, CLIENT, pan("same"));
-      const again = await attempt(db, "select public.add_client($1, $2, 'Copy', 'individual', $3)", [
+      const again = await attempt(db, "select public.add_clients($1, $2)", [
         FIRM,
-        "00000000-0000-4000-8000-0000000004c3",
-        JSON.stringify(pan("same")),
+        JSON.stringify([{ id: "00000000-0000-4000-8000-0000000004c3", name: "Copy", kind: "individual", registrations: pan("same") }]),
       ]);
       expect(again).toMatchObject({ ok: false });
     }));
