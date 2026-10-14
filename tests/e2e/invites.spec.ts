@@ -78,7 +78,7 @@ test("the owner changes the role, removes the person and brings them back", asyn
   await row.getByLabel(`Role for ${newEmail}`).selectOption("staff");
   await Promise.all([
     owner.waitForResponse((response) => response.request().method() === "POST"),
-    row.getByRole("button", { name: "Save role" }).click(),
+    row.getByRole("button", { name: "Save", exact: true }).click(),
   ]);
   await owner.reload();
   await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("staff");
@@ -118,7 +118,7 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await expect(person.getByRole("heading", { level: 1 })).not.toContainText("closed");
 });
 
-test("in restricted mode a person sees only the clients assigned to them", async () => {
+test("in restricted mode a person sees only clients assigned to them or their team", async () => {
   await owner.goto("/app/clients");
   await owner.getByLabel("Name", { exact: true }).fill("Shared Client");
   await owner.getByRole("button", { name: "Add client" }).click();
@@ -132,10 +132,21 @@ test("in restricted mode a person sees only the clients assigned to them", async
   await person.goto("/app/clients");
   await expect(person.getByRole("heading", { name: "0 clients" })).toBeVisible();
 
+  // A team: the person joins it, and the client is assigned to the whole team.
+  await owner.goto("/app/people");
+  await owner.getByLabel("New team").fill("GST team");
+  await owner.getByRole("button", { name: "Add team" }).click();
+  const row = owner.getByRole("listitem").filter({ hasText: newEmail });
+  await row.getByLabel(`Team for ${newEmail}`).selectOption({ label: "GST team" });
+  await Promise.all([
+    owner.waitForResponse((response) => response.request().method() === "POST"),
+    row.getByRole("button", { name: "Save", exact: true }).click(),
+  ]);
+  await expect(owner.locator("section[aria-labelledby=teams]").getByRole("listitem")).toContainText("1 person");
   await owner.goto(client);
-  await owner.getByLabel("Person").selectOption({ label: newEmail });
+  await owner.getByLabel("Person or team").selectOption({ label: "Team: GST team" });
   await owner.getByRole("button", { name: "Assign" }).click();
-  await expect(owner.getByRole("listitem").filter({ hasText: newEmail })).toContainText("Staff");
+  await expect(owner.getByRole("listitem").filter({ hasText: "Team: GST team" })).toContainText("Staff");
   await person.reload();
   await expect(person.getByRole("link", { name: "Shared Client" })).toBeVisible();
   await expect(person.getByRole("heading", { name: "1 client", exact: true })).toBeVisible();

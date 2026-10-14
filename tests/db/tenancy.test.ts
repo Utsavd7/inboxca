@@ -190,7 +190,7 @@ describe("the activity log is append only", () => {
       await seed();
       await db.query("select set_config('app.log_purge', 'on', true)");
       expect(
-        await attempt(db, "delete from public.activity_log where firm_id = $1", [FIRM_B]),
+        await attempt(db, "delete from public.activity_log where firm_id = $1 and action = 'client.created'", [FIRM_B]),
       ).toMatchObject({ ok: true, count: 1 });
     }));
 });

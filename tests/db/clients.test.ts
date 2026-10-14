@@ -132,4 +132,25 @@ describe("the client register", () => {
       await db.query(self, [FIRM, CLIENT, STAFF]);
       expect(await seen(STAFF)).toEqual([1, 1]);
     }));
+
+  it("in restricted mode shows a client assigned to a team to everyone in that team", () =>
+    rollback(db, async () => {
+      await seed();
+      const TEAM = "00000000-0000-4000-8000-0000000004d0";
+      await db.query("insert into public.groups (id, firm_id, kind, name) values ($1, $2, 'team', 'GST team')", [TEAM, FIRM]);
+      await db.query("update public.firms set settings = '{\"client_visibility\": \"restricted\"}' where id = $1", [FIRM]);
+      await actAs(db, OWNER);
+      await add(FIRM, CLIENT, pan("i1"));
+      await db.query("insert into public.client_assignments (firm_id, client_id, team_id, role) values ($1, $2, $3, 'staff')", [FIRM, CLIENT, TEAM]);
+      await db.query("update public.firm_members set team_id = $1 where user_id = $2", [TEAM, STAFF]);
+      await actAs(db, STAFF);
+      expect((await db.query("select 1 from public.clients")).rowCount).toBe(1);
+      await actAs(db, OWNER);
+      await db.query("update public.firm_members set team_id = null where user_id = $1", [STAFF]);
+      await actAs(db, STAFF);
+      expect((await db.query("select 1 from public.clients")).rowCount).toBe(0);
+      await asOwner(db);
+      const log = await db.query("select action from public.activity_log where firm_id = $1 and action like 'member.%'", [FIRM]);
+      expect(log.rowCount).toBe(2);
+    }));
 });

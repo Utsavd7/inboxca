@@ -26,13 +26,13 @@ isOneToOne: false
                   ]
                 },"client_assignments": {
                   Row: {
-                    "client_id": string,"firm_id": string,"role": string,"user_id": string
+                    "client_id": string,"firm_id": string,"role": string,"team_id": string | null,"user_id": string | null
                   }
                   Insert: {
-                    "client_id": string,"firm_id": string,"role": string,"user_id": string
+                    "client_id": string,"firm_id": string,"role": string,"team_id"?: string | null,"user_id"?: string | null
                   }
                   Update: {
-                    "client_id"?: string,"firm_id"?: string,"role"?: string,"user_id"?: string
+                    "client_id"?: string,"firm_id"?: string,"role"?: string,"team_id"?: string | null,"user_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -40,6 +40,12 @@ isOneToOne: false
       columns: ["firm_id","client_id"]
 isOneToOne: false
       referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "client_assignments_firm_id_team_id_fkey"
+      columns: ["firm_id","team_id"]
+isOneToOne: false
+      referencedRelation: "groups"
       referencedColumns: ["firm_id","id"]
     },{
       foreignKeyName: "client_assignments_firm_id_user_id_fkey"
@@ -243,7 +249,7 @@ isOneToOne: false
                            },
 "firm_people":
 { Args: { "target_firm": string }; Returns: {
-              "email": string,"role": string,"status": string,"user_id": string
+              "email": string,"role": string,"status": string,"team_id": string,"user_id": string
             }[]
                            },
 "firm_state":

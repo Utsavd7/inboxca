@@ -68,7 +68,22 @@ export async function manageMember(form: FormData) {
   const role = invitable.safeParse(form.get("role"));
   if (intent === "remove") await supabase.rpc("remove_member", args);
   else if (intent === "restore") await supabase.rpc("restore_member", args);
-  else if (role.success) await supabase.rpc("change_role", { ...args, new_role: role.data });
+  else if (role.success) {
+    await supabase.rpc("change_role", { ...args, new_role: role.data });
+    const team = String(form.get("team") ?? "") || null;
+    await supabase.from("firm_members").update({ team_id: team }).eq("firm_id", args.target_firm).eq("user_id", args.person);
+  }
+  revalidatePath("/app/people");
+}
+
+// People → Teams: the owner adds and removes teams. Removing one leaves its people without
+// a team and drops its client assignments.
+export async function changeTeam(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const name = String(form.get("name") ?? "").trim();
+  if (form.get("intent") === "remove") await supabase.from("groups").delete().eq("id", String(form.get("team") ?? "")).eq("kind", "team");
+  else if (name && name.length <= 120) await supabase.from("groups").insert({ firm_id: membership.firmId, kind: "team", name });
   revalidatePath("/app/people");
 }
 
@@ -310,13 +325,16 @@ export async function manageClient(form: FormData) {
     await supabase.from("clients").update({ archived_at: intent === "archive" ? new Date().toISOString() : null }).eq("id", id);
   } else if (intent === "assign") {
     const role = String(form.get("role") ?? "");
-    if (!(role in assignmentRoles)) back("assign");
+    // "team:<id>" or "person:<id>"
+    const [kind, who] = String(form.get("who") ?? "").split(":");
+    if (!(role in assignmentRoles) || !who || (kind !== "team" && kind !== "person")) back("assign");
     const { error } = await supabase
       .from("client_assignments")
-      .insert({ firm_id: firm, client_id: id, user_id: String(form.get("person") ?? ""), role });
+      .insert({ firm_id: firm, client_id: id, role, ...(kind === "team" ? { team_id: who } : { user_id: who }) });
     if (error) back(error.code === "23505" ? "assigned" : "assign");
   } else if (intent === "unassign") {
-    await supabase.from("client_assignments").delete().eq("client_id", id).eq("user_id", String(form.get("person") ?? ""));
+    const [kind, who] = String(form.get("who") ?? "").split(":");
+    await supabase.from("client_assignments").delete().eq("client_id", id).eq(kind === "team" ? "team_id" : "user_id", who);
   } else if (intent === "remove-number") {
     await supabase.from("client_registrations").delete().eq("id", String(form.get("registration") ?? ""));
   } else if (intent === "add-number") {
