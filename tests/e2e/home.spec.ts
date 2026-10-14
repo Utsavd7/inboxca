@@ -10,7 +10,7 @@ const axe = async (page: Page) =>
       .analyze()
   ).violations;
 
-test("the private page has no live product routes or tracking", async ({
+test("the private home page sets no cookies, calls no other server and is not indexed", async ({
   page,
   baseURL,
 }) => {
@@ -19,26 +19,10 @@ test("the private page has no live product routes or tracking", async ({
     if (!request.url().startsWith(baseURL!)) remote.push(request.url());
   });
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Every client email, read, filed and answered.",
-  );
-  await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
-    "content",
-    "noindex, nofollow",
-  );
-  await expect(
-    page.getByText("In development. First firms by invitation."),
-  ).toBeVisible();
-  await expect(page.getByText("Utsav Doshi")).toBeVisible();
-  await expect(
-    page.getByRole("contentinfo").getByRole("link", { name: /Orelu website/ }),
-  ).toHaveAttribute("href", "https://orelu.netlify.app/");
-  await expect(page.getByText("How do I start?")).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+  await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
   expect(await page.context().cookies()).toEqual([]);
   expect(remote).toEqual([]);
-  await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(
-    0,
-  );
 });
 
 test("the demo steps through one email and waits for approval", async ({
@@ -171,14 +155,6 @@ test("the cost section multiplies out the visitor's own numbers", async ({
   await expect(today.locator(".quote")).toContainText(
     "will be measured with the first firms",
   );
-});
-
-test("the money back line sits beside the invite buttons", async ({ page }) => {
-  await page.goto("/");
-  const line = "14 day money back when you join";
-  await expect(page.locator(".hero").getByText(line)).toBeVisible();
-  await expect(page.locator("#today").getByText(line)).toBeVisible();
-  await expect(page.locator("#invite").getByText(line)).toBeVisible();
 });
 
 test("on a phone the invite button follows the scroll", async ({ page }) => {

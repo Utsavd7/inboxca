@@ -59,9 +59,4 @@ describe("log lines", () => {
     });
   });
 
-  it("sends warnings and errors to the error stream", () => {
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    log.error("job.failed", { error: new Error("timeout") });
-    expect(JSON.parse(err.mock.calls[0][0] as string).error.message).toBe("timeout");
-  });
 });

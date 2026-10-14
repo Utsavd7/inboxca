@@ -1,22 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { isWorkerCall } from "@/src/jobs/worker-call";
 
-describe("the job worker's caller check", () => {
+it("accepts only the exact secret, sent as a bearer token, and nothing while none is set", () => {
   const secret = "test-only-worker-secret";
-
-  it("accepts the secret as a bearer token", () => {
-    expect(isWorkerCall(`Bearer ${secret}`, secret)).toBe(true);
-  });
-
-  it("refuses a missing, wrong or differently sent secret", () => {
-    expect(isWorkerCall(null, secret)).toBe(false);
-    expect(isWorkerCall("Bearer nope", secret)).toBe(false);
-    expect(isWorkerCall(secret, secret)).toBe(false);
-    expect(isWorkerCall(`Bearer ${secret}x`, secret)).toBe(false);
-  });
-
-  it("refuses everything while no secret is set", () => {
-    expect(isWorkerCall("Bearer ", undefined)).toBe(false);
-    expect(isWorkerCall("Bearer ", "")).toBe(false);
-  });
+  expect(isWorkerCall(`Bearer ${secret}`, secret)).toBe(true);
+  for (const header of [null, "Bearer nope", secret, `Bearer ${secret}x`])
+    expect(isWorkerCall(header, secret)).toBe(false);
+  expect(isWorkerCall("Bearer ", undefined)).toBe(false);
+  expect(isWorkerCall("Bearer ", "")).toBe(false);
 });
