@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { DAYS, type Hours } from "@/src/lib/hours";
 import { log } from "@/src/lib/logger";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
@@ -68,4 +69,34 @@ export async function joinFirm(form: FormData) {
   const { supabase } = await currentMember();
   await supabase.rpc("accept_invite", { target_firm: String(form.get("firm") ?? "") });
   redirect("/app");
+}
+
+// Settings → Office hours. The database logs every change to the firm's settings.
+export async function saveHours(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const hours: Hours = {};
+  for (const day of DAYS.keys()) {
+    if (!form.get(`open-${day}`)) continue;
+    const [from, to] = [form.get(`from-${day}`), form.get(`to-${day}`)].map(String);
+    if (!/^\d\d:\d\d$/.test(from) || !/^\d\d:\d\d$/.test(to) || from >= to)
+      redirect(`/app/settings?error=${DAYS[day]}`);
+    hours[day] = [from, to];
+  }
+  const { settings } = membership;
+  const access = { ...(settings.access as object), hours_only: form.get("hours_only") === "on" };
+  await supabase.from("firms").update({ settings: { ...settings, hours, access } }).eq("id", membership.firmId);
+  redirect("/app/settings?saved=hours");
+}
+
+export async function changeHoliday(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const date = String(form.get("date") ?? "");
+  if (!/^\d{4}-\d\d-\d\d$/.test(date)) redirect("/app/settings");
+  const current = (membership.settings.holidays as string[] | undefined) ?? [];
+  const holidays =
+    form.get("intent") === "remove" ? current.filter((day) => day !== date) : [...new Set([...current, date])].sort();
+  await supabase.from("firms").update({ settings: { ...membership.settings, holidays } }).eq("id", membership.firmId);
+  revalidatePath("/app/settings");
 }

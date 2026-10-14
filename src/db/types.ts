@@ -161,6 +161,11 @@ isOneToOne: false
         isOneToOne: false
         isSetofReturn: true
       } },
+"closed_firms":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "firm_name": string,"hours": Json
+            }[]
+                           },
 "finish_job":
 { Args: { "error_code"?: string,"job_id": number,"outcome": string,"retry_at"?: string }; Returns: boolean
                            },
@@ -188,6 +193,9 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_id": string,"firm_name": string,"role": string
             }[]
+                           },
+"open_to":
+{ Args: { "at"?: string,"person": Json,"role": string,"settings": Json }; Returns: boolean
                            },
 "remove_member":
 { Args: { "person": string,"target_firm": string }; Returns: boolean

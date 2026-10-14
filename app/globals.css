@@ -557,6 +557,14 @@ li { text-wrap: pretty; }
 .app-invite .btn { margin-top: 0; }
 .auth-form select { width: 100%; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; }
 .auth-form select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
+.app-note { margin-top: 6px; color: var(--slate); }
+.hours-table { margin-top: 16px; border-collapse: collapse; }
+.hours-table th { padding: 8px 24px 8px 0; text-align: left; font-weight: 600; }
+.hours-table td { padding: 8px 24px 8px 0; color: var(--slate); }
+.hours-table input[type="time"],
+.holiday-add input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--navy); font-size: 15px; }
+.app-check { display: flex; align-items: center; gap: 10px; margin: 20px 0; font-weight: 600; }
+.holiday-add { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; font-weight: 600; }
 .app-done { margin-top: 14px; font-weight: 600; color: var(--green-deep); }
 @media (max-width: 640px) {
   .app-invite { grid-template-columns: 1fr; }
