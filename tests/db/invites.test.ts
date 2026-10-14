@@ -145,3 +145,66 @@ describe("joining a firm", () => {
       expect(await invite(FIRM, STAFF, "staff")).toBe(false);
     }));
 });
+
+describe("changing and removing people", () => {
+  const call = async (sql: string, person: string) =>
+    (await db.query(`select ${sql} as ok`, [FIRM, person])).rows[0].ok;
+  const status = async (person: string) => {
+    await asOwner(db);
+    return (
+      await db.query("select role, status from public.firm_members where firm_id = $1 and user_id = $2", [
+        FIRM,
+        person,
+      ])
+    ).rows[0];
+  };
+
+  it("lets the owner change a role, never to owner, and logs it", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER);
+      expect(await call("public.change_role($1, $2, 'manager')", STAFF)).toBe(true);
+      expect(await call("public.change_role($1, $2, 'owner')", STAFF)).toBe(false);
+      expect(await status(STAFF)).toEqual({ role: "manager", status: "active" });
+      expect(await logged("member.role_changed")).toEqual([{ actor_id: OWNER, entity_id: STAFF }]);
+    }));
+
+  it("removes a member, who then sees nothing, and brings them back", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER);
+      expect(await call("public.remove_member($1, $2)", STAFF)).toBe(true);
+      expect(await status(STAFF)).toEqual({ role: "staff", status: "deactivated" });
+      await actAs(db, STAFF);
+      expect((await db.query("select 1 from public.firms")).rowCount).toBe(0);
+      await actAs(db, OWNER);
+      expect(await call("public.change_role($1, $2, 'manager')", STAFF)).toBe(false);
+      expect(await call("public.restore_member($1, $2)", STAFF)).toBe(true);
+      expect(await status(STAFF)).toEqual({ role: "staff", status: "active" });
+      expect(await logged("member.removed")).toHaveLength(1);
+      expect(await logged("member.restored")).toHaveLength(1);
+    }));
+
+  it("withdraws an invite that was not yet accepted", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER);
+      await invite(FIRM, NEW, "staff");
+      expect(await call("public.remove_member($1, $2)", NEW)).toBe(true);
+      expect(await status(NEW)).toBeUndefined();
+      await actAs(db, NEW);
+      expect((await db.query("select 1 from public.my_invites()")).rowCount).toBe(0);
+      expect(await logged("member.invite_withdrawn")).toHaveLength(1);
+    }));
+
+  it("lets nobody but the owner do any of it", () =>
+    rollback(db, async () => {
+      await seed();
+      for (const [person, aal] of [[STAFF, "aal2"], [OUTSIDER, "aal2"], [OWNER, "aal1"]] as const) {
+        await actAs(db, person, aal);
+        expect(await call("public.change_role($1, $2, 'manager')", STAFF)).toBe(false);
+        expect(await call("public.remove_member($1, $2)", STAFF)).toBe(false);
+      }
+      expect(await status(STAFF)).toEqual({ role: "staff", status: "active" });
+    }));
+});

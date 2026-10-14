@@ -1,6 +1,7 @@
 "use client";
 import { useActionState } from "react";
 import { inviteMember, type InviteState } from "@/app/(app)/actions";
+import { invitableRoles, roleLabel } from "@/src/lib/roles";
 
 export function InviteForm() {
   const [state, invite, inviting] = useActionState(inviteMember, {} as InviteState);
@@ -23,10 +24,11 @@ export function InviteForm() {
         <div>
           <label htmlFor="invite-role">Role</label>
           <select id="invite-role" name="role" defaultValue="staff">
-            <option value="partner">Partner</option>
-            <option value="manager">Manager</option>
-            <option value="staff">Staff</option>
-            <option value="front_desk">Front desk</option>
+            {invitableRoles.map((role) => (
+              <option key={role} value={role}>
+                {roleLabel(role)}
+              </option>
+            ))}
           </select>
         </div>
         <button className="btn" type="submit" disabled={inviting}>

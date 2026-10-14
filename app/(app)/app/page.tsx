@@ -1,5 +1,6 @@
 import { joinFirm } from "@/app/(app)/actions";
-import { currentMember, roleNames } from "@/src/lib/member";
+import { currentMember } from "@/src/lib/member";
+import { roleNames } from "@/src/lib/roles";
 
 // The signed in start page. The dashboard arrives in M10; for now it shows whose firm this
 // is, and any firm that has invited this person.

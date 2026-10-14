@@ -32,14 +32,14 @@ test("the owner invites a new person, who appears as invited", async () => {
   await expect(owner.getByText(ownerEmail)).toBeVisible();
   await owner.getByLabel("Their work email").fill(newEmail.toUpperCase());
   await owner.getByLabel("Role").selectOption("manager");
-  await owner.getByRole("button", { name: "Invite" }).click();
+  await owner.getByRole("button", { name: "Invite", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText(`Invited ${newEmail}`);
   const row = owner.getByRole("listitem").filter({ hasText: newEmail });
-  await expect(row).toContainText("manager");
+  await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("manager");
   await expect(row).toContainText("invited");
 
   await owner.getByLabel("Their work email").fill(newEmail);
-  await owner.getByRole("button", { name: "Invite" }).click();
+  await owner.getByRole("button", { name: "Invite", exact: true }).click();
   await expect(owner.getByRole("alert").filter({ hasText: "already on your firm's list" })).toBeVisible();
 });
 
@@ -61,10 +61,25 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
   // Only the owner invites.
   await page.getByRole("link", { name: "People" }).click();
   await expect(page.getByText(ownerEmail)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Invite" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Invite", exact: true })).toHaveCount(0);
 
   await owner.reload();
   const row = owner.getByRole("listitem").filter({ hasText: newEmail });
-  await expect(row).toContainText("manager");
+  await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("manager");
   await expect(row).not.toContainText("invited");
+});
+
+test("the owner changes the role, removes the person and brings them back", async () => {
+  await owner.goto("/app/people");
+  const row = owner.getByRole("listitem").filter({ hasText: newEmail });
+  await row.getByLabel(`Role for ${newEmail}`).selectOption("staff");
+  await row.getByRole("button", { name: "Save role" }).click();
+  await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("staff");
+  await owner.reload();
+  await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("staff");
+
+  await row.getByRole("button", { name: "Remove" }).click();
+  await expect(row).toContainText("removed");
+  await row.getByRole("button", { name: "Bring back" }).click();
+  await expect(row.getByRole("button", { name: "Remove" })).toBeVisible();
 });
