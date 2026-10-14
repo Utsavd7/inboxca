@@ -1,6 +1,8 @@
 // Office hours as firms.settings keeps them: weekday (0 is Sunday) to opening and closing
 // time, India time. A missing day is closed.
 export type Hours = Record<string, [string, string]>;
+// A date range with its own times, every day in it (Season hours, a late evening).
+export type SpecialHours = { from: string; to: string; open: string; close: string };
 
 export const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -18,3 +20,7 @@ export function describeHours(hours: Hours | null | undefined) {
   }
   return [...groups].map(([times, days]) => `${days.join(", ")}: ${times}`).join("; ");
 }
+
+// "1 July 2026" for a "2026-07-01" date.
+export const longDate = (date: string) =>
+  new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });

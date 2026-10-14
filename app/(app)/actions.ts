@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { DAYS, type Hours } from "@/src/lib/hours";
+import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { log } from "@/src/lib/logger";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
@@ -128,4 +128,23 @@ export async function stillHere() {
     secure: process.env.NODE_ENV === "production",
     path: "/",
   });
+}
+
+// Settings → Special hours: a date range with its own times (a tax season, a late evening).
+export async function changeSpecialHours(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const [from, to, open, close] = ["from", "to", "open", "close"].map((name) => String(form.get(name) ?? ""));
+  const current = (membership.settings.special_hours as SpecialHours[] | undefined) ?? [];
+  let special: SpecialHours[];
+  if (form.get("intent") === "remove") special = current.filter((range) => range.from !== from || range.to !== to);
+  else {
+    const day = /^\d{4}-\d\d-\d\d$/;
+    const time = /^\d\d:\d\d$/;
+    if (!day.test(from) || !day.test(to) || from > to || !time.test(open) || !time.test(close) || open >= close)
+      redirect("/app/settings?error=special");
+    special = [...current, { from, to, open, close }].sort((a, b) => a.from.localeCompare(b.from));
+  }
+  await supabase.from("firms").update({ settings: { ...membership.settings, special_hours: special } }).eq("id", membership.firmId);
+  revalidatePath("/app/settings");
 }
