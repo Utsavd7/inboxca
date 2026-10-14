@@ -546,8 +546,11 @@ li { text-wrap: pretty; }
 .app-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 14px 0; border-top: 1px solid var(--line); }
 .app-list li:first-child { border-top: 0; }
 .person { font-weight: 600; overflow-wrap: anywhere; }
-.person-role { display: flex; align-items: center; gap: 10px; color: var(--slate); }
+.person-role { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--slate); }
+.person-role select { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--white); color: var(--navy); font-size: 15px; }
+.person-role .btn-quiet { padding: 8px 12px; font-size: 14px; white-space: nowrap; }
 .tag { padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--grey); color: var(--slate); }
+.tag-deactivated { background: rgba(180, 35, 24, 0.08); color: var(--error); }
 .tag-invited { background: rgba(26, 75, 176, 0.1); color: var(--blue-deep); }
 .app-invite { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; align-items: end; }
 .app-invite label { display: block; margin: 0 0 7px; }

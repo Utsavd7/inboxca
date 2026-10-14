@@ -1,14 +1,6 @@
 import { redirect } from "next/navigation";
 import { supabaseServer } from "./supabase";
 
-export const roleNames: Record<string, string> = {
-  owner: "owner",
-  partner: "partner",
-  manager: "manager",
-  staff: "staff",
-  front_desk: "front desk",
-};
-
 // The signed in person and their firm, for every product page and action. Sends anyone
 // who has not finished both sign in steps back to sign in. Row level security shows only
 // active memberships; a person in two firms sees the first for now.

@@ -118,6 +118,9 @@ isOneToOne: false
 "cancel_jobs":
 { Args: { "below_version"?: number,"p_entity_id": string,"p_entity_type": string }; Returns: number
                            },
+"change_role":
+{ Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
+                           },
 "claim_jobs":
 { Args: { "batch"?: number,"lease_seconds"?: number }; Returns: {
               "attempts": number,
@@ -166,6 +169,12 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_id": string,"firm_name": string,"role": string
             }[]
+                           },
+"remove_member":
+{ Args: { "person": string,"target_firm": string }; Returns: boolean
+                           },
+"restore_member":
+{ Args: { "person": string,"target_firm": string }; Returns: boolean
                            },
 "user_id_for_email":
 { Args: { "address": string }; Returns: string
