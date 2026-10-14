@@ -37,3 +37,18 @@ jobs:
           name: playwright-report
           path: test-results
           retention-days: 7
+
+  # Migrations apply to a fresh database, and one firm never reaches another's rows.
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx supabase db start
+      - run: npx supabase migration up --local
+      - run: npm run test:db
