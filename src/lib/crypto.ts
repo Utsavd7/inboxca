@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/src/db/types";
+import { supabaseAdmin } from "./supabase";
 
 // Per-firm envelope encryption (PLAN.md 8.4). Each firm has a key set: one key for blind
 // indexes and its encryption keys, newest last. The set is stored only wrapped by the
@@ -178,4 +179,14 @@ export function supabaseKeyStore(supabase: SupabaseClient<Database>): KeyStore {
       return data.length > 0;
     },
   };
+}
+
+// This server's firm encryption, one per server so the 5 minute key cache is shared. The
+// outer key is local in development and tests (LOCAL_KEK, written by `npm run db:env`);
+// production uses AWS KMS, which is not set up yet, so nothing is encrypted there until it is.
+let server: ReturnType<typeof firmCrypto> | undefined;
+export function serverCrypto() {
+  const key = process.env.LOCAL_KEK;
+  if (!key || process.env.KMS_KEY_ID) throw new Error("Firm encryption is not set up on this server");
+  return (server ??= firmCrypto(localKek(Buffer.from(key, "base64")), supabaseKeyStore(supabaseAdmin())));
 }

@@ -521,7 +521,7 @@ li { text-wrap: pretty; }
 /* One field style for every product form: sign in, People, Settings. */
 .auth-form input,
 .app-page input:not([type="checkbox"]),
-.app-page select { padding: 11px 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }
+.app-page select { height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }
 .auth-form input,
 .auth-form select { width: 100%; }
 .auth-form input:focus,
