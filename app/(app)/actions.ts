@@ -311,12 +311,24 @@ export async function manageClient(form: FormData) {
     const checked = checkClient({ name: String(form.get("name") ?? ""), kind: String(form.get("kind") ?? ""), pan: "", gstin: "", email: String(form.get("email") ?? "") });
     if ("error" in checked) back("details");
     const { name, kind, email } = (checked as { client: ClientInput }).client;
+    // A group chosen from the list, or a new one named here.
+    let group = String(form.get("group") ?? "") || null;
+    const newGroup = String(form.get("new_group") ?? "").trim();
+    if (newGroup) {
+      const { data } = await supabase
+        .from("groups")
+        .insert({ firm_id: firm, kind: "client_group", name: newGroup.slice(0, 120) })
+        .select("id")
+        .single();
+      group = data?.id ?? group;
+    }
     const crypto = serverCrypto();
     await supabase
       .from("clients")
       .update({
         name,
         kind,
+        group_id: group,
         email_enc: email ? await crypto.encrypt(firm, `clients/${id}/email`, email) : null,
         email_bidx: email ? await crypto.blindIndex(firm, "email", email) : null,
       })

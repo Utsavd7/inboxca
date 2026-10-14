@@ -76,13 +76,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"id": string,"kind": string,"name": string
+                    "archived_at": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string
                   }
                   Insert: {
-                    "archived_at"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"id"?: string,"kind": string,"name": string
+                    "archived_at"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string
                   }
                   Update: {
-                    "archived_at"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"id"?: string,"kind"?: string,"name"?: string
+                    "archived_at"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string
                   }
                   Relationships: [
                     {
@@ -91,6 +91,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "firms"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "clients_firm_id_group_id_fkey"
+      columns: ["firm_id","group_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["firm_id","id"]
     }
                   ]
                 },"firm_keys": {
