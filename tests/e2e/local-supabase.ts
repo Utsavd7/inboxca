@@ -1,27 +1,10 @@
 import { createHmac } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
 import { expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
+import { localSupabase } from "../local-env";
 
-// The local Supabase connection, from .env.local (written by `npm run db:env`) or the
-// environment. Tests that need it skip themselves when it is missing.
-export function localSupabase() {
-  const file = existsSync(".env.local") ? readFileSync(".env.local", "utf8") : "";
-  const fromFile = Object.fromEntries(
-    file
-      .split("\n")
-      .filter((line) => line.includes("=") && !line.startsWith("#"))
-      .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
-  );
-  const get = (key: string) => process.env[key] || fromFile[key] || "";
-  return {
-    url: get("SUPABASE_URL"),
-    secretKey: get("SUPABASE_SECRET_KEY"),
-    dbUrl: get("TEST_DB_URL"),
-    mailUrl: get("TEST_MAIL_URL"),
-  };
-}
+export { localSupabase };
 
 // The newest sign in email to an address, from the local mail catcher (Mailpit).
 export async function latestEmail(mailUrl: string, to: string, after = 0) {
