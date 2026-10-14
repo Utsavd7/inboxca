@@ -45,13 +45,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"firm_id": string,"id": string,"kind": string,"name": string
+                    "archived_at": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"id": string,"kind": string,"name": string
                   }
                   Insert: {
-                    "archived_at"?: string | null,"firm_id": string,"id"?: string,"kind": string,"name": string
+                    "archived_at"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"id"?: string,"kind": string,"name": string
                   }
                   Update: {
-                    "archived_at"?: string | null,"firm_id"?: string,"id"?: string,"kind"?: string,"name"?: string
+                    "archived_at"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"id"?: string,"kind"?: string,"name"?: string
                   }
                   Relationships: [
                     {

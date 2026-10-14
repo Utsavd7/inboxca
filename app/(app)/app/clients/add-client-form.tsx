@@ -8,7 +8,8 @@ export function AddClientForm() {
   return (
     <section className="app-card" aria-labelledby="add-client">
       <h2 id="add-client">Add a client</h2>
-      <form key={JSON.stringify(state.values)} action={add} className="app-form-row" noValidate>
+      <p className="app-note">Only the name is needed. Add the email, PAN and GSTIN if you have them; InboxCA uses them to recognise the client&apos;s emails and documents.</p>
+      <form key={JSON.stringify(state.values)} action={add} className="app-grid-form" noValidate>
         <div>
           <label htmlFor="client-name">Name</label>
           <input id="client-name" name="name" required defaultValue={state.values?.name} aria-invalid={!!state.error} />
@@ -24,11 +25,15 @@ export function AddClientForm() {
           </select>
         </div>
         <div>
+          <label htmlFor="client-email">Email</label>
+          <input id="client-email" name="email" type="email" autoComplete="off" defaultValue={state.values?.email} />
+        </div>
+        <div>
           <label htmlFor="client-pan">PAN</label>
           <input id="client-pan" name="pan" autoComplete="off" maxLength={10} className="num" defaultValue={state.values?.pan} />
         </div>
         <div>
-          <label htmlFor="client-gstin">GSTIN, if any</label>
+          <label htmlFor="client-gstin">GSTIN</label>
           <input id="client-gstin" name="gstin" autoComplete="off" maxLength={15} className="num" defaultValue={state.values?.gstin} />
         </div>
         <button className="btn" type="submit" disabled={adding}>

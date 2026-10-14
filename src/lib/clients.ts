@@ -15,7 +15,7 @@ export type ClientKind = keyof typeof clientKinds;
 // Who may add and change clients; staff view only (PLAN.md 5.17.2).
 export const canManageClients = (role: string) => ["owner", "partner", "manager"].includes(role);
 
-export type ClientInput = { name: string; kind: string; pan: string; gstin: string };
+export type ClientInput = { name: string; kind: string; pan: string; gstin: string; email: string };
 
 // Checks a client as typed or imported, and gives it back cleaned, or why it can't be added.
 // A GSTIN holds the PAN, so the PAN can be left empty when a GSTIN is given.
@@ -23,12 +23,14 @@ export function checkClient(input: ClientInput): { client: ClientInput } | { err
   const name = input.name.trim();
   const gstin = cleanNumber(input.gstin);
   const pan = cleanNumber(input.pan) || (gstin && panOfGstin(gstin));
+  const email = (input.email ?? "").trim().toLowerCase();
   if (!name || name.length > 200) return { error: "Enter the client's name." };
   if (!(input.kind in clientKinds)) return { error: "Choose what kind of client this is." };
   if (gstin && !isGstin(gstin)) return { error: "That GSTIN is not valid. Check it for a typing mistake." };
   if (pan && !isPan(pan)) return { error: "That PAN is not valid. A PAN is 5 letters, 4 digits and a letter." };
   if (gstin && panOfGstin(gstin) !== pan) return { error: "The PAN does not match the one inside the GSTIN." };
-  return { client: { name, kind: input.kind, pan, gstin } };
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "That email address is not valid." };
+  return { client: { name, kind: input.kind, pan, gstin, email } };
 }
 
 // A kind as people write it in a spreadsheet ("Pvt Ltd", "Proprietor", "LLP"). Blank means

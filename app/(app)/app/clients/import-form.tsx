@@ -64,7 +64,7 @@ export function ImportForm() {
             {running ? "Reading" : "Check the file"}
           </button>
           <p className="app-note">
-            The first row names the columns: Name, and Kind, PAN and GSTIN when you have them. Nothing is added
+            The first row names the columns: Name, and Kind, Email, PAN and GSTIN when you have them. Nothing is added
             until you see the check.
           </p>
         </form>

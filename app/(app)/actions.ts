@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { canManageClients, checkClient, clientKinds, readKind, type ClientInput } from "@/src/lib/clients";
+import { canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
@@ -175,13 +175,16 @@ async function sealClient(firm: string, client: ClientInput) {
       state_code,
     })),
   );
-  return { id, name: client.name, kind: client.kind, registrations };
+  const email = client.email
+    ? { email_enc: await crypto.encrypt(firm, `clients/${id}/email`, client.email), email_bidx: await crypto.blindIndex(firm, "email", client.email) }
+    : {};
+  return { id, name: client.name, kind: client.kind, ...email, registrations };
 }
 
 // Adds one client from the form.
 export async function addClient(_prev: ClientState, form: FormData): Promise<ClientState> {
   const { supabase, membership } = await currentMember();
-  const values = Object.fromEntries(["name", "kind", "pan", "gstin"].map((field) => [field, String(form.get(field) ?? "")]));
+  const values = Object.fromEntries(["name", "kind", "pan", "gstin", "email"].map((field) => [field, String(form.get(field) ?? "")]));
   if (!membership || !canManageClients(membership.role))
     return { error: "Only the owner, a partner or a manager can add clients.", values };
   const checked = checkClient(values as ClientInput);
@@ -202,6 +205,7 @@ const headings: Record<keyof ClientInput, string[]> = {
   kind: ["kind", "type", "client type", "constitution", "category"],
   pan: ["pan", "pan no", "pan number"],
   gstin: ["gstin", "gst", "gst no", "gst number", "gstin/uin"],
+  email: ["email", "e-mail", "email id", "email address", "mail"],
 };
 
 // Import from a CSV or Excel file, in two passes: the first reads and checks every row and
@@ -238,6 +242,7 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
       kind: cell(cells, "kind"),
       pan: cell(cells, "pan"),
       gstin: cell(cells, "gstin"),
+      email: cell(cells, "email"),
     }));
   }
 
@@ -288,10 +293,19 @@ export async function manageClient(form: FormData) {
   const intent = form.get("intent");
 
   if (intent === "details") {
-    const name = String(form.get("name") ?? "").trim();
-    const kind = String(form.get("kind") ?? "");
-    if (!name || name.length > 200 || !(kind in clientKinds)) back("details");
-    await supabase.from("clients").update({ name, kind }).eq("id", id);
+    const checked = checkClient({ name: String(form.get("name") ?? ""), kind: String(form.get("kind") ?? ""), pan: "", gstin: "", email: String(form.get("email") ?? "") });
+    if ("error" in checked) back("details");
+    const { name, kind, email } = (checked as { client: ClientInput }).client;
+    const crypto = serverCrypto();
+    await supabase
+      .from("clients")
+      .update({
+        name,
+        kind,
+        email_enc: email ? await crypto.encrypt(firm, `clients/${id}/email`, email) : null,
+        email_bidx: email ? await crypto.blindIndex(firm, "email", email) : null,
+      })
+      .eq("id", id);
   } else if (intent === "archive" || intent === "restore") {
     await supabase.from("clients").update({ archived_at: intent === "archive" ? new Date().toISOString() : null }).eq("id", id);
   } else if (intent === "remove-number") {

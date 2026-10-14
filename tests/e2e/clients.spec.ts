@@ -27,17 +27,19 @@ test("a client added with only a GSTIN gets its PAN too, and opens with both", a
   await owner.getByRole("link", { name: "Clients" }).click();
   await owner.getByLabel("Name", { exact: true }).fill("Patel Textiles");
   await owner.getByLabel("Kind", { exact: true }).selectOption("business");
-  await owner.getByLabel("GSTIN, if any").fill("27aapfu0939f1zv");
+  await owner.getByLabel("GSTIN", { exact: true }).fill("27aapfu0939f1zv");
+  await owner.getByLabel("Email", { exact: true }).fill("Accounts@Patel.example");
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.getByRole("heading", { level: 1 })).toContainText("Patel Textiles");
+  await expect(owner.getByRole("heading", { level: 1 })).toContainText("accounts@patel.example");
   await expect(owner.getByRole("listitem").filter({ hasText: "PAN" })).toContainText("AAPFU0939F");
   await expect(owner.getByRole("listitem").filter({ hasText: "GSTIN" })).toContainText("27AAPFU0939F1ZV");
 });
 
-test("search finds a client by name or by its whole PAN, and the same PAN is refused twice", async () => {
+test("search finds a client by name, email or whole PAN, and the same PAN is refused twice", async () => {
   await owner.goto("/app/clients");
-  for (const search of ["patel", "aapfu0939f"]) {
-    await owner.getByLabel("Find by name, PAN or GSTIN").fill(search);
+  for (const search of ["patel", "aapfu0939f", "ACCOUNTS@patel.example"]) {
+    await owner.getByLabel("Find by name, email, PAN or GSTIN").fill(search);
     await owner.getByRole("button", { name: "Find" }).click();
     await expect(owner.getByRole("link", { name: "Patel Textiles" })).toBeVisible();
   }
@@ -45,7 +47,7 @@ test("search finds a client by name or by its whole PAN, and the same PAN is ref
   await owner.getByLabel("PAN", { exact: true }).fill("AAPFU0939F");
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.getByRole("alert").filter({ hasText: "already in your firm" })).toBeVisible();
-  await owner.getByLabel("GSTIN, if any").fill("27AAPFU0939F1ZW");
+  await owner.getByLabel("GSTIN", { exact: true }).fill("27AAPFU0939F1ZW");
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.getByRole("alert").filter({ hasText: "GSTIN is not valid" })).toBeVisible();
 });
@@ -76,25 +78,27 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await expect(owner.getByRole("heading", { level: 1 })).not.toContainText("Archived");
 });
 
-test("importing 500 clients adds them all and reports every bad row", async () => {
+test("importing 500 clients with emails adds them all and reports every bad row", async () => {
   test.setTimeout(120_000);
   // 500 good rows with distinct, valid PANs, then five rows with a problem each.
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const pan = (n: number) => `QRS${letters[Math.floor(n / 26) % 26]}${letters[n % 26]}${String(n).padStart(4, "0")}Z`;
-  const lines = ["Client name,Constitution,PAN,GST No"];
-  for (let n = 0; n < 500; n++) lines.push(`Client ${n},${n % 2 ? "Proprietor" : "Individual"},${pan(n)},`);
-  lines.push("Bad PAN,Individual,ABC123,", "Odd kind,Martian,QRSZZ9998Z,", `Repeat,Individual,${pan(7)},`, ",Individual,QRSZZ9997Z,", "Patel again,Business,,27AAPFU0939F1ZV");
+  const lines = ["Client name,Constitution,PAN,GST No,Email ID"];
+  for (let n = 0; n < 500; n++) lines.push(`Client ${n},${n % 2 ? "Proprietor" : "Individual"},${pan(n)},,client${n}@example.test`);
+  lines.push("Bad PAN,Individual,ABC123,,", "Odd kind,Martian,QRSZZ9998Z,,", `Repeat,Individual,${pan(7)},,`, ",Individual,QRSZZ9997Z,,", "Patel again,Business,,27AAPFU0939F1ZV,", "Bad email,Individual,QRSZZ9996Z,,nobody@");
 
   await owner.goto("/app/clients");
   await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "clients.csv", mimeType: "text/csv", buffer: Buffer.from(lines.join("\n")) });
   await owner.getByRole("button", { name: "Check the file" }).click();
-  await expect(owner.getByText("500 ready to import, 5 with a problem and left out.")).toBeVisible({ timeout: 30_000 });
+  await expect(owner.getByText("500 ready to import, 6 with a problem and left out.")).toBeVisible({ timeout: 30_000 });
   const problems = owner.getByRole("table");
-  for (const text of ["PAN is not valid", "not a kind InboxCA knows", "on an earlier row", "Enter the client's name", "already in your firm"])
+  for (const text of ["PAN is not valid", "not a kind InboxCA knows", "on an earlier row", "Enter the client's name", "already in your firm", "email address is not valid"])
     await expect(problems).toContainText(text);
 
   await owner.getByRole("button", { name: "Import 500 clients" }).click();
   await expect(owner.getByText("Imported 500 clients.")).toBeVisible({ timeout: 30_000 });
   await owner.goto(`/app/clients?q=${pan(321).toLowerCase()}`);
   await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
+  await owner.goto("/app/clients?q=client42@example.test");
+  await expect(owner.getByRole("link", { name: "Client 42", exact: true })).toBeVisible();
 });

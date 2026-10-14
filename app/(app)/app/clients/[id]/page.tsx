@@ -7,7 +7,7 @@ import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
 
 const errors: Record<string, string> = {
-  details: "Enter a name and choose a kind.",
+  details: "Enter a name, choose a kind, and check the email address.",
   number: "That number is not valid for its kind. Check it for a typing mistake.",
   "one-pan": "This client already has a PAN.",
   "gstin-pan": "That GSTIN holds a different PAN from this client's.",
@@ -28,7 +28,7 @@ export default async function Client({
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, kind, archived_at, client_registrations(id, kind, number_enc)")
+    .select("id, name, kind, archived_at, email_enc, client_registrations(id, kind, number_enc)")
     .eq("id", id)
     .maybeSingle();
   if (!client) notFound();
@@ -39,6 +39,7 @@ export default async function Client({
       number: await crypto.decrypt(membership.firmId, `clients/${client.id}/${registration.kind}`, registration.number_enc),
     })),
   );
+  const email = client.email_enc ? await crypto.decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc) : "";
   const manage = canManageClients(membership.role);
   const hidden = <input type="hidden" name="client" value={client.id} />;
 
@@ -52,6 +53,7 @@ export default async function Client({
         <span className="app-role">
           {clientKinds[client.kind as ClientKind]}
           {client.archived_at && <span className="tag tag-deactivated">Archived</span>}
+          {email && <span className="app-email">{email}</span>}
         </span>
       </h1>
       {error && errors[error] && (
@@ -114,6 +116,10 @@ export default async function Client({
             <div>
               <label htmlFor="client-name">Name</label>
               <input id="client-name" name="name" required defaultValue={client.name} />
+            </div>
+            <div>
+              <label htmlFor="client-email">Email</label>
+              <input id="client-email" name="email" type="email" defaultValue={email} />
             </div>
             <div>
               <label htmlFor="client-kind">Kind</label>
