@@ -1118,7 +1118,7 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 | `devices` | firm_id, user_id (null for a shared office PC), kind (stays_in_office/laptop/personal), public_key, passkey_id, session_binding (dbsc/signed_requests), label, status (pending/approved/refused/revoked/expired), valid_until | `registered_devices`, `device_requests` |
 | `requests` | firm_id, kind (permission/delete/remote_access/team_reply/support_access/alert), raised_by, client_id, entity_type, entity_id, reason_code, assigned_to, status (pending/approved/refused/expired/used/revoked/done), expires_at, details jsonb (by kind, below) | `permission_requests`, `permission_grants`, `delete_requests`, `remote_access_requests`, `team_reply_requests`, `support_sessions`, `alerts` |
 | `activity_log` | firm_id, actor_id, action, entity_type, entity_id, at, details jsonb; no id, since a line is never addressed alone (changed field names; old and new name for a rename; ip; device id hash; watermark id; office-connection address and wait time; AI model, tokens and latency; never content); append-only, no update or delete grant for any role; partitioned by month, with the partitions in a `private` schema the API never exposes; once a day a firm's rows past its `activity_log_months` are removed and whole months past 36 are dropped | `audit_log`, `access_log`, `office_connection_events`, `document_reclassifications`, `ai_runs` |
-| `clients` | firm_id, branch_id, group_id, name, kind (individual/business/tax_audit/company/llp/trust), stage (lead_new/qualifying/proposal/client/lost/cold), email_enc, email_bidx, state_code, notes_enc, details jsonb (enquiry fields: service, urgency, score), archived_at | `leads`, `client_group_members` |
+| `clients` | firm_id, branch_id, group_id, name, kind (individual/business/tax_audit/company/llp/trust), stage (lead_new/qualifying/proposal/client/lost/cold), email_enc, email_bidx, state_code, notes_enc, details jsonb (enquiry fields: service, urgency, score), archived_at (M1 step 1 built id, firm_id, name and kind; each other column arrives with the step that uses it) | `leads`, `client_group_members` |
 | `client_registrations` | firm_id, client_id, kind (pan/gstin/tan/cin/llpin), number_enc, number_bidx, state_code, scheme, services text[] (compliance codes) | `client_gstins`, `compliance_subjects`, `client_services`, the PAN columns on `clients` |
 | `contacts` | firm_id, name_enc, email_enc, email_bidx, language | — |
 | `contact_clients` | firm_id, contact_id, client_id, relation, can_view_status, can_receive_documents | — |
@@ -1224,6 +1224,7 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 
 ### M1: Client register
 - [ ] Clients CRUD with client kind, GSTINs, subjects, services; CSV/XLSX import with preview and row errors
+  - [x] Step 1 (14 Oct 2026): `clients` (name, kind) and `client_registrations` (PAN and GSTIN so far; the number encrypted with the firm's key and bound to the client and field, a blind index to find it and to refuse the same number twice in a firm, the GSTIN's state code). Owners, partners and managers add clients through `add_client`, which logs `client.added`; staff view only; every member sees every client (open visibility). The Clients page finds a client by name, or by a whole PAN or GSTIN through the blind index; a GSTIN is checked with its check character and gives the PAN by itself. Encryption uses a local key (`LOCAL_KEK`) in development and tests; production needs AWS KMS first. Still open: editing and archiving, more numbers (TAN, CIN, LLPIN) and several GSTINs, subjects and services (with M2), import, the client page tabs, restricted visibility.
 - [ ] Client page tabs: calendar, documents, notices, extraction, outputs, activity
 - [ ] Teams, assignment, visibility modes, branches, groups, contacts with permissions (§5.9)
 - [ ] Active-client count on the dashboard (information only; clients are unlimited, §5.14)
@@ -1476,6 +1477,7 @@ SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SECRET_KEY=              # job workers + admin only
 KMS_KEY_ID=                       # KEK in AWS KMS ap-south-1
 KMS_CREDENTIALS=                  # scoped to encrypt/decrypt only
+LOCAL_KEK=                        # development and tests only, written by `npm run db:env`; never set in production
 B2_ENDPOINT=                      # Backblaze S3-compatible endpoint for the chosen region
 B2_KEY_ID=                        # application key for bucket management and the worker
 B2_APPLICATION_KEY=

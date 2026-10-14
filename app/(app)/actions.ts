@@ -1,16 +1,20 @@
 "use server";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { canManageClients, clientKinds } from "@/src/lib/clients";
+import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
+import { cleanNumber, isGstin, isPan, panOfGstin } from "@/src/lib/identifiers";
 import { log } from "@/src/lib/logger";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 
-export type InviteState = { error?: string; done?: string };
+export type InviteState = { error?: string; done?: string; values?: Record<string, string> };
 
 const invitable = z.enum(invitableRoles);
 
@@ -19,11 +23,12 @@ const invitable = z.enum(invitableRoles);
 // the invite once signed in.
 export async function inviteMember(_prev: InviteState, form: FormData): Promise<InviteState> {
   const { supabase, membership } = await currentMember();
-  if (membership?.role !== "owner") return { error: "Only the firm's owner can invite people." };
-  const email = String(form.get("email") ?? "").trim().toLowerCase();
-  if (!z.email().safeParse(email).success) return { error: "Enter a valid email address." };
+  const values = { email: String(form.get("email") ?? ""), role: String(form.get("role") ?? "staff") };
+  if (membership?.role !== "owner") return { error: "Only the firm's owner can invite people.", values };
+  const email = values.email.trim().toLowerCase();
+  if (!z.email().safeParse(email).success) return { error: "Enter a valid email address.", values };
   const role = invitable.safeParse(form.get("role"));
-  if (!role.success) return { error: "Choose a role." };
+  if (!role.success) return { error: "Choose a role.", values };
 
   const admin = supabaseAdmin();
   let { data: personId } = await admin.rpc("user_id_for_email", { address: email });
@@ -31,7 +36,7 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
     const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true });
     if (error || !data.user) {
       log.error("invite.create_user_failed", { status: error?.status });
-      return { error: "The invite could not be made. Try again in a minute." };
+      return { error: "The invite could not be made. Try again in a minute.", values };
     }
     personId = data.user.id;
   }
@@ -40,7 +45,7 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
     person: personId,
     new_role: role.data,
   });
-  if (!added) return { error: `${email} is already on your firm's list.` };
+  if (!added) return { error: `${email} is already on your firm's list.`, values };
 
   const origin = (await headers()).get("origin") ?? process.env.APP_BASE_URL ?? "";
   const { error } = await supabaseAnonymous().auth.signInWithOtp({
@@ -147,4 +152,51 @@ export async function changeSpecialHours(form: FormData) {
   }
   await supabase.from("firms").update({ settings: { ...membership.settings, special_hours: special } }).eq("id", membership.firmId);
   revalidatePath("/app/settings");
+}
+
+// On an error the form gets back what was typed, since React clears it after an action.
+export type ClientState = { error?: string; values?: Record<string, string> };
+
+// Adds a client with its PAN and GSTIN, encrypted with the firm's key. A GSTIN holds the
+// PAN, so the PAN can be left empty when a GSTIN is given.
+export async function addClient(_prev: ClientState, form: FormData): Promise<ClientState> {
+  const { supabase, membership } = await currentMember();
+  const values = Object.fromEntries(["name", "kind", "pan", "gstin"].map((field) => [field, String(form.get(field) ?? "")]));
+  const fail = (error: string) => ({ error, values });
+  if (!membership || !canManageClients(membership.role)) return fail("Only the owner, a partner or a manager can add clients.");
+  const name = String(form.get("name") ?? "").trim();
+  const kind = String(form.get("kind") ?? "");
+  const gstin = cleanNumber(String(form.get("gstin") ?? ""));
+  const pan = cleanNumber(String(form.get("pan") ?? "")) || (gstin && panOfGstin(gstin));
+  if (!name || name.length > 200) return fail("Enter the client's name.");
+  if (!(kind in clientKinds)) return fail("Choose what kind of client this is.");
+  if (gstin && !isGstin(gstin)) return fail("That GSTIN is not valid. Check it for a typing mistake.");
+  if (pan && !isPan(pan)) return fail("That PAN is not valid. A PAN is 5 letters, 4 digits and a letter.");
+  if (gstin && panOfGstin(gstin) !== pan) return fail("The PAN does not match the one inside the GSTIN.");
+
+  const id = randomUUID();
+  const firm = membership.firmId;
+  const crypto = serverCrypto();
+  const numbers = [
+    ["pan", pan, null],
+    ["gstin", gstin, gstin.slice(0, 2)],
+  ].filter(([, number]) => number) as [string, string, string | null][];
+  const registrations = await Promise.all(
+    numbers.map(async ([type, number, state_code]) => ({
+      kind: type,
+      number_enc: await crypto.encrypt(firm, `clients/${id}/${type}`, number),
+      number_bidx: await crypto.blindIndex(firm, type, number),
+      state_code,
+    })),
+  );
+  const { data, error } = await supabase.rpc("add_client", {
+    target_firm: firm,
+    client: id,
+    client_name: name,
+    client_kind: kind,
+    registrations,
+  });
+  if (error?.code === "23505") return fail("A client with this PAN or GSTIN is already in your firm.");
+  if (error || !data) return fail("The client could not be added. Try again.");
+  redirect(`/app/clients/${id}`);
 }

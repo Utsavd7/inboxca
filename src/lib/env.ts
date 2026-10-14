@@ -18,6 +18,7 @@ const schema = z
 
     KMS_KEY_ID: secret,
     KMS_CREDENTIALS: secret,
+    LOCAL_KEK: secret, // development and tests only; production uses KMS
 
     B2_ENDPOINT: url,
     B2_KEY_ID: secret,

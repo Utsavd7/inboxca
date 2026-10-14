@@ -24,6 +24,44 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"client_registrations": {
+                  Row: {
+                    "client_id": string,"firm_id": string,"id": string,"kind": string,"number_bidx": string,"number_enc": string,"state_code": string | null
+                  }
+                  Insert: {
+                    "client_id": string,"firm_id": string,"id"?: string,"kind": string,"number_bidx": string,"number_enc": string,"state_code"?: string | null
+                  }
+                  Update: {
+                    "client_id"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"number_bidx"?: string,"number_enc"?: string,"state_code"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "client_registrations_firm_id_client_id_fkey"
+      columns: ["firm_id","client_id"]
+isOneToOne: false
+      referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    }
+                  ]
+                },"clients": {
+                  Row: {
+                    "firm_id": string,"id": string,"kind": string,"name": string
+                  }
+                  Insert: {
+                    "firm_id": string,"id"?: string,"kind": string,"name": string
+                  }
+                  Update: {
+                    "firm_id"?: string,"id"?: string,"kind"?: string,"name"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "clients_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"firm_keys": {
                   Row: {
                     "firm_id": string,"wrapped_key": string
@@ -136,6 +174,9 @@ isOneToOne: false
                            },
 "access_setting":
 { Args: { "key": string,"person": Json,"role": string,"settings": Json }; Returns: Json
+                           },
+"add_client":
+{ Args: { "client": string,"client_kind": string,"client_name": string,"registrations": Json,"target_firm": string }; Returns: boolean
                            },
 "cancel_jobs":
 { Args: { "below_version"?: number,"p_entity_id": string,"p_entity_type": string }; Returns: number

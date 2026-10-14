@@ -8,7 +8,7 @@ export function InviteForm() {
   return (
     <section className="app-card" aria-labelledby="invite">
       <h2 id="invite">Invite someone</h2>
-      <form action={invite} className="auth-form app-invite" noValidate>
+      <form key={JSON.stringify(state.values)} action={invite} className="auth-form app-invite" noValidate>
         <div>
           <label htmlFor="invite-email">Their work email</label>
           <input
@@ -17,13 +17,14 @@ export function InviteForm() {
             type="email"
             autoComplete="off"
             required
+            defaultValue={state.values?.email}
             aria-invalid={!!state.error}
             aria-describedby={state.error ? "invite-error" : undefined}
           />
         </div>
         <div>
           <label htmlFor="invite-role">Role</label>
-          <select id="invite-role" name="role" defaultValue="staff">
+          <select id="invite-role" name="role" defaultValue={state.values?.role ?? "staff"}>
             {invitableRoles.map((role) => (
               <option key={role} value={role}>
                 {roleLabel(role)}
