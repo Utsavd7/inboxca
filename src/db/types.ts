@@ -134,6 +134,9 @@ isOneToOne: false
             "accept_invite":
 { Args: { "target_firm": string }; Returns: boolean
                            },
+"access_setting":
+{ Args: { "key": string,"person": Json,"role": string,"settings": Json }; Returns: Json
+                           },
 "cancel_jobs":
 { Args: { "below_version"?: number,"p_entity_id": string,"p_entity_type": string }; Returns: number
                            },
@@ -163,7 +166,7 @@ isOneToOne: false
       } },
 "closed_firms":
 { Args: Record<PropertyKey, never>; Returns: {
-              "firm_name": string,"hours": Json
+              "firm_name": string,"hours": Json,"reason": string
             }[]
                            },
 "finish_job":
@@ -202,6 +205,9 @@ isOneToOne: false
                            },
 "restore_member":
 { Args: { "person": string,"target_firm": string }; Returns: boolean
+                           },
+"two_step_at":
+{ Args: Record<PropertyKey, never>; Returns: string
                            },
 "user_id_for_email":
 { Args: { "address": string }; Returns: string

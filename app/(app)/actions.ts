@@ -1,12 +1,13 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { DAYS, type Hours } from "@/src/lib/hours";
 import { log } from "@/src/lib/logger";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
+import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 
 export type InviteState = { error?: string; done?: string };
@@ -99,4 +100,32 @@ export async function changeHoliday(form: FormData) {
     form.get("intent") === "remove" ? current.filter((day) => day !== date) : [...new Set([...current, date])].sort();
   await supabase.from("firms").update({ settings: { ...membership.settings, holidays } }).eq("id", membership.firmId);
   revalidatePath("/app/settings");
+}
+
+// Settings → Signing in: the idle and session limits (0 is off).
+export async function saveLimits(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const whole = (name: string, allowed: number[]) => {
+    const value = Number(form.get(name));
+    return allowed.includes(value) && value ? value : undefined;
+  };
+  const access = {
+    ...(membership.settings.access as object),
+    idle_minutes: whole("idle_minutes", IDLE_CHOICES),
+    session_hours: whole("session_hours", SESSION_CHOICES),
+  };
+  await supabase.from("firms").update({ settings: { ...membership.settings, access } }).eq("id", membership.firmId);
+  redirect("/app/settings?saved=limits");
+}
+
+// The idle timer calls this while the person is active, so the server knows too.
+export async function stillHere() {
+  const { userId } = await currentMember();
+  (await cookies()).set(SEEN_COOKIE, seenCookie(userId), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
 }

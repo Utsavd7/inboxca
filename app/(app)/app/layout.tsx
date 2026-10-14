@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Logo } from "@/components/site/logo";
 import { signOut } from "@/app/(auth)/actions";
+import { IdleWatch } from "./idle-watch";
 import { NavLinks } from "./nav-links";
 import { currentMember } from "@/src/lib/member";
 
@@ -25,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </nav>
       </header>
       <main className="app-body">{children}</main>
+      {!!membership?.idleMinutes && <IdleWatch minutes={membership.idleMinutes} />}
     </div>
   );
 }

@@ -70,4 +70,27 @@ describe("office hours", () => {
       const log = await db.query("select actor_id, details from public.activity_log where firm_id = $1 and action = 'firm.changed'", [FIRM]);
       expect(log.rows).toEqual([{ actor_id: OWNER, details: { name: false, settings: ["holidays"] } }]);
     }));
+
+  it("hide everything once the 2 step code is older than the firm's session limit", () =>
+    rollback(db, async () => {
+      await asOwner(db);
+      await db.query("insert into auth.users (id, email) values ($1, 'limit@hours.test')", [OWNER]);
+      await db.query(
+        "insert into public.firms (id, name, state_code, status, settings) values ($1, 'Hours Firm', '27', 'active', $2)",
+        [FIRM, { access: { session_hours: 8 } }],
+      );
+      await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'owner', 'active')", [FIRM, OWNER]);
+      const signedIn = async (hoursAgo: number) => {
+        await actAs(db, OWNER);
+        const at = Math.floor(Date.now() / 1000) - hoursAgo * 3600;
+        await db.query("select set_config('request.jwt.claims', $1, true)", [
+          JSON.stringify({ sub: OWNER, role: "authenticated", aal: "aal2", amr: [{ method: "totp", timestamp: at }] }),
+        ]);
+      };
+      await signedIn(2);
+      expect((await db.query("select 1 from public.firms")).rowCount).toBe(1);
+      await signedIn(9);
+      expect((await db.query("select 1 from public.firms")).rowCount).toBe(0);
+      expect((await db.query("select reason from public.closed_firms()")).rows).toEqual([{ reason: "session" }]);
+    }));
 });
