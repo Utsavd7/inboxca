@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:db": "vitest run --config vitest.db.config.ts",
+    "db:types": "supabase gen types typescript --local --schema public > src/db/types.ts",
     "test:e2e": "playwright test",
     "audit:page": "node scripts/audit-page.mjs",
     "brand:social": "node scripts/generate-social.mjs"
@@ -20,6 +21,7 @@
     "lucide-react": "^1.55.0",
     "motion": "^14.1.0",
     "next": "16.4.0",
+    "pg": "8.23.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwind-merge": "^3.7.0",
@@ -36,7 +38,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "lighthouse": "^13.5.0",
-    "pg": "8.23.0",
     "supabase": "2.118.0",
     "tailwindcss": "^4",
     "typescript": "^5",
