@@ -197,7 +197,7 @@ describe("changing and removing people", () => {
       expect(await logged("member.invite_withdrawn")).toHaveLength(1);
     }));
 
-  it("lets nobody but the owner do any of it", () =>
+  it("lets nobody but the owner do any of it, and not even the owner on their own row", () =>
     rollback(db, async () => {
       await seed();
       for (const [person, aal] of [[STAFF, "aal2"], [OUTSIDER, "aal2"], [OWNER, "aal1"]] as const) {
@@ -205,6 +205,12 @@ describe("changing and removing people", () => {
         expect(await call("public.change_role($1, $2, 'manager')", STAFF)).toBe(false);
         expect(await call("public.remove_member($1, $2)", STAFF)).toBe(false);
       }
+      await actAs(db, OWNER);
+      expect(await call("public.change_role($1, $2, 'staff')", OWNER)).toBe(false);
+      expect(await call("public.remove_member($1, $2)", OWNER)).toBe(false);
+      // Nor around the functions, where nothing would be logged.
+      const direct = "update public.firm_members set role = 'owner' where user_id = $1";
+      expect((await attempt(db, direct, [STAFF])).ok).toBe(false);
       expect(await status(STAFF)).toEqual({ role: "staff", status: "active" });
     }));
 });

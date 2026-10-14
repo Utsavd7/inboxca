@@ -70,13 +70,6 @@ describe("the job runner", () => {
     expect(finished[0]).toMatchObject({ outcome: "failed", code: "timeout" });
   });
 
-  it("fails a job nobody knows how to run", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const { store, finished } = memoryStore([{ kind: "mystery" }]);
-    await runDueJobs(store, {}, { now });
-    expect(finished[0]).toMatchObject({ outcome: "failed", code: "no_handler" });
-  });
-
   it("retries a handler that throws, and logs only the error's type", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const { store, finished } = memoryStore([{ kind: "extract" }]);

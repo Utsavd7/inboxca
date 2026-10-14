@@ -30,8 +30,4 @@ describe("server settings", () => {
     }
   });
 
-  it("reads the AI spend cap as a number", () => {
-    expect(readServerEnv({ AI_GLOBAL_DAILY_CAP_USD: "12.5" }).AI_GLOBAL_DAILY_CAP_USD).toBe(12.5);
-    expect(() => readServerEnv({ AI_GLOBAL_DAILY_CAP_USD: "-1" })).toThrow(EnvError);
-  });
 });

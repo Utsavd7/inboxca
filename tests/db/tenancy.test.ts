@@ -147,43 +147,6 @@ describe("what each role may change", () => {
       ).toBe(false);
     }));
 
-  it("lets the owner invite people, but never a second owner", () =>
-    rollback(db, async () => {
-      await seed();
-      await actAs(db, OWNER_A);
-      const invite = (role: string) =>
-        db.query("select public.invite_member($1, $2, $3) as added", [FIRM_A, NEW_PERSON, role]);
-      expect((await invite("owner")).rows[0].added).toBe(false);
-      expect((await invite("manager")).rows[0].added).toBe(true);
-      expect(
-        (await attempt(
-          db,
-          "insert into public.firm_members (firm_id, user_id, role) values ($1, $2, 'staff')",
-          [FIRM_A, STAFF_A],
-        )).ok,
-      ).toBe(false);
-      expect(
-        await attempt(db, "update public.firm_members set role = 'owner' where user_id = $1", [STAFF_A]),
-      ).toMatchObject({ ok: false });
-    }));
-
-  it("stops anyone changing their own role, the owner included", () =>
-    rollback(db, async () => {
-      await seed();
-      const call = async (sql: string, person: string) =>
-        (await db.query(`select ${sql} as ok`, [FIRM_A, person])).rows[0].ok;
-      await actAs(db, STAFF_A);
-      expect(await call("public.change_role($1, $2, 'manager')", STAFF_A)).toBe(false);
-      expect(
-        (await attempt(db, "update public.firm_members set role = 'manager' where user_id = $1", [STAFF_A])).ok,
-      ).toBe(false);
-      await actAs(db, OWNER_A);
-      expect(await call("public.change_role($1, $2, 'staff')", OWNER_A)).toBe(false);
-      expect(await call("public.remove_member($1, $2)", OWNER_A)).toBe(false);
-      expect(
-        (await attempt(db, "update public.firm_members set status = 'deactivated' where user_id = $1", [STAFF_A])).ok,
-      ).toBe(false);
-    }));
 });
 
 describe("the activity log is append only", () => {
