@@ -45,13 +45,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "firm_id": string,"id": string,"kind": string,"name": string
+                    "archived_at": string | null,"firm_id": string,"id": string,"kind": string,"name": string
                   }
                   Insert: {
-                    "firm_id": string,"id"?: string,"kind": string,"name": string
+                    "archived_at"?: string | null,"firm_id": string,"id"?: string,"kind": string,"name": string
                   }
                   Update: {
-                    "firm_id"?: string,"id"?: string,"kind"?: string,"name"?: string
+                    "archived_at"?: string | null,"firm_id"?: string,"id"?: string,"kind"?: string,"name"?: string
                   }
                   Relationships: [
                     {

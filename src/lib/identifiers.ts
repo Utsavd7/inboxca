@@ -18,3 +18,13 @@ export function isGstin(gstin: string) {
 }
 
 export const panOfGstin = (gstin: string) => gstin.slice(2, 12);
+
+// Every number a client can have, with its check.
+export const numberKinds = {
+  pan: { name: "PAN", valid: isPan },
+  gstin: { name: "GSTIN", valid: isGstin },
+  tan: { name: "TAN", valid: (tan: string) => /^[A-Z]{4}[0-9]{5}[A-Z]$/.test(tan) },
+  cin: { name: "CIN", valid: (cin: string) => /^[LU][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/.test(cin) },
+  llpin: { name: "LLPIN", valid: (llpin: string) => /^[A-Z]{3}-[0-9]{4}$/.test(llpin) },
+} as const;
+export type NumberKind = keyof typeof numberKinds;

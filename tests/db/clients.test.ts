@@ -76,4 +76,32 @@ describe("the client register", () => {
       ]);
       expect(again).toMatchObject({ ok: false });
     }));
+
+  it("lets the owner change, number and archive a client, logs each change, and keeps staff to viewing", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER);
+      await add(FIRM, CLIENT, pan("i1"));
+      await actAs(db, STAFF);
+      expect(await attempt(db, "update public.clients set name = 'Changed'")).toMatchObject({ ok: true, count: 0 });
+      expect((await attempt(db, "delete from public.client_registrations")).count ?? 0).toBe(0);
+      await actAs(db, OWNER);
+      await db.query("update public.clients set name = 'Patel Textiles Pvt', archived_at = now() where id = $1", [CLIENT]);
+      await db.query(
+        "insert into public.client_registrations (firm_id, client_id, kind, number_enc, number_bidx) values ($1, $2, 'tan', 'sealed', 't1')",
+        [FIRM, CLIENT],
+      );
+      await db.query("delete from public.client_registrations where kind = 'pan'");
+      await asOwner(db);
+      const log = await db.query(
+        "select action, details from public.activity_log where firm_id = $1 and action <> 'client.added' order by action",
+        [FIRM],
+      );
+      expect(log.rows).toEqual([
+        { action: "client.changed", details: { changed: ["name", "archived_at"] } },
+        { action: "registration.added", details: { kind: "pan" } },
+        { action: "registration.added", details: { kind: "tan" } },
+        { action: "registration.removed", details: { kind: "pan" } },
+      ]);
+    }));
 });

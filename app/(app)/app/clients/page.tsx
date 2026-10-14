@@ -8,14 +8,17 @@ import { AddClientForm } from "./add-client-form";
 
 // The client register. Search finds a name, or a whole PAN or GSTIN through its blind
 // index, so numbers are never searched in plain text.
-export default async function Clients({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+export default async function Clients({ searchParams }: { searchParams: Promise<{ q?: string; archived?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const q = (await searchParams).q?.trim() ?? "";
+  const params = await searchParams;
+  const q = params.q?.trim() ?? "";
+  const archived = params.archived === "1";
   const number = cleanNumber(q);
   const kind = isGstin(number) ? "gstin" : isPan(number) ? "pan" : null;
 
   let query = supabase.from("clients").select("id, name, kind").eq("firm_id", membership.firmId).order("name").limit(500);
+  query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
   if (kind) {
     const index = await serverCrypto().blindIndex(membership.firmId, kind, number);
     const { data } = await supabase.from("client_registrations").select("client_id").eq("kind", kind).eq("number_bidx", index);
@@ -27,12 +30,15 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
     <>
       <h1>Clients</h1>
       <section className="app-card" aria-labelledby="register">
-        <h2 id="register">{q ? `Clients matching “${q}”` : `${clients?.length ?? 0} clients`}</h2>
+        <h2 id="register">
+          {q ? `Clients matching “${q}”` : `${clients?.length ?? 0} ${archived ? "archived clients" : "clients"}`}
+        </h2>
         <form className="app-form-row" role="search">
           <div>
             <label htmlFor="q">Find by name, PAN or GSTIN</label>
             <input id="q" name="q" type="search" defaultValue={q} />
           </div>
+          {archived && <input type="hidden" name="archived" value="1" />}
           <button className="btn btn-quiet" type="submit">
             Find
           </button>
@@ -48,6 +54,11 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
           ))}
         </ul>
         {q && !clients?.length && <p className="app-note">No client matches. Check the spelling or the number.</p>}
+        <p className="app-note">
+          <Link href={archived ? "/app/clients" : "/app/clients?archived=1"}>
+            {archived ? "Show current clients" : "Show archived clients"}
+          </Link>
+        </p>
       </section>
       {canManageClients(membership.role) && <AddClientForm />}
     </>
