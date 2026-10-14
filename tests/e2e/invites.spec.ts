@@ -15,10 +15,12 @@ const newEmail = `new-${tag}@example.test`;
 const ownerKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
 let firm: Awaited<ReturnType<typeof seedFirm>>;
 let owner: Page;
+let person: Page;
 
 test.beforeAll(async ({ browser }) => {
   firm = await seedFirm("Invite Test Firm", ownerEmail, ownerKey);
   owner = await (await browser.newContext()).newPage();
+  person = await (await browser.newContext()).newPage();
 });
 test.afterAll(() => firm.remove(newEmail));
 
@@ -43,7 +45,8 @@ test("the owner invites a new person, who appears as invited", async () => {
   await expect(owner.getByRole("alert").filter({ hasText: "already on your firm's list" })).toBeVisible();
 });
 
-test("the invited person signs in from the email, sets up 2 step and joins", async ({ page, baseURL }) => {
+test("the invited person signs in from the email, sets up 2 step and joins", async ({ baseURL }) => {
+  const page = person;
   const { link } = await latestEmail(local.mailUrl, newEmail);
   const target = new URL(link!);
   await page.goto(`${baseURL}${target.pathname}${target.search}`);
@@ -73,8 +76,10 @@ test("the owner changes the role, removes the person and brings them back", asyn
   await owner.goto("/app/people");
   const row = owner.getByRole("listitem").filter({ hasText: newEmail });
   await row.getByLabel(`Role for ${newEmail}`).selectOption("staff");
-  await row.getByRole("button", { name: "Save role" }).click();
-  await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("staff");
+  await Promise.all([
+    owner.waitForResponse((response) => response.request().method() === "POST"),
+    row.getByRole("button", { name: "Save role" }).click(),
+  ]);
   await owner.reload();
   await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("staff");
 
@@ -82,4 +87,22 @@ test("the owner changes the role, removes the person and brings them back", asyn
   await expect(row).toContainText("removed");
   await row.getByRole("button", { name: "Bring back" }).click();
   await expect(row.getByRole("button", { name: "Remove" })).toBeVisible();
+});
+
+test("the owner keeps people to office hours, and the person sees the firm is closed", async () => {
+  await owner.getByRole("link", { name: "Settings" }).click();
+  for (const day of ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
+    await owner.getByRole("row", { name: new RegExp(day) }).getByLabel("Open", { exact: true }).uncheck();
+  await owner.getByLabel(/only during office hours/).check();
+  await owner.getByRole("button", { name: "Save office hours" }).click();
+  await expect(owner.getByRole("status")).toHaveText("Office hours saved.");
+
+  await owner.getByLabel("Add a holiday").fill("2026-12-25");
+  await owner.getByRole("button", { name: "Add holiday" }).click();
+  await expect(owner.getByText("Friday, 25 December 2026")).toBeVisible();
+
+  await person.goto("/app");
+  await expect(person.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm is closed now.");
+  await owner.goto("/app");
+  await expect(owner.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
 });
