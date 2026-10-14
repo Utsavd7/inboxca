@@ -159,7 +159,7 @@
 | Web app | Next.js (App Router) on **Cloudflare Workers** (Workers Paid, $5 a month) through the OpenNext Cloudflare adapter; Smart Placement runs it close to Supabase Mumbai. Fallback if the adapter causes trouble in M0: Netlify Personal ($9 a month, 1,000 credits) | One app for every firm |
 | UI | Tailwind CSS + shadcn/ui, InboxCA tokens (§9.1) | Lucide icons |
 | Database | **Supabase Postgres (Mumbai)** | RLS on every tenant table |
-| Auth | Supabase Auth, email magic link + TOTP 2FA + passkeys for registered devices | Plus access-policy checks (§4.4) |
+| Auth | Supabase Auth, an emailed code or link + TOTP 2FA + passkeys for registered devices | Plus access-policy checks (§4.4) |
 | Jobs | One Postgres `jobs` table (scheduled work and sends) and **Supabase Cron** | Idempotent workers; `run_at`; claims with `FOR UPDATE SKIP LOCKED` and a lease; cancellation by entity version |
 | Client files | **The firm's own drive**: OneDrive and Dropbox at launch (Google Drive later), others behind one adapter interface | Orelu touches only the folder it creates, with the narrowest own-folder permission; no drive link ever reaches staff (D36) |
 | Orelu workspace store | **Backblaze B2**, S3-compatible API, one private bucket | Temporary files in transit (24-hour lifecycle), the encrypted text read from files, locked 30-day safety copies (object lock), database exports; no India region (D12) |
@@ -223,7 +223,7 @@
 ### 4.4 How a request is authorised (access policies)
 
 **Every signed-in request passes, in order:**
-1. Valid session and 2FA.
+1. Valid session and 2FA. The database checks this too: firm data is visible only to a session that has passed the 2 step code (`aal2`), so a session that stopped after the email code sees nothing.
 2. Role and client scope (RLS).
 3. **The user's effective access policy (D17, §5.17):** where (office proof per §5.8 and §5.17.1: the request's IP, from Cloudflare's trusted `CF-Connecting-IP` header, matches a confirmed office address, or the owner allowed that network for today; or anywhere, optionally India-only by IP), which device (an approved device proven by its device key or passkey, marked `stays_in_office`, `laptop` or `personal`), when (the policy's hours and holidays in the firm's timezone) and what (full, view-only or no access when off the office connection). Any failure → sign-out or a reduced mode with a plain message; the attempt is logged and the owner alerted on repeats.
 4. Sessions end automatically at the end of allowed hours and after the policy's idle timeout.
@@ -1197,6 +1197,7 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
   - [x] Step 2 (14 Oct 2026): Supabase local dev (`supabase/config.toml`, with realtime, storage, edge functions and log analytics off, since InboxCA uses none of them) and the first migration: `firms`, `groups`, `firm_members`, `activity_log`, with row level security on each. Runs on Docker through Colima on this Mac.
   - [x] Step 3 (14 Oct 2026): generated types (`src/db/types.ts`, `npm run db:types`, checked in CI), the `jobs` table with `claim_jobs`, `mark_job_sending`, `finish_job` and `cancel_jobs` (server only), and the runner with retries (`src/jobs`). Still open: the `/api/jobs` endpoint and the Supabase Cron schedule that calls it, which come with the first real job kind.
 - [ ] Auth, invites, roles, mandatory TOTP 2FA
+  - [x] Step 4 (14 Oct 2026): sign in with a code or a link sent by email, then a 2 step code from an authenticator app, set up on first sign in (`/sign-in`, `/sign-in/two-step`, `/auth/confirm`). Only existing members can sign in: there is no open sign up, and an unknown address gets the same answer and no email. The database shows firm data only after the 2 step code (`member_role` requires `aal2`). The app's first page shows the firm and the person's role. Browser tests run the whole flow against local Supabase, its mail catcher included, in CI. Still open: invites, and roles beyond reading one's own.
 - [ ] **Sign-up, billing and activation (D5, §5.14.1):** public sign-up with plan and billing-cycle choice and click-through acceptance of terms, privacy notice and DPA; Razorpay Subscriptions with card / UPI AutoPay or eNACH by amount; webhook-verified activation that makes the pending firm active and invites the owner; automatic renewals, failed-payment grace and read-only states, prorated upgrades, top-ups paid before they apply, invoices, daily reconciliation; admin override for pilots
 - [ ] **Money-back guarantee (D33, §5.14.1):** eligibility check, self-serve cancel and refund, Razorpay refund and its webhooks, `guarantee_claims`, the read-only state and the owner's download of the client list, records and logs, the window's last day shown at sign-up and in Billing, admin refund report
 - **Billing acceptance (Razorpay test mode):** a monthly plan above ₹15,000 offers eNACH by default; a top-up adds credits only after `payment.captured`; inviting a person at the user limit adds the seat only after `payment.captured`, and deactivating a user frees the seat at once; a replayed or forged webhook changes nothing; a failed renewal moves the firm to grace, then read-only, and never deletes data; cancelling AutoPay stops the next debit. Money-back: a request on day 14 refunds the first plan payment in full, cancels the mandate and makes the firm read-only; a request on day 15 is refused with the reason; a second claim from the same PAN or mailbox is refused; a replayed request creates one refund; the setup fee stays once the first import has started; a failed refund retries and alerts the admin.
@@ -1461,9 +1462,9 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 ## 10. Environment variables
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=        # job workers + admin only
+SUPABASE_URL=                     # read by the server only; the browser never talks to Supabase directly
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=              # job workers + admin only
 KMS_KEY_ID=                       # KEK in AWS KMS ap-south-1
 KMS_CREDENTIALS=                  # scoped to encrypt/decrypt only
 B2_ENDPOINT=                      # Backblaze S3-compatible endpoint for the chosen region

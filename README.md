@@ -1,6 +1,20 @@
 # InboxCA
 
-Private home page for InboxCA, a product by Orelu. The product is in development. This repository has no login, billing, database or email service.
+Private home page for InboxCA, a product by Orelu, and the product itself, built in small steps tracked in `PLAN.md` (M0). So far the product has its database, background jobs and sign in; it has no billing and sends no real email.
+
+## The product, locally
+
+Local Supabase runs on Docker (on this Mac, through Colima):
+
+```sh
+colima start
+npx supabase start          # database, sign in and a mail catcher at http://127.0.0.1:54324
+npm run db:env              # writes the local connection into .env.local
+npm run test:db             # row level security and job tests
+npm run build && PORT=3211 npx playwright test tests/e2e/sign-in.spec.ts
+```
+
+Sign in is by invitation only, and invites are not built yet: `tests/e2e/sign-in.spec.ts` shows how a person, a firm and their membership are set up before signing in at `/sign-in`. The emailed code arrives in the mail catcher. After a migration, run `npx supabase migration up --local` and `npm run db:types`.
 
 ## Run locally
 

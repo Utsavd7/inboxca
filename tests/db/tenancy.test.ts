@@ -99,6 +99,17 @@ describe("one firm never sees another", () => {
       expect((await db.query("select firm_id from public.firm_members")).rowCount).toBe(0);
     }));
 
+  it("shows nothing until the second sign in step has passed", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER_A, "aal1");
+      for (const table of ["firms", "groups", "firm_members", "activity_log"])
+        expect((await db.query(`select 1 from public.${table}`)).rowCount).toBe(0);
+      expect(
+        await attempt(db, "update public.firms set name = 'x' where id = $1", [FIRM_A]),
+      ).toMatchObject({ ok: true, count: 0 });
+    }));
+
   it("shows nothing at all to a visitor who is not signed in", () =>
     rollback(db, async () => {
       await seed();
