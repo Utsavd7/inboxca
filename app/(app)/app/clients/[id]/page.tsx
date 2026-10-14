@@ -30,7 +30,7 @@ export default async function Client({
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, kind, archived_at, email_enc, client_registrations(id, kind, number_enc), client_assignments(user_id, role)")
+    .select("id, name, kind, archived_at, email_enc, client_registrations(id, kind, number_enc), client_assignments(user_id, team_id, role)")
     .eq("id", id)
     .maybeSingle();
   if (!client) notFound();
@@ -43,9 +43,18 @@ export default async function Client({
   );
   const email = client.email_enc ? await crypto.decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc) : "";
   const manage = canManageClients(membership.role);
-  const { data: people } = await supabase.rpc("firm_people", { target_firm: membership.firmId });
-  const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
-  const unassigned = people?.filter((person) => person.status === "active" && !client.client_assignments.some((a) => a.user_id === person.user_id)) ?? [];
+  const [{ data: people }, { data: teams }] = await Promise.all([
+    supabase.rpc("firm_people", { target_firm: membership.firmId }),
+    supabase.from("groups").select("id, name").eq("kind", "team").order("name"),
+  ]);
+  // Who can be assigned: teams and active people, each as "team:<id>" or "person:<id>".
+  const choices = [
+    ...(teams ?? []).map((team) => ({ value: `team:${team.id}`, label: `Team: ${team.name}` })),
+    ...(people ?? []).filter((person) => person.status === "active").map((person) => ({ value: `person:${person.user_id}`, label: person.email })),
+  ];
+  const assigned = client.client_assignments.map((a) => ({ ...a, value: a.team_id ? `team:${a.team_id}` : `person:${a.user_id}` }));
+  const labelOf = new Map(choices.map((choice) => [choice.value, choice.label]));
+  const unassigned = choices.filter((choice) => !assigned.some((a) => a.value === choice.value));
   const hidden = <input type="hidden" name="client" value={client.id} />;
 
   return (
@@ -116,15 +125,15 @@ export default async function Client({
       <section className="app-card" aria-labelledby="assigned">
         <h2 id="assigned">Assigned to</h2>
         <ul className="app-list">
-          {client.client_assignments.map((assignment) => (
-            <li key={assignment.user_id}>
-              <span className="person">{emailOf.get(assignment.user_id)}</span>
+          {assigned.map((assignment) => (
+            <li key={assignment.value}>
+              <span className="person">{labelOf.get(assignment.value)}</span>
               <span className="person-role">
                 {assignmentRoles[assignment.role as keyof typeof assignmentRoles]}
                 {manage && (
                   <form action={manageClient}>
                     {hidden}
-                    <input type="hidden" name="person" value={assignment.user_id} />
+                    <input type="hidden" name="who" value={assignment.value} />
                     <button className="btn btn-quiet" name="intent" value="unassign">
                       Unassign
                     </button>
@@ -139,11 +148,11 @@ export default async function Client({
           <form action={manageClient} className="app-form-row">
             {hidden}
             <div>
-              <label htmlFor="assign-person">Person</label>
-              <select id="assign-person" name="person">
-                {unassigned.map((person) => (
-                  <option key={person.user_id} value={person.user_id}>
-                    {person.email}
+              <label htmlFor="assign-who">Person or team</label>
+              <select id="assign-who" name="who">
+                {unassigned.map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.label}
                   </option>
                 ))}
               </select>
