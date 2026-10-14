@@ -151,13 +151,17 @@ describe("what each role may change", () => {
     rollback(db, async () => {
       await seed();
       await actAs(db, OWNER_A);
+      const invite = (role: string) =>
+        db.query("select public.invite_member($1, $2, $3) as added", [FIRM_A, NEW_PERSON, role]);
+      expect((await invite("owner")).rows[0].added).toBe(false);
+      expect((await invite("manager")).rows[0].added).toBe(true);
       expect(
         (await attempt(
           db,
-          "insert into public.firm_members (firm_id, user_id, role) values ($1, $2, 'manager')",
-          [FIRM_A, NEW_PERSON],
+          "insert into public.firm_members (firm_id, user_id, role) values ($1, $2, 'staff')",
+          [FIRM_A, STAFF_A],
         )).ok,
-      ).toBe(true);
+      ).toBe(false);
       expect(
         await attempt(db, "update public.firm_members set role = 'owner' where user_id = $1", [STAFF_A]),
       ).toMatchObject({ ok: false });

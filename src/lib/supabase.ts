@@ -31,6 +31,15 @@ export async function supabaseServer() {
   });
 }
 
+// Acts as nobody, with no cookies: for emailing a sign in code to someone else (an invite)
+// without touching the signed in person's own session.
+export function supabaseAnonymous() {
+  const { url, value } = connection("SUPABASE_PUBLISHABLE_KEY");
+  return createClient<Database>(url, value, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 // The server's own access, past row level security. Only for work no person may do
 // themselves: creating people, accepting invites, running jobs.
 export function supabaseAdmin() {

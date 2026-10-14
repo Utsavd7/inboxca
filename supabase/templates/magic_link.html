@@ -1,4 +1,5 @@
-<!-- The InboxCA sign in email. Supabase fills in the code and the link. -->
+<!-- The InboxCA sign in email, sent when someone asks to sign in and when a firm invites
+     them. Supabase fills in the code and the link. -->
 <div style="font-family: Arial, sans-serif; color: #0b1f3a; max-width: 480px">
   <h2 style="margin: 0 0 16px">Your InboxCA sign in code</h2>
   <p style="margin: 0 0 8px">Type this code on the sign in page:</p>
@@ -7,7 +8,11 @@
     Or, on this same device,
     <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email" style="color: #1a4bb0">open InboxCA</a>.
   </p>
+  <p style="margin: 0 0 12px">
+    If a firm has invited you, its invite is waiting once you have signed in.
+  </p>
   <p style="color: #51607a; font-size: 14px; margin: 0">
-    The code works for 10 minutes and only once. If you did not ask to sign in, you can ignore this email.
+    The code works for 10 minutes and only once. After that, ask for a new one on the sign in
+    page with this email address. If you did not expect this email, you can ignore it.
   </p>
 </div>
