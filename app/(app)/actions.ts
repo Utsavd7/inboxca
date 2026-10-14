@@ -7,7 +7,7 @@ import { z } from "zod";
 import { canManageClients, clientKinds } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
-import { cleanNumber, isGstin, isPan, panOfGstin } from "@/src/lib/identifiers";
+import { cleanNumber, isGstin, isPan, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { log } from "@/src/lib/logger";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
@@ -199,4 +199,49 @@ export async function addClient(_prev: ClientState, form: FormData): Promise<Cli
   if (error?.code === "23505") return fail("A client with this PAN or GSTIN is already in your firm.");
   if (error || !data) return fail("The client could not be added. Try again.");
   redirect(`/app/clients/${id}`);
+}
+
+// Every change on a client's page: its name and kind, a number added or removed, archived
+// or restored. Row level security allows only the owner, a partner or a manager, and a
+// trigger logs each change.
+export async function manageClient(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  const id = String(form.get("client") ?? "");
+  const back = (error?: string) => redirect(`/app/clients/${id}${error ? `?error=${error}` : ""}`);
+  if (!membership || !canManageClients(membership.role)) back("role");
+  const firm = membership!.firmId;
+  const intent = form.get("intent");
+
+  if (intent === "details") {
+    const name = String(form.get("name") ?? "").trim();
+    const kind = String(form.get("kind") ?? "");
+    if (!name || name.length > 200 || !(kind in clientKinds)) back("details");
+    await supabase.from("clients").update({ name, kind }).eq("id", id);
+  } else if (intent === "archive" || intent === "restore") {
+    await supabase.from("clients").update({ archived_at: intent === "archive" ? new Date().toISOString() : null }).eq("id", id);
+  } else if (intent === "remove-number") {
+    await supabase.from("client_registrations").delete().eq("id", String(form.get("registration") ?? ""));
+  } else if (intent === "add-number") {
+    const kind = String(form.get("kind") ?? "") as NumberKind;
+    const number = cleanNumber(String(form.get("number") ?? ""));
+    if (!(kind in numberKinds) || !numberKinds[kind].valid(number)) back("number");
+    // One PAN per client, and every GSTIN must hold that PAN.
+    const crypto = serverCrypto();
+    const { data: own } = await supabase.from("client_registrations").select("kind, number_enc").eq("client_id", id);
+    const pans = await Promise.all(
+      (own ?? []).filter((row) => row.kind === "pan").map((row) => crypto.decrypt(firm, `clients/${id}/pan`, row.number_enc)),
+    );
+    if (kind === "pan" && pans.length) back("one-pan");
+    if (kind === "gstin" && pans.length && !pans.includes(panOfGstin(number))) back("gstin-pan");
+    const { error } = await supabase.from("client_registrations").insert({
+      firm_id: firm,
+      client_id: id,
+      kind,
+      number_enc: await crypto.encrypt(firm, `clients/${id}/${kind}`, number),
+      number_bidx: await crypto.blindIndex(firm, kind, number),
+      state_code: kind === "gstin" ? number.slice(0, 2) : null,
+    });
+    if (error) back(error.code === "23505" ? "taken" : "number");
+  }
+  back();
 }

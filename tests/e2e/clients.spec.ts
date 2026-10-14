@@ -49,3 +49,29 @@ test("search finds a client by name or by its whole PAN, and the same PAN is ref
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.getByRole("alert").filter({ hasText: "GSTIN is not valid" })).toBeVisible();
 });
+
+test("a client's page adds and checks numbers, renames, archives and restores", async () => {
+  await owner.goto("/app/clients");
+  await owner.getByRole("link", { name: "Patel Textiles" }).click();
+  await owner.getByLabel("Number", { exact: true }).selectOption("gstin");
+  await owner.getByLabel("Value").fill("29AAGCB7383J1Z4"); // a valid GSTIN with another PAN
+  await owner.getByRole("button", { name: "Add number" }).click();
+  await expect(owner.getByRole("alert").filter({ hasText: "holds a different PAN" })).toBeVisible();
+  await owner.getByLabel("Number", { exact: true }).selectOption("tan");
+  await owner.getByLabel("Value").fill("muma12345b");
+  await owner.getByRole("button", { name: "Add number" }).click();
+  await expect(owner.getByRole("listitem").filter({ hasText: "TAN" })).toContainText("MUMA12345B");
+
+  await owner.getByLabel("Name", { exact: true }).fill("Patel Textiles Pvt Ltd");
+  await owner.getByRole("button", { name: "Save details" }).click();
+  await expect(owner.getByRole("heading", { level: 1 })).toContainText("Patel Textiles Pvt Ltd");
+  await owner.getByRole("button", { name: "Archive client" }).click();
+  await expect(owner.getByRole("heading", { level: 1 })).toContainText("Archived");
+
+  await owner.goto("/app/clients");
+  await expect(owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" })).toHaveCount(0);
+  await owner.getByRole("link", { name: "Show archived clients" }).click();
+  await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
+  await owner.getByRole("button", { name: "Restore client" }).click();
+  await expect(owner.getByRole("heading", { level: 1 })).not.toContainText("Archived");
+});
