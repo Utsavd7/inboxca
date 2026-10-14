@@ -7,8 +7,8 @@ import { currentMember } from "@/src/lib/member";
 import { AddClientForm } from "./add-client-form";
 import { ImportForm } from "./import-form";
 
-// The client register. Search finds a name, or a whole PAN or GSTIN through its blind
-// index, so numbers are never searched in plain text.
+// The client register. Search finds a name, or a whole email, PAN or GSTIN through its
+// blind index, so those are never searched in plain text.
 export default async function Clients({ searchParams }: { searchParams: Promise<{ q?: string; archived?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
@@ -20,7 +20,8 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
 
   let query = supabase.from("clients").select("id, name, kind").eq("firm_id", membership.firmId).order("name").limit(500);
   query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
-  if (kind) {
+  if (q.includes("@")) query = query.eq("email_bidx", await serverCrypto().blindIndex(membership.firmId, "email", q));
+  else if (kind) {
     const index = await serverCrypto().blindIndex(membership.firmId, kind, number);
     const { data } = await supabase.from("client_registrations").select("client_id").eq("kind", kind).eq("number_bidx", index);
     query = query.in("id", data?.map((row) => row.client_id) ?? []);
@@ -36,7 +37,7 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
         </h2>
         <form className="app-form-row" role="search">
           <div>
-            <label htmlFor="q">Find by name, PAN or GSTIN</label>
+            <label htmlFor="q">Find by name, email, PAN or GSTIN</label>
             <input id="q" name="q" type="search" defaultValue={q} />
           </div>
           {archived && <input type="hidden" name="archived" value="1" />}
