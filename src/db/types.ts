@@ -99,6 +99,50 @@ isOneToOne: false
       referencedColumns: ["firm_id","id"]
     }
                   ]
+                },"contact_clients": {
+                  Row: {
+                    "can_receive_documents": boolean,"can_view_status": boolean,"client_id": string,"contact_id": string,"firm_id": string,"relation": string | null
+                  }
+                  Insert: {
+                    "can_receive_documents"?: boolean,"can_view_status"?: boolean,"client_id": string,"contact_id": string,"firm_id": string,"relation"?: string | null
+                  }
+                  Update: {
+                    "can_receive_documents"?: boolean,"can_view_status"?: boolean,"client_id"?: string,"contact_id"?: string,"firm_id"?: string,"relation"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "contact_clients_firm_id_client_id_fkey"
+      columns: ["firm_id","client_id"]
+isOneToOne: false
+      referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "contact_clients_firm_id_contact_id_fkey"
+      columns: ["firm_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["firm_id","id"]
+    }
+                  ]
+                },"contacts": {
+                  Row: {
+                    "email_bidx": string,"email_enc": string,"firm_id": string,"id": string,"name_enc": string
+                  }
+                  Insert: {
+                    "email_bidx": string,"email_enc": string,"firm_id": string,"id"?: string,"name_enc": string
+                  }
+                  Update: {
+                    "email_bidx"?: string,"email_enc"?: string,"firm_id"?: string,"id"?: string,"name_enc"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "contacts_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"firm_keys": {
                   Row: {
                     "firm_id": string,"wrapped_key": string

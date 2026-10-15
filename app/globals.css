@@ -573,6 +573,8 @@ li { text-wrap: pretty; }
 .hours-table td { padding: 8px 24px 8px 0; color: var(--slate); }
 .app-check { display: flex; align-items: center; gap: 10px; margin: 20px 0; font-weight: 600; }
 .hours-table label { display: flex; align-items: center; gap: 8px; }
+.app-check-inline { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--navy); }
+.app-grid-form .app-check-inline { display: flex; align-self: center; margin: 0; font-weight: 600; }
 .app-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; }
 .app-form-row > div > :is(input, select) { width: 100%; }
 .app-form-row > .app-note { align-self: center; margin: 0; }

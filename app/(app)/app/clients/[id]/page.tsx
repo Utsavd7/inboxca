@@ -14,6 +14,8 @@ const errors: Record<string, string> = {
   taken: "Another client in your firm already has that number.",
   assign: "Choose a person and what they do for this client.",
   assigned: "That person is already assigned to this client.",
+  contact: "Enter the contact's name and a valid email address.",
+  linked: "That contact is already linked to this client.",
   role: "Only the owner, a partner or a manager can change clients.",
 };
 
@@ -30,7 +32,7 @@ export default async function Client({
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, kind, archived_at, email_enc, group_id, client_registrations(id, kind, number_enc), client_assignments(user_id, team_id, role)")
+    .select("id, name, kind, archived_at, email_enc, group_id, client_registrations(id, kind, number_enc), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))")
     .eq("id", id)
     .maybeSingle();
   if (!client) notFound();
@@ -42,6 +44,13 @@ export default async function Client({
     })),
   );
   const email = client.email_enc ? await crypto.decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc) : "";
+  const contacts = await Promise.all(
+    client.contact_clients.map(async (link) => ({
+      ...link,
+      name: link.contacts ? await crypto.decrypt(membership.firmId, `contacts/${link.contact_id}/name`, link.contacts.name_enc) : "",
+      email: link.contacts ? await crypto.decrypt(membership.firmId, `contacts/${link.contact_id}/email`, link.contacts.email_enc) : "",
+    })),
+  );
   const manage = canManageClients(membership.role);
   const [{ data: people }, { data: groups }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
@@ -125,6 +134,73 @@ export default async function Client({
             </div>
             <button className="btn btn-quiet" name="intent" value="add-number">
               Add number
+            </button>
+          </form>
+        )}
+      </section>
+
+      <section className="app-card" aria-labelledby="contacts">
+        <h2 id="contacts">Contact people</h2>
+        <p className="app-note">People who write for this client. InboxCA recognises their emails, and sends documents only to those allowed.</p>
+        <ul className="app-list">
+          {contacts.map((contact) => (
+            <li key={contact.contact_id}>
+              <span className="person">
+                {contact.name}
+                <span className="app-email">
+                  {contact.email}
+                  {contact.relation && `, ${contact.relation}`}
+                </span>
+              </span>
+              {manage ? (
+                <form key={`${contact.can_view_status}${contact.can_receive_documents}`} action={manageClient} className="person-role">
+                  {hidden}
+                  <input type="hidden" name="contact" value={contact.contact_id} />
+                  <label className="app-check-inline">
+                    <input type="checkbox" name="can_view_status" defaultChecked={contact.can_view_status} /> Sees work status
+                  </label>
+                  <label className="app-check-inline">
+                    <input type="checkbox" name="can_receive_documents" defaultChecked={contact.can_receive_documents} /> Receives documents
+                  </label>
+                  <button className="btn btn-quiet" name="intent" value="contact-rights">
+                    Save
+                  </button>
+                  <button className="btn btn-quiet" name="intent" value="unlink-contact">
+                    Remove
+                  </button>
+                </form>
+              ) : (
+                <span className="person-role">
+                  {[contact.can_view_status && "Sees work status", contact.can_receive_documents && "Receives documents"].filter(Boolean).join(", ")}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+        {!contacts.length && <p className="app-note">No contact people yet.</p>}
+        {manage && (
+          <form action={manageClient} className="app-grid-form">
+            {hidden}
+            <div>
+              <label htmlFor="contact-name">Contact&apos;s name</label>
+              <input id="contact-name" name="contact_name" required maxLength={120} />
+            </div>
+            <div>
+              <label htmlFor="contact-email">Contact&apos;s email</label>
+              <input id="contact-email" name="contact_email" type="email" required />
+            </div>
+            <div>
+              <label htmlFor="contact-relation">Who they are, if known</label>
+              <input id="contact-relation" name="relation" maxLength={60} />
+            </div>
+            <label className="app-check-inline">
+              <input type="checkbox" name="can_view_status" /> Sees work status
+            </label>
+            <label className="app-check-inline">
+              <input type="checkbox" name="can_receive_documents" /> Receives documents
+            </label>
+            <button className="btn btn-quiet" name="intent" value="add-contact">
+              Add contact
             </button>
           </form>
         )}

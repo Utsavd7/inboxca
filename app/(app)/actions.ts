@@ -347,6 +347,43 @@ export async function manageClient(form: FormData) {
   } else if (intent === "unassign") {
     const [kind, who] = String(form.get("who") ?? "").split(":");
     await supabase.from("client_assignments").delete().eq("client_id", id).eq(kind === "team" ? "team_id" : "user_id", who);
+  } else if (intent === "add-contact") {
+    // A contact is found by email first, so one person acting for several clients is one contact.
+    const name = String(form.get("contact_name") ?? "").trim();
+    const email = String(form.get("contact_email") ?? "").trim().toLowerCase();
+    if (!name || name.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) back("contact");
+    const crypto = serverCrypto();
+    const index = await crypto.blindIndex(firm, "email", email);
+    let { data: contact } = await supabase.from("contacts").select("id").eq("email_bidx", index).maybeSingle();
+    if (!contact) {
+      const contactId = randomUUID();
+      const { error } = await supabase.from("contacts").insert({
+        id: contactId,
+        firm_id: firm,
+        name_enc: await crypto.encrypt(firm, `contacts/${contactId}/name`, name),
+        email_enc: await crypto.encrypt(firm, `contacts/${contactId}/email`, email),
+        email_bidx: index,
+      });
+      if (error) back("contact");
+      contact = { id: contactId };
+    }
+    const { error } = await supabase.from("contact_clients").insert({
+      firm_id: firm,
+      contact_id: contact.id,
+      client_id: id,
+      relation: String(form.get("relation") ?? "").trim().slice(0, 60) || null,
+      can_view_status: form.get("can_view_status") === "on",
+      can_receive_documents: form.get("can_receive_documents") === "on",
+    });
+    if (error) back(error.code === "23505" ? "linked" : "contact");
+  } else if (intent === "contact-rights") {
+    await supabase
+      .from("contact_clients")
+      .update({ can_view_status: form.get("can_view_status") === "on", can_receive_documents: form.get("can_receive_documents") === "on" })
+      .eq("client_id", id)
+      .eq("contact_id", String(form.get("contact") ?? ""));
+  } else if (intent === "unlink-contact") {
+    await supabase.from("contact_clients").delete().eq("client_id", id).eq("contact_id", String(form.get("contact") ?? ""));
   } else if (intent === "remove-number") {
     await supabase.from("client_registrations").delete().eq("id", String(form.get("registration") ?? ""));
   } else if (intent === "add-number") {
