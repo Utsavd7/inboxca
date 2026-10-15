@@ -118,3 +118,29 @@ test("clients in one group are listed together", async () => {
   await expect(owner.getByRole("heading", { name: "Patel family: 2 clients" })).toBeVisible();
   await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
 });
+
+test("a contact person can act for several clients, with what they may receive", async () => {
+  await owner.goto("/app/clients?q=patel");
+  await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
+  await owner.getByLabel("Contact's name").fill("Ramesh Patel");
+  await owner.getByLabel("Contact's email").fill("ramesh@patel.example");
+  await owner.getByLabel("Who they are, if known").fill("Director");
+  await owner.getByRole("button", { name: "Add contact" }).click();
+  const row = owner.getByRole("listitem").filter({ hasText: "Ramesh Patel" });
+  await expect(row).toContainText("ramesh@patel.example, Director");
+  await row.getByLabel("Receives documents").check();
+  await Promise.all([
+    owner.waitForResponse((response) => response.request().method() === "POST"),
+    row.getByRole("button", { name: "Save", exact: true }).click(),
+  ]);
+  await owner.reload();
+  await expect(owner.getByRole("listitem").filter({ hasText: "Ramesh Patel" }).getByLabel("Receives documents")).toBeChecked();
+
+  // The same email on another client links the same person.
+  await owner.goto("/app/clients?q=Client 321");
+  await owner.getByRole("link", { name: "Client 321" }).click();
+  await owner.getByLabel("Contact's name").fill("R Patel");
+  await owner.getByLabel("Contact's email").fill("RAMESH@patel.example");
+  await owner.getByRole("button", { name: "Add contact" }).click();
+  await expect(owner.getByRole("listitem").filter({ hasText: "ramesh@patel.example" })).toContainText("Ramesh Patel");
+});

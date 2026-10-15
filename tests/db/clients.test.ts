@@ -171,4 +171,29 @@ describe("the client register", () => {
       await db.query("delete from public.groups where id = $1", [id]);
       expect((await db.query("select group_id from public.clients where id = $1", [CLIENT])).rows).toEqual([{ group_id: null }]);
     }));
+
+  it("links one contact to several clients, refuses a second contact with the same email, and follows client visibility", () =>
+    rollback(db, async () => {
+      await seed();
+      const OTHER_CLIENT = "00000000-0000-4000-8000-0000000004c5";
+      const CONTACT = "00000000-0000-4000-8000-0000000004e1";
+      await actAs(db, OWNER);
+      await add(FIRM, CLIENT, pan("i1"));
+      await add(FIRM, OTHER_CLIENT, pan("i5"));
+      const contact = (id: string) =>
+        attempt(db, "insert into public.contacts (id, firm_id, name_enc, email_enc, email_bidx) values ($1, $2, 'n', 'e', 'same')", [id, FIRM]);
+      expect((await contact(CONTACT)).ok).toBe(true);
+      expect((await contact("00000000-0000-4000-8000-0000000004e2")).ok).toBe(false);
+      for (const client of [CLIENT, OTHER_CLIENT])
+        await db.query("insert into public.contact_clients (firm_id, contact_id, client_id, can_receive_documents) values ($1, $2, $3, true)", [FIRM, CONTACT, client]);
+
+      await actAs(db, STAFF);
+      expect((await contact("00000000-0000-4000-8000-0000000004e3")).ok).toBe(false);
+      expect((await db.query("select 1 from public.contact_clients")).rowCount).toBe(2);
+      await actAs(db, OWNER);
+      await db.query("update public.firms set settings = '{\"client_visibility\": \"restricted\"}' where id = $1", [FIRM]);
+      await db.query("insert into public.client_assignments (firm_id, client_id, user_id, role) values ($1, $2, $3, 'staff')", [FIRM, CLIENT, STAFF]);
+      await actAs(db, STAFF);
+      expect((await db.query("select client_id from public.contact_clients")).rows).toEqual([{ client_id: CLIENT }]);
+    }));
 });
