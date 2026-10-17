@@ -1,6 +1,7 @@
 import { promises as dns } from "node:dns";
 import { isIP } from "node:net";
 import { ImapFlow } from "imapflow";
+import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 
 // The firm's own mailbox over IMAP and SMTP (PLAN.md 5.13): settings found from the
@@ -95,25 +96,34 @@ export async function checkMailbox(address: string, password: string, settings: 
   }
 }
 
-export type NewMail = { messageId: string; threadId: string; from: string; receivedAt: string };
+export type NewMail = { uid: number; messageId: string; threadId: string; from: string; receivedAt: string };
+export type MailContent = { subject: string; text: string; attachments: string[] };
 
-// The inbox's messages after the cursor, up to 200 a time, as envelopes only: the body is
-// never fetched here. If the mailbox was rebuilt (a new UIDVALIDITY), reading restarts
-// from the next new message rather than reading the old ones again.
-export async function readNewMail(address: string, password: string, server: Server, cursor: string | null) {
+// The inbox's messages after the cursor, up to 200 a time, as envelopes. Only the ones
+// `keep` chooses (mail from the firm's clients and contacts) are opened, in memory, for
+// their subject, text and attachment names; nothing of any other message is read. If the
+// mailbox was rebuilt (a new UIDVALIDITY), reading restarts from the next new message.
+export async function readNewMail(
+  address: string,
+  password: string,
+  server: Server,
+  cursor: string | null,
+  keep: (mail: NewMail[]) => Promise<NewMail[]>,
+) {
   const imap = imapClient(address, password, server);
   try {
     await imap.connect();
     const box = await imap.mailboxOpen("INBOX", { readOnly: true });
     const [validity, next] = (cursor ?? "").split(":");
     let start = validity === String(box.uidValidity) ? Number(next) : box.uidNext;
-    const mail: NewMail[] = [];
+    const all: NewMail[] = [];
     if (box.uidNext > start) {
       const last = Math.min(box.uidNext - 1, start + 199);
       for await (const message of imap.fetch(`${start}:${last}`, { uid: true, envelope: true, internalDate: true, headers: ["references"] }, { uid: true })) {
         const id = message.envelope?.messageId ?? `uid:${box.uidValidity}:${message.uid}`;
         const root = message.headers?.toString().match(/<[^>]+>/)?.[0];
-        mail.push({
+        all.push({
+          uid: message.uid,
           messageId: id,
           threadId: root ?? message.envelope?.inReplyTo ?? id,
           from: message.envelope?.from?.[0]?.address?.toLowerCase() ?? "",
@@ -122,8 +132,21 @@ export async function readNewMail(address: string, password: string, server: Ser
       }
       start = last + 1;
     }
+    const kept: (NewMail & { content: MailContent })[] = [];
+    for (const mail of all.length ? await keep(all) : []) {
+      const message = await imap.fetchOne(String(mail.uid), { source: true }, { uid: true });
+      const parsed = message && message.source ? await simpleParser(message.source) : null;
+      kept.push({
+        ...mail,
+        content: {
+          subject: parsed?.subject ?? "",
+          text: parsed?.text ?? "",
+          attachments: parsed?.attachments.map((file) => file.filename ?? "").filter(Boolean) ?? [],
+        },
+      });
+    }
     await imap.logout();
-    return { cursor: `${box.uidValidity}:${start}`, mail };
+    return { cursor: `${box.uidValidity}:${start}`, mail: kept };
   } catch (error) {
     imap.close();
     return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };

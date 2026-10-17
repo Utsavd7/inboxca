@@ -10,6 +10,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { readSheet } from "@/src/lib/sheet";
+import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
 import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
 import { currentMember } from "@/src/lib/member";
@@ -510,4 +511,16 @@ export async function disconnectMailbox() {
   if (membership?.role !== "owner") redirect("/app");
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "mail");
   revalidatePath("/app/settings");
+}
+
+// Inbox: correct an email's label (a person's choice wins over the rules and is logged), or
+// mark a Needs team reply request done once someone has replied from the mailbox.
+export async function manageEmail(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (!membership) redirect("/app");
+  const label = String(form.get("label") ?? "");
+  if (form.get("intent") === "label" && label in labels)
+    await supabase.from("email_events").update({ label, decision_source: "staff" }).eq("id", String(form.get("email") ?? ""));
+  else if (form.get("intent") === "done") await supabase.from("requests").update({ status: "done" }).eq("id", String(form.get("request") ?? ""));
+  revalidatePath("/app/inbox");
 }
