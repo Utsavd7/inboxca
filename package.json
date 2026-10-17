@@ -14,7 +14,9 @@
     "db:env": "node scripts/local-env.mjs",
     "test:e2e": "playwright test",
     "audit:page": "node scripts/audit-page.mjs",
-    "brand:social": "node scripts/generate-social.mjs"
+    "brand:social": "node scripts/generate-social.mjs",
+    "demo": "node scripts/demo-firm.mjs",
+    "demo:code": "node scripts/demo-firm.mjs code"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
