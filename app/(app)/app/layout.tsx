@@ -7,6 +7,7 @@ import "./app.css";
 import { Command } from "./command";
 import { IdleWatch } from "./idle-watch";
 import { NavLinks } from "./nav-links";
+import { PageIn } from "./page-in";
 import { Avatar } from "./ui";
 
 export const metadata: Metadata = {
@@ -57,7 +58,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
       <main className="stage">
         <div className="stage-panel">
-          <div className="stage-body">{children}</div>
+          <div className="stage-body">
+            <PageIn>{children}</PageIn>
+          </div>
         </div>
       </main>
       {!!membership?.idleMinutes && <IdleWatch minutes={membership.idleMinutes} />}

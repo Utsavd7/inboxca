@@ -17,7 +17,7 @@ export function PageHead({ title, sub, crumb, actions }: { title: React.ReactNod
 
 // Two letters for a name or an address: "Patel Textiles" is PT, "ravi@x.in" is RA.
 export const initials = (text: string) => {
-  const words = text.split("@")[0].split(/[\s._-]+/).filter(Boolean);
+  const words = text.split("@")[0].split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? words[0]?.[1] ?? "")).toUpperCase();
 };
 

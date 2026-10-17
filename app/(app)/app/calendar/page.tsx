@@ -46,7 +46,6 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
       <PageHead title="Calendar" sub="Every return your firm files, by due date. Tick returns to mark them in progress or filed." />
       <div className="toolbar">
         <LinkTabs
-          id="calendar-view"
           kind="segment"
           label="Show"
           items={Object.entries(calendarViews).map(([value, { label }]) => ({ href: `/app/calendar?view=${value}${code}`, label, current: !day && view === value }))}
@@ -66,10 +65,10 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
           </button>
         </form>
       </div>
-      <section aria-labelledby="returns">
-        <div className="section-head">
+      <section className="panel" aria-labelledby="returns">
+        <div className="panel-head">
           <h2 id="returns">{title}</h2>
-          {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p>Dates marked * are not yet confirmed by a CA against the official notification.</p>}
+          {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="hint">Dates marked * are not yet confirmed by a CA against the official notification.</p>}
         </div>
         {tasks?.length ? (
           <form key={tasks.map((task) => task.id + task.status).join()} action={manageTasks}>
@@ -146,11 +145,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
             <p className="hint">Tick returns to act on them. An acknowledgement number typed in a row is saved when that return is marked filed.</p>
           </form>
         ) : (
-          <div className="box">
-            <Empty Icon={CalendarDays} title={view === "overdue" && !day ? "Nothing is overdue." : "No returns here"}>
+          <Empty Icon={CalendarDays} title={view === "overdue" && !day ? "Nothing is overdue." : "No returns here"}>
               <span>{view === "overdue" && !day ? "Every return that was due has been filed." : "Tick what you file on a client's page, and its due dates appear here."}</span>
             </Empty>
-          </div>
         )}
       </section>
     </>

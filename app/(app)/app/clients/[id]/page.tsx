@@ -132,7 +132,6 @@ export default async function Client({
         }
       />
       <LinkTabs
-        id="client-tab"
         label="Client"
         items={tabs.map(([key, label, count]) => ({ href: `/app/clients/${client.id}${key === "overview" ? "" : `?tab=${key}`}`, label, count, current: tab === key }))}
       />
@@ -144,7 +143,7 @@ export default async function Client({
 
 
       {tab === "overview" && (
-        <div className="cols">
+        <div className="grid-2">
           <div>
           <section className="panel" aria-labelledby="numbers">
             <h2 id="numbers">Registrations</h2>

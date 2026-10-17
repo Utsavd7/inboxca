@@ -45,7 +45,10 @@ export default async function AppHome() {
     supabase.from("compliance_types").select("code, name, frequency").eq("period_key", ""),
     owner
       ? Promise.all([
-          supabase.from("connected_accounts").select("kind").then((result) => result.data?.map((row) => row.kind) ?? []),
+          supabase
+            .from("connected_accounts")
+            .select("kind")
+            .then((result) => result.data?.map((row) => row.kind) ?? []),
           count(supabase.from("clients").select("id", { count: "exact", head: true })),
           count(supabase.from("client_registrations").select("id", { count: "exact", head: true }).filter("services", "neq", "{}")),
           count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
@@ -69,9 +72,27 @@ export default async function AppHome() {
   const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric" }));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const needs = [
-    { number: waiting, one: "client email needs a reply", many: "client emails need a reply", none: "No client email needs a reply", href: "/app/inbox", action: "Open inbox", Icon: Inbox, late: false },
+    {
+      number: waiting,
+      one: "client email needs a reply",
+      many: "client emails need a reply",
+      none: "No client email needs a reply",
+      href: "/app/inbox",
+      action: "Open inbox",
+      Icon: Inbox,
+      late: false,
+    },
     { number: overdue, one: "return is overdue", many: "returns are overdue", none: "Nothing is overdue", href: "/app/calendar?view=overdue", action: "See overdue", Icon: TriangleAlert, late: true },
-    { number: week, one: "return falls due in the next 7 days", many: "returns fall due in the next 7 days", none: "Nothing falls due in the next 7 days", href: "/app/calendar?view=week", action: "See the week", Icon: CalendarClock, late: false },
+    {
+      number: week,
+      one: "return falls due in the next 7 days",
+      many: "returns fall due in the next 7 days",
+      none: "Nothing falls due in the next 7 days",
+      href: "/app/calendar?view=week",
+      action: "See the week",
+      Icon: CalendarClock,
+      late: false,
+    },
   ];
 
   return (
@@ -154,108 +175,102 @@ export default async function AppHome() {
         </Link>
       </section>
 
-      <section className="section" aria-labelledby="ribbon-title">
-        <div className="box">
-          <Ribbon month={month} days={ribbon} today={today} lastDay={lastDay} />
-        </div>
+      <section className="panel" aria-labelledby="ribbon-title">
+        <Ribbon month={month} days={ribbon} today={today} lastDay={lastDay} />
       </section>
 
-      <div className="split">
-        <section className="section" aria-labelledby="needs">
-          <div className="section-head">
+      <div className="grid-main">
+        <div>
+          <section className="panel" aria-labelledby="needs">
             <h2 id="needs">Needs you</h2>
-          </div>
-          <ul className="box rows needs">
-            {needs.map(({ number, one, many, none, href, action, Icon, late }) => (
-              <li key={href} className={number && late ? "is-late" : number ? "" : "is-clear"}>
-                <Icon size={16} aria-hidden />
-                <span className="grow">
-                  {number ? (
-                    <>
-                      <strong>
-                        <CountUp value={number} />
-                      </strong>{" "}
-                      {number === 1 ? one : many}
-                    </>
-                  ) : (
-                    none
+            <ul className="rows needs">
+              {needs.map(({ number, one, many, none, href, action, Icon, late }) => (
+                <li key={href} className={number && late ? "is-late" : number ? "" : "is-clear"}>
+                  <Icon size={16} aria-hidden />
+                  <span className="grow">
+                    {number ? (
+                      <>
+                        <strong>
+                          <CountUp value={number} />
+                        </strong>{" "}
+                        {number === 1 ? one : many}
+                      </>
+                    ) : (
+                      none
+                    )}
+                  </span>
+                  {!!number && (
+                    <Link className="b b-secondary b-small" href={href}>
+                      {action}
+                    </Link>
                   )}
-                </span>
-                {!!number && (
-                  <Link className="b b-secondary b-small" href={href}>
-                    {action}
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-          <div className="section">
-            <div className="section-head">
+          <section className="panel" aria-labelledby="mail">
+            <div className="panel-head">
               <h2 id="mail">Latest client email</h2>
               <Link className="b b-ghost b-small" href="/app/inbox">
                 Inbox
               </Link>
             </div>
-            <div className="box">
-              {mail.data?.length ? (
-                <ul className="rows">
-                  {mail.data.map((event) => (
-                    <li key={event.id}>
-                      <span className="who grow">
-                        <Avatar name={event.clients?.name ?? "Contact"} />
-                        <span>
-                          <span className="name">{event.clients?.name ?? "A contact"}</span>
-                          <span className="sub">
-                            {new Date(event.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                          </span>
+            {mail.data?.length ? (
+              <ul className="rows">
+                {mail.data.map((event) => (
+                  <li key={event.id}>
+                    <span className="who grow">
+                      <Avatar name={event.clients?.name ?? "Contact"} />
+                      <span>
+                        <span className="name">{event.clients?.name ?? "A contact"}</span>
+                        <span className="sub">
+                          {new Date(event.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </span>
-                      <Badge tone={labelTone[event.label ?? "other"] ?? ""}>{labels[(event.label ?? "other") as Label]}</Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <Empty Icon={Mail} title="No client email yet">
-                  <span>Connect the firm&apos;s email in Settings and new client mail shows here, sorted.</span>
-                </Empty>
-              )}
-            </div>
-          </div>
-        </section>
+                    </span>
+                    <Badge tone={labelTone[event.label ?? "other"] ?? ""}>{labels[(event.label ?? "other") as Label]}</Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Empty Icon={Mail} title="No client email yet">
+                <span>Connect the firm&apos;s email in Settings and new client mail shows here, sorted.</span>
+              </Empty>
+            )}
+          </section>
+        </div>
 
-        <section className="section" aria-labelledby="coming">
-          <div className="section-head">
+        <section className="panel" aria-labelledby="coming">
+          <div className="panel-head">
             <h2 id="coming">Coming up</h2>
             <Link className="b b-ghost b-small" href="/app/calendar">
               All dates
             </Link>
           </div>
-          <div className="box">
-            {upcoming.data?.length ? (
-              <ul className="rows">
-                {upcoming.data.map((task) => (
-                  <li key={task.id}>
-                    <span className="grow">
-                      <Link className="name" href={`/app/clients/${task.client_id}`}>
-                        {task.clients.name}
-                      </Link>
-                      <span className="sub">
-                        {rule.get(task.code ?? "")?.name}, {periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}
-                      </span>
+          {upcoming.data?.length ? (
+            <ul className="rows">
+              {upcoming.data.map((task) => (
+                <li key={task.id}>
+                  <span className="grow">
+                    <Link className="name" href={`/app/clients/${task.client_id}`}>
+                      {task.clients.name}
+                    </Link>
+                    <span className="sub">
+                      {rule.get(task.code ?? "")?.name}, {periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}
                     </span>
-                    <span className={`when${task.due_on < today ? " late" : ""}`} title={dueLabel(task.due_on)}>
-                      {when(task.due_on, today)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Empty Icon={CalendarDays} title="No returns due yet">
-                <span>Open a client and tick what you file for them; their due dates appear here.</span>
-              </Empty>
-            )}
-          </div>
+                  </span>
+                  <span className={`when${task.due_on < today ? " late" : ""}`} title={dueLabel(task.due_on)}>
+                    {when(task.due_on, today)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Empty Icon={CalendarDays} title="No returns due yet">
+              <span>Open a client and tick what you file for them; their due dates appear here.</span>
+            </Empty>
+          )}
         </section>
       </div>
     </>
@@ -263,13 +278,7 @@ export default async function AppHome() {
 }
 
 // Someone signed in who is not in a firm yet: their invites, or the firm being closed.
-function NoFirm({
-  closed,
-  invites,
-}: {
-  closed: { firm_name: string; hours: unknown } | null | undefined;
-  invites: { firm_id: string; firm_name: string; role: string }[];
-}) {
+function NoFirm({ closed, invites }: { closed: { firm_name: string; hours: unknown } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[] }) {
   return (
     <>
       <PageHead
@@ -285,11 +294,9 @@ function NoFirm({
         }
       />
       {!!invites.length && (
-        <section className="section" aria-labelledby="invites">
-          <div className="section-head">
-            <h2 id="invites">Invites</h2>
-          </div>
-          <ul className="box rows">
+        <section className="panel" aria-labelledby="invites">
+          <h2 id="invites">Invites</h2>
+          <ul className="rows">
             {invites.map((invite) => (
               <li key={invite.firm_id}>
                 <span className="grow">

@@ -57,7 +57,7 @@ export function Command({ pages }: { pages: Page[] }) {
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger className="rail-search">
         <Search size={15} aria-hidden />
-        Search clients or pages
+        Search
         <kbd>⌘K</kbd>
       </Dialog.Trigger>
       <Dialog.Portal>
