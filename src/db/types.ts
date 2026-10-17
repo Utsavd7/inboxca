@@ -445,6 +445,11 @@ isOneToOne: false
 "member_role":
 { Args: { "target_firm": string }; Returns: string
                            },
+"month_load":
+{ Args: { "first_day": string }; Returns: {
+              "codes": (string)[],"due": number,"due_on": string,"filed": number
+            }[]
+                           },
 "my_invites":
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_id": string,"firm_name": string,"role": string

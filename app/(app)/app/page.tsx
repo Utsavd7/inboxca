@@ -1,4 +1,4 @@
-import { CalendarClock, Check, ChevronRight, Inbox, TriangleAlert } from "lucide-react";
+import { CalendarClock, Check, Inbox, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { joinFirm } from "@/app/(app)/actions";
@@ -7,6 +7,8 @@ import { describeHours, type Hours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { roleNames } from "@/src/lib/roles";
 import { labels, type Label } from "@/src/lib/triage";
+import { CountUp } from "./count-up";
+import { Ribbon } from "./ribbon";
 
 const DAY = 86_400_000;
 // "today", "tomorrow", "in 3 days" or "4 days late", for a date column.
@@ -29,7 +31,9 @@ export default async function AppHome() {
   const owner = membership.role === "owner";
   const count = (query: PromiseLike<{ count: number | null }>) => Promise.resolve(query).then((result) => result.count ?? 0);
   const open = () => supabase.from("tasks").select("id", { count: "exact", head: true }).neq("status", "filed");
-  const [waiting, overdue, week, upcoming, mail, rules, setup] = await Promise.all([
+  const month = today.slice(0, 7);
+  const lastDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
+  const [waiting, overdue, week, upcoming, mail, rules, setup, load] = await Promise.all([
     count(supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending")),
     count(open().lte("due_on", calendarViews.overdue.window(today).to)),
     count(open().gte("due_on", today).lte("due_on", calendarViews.week.window(today).to)),
@@ -44,6 +48,7 @@ export default async function AppHome() {
           count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
         ])
       : null,
+    supabase.rpc("month_load", { first_day: `${month}-01` }),
   ]);
   const rule = new Map(rules.data?.map((r) => [r.code, r]));
   const steps = setup && [
@@ -56,11 +61,18 @@ export default async function AppHome() {
   const next = steps?.find((step) => !step.done);
   const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric" }));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const tiles = [
-    { number: waiting, label: "emails waiting for a reply", href: "/app/inbox", Icon: Inbox, alert: false },
-    { number: overdue, label: "returns overdue", href: "/app/calendar?view=overdue", Icon: TriangleAlert, alert: overdue > 0 },
-    { number: week, label: "returns due in 7 days", href: "/app/calendar?view=week", Icon: CalendarClock, alert: false },
+  // What needs a person, as plain sentences with one button each; nothing to do reads as such.
+  const needs = [
+    { number: waiting, one: "client email needs a reply", many: "client emails need a reply", none: "No client email needs a reply", href: "/app/inbox", action: "Open inbox", Icon: Inbox, late: false },
+    { number: overdue, one: "return is overdue", many: "returns are overdue", none: "Nothing is overdue", href: "/app/calendar?view=overdue", action: "See overdue", Icon: TriangleAlert, late: true },
+    { number: week, one: "return falls due in the next 7 days", many: "returns fall due in the next 7 days", none: "Nothing falls due in the next 7 days", href: "/app/calendar?view=week", action: "See the week", Icon: CalendarClock, late: false },
   ];
+  const ribbon = (load.data ?? []).map((row) => ({
+    date: row.due_on,
+    due: row.due,
+    filed: row.filed,
+    names: row.codes.map((code) => rule.get(code)?.name ?? code),
+  }));
 
   return (
     <>
@@ -72,20 +84,7 @@ export default async function AppHome() {
         <span className="app-date">{new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" })}</span>
       </header>
 
-      <section aria-label="Needs you today" className="app-tiles">
-        {tiles.map(({ number, label, href, Icon, alert }) => (
-          <Link key={href} className={`app-tile${alert ? " is-alert" : ""}`} href={href}>
-            <span className="app-tile-icon">
-              <Icon size={18} aria-hidden />
-            </span>
-            <span>
-              <strong className="num">{number}</strong>
-              <span>{label}</span>
-            </span>
-            <ChevronRight className="app-tile-go" size={16} aria-hidden />
-          </Link>
-        ))}
-      </section>
+      <Ribbon month={month} days={ribbon} today={today} lastDay={lastDay} />
 
       {next && steps && (
         <section className="app-card" aria-labelledby="start">
@@ -116,29 +115,30 @@ export default async function AppHome() {
       )}
 
       <div className="app-columns">
-        <section className="app-card" aria-labelledby="coming">
-          <div className="app-card-head">
-            <h2 id="coming">Coming up</h2>
-            <Link className="app-link" href="/app/calendar">
-              Calendar
-            </Link>
-          </div>
-          <ul className="app-list">
-            {upcoming.data?.map((task) => (
-              <li key={task.id}>
-                <span className="person">
-                  <Link href={`/app/clients/${task.client_id}`}>{task.clients.name}</Link>
-                  <span className="app-aside">
-                    {rule.get(task.code ?? "")?.name}, {periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}
-                  </span>
+        <div>
+        <section className="app-card" aria-labelledby="needs">
+          <h2 id="needs">Needs you</h2>
+          <ul className="needs">
+            {needs.map(({ number, one, many, none, href, action, Icon, late }) => (
+              <li key={href} className={number && late ? "is-late" : number ? "" : "is-clear"}>
+                <Icon size={17} aria-hidden />
+                <span>
+                  {number ? (
+                    <>
+                      <CountUp value={number} /> {number === 1 ? one : many}
+                    </>
+                  ) : (
+                    none
+                  )}
                 </span>
-                <span className={`pill${task.due_on < today ? " pill-late" : ""}`} title={dueLabel(task.due_on)}>
-                  {when(task.due_on, today)}
-                </span>
+                {!!number && (
+                  <Link className="btn btn-quiet" href={href}>
+                    {action}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
-          {!upcoming.data?.length && <p className="app-note">No returns due yet. Tick what you file on a client&apos;s page.</p>}
         </section>
 
         <section className="app-card" aria-labelledby="mail">
@@ -163,6 +163,33 @@ export default async function AppHome() {
           </ul>
           {!mail.data?.length && <p className="app-note">No client email yet.</p>}
         </section>
+        </div>
+        <div>
+        <section className="app-card" aria-labelledby="coming">
+          <div className="app-card-head">
+            <h2 id="coming">Coming up</h2>
+            <Link className="app-link" href="/app/calendar">
+              Calendar
+            </Link>
+          </div>
+          <ul className="app-list">
+            {upcoming.data?.map((task) => (
+              <li key={task.id}>
+                <span className="person">
+                  <Link href={`/app/clients/${task.client_id}`}>{task.clients.name}</Link>
+                  <span className="app-aside">
+                    {rule.get(task.code ?? "")?.name}, {periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}
+                  </span>
+                </span>
+                <span className={`pill${task.due_on < today ? " pill-late" : ""}`} title={dueLabel(task.due_on)}>
+                  {when(task.due_on, today)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {!upcoming.data?.length && <p className="app-note">No returns due yet. Tick what you file on a client&apos;s page.</p>}
+        </section>
+        </div>
       </div>
     </>
   );

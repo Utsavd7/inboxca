@@ -60,7 +60,13 @@ test("a return is marked filed with its acknowledgement on the calendar", async 
 
 test("Home shows what needs the owner today and the next setup step", async () => {
   await owner.getByRole("link", { name: "Home" }).click();
-  await expect(owner.getByRole("link", { name: /returns due in 7 days/ })).toBeVisible();
+  await expect(owner.locator("section[aria-labelledby=needs]")).toContainText("in the next 7 days");
+  // This month's ribbon: a filing day opens that day in the Calendar.
+  const day = owner.locator(".ribbon-days a").first();
+  await expect(day).toHaveAttribute("aria-label", /GSTR/);
+  await day.click();
+  await expect(owner.getByRole("heading", { name: /^Due on / })).toBeVisible();
+  await owner.getByRole("link", { name: "Home" }).click();
   const start = owner.locator("section[aria-labelledby=start]");
   await expect(start.getByRole("listitem").filter({ hasText: "Add your clients" }).getByLabel("Done")).toBeVisible();
   await expect(start.getByRole("link", { name: "Connect email" })).toHaveAttribute("href", "/app/settings#mailbox");

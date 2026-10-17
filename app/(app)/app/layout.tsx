@@ -22,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="app-page">
       <aside className="app-side">
-        <Logo />
+        <Logo light />
         {membership && (
           <nav className="app-nav" aria-label="InboxCA">
             <NavLinks role={membership.role} waiting={waiting ?? 0} />

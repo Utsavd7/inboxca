@@ -6,7 +6,7 @@ import { currentMember } from "@/src/lib/member";
 
 // The firm's compliance calendar: overdue, coming up and recently filed returns. Anyone in
 // the firm marks a return in progress or filed, one at a time or many together (5.17.2).
-export default async function Calendar({ searchParams }: { searchParams: Promise<{ view?: string; code?: string }> }) {
+export default async function Calendar({ searchParams }: { searchParams: Promise<{ view?: string; code?: string; day?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
@@ -19,8 +19,11 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     .is("clients.archived_at", null)
     .order("due_on")
     .limit(500);
-  const window: { from?: string; to?: string; filedSince?: string } = calendarViews[view].window(today);
-  if (window.filedSince) query = query.eq("status", "filed").gte("details->>filed_on", window.filedSince);
+  // One day, from the Home ribbon: everything due that day, filed or not.
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(params.day ?? "") ? params.day! : null;
+  const window: { from?: string; to?: string; filedSince?: string } = day ? {} : calendarViews[view].window(today);
+  if (day) query = query.eq("due_on", day);
+  else if (window.filedSince) query = query.eq("status", "filed").gte("details->>filed_on", window.filedSince);
   else query = query.neq("status", "filed").lte("due_on", window.to!);
   if (window.from) query = query.gte("due_on", window.from);
   if (params.code) query = query.eq("code", params.code);
@@ -35,7 +38,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
       <h1>Calendar</h1>
       <section className="app-card" aria-labelledby="returns">
         <h2 id="returns">
-          {calendarViews[view].label}: {tasks?.length ?? 0} return{tasks?.length === 1 ? "" : "s"}
+          {day ? `Due on ${dueLabel(day)}` : calendarViews[view].label}: {tasks?.length ?? 0} return{tasks?.length === 1 ? "" : "s"}
         </h2>
         <form className="app-form-row">
           <div>
