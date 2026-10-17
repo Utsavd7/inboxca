@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
-import { emailStep, latestEmail, localSupabase, seedFirm, totp } from "./local-supabase";
+import nodemailer from "nodemailer";
+import { TEST_WORKER_SECRET } from "../../playwright.config";
+import { emailStep, latestEmail, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
 // The owner invites a new person, who signs in from the invite email, sets up a 2 step
 // code and joins the firm. Skipped when local Supabase is not running.
@@ -171,7 +173,7 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
   await expect(person).toHaveURL(/\/sign-in$/);
 });
 
-test("the owner connects the firm's mailbox after a wrong password, and disconnects it", async () => {
+test("the owner connects the firm's mailbox; mail from a client is noted, a stranger's is not", async ({ request }) => {
   await owner.goto("/app/settings");
   const card = owner.locator("section[aria-labelledby=mailbox]");
   await card.getByLabel("The firm's email address").fill("office@firm.test");
@@ -186,6 +188,21 @@ test("the owner connects the firm's mailbox after a wrong password, and disconne
   await card.getByLabel("Its password").fill("secret");
   await card.getByRole("button", { name: "Connect email" }).click();
   await expect(card.getByRole("status")).toHaveText("Connected: office@firm.test");
+
+  await owner.goto("/app/clients");
+  await owner.getByLabel("Name", { exact: true }).fill("Mail Client");
+  await owner.getByLabel("Email", { exact: true }).fill(`client-${tag}@patel.test`);
+  await owner.getByRole("button", { name: "Add client" }).click();
+  await expect(owner.getByRole("heading", { level: 1 })).toContainText("Mail Client");
+  const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
+  for (const from of [`Client-${tag}@Patel.test`, `stranger-${tag}@else.test`])
+    await smtp.sendMail({ from, to: "office@firm.test", subject: "Please send last year's ITR", text: "Thanks" });
+  await query(local.dbUrl, "select private.queue_mail_polls()");
+  await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  const events = await query(local.dbUrl, "select (client_id is not null) as matched from public.email_events where firm_id = $1", [firm.firmId]);
+  expect(events).toEqual([{ matched: true }]);
+
+  await owner.goto("/app/settings");
   await card.getByRole("button", { name: "Disconnect" }).click();
   await expect(card.getByLabel("The firm's email address")).toBeVisible();
 });

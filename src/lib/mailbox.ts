@@ -72,6 +72,11 @@ export const smtpTransport = (address: string, password: string, { host, port }:
     connectionTimeout: 15_000,
   });
 
+const signInFailed = (error: unknown) => {
+  const failure = error as { authenticationFailed?: boolean; responseCode?: number; code?: string };
+  return !!failure.authenticationFailed || failure.responseCode === 535 || failure.code === "EAUTH";
+};
+
 // Signs in to both servers. Reading starts from the next new message, so no old mail is
 // read (no backfill); the cursor is "UIDVALIDITY:UIDNEXT" of the inbox.
 export async function checkMailbox(address: string, password: string, settings: MailSettings): Promise<MailCheck> {
@@ -86,7 +91,41 @@ export async function checkMailbox(address: string, password: string, settings: 
     return { cursor: `${inbox.uidValidity}:${inbox.uidNext}` };
   } catch (error) {
     imap.close();
-    const failure = error as { authenticationFailed?: boolean; responseCode?: number; code?: string };
-    return { error: failure.authenticationFailed || failure.responseCode === 535 || failure.code === "EAUTH" ? "sign_in" : "server" };
+    return { error: signInFailed(error) ? "sign_in" : "server" };
+  }
+}
+
+export type NewMail = { messageId: string; threadId: string; from: string; receivedAt: string };
+
+// The inbox's messages after the cursor, up to 200 a time, as envelopes only: the body is
+// never fetched here. If the mailbox was rebuilt (a new UIDVALIDITY), reading restarts
+// from the next new message rather than reading the old ones again.
+export async function readNewMail(address: string, password: string, server: Server, cursor: string | null) {
+  const imap = imapClient(address, password, server);
+  try {
+    await imap.connect();
+    const box = await imap.mailboxOpen("INBOX", { readOnly: true });
+    const [validity, next] = (cursor ?? "").split(":");
+    let start = validity === String(box.uidValidity) ? Number(next) : box.uidNext;
+    const mail: NewMail[] = [];
+    if (box.uidNext > start) {
+      const last = Math.min(box.uidNext - 1, start + 199);
+      for await (const message of imap.fetch(`${start}:${last}`, { uid: true, envelope: true, internalDate: true, headers: ["references"] }, { uid: true })) {
+        const id = message.envelope?.messageId ?? `uid:${box.uidValidity}:${message.uid}`;
+        const root = message.headers?.toString().match(/<[^>]+>/)?.[0];
+        mail.push({
+          messageId: id,
+          threadId: root ?? message.envelope?.inReplyTo ?? id,
+          from: message.envelope?.from?.[0]?.address?.toLowerCase() ?? "",
+          receivedAt: new Date(message.internalDate ?? Date.now()).toISOString(),
+        });
+      }
+      start = last + 1;
+    }
+    await imap.logout();
+    return { cursor: `${box.uidValidity}:${start}`, mail };
+  } catch (error) {
+    imap.close();
+    return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };
   }
 }
