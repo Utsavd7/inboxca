@@ -181,6 +181,43 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"email_events": {
+                  Row: {
+                    "account_id": string,"client_id": string | null,"contact_id": string | null,"firm_id": string,"id": string,"provider_message_id": string,"received_at": string,"sender_bidx": string,"status": string,"thread_id": string | null
+                  }
+                  Insert: {
+                    "account_id": string,"client_id"?: string | null,"contact_id"?: string | null,"firm_id": string,"id"?: string,"provider_message_id": string,"received_at": string,"sender_bidx": string,"status"?: string,"thread_id"?: string | null
+                  }
+                  Update: {
+                    "account_id"?: string,"client_id"?: string | null,"contact_id"?: string | null,"firm_id"?: string,"id"?: string,"provider_message_id"?: string,"received_at"?: string,"sender_bidx"?: string,"status"?: string,"thread_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "email_events_account_id_fkey"
+      columns: ["account_id"]
+isOneToOne: false
+      referencedRelation: "connected_accounts"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "email_events_firm_id_client_id_fkey"
+      columns: ["firm_id","client_id"]
+isOneToOne: false
+      referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "email_events_firm_id_contact_id_fkey"
+      columns: ["firm_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "email_events_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"firm_keys": {
                   Row: {
                     "firm_id": string,"wrapped_key": string
