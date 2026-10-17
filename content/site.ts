@@ -50,6 +50,10 @@ export const questions = [
     "In your firm's own OneDrive or Dropbox. Your old files stay there too.",
   ],
   [
+    "How are my files arranged?",
+    "By year, then client, then work: FY 2026-27, Patel Textiles, GST. Each file is named like Patel Textiles - Purchase bills - Sep 2026.pdf. You can change the folder order in Settings.",
+  ],
+  [
     "Do you need my GST or income tax portal password or OTP?",
     "Never. InboxCA does not log in to the GST or income tax portal.",
   ],

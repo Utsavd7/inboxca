@@ -28,7 +28,7 @@ import { StickyInvite } from "@/components/site/sticky-invite";
 const trust = [
   [MailX, "No email text kept", "Your emails stay in your mailbox."],
   [KeyRound, "Your firm's own key", "Your records are encrypted with it."],
-  [LockKeyhole, "2 step sign in", "For every person in your firm."],
+  [LockKeyhole, "2 step sign in", "An email code, plus a phone code or an approved office PC."],
   [History, "Every action recorded", "Nobody can edit the record."],
 ] as const;
 
