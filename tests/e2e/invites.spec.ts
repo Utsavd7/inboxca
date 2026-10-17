@@ -215,7 +215,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await expect(latest).toHaveCount(2);
   await latest.first().getByRole("combobox").selectOption({ label: "Asks for this year's records" });
   await latest.first().getByRole("button", { name: "Save label" }).click();
-  await expect(latest.first()).toContainText("Corrected");
+  await expect(latest.filter({ hasText: "Corrected" })).toHaveCount(1);
 
   await owner.goto("/app/settings");
   await card.getByRole("button", { name: "Disconnect" }).click();

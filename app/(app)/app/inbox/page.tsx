@@ -23,6 +23,7 @@ export default async function Inbox() {
       .from("email_events")
       .select("id, client_id, contact_id, received_at, label, decision_source, clients(name), contacts(name_enc)")
       .order("received_at", { ascending: false })
+      .order("id")
       .limit(100),
     supabase.from("requests").select("id, entity_id, reason_code").eq("kind", "team_reply").eq("status", "pending"),
   ]);
