@@ -233,7 +233,7 @@ test("the owner connects a drive only after agreeing to the Drive access terms",
   await card.getByRole("button", { name: "Connect drive" }).click();
   await expect(card.getByRole("status")).toHaveText("Connected: Test drive on this computer");
   const [consent] = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'drive.consent'", [firm.firmId]);
-  expect(consent.details).toEqual({ provider: "local", level: "own_folder", terms_version: "2026-10-17" });
+  expect(consent.details).toEqual({ provider: "local", level: "whole_drive", terms_version: "2026-10-17" });
   await card.getByRole("button", { name: "Disconnect" }).click();
   await expect(card.getByRole("button", { name: "Connect drive" })).toBeVisible();
 });

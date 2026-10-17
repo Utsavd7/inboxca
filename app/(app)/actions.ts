@@ -533,7 +533,6 @@ export async function connectDrive(form: FormData) {
   const { supabase, membership } = await currentMember();
   if (membership?.role !== "owner") redirect("/app");
   const provider = String(form.get("provider") ?? "");
-  const level = form.get("only_firm") === "yes" ? "whole_drive" : "own_folder";
   if (form.get("agree") !== "on") redirect("/app/settings?error=drive_terms#drive");
   if (provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?error=drive_provider#drive");
   const id = randomUUID();
@@ -545,7 +544,7 @@ export async function connectDrive(form: FormData) {
     address: await crypto.encrypt(membership.firmId, `accounts/${id}/address`, "Test drive on this computer"),
     credentials: await crypto.encrypt(membership.firmId, `accounts/${id}/credentials`, "{}"),
     drive_settings: { folder_order: "year_client_work" },
-    level,
+    level: "whole_drive",
     terms_version: DRIVE_TERMS_VERSION,
   });
   if (!connected) redirect("/app/settings?error=drive_taken#drive");

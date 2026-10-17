@@ -79,15 +79,7 @@ export default async function Settings({
                 </label>
               ))}
             </fieldset>
-            <fieldset className="app-fieldset">
-              <legend>Is this drive used only for your firm?</legend>
-              <label className="app-check">
-                <input type="radio" name="only_firm" value="no" defaultChecked /> No, or not sure: InboxCA uses only its own folder
-              </label>
-              <label className="app-check">
-                <input type="radio" name="only_firm" value="yes" /> Yes: InboxCA may sort the folders you choose, where they are
-              </label>
-            </fieldset>
+<p className="app-note">InboxCA can read this whole drive and touches only the folders you choose and its own InboxCA folder, so connect a drive kept for your firm.</p>
             <h3 className="app-subhead">What you are allowing InboxCA to do</h3>
             <ul className="app-points">
               <li>Read the files in the folders you choose, and every file it saves.</li>
