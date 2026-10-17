@@ -42,7 +42,8 @@ test("services on a client's GSTIN give it its due dates", async () => {
   await gstin.getByLabel("GSTR-3B (monthly)").check();
   await gstin.getByRole("button", { name: "Save services" }).click();
   const due = owner.locator("section[aria-labelledby=due]").getByRole("listitem");
-  await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("Date not yet confirmed");
+  await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");
+  await expect(owner.locator("section[aria-labelledby=due]")).toContainText("not yet confirmed by a CA");
   await expect(due).toHaveCount(12);
 });
 

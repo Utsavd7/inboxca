@@ -63,6 +63,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
             Show
           </button>
         </form>
+        {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && (
+          <p className="app-note">Dates marked * are not yet confirmed by a CA against the official notification.</p>
+        )}
         {tasks?.length ? (
           <form key={tasks.map((task) => task.id + task.status).join()} action={manageTasks}>
             <div className="table-scroll table-tall">
@@ -97,7 +100,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                         </td>
                         <td>
                           <span className="num">{dueLabel(task.due_on)}</span>
-                          {!r?.verified_on && <span className="app-email tag">Date not yet confirmed</span>}
+                          {!r?.verified_on && "*"}
                         </td>
                         <td>{taskStatuses[task.status as keyof typeof taskStatuses]}</td>
                         <td>
