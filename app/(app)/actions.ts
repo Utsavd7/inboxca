@@ -7,6 +7,7 @@ import { z } from "zod";
 import { todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
+import { DRIVE_TERMS_VERSION } from "@/src/lib/drive";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { readSheet } from "@/src/lib/sheet";
@@ -523,4 +524,37 @@ export async function manageEmail(form: FormData) {
     await supabase.from("email_events").update({ label, decision_source: "staff" }).eq("id", String(form.get("email") ?? ""));
   else if (form.get("intent") === "done") await supabase.from("requests").update({ status: "done" }).eq("id", String(form.get("request") ?? ""));
   revalidatePath("/app/inbox");
+}
+
+// Settings → Firm drive: the owner connects the firm's drive after ticking the Drive
+// access terms. The test drive exists only where the server has one (DRIVE_LOCAL_DIR);
+// OneDrive and Dropbox sign in on the provider's own page (next step).
+export async function connectDrive(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const provider = String(form.get("provider") ?? "");
+  if (form.get("agree") !== "on") redirect("/app/settings?error=drive_terms#drive");
+  if (provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?error=drive_provider#drive");
+  const id = randomUUID();
+  const crypto = serverCrypto();
+  const { data: connected } = await supabase.rpc("connect_drive", {
+    target_firm: membership.firmId,
+    account: id,
+    drive_provider: provider,
+    address: await crypto.encrypt(membership.firmId, `accounts/${id}/address`, "Test drive on this computer"),
+    credentials: await crypto.encrypt(membership.firmId, `accounts/${id}/credentials`, "{}"),
+    drive_settings: { folder_order: "year_client_work" },
+    level: "whole_drive",
+    terms_version: DRIVE_TERMS_VERSION,
+  });
+  if (!connected) redirect("/app/settings?error=drive_taken#drive");
+  revalidatePath("/app/settings");
+}
+
+// Disconnecting deletes InboxCA's access at once; the files stay in the firm's drive.
+export async function disconnectDrive() {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "drive");
+  revalidatePath("/app/settings");
 }

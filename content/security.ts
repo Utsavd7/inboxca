@@ -11,6 +11,7 @@ export const securitySections = [
     title: "Where your data lives",
     points: [
       "Your client files stay in your firm's own OneDrive or Dropbox. InboxCA does not keep them.",
+      "InboxCA can read the drive you connect, and touches only the folders you choose and its own InboxCA folder. Connect a drive kept for your firm.",
       "A file passes through InboxCA only while it is checked and filed. That is at most 24 hours, or up to 7 days if your drive cannot be reached.",
       "Your client list, your records and the figures read from files are kept in a database in Mumbai, India.",
       "InboxCA's temporary files and safety copies are held outside India, and they are encrypted.",

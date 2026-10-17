@@ -221,3 +221,19 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await card.getByRole("button", { name: "Disconnect" }).click();
   await expect(card.getByLabel("The firm's email address")).toBeVisible();
 });
+
+test("the owner connects a drive only after agreeing to the Drive access terms", async () => {
+  await owner.goto("/app/settings");
+  const card = owner.locator("section#drive");
+  await expect(card.getByLabel(/OneDrive/)).toBeDisabled();
+  await card.getByLabel("Test drive on this computer").check();
+  await card.getByRole("button", { name: "Connect drive" }).click();
+  await expect(card.getByRole("status")).toHaveCount(0);
+  await card.getByLabel(/I have read this and I agree/).check();
+  await card.getByRole("button", { name: "Connect drive" }).click();
+  await expect(card.getByRole("status")).toHaveText("Connected: Test drive on this computer");
+  const [consent] = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'drive.consent'", [firm.firmId]);
+  expect(consent.details).toEqual({ provider: "local", level: "whole_drive", terms_version: "2026-10-17" });
+  await card.getByRole("button", { name: "Disconnect" }).click();
+  await expect(card.getByRole("button", { name: "Connect drive" })).toBeVisible();
+});

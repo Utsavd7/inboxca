@@ -419,6 +419,9 @@ isOneToOne: false
               "firm_name": string,"hours": Json,"reason": string
             }[]
                            },
+"connect_drive":
+{ Args: { "account": string,"address": string,"credentials": string,"drive_provider": string,"drive_settings": Json,"level": string,"target_firm": string,"terms_version": string }; Returns: boolean
+                           },
 "finish_job":
 { Args: { "error_code"?: string,"job_id": number,"outcome": string,"retry_at"?: string }; Returns: boolean
                            },

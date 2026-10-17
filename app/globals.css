@@ -572,6 +572,11 @@ li { text-wrap: pretty; }
 .hours-table th { padding: 8px 24px 8px 0; text-align: left; font-weight: 600; }
 .hours-table td { padding: 8px 24px 8px 0; color: var(--slate); }
 .app-check { display: flex; align-items: center; gap: 10px; margin: 20px 0; font-weight: 600; }
+.app-fieldset { margin: 18px 0 0; padding: 0; border: 0; }
+.app-fieldset legend { font-weight: 700; }
+.app-fieldset .app-check { margin: 10px 0; font-weight: 500; }
+.app-subhead { margin: 20px 0 8px; font-size: 17px; }
+.app-points { display: grid; gap: 6px; padding-left: 20px; list-style: disc; color: var(--slate); }
 .hours-table label { display: flex; align-items: center; gap: 8px; }
 .app-check-inline { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--navy); }
 .app-grid-form .app-check-inline { display: flex; align-self: center; margin: 0; font-weight: 600; }

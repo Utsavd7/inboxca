@@ -126,6 +126,16 @@ export const termsSections = [
     ],
   },
   {
+    id: "drive",
+    title: "Drive access",
+    points: [
+      "When you connect your drive, InboxCA may read the files in the folders you choose and every file it saves; make folders, and rename and move folders and files to keep them in order; save files from client emails and the forms it fills; and read figures from your files to fill GST and income tax forms for your team to check.",
+      "InboxCA will not delete a file without your approval, share anything outside your firm, open folders you did not choose, or use your files to train AI.",
+      "Your firm stays the owner of its files. Your firm is responsible for its drive account and its provider's charges.",
+      "You can take this access back at any time in InboxCA's settings or at your drive provider. The files stay in your drive.",
+    ],
+  },
+  {
     id: "use",
     title: "Fair use",
     points: [
