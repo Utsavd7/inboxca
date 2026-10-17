@@ -183,13 +183,13 @@ isOneToOne: false
                   ]
                 },"email_events": {
                   Row: {
-                    "account_id": string,"client_id": string | null,"contact_id": string | null,"firm_id": string,"id": string,"provider_message_id": string,"received_at": string,"sender_bidx": string,"status": string,"thread_id": string | null
+                    "account_id": string,"client_id": string | null,"contact_id": string | null,"decision_source": string | null,"firm_id": string,"id": string,"label": string | null,"provider_message_id": string,"reason_code": string | null,"received_at": string,"sender_bidx": string,"status": string,"thread_id": string | null
                   }
                   Insert: {
-                    "account_id": string,"client_id"?: string | null,"contact_id"?: string | null,"firm_id": string,"id"?: string,"provider_message_id": string,"received_at": string,"sender_bidx": string,"status"?: string,"thread_id"?: string | null
+                    "account_id": string,"client_id"?: string | null,"contact_id"?: string | null,"decision_source"?: string | null,"firm_id": string,"id"?: string,"label"?: string | null,"provider_message_id": string,"reason_code"?: string | null,"received_at": string,"sender_bidx": string,"status"?: string,"thread_id"?: string | null
                   }
                   Update: {
-                    "account_id"?: string,"client_id"?: string | null,"contact_id"?: string | null,"firm_id"?: string,"id"?: string,"provider_message_id"?: string,"received_at"?: string,"sender_bidx"?: string,"status"?: string,"thread_id"?: string | null
+                    "account_id"?: string,"client_id"?: string | null,"contact_id"?: string | null,"decision_source"?: string | null,"firm_id"?: string,"id"?: string,"label"?: string | null,"provider_message_id"?: string,"reason_code"?: string | null,"received_at"?: string,"sender_bidx"?: string,"status"?: string,"thread_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -313,6 +313,31 @@ isOneToOne: false
                   Relationships: [
                     {
       foreignKeyName: "jobs_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"requests": {
+                  Row: {
+                    "client_id": string | null,"entity_id": string,"entity_type": string,"firm_id": string,"id": string,"kind": string,"reason_code": string | null,"status": string
+                  }
+                  Insert: {
+                    "client_id"?: string | null,"entity_id": string,"entity_type": string,"firm_id": string,"id"?: string,"kind": string,"reason_code"?: string | null,"status"?: string
+                  }
+                  Update: {
+                    "client_id"?: string | null,"entity_id"?: string,"entity_type"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"reason_code"?: string | null,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "requests_firm_id_client_id_fkey"
+      columns: ["firm_id","client_id"]
+isOneToOne: false
+      referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "requests_firm_id_fkey"
       columns: ["firm_id"]
 isOneToOne: false
       referencedRelation: "firms"

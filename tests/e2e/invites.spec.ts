@@ -173,7 +173,7 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
   await expect(person).toHaveURL(/\/sign-in$/);
 });
 
-test("the owner connects the firm's mailbox; mail from a client is noted, a stranger's is not", async ({ request }) => {
+test("the owner connects the firm's mailbox; client mail is sorted, unclear mail waits for the team, a stranger's is skipped", async ({ request }) => {
   await owner.goto("/app/settings");
   const card = owner.locator("section[aria-labelledby=mailbox]");
   await card.getByLabel("The firm's email address").fill("office@firm.test");
@@ -199,8 +199,23 @@ test("the owner connects the firm's mailbox; mail from a client is noted, a stra
     await smtp.sendMail({ from, to: "office@firm.test", subject: "Please send last year's ITR", text: "Thanks" });
   await query(local.dbUrl, "select private.queue_mail_polls()");
   await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
-  const events = await query(local.dbUrl, "select (client_id is not null) as matched from public.email_events where firm_id = $1", [firm.firmId]);
-  expect(events).toEqual([{ matched: true }]);
+  const events = await query(local.dbUrl, "select (client_id is not null) as matched, label from public.email_events where firm_id = $1", [firm.firmId]);
+  expect(events).toEqual([{ matched: true, label: "records_past" }]);
+
+  // A second email the rules cannot place waits for the team, and a person corrects a label.
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Hello", text: "Can we meet next week?" });
+  await query(local.dbUrl, "select private.queue_mail_polls()");
+  await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  await owner.getByRole("link", { name: "Inbox" }).click();
+  const waiting = owner.locator("section[aria-labelledby=team-reply]").getByRole("listitem");
+  await expect(waiting).toContainText("InboxCA could not tell what it asks");
+  await waiting.getByRole("button", { name: "Done" }).click();
+  await expect(owner.getByText("Nothing waits for the team.")).toBeVisible();
+  const latest = owner.locator("section[aria-labelledby=latest]").getByRole("listitem");
+  await expect(latest).toHaveCount(2);
+  await latest.first().getByRole("combobox").selectOption({ label: "Asks for this year's records" });
+  await latest.first().getByRole("button", { name: "Save label" }).click();
+  await expect(latest.first()).toContainText("Corrected");
 
   await owner.goto("/app/settings");
   await card.getByRole("button", { name: "Disconnect" }).click();
