@@ -16,7 +16,8 @@
     "audit:page": "node scripts/audit-page.mjs",
     "brand:social": "node scripts/generate-social.mjs",
     "demo": "node scripts/demo-firm.mjs",
-    "demo:code": "node scripts/demo-firm.mjs code"
+    "demo:code": "node scripts/demo-firm.mjs code",
+    "demo:data": "npx --yes tsx scripts/demo-data.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

@@ -200,7 +200,8 @@ describe("nothing is stored twice", () => {
     rollback(db, async () => {
       await seed();
       const states = await db.query(
-        "select id, public.firm_state(f) as state from public.firms f order by name",
+        "select id, public.firm_state(f) as state from public.firms f where id = any($1) order by name",
+        [[FIRM_A, FIRM_B]],
       );
       expect(states.rows.map((row) => row.state)).toEqual(["27", "24"]);
       const both = await attempt(

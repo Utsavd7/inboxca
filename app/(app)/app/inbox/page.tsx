@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { manageEmail } from "@/app/(app)/actions";
 import { serverCrypto } from "@/src/lib/crypto";
 import { currentMember } from "@/src/lib/member";
+import { PageHead } from "../ui";
 import { labels } from "@/src/lib/triage";
 
 const reasons: Record<string, string> = {
@@ -40,23 +41,23 @@ export default async function Inbox() {
 
   return (
     <>
-      <h1>Inbox</h1>
-      <section className="app-card" aria-labelledby="team-reply">
+      <PageHead title="Inbox" sub="Client email as InboxCA sorted it. The email itself stays in your mailbox; only its label and time are kept here." />
+      <section className="panel" aria-labelledby="team-reply">
         <h2 id="team-reply">Needs team reply</h2>
-        <p className="app-note">Reply from your own mailbox, then mark it done.</p>
-        <ul className="app-list">
+        <p className="hint">Reply from your own mailbox, then mark it done.</p>
+        <ul className="rows">
           {waiting?.map((request) => {
             const event = byId.get(request.entity_id);
             return (
               <li key={request.id}>
-                <span className="person">
+                <span className="name">
                   {event?.client_id ? <Link href={`/app/clients/${event.client_id}`}>{sender.get(request.entity_id)}</Link> : sender.get(request.entity_id)}
-                  <span className="app-email">{reasons[request.reason_code ?? ""] ?? labels.other}</span>
+                  <span className="sub">{reasons[request.reason_code ?? ""] ?? labels.other}</span>
                 </span>
-                <form action={manageEmail} className="person-role">
+                <form action={manageEmail} className="end">
                   {event && <span className="num">{when(event.received_at)}</span>}
                   <input type="hidden" name="request" value={request.id} />
-                  <button className="btn btn-quiet" name="intent" value="done">
+                  <button className="b b-secondary" name="intent" value="done">
                     Done
                   </button>
                 </form>
@@ -64,19 +65,19 @@ export default async function Inbox() {
             );
           })}
         </ul>
-        {!waiting?.length && <p className="app-note">Nothing waits for the team.</p>}
+        {!waiting?.length && <p className="hint">Nothing waits for the team.</p>}
       </section>
 
-      <section className="app-card" aria-labelledby="latest">
+      <section className="panel" aria-labelledby="latest">
         <h2 id="latest">Latest client email</h2>
-        <ul className="app-list">
+        <ul className="rows">
           {events?.map((event) => (
             <li key={event.id}>
-              <span className="person">
+              <span className="name">
                 {sender.get(event.id)}
-                <span className="app-email num">{when(event.received_at)}</span>
+                <span className="sub num">{when(event.received_at)}</span>
               </span>
-              <form key={`${event.label}`} action={manageEmail} className="person-role">
+              <form key={`${event.label}`} action={manageEmail} className="end">
                 <input type="hidden" name="email" value={event.id} />
                 <select name="label" defaultValue={event.label ?? "other"} aria-label={`Label for ${sender.get(event.id)}, ${when(event.received_at)}`}>
                   {Object.entries(labels).map(([value, label]) => (
@@ -85,15 +86,15 @@ export default async function Inbox() {
                     </option>
                   ))}
                 </select>
-                {event.decision_source === "staff" && <span className="tag">Corrected</span>}
-                <button className="btn btn-quiet" name="intent" value="label">
+                {event.decision_source === "staff" && <span className="badge plain">Corrected</span>}
+                <button className="b b-secondary" name="intent" value="label">
                   Save label
                 </button>
               </form>
             </li>
           ))}
         </ul>
-        {!events?.length && <p className="app-note">No client email yet. Connect the firm&apos;s email in Settings.</p>}
+        {!events?.length && <p className="hint">No client email yet. Connect the firm&apos;s email in Settings.</p>}
       </section>
     </>
   );

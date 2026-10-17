@@ -1,48 +1,65 @@
 import type { Metadata } from "next";
 import { LogOut } from "lucide-react";
-import { Logo } from "@/components/site/logo";
 import { signOut } from "@/app/(auth)/actions";
-import { roleLabel } from "@/src/lib/roles";
+import { currentMember } from "@/src/lib/member";
+import { pagesFor, roleLabel } from "@/src/lib/roles";
+import "./app.css";
+import { Command } from "./command";
 import { IdleWatch } from "./idle-watch";
 import { NavLinks } from "./nav-links";
-import { currentMember } from "@/src/lib/member";
+import { Avatar } from "./ui";
 
 export const metadata: Metadata = {
   title: "InboxCA",
   robots: { index: false, follow: false },
 };
 
-// The app's frame: a sidebar with the pages this person's role uses, their firm and role,
-// and sign out; the page itself beside it.
+// The app's frame: a quiet rail with the firm, search, the pages this person's role uses
+// and who is signed in; each page sits on one white panel beside it.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { supabase, membership } = await currentMember();
-  const { count: waiting } = membership
-    ? await supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending")
-    : { count: 0 };
+  const [{ count: waiting }, { data: auth }] = await Promise.all([
+    membership
+      ? supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending")
+      : Promise.resolve({ count: 0 }),
+    supabase.auth.getUser(),
+  ]);
+  const email = auth.user?.email ?? "";
+  const role = membership?.role ?? "";
   return (
-    <div className="app-page">
-      <aside className="app-side">
-        <Logo />
+    <div className="ui">
+      <aside className="rail">
+        <div className="rail-firm">
+          <Avatar name={membership?.firmName ?? "InboxCA"} square />
+          <span>
+            <strong>{membership?.firmName ?? "InboxCA"}</strong>
+            <small>InboxCA</small>
+          </span>
+        </div>
+        {membership && <Command pages={pagesFor(role)} />}
         {membership && (
-          <nav className="app-nav" aria-label="InboxCA">
-            <NavLinks role={membership.role} waiting={waiting ?? 0} />
+          <nav className="rail-nav" aria-label="InboxCA">
+            <NavLinks role={role} waiting={waiting ?? 0} />
           </nav>
         )}
-        <div className="app-me">
-          {membership && (
-            <span>
-              <strong>{membership.firmName}</strong>
-              <small>{roleLabel(membership.role)}</small>
-            </span>
-          )}
-          <form action={signOut}>
-            <button className="app-icon-button" type="submit" aria-label="Sign out" title="Sign out">
-              <LogOut size={17} aria-hidden />
+        <div className="rail-me">
+          <Avatar name={email || "?"} />
+          <span>
+            <strong title={email}>{email}</strong>
+            {membership && <small>{roleLabel(role)}</small>}
+          </span>
+          <form action={signOut} style={{ marginLeft: "auto" }}>
+            <button className="b b-ghost b-icon" type="submit" aria-label="Sign out" title="Sign out">
+              <LogOut size={16} aria-hidden />
             </button>
           </form>
         </div>
       </aside>
-      <main className="app-body">{children}</main>
+      <main className="stage">
+        <div className="stage-panel">
+          <div className="stage-body">{children}</div>
+        </div>
+      </main>
       {!!membership?.idleMinutes && <IdleWatch minutes={membership.idleMinutes} />}
     </div>
   );

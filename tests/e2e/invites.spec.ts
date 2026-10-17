@@ -59,8 +59,8 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
 
   await expect(page.getByText("Invite Test Firm has invited you as manager.")).toBeVisible();
   await page.getByRole("button", { name: "Join Invite Test Firm" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
-  await expect(page.locator(".app-me")).toContainText("Manager");
+  await expect(page.locator(".page-head")).toContainText("Invite Test Firm");
+  await expect(page.locator(".rail-me")).toContainText("Manager");
   // A manager's sidebar has People but not Settings, which is the owner's.
   await expect(page.getByRole("link", { name: "People" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Settings" })).toHaveCount(0);
@@ -107,9 +107,9 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await expect(owner.getByText("Friday, 25 December 2026")).toBeVisible();
 
   await person.goto("/app");
-  await expect(person.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm is closed now.");
+  await expect(person.locator(".page-head")).toContainText("Invite Test Firm is closed now.");
   await owner.goto("/app");
-  await expect(owner.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
+  await expect(owner.locator(".page-head")).toContainText("Invite Test Firm");
 
   // Special hours for today open the firm again, closed weekdays or not.
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -119,7 +119,7 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await owner.getByRole("button", { name: "Add special hours" }).click();
   await expect(owner.getByText("00:00 to 23:59")).toBeVisible();
   await person.reload();
-  await expect(person.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
+  await expect(person.locator(".page-head")).toContainText("Invite Test Firm");
   await expect(person.getByRole("heading", { level: 1 })).not.toContainText("closed");
 });
 
@@ -127,7 +127,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.goto("/app/clients");
   await owner.getByLabel("Name", { exact: true }).fill("Shared Client");
   await owner.getByRole("button", { name: "Add client" }).click();
-  await expect(owner.getByRole("heading", { level: 1 })).toContainText("Shared Client");
+  await expect(owner.locator(".page-head")).toContainText("Shared Client");
   const client = owner.url();
 
   await owner.goto("/app/settings");
@@ -148,7 +148,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
     row.getByRole("button", { name: "Save", exact: true }).click(),
   ]);
   await expect(owner.locator("section[aria-labelledby=teams]").getByRole("listitem")).toContainText("1 person");
-  await owner.goto(client);
+  await owner.goto(`${client}?tab=team`);
   await owner.getByLabel("Person or team").selectOption({ label: "Team: GST team" });
   await owner.getByRole("button", { name: "Assign" }).click();
   await expect(owner.getByRole("listitem").filter({ hasText: "Team: GST team" })).toContainText("Staff");
@@ -168,7 +168,7 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
 
   await person.clock.install();
   await person.goto("/app");
-  await expect(person.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
+  await expect(person.locator(".page-head")).toContainText("Invite Test Firm");
   await person.clock.fastForward("16:00");
   await expect(person).toHaveURL(/\/sign-in\?reason=idle$/);
   await expect(person.getByRole("status")).toContainText("signed out after a while without activity");
@@ -192,11 +192,11 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await card.getByRole("button", { name: "Connect email" }).click();
   await expect(card.getByRole("status")).toHaveText("Connected: office@firm.test");
 
-  await owner.goto("/app/clients");
+  await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill("Mail Client");
   await owner.getByLabel("Email", { exact: true }).fill(`client-${tag}@patel.test`);
   await owner.getByRole("button", { name: "Add client" }).click();
-  await expect(owner.getByRole("heading", { level: 1 })).toContainText("Mail Client");
+  await expect(owner.locator(".page-head")).toContainText("Mail Client");
   const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
   for (const from of [`Client-${tag}@Patel.test`, `stranger-${tag}@else.test`])
     await smtp.sendMail({ from, to: "office@firm.test", subject: "Please send last year's ITR", text: "Thanks" });
