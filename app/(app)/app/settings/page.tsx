@@ -206,7 +206,7 @@ export default async function Settings({
                   <form action={changeSpecialHours}>
                     <input type="hidden" name="from" value={range.from} />
                     <input type="hidden" name="to" value={range.to} />
-                    <button className="b b-secondary" name="intent" value="remove">
+                    <button className="b b-ghost b-small" name="intent" value="remove">
                       Remove
                     </button>
                   </form>
@@ -281,7 +281,7 @@ export default async function Settings({
                   </span>
                   <form action={changeHoliday}>
                     <input type="hidden" name="date" value={date} />
-                    <button className="b b-secondary" name="intent" value="remove">
+                    <button className="b b-ghost b-small" name="intent" value="remove">
                       Remove
                     </button>
                   </form>

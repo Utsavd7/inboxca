@@ -73,7 +73,7 @@ export default async function People() {
                       <button className="b b-secondary" name="intent" value="role">
                         Save
                       </button>
-                      <button className="b b-secondary" name="intent" value="remove">
+                      <button className="b b-ghost b-small" name="intent" value="remove">
                         {person.status === "invited" ? "Withdraw invite" : "Remove"}
                       </button>
                     </>
@@ -107,7 +107,7 @@ export default async function People() {
                       <form action={changeGroup}>
                         <input type="hidden" name="kind" value={kind} />
                         <input type="hidden" name="group" value={group.id} />
-                        <button className="b b-secondary" name="intent" value="remove">
+                        <button className="b b-ghost b-small" name="intent" value="remove">
                           Remove {one}
                         </button>
                       </form>

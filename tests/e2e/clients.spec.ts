@@ -31,7 +31,7 @@ test("a client added with only a GSTIN gets its PAN too, and opens with both", a
   await owner.getByLabel("Email", { exact: true }).fill("Accounts@Patel.example");
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText("Patel Textiles");
-  await expect(owner.locator(".page-head")).toContainText("accounts@patel.example");
+  await expect(owner.locator(".record-side")).toContainText("accounts@patel.example");
   await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "PAN" })).toContainText("AAPFU0939F");
   await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "GSTIN" })).toContainText("27AAPFU0939F1ZV");
 });
@@ -148,14 +148,14 @@ test("clients in one group are listed together", async () => {
   await owner.getByRole("link", { name: "Details", exact: true }).click();
   await owner.getByLabel("Or a new group").fill("Patel family");
   await owner.getByRole("button", { name: "Save details" }).click();
-  await expect(owner.getByRole("link", { name: "Group: Patel family" })).toBeVisible();
+  await expect(owner.locator(".record-side").getByRole("link", { name: "Patel family" })).toBeVisible();
 
   await owner.goto("/app/clients?q=Client 321");
   await owner.getByRole("link", { name: "Client 321" }).click();
   await owner.getByRole("link", { name: "Details", exact: true }).click();
   await owner.getByLabel("Group", { exact: true }).selectOption({ label: "Patel family" });
   await owner.getByRole("button", { name: "Save details" }).click();
-  await owner.getByRole("link", { name: "Group: Patel family" }).click();
+  await owner.locator(".record-side").getByRole("link", { name: "Patel family" }).click();
   await expect(owner.getByRole("heading", { name: "Patel family: 2 clients" })).toBeVisible();
   await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
 });
@@ -170,7 +170,7 @@ test("a client is served from a branch, and the list filters by branch", async (
   await owner.getByRole("link", { name: "Details", exact: true }).click();
   await owner.locator("section[aria-labelledby=details]").getByLabel("Branch").selectOption({ label: "Surat" });
   await owner.getByRole("button", { name: "Save details" }).click();
-  await owner.getByRole("link", { name: "Branch: Surat" }).click();
+  await owner.locator(".record-side").getByRole("link", { name: "Surat" }).click();
   await expect(owner.getByRole("heading", { name: "Surat: 1 client" })).toBeVisible();
 });
 
