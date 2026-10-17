@@ -79,7 +79,7 @@ for (const [kind, name] of [["team", "GST team"], ["team", "Income tax team"], [
 // The firm's people: invented staff who can not sign in (they have no 2 step code).
 const staff = new Map<string, string>();
 for (const [email, role, team] of people) {
-  let { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
   let user = data.users.find((u) => u.email === email);
   if (!user) user = (await admin.auth.admin.createUser({ email, email_confirm: true })).data.user!;
   await db.query("insert into public.firm_members (firm_id, user_id, role, status, team_id, branch_id) values ($1, $2, $3, 'active', $4, $5)", [
