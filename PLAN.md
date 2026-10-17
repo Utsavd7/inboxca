@@ -1310,6 +1310,7 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 
 ### M10: Dashboard
 - [ ] KPI tiles, due this week, overdue, pending documents, open notices, drafts awaiting approval, Needs team reply, workspace and returns used, the owner-only upgrade card (§5.14), activity
+  - [x] Step 1 (17 Oct 2026, ahead of M10 because the user asked for a plain start page): **Home is "Needs you today"**: three counts that each open the list to act on (emails waiting for a reply, returns overdue, returns due in 7 days), and for the owner a **Get started** checklist (connect email, link the drive, add clients, tick services, invite the team) with one button on the next step only; it disappears once every step is done. Still open: pending documents, notices, drafts, meters, the upgrade card, activity.
 - **Acceptance:** numbers match hand-counted seed data for a demo firm.
 
 ### M11: Orelu admin and hardening
@@ -1466,6 +1467,8 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 - UI English first; Hindi and Gujarati on client-facing surfaces (upload page, enquiry form, email templates). Indian number format (1,23,456.00); dates DD MMM YYYY.
 
 ### 9.1 InboxCA (the product's own brand, D35)
+
+- **For people who are not technical (user, 17 Oct 2026):** most owners and their staff are not tech friendly, and most of the work runs by itself. Every screen shows results and what needs a person, never the machinery; one clear action per card; plain words with no technical terms on screen; advanced options folded away; defaults that work without changing a setting. Inside the app the sizes are compact and standard (14px text, 34px fields and buttons), with two columns of cards on a laptop so pages scroll less; the landing page keeps its own larger sizes.
 
 - **The product and its public site use the InboxCA brand, not the Orelu tokens above.** The Orelu tokens and logos are used only for the line "a product by Orelu" and for Orelu's own company pages.
 - Reference board: `InboxCA-Brand-Kit.png` in this folder. Official logo files: the company Drive folder "InboxCA brand assets".
