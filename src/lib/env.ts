@@ -27,8 +27,7 @@ const schema = z
 
     MS_DRIVE_CLIENT_ID: secret,
     MS_DRIVE_CLIENT_SECRET: secret,
-    DROPBOX_APP_KEY: secret,
-    DROPBOX_APP_SECRET: secret,
+    DROPBOX_APP_KEY: secret, // Dropbox signs in with PKCE, so there is no app secret
 
     FILE_WORKER_URL: url,
     FILE_WORKER_SECRET: secret,

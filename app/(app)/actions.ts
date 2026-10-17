@@ -7,7 +7,8 @@ import { z } from "zod";
 import { todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { DRIVE_TERMS_VERSION } from "@/src/lib/drive";
+import { DRIVE_COOKIE, saveDrive } from "@/src/lib/drive-account";
+import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { readSheet } from "@/src/lib/sheet";
@@ -527,27 +528,30 @@ export async function manageEmail(form: FormData) {
 }
 
 // Settings → Firm drive: the owner connects the firm's drive after ticking the Drive
-// access terms. The test drive exists only where the server has one (DRIVE_LOCAL_DIR);
-// OneDrive and Dropbox sign in on the provider's own page (next step).
+// access terms. Dropbox signs in on its own page (the callback finishes in
+// /api/drive/callback); the test drive exists only where the server has one.
 export async function connectDrive(form: FormData) {
   const { supabase, membership } = await currentMember();
   if (membership?.role !== "owner") redirect("/app");
   const provider = String(form.get("provider") ?? "");
   if (form.get("agree") !== "on") redirect("/app/settings?error=drive_terms#drive");
+  if (provider === "dropbox" && process.env.DROPBOX_APP_KEY) {
+    const { verifier, challenge } = pkce();
+    const state = randomUUID();
+    const h = await headers();
+    const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+    (await cookies()).set(DRIVE_COOKIE, Buffer.from(JSON.stringify({ state, verifier })).toString("base64url"), {
+      httpOnly: true,
+      secure: origin.startsWith("https"),
+      sameSite: "lax",
+      maxAge: 600,
+      path: "/api/drive",
+    });
+    redirect(dropboxSignIn(state, challenge, `${origin}/api/drive/callback`));
+  }
   if (provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?error=drive_provider#drive");
-  const id = randomUUID();
-  const crypto = serverCrypto();
-  const { data: connected } = await supabase.rpc("connect_drive", {
-    target_firm: membership.firmId,
-    account: id,
-    drive_provider: provider,
-    address: await crypto.encrypt(membership.firmId, `accounts/${id}/address`, "Test drive on this computer"),
-    credentials: await crypto.encrypt(membership.firmId, `accounts/${id}/credentials`, "{}"),
-    drive_settings: { folder_order: "year_client_work" },
-    level: "whole_drive",
-    terms_version: DRIVE_TERMS_VERSION,
-  });
-  if (!connected) redirect("/app/settings?error=drive_taken#drive");
+  const { error } = await saveDrive(supabase, membership.firmId, "local", "Test drive on this computer", "{}");
+  if (error) redirect(`/app/settings?error=${error}#drive`);
   revalidatePath("/app/settings");
 }
 

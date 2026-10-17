@@ -12,6 +12,8 @@ const driveErrors: Record<string, string> = {
   drive_terms: "Tick the box to agree to the Drive access terms first.",
   drive_provider: "Choose a drive.",
   drive_taken: "A drive is already connected. Disconnect it first.",
+  drive_denied: "The drive was not allowed, so nothing was connected.",
+  drive_failed: "The drive did not finish connecting. Try again.",
 };
 
 // The owner's settings: the firm's email, who sees clients, office hours, holidays and
@@ -26,6 +28,8 @@ export default async function Settings({
   const { data: accounts } = await supabase.from("connected_accounts").select("id, kind, provider, address_enc, status");
   const mailbox = accounts?.find((account) => account.kind === "mail");
   const drive = accounts?.find((account) => account.kind === "drive");
+  const driveAddress = drive && (await serverCrypto().decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc));
+  const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
   const mailAddress = mailbox && (await serverCrypto().decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc));
   const { saved, error } = await searchParams;
   const settings = membership.settings;
@@ -61,7 +65,7 @@ export default async function Settings({
         {drive ? (
           <form action={disconnectDrive} className="app-form-row">
             <p className="app-done" role="status">
-              Connected: {driveNames[drive.provider]}
+              Connected: {driveAddress}
             </p>
             <button className="btn btn-quiet" type="submit">
               Disconnect
@@ -73,9 +77,9 @@ export default async function Settings({
               <legend>Which drive</legend>
               {(["onedrive", "dropbox", ...(process.env.DRIVE_LOCAL_DIR ? ["local"] : [])] as const).map((provider) => (
                 <label key={provider} className="app-check">
-                  <input type="radio" name="provider" value={provider} required disabled={provider !== "local"} />
+                  <input type="radio" name="provider" value={provider} required disabled={!ready[provider]} />
                   {driveNames[provider]}
-                  {provider !== "local" && <span className="tag">Coming soon</span>}
+                  {!ready[provider] && <span className="tag">Coming soon</span>}
                 </label>
               ))}
             </fieldset>
