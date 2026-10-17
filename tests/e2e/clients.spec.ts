@@ -32,8 +32,18 @@ test("a client added with only a GSTIN gets its PAN too, and opens with both", a
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.getByRole("heading", { level: 1 })).toContainText("Patel Textiles");
   await expect(owner.getByRole("heading", { level: 1 })).toContainText("accounts@patel.example");
-  await expect(owner.getByRole("listitem").filter({ hasText: "PAN" })).toContainText("AAPFU0939F");
-  await expect(owner.getByRole("listitem").filter({ hasText: "GSTIN" })).toContainText("27AAPFU0939F1ZV");
+  await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "PAN" })).toContainText("AAPFU0939F");
+  await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "GSTIN" })).toContainText("27AAPFU0939F1ZV");
+});
+
+test("services on a client's GSTIN give it its due dates", async () => {
+  const gstin = owner.locator("section[aria-labelledby=services]").getByRole("listitem").filter({ hasText: "GSTIN" });
+  await gstin.getByLabel("GSTR-1 (monthly)").check();
+  await gstin.getByLabel("GSTR-3B (monthly)").check();
+  await gstin.getByRole("button", { name: "Save services" }).click();
+  const due = owner.locator("section[aria-labelledby=due]").getByRole("listitem");
+  await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("Date not yet confirmed");
+  await expect(due).toHaveCount(12);
 });
 
 test("search finds a client by name, email or whole PAN, and the same PAN is refused twice", async () => {
@@ -62,7 +72,7 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await owner.getByLabel("Number", { exact: true }).selectOption("tan");
   await owner.getByLabel("Value").fill("muma12345b");
   await owner.getByRole("button", { name: "Add number" }).click();
-  await expect(owner.getByRole("listitem").filter({ hasText: "TAN" })).toContainText("MUMA12345B");
+  await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "TAN" })).toContainText("MUMA12345B");
 
   await owner.getByLabel("Name", { exact: true }).fill("Patel Textiles Pvt Ltd");
   await owner.getByRole("button", { name: "Save details" }).click();

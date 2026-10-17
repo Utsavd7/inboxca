@@ -248,7 +248,7 @@
 - Due dates are **data, not code constants**.
 - Each rule is effective-dated and carries its official source, applicable period, verification date and CA approver; an unverified rule can't generate live reminders.
 - `compliance_types` holds the default rule; a row with a period holds a government extension for that period, entered by an Orelu admin and reviewed by a CA.
-- The calendar generator is a pure function: `generateTasks(clientServices, catalog, overrides, fromDate, toDate) → Task[]`.
+- The calendar generator is one SQL function, `private.plan_tasks(registration, today)` (M2 step 1, 17 Oct 2026: in the database rather than a TypeScript function, so the nightly top-up needs no worker): the rule's `due_rule` (which number it sits on, the month after the period and the day, exceptions by month, a day by GSTIN state, the only period months, and services that exclude each other) gives each period's date, and table-driven database tests check it.
 
 **Seed catalog (statutory defaults). Verify every row against current CBIC, CBDT and MCA notifications before launch:**
 
@@ -1243,7 +1243,8 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 - **Acceptance:** importing 500 clients works; invalid rows are reported; in the default `open` mode every employee sees every client; restricted mode hides unassigned clients at the database level.
 
 ### M2: Compliance calendar
-- [ ] Catalog seed + overrides; pure `generateTasks()` with table-driven tests; nightly rolling top-up
+- [x] Catalog seed + overrides; the generator with table-driven tests; nightly rolling top-up
+  - [x] Step 1 (17 Oct 2026): `compliance_types` seeded with the statutory defaults above, **all unverified**: a rule counts as verified only with its official source, the day it was checked and the CA who approved it, and the client page marks each date from an unverified rule "Date not yet confirmed"; reminders (M5) use verified rules only. A period's extension is a row with that period_key and moves the date only once verified. Services sit on a number (`client_registrations.services`: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN, LLP forms on an LLPIN) and are ticked on the client page by owners, partners and managers; services on the wrong number, two frequencies of one return, or composition with regular returns are refused. `tasks` holds the next 12 months, made when services change and topped up every night at 00:30 India time; removing a service drops its tasks not yet started, and filed tasks never change. Every member may mark a task in progress or filed (5.17.2), never move its date; tasks follow the client's visibility. AOC-4 and MGT-7 follow the AGM date and come when that date is recorded. Acceptance met for generation: a client with monthly GST, TDS and a non-audit ITR gets its 41 tasks for the 12 months. Still open: the calendar page, marking filed with the acknowledgement, and bulk actions (step 2).
 - [ ] Calendar and tracker UI; mark filed with acknowledgement number; bulk actions
 - **Acceptance:** a client with GST monthly + TDS + ITR non-audit gets the right 12 months of tasks; unverified rules can't send reminders.
 
