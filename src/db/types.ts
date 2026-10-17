@@ -118,6 +118,25 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"connected_accounts": {
+                  Row: {
+                    "address_enc": string,"credentials_enc": string,"firm_id": string,"id": string,"kind": string,"provider": string,"settings": NonNullable<Json>,"status": string,"sync_cursor": string | null
+                  }
+                  Insert: {
+                    "address_enc": string,"credentials_enc": string,"firm_id": string,"id"?: string,"kind": string,"provider": string,"settings"?: NonNullable<Json>,"status"?: string,"sync_cursor"?: string | null
+                  }
+                  Update: {
+                    "address_enc"?: string,"credentials_enc"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"provider"?: string,"settings"?: NonNullable<Json>,"status"?: string,"sync_cursor"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "connected_accounts_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"contact_clients": {
                   Row: {
                     "can_receive_documents": boolean,"can_view_status": boolean,"client_id": string,"contact_id": string,"firm_id": string,"relation": string | null

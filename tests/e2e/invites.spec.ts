@@ -170,3 +170,22 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
   await person.goto("/app");
   await expect(person).toHaveURL(/\/sign-in$/);
 });
+
+test("the owner connects the firm's mailbox after a wrong password, and disconnects it", async () => {
+  await owner.goto("/app/settings");
+  const card = owner.locator("section[aria-labelledby=mailbox]");
+  await card.getByLabel("The firm's email address").fill("office@firm.test");
+  await card.getByLabel("Its password").fill("wrong");
+  await card.getByText("Server settings, only if InboxCA asks").click();
+  await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
+  await card.getByLabel("Incoming port").fill("3143");
+  await card.getByLabel("Outgoing (SMTP) server").fill("127.0.0.1");
+  await card.getByLabel("Outgoing port").fill("3025");
+  await card.getByRole("button", { name: "Connect email" }).click();
+  await expect(card.getByRole("alert")).toContainText("could not sign in");
+  await card.getByLabel("Its password").fill("secret");
+  await card.getByRole("button", { name: "Connect email" }).click();
+  await expect(card.getByRole("status")).toHaveText("Connected: office@firm.test");
+  await card.getByRole("button", { name: "Disconnect" }).click();
+  await expect(card.getByLabel("The firm's email address")).toBeVisible();
+});

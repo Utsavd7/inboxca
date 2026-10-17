@@ -13,6 +13,6 @@ export default defineConfig({
     command: "npm run start",
     url: origin,
     reuseExistingServer: !process.env.CI,
-    env: { JOB_WORKER_SECRET: TEST_WORKER_SECRET },
+    env: { JOB_WORKER_SECRET: TEST_WORKER_SECRET, MAIL_ALLOW_LOCAL: "1" },
   },
 });
