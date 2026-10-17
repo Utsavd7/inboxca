@@ -1,17 +1,22 @@
 import { redirect } from "next/navigation";
-import { changeHoliday, changeSpecialHours, saveHours, saveLimits, saveVisibility } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, disconnectMailbox, saveHours, saveLimits, saveVisibility } from "@/app/(app)/actions";
+import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
+import { MailboxForm } from "./mailbox-form";
 
-// The owner's settings. For now: office hours, holidays and signing in limits (PLAN.md 5.17).
+// The owner's settings: the firm's email, who sees clients, office hours, holidays and
+// signing in limits (PLAN.md 5.13, 5.17).
 export default async function Settings({
   searchParams,
 }: {
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
-  const { membership } = await currentMember();
+  const { supabase, membership } = await currentMember();
   if (membership?.role !== "owner") redirect("/app");
+  const { data: mailbox } = await supabase.from("connected_accounts").select("id, address_enc, status").eq("kind", "mail").maybeSingle();
+  const mailAddress = mailbox && (await serverCrypto().decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc));
   const { saved, error } = await searchParams;
   const settings = membership.settings;
   const hours = (settings.hours as Hours | undefined) ?? SUGGESTED_HOURS;
@@ -23,6 +28,22 @@ export default async function Settings({
   return (
     <>
       <h1>Settings</h1>
+      <section className="app-card" aria-labelledby="mailbox">
+        <h2 id="mailbox">Firm email</h2>
+        <p className="app-note">The address your clients write to. InboxCA reads only mail from your clients and their contacts, keeps no copy of it, and replies from this address.</p>
+        {mailbox ? (
+          <form action={disconnectMailbox} className="app-form-row">
+            <p className="app-done" role="status">
+              {mailbox.status === "connected" ? "Connected" : "Needs to be connected again"}: {mailAddress}
+            </p>
+            <button className="btn btn-quiet" type="submit">
+              Disconnect
+            </button>
+          </form>
+        ) : (
+          <MailboxForm />
+        )}
+      </section>
       <section className="app-card" aria-labelledby="visibility">
         <h2 id="visibility">Who sees which clients</h2>
         <form action={saveVisibility}>

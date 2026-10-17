@@ -11,5 +11,6 @@ export default defineConfig({
     include: ["tests/db/**/*.test.ts"],
     environment: "node",
     fileParallelism: false,
+    env: { MAIL_ALLOW_LOCAL: "1" },
   },
 });

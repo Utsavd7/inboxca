@@ -11,6 +11,7 @@ import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { readSheet } from "@/src/lib/sheet";
 import { log } from "@/src/lib/logger";
+import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie } from "@/src/lib/session";
@@ -453,4 +454,60 @@ export async function manageTasks(form: FormData) {
     }),
   );
   revalidatePath("/app/calendar");
+}
+
+export type MailboxState = { error?: string; values?: Record<string, string> };
+const mailboxErrors = {
+  invalid: "Enter the firm's email address and its password.",
+  microsoft: "This address is on Outlook or Microsoft 365, which connects with Microsoft sign in. That is coming soon.",
+  sign_in: "InboxCA could not sign in with that address and password. Check the password, or use an app password.",
+  server: "InboxCA could not reach the mail server. Check the server settings below.",
+};
+
+// Settings → Firm email: the owner connects the firm's mailbox. Both sign ins are checked
+// first; the address and password are saved encrypted with the firm's key.
+export async function connectMailbox(_prev: MailboxState, form: FormData): Promise<MailboxState> {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const values = Object.fromEntries(["address", "imap_host", "imap_port", "smtp_host", "smtp_port"].map((key) => [key, String(form.get(key) ?? "").trim()]));
+  const address = values.address.toLowerCase();
+  const password = String(form.get("password") ?? "");
+  if (!z.email().safeParse(address).success || !password) return { error: mailboxErrors.invalid, values };
+  const typed = values.imap_host && values.smtp_host;
+  const settings = typed
+    ? { imap: { host: values.imap_host, port: Number(values.imap_port) || 993 }, smtp: { host: values.smtp_host, port: Number(values.smtp_port) || 465 } }
+    : await detectSettings(address);
+  if (settings === "microsoft") return { error: mailboxErrors.microsoft, values };
+  const checked = await checkMailbox(address, password, settings);
+  if ("error" in checked) return { error: mailboxErrors[checked.error], values: { ...values, ...serverValues(settings) } };
+
+  const id = randomUUID();
+  const crypto = serverCrypto();
+  const { error } = await supabase.from("connected_accounts").insert({
+    id,
+    firm_id: membership.firmId,
+    kind: "mail",
+    provider: "imap",
+    address_enc: await crypto.encrypt(membership.firmId, `accounts/${id}/address`, address),
+    credentials_enc: await crypto.encrypt(membership.firmId, `accounts/${id}/credentials`, JSON.stringify({ password })),
+    sync_cursor: checked.cursor,
+    settings,
+  });
+  if (error) return { error: "A mailbox is already connected. Disconnect it first.", values };
+  revalidatePath("/app/settings");
+  return {};
+}
+const serverValues = ({ imap, smtp }: { imap: { host: string; port: number }; smtp: { host: string; port: number } }) => ({
+  imap_host: imap.host,
+  imap_port: String(imap.port),
+  smtp_host: smtp.host,
+  smtp_port: String(smtp.port),
+});
+
+// Disconnecting deletes the saved password at once, so nothing more is read or sent.
+export async function disconnectMailbox() {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "mail");
+  revalidatePath("/app/settings");
 }
