@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { manageClient } from "@/app/(app)/actions";
+import { dueLabel, periodLabel, taskStatuses } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
@@ -16,6 +17,7 @@ const errors: Record<string, string> = {
   assigned: "That person is already assigned to this client.",
   contact: "Enter the contact's name and a valid email address.",
   linked: "That contact is already linked to this client.",
+  services: "Those services do not fit together. Choose one GSTR-1 and one GSTR-3B frequency, and not composition with regular returns.",
   role: "Only the owner, a partner or a manager can change clients.",
 };
 
@@ -32,7 +34,7 @@ export default async function Client({
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, kind, archived_at, email_enc, group_id, branch_id, client_registrations(id, kind, number_enc), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))")
+    .select("id, name, kind, archived_at, email_enc, group_id, branch_id, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))")
     .eq("id", id)
     .maybeSingle();
   if (!client) notFound();
@@ -52,10 +54,15 @@ export default async function Client({
     })),
   );
   const manage = canManageClients(membership.role);
-  const [{ data: people }, { data: groups }] = await Promise.all([
+  const [{ data: people }, { data: groups }, { data: rules }, { data: tasks }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
+    supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
+    supabase.from("tasks").select("id, code, period_key, due_on, status").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
   ]);
+  const rule = new Map(rules?.map((r) => [r.code, r]));
+  // Services sit on a number: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN.
+  const servicesFor = (kind: string) => rules?.filter((r) => (r.due_rule as { for?: string }).for === kind) ?? [];
   const teams = groups?.filter((group) => group.kind === "team");
   const clientGroups = groups?.filter((group) => group.kind === "client_group") ?? [];
   const branches = groups?.filter((group) => group.kind === "branch") ?? [];
@@ -144,6 +151,58 @@ export default async function Client({
             </button>
           </form>
         )}
+      </section>
+
+      {numbers.some((registration) => servicesFor(registration.kind).length) && (
+        <section className="app-card" aria-labelledby="services">
+          <h2 id="services">Services</h2>
+          <p className="app-note">What your firm files for this client. InboxCA makes the due dates for the next 12 months.</p>
+          <ul className="app-list">
+            {numbers
+              .filter((registration) => servicesFor(registration.kind).length)
+              .map((registration) => (
+                <li key={registration.id}>
+                  <span className="person">
+                    {numberKinds[registration.kind as NumberKind].name} <span className="num">{registration.number}</span>
+                  </span>
+                  <form key={registration.services.join()} action={manageClient} className="person-role">
+                    {hidden}
+                    <input type="hidden" name="registration" value={registration.id} />
+                    {servicesFor(registration.kind).map((service) => (
+                      <label key={service.code} className="app-check-inline">
+                        <input type="checkbox" name="service" value={service.code} defaultChecked={registration.services.includes(service.code)} disabled={!manage} /> {service.name}
+                      </label>
+                    ))}
+                    {manage && (
+                      <button className="btn btn-quiet" name="intent" value="services">
+                        Save services
+                      </button>
+                    )}
+                  </form>
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="app-card" aria-labelledby="due">
+        <h2 id="due">Due dates</h2>
+        <ul className="app-list">
+          {tasks?.map((task) => (
+            <li key={task.id}>
+              <span className="person">
+                {rule.get(task.code ?? "")?.name}
+                <span className="app-email">{periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}</span>
+              </span>
+              <span className="person-role">
+                {!rule.get(task.code ?? "")?.verified_on && <span className="tag">Date not yet confirmed</span>}
+                {taskStatuses[task.status as keyof typeof taskStatuses]}
+                <span className="num">{dueLabel(task.due_on)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        {!tasks?.length && <p className="app-note">No due dates yet. Add a number and choose its services.</p>}
       </section>
 
       <section className="app-card" aria-labelledby="contacts">

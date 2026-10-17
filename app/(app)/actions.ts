@@ -391,6 +391,10 @@ export async function manageClient(form: FormData) {
       .eq("contact_id", String(form.get("contact") ?? ""));
   } else if (intent === "unlink-contact") {
     await supabase.from("contact_clients").delete().eq("client_id", id).eq("contact_id", String(form.get("contact") ?? ""));
+  } else if (intent === "services") {
+    const services = form.getAll("service").map(String);
+    const { error } = await supabase.from("client_registrations").update({ services }).eq("id", String(form.get("registration") ?? ""));
+    if (error) back("services");
   } else if (intent === "remove-number") {
     await supabase.from("client_registrations").delete().eq("id", String(form.get("registration") ?? ""));
   } else if (intent === "add-number") {

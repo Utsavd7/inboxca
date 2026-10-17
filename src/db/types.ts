@@ -57,13 +57,13 @@ isOneToOne: false
                   ]
                 },"client_registrations": {
                   Row: {
-                    "client_id": string,"firm_id": string,"id": string,"kind": string,"number_bidx": string,"number_enc": string,"state_code": string | null
+                    "client_id": string,"firm_id": string,"id": string,"kind": string,"number_bidx": string,"number_enc": string,"services": (string)[],"state_code": string | null
                   }
                   Insert: {
-                    "client_id": string,"firm_id": string,"id"?: string,"kind": string,"number_bidx": string,"number_enc": string,"state_code"?: string | null
+                    "client_id": string,"firm_id": string,"id"?: string,"kind": string,"number_bidx": string,"number_enc": string,"services"?: (string)[],"state_code"?: string | null
                   }
                   Update: {
-                    "client_id"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"number_bidx"?: string,"number_enc"?: string,"state_code"?: string | null
+                    "client_id"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"number_bidx"?: string,"number_enc"?: string,"services"?: (string)[],"state_code"?: string | null
                   }
                   Relationships: [
                     {
@@ -104,6 +104,19 @@ isOneToOne: false
       referencedRelation: "groups"
       referencedColumns: ["firm_id","id"]
     }
+                  ]
+                },"compliance_types": {
+                  Row: {
+                    "approved_by": string | null,"code": string,"due_rule": NonNullable<Json>,"effective_from": string | null,"effective_to": string | null,"frequency": string | null,"name": string | null,"period_key": string,"source_url": string | null,"verified_on": string | null
+                  }
+                  Insert: {
+                    "approved_by"?: string | null,"code": string,"due_rule": NonNullable<Json>,"effective_from"?: string | null,"effective_to"?: string | null,"frequency"?: string | null,"name"?: string | null,"period_key"?: string,"source_url"?: string | null,"verified_on"?: string | null
+                  }
+                  Update: {
+                    "approved_by"?: string | null,"code"?: string,"due_rule"?: NonNullable<Json>,"effective_from"?: string | null,"effective_to"?: string | null,"frequency"?: string | null,"name"?: string | null,"period_key"?: string,"source_url"?: string | null,"verified_on"?: string | null
+                  }
+                  Relationships: [
+                    
                   ]
                 },"contact_clients": {
                   Row: {
@@ -248,6 +261,31 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "firms"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"tasks": {
+                  Row: {
+                    "client_id": string,"code": string | null,"details": NonNullable<Json>,"due_on": string,"firm_id": string,"id": string,"kind": string,"period_key": string | null,"registration_id": string | null,"status": string
+                  }
+                  Insert: {
+                    "client_id": string,"code"?: string | null,"details"?: NonNullable<Json>,"due_on": string,"firm_id": string,"id"?: string,"kind"?: string,"period_key"?: string | null,"registration_id"?: string | null,"status"?: string
+                  }
+                  Update: {
+                    "client_id"?: string,"code"?: string | null,"details"?: NonNullable<Json>,"due_on"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"period_key"?: string | null,"registration_id"?: string | null,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "tasks_firm_id_client_id_fkey"
+      columns: ["firm_id","client_id"]
+isOneToOne: false
+      referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "tasks_firm_id_registration_id_fkey"
+      columns: ["firm_id","registration_id"]
+isOneToOne: false
+      referencedRelation: "client_registrations"
+      referencedColumns: ["firm_id","id"]
     }
                   ]
                 }
