@@ -606,6 +606,18 @@ li { text-wrap: pretty; }
 .app-role .tag { vertical-align: middle; }
 .app-role .app-email { display: inline; margin: 0; font-size: 14px; }
 .app-aside { margin-left: 4px; font-weight: 500; color: var(--slate); }
+.app-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+.app-tile { display: block; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; color: var(--navy); text-decoration: none; transition: border-color 0.2s; }
+.app-tile:hover { border-color: var(--blue); }
+.app-tile strong { display: block; font-size: 24px; line-height: 1.2; }
+.app-tile span { font-size: 13px; color: var(--slate); }
+.app-steps { display: grid; gap: 2px; margin-top: 8px; }
+.app-steps li { display: flex; align-items: center; gap: 10px; min-height: 38px; }
+.app-steps li.is-done { color: var(--slate); }
+.app-steps li.is-done svg { color: var(--green-deep); }
+.app-steps .btn { margin-left: auto; }
+.app-step-dot { width: 16px; height: 16px; border: 2px solid var(--line-strong); border-radius: 50%; flex: none; }
+@media (max-width: 640px) { .app-tiles { grid-template-columns: 1fr; } }
 /* Two columns of cards on a laptop; one on a narrow screen. */
 .app-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; align-items: start; }
 .app-columns .app-grid-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -58,6 +58,14 @@ test("a return is marked filed with its acknowledgement on the calendar", async 
   await expect(owner.getByRole("row").filter({ hasText: "Patel Textiles" })).toContainText("AA240925123456X");
 });
 
+test("Home shows what needs the owner today and the next setup step", async () => {
+  await owner.getByRole("link", { name: "Home" }).click();
+  await expect(owner.getByRole("link", { name: /returns due in 7 days/ })).toBeVisible();
+  const start = owner.locator("section[aria-labelledby=start]");
+  await expect(start.getByRole("listitem").filter({ hasText: "Add your clients" }).getByLabel("Done")).toBeVisible();
+  await expect(start.getByRole("link", { name: "Connect email" })).toHaveAttribute("href", "/app/settings#mailbox");
+});
+
 test("search finds a client by name, email or whole PAN, and the same PAN is refused twice", async () => {
   await owner.goto("/app/clients");
   for (const search of ["patel", "aapfu0939f", "ACCOUNTS@patel.example"]) {
