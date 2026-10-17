@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { changeTeam, manageMember } from "@/app/(app)/actions";
+import { changeGroup, manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles, roleLabel } from "@/src/lib/roles";
 import { InviteForm } from "./invite-form";
@@ -11,13 +11,19 @@ const statusNames: Record<string, string> = { invited: "Invited", deactivated: "
 export default async function People() {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ data: people }, { data: teams }] = await Promise.all([
+  const [{ data: people }, { data: groups }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
-    supabase.from("groups").select("id, name").eq("kind", "team").order("name"),
+    supabase.from("groups").select("id, kind, name").in("kind", ["team", "branch"]).order("name"),
   ]);
-  const teamName = new Map(teams?.map((team) => [team.id, team.name]));
-  const teamSize = (id: string) => {
-    const count = people?.filter((person) => person.team_id === id).length ?? 0;
+  const groupName = new Map(groups?.map((group) => [group.id, group.name]));
+  // A person is in at most one team and works at most at one branch.
+  const kinds = [
+    { kind: "team", column: "team_id", title: "Teams", one: "team" },
+    { kind: "branch", column: "branch_id", title: "Branches", one: "branch" },
+  ] as const;
+  const groupsOf = (kind: string) => groups?.filter((group) => group.kind === kind) ?? [];
+  const size = (column: "team_id" | "branch_id", id: string) => {
+    const count = people?.filter((person) => person[column] === id).length ?? 0;
     return `${count} ${count === 1 ? "person" : "people"}`;
   };
   const isOwner = membership.role === "owner";
@@ -33,7 +39,7 @@ export default async function People() {
               <span className="person">{person.email}</span>
               {isOwner && person.user_id !== userId ? (
                 // Keyed on the saved values, so the form shows them after each change.
-                <form key={person.role + person.status + person.team_id} action={manageMember} className="person-role">
+                <form key={person.role + person.status + person.team_id + person.branch_id} action={manageMember} className="person-role">
                   <input type="hidden" name="person" value={person.user_id} />
                   {statusNames[person.status] && (
                     <span className={`tag tag-${person.status}`}>{statusNames[person.status]}</span>
@@ -51,15 +57,17 @@ export default async function People() {
                           </option>
                         ))}
                       </select>
-                      {!!teams?.length && (
-                        <select name="team" defaultValue={person.team_id ?? ""} aria-label={`Team for ${person.email}`}>
-                          <option value="">No team</option>
-                          {teams.map((team) => (
-                            <option key={team.id} value={team.id}>
-                              {team.name}
-                            </option>
-                          ))}
-                        </select>
+                      {kinds.map(({ kind, column, one }) =>
+                        groupsOf(kind).length ? (
+                          <select key={kind} name={kind} defaultValue={person[column] ?? ""} aria-label={`${one[0].toUpperCase() + one.slice(1)} for ${person.email}`}>
+                            <option value="">No {one}</option>
+                            {groupsOf(kind).map((group) => (
+                              <option key={group.id} value={group.id}>
+                                {group.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null,
                       )}
                       <button className="btn btn-quiet" name="intent" value="role">
                         Save
@@ -72,7 +80,8 @@ export default async function People() {
                 </form>
               ) : (
                 <span className="person-role">
-                  {person.team_id && teamName.get(person.team_id)}
+                  {person.branch_id && groupName.get(person.branch_id)}
+                  {person.team_id && groupName.get(person.team_id)}
                   {roleLabel(person.role)}
                   {statusNames[person.status] && (
                     <span className={`tag tag-${person.status}`}>{statusNames[person.status]}</span>
@@ -83,39 +92,43 @@ export default async function People() {
           ))}
         </ul>
       </section>
-      {(isOwner || !!teams?.length) && (
-        <section className="app-card" aria-labelledby="teams">
-          <h2 id="teams">Teams</h2>
-          <ul className="app-list">
-            {teams?.map((team) => (
-              <li key={team.id}>
-                <span className="person">{team.name}</span>
-                <span className="person-role">
-                  {teamSize(team.id)}
-                  {isOwner && (
-                    <form action={changeTeam}>
-                      <input type="hidden" name="team" value={team.id} />
-                      <button className="btn btn-quiet" name="intent" value="remove">
-                        Remove team
-                      </button>
-                    </form>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {isOwner && (
-            <form action={changeTeam} className="app-form-row">
-              <div>
-                <label htmlFor="team-name">New team</label>
-                <input id="team-name" name="name" required maxLength={120} />
-              </div>
-              <button className="btn btn-quiet" type="submit">
-                Add team
-              </button>
-            </form>
-          )}
-        </section>
+      {kinds.map(({ kind, column, title, one }) =>
+        isOwner || groupsOf(kind).length ? (
+          <section key={kind} className="app-card" aria-labelledby={title.toLowerCase()}>
+            <h2 id={title.toLowerCase()}>{title}</h2>
+            <ul className="app-list">
+              {groupsOf(kind).map((group) => (
+                <li key={group.id}>
+                  <span className="person">{group.name}</span>
+                  <span className="person-role">
+                    {size(column, group.id)}
+                    {isOwner && (
+                      <form action={changeGroup}>
+                        <input type="hidden" name="kind" value={kind} />
+                        <input type="hidden" name="group" value={group.id} />
+                        <button className="btn btn-quiet" name="intent" value="remove">
+                          Remove {one}
+                        </button>
+                      </form>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {isOwner && (
+              <form action={changeGroup} className="app-form-row">
+                <input type="hidden" name="kind" value={kind} />
+                <div>
+                  <label htmlFor={`${kind}-name`}>New {one}</label>
+                  <input id={`${kind}-name`} name="name" required maxLength={120} />
+                </div>
+                <button className="btn btn-quiet" type="submit">
+                  Add {one}
+                </button>
+              </form>
+            )}
+          </section>
+        ) : null,
       )}
       {isOwner && <InviteForm />}
     </>
