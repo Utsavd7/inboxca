@@ -1,10 +1,18 @@
 import { redirect } from "next/navigation";
-import { changeHoliday, changeSpecialHours, disconnectMailbox, saveHours, saveLimits, saveVisibility } from "@/app/(app)/actions";
+import Link from "next/link";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveVisibility } from "@/app/(app)/actions";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
 import { MailboxForm } from "./mailbox-form";
+
+const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
+const driveErrors: Record<string, string> = {
+  drive_terms: "Tick the box to agree to the Drive access terms first.",
+  drive_provider: "Choose a drive.",
+  drive_taken: "A drive is already connected. Disconnect it first.",
+};
 
 // The owner's settings: the firm's email, who sees clients, office hours, holidays and
 // signing in limits (PLAN.md 5.13, 5.17).
@@ -15,7 +23,9 @@ export default async function Settings({
 }) {
   const { supabase, membership } = await currentMember();
   if (membership?.role !== "owner") redirect("/app");
-  const { data: mailbox } = await supabase.from("connected_accounts").select("id, address_enc, status").eq("kind", "mail").maybeSingle();
+  const { data: accounts } = await supabase.from("connected_accounts").select("id, kind, provider, address_enc, status");
+  const mailbox = accounts?.find((account) => account.kind === "mail");
+  const drive = accounts?.find((account) => account.kind === "drive");
   const mailAddress = mailbox && (await serverCrypto().decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc));
   const { saved, error } = await searchParams;
   const settings = membership.settings;
@@ -42,6 +52,64 @@ export default async function Settings({
           </form>
         ) : (
           <MailboxForm />
+        )}
+      </section>
+
+      <section className="app-card" aria-labelledby="drive-title" id="drive">
+        <h2 id="drive-title">Firm drive</h2>
+        <p className="app-note">Client files are saved in your firm&apos;s own drive, in folders by year, client and work. InboxCA keeps no client files.</p>
+        {drive ? (
+          <form action={disconnectDrive} className="app-form-row">
+            <p className="app-done" role="status">
+              Connected: {driveNames[drive.provider]}
+            </p>
+            <button className="btn btn-quiet" type="submit">
+              Disconnect
+            </button>
+          </form>
+        ) : (
+          <form action={connectDrive}>
+            <fieldset className="app-fieldset">
+              <legend>Which drive</legend>
+              {(["onedrive", "dropbox", ...(process.env.DRIVE_LOCAL_DIR ? ["local"] : [])] as const).map((provider) => (
+                <label key={provider} className="app-check">
+                  <input type="radio" name="provider" value={provider} required disabled={provider !== "local"} />
+                  {driveNames[provider]}
+                  {provider !== "local" && <span className="tag">Coming soon</span>}
+                </label>
+              ))}
+            </fieldset>
+            <fieldset className="app-fieldset">
+              <legend>Is this drive used only for your firm?</legend>
+              <label className="app-check">
+                <input type="radio" name="only_firm" value="no" defaultChecked /> No, or not sure: InboxCA uses only its own folder
+              </label>
+              <label className="app-check">
+                <input type="radio" name="only_firm" value="yes" /> Yes: InboxCA may sort the folders you choose, where they are
+              </label>
+            </fieldset>
+            <h3 className="app-subhead">What you are allowing InboxCA to do</h3>
+            <ul className="app-points">
+              <li>Read the files in the folders you choose, and every file it saves.</li>
+              <li>Make folders, and rename and move folders and files to keep them in order.</li>
+              <li>Save files from client emails, and the forms it fills.</li>
+              <li>Read figures from your files to fill GST and income tax forms for your team to check.</li>
+              <li>It will not delete a file without your approval, share anything outside your firm, open folders you did not choose, or use your files to train AI.</li>
+              <li>You can take this access back at any time, here or at your drive provider.</li>
+            </ul>
+            <label className="app-check">
+              <input type="checkbox" name="agree" required /> I have read this and I agree, on behalf of my firm, to the{" "}
+              <Link href="/terms#drive">Drive access terms</Link>.
+            </label>
+            {error?.startsWith("drive_") && (
+              <p className="field-error" role="alert">
+                {driveErrors[error]}
+              </p>
+            )}
+            <button className="btn" type="submit">
+              Connect drive
+            </button>
+          </form>
         )}
       </section>
       <section className="app-card" aria-labelledby="visibility">

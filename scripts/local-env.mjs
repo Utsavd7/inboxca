@@ -21,6 +21,8 @@ const values = {
   // The outer encryption key for development and tests only (production uses AWS KMS).
   // Kept once made: data encrypted with it can not be read with another.
   LOCAL_KEK: existing.match(/^LOCAL_KEK=(.+)$/m)?.[1] ?? randomBytes(32).toString("base64"),
+  // A test drive in a folder of this checkout (kept out of git), until a real one is linked.
+  DRIVE_LOCAL_DIR: `${process.cwd()}/.test-drive`,
 };
 for (const [key, value] of Object.entries(values))
   if (!value) throw new Error(`supabase status did not report ${key}; is it running?`);

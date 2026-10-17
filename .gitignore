@@ -19,6 +19,7 @@ brag-output/composition/snapshots/
 *.tsbuildinfo
 playwright-report/
 test-results/
+.test-drive/
 
 # Browser review exports stay outside the source tree.
 reports/
