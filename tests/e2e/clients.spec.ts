@@ -119,6 +119,19 @@ test("clients in one group are listed together", async () => {
   await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
 });
 
+test("a client is served from a branch, and the list filters by branch", async () => {
+  await owner.goto("/app/people");
+  await owner.getByLabel("New branch").fill("Surat");
+  await owner.getByRole("button", { name: "Add branch" }).click();
+  await expect(owner.locator("section[aria-labelledby=branches]").getByRole("listitem")).toContainText("Surat");
+  await owner.goto("/app/clients?q=Client 42");
+  await owner.getByRole("link", { name: "Client 42", exact: true }).click();
+  await owner.locator("section[aria-labelledby=details]").getByLabel("Branch").selectOption({ label: "Surat" });
+  await owner.getByRole("button", { name: "Save details" }).click();
+  await owner.getByRole("link", { name: "Branch: Surat" }).click();
+  await expect(owner.getByRole("heading", { name: "Surat: 1 client" })).toBeVisible();
+});
+
 test("a contact person can act for several clients, with what they may receive", async () => {
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();

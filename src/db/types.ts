@@ -76,16 +76,22 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string
+                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string
                   }
                   Insert: {
-                    "archived_at"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string
                   }
                   Update: {
-                    "archived_at"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "clients_firm_id_branch_id_fkey"
+      columns: ["firm_id","branch_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["firm_id","id"]
+    },{
       foreignKeyName: "clients_firm_id_fkey"
       columns: ["firm_id"]
 isOneToOne: false
@@ -299,7 +305,7 @@ isOneToOne: false
                            },
 "firm_people":
 { Args: { "target_firm": string }; Returns: {
-              "email": string,"role": string,"status": string,"team_id": string,"user_id": string
+              "branch_id": string,"email": string,"role": string,"status": string,"team_id": string,"user_id": string
             }[]
                            },
 "firm_state":

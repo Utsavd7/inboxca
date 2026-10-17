@@ -70,20 +70,26 @@ export async function manageMember(form: FormData) {
   else if (intent === "restore") await supabase.rpc("restore_member", args);
   else if (role.success) {
     await supabase.rpc("change_role", { ...args, new_role: role.data });
-    const team = String(form.get("team") ?? "") || null;
-    await supabase.from("firm_members").update({ team_id: team }).eq("firm_id", args.target_firm).eq("user_id", args.person);
+    const group = (name: string) => String(form.get(name) ?? "") || null;
+    await supabase
+      .from("firm_members")
+      .update({ team_id: group("team"), branch_id: group("branch") })
+      .eq("firm_id", args.target_firm)
+      .eq("user_id", args.person);
   }
   revalidatePath("/app/people");
 }
 
-// People → Teams: the owner adds and removes teams. Removing one leaves its people without
-// a team and drops its client assignments.
-export async function changeTeam(form: FormData) {
+// People → Teams and Branches: the owner adds and removes them. Removing a team leaves its
+// people without a team and drops its client assignments; removing a branch clears it from
+// its people and clients.
+export async function changeGroup(form: FormData) {
   const { supabase, membership } = await currentMember();
   if (membership?.role !== "owner") redirect("/app");
+  const kind = form.get("kind") === "branch" ? "branch" : "team";
   const name = String(form.get("name") ?? "").trim();
-  if (form.get("intent") === "remove") await supabase.from("groups").delete().eq("id", String(form.get("team") ?? "")).eq("kind", "team");
-  else if (name && name.length <= 120) await supabase.from("groups").insert({ firm_id: membership.firmId, kind: "team", name });
+  if (form.get("intent") === "remove") await supabase.from("groups").delete().eq("id", String(form.get("group") ?? "")).eq("kind", kind);
+  else if (name && name.length <= 120) await supabase.from("groups").insert({ firm_id: membership.firmId, kind, name });
   revalidatePath("/app/people");
 }
 
@@ -329,6 +335,7 @@ export async function manageClient(form: FormData) {
         name,
         kind,
         group_id: group,
+        branch_id: String(form.get("branch") ?? "") || null,
         email_enc: email ? await crypto.encrypt(firm, `clients/${id}/email`, email) : null,
         email_bidx: email ? await crypto.blindIndex(firm, "email", email) : null,
       })

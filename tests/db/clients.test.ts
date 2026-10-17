@@ -163,6 +163,7 @@ describe("the client register", () => {
       await actAs(db, STAFF);
       const make = (kind: string) => attempt(db, "insert into public.groups (firm_id, kind, name) values ($1, $2, 'Patel family') returning id", [FIRM, kind]);
       expect((await make("team")).ok).toBe(false);
+      expect((await make("branch")).ok).toBe(false);
       const group = await make("client_group");
       expect(group.ok).toBe(true);
       const id = group.ok ? group.rows[0].id : null;
@@ -170,6 +171,19 @@ describe("the client register", () => {
       await actAs(db, OWNER);
       await db.query("delete from public.groups where id = $1", [id]);
       expect((await db.query("select group_id from public.clients where id = $1", [CLIENT])).rows).toEqual([{ group_id: null }]);
+    }));
+
+  it("clears a branch from its people and clients when the branch goes", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER);
+      await add(FIRM, CLIENT, pan("i1"));
+      const branch = (await db.query("insert into public.groups (firm_id, kind, name) values ($1, 'branch', 'Surat') returning id", [FIRM])).rows[0].id;
+      await db.query("update public.clients set branch_id = $1 where id = $2", [branch, CLIENT]);
+      await db.query("update public.firm_members set branch_id = $1 where user_id = $2", [branch, STAFF]);
+      await db.query("delete from public.groups where id = $1", [branch]);
+      expect((await db.query("select branch_id from public.clients where id = $1", [CLIENT])).rows).toEqual([{ branch_id: null }]);
+      expect((await db.query("select branch_id from public.firm_members where user_id = $1", [STAFF])).rows).toEqual([{ branch_id: null }]);
     }));
 
   it("links one contact to several clients, refuses a second contact with the same email, and follows client visibility", () =>

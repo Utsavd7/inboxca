@@ -32,7 +32,7 @@ export default async function Client({
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, kind, archived_at, email_enc, group_id, client_registrations(id, kind, number_enc), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))")
+    .select("id, name, kind, archived_at, email_enc, group_id, branch_id, client_registrations(id, kind, number_enc), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))")
     .eq("id", id)
     .maybeSingle();
   if (!client) notFound();
@@ -54,11 +54,13 @@ export default async function Client({
   const manage = canManageClients(membership.role);
   const [{ data: people }, { data: groups }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
-    supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group"]).order("name"),
+    supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
   ]);
   const teams = groups?.filter((group) => group.kind === "team");
   const clientGroups = groups?.filter((group) => group.kind === "client_group") ?? [];
+  const branches = groups?.filter((group) => group.kind === "branch") ?? [];
   const groupName = clientGroups.find((group) => group.id === client.group_id)?.name;
+  const branchName = branches.find((branch) => branch.id === client.branch_id)?.name;
   // Who can be assigned: teams and active people, each as "team:<id>" or "person:<id>".
   const choices = [
     ...(teams ?? []).map((team) => ({ value: `team:${team.id}`, label: `Team: ${team.name}` })),
@@ -83,6 +85,11 @@ export default async function Client({
           {groupName && (
             <Link className="app-email" href={`/app/clients?group=${client.group_id}`}>
               Group: {groupName}
+            </Link>
+          )}
+          {branchName && (
+            <Link className="app-email" href={`/app/clients?branch=${client.branch_id}`}>
+              Branch: {branchName}
             </Link>
           )}
         </span>
@@ -296,6 +303,19 @@ export default async function Client({
               <label htmlFor="client-new-group">Or a new group</label>
               <input id="client-new-group" name="new_group" maxLength={120} />
             </div>
+            {!!branches.length && (
+              <div>
+                <label htmlFor="client-branch">Branch</label>
+                <select id="client-branch" name="branch" defaultValue={client.branch_id ?? ""}>
+                  <option value="">No branch</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button className="btn" name="intent" value="details">
               Save details
             </button>

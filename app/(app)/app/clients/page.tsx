@@ -12,7 +12,7 @@ import { ImportForm } from "./import-form";
 export default async function Clients({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; archived?: string; group?: string }>;
+  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string }>;
 }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
@@ -24,11 +24,12 @@ export default async function Clients({
 
   let query = supabase
     .from("clients")
-    .select("id, name, kind, group_id, groups(name)")
+    .select("id, name, kind, group_id, branch_id")
     .eq("firm_id", membership.firmId)
     .order("name")
     .limit(500);
   if (params.group) query = query.eq("group_id", params.group);
+  if (params.branch) query = query.eq("branch_id", params.branch);
   query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
   if (q.includes("@")) query = query.eq("email_bidx", await serverCrypto().blindIndex(membership.firmId, "email", q));
   else if (kind) {
@@ -36,8 +37,14 @@ export default async function Clients({
     const { data } = await supabase.from("client_registrations").select("client_id").eq("kind", kind).eq("number_bidx", index);
     query = query.in("id", data?.map((row) => row.client_id) ?? []);
   } else if (q) query = query.ilike("name", `%${q.replace(/[\\%_]/g, "\\$&")}%`);
-  const { data: clients } = await query;
-  const groupName = params.group ? clients?.[0]?.groups?.name : null;
+  const [{ data: clients }, { data: groups }] = await Promise.all([
+    query,
+    supabase.from("groups").select("id, kind, name").in("kind", ["client_group", "branch"]).order("name"),
+  ]);
+  const nameOf = new Map(groups?.map((group) => [group.id, group.name]));
+  const branches = groups?.filter((group) => group.kind === "branch") ?? [];
+  const filtered = params.group || params.branch;
+  const groupName = filtered ? nameOf.get(filtered) : null;
 
   return (
     <>
@@ -55,6 +62,19 @@ export default async function Clients({
             <label htmlFor="q">Find by name, email, PAN or GSTIN</label>
             <input id="q" name="q" type="search" defaultValue={q} />
           </div>
+          {!!branches.length && (
+            <div>
+              <label htmlFor="branch">Branch</label>
+              <select id="branch" name="branch" defaultValue={params.branch ?? ""}>
+                <option value="">All branches</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {archived && <input type="hidden" name="archived" value="1" />}
           <button className="btn btn-quiet" type="submit">
             Find
@@ -67,7 +87,8 @@ export default async function Clients({
                 {client.name}
               </Link>
               <span className="person-role">
-                {client.groups && <Link href={`/app/clients?group=${client.group_id}`}>{client.groups.name}</Link>}
+                {client.group_id && <Link href={`/app/clients?group=${client.group_id}`}>{nameOf.get(client.group_id)}</Link>}
+                {client.branch_id && <Link href={`/app/clients?branch=${client.branch_id}`}>{nameOf.get(client.branch_id)}</Link>}
                 {clientKinds[client.kind as ClientKind]}
               </span>
             </li>
@@ -75,8 +96,8 @@ export default async function Clients({
         </ul>
         {q && !clients?.length && <p className="app-note">No client matches. Check the spelling or the number.</p>}
         <p className="app-note">
-          <Link href={archived || params.group ? "/app/clients" : "/app/clients?archived=1"}>
-            {archived || params.group ? "Show all current clients" : "Show archived clients"}
+          <Link href={archived || filtered ? "/app/clients" : "/app/clients?archived=1"}>
+            {archived || filtered ? "Show all current clients" : "Show archived clients"}
           </Link>
         </p>
       </section>
