@@ -582,6 +582,9 @@ li { text-wrap: pretty; }
 .app-grid-form label { display: block; margin: 0 0 7px; font-size: 15px; font-weight: 700; }
 .app-grid-form :is(input, select) { width: 100%; }
 .table-scroll { margin-top: 14px; max-height: 360px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+.table-tall { max-height: 70vh; }
+.app-table .app-email { font-size: 14px; color: var(--slate); }
+.app-table .tag { display: inline-block; }
 .app-table { width: 100%; border-collapse: collapse; font-size: 15px; }
 .app-table th { position: sticky; top: 0; padding: 10px 14px; background: var(--grey); text-align: left; font-weight: 700; }
 .app-table td { padding: 10px 14px; border-top: 1px solid var(--line); vertical-align: top; }

@@ -46,6 +46,17 @@ test("services on a client's GSTIN give it its due dates", async () => {
   await expect(due).toHaveCount(12);
 });
 
+test("a return is marked filed with its acknowledgement on the calendar", async () => {
+  await owner.getByRole("link", { name: "Calendar" }).click();
+  const row = owner.getByRole("row").filter({ hasText: "GSTR-3B (monthly)" }).first();
+  await row.getByRole("checkbox").check();
+  await row.getByLabel(/Acknowledgement for/).fill("AA240925123456X");
+  await owner.getByRole("button", { name: "Mark chosen as filed" }).click();
+  await owner.getByLabel("Show").selectOption({ label: "Filed in the last 30 days" });
+  await owner.getByRole("button", { name: "Show", exact: true }).click();
+  await expect(owner.getByRole("row").filter({ hasText: "Patel Textiles" })).toContainText("AA240925123456X");
+});
+
 test("search finds a client by name, email or whole PAN, and the same PAN is refused twice", async () => {
   await owner.goto("/app/clients");
   for (const search of ["patel", "aapfu0939f", "ACCOUNTS@patel.example"]) {
