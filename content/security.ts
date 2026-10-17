@@ -40,7 +40,7 @@ export const securitySections = [
     id: "access",
     title: "Who can open what",
     points: [
-      "Everyone signs in with a 2 step code. One login is for one person.",
+      "Every sign in needs two proofs. Staff at an approved office PC use the code sent to their own email; you, your deputies and anyone outside the office also use a code from a phone app. One login is for one person.",
       "Staff can view files but cannot change, share or delete the originals. The owner decides what each role may do.",
       "With the office only switch, staff can sign in only on PCs you approved, on your office internet, in your office hours.",
       "Every view, download, share and delete request is recorded. The record is kept for 12 to 36 months and nobody can edit it or delete it early, the owner included.",

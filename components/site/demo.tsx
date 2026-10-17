@@ -101,7 +101,7 @@ function FileScene() {
         </span>
       </motion.div>
       <motion.div variants={item} className="card tree">
-        {["Your OneDrive", "GST", "FY 2026-27", "Patel Textiles"].map(
+        {["Your OneDrive", "FY 2026-27", "Patel Textiles", "GST"].map(
           (name, depth) => (
             <motion.div
               key={name}
@@ -110,7 +110,7 @@ function FileScene() {
               style={{ paddingLeft: depth * 22 }}
             >
               <Folder size={17} aria-hidden />
-              <span className={depth === 2 ? "num" : undefined}>{name}</span>
+              <span className={depth === 1 ? "num" : undefined}>{name}</span>
             </motion.div>
           ),
         )}
@@ -120,7 +120,7 @@ function FileScene() {
           style={{ paddingLeft: 4 * 22 }}
         >
           <FileText size={17} aria-hidden />
-          <span className="num">Purchase bills - Sep 2026.pdf</span>
+          <span className="num">Patel Textiles - Purchase bills - Sep 2026.pdf</span>
           <Done>Saved</Done>
         </motion.div>
       </motion.div>

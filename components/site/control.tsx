@@ -61,19 +61,19 @@ function DriveCell() {
         </div>
         <div className="tree-row" style={{ paddingLeft: 20 }}>
           <Folder size={16} />
-          <span>GST</span>
+          <span className="num">FY 2026-27</span>
         </div>
         <div className="tree-row" style={{ paddingLeft: 40 }}>
           <Folder size={16} />
-          <span className="num">FY 2026-27</span>
+          <span>Patel Textiles</span>
         </div>
         <div className="tree-row" style={{ paddingLeft: 60 }}>
           <Folder size={16} />
-          <span>Patel Textiles</span>
+          <span>GST</span>
         </div>
         <div className="tree-row tree-leaf" style={{ paddingLeft: 80 }}>
           <FileText size={16} />
-          <span className="num">Purchase bills - Sep 2026.pdf</span>
+          <span className="num">Patel Textiles - Purchase bills - Sep 2026.pdf</span>
         </div>
       </div>
     </li>
