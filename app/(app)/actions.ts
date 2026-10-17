@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
@@ -429,4 +430,27 @@ export async function saveVisibility(form: FormData) {
   const client_visibility = form.get("visibility") === "restricted" ? "restricted" : "open";
   await supabase.from("firms").update({ settings: { ...membership.settings, client_visibility } }).eq("id", membership.firmId);
   redirect("/app/settings?saved=visibility");
+}
+
+// Calendar: mark the chosen returns in progress, filed (with each one's acknowledgement
+// number), or not filed after a mistake. Row level security limits it to clients the
+// person may see; every change is logged.
+export async function manageTasks(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (!membership) redirect("/app");
+  const intent = form.get("intent");
+  const ids = form.getAll("task").map(String);
+  await Promise.all(
+    ids.map((id) => {
+      const ack = String(form.get(`ack-${id}`) ?? "").trim().slice(0, 40);
+      const change =
+        intent === "filed"
+          ? { status: "filed", details: { filed_on: todayInIndia(), ...(ack && { ack }) } }
+          : intent === "in_progress"
+            ? { status: "in_progress" }
+            : { status: "upcoming", details: {} };
+      return supabase.from("tasks").update(change).eq("id", id);
+    }),
+  );
+  revalidatePath("/app/calendar");
 }
