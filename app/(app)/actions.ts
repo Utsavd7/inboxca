@@ -101,6 +101,8 @@ export async function changeGroup(form: FormData) {
 export async function joinFirm(form: FormData) {
   const { supabase } = await currentMember();
   await supabase.rpc("accept_invite", { target_firm: String(form.get("firm") ?? "") });
+  // The sidebar is in the layout, which a redirect alone does not redraw.
+  revalidatePath("/app", "layout");
   redirect("/app");
 }
 
@@ -524,7 +526,8 @@ export async function manageEmail(form: FormData) {
   if (form.get("intent") === "label" && label in labels)
     await supabase.from("email_events").update({ label, decision_source: "staff" }).eq("id", String(form.get("email") ?? ""));
   else if (form.get("intent") === "done") await supabase.from("requests").update({ status: "done" }).eq("id", String(form.get("request") ?? ""));
-  revalidatePath("/app/inbox");
+  // The sidebar's Inbox count is in the layout.
+  revalidatePath("/app", "layout");
 }
 
 // Settings → Firm drive: the owner connects the firm's drive after ticking the Drive
