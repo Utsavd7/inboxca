@@ -46,8 +46,8 @@ test("first sign in: email code, then setting up the 2 step code", async ({ page
   await page.getByLabel("6 digit code from the app").fill(await nextTotp());
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Test Firm");
-  await expect(page.locator(".app-me")).toContainText("Owner");
+  await expect(page.locator(".page-head")).toContainText("Test Firm");
+  await expect(page.locator(".rail-me")).toContainText("Owner");
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
   await page.goto("/app");
@@ -61,7 +61,7 @@ test("next sign in asks for the app's code, and firm data waits for it", async (
   await expect(page).toHaveURL(/\/sign-in\/two-step$/);
   await page.getByLabel("6 digit code from the app").fill(await nextTotp());
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.locator(".app-me")).toContainText("Owner");
+  await expect(page.locator(".rail-me")).toContainText("Owner");
 });
 
 test("the link in the email works on the same device", async ({ page, baseURL }) => {

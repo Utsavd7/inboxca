@@ -9,7 +9,7 @@ export function MailboxForm() {
   const values = state.values ?? {};
   return (
     <form key={JSON.stringify(values)} action={connect} noValidate>
-      <div className="app-grid-form">
+      <div className="fields">
         <div>
           <label htmlFor="mail-address">The firm&apos;s email address</label>
           <input id="mail-address" name="address" type="email" autoComplete="off" required defaultValue={values.address} />
@@ -18,14 +18,14 @@ export function MailboxForm() {
           <label htmlFor="mail-password">Its password</label>
           <input id="mail-password" name="password" type="password" autoComplete="new-password" required />
         </div>
-        <button className="btn" type="submit" disabled={connecting}>
+        <button className="b b-primary" type="submit" disabled={connecting}>
           {connecting ? "Checking" : "Connect email"}
         </button>
       </div>
-      <p className="app-note">Gmail, Google Workspace and Zoho need an app password, made in the account&apos;s security settings.</p>
-      <details className="app-details" open={!!values.imap_host}>
+      <p className="hint">Gmail, Google Workspace and Zoho need an app password, made in the account&apos;s security settings.</p>
+      <details className="reveal" open={!!values.imap_host}>
         <summary>Server settings, only if InboxCA asks</summary>
-        <div className="app-grid-form">
+        <div className="fields">
           {[
             ["imap_host", "Incoming (IMAP) server"],
             ["imap_port", "Incoming port"],
@@ -40,7 +40,7 @@ export function MailboxForm() {
         </div>
       </details>
       {state.error && (
-        <p className="field-error" role="alert">
+        <p className="alert" role="alert">
           {state.error}
         </p>
       )}

@@ -315,7 +315,11 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
 export async function manageClient(form: FormData) {
   const { supabase, membership } = await currentMember();
   const id = String(form.get("client") ?? "");
-  const back = (error?: string) => redirect(`/app/clients/${id}${error ? `?error=${error}` : ""}`);
+  const tab = String(form.get("tab") ?? "").replace(/[^a-z]/g, "");
+  const back = (error?: string) => {
+    const query = new URLSearchParams({ ...(tab && tab !== "overview" && { tab }), ...(error && { error }) }).toString();
+    return redirect(`/app/clients/${id}${query ? `?${query}` : ""}`);
+  };
   if (!membership || !canManageClients(membership.role)) back("role");
   const firm = membership!.firmId;
   const intent = form.get("intent");
@@ -564,4 +568,19 @@ export async function disconnectDrive() {
   if (membership?.role !== "owner") redirect("/app");
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "drive");
   revalidatePath("/app/settings");
+}
+
+// The search palette: the firm's current clients whose name matches, as many as fit a list.
+export async function findClients(text: string) {
+  const { supabase, membership } = await currentMember();
+  const q = text.trim().slice(0, 80);
+  if (!membership || !q) return [];
+  const { data } = await supabase
+    .from("clients")
+    .select("id, name, kind")
+    .is("archived_at", null)
+    .ilike("name", `%${q.replace(/[\\%_]/g, "\\$&")}%`)
+    .order("name")
+    .limit(8);
+  return data ?? [];
 }

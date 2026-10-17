@@ -40,11 +40,11 @@ const setServices = (kind: string, services: string[]) =>
 // Plans the calendar as of a fixed day, so the expected tasks never move.
 async function planAsOf(day: string) {
   await asOwner(db);
-  await db.query("delete from public.tasks");
+  await db.query("delete from public.tasks where firm_id = $1", [FIRM]);
   await db.query("select private.plan_tasks(null, $1)", [day]);
 }
 const due = async (code: string) =>
-  (await db.query("select period_key, to_char(due_on, 'YYYY-MM-DD') as due_on from public.tasks where code = $1 order by due_on", [code])).rows;
+  (await db.query("select period_key, to_char(due_on, 'YYYY-MM-DD') as due_on from public.tasks where firm_id = $2 and code = $1 order by due_on", [code, FIRM])).rows;
 
 describe("the compliance calendar", () => {
   it("gives a client with monthly GST, TDS and a non-audit ITR the right 12 months of tasks", () =>
@@ -53,7 +53,7 @@ describe("the compliance calendar", () => {
       for (const [kind, services] of [["gstin", ["GSTR1_M", "GSTR3B_M"]], ["tan", ["TDS_PAY", "TDS_RET"]], ["pan", ["ITR_NA"]]] as const)
         expect((await setServices(kind, [...services])).ok).toBe(true);
       await planAsOf("2026-04-01");
-      const counts = await db.query("select code, count(*)::int as n from public.tasks group by code order by code");
+      const counts = await db.query("select code, count(*)::int as n from public.tasks where firm_id = $1 group by code order by code", [FIRM]);
       expect(counts.rows).toEqual([
         { code: "GSTR1_M", n: 12 },
         { code: "GSTR3B_M", n: 12 },

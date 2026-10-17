@@ -6,7 +6,7 @@ import { invitableRoles, roleLabel } from "@/src/lib/roles";
 export function InviteForm() {
   const [state, invite, inviting] = useActionState(inviteMember, {} as InviteState);
   return (
-    <section className="app-card" aria-labelledby="invite">
+    <section className="panel" aria-labelledby="invite">
       <h2 id="invite">Invite someone</h2>
       <form key={JSON.stringify(state.values)} action={invite} className="auth-form app-invite" noValidate>
         <div>
@@ -32,17 +32,17 @@ export function InviteForm() {
             ))}
           </select>
         </div>
-        <button className="btn" type="submit" disabled={inviting}>
+        <button className="b b-primary" type="submit" disabled={inviting}>
           {inviting ? "Inviting" : "Invite"}
         </button>
       </form>
       {state.error && (
-        <p className="field-error" id="invite-error" role="alert">
+        <p className="alert" id="invite-error" role="alert">
           {state.error}
         </p>
       )}
       {state.done && (
-        <p className="app-done" role="status">
+        <p className="ok" role="status">
           {state.done}
         </p>
       )}

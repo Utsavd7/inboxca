@@ -14,7 +14,7 @@ export function CountUp({ value }: { value: number }) {
     return () => controls.stop();
   }, [value, still]);
   return (
-    <span ref={ref} className="num">
+    <span ref={ref} className="tabular">
       {value}
     </span>
   );

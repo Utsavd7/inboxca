@@ -1,8 +1,11 @@
+import { CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageTasks } from "@/app/(app)/actions";
-import { calendarViews, dueLabel, periodLabel, taskStatuses, todayInIndia, type CalendarView } from "@/src/lib/calendar";
+import { calendarViews, dueLabel, periodLabel, todayInIndia, type CalendarView } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
+import { LinkTabs } from "../link-tabs";
+import { Badge, Empty, PageHead, type Tone } from "../ui";
 
 // The firm's compliance calendar: overdue, coming up and recently filed returns. Anyone in
 // the firm marks a return in progress or filed, one at a time or many together (5.17.2).
@@ -33,49 +36,48 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   ]);
   const rule = new Map(rules?.map((r) => [r.code, r]));
 
+  const title = `${day ? `Due on ${dueLabel(day)}` : calendarViews[view].label}: ${tasks?.length ?? 0} return${tasks?.length === 1 ? "" : "s"}`;
+  const status = (task: { status: string; due_on: string }): [Tone, string] =>
+    task.status === "filed" ? ["done", "Filed"] : task.due_on < today ? ["late", "Overdue"] : task.status === "in_progress" ? ["blue", "In progress"] : ["", "Upcoming"];
+  const code = params.code ? `&code=${params.code}` : "";
+
   return (
     <>
-      <h1>Calendar</h1>
-      <section className="app-card" aria-labelledby="returns">
-        <h2 id="returns">
-          {day ? `Due on ${dueLabel(day)}` : calendarViews[view].label}: {tasks?.length ?? 0} return{tasks?.length === 1 ? "" : "s"}
-        </h2>
-        <form className="app-form-row">
-          <div>
-            <label htmlFor="view">Show</label>
-            <select id="view" name="view" defaultValue={view}>
-              {Object.entries(calendarViews).map(([value, { label }]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="code">Return</label>
-            <select id="code" name="code" defaultValue={params.code ?? ""}>
-              <option value="">All returns</option>
-              {rules?.map((r) => (
-                <option key={r.code} value={r.code}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button className="btn btn-quiet" type="submit">
+      <PageHead title="Calendar" sub="Every return your firm files, by due date. Tick returns to mark them in progress or filed." />
+      <div className="toolbar">
+        <LinkTabs
+          id="calendar-view"
+          kind="segment"
+          label="Show"
+          items={Object.entries(calendarViews).map(([value, { label }]) => ({ href: `/app/calendar?view=${value}${code}`, label, current: !day && view === value }))}
+        />
+        <form className="toolbar-end">
+          <input type="hidden" name="view" value={view} />
+          <select id="code" name="code" defaultValue={params.code ?? ""} aria-label="Return">
+            <option value="">All returns</option>
+            {rules?.map((r) => (
+              <option key={r.code} value={r.code}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+          <button className="b b-secondary" type="submit">
             Show
           </button>
         </form>
-        {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && (
-          <p className="app-note">Dates marked * are not yet confirmed by a CA against the official notification.</p>
-        )}
+      </div>
+      <section aria-labelledby="returns">
+        <div className="section-head">
+          <h2 id="returns">{title}</h2>
+          {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p>Dates marked * are not yet confirmed by a CA against the official notification.</p>}
+        </div>
         {tasks?.length ? (
           <form key={tasks.map((task) => task.id + task.status).join()} action={manageTasks}>
-            <div className="table-scroll table-tall">
-              <table className="app-table">
+            <div className="table-wrap">
+              <table className="t">
                 <thead>
                   <tr>
-                    <th scope="col">
+                    <th scope="col" className="shrink">
                       <span className="sr-only">Choose</span>
                     </th>
                     <th scope="col">Client</th>
@@ -89,28 +91,33 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                   {tasks.map((task) => {
                     const r = rule.get(task.code ?? "");
                     const ack = (task.details as { ack?: string }).ack;
+                    const [tone, word] = status(task);
                     return (
                       <tr key={task.id}>
-                        <td>
+                        <td className="shrink">
                           <input type="checkbox" name="task" value={task.id} aria-label={`Choose ${task.clients.name} ${r?.name}`} />
                         </td>
                         <td>
-                          <Link href={`/app/clients/${task.client_id}`}>{task.clients.name}</Link>
+                          <Link className="row-link" href={`/app/clients/${task.client_id}`}>
+                            {task.clients.name}
+                          </Link>
                         </td>
                         <td>
                           {r?.name}
-                          <span className="app-email">{periodLabel(r?.frequency ?? null, task.period_key)}</span>
+                          <span className="sub">{periodLabel(r?.frequency ?? null, task.period_key)}</span>
                         </td>
-                        <td>
+                        <td className="shrink">
                           <span className="num">{dueLabel(task.due_on)}</span>
                           {!r?.verified_on && "*"}
                         </td>
-                        <td>{taskStatuses[task.status as keyof typeof taskStatuses]}</td>
+                        <td className="shrink">
+                          <Badge tone={tone}>{word}</Badge>
+                        </td>
                         <td>
                           {task.status === "filed" ? (
                             <span className="num">{ack}</span>
                           ) : (
-                            <input name={`ack-${task.id}`} maxLength={40} autoComplete="off" className="num" aria-label={`Acknowledgement for ${task.clients.name} ${r?.name}`} />
+                            <input name={`ack-${task.id}`} maxLength={40} autoComplete="off" className="num" placeholder="Optional" aria-label={`Acknowledgement for ${task.clients.name} ${r?.name}`} />
                           )}
                         </td>
                       </tr>
@@ -119,26 +126,31 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 </tbody>
               </table>
             </div>
-            <div className="app-form-row">
+            <div className="bulk" role="region" aria-label="Chosen returns">
+              <span>Chosen returns</span>
               {window.filedSince ? (
-                <button className="btn btn-quiet" name="intent" value="reopen">
+                <button className="b b-primary" name="intent" value="reopen">
                   Mark chosen as not filed
                 </button>
               ) : (
                 <>
-                  <button className="btn" name="intent" value="filed">
-                    Mark chosen as filed
-                  </button>
-                  <button className="btn btn-quiet" name="intent" value="in_progress">
+                  <button className="b b-secondary" name="intent" value="in_progress">
                     Mark chosen as in progress
+                  </button>
+                  <button className="b b-primary" name="intent" value="filed">
+                    Mark chosen as filed
                   </button>
                 </>
               )}
-              <span className="app-note">Tick the returns first. An acknowledgement number is saved with each return marked filed.</span>
             </div>
+            <p className="hint">Tick returns to act on them. An acknowledgement number typed in a row is saved when that return is marked filed.</p>
           </form>
         ) : (
-          <p className="app-note">{view === "overdue" ? "Nothing is overdue." : "No returns here. Choose services on a client's page to make its due dates."}</p>
+          <div className="box">
+            <Empty Icon={CalendarDays} title={view === "overdue" && !day ? "Nothing is overdue." : "No returns here"}>
+              <span>{view === "overdue" && !day ? "Every return that was due has been filed." : "Tick what you file on a client's page, and its due dates appear here."}</span>
+            </Empty>
+          </div>
         )}
       </section>
     </>

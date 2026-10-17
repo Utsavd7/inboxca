@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { changeGroup, manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
+import { PageHead } from "../ui";
 import { invitableRoles, roleLabel } from "@/src/lib/roles";
 import { InviteForm } from "./invite-form";
 
@@ -30,22 +31,22 @@ export default async function People() {
 
   return (
     <>
-      <h1>People</h1>
-      <section className="app-card" aria-labelledby="people">
+      <PageHead title="People" sub="Everyone in your firm, the teams they work in and the branches they work at." />
+      <section className="panel" aria-labelledby="people">
         <h2 id="people">{membership.firmName}</h2>
-        <ul className="app-list">
+        <ul className="rows">
           {people?.map((person) => (
             <li key={person.user_id}>
-              <span className="person">{person.email}</span>
+              <span className="name">{person.email}</span>
               {isOwner && person.user_id !== userId ? (
                 // Keyed on the saved values, so the form shows them after each change.
-                <form key={person.role + person.status + person.team_id + person.branch_id} action={manageMember} className="person-role">
+                <form key={person.role + person.status + person.team_id + person.branch_id} action={manageMember} className="end">
                   <input type="hidden" name="person" value={person.user_id} />
                   {statusNames[person.status] && (
-                    <span className={`tag tag-${person.status}`}>{statusNames[person.status]}</span>
+                    <span className={`badge tag-${person.status}`}>{statusNames[person.status]}</span>
                   )}
                   {person.status === "deactivated" ? (
-                    <button className="btn btn-quiet" name="intent" value="restore">
+                    <button className="b b-secondary" name="intent" value="restore">
                       Bring back
                     </button>
                   ) : (
@@ -69,22 +70,22 @@ export default async function People() {
                           </select>
                         ) : null,
                       )}
-                      <button className="btn btn-quiet" name="intent" value="role">
+                      <button className="b b-secondary" name="intent" value="role">
                         Save
                       </button>
-                      <button className="btn btn-quiet" name="intent" value="remove">
+                      <button className="b b-secondary" name="intent" value="remove">
                         {person.status === "invited" ? "Withdraw invite" : "Remove"}
                       </button>
                     </>
                   )}
                 </form>
               ) : (
-                <span className="person-role">
+                <span className="end">
                   {person.branch_id && groupName.get(person.branch_id)}
                   {person.team_id && groupName.get(person.team_id)}
                   {roleLabel(person.role)}
                   {statusNames[person.status] && (
-                    <span className={`tag tag-${person.status}`}>{statusNames[person.status]}</span>
+                    <span className={`badge tag-${person.status}`}>{statusNames[person.status]}</span>
                   )}
                 </span>
               )}
@@ -94,19 +95,19 @@ export default async function People() {
       </section>
       {kinds.map(({ kind, column, title, one }) =>
         isOwner || groupsOf(kind).length ? (
-          <section key={kind} className="app-card" aria-labelledby={title.toLowerCase()}>
+          <section key={kind} className="panel" aria-labelledby={title.toLowerCase()}>
             <h2 id={title.toLowerCase()}>{title}</h2>
-            <ul className="app-list">
+            <ul className="rows">
               {groupsOf(kind).map((group) => (
                 <li key={group.id}>
-                  <span className="person">{group.name}</span>
-                  <span className="person-role">
+                  <span className="name">{group.name}</span>
+                  <span className="end">
                     {size(column, group.id)}
                     {isOwner && (
                       <form action={changeGroup}>
                         <input type="hidden" name="kind" value={kind} />
                         <input type="hidden" name="group" value={group.id} />
-                        <button className="btn btn-quiet" name="intent" value="remove">
+                        <button className="b b-secondary" name="intent" value="remove">
                           Remove {one}
                         </button>
                       </form>
@@ -116,13 +117,13 @@ export default async function People() {
               ))}
             </ul>
             {isOwner && (
-              <form action={changeGroup} className="app-form-row">
+              <form action={changeGroup} className="form-row">
                 <input type="hidden" name="kind" value={kind} />
                 <div>
                   <label htmlFor={`${kind}-name`}>New {one}</label>
                   <input id={`${kind}-name`} name="name" required maxLength={120} />
                 </div>
-                <button className="btn btn-quiet" type="submit">
+                <button className="b b-secondary" type="submit">
                   Add {one}
                 </button>
               </form>

@@ -17,7 +17,7 @@ export function Ribbon({ month, days, today, lastDay }: { month: string; days: R
   const pending = days.filter((day) => day.date >= today).reduce((sum, day) => sum + day.due - day.filed, 0);
 
   return (
-    <section className="ribbon" aria-labelledby="ribbon-title">
+    <div className="ribbon">
       <div className="ribbon-head">
         <h2 id="ribbon-title">{new Date(`${month}-01T00:00:00`).toLocaleString("en-IN", { month: "long", year: "numeric" })}</h2>
         <p className="ribbon-note" aria-live="polite">
@@ -53,7 +53,7 @@ export function Ribbon({ month, days, today, lastDay }: { month: string; days: R
                       style={{ height: `${Math.max(14, (day.due / most) * 100)}%` }}
                       initial={still ? false : { scaleY: 0 }}
                       animate={{ scaleY: 1 }}
-                      transition={{ delay: 0.15 + index * 0.012, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+                      transition={{ delay: index * 0.006, duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                     >
                       <span className="ribbon-done" style={{ height: `${(day.filed / day.due) * 100}%` }} />
                     </motion.span>
@@ -71,6 +71,6 @@ export function Ribbon({ month, days, today, lastDay }: { month: string; days: R
           );
         })}
       </ol>
-    </section>
+    </div>
   );
 }

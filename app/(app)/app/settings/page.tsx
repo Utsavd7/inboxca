@@ -5,6 +5,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
+import { PageHead } from "../ui";
 import { MailboxForm } from "./mailbox-form";
 
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
@@ -41,18 +42,33 @@ export default async function Settings({
 
   return (
     <>
-      <h1>Settings</h1>
-      <div className="app-columns">
+      <PageHead title="Settings" sub="How your firm uses InboxCA. Only you, the owner, see this page." />
+      <div className="settings">
+        <nav className="settings-index" aria-label="Settings">
+          {[
+            ["#mailbox", "Firm email"],
+            ["#drive", "Firm drive"],
+            ["#visibility", "Who sees clients"],
+            ["#hours", "Office hours"],
+            ["#special", "Special hours"],
+            ["#limits", "Signing in"],
+            ["#holidays", "Holidays"],
+          ].map(([href, name]) => (
+            <a key={href} href={href}>
+              {name}
+            </a>
+          ))}
+        </nav>
         <div>
-          <section className="app-card" aria-labelledby="mailbox">
+          <section className="panel" aria-labelledby="mailbox">
             <h2 id="mailbox">Firm email</h2>
-            <p className="app-note">The address your clients write to. InboxCA reads only mail from your clients and their contacts, keeps no copy of it, and replies from this address.</p>
+            <p className="hint">The address your clients write to. InboxCA reads only mail from your clients and their contacts, keeps no copy of it, and replies from this address.</p>
             {mailbox ? (
-              <form action={disconnectMailbox} className="app-form-row">
-                <p className="app-done" role="status">
+              <form action={disconnectMailbox} className="form-row">
+                <p className="ok" role="status">
                   {mailbox.status === "connected" ? "Connected" : "Needs to be connected again"}: {mailAddress}
                 </p>
-                <button className="btn btn-quiet" type="submit">
+                <button className="b b-secondary" type="submit">
                   Disconnect
                 </button>
               </form>
@@ -61,33 +77,33 @@ export default async function Settings({
             )}
           </section>
 
-          <section className="app-card" aria-labelledby="drive-title" id="drive">
+          <section className="panel" aria-labelledby="drive-title" id="drive">
             <h2 id="drive-title">Firm drive</h2>
-            <p className="app-note">Client files are saved in your firm&apos;s own drive, in folders by year, client and work. InboxCA keeps no client files.</p>
+            <p className="hint">Client files are saved in your firm&apos;s own drive, in folders by year, client and work. InboxCA keeps no client files.</p>
             {drive ? (
-              <form action={disconnectDrive} className="app-form-row">
-                <p className="app-done" role="status">
+              <form action={disconnectDrive} className="form-row">
+                <p className="ok" role="status">
                   Connected: {driveAddress}
                 </p>
-                <button className="btn btn-quiet" type="submit">
+                <button className="b b-secondary" type="submit">
                   Disconnect
                 </button>
               </form>
             ) : (
               <form action={connectDrive}>
-                <fieldset className="app-fieldset">
+                <fieldset className="fieldset">
                   <legend>Which drive</legend>
                   {(["onedrive", "dropbox", ...(process.env.DRIVE_LOCAL_DIR ? ["local"] : [])] as const).map((provider) => (
-                    <label key={provider} className="app-check">
+                    <label key={provider} className="check check-row">
                       <input type="radio" name="provider" value={provider} required disabled={!ready[provider]} />
                       {driveNames[provider]}
-                      {!ready[provider] && <span className="tag">Coming soon</span>}
+                      {!ready[provider] && <span className="badge plain">Coming soon</span>}
                     </label>
                   ))}
                 </fieldset>
-    <p className="app-note">InboxCA can read this whole drive and touches only the folders you choose and its own InboxCA folder, so connect a drive kept for your firm.</p>
-                <h3 className="app-subhead">What you are allowing InboxCA to do</h3>
-                <ul className="app-points">
+    <p className="hint">InboxCA can read this whole drive and touches only the folders you choose and its own InboxCA folder, so connect a drive kept for your firm.</p>
+                <h3 className="subhead">What you are allowing InboxCA to do</h3>
+                <ul className="points">
                   <li>Read the files in the folders you choose, and every file it saves.</li>
                   <li>Make folders, and rename and move folders and files to keep them in order.</li>
                   <li>Save files from client emails, and the forms it fills.</li>
@@ -95,51 +111,49 @@ export default async function Settings({
                   <li>It will not delete a file without your approval, share anything outside your firm, open folders you did not choose, or use your files to train AI.</li>
                   <li>You can take this access back at any time, here or at your drive provider.</li>
                 </ul>
-                <label className="app-check">
+                <label className="check check-row">
                   <input type="checkbox" name="agree" required />
                   <span>
                     I have read this and I agree, on behalf of my firm, to the <Link href="/terms#drive">Drive access terms</Link>.
                   </span>
                 </label>
                 {error?.startsWith("drive_") && (
-                  <p className="field-error" role="alert">
+                  <p className="alert" role="alert">
                     {driveErrors[error]}
                   </p>
                 )}
-                <button className="btn" type="submit">
+                <button className="b b-primary" type="submit">
                   Connect drive
                 </button>
               </form>
             )}
           </section>
-        </div>
-        <div>
-          <section className="app-card" aria-labelledby="visibility">
+          <section className="panel" aria-labelledby="visibility">
             <h2 id="visibility">Who sees which clients</h2>
             <form action={saveVisibility}>
               {[
                 ["open", "Everyone in the firm sees every client"],
                 ["restricted", "Only you, partners and the people assigned to a client see it"],
               ].map(([value, label]) => (
-                <label key={value} className="app-check">
+                <label key={value} className="check check-row">
                   <input type="radio" name="visibility" value={value} defaultChecked={(settings.client_visibility ?? "open") === value} />
                   {label}
                 </label>
               ))}
-              <button className="btn" type="submit">
+              <button className="b b-primary" type="submit">
                 Save who sees clients
               </button>
               {saved === "visibility" && (
-                <p className="app-done" role="status">
+                <p className="ok" role="status">
                   Who sees clients saved.
                 </p>
               )}
             </form>
           </section>
 
-          <section className="app-card" aria-labelledby="hours">
+          <section className="panel" aria-labelledby="hours">
             <h2 id="hours">Office hours</h2>
-            <p className="app-note">India time. You can always sign in; these hours apply to everyone else.</p>
+            <p className="hint">India time. You can always sign in; these hours apply to everyone else.</p>
             <form action={saveHours}>
               <table className="hours-table">
                 <tbody>
@@ -160,46 +174,46 @@ export default async function Settings({
                   ))}
                 </tbody>
               </table>
-              <label className="app-check">
+              <label className="check check-row">
                 <input type="checkbox" name="hours_only" defaultChecked={hoursOnly} />
                 Everyone except you can use InboxCA only during office hours, and not on holidays
               </label>
-              <button className="btn" type="submit">
+              <button className="b b-primary" type="submit">
                 Save office hours
               </button>
               {saved === "hours" && (
-                <p className="app-done" role="status">
+                <p className="ok" role="status">
                   Office hours saved.
                 </p>
               )}
               {error && DAYS.includes(error) && (
-                <p className="field-error" role="alert">
+                <p className="alert" role="alert">
                   {error}: the closing time must be after the opening time.
                 </p>
               )}
             </form>
           </section>
 
-          <section className="app-card" aria-labelledby="special">
+          <section className="panel" aria-labelledby="special">
             <h2 id="special">Special hours</h2>
-            <p className="app-note">A tax season or a late evening: these times replace the office hours on every day in the dates. Holidays stay closed.</p>
-            <ul className="app-list">
+            <p className="hint">A tax season or a late evening: these times replace the office hours on every day in the dates. Holidays stay closed.</p>
+            <ul className="rows">
               {special.map((range) => (
                 <li key={range.from + range.to}>
-                  <span className="person">
+                  <span className="name">
                     {range.from === range.to ? longDate(range.from) : `${longDate(range.from)} to ${longDate(range.to)}`}: {range.open} to {range.close}
                   </span>
                   <form action={changeSpecialHours}>
                     <input type="hidden" name="from" value={range.from} />
                     <input type="hidden" name="to" value={range.to} />
-                    <button className="btn btn-quiet" name="intent" value="remove">
+                    <button className="b b-secondary" name="intent" value="remove">
                       Remove
                     </button>
                   </form>
                 </li>
               ))}
             </ul>
-            <form action={changeSpecialHours} className="app-form-row">
+            <form action={changeSpecialHours} className="form-row">
               {[
                 ["from", "From", "date"],
                 ["to", "To", "date"],
@@ -211,21 +225,21 @@ export default async function Settings({
                   <input id={`special-${name}`} name={name} type={type} required />
                 </div>
               ))}
-              <button className="btn btn-quiet" type="submit">
+              <button className="b b-secondary" type="submit">
                 Add special hours
               </button>
             </form>
             {error === "special" && (
-              <p className="field-error" role="alert">
+              <p className="alert" role="alert">
                 The dates must run forward and the closing time must be after the opening time.
               </p>
             )}
           </section>
 
-          <section className="app-card" aria-labelledby="limits">
+          <section className="panel" aria-labelledby="limits">
             <h2 id="limits">Signing in</h2>
-            <p className="app-note">For everyone in the firm, you included.</p>
-            <form action={saveLimits} className="app-form-row">
+            <p className="hint">For everyone in the firm, you included.</p>
+            <form action={saveLimits} className="form-row">
               <div>
                 <label htmlFor="idle_minutes">Sign out after no activity for</label>
                 <select id="idle_minutes" name="idle_minutes" defaultValue={access.idle_minutes ?? 0}>
@@ -246,40 +260,40 @@ export default async function Settings({
                   ))}
                 </select>
               </div>
-              <button className="btn" type="submit">
+              <button className="b b-primary" type="submit">
                 Save signing in limits
               </button>
             </form>
             {saved === "limits" && (
-              <p className="app-done" role="status">
+              <p className="ok" role="status">
                 Signing in limits saved.
               </p>
             )}
           </section>
 
-          <section className="app-card" aria-labelledby="holidays">
+          <section className="panel" aria-labelledby="holidays">
             <h2 id="holidays">Holidays</h2>
-            <ul className="app-list">
+            <ul className="rows">
               {holidays.map((date) => (
                 <li key={date}>
-                  <span className="person">
+                  <span className="name">
                     {new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { weekday: "long" })}, {longDate(date)}
                   </span>
                   <form action={changeHoliday}>
                     <input type="hidden" name="date" value={date} />
-                    <button className="btn btn-quiet" name="intent" value="remove">
+                    <button className="b b-secondary" name="intent" value="remove">
                       Remove
                     </button>
                   </form>
                 </li>
               ))}
             </ul>
-            <form action={changeHoliday} className="app-form-row">
+            <form action={changeHoliday} className="form-row">
               <div>
                 <label htmlFor="holiday">Add a holiday</label>
                 <input id="holiday" type="date" name="date" required />
               </div>
-              <button className="btn btn-quiet" type="submit">
+              <button className="b b-secondary" type="submit">
                 Add holiday
               </button>
             </form>
