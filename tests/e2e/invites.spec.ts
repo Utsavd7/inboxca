@@ -60,7 +60,10 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
   await expect(page.getByText("Invite Test Firm has invited you as manager.")).toBeVisible();
   await page.getByRole("button", { name: "Join Invite Test Firm" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Invite Test Firm");
-  await expect(page.locator(".app-role")).toHaveText("You are signed in as manager.");
+  await expect(page.locator(".app-me")).toContainText("Manager");
+  // A manager's sidebar has People but not Settings, which is the owner's.
+  await expect(page.getByRole("link", { name: "People" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Settings" })).toHaveCount(0);
   await expect(page.getByText(/has invited you/)).toHaveCount(0);
 
   // Only the owner invites.
