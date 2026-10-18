@@ -79,7 +79,12 @@ export const mailPoll: Handler = async (job) => {
     const filing = (saved ?? [])
       .filter((event) => event.client_id && withFiles.has(event.provider_message_id))
       .map((event) => ({ firm_id: firm, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }));
-    if (filing.length) await admin.from("jobs").upsert(filing, { onConflict: "idempotency_key", ignoreDuplicates: true });
+    // A known client asking for a paper is answered by a job of its own (5.5.2).
+    const asking = (saved ?? [])
+      .filter((event) => event.client_id && (event.label === "records_past" || event.label === "records_current"))
+      .map((event) => ({ firm_id: firm, kind: "records_reply", entity_type: "email", entity_id: event.id, idempotency_key: `records_reply:${event.id}` }));
+    const queued = [...filing, ...asking];
+    if (queued.length) await admin.from("jobs").upsert(queued, { onConflict: "idempotency_key", ignoreDuplicates: true });
     // Unclear mail, or mail whose client is not known yet, waits for the team.
     const replies = (saved ?? [])
       .filter((event) => event.label === "other" || !event.client_id)

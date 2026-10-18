@@ -10,7 +10,7 @@ import type { Json } from "@/src/db/types";
 import { checklists, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { folderFor, periodChoices, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
+import { documentTypes, folderFor, periodChoices, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
@@ -24,6 +24,7 @@ import { queueRead } from "@/src/jobs/read-document";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
 import { firmMailer } from "@/src/lib/firm-mail";
+import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
@@ -952,7 +953,7 @@ export async function uploadToRequest(form: FormData) {
 // documents (PLAN.md 5.10, 8.6): a secure link from the firm's mailbox that works for 7 days
 // and 5 downloads. The owner, a partner or a manager may send; each send is recorded.
 export async function sendDocument(form: FormData) {
-  const { id, userId, membership, back, document } = await visibleDocument(form);
+  const { id, membership, back, document } = await visibleDocument(form);
   if (!canManageClients(membership.role)) redirect(`${back}&error=role`);
   const admin = supabaseAdmin();
   const { data: owner } = await admin.from("documents").select("client_id, clients(name, email_enc)").eq("id", id).single();
@@ -969,29 +970,8 @@ export async function sendDocument(form: FormData) {
     }
   }
   if (!to) redirect(`${back}&send=${id}&error=recipient`);
-  const mailer = await firmMailer(membership.firmId, membership.firmName);
-  if (!mailer) redirect(`${back}&send=${id}&error=mailbox`);
-  const token = randomBytes(32).toString("base64url");
-  const share = randomUUID();
-  await admin.from("shares").insert({
-    id: share,
-    firm_id: membership.firmId,
-    document_id: id,
-    contact_id: contact,
-    link_token_hash: createHash("sha256").update(token).digest("hex"),
-    link_expires_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-  });
-  const link = `${process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? ""}/s/${token}`;
-  const sent = await mailer.send(
-    to,
-    document.name,
-    [`Dear ${owner?.clients?.name},`, "", `${membership.firmName} has shared ${document.name} with you.`, "", `Download it here: ${link}`, "The link works for 7 days and up to 5 downloads.", "", membership.firmName].join("\n"),
-  );
-  if (!sent) {
-    await admin.from("shares").delete().eq("id", share);
-    redirect(`${back}&send=${id}&error=mailbox`);
-  }
-  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.shared", entity_type: "document", entity_id: id, details: { share } });
+  const sent = await sendShare({ firmId: membership.firmId, firmName: membership.firmName, documentId: id, documentName: document.name, clientName: owner?.clients?.name ?? "", contactId: contact, to });
+  if (!sent) redirect(`${back}&send=${id}&error=mailbox`);
   revalidatePath("/app", "layout");
   redirect(`${back}&shared=${id}`);
 }
@@ -1053,4 +1033,58 @@ export async function undoFirstImport(form: FormData) {
     await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "import.undo_asked", entity_type: "request", entity_id: request.id });
   }
   redirect("/app/import?undoing=1");
+}
+
+// Inbox → Papers waiting for approval (PLAN.md 5.5.2): a private paper a client asked for
+// goes only after one approval by the owner, a partner or a manager; or it is not sent.
+export async function decideShare(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  if (!membership || !canManageClients(membership.role)) redirect("/app/inbox");
+  const { data: share } = await supabase.from("shares").select("id, document_id, contact_id, email_event_id, status").eq("id", String(form.get("share") ?? "")).eq("status", "waiting").maybeSingle();
+  if (!share) redirect("/app/inbox");
+  const admin = supabaseAdmin();
+  if (form.get("intent") === "refuse") {
+    await admin.from("shares").update({ status: "refused" }).eq("id", share.id);
+    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "share.refused", entity_type: "document", entity_id: share.document_id });
+    revalidatePath("/app", "layout");
+    redirect("/app/inbox");
+  }
+  const [{ data: document }, { data: event }] = await Promise.all([
+    admin.from("documents").select("name, client_id, clients(name, email_enc)").eq("id", share.document_id).single(),
+    admin.from("email_events").select("provider_message_id").eq("id", share.email_event_id ?? "").maybeSingle(),
+  ]);
+  const crypto = serverCrypto();
+  let to = "";
+  if (share.contact_id) {
+    const { data: contact } = await admin.from("contacts").select("email_enc").eq("id", share.contact_id).single();
+    if (contact) to = await crypto.decrypt(membership.firmId, `contacts/${share.contact_id}/email`, contact.email_enc);
+  } else if (document?.clients?.email_enc) to = await crypto.decrypt(membership.firmId, `clients/${document.client_id}/email`, document.clients.email_enc);
+  const sent =
+    !!to &&
+    !!document &&
+    (await sendShare({
+      firmId: membership.firmId,
+      firmName: membership.firmName,
+      documentId: share.document_id,
+      documentName: document.name,
+      clientName: document.clients?.name ?? "",
+      contactId: share.contact_id,
+      to,
+      emailEventId: share.email_event_id,
+      inReplyTo: event?.provider_message_id,
+      waitingId: share.id,
+    }));
+  if (sent) await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "share.approved", entity_type: "document", entity_id: share.document_id });
+  revalidatePath("/app", "layout");
+  redirect(sent ? "/app/inbox?approved=1" : "/app/inbox?error=mailbox");
+}
+
+// Settings → Papers sent on request: which document types go at once when a client asks,
+// or that every paper waits for approval. The owner's choice.
+export async function saveRecords(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const routine = form.getAll("routine").map(String).filter((type) => documentTypes.includes(type));
+  await supabase.from("firms").update({ settings: { ...membership.settings, records: { routine, approve_all: form.get("approve_all") === "on" } } }).eq("id", membership.firmId);
+  redirect("/app/settings?saved=records#records");
 }

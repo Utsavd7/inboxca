@@ -15,9 +15,16 @@ export async function firmMailer(firmId: string, firmName: string) {
   const { password } = JSON.parse(await crypto.decrypt(firmId, `accounts/${mailbox.id}/credentials`, mailbox.credentials_enc));
   const settings = mailbox.settings as MailSettings;
   return {
-    async send(to: string, subject: string, text: string, messageId?: string) {
+    async send(to: string, subject: string, text: string, messageId?: string, inReplyTo?: string) {
       try {
-        await smtpTransport(from, password, settings.smtp).sendMail({ from: `${firmName} <${from}>`, to, subject, text, ...(messageId && { messageId }) });
+        await smtpTransport(from, password, settings.smtp).sendMail({
+          from: `${firmName} <${from}>`,
+          to,
+          subject,
+          text,
+          ...(messageId && { messageId }),
+          ...(inReplyTo && { inReplyTo, references: inReplyTo }),
+        });
         return true;
       } catch (failure) {
         log.warn("firm_mail_failed", { code: (failure as { code?: string }).code ?? "send" });

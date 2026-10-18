@@ -153,7 +153,7 @@ export async function readNewMail(
   }
 }
 
-// One message's subject and attached files, found again by its Message-ID ("uid:<validity>:
+// One message's subject, text and attached files, found again by its Message-ID ("uid:<validity>:
 // <uid>" for one that has none) and opened in memory for filing. Pictures shown inside the
 // text, such as a signature's logo, are left out.
 export async function readAttachments(address: string, password: string, server: Server, messageId: string) {
@@ -168,6 +168,7 @@ export async function readAttachments(address: string, password: string, server:
     await imap.logout();
     return {
       subject: parsed?.subject ?? "",
+      text: parsed?.text ?? "",
       files: (parsed?.attachments ?? []).filter((file) => !file.related).map((file) => ({ name: file.filename ?? "", bytes: new Uint8Array(file.content) })),
     };
   } catch (error) {

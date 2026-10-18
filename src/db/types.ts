@@ -377,13 +377,13 @@ isOneToOne: false
                   ]
                 },"shares": {
                   Row: {
-                    "contact_id": string | null,"document_id": string,"downloads": number,"firm_id": string,"id": string,"link_expires_at": string,"link_token_hash": string
+                    "contact_id": string | null,"document_id": string,"downloads": number,"email_event_id": string | null,"firm_id": string,"id": string,"link_expires_at": string | null,"link_token_hash": string | null,"status": string
                   }
                   Insert: {
-                    "contact_id"?: string | null,"document_id": string,"downloads"?: number,"firm_id": string,"id"?: string,"link_expires_at": string,"link_token_hash": string
+                    "contact_id"?: string | null,"document_id": string,"downloads"?: number,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"status"?: string
                   }
                   Update: {
-                    "contact_id"?: string | null,"document_id"?: string,"downloads"?: number,"firm_id"?: string,"id"?: string,"link_expires_at"?: string,"link_token_hash"?: string
+                    "contact_id"?: string | null,"document_id"?: string,"downloads"?: number,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"status"?: string
                   }
                   Relationships: [
                     {
@@ -391,6 +391,12 @@ isOneToOne: false
       columns: ["document_id"]
 isOneToOne: false
       referencedRelation: "documents"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "shares_email_event_id_fkey"
+      columns: ["email_event_id"]
+isOneToOne: false
+      referencedRelation: "email_events"
       referencedColumns: ["id"]
     },{
       foreignKeyName: "shares_firm_id_contact_id_fkey"

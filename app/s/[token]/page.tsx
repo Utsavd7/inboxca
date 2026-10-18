@@ -8,7 +8,7 @@ import "../../(app)/app/app.css";
 export const metadata: Metadata = { title: "A document for you", robots: { index: false, follow: false } };
 
 // Whether a link is still current: before its end time and under 5 downloads.
-const current = (share: { link_expires_at: string; downloads: number }) => Date.parse(share.link_expires_at) > Date.now() && share.downloads < 5;
+const current = (share: { link_expires_at: string | null; downloads: number }) => Date.parse(share.link_expires_at ?? "") > Date.now() && share.downloads < 5;
 
 // The page a client reaches from a document the firm sent (PLAN.md 5.10, 8.6): no sign in,
 // only the secure link. It names the file and offers its download, nothing else.
@@ -32,7 +32,7 @@ export default async function SharedDocument({ params }: { params: Promise<{ tok
             {current(share) ? (
               <>
                 <p className="hint">
-                  This link works until {dueLabel(share.link_expires_at.slice(0, 10))}, for {5 - share.downloads} more {5 - share.downloads === 1 ? "download" : "downloads"}.
+                  This link works until {dueLabel(share.link_expires_at!.slice(0, 10))}, for {5 - share.downloads} more {5 - share.downloads === 1 ? "download" : "downloads"}.
                 </p>
                 <a className="b b-primary public-download" href={`/s/${token}/file`} download>
                   <Download size={15} aria-hidden />

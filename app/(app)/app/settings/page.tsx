@@ -1,7 +1,9 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveReminders, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveRecords, saveReminders, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
+import { documentTypes } from "@/src/lib/documents";
+import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { folderOrderNames } from "@/src/lib/drive";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { serverCrypto } from "@/src/lib/crypto";
@@ -45,6 +47,7 @@ export default async function Settings({
   const special = (settings.special_hours as SpecialHours[] | undefined) ?? [];
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number };
   const hoursOnly = access.hours_only ?? false;
+  const records = (settings.records ?? {}) as RecordsSettings;
   const { data: used } = await supabase.rpc("firm_usage", { target_firm: membership.firmId });
   const usage = used?.[0];
 
@@ -57,6 +60,7 @@ export default async function Settings({
             ["#mailbox", "Firm email"],
             ["#drive", "Firm drive"],
             ["#reminders", "Reminders"],
+            ["#records", "Papers on request"],
             ["#visibility", "Who sees clients"],
             ["#hours", "Office hours"],
             ["#special", "Special hours"],
@@ -181,6 +185,33 @@ export default async function Settings({
               <button className="b b-secondary" type="submit">
                 Save reminders
               </button>
+            </form>
+          </section>
+
+          <section className="panel" aria-labelledby="records-title" id="records">
+            <h2 id="records-title">Papers sent on request</h2>
+            <p className="hint">
+              When a client or an allowed contact asks for a paper by email, InboxCA finds it and replies with a secure link. Ticked papers go at once; the rest wait for one approval in the
+              Inbox.
+            </p>
+            <form action={saveRecords}>
+              <div className="routine-grid">
+                {documentTypes.map((type) => (
+                  <label key={type} className="check">
+                    <input type="checkbox" name="routine" value={type} defaultChecked={isRoutine(type, { routine: records.routine })} />
+                    {type}
+                  </label>
+                ))}
+              </div>
+              <div className="form-row">
+                <label className="check">
+                  <input type="checkbox" name="approve_all" defaultChecked={records.approve_all === true} />
+                  Wait for approval for every paper
+                </label>
+                <button className="b b-secondary" type="submit">
+                  Save papers
+                </button>
+              </div>
             </form>
           </section>
 
