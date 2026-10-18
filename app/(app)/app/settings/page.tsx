@@ -1,7 +1,10 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveRecords, saveReminders, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveRecords, saveReminders, saveVisibility, setFolderOrder, setOfficeOnly } from "@/app/(app)/actions";
+import { headers } from "next/headers";
+import { dueLabel } from "@/src/lib/calendar";
+import { onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { documentTypes } from "@/src/lib/documents";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { folderOrderNames, namings } from "@/src/lib/drive";
@@ -49,6 +52,8 @@ export default async function Settings({
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number };
   const hoursOnly = access.hours_only ?? false;
   const records = (settings.records ?? {}) as RecordsSettings;
+  const office = (settings.office ?? {}) as Office;
+  const hereIsOffice = onOfficeLine(requestAddress(await headers()), office);
   const { data: used } = await supabase.rpc("firm_usage", { target_firm: membership.firmId });
   const usage = used?.[0];
 
@@ -60,6 +65,7 @@ export default async function Settings({
           {[
             ["#mailbox", "Firm email"],
             ["#drive", "Firm drive"],
+            ["#office", "Office only"],
             ["#reminders", "Reminders"],
             ["#records", "Papers on request"],
             ["#visibility", "Who sees clients"],
@@ -182,6 +188,68 @@ export default async function Settings({
               </form>
             )}
           </section>
+          <section className="panel" aria-labelledby="office-title" id="office">
+            <h2 id="office-title">Staff can use InboxCA only in the office</h2>
+            <p className="hint">Staff, managers and front desk then reach your clients only from your office&apos;s internet connection. You and partners can use InboxCA anywhere.</p>
+            {office.on ? (
+              <>
+                <p className={hereIsOffice ? "notice" : "alert"} role="status">
+                  {hereIsOffice
+                    ? "On. You are on your office internet connection now."
+                    : office.lines?.length
+                      ? "On. You are not on your office internet connection now."
+                      : "On. Waiting for you to confirm your office internet connection from the office."}
+                </p>
+                <p className="hint">
+                  {office.lines?.length
+                    ? `Office connections: ${office.lines.length}, confirmed ${office.lines.map((line) => dueLabel(line.confirmed_on)).join(", ")}.`
+                    : "No office connection yet: staff wait until you confirm one."}
+                </p>
+                <form action={setOfficeOnly} className="form-row">
+                  {!hereIsOffice && (
+                    <button className="b b-primary" name="intent" value="here">
+                      This is my office
+                    </button>
+                  )}
+                  {!!office.lines?.length && (
+                    <button className="b b-ghost" name="intent" value="forget">
+                      Forget office connections
+                    </button>
+                  )}
+                  <button className="b b-secondary" name="intent" value="off">
+                    Turn off
+                  </button>
+                </form>
+                <div className="side-doors">
+                  <h3 className="sub-head">Doors InboxCA cannot close for you</h3>
+                  <ul>
+                    <li>Don&apos;t give staff the firm mailbox&apos;s password; InboxCA does the email work.</li>
+                    <li>Uninstall remote desktop tools such as AnyDesk and TeamViewer from office PCs.</li>
+                    <li>Ask clients to send documents to the firm&apos;s email, not to staff phones.</li>
+                    <li>Photos of the screen cannot be blocked; every page InboxCA shows names who viewed it and when.</li>
+                  </ul>
+                </div>
+              </>
+            ) : (
+              <form action={setOfficeOnly}>
+                <fieldset className="fieldset">
+                  <legend>Are you in your office right now?</legend>
+                  <label className="check">
+                    <input type="radio" name="here" value="yes" defaultChecked />
+                    Yes, this is my office
+                  </label>
+                  <label className="check">
+                    <input type="radio" name="here" value="no" />
+                    No, I will confirm it from the office
+                  </label>
+                </fieldset>
+                <button className="b b-primary" name="intent" value="on">
+                  Turn on
+                </button>
+              </form>
+            )}
+          </section>
+
           <section className="panel" aria-labelledby="reminders-title" id="reminders">
             <h2 id="reminders-title">Reminders</h2>
             <p className="hint">

@@ -18,6 +18,7 @@ import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
+import { lineFor, requestAddress, type Office, type OfficeLine } from "@/src/lib/office";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
@@ -1143,4 +1144,26 @@ export async function manageNotice(form: FormData) {
   }
   revalidatePath("/app", "layout");
   redirect("/app/notices");
+}
+
+// Settings → Staff can use InboxCA only in the office (PLAN.md 5.8, 5.17.3), the owner's.
+// Turning it on asks one question: is the owner in the office right now? If yes, this
+// request's connection is the first office connection. From the office later, "This is my
+// office" adds the connection the owner is on. Turning it off returns staff to how it was.
+export async function setOfficeOnly(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const office = (membership.settings.office ?? {}) as Office;
+  const intent = String(form.get("intent") ?? "");
+  const line = lineFor(requestAddress(await headers()), todayInIndia());
+  const lines = office.lines ?? [];
+  const known = (candidate: OfficeLine | null) => !!candidate && lines.some((saved) => saved.ipv4 === candidate.ipv4 && saved.ipv6 === candidate.ipv6);
+  let next: Office = office;
+  if (intent === "on") next = { on: true, lines: form.get("here") === "yes" && line && !known(line) ? [...lines, line] : lines };
+  else if (intent === "here" && line && !known(line)) next = { ...office, lines: [...lines, line] };
+  else if (intent === "off") next = { ...office, on: false };
+  else if (intent === "forget") next = { ...office, lines: [] };
+  await supabase.from("firms").update({ settings: { ...membership.settings, office: next } }).eq("id", membership.firmId);
+  await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: `office.${intent}`, entity_type: "firm", entity_id: membership.firmId });
+  redirect("/app/settings#office");
 }

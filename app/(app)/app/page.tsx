@@ -449,7 +449,14 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
 }
 
 // Someone signed in who is not in a firm yet: their invites, or the firm being closed.
-function NoFirm({ closed, invites }: { closed: { firm_name: string; hours: unknown } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[] }) {
+function NoFirm({ closed, invites }: { closed: { firm_name: string; hours: unknown; reason: string } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[] }) {
+  if (closed?.reason === "office")
+    return (
+      <PageHead
+        title="Use InboxCA from your office."
+        sub={`${closed.firm_name} lets staff use InboxCA only in the office, on the office internet connection. If you are in the office now, ask the owner to confirm this connection.`}
+      />
+    );
   return (
     <>
       <PageHead

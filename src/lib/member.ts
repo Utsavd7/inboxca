@@ -1,8 +1,9 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
-import { supabaseServer } from "./supabase";
+import { officeBound, officeProof, onOfficeLine, requestAddress, type Office } from "./office";
+import { supabaseAdmin, supabaseServer } from "./supabase";
 
 // The signed in person and their firm, for every product page and action; cached for the
 // request, so the layout and the page share one lookup. Sends anyone who has not finished
@@ -10,11 +11,17 @@ import { supabaseServer } from "./supabase";
 // level security shows only active memberships, within office hours and the session limit
 // where the firm uses them; a person in two firms sees the first for now.
 export const currentMember = cache(async () => {
-  const supabase = await supabaseServer();
-  const { data: claims } = await supabase.auth.getClaims();
+  const signedIn = await supabaseServer();
+  const { data: claims } = await signedIn.auth.getClaims();
   if (!claims) redirect("/sign-in");
   if (claims.claims.aal !== "aal2") redirect("/sign-in/two-step");
   const userId = claims.claims.sub;
+  // Under Office only, a request from an office line carries the server's proof (5.8), so the
+  // database lets staff in; from anywhere else it carries none, and they see nothing.
+  const { data: firmRow } = await supabaseAdmin().from("firm_members").select("role, firms(settings)").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  const office = (firmRow?.firms?.settings as { office?: Office } | undefined)?.office;
+  const fromOffice = !!office?.on && !!firmRow && officeBound(firmRow.role) && onOfficeLine(requestAddress(await headers()), office);
+  const supabase = fromOffice ? await supabaseServer({ "x-inboxca-office": await officeProof(userId, String(claims.claims.session_id ?? "")) }) : signedIn;
   const { data } = await supabase
     .from("firm_members")
     .select("firm_id, role, access, firms(name, settings)")

@@ -539,6 +539,12 @@ isOneToOne: false
               "firm_id": string,"firm_name": string,"role": string
             }[]
                            },
+"office_allows":
+{ Args: { "member_role": string,"settings": Json }; Returns: boolean
+                           },
+"office_proof_key":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           },
 "open_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]
                            },
