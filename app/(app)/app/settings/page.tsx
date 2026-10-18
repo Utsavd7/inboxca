@@ -1,3 +1,4 @@
+import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveVisibility } from "@/app/(app)/actions";
@@ -5,7 +6,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
-import { PageHead } from "../ui";
+import { Badge, PageHead } from "../ui";
 import { MailboxForm } from "./mailbox-form";
 
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
@@ -64,11 +65,14 @@ export default async function Settings({
             <h2 id="mailbox">Firm email</h2>
             <p className="hint">The address your clients write to. InboxCA reads only mail from your clients and their contacts, keeps no copy of it, and replies from this address.</p>
             {mailbox ? (
-              <form action={disconnectMailbox} className="form-row">
-                <p className="ok" role="status">
-                  {mailbox.status === "connected" ? "Connected" : "Needs to be connected again"}: {mailAddress}
+              <form action={disconnectMailbox} className="connection">
+                <Mail size={18} aria-hidden />
+                <p className="grow" role="status">
+                  <Badge tone={mailbox.status === "connected" ? "done" : "late"}>{mailbox.status === "connected" ? "Connected" : "Needs to be connected again"}</Badge>
+                  <span className="sr-only">: </span>
+                  <strong>{mailAddress}</strong>
                 </p>
-                <button className="b b-secondary" type="submit">
+                <button className="b b-secondary b-small" type="submit">
                   Disconnect
                 </button>
               </form>
@@ -81,11 +85,14 @@ export default async function Settings({
             <h2 id="drive-title">Firm drive</h2>
             <p className="hint">Client files are saved in your firm&apos;s own drive, in folders by year, client and work. InboxCA keeps no client files.</p>
             {drive ? (
-              <form action={disconnectDrive} className="form-row">
-                <p className="ok" role="status">
-                  Connected: {driveAddress}
+              <form action={disconnectDrive} className="connection">
+                <HardDrive size={18} aria-hidden />
+                <p className="grow" role="status">
+                  <Badge tone="done">Connected</Badge>
+                  <span className="sr-only">: </span>
+                  <strong>{driveAddress}</strong>
                 </p>
-                <button className="b b-secondary" type="submit">
+                <button className="b b-secondary b-small" type="submit">
                   Disconnect
                 </button>
               </form>
@@ -206,7 +213,7 @@ export default async function Settings({
                   <form action={changeSpecialHours}>
                     <input type="hidden" name="from" value={range.from} />
                     <input type="hidden" name="to" value={range.to} />
-                    <button className="b b-secondary" name="intent" value="remove">
+                    <button className="b b-ghost b-small" name="intent" value="remove">
                       Remove
                     </button>
                   </form>
@@ -281,7 +288,7 @@ export default async function Settings({
                   </span>
                   <form action={changeHoliday}>
                     <input type="hidden" name="date" value={date} />
-                    <button className="b b-secondary" name="intent" value="remove">
+                    <button className="b b-ghost b-small" name="intent" value="remove">
                       Remove
                     </button>
                   </form>

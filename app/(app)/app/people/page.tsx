@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { changeGroup, manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
-import { PageHead } from "../ui";
+import { AutoSelect } from "../auto-select";
+import { Avatar, PageHead } from "../ui";
 import { invitableRoles, roleLabel } from "@/src/lib/roles";
 import { InviteForm } from "./invite-form";
 
@@ -33,65 +34,90 @@ export default async function People() {
     <>
       <PageHead title="People" sub="Everyone in your firm, the teams they work in and the branches they work at." />
       <section className="panel" aria-labelledby="people">
-        <h2 id="people">{membership.firmName}</h2>
-        <ul className="rows">
-          {people?.map((person) => (
-            <li key={person.user_id}>
-              <span className="name">{person.email}</span>
-              {isOwner && person.user_id !== userId ? (
+        <div className="panel-head">
+          <h2 id="people">{membership.firmName}</h2>
+          {isOwner && <p className="hint">A change saves as soon as you pick it.</p>}
+        </div>
+        <div className="table-wrap">
+          <table className="t">
+            <thead>
+              <tr>
+                <th scope="col">Person</th>
+                <th scope="col">Role</th>
+                {kinds.map(({ kind, one }) => groupsOf(kind).length > 0 && <th key={kind} scope="col">{one[0].toUpperCase() + one.slice(1)}</th>)}
+                <th scope="col" className="shrink">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {people?.map((person) => {
+                const editable = isOwner && person.user_id !== userId && person.status !== "deactivated";
                 // Keyed on the saved values, so the form shows them after each change.
-                <form key={person.role + person.status + person.team_id + person.branch_id} action={manageMember} className="end">
-                  <input type="hidden" name="person" value={person.user_id} />
-                  {statusNames[person.status] && (
-                    <span className={`badge tag-${person.status}`}>{statusNames[person.status]}</span>
-                  )}
-                  {person.status === "deactivated" ? (
-                    <button className="b b-secondary" name="intent" value="restore">
-                      Bring back
-                    </button>
-                  ) : (
-                    <>
-                      <select name="role" defaultValue={person.role} aria-label={`Role for ${person.email}`}>
-                        {invitableRoles.map((role) => (
-                          <option key={role} value={role}>
-                            {roleLabel(role)}
-                          </option>
-                        ))}
-                      </select>
-                      {kinds.map(({ kind, column, one }) =>
-                        groupsOf(kind).length ? (
-                          <select key={kind} name={kind} defaultValue={person[column] ?? ""} aria-label={`${one[0].toUpperCase() + one.slice(1)} for ${person.email}`}>
-                            <option value="">No {one}</option>
-                            {groupsOf(kind).map((group) => (
-                              <option key={group.id} value={group.id}>
-                                {group.name}
-                              </option>
-                            ))}
-                          </select>
-                        ) : null,
+                const form = `person-${person.user_id}`;
+                return (
+                  <tr key={person.user_id + person.role + person.status + person.team_id + person.branch_id} className={person.status === "deactivated" ? "is-off" : undefined}>
+                    <td>
+                      <span className="who">
+                        <Avatar name={person.email} />
+                        <span className="name">{person.email}</span>
+                        {statusNames[person.status] && <span className={`badge tag-${person.status}`}>{statusNames[person.status]}</span>}
+                      </span>
+                    </td>
+                    <td className="shrink">
+                      {editable ? (
+                        <AutoSelect save="role" form={form} name="role" defaultValue={person.role} aria-label={`Role for ${person.email}`}>
+                          {invitableRoles.map((role) => (
+                            <option key={role} value={role}>
+                              {roleLabel(role)}
+                            </option>
+                          ))}
+                        </AutoSelect>
+                      ) : (
+                        roleLabel(person.role)
                       )}
-                      <button className="b b-secondary" name="intent" value="role">
-                        Save
-                      </button>
-                      <button className="b b-secondary" name="intent" value="remove">
-                        {person.status === "invited" ? "Withdraw invite" : "Remove"}
-                      </button>
-                    </>
-                  )}
-                </form>
-              ) : (
-                <span className="end">
-                  {person.branch_id && groupName.get(person.branch_id)}
-                  {person.team_id && groupName.get(person.team_id)}
-                  {roleLabel(person.role)}
-                  {statusNames[person.status] && (
-                    <span className={`badge tag-${person.status}`}>{statusNames[person.status]}</span>
-                  )}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+                    </td>
+                    {kinds.map(({ kind, column, one }) =>
+                      groupsOf(kind).length ? (
+                        <td key={kind} className="shrink">
+                          {editable ? (
+                            <AutoSelect save="role" form={form} name={kind} defaultValue={person[column] ?? ""} aria-label={`${one[0].toUpperCase() + one.slice(1)} for ${person.email}`}>
+                              <option value="">No {one}</option>
+                              {groupsOf(kind).map((group) => (
+                                <option key={group.id} value={group.id}>
+                                  {group.name}
+                                </option>
+                              ))}
+                            </AutoSelect>
+                          ) : (
+                            <span className="hint">{groupName.get(person[column] ?? "") ?? `No ${one}`}</span>
+                          )}
+                        </td>
+                      ) : null,
+                    )}
+                    <td className="shrink">
+                      {isOwner && person.user_id !== userId && (
+                        <form id={form} action={manageMember}>
+                          <input type="hidden" name="person" value={person.user_id} />
+                          <button hidden name="intent" value="role" />
+                          {person.status === "deactivated" ? (
+                            <button className="b b-secondary b-small" name="intent" value="restore">
+                              Bring back
+                            </button>
+                          ) : (
+                            <button className="b b-ghost b-small" name="intent" value="remove">
+                              {person.status === "invited" ? "Withdraw invite" : "Remove"}
+                            </button>
+                          )}
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
       {kinds.map(({ kind, column, title, one }) =>
         isOwner || groupsOf(kind).length ? (
@@ -107,7 +133,7 @@ export default async function People() {
                       <form action={changeGroup}>
                         <input type="hidden" name="kind" value={kind} />
                         <input type="hidden" name="group" value={group.id} />
-                        <button className="b b-secondary" name="intent" value="remove">
+                        <button className="b b-ghost b-small" name="intent" value="remove">
                           Remove {one}
                         </button>
                       </form>

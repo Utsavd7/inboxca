@@ -1,9 +1,11 @@
+import { Check, Mail } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageEmail } from "@/app/(app)/actions";
 import { serverCrypto } from "@/src/lib/crypto";
 import { currentMember } from "@/src/lib/member";
-import { PageHead } from "../ui";
+import { AutoSelect } from "../auto-select";
+import { Avatar, Badge, Empty, PageHead } from "../ui";
 import { labels } from "@/src/lib/triage";
 
 const reasons: Record<string, string> = {
@@ -43,60 +45,106 @@ export default async function Inbox() {
     <>
       <PageHead title="Inbox" sub="Client email as InboxCA sorted it. The email itself stays in your mailbox; only its label and time are kept here." />
       <section className="panel" aria-labelledby="team-reply">
-        <h2 id="team-reply">Needs team reply</h2>
-        <p className="hint">Reply from your own mailbox, then mark it done.</p>
-        <ul className="rows">
+        <div className="panel-head">
+          <h2 id="team-reply">Needs team reply</h2>
+          <p className="hint">Reply from your own mailbox, then mark it done.</p>
+        </div>
+        <ul className="rows needs">
           {waiting?.map((request) => {
             const event = byId.get(request.entity_id);
+            const name = sender.get(request.entity_id) || "A contact";
             return (
               <li key={request.id}>
-                <span className="name">
-                  {event?.client_id ? <Link href={`/app/clients/${event.client_id}`}>{sender.get(request.entity_id)}</Link> : sender.get(request.entity_id)}
+                <Avatar name={name} />
+                <span className="grow">
+                  {event?.client_id ? (
+                    <Link className="name" href={`/app/clients/${event.client_id}`}>
+                      {name}
+                    </Link>
+                  ) : (
+                    <span className="name">{name}</span>
+                  )}
                   <span className="sub">{reasons[request.reason_code ?? ""] ?? labels.other}</span>
                 </span>
                 <form action={manageEmail} className="end">
-                  {event && <span className="num">{when(event.received_at)}</span>}
+                  {event && <span className="when">{when(event.received_at)}</span>}
                   <input type="hidden" name="request" value={request.id} />
-                  <button className="b b-secondary" name="intent" value="done">
+                  <button className="b b-secondary b-small" name="intent" value="done">
+                    <Check size={14} aria-hidden />
                     Done
                   </button>
                 </form>
               </li>
             );
           })}
+          {!waiting?.length && (
+            <li className="is-clear">
+              <Check size={16} aria-hidden />
+              <span className="grow">Nothing waits for the team.</span>
+            </li>
+          )}
         </ul>
-        {!waiting?.length && <p className="hint">Nothing waits for the team.</p>}
       </section>
 
       <section className="panel" aria-labelledby="latest">
-        <h2 id="latest">Latest client email</h2>
-        <ul className="rows">
-          {events?.map((event) => (
-            <li key={event.id}>
-              <span className="name">
-                {sender.get(event.id)}
-                <span className="sub num">{when(event.received_at)}</span>
-              </span>
-              <form key={`${event.label}`} action={manageEmail} className="end">
-                <input type="hidden" name="email" value={event.id} />
-                <select name="label" defaultValue={event.label ?? "other"} aria-label={`Label for ${sender.get(event.id)}, ${when(event.received_at)}`}>
-                  {Object.entries(labels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                {event.decision_source === "staff" && <span className="badge plain">Corrected</span>}
-                <button className="b b-secondary" name="intent" value="label">
-                  Save label
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
-        {!events?.length && <p className="hint">No client email yet. Connect the firm&apos;s email in Settings.</p>}
+        <div className="panel-head">
+          <h2 id="latest">Latest client email</h2>
+          <p className="hint">Pick another label when InboxCA got one wrong; it learns from you.</p>
+        </div>
+        {events?.length ? (
+          <div className="table-wrap">
+            <table className="t">
+              <thead>
+                <tr>
+                  <th scope="col">From</th>
+                  <th scope="col">Received</th>
+                  <th scope="col">Label</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((event) => {
+                  const name = sender.get(event.id) || "A contact";
+                  return (
+                    <tr key={event.id}>
+                      <td>
+                        <span className="who">
+                          <Avatar name={name} />
+                          {event.client_id ? (
+                            <Link className="row-link" href={`/app/clients/${event.client_id}`}>
+                              {name}
+                            </Link>
+                          ) : (
+                            name
+                          )}
+                        </span>
+                      </td>
+                      <td className="shrink when">{when(event.received_at)}</td>
+                      <td className="shrink">
+                        <form key={`${event.label}`} action={manageEmail} className="cell-form">
+                          <input type="hidden" name="email" value={event.id} />
+                          <AutoSelect save="label" name="label" defaultValue={event.label ?? "other"} aria-label={`Label for ${name}, ${when(event.received_at)}`}>
+                            {Object.entries(labels).map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </AutoSelect>
+                          <button hidden name="intent" value="label" />
+                          {event.decision_source === "staff" && <Badge tone="purple">Corrected</Badge>}
+                        </form>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Empty Icon={Mail} title="No client email yet">
+            <span>Connect the firm&apos;s email in Settings and new mail shows here, sorted.</span>
+          </Empty>
+        )}
       </section>
     </>
   );
 }
-

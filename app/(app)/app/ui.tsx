@@ -17,19 +17,23 @@ export function PageHead({ title, sub, crumb, actions }: { title: React.ReactNod
 
 // Two letters for a name or an address: "Patel Textiles" is PT, "ravi@x.in" is RA.
 export const initials = (text: string) => {
-  const words = text.split("@")[0].split(/[\s._-]+/).filter(Boolean);
+  const words = text.split("@")[0].split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? words[0]?.[1] ?? "")).toUpperCase();
 };
 
+// Each name keeps one of eight soft colours, so the same client is easy to spot anywhere.
+const tones = ["blue", "green", "amber", "purple", "teal", "pink", "red", "gray"];
+const toneOf = (name: string) => tones[[...name].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) >>> 0, 7) % tones.length];
+
 export function Avatar({ name, square = false, big = false }: { name: string; square?: boolean; big?: boolean }) {
   return (
-    <span className={`avatar${square ? " square" : ""}${big ? " big" : ""}`} aria-hidden>
+    <span className={`avatar tone-${toneOf(name)}${square ? " square" : ""}${big ? " big" : ""}`} aria-hidden>
       {initials(name)}
     </span>
   );
 }
 
-export type Tone = "blue" | "done" | "late" | "warn" | "";
+export type Tone = "blue" | "done" | "late" | "warn" | "purple" | "";
 export function Badge({ tone = "", plain = false, children }: { tone?: Tone; plain?: boolean; children: React.ReactNode }) {
   return <span className={`badge ${tone}${plain ? " plain" : ""}`}>{children}</span>;
 }

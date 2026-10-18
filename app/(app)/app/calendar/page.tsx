@@ -5,7 +5,7 @@ import { manageTasks } from "@/app/(app)/actions";
 import { calendarViews, dueLabel, periodLabel, todayInIndia, type CalendarView } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
 import { LinkTabs } from "../link-tabs";
-import { Badge, Empty, PageHead, type Tone } from "../ui";
+import { Avatar, Badge, Empty, PageHead, type Tone } from "../ui";
 
 // The firm's compliance calendar: overdue, coming up and recently filed returns. Anyone in
 // the firm marks a return in progress or filed, one at a time or many together (5.17.2).
@@ -46,8 +46,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
       <PageHead title="Calendar" sub="Every return your firm files, by due date. Tick returns to mark them in progress or filed." />
       <div className="toolbar">
         <LinkTabs
-          id="calendar-view"
-          kind="segment"
+          kind="pills"
           label="Show"
           items={Object.entries(calendarViews).map(([value, { label }]) => ({ href: `/app/calendar?view=${value}${code}`, label, current: !day && view === value }))}
         />
@@ -66,10 +65,10 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
           </button>
         </form>
       </div>
-      <section aria-labelledby="returns">
-        <div className="section-head">
+      <section className="panel" aria-labelledby="returns">
+        <div className="panel-head">
           <h2 id="returns">{title}</h2>
-          {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p>Dates marked * are not yet confirmed by a CA against the official notification.</p>}
+          {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="hint">Dates marked * are not yet confirmed by a CA against the official notification.</p>}
         </div>
         {tasks?.length ? (
           <form key={tasks.map((task) => task.id + task.status).join()} action={manageTasks}>
@@ -98,16 +97,19 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                           <input type="checkbox" name="task" value={task.id} aria-label={`Choose ${task.clients.name} ${r?.name}`} />
                         </td>
                         <td>
-                          <Link className="row-link" href={`/app/clients/${task.client_id}`}>
-                            {task.clients.name}
-                          </Link>
+                          <span className="who">
+                            <Avatar name={task.clients.name} />
+                            <Link className="row-link" href={`/app/clients/${task.client_id}`}>
+                              {task.clients.name}
+                            </Link>
+                          </span>
                         </td>
                         <td>
                           {r?.name}
                           <span className="sub">{periodLabel(r?.frequency ?? null, task.period_key)}</span>
                         </td>
                         <td className="shrink">
-                          <span className="num">{dueLabel(task.due_on)}</span>
+                          {dueLabel(task.due_on)}
                           {!r?.verified_on && "*"}
                         </td>
                         <td className="shrink">
@@ -117,7 +119,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                           {task.status === "filed" ? (
                             <span className="num">{ack}</span>
                           ) : (
-                            <input name={`ack-${task.id}`} maxLength={40} autoComplete="off" className="num" placeholder="Optional" aria-label={`Acknowledgement for ${task.clients.name} ${r?.name}`} />
+                            <input name={`ack-${task.id}`} maxLength={40} autoComplete="off" className="cell-input num" placeholder="Optional" aria-label={`Acknowledgement for ${task.clients.name} ${r?.name}`} />
                           )}
                         </td>
                       </tr>
@@ -146,11 +148,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
             <p className="hint">Tick returns to act on them. An acknowledgement number typed in a row is saved when that return is marked filed.</p>
           </form>
         ) : (
-          <div className="box">
-            <Empty Icon={CalendarDays} title={view === "overdue" && !day ? "Nothing is overdue." : "No returns here"}>
+          <Empty Icon={CalendarDays} title={view === "overdue" && !day ? "Nothing is overdue." : "No returns here"}>
               <span>{view === "overdue" && !day ? "Every return that was due has been filed." : "Tick what you file on a client's page, and its due dates appear here."}</span>
             </Empty>
-          </div>
         )}
       </section>
     </>

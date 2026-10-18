@@ -2,7 +2,7 @@ import { Archive, ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { manageClient } from "@/app/(app)/actions";
-import { dueLabel, periodLabel, taskStatuses } from "@/src/lib/calendar";
+import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
@@ -25,19 +25,15 @@ const errors: Record<string, string> = {
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; tab?: string }>;
-}) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const [{ id }, { error, tab: asked }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
-    .select("id, name, kind, archived_at, email_enc, group_id, branch_id, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))")
+    .select(
+      "id, name, kind, archived_at, email_enc, group_id, branch_id, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))",
+    )
     .eq("id", id)
     .maybeSingle();
   if (!client) notFound();
@@ -112,16 +108,16 @@ export default async function Client({
         }
         sub={
           <span className="head-meta">
-            <Badge plain>{clientKinds[client.kind as ClientKind]}</Badge>
+            <Badge>{clientKinds[client.kind as ClientKind]}</Badge>
             {client.archived_at && <Badge tone="late">Archived</Badge>}
-            {email && <span>{email}</span>}
-            {groupName && <Link href={`/app/clients?group=${client.group_id}`}>Group: {groupName}</Link>}
-            {branchName && <Link href={`/app/clients?branch=${client.branch_id}`}>Branch: {branchName}</Link>}
           </span>
         }
         actions={
           manage && (
-            <form action={manageClient} title={client.archived_at ? "Archived clients are hidden from the list. Nothing was deleted." : "Archiving hides the client from the list. Nothing is deleted, and you can restore it."}>
+            <form
+              action={manageClient}
+              title={client.archived_at ? "Archived clients are hidden from the list. Nothing was deleted." : "Archiving hides the client from the list. Nothing is deleted, and you can restore it."}
+            >
               {hidden}
               <button className="b b-secondary" name="intent" value={client.archived_at ? "restore" : "archive"}>
                 <Archive size={15} aria-hidden />
@@ -131,305 +127,353 @@ export default async function Client({
           )
         }
       />
-      <LinkTabs
-        id="client-tab"
-        label="Client"
-        items={tabs.map(([key, label, count]) => ({ href: `/app/clients/${client.id}${key === "overview" ? "" : `?tab=${key}`}`, label, count, current: tab === key }))}
-      />
-      {error && errors[error] && (
-        <p className="alert" role="alert">
-          {errors[error]}
-        </p>
-      )}
+      <div className="record">
+        <div className="record-main">
+          <LinkTabs label="Client" items={tabs.map(([key, label, count]) => ({ href: `/app/clients/${client.id}${key === "overview" ? "" : `?tab=${key}`}`, label, count, current: tab === key }))} />
+          {error && errors[error] && (
+            <p className="alert" role="alert">
+              {errors[error]}
+            </p>
+          )}
 
-
-      {tab === "overview" && (
-        <div className="cols">
-          <div>
-          <section className="panel" aria-labelledby="numbers">
-            <h2 id="numbers">Registrations</h2>
-            <ul className="rows">
-              {numbers.map((registration) => (
-                <li key={registration.id}>
-                  <span className="name">{numberKinds[registration.kind as NumberKind].name}</span>
-                  <span className="end">
-                    <span className="num">{registration.number}</span>
-                    {manage && (
-                      <form action={manageClient}>
+          {tab === "overview" && (
+            <div>
+              <div>
+                <section className="panel" aria-labelledby="numbers">
+                  <h2 id="numbers">Registrations</h2>
+                  <ul className="rows">
+                    {numbers.map((registration) => (
+                      <li key={registration.id}>
+                        <span className="name">{numberKinds[registration.kind as NumberKind].name}</span>
+                        <span className="end">
+                          <span className="num">{registration.number}</span>
+                          {manage && (
+                            <form action={manageClient}>
+                              {hidden}
+                              <input type="hidden" name="registration" value={registration.id} />
+                              <button className="b b-ghost b-small" name="intent" value="remove-number">
+                                Remove
+                              </button>
+                            </form>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {!numbers.length && <p className="hint">No numbers yet.</p>}
+                  {manage && (
+                    <form action={manageClient} className="form-row">
+                      {hidden}
+                      <div>
+                        <label htmlFor="number-kind">Number</label>
+                        <select id="number-kind" name="kind" defaultValue="gstin">
+                          {Object.entries(numberKinds).map(([value, { name }]) => (
+                            <option key={value} value={value}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="number-value">Value</label>
+                        <input id="number-value" name="number" required autoComplete="off" className="num" />
+                      </div>
+                      <button className="b b-secondary" name="intent" value="add-number">
+                        Add number
+                      </button>
+                    </form>
+                  )}
+                </section>
+              </div>
+              <div>
+                {numbers.some((registration) => servicesFor(registration.kind).length) && (
+                  <section className="panel" aria-labelledby="services">
+                    <h2 id="services">Services</h2>
+                    <p className="hint">What your firm files for this client. InboxCA makes the due dates for the next 12 months.</p>
+                    <ul className="rows">
+                      {numbers
+                        .filter((registration) => servicesFor(registration.kind).length)
+                        .map((registration) => (
+                          <li key={registration.id}>
+                            <span className="name">
+                              {numberKinds[registration.kind as NumberKind].name} <span className="num">{registration.number}</span>
+                            </span>
+                            <form key={registration.services.join()} action={manageClient} className="end">
+                              {hidden}
+                              <input type="hidden" name="registration" value={registration.id} />
+                              {servicesFor(registration.kind).map((service) => (
+                                <label key={service.code} className="check">
+                                  <input type="checkbox" name="service" value={service.code} defaultChecked={registration.services.includes(service.code)} disabled={!manage} /> {service.name}
+                                </label>
+                              ))}
+                              {manage && (
+                                <button className="b b-secondary" name="intent" value="services">
+                                  Save services
+                                </button>
+                              )}
+                            </form>
+                          </li>
+                        ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            </div>
+          )}
+          {tab === "due" && (
+            <section className="panel" aria-labelledby="due">
+              <h2 id="due">Due dates</h2>
+              {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="hint">Dates marked * are not yet confirmed by a CA against the official notification.</p>}
+              {tasks?.length ? (
+                <div className="table-wrap">
+                  <table className="t">
+                    <thead>
+                      <tr>
+                        <th scope="col">Return</th>
+                        <th scope="col">Period</th>
+                        <th scope="col">Due</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tasks.map((task) => {
+                        const r = rule.get(task.code ?? "");
+                        const late = task.status !== "filed" && task.due_on < todayInIndia();
+                        return (
+                          <tr key={task.id}>
+                            <td>{r?.name}</td>
+                            <td className="hint">{periodLabel(r?.frequency ?? null, task.period_key)}</td>
+                            <td className="shrink">
+                              {dueLabel(task.due_on)}
+                              {!r?.verified_on && "*"}
+                            </td>
+                            <td className="shrink">
+                              <Badge tone={task.status === "filed" ? "done" : late ? "late" : task.status === "in_progress" ? "blue" : ""}>
+                                {late ? "Overdue" : taskStatuses[task.status as keyof typeof taskStatuses]}
+                              </Badge>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="hint">No due dates yet. Add a number and choose its services.</p>
+              )}
+            </section>
+          )}
+          {tab === "contacts" && (
+            <section className="panel" aria-labelledby="contacts">
+              <h2 id="contacts">Contact people</h2>
+              <p className="hint">People who write for this client. InboxCA recognises their emails, and sends documents only to those allowed.</p>
+              <ul className="rows">
+                {contacts.map((contact) => (
+                  <li key={contact.contact_id}>
+                    <span className="name">
+                      {contact.name}
+                      <span className="sub">
+                        {contact.email}
+                        {contact.relation && `, ${contact.relation}`}
+                      </span>
+                    </span>
+                    {manage ? (
+                      <form key={`${contact.can_view_status}${contact.can_receive_documents}`} action={manageClient} className="end">
                         {hidden}
-                        <input type="hidden" name="registration" value={registration.id} />
-                        <button className="b b-secondary" name="intent" value="remove-number">
+                        <input type="hidden" name="contact" value={contact.contact_id} />
+                        <label className="check">
+                          <input type="checkbox" name="can_view_status" defaultChecked={contact.can_view_status} /> Sees work status
+                        </label>
+                        <label className="check">
+                          <input type="checkbox" name="can_receive_documents" defaultChecked={contact.can_receive_documents} /> Receives documents
+                        </label>
+                        <button className="b b-secondary" name="intent" value="contact-rights">
+                          Save
+                        </button>
+                        <button className="b b-ghost b-small" name="intent" value="unlink-contact">
                           Remove
                         </button>
                       </form>
+                    ) : (
+                      <span className="end">{[contact.can_view_status && "Sees work status", contact.can_receive_documents && "Receives documents"].filter(Boolean).join(", ")}</span>
                     )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {!numbers.length && <p className="hint">No numbers yet.</p>}
-            {manage && (
-              <form action={manageClient} className="form-row">
+                  </li>
+                ))}
+              </ul>
+              {!contacts.length && <p className="hint">No contact people yet.</p>}
+              {manage && (
+                <form action={manageClient} className="fields">
+                  {hidden}
+                  <div>
+                    <label htmlFor="contact-name">Contact&apos;s name</label>
+                    <input id="contact-name" name="contact_name" required maxLength={120} />
+                  </div>
+                  <div>
+                    <label htmlFor="contact-email">Contact&apos;s email</label>
+                    <input id="contact-email" name="contact_email" type="email" required />
+                  </div>
+                  <div>
+                    <label htmlFor="contact-relation">Who they are, if known</label>
+                    <input id="contact-relation" name="relation" maxLength={60} />
+                  </div>
+                  <label className="check">
+                    <input type="checkbox" name="can_view_status" /> Sees work status
+                  </label>
+                  <label className="check">
+                    <input type="checkbox" name="can_receive_documents" /> Receives documents
+                  </label>
+                  <button className="b b-secondary" name="intent" value="add-contact">
+                    Add contact
+                  </button>
+                </form>
+              )}
+            </section>
+          )}
+          {tab === "team" && (
+            <section className="panel" aria-labelledby="assigned">
+              <h2 id="assigned">Assigned to</h2>
+              <ul className="rows">
+                {assigned.map((assignment) => (
+                  <li key={assignment.value}>
+                    <span className="name">{labelOf.get(assignment.value)}</span>
+                    <span className="end">
+                      {assignmentRoles[assignment.role as keyof typeof assignmentRoles]}
+                      {manage && (
+                        <form action={manageClient}>
+                          {hidden}
+                          <input type="hidden" name="who" value={assignment.value} />
+                          <button className="b b-ghost b-small" name="intent" value="unassign">
+                            Unassign
+                          </button>
+                        </form>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {!client.client_assignments.length && <p className="hint">Nobody is assigned yet.</p>}
+              {manage && !!unassigned.length && (
+                <form action={manageClient} className="form-row">
+                  {hidden}
+                  <div>
+                    <label htmlFor="assign-who">Person or team</label>
+                    <select id="assign-who" name="who">
+                      {unassigned.map((choice) => (
+                        <option key={choice.value} value={choice.value}>
+                          {choice.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="assign-role">Does</label>
+                    <select id="assign-role" name="role" defaultValue="staff">
+                      {Object.entries(assignmentRoles).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button className="b b-secondary" name="intent" value="assign">
+                    Assign
+                  </button>
+                </form>
+              )}
+            </section>
+          )}
+          {tab === "details" && manage && (
+            <section className="panel" aria-labelledby="details">
+              <h2 id="details">Details</h2>
+              <form action={manageClient} className="fields">
                 {hidden}
                 <div>
-                  <label htmlFor="number-kind">Number</label>
-                  <select id="number-kind" name="kind" defaultValue="gstin">
-                    {Object.entries(numberKinds).map(([value, { name }]) => (
+                  <label htmlFor="client-name">Name</label>
+                  <input id="client-name" name="name" required defaultValue={client.name} />
+                </div>
+                <div>
+                  <label htmlFor="client-email">Email</label>
+                  <input id="client-email" name="email" type="email" defaultValue={email} />
+                </div>
+                <div>
+                  <label htmlFor="client-kind">Kind</label>
+                  <select id="client-kind" name="kind" defaultValue={client.kind}>
+                    {Object.entries(clientKinds).map(([value, label]) => (
                       <option key={value} value={value}>
-                        {name}
+                        {label}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="number-value">Value</label>
-                  <input id="number-value" name="number" required autoComplete="off" className="num" />
+                  <label htmlFor="client-group">Group</label>
+                  <select id="client-group" name="group" defaultValue={client.group_id ?? ""}>
+                    <option value="">No group</option>
+                    {clientGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <button className="b b-secondary" name="intent" value="add-number">
-                  Add number
+                <div>
+                  <label htmlFor="client-new-group">Or a new group</label>
+                  <input id="client-new-group" name="new_group" maxLength={120} />
+                </div>
+                {!!branches.length && (
+                  <div>
+                    <label htmlFor="client-branch">Branch</label>
+                    <select id="client-branch" name="branch" defaultValue={client.branch_id ?? ""}>
+                      <option value="">No branch</option>
+                      {branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <button className="b b-primary" name="intent" value="details">
+                  Save details
                 </button>
               </form>
-            )}
-          </section>
-          </div>
-          <div>
-          {numbers.some((registration) => servicesFor(registration.kind).length) && (
-            <section className="panel" aria-labelledby="services">
-              <h2 id="services">Services</h2>
-              <p className="hint">What your firm files for this client. InboxCA makes the due dates for the next 12 months.</p>
-              <ul className="rows">
-                {numbers
-                  .filter((registration) => servicesFor(registration.kind).length)
-                  .map((registration) => (
-                    <li key={registration.id}>
-                      <span className="name">
-                        {numberKinds[registration.kind as NumberKind].name} <span className="num">{registration.number}</span>
-                      </span>
-                      <form key={registration.services.join()} action={manageClient} className="end">
-                        {hidden}
-                        <input type="hidden" name="registration" value={registration.id} />
-                        {servicesFor(registration.kind).map((service) => (
-                          <label key={service.code} className="check">
-                            <input type="checkbox" name="service" value={service.code} defaultChecked={registration.services.includes(service.code)} disabled={!manage} /> {service.name}
-                          </label>
-                        ))}
-                        {manage && (
-                          <button className="b b-secondary" name="intent" value="services">
-                            Save services
-                          </button>
-                        )}
-                      </form>
-                    </li>
-                  ))}
-              </ul>
             </section>
           )}
-          </div>
         </div>
-      )}
-      {tab === "due" && (
-      <section className="panel" aria-labelledby="due">
-        <h2 id="due">Due dates</h2>
-        {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && (
-          <p className="hint">Dates marked * are not yet confirmed by a CA against the official notification.</p>
-        )}
-        <ul className="rows">
-          {tasks?.map((task) => (
-            <li key={task.id}>
-              <span className="name">
-                {rule.get(task.code ?? "")?.name} <span className="sub-inline">{periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}</span>
-              </span>
-              <span className="end">
-                {taskStatuses[task.status as keyof typeof taskStatuses]}
-                <span className="num">
-                  {dueLabel(task.due_on)}
-                  {!rule.get(task.code ?? "")?.verified_on && "*"}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
-        {!tasks?.length && <p className="hint">No due dates yet. Add a number and choose its services.</p>}
-      </section>
-      )}
-      {tab === "contacts" && (
-      <section className="panel" aria-labelledby="contacts">
-        <h2 id="contacts">Contact people</h2>
-        <p className="hint">People who write for this client. InboxCA recognises their emails, and sends documents only to those allowed.</p>
-        <ul className="rows">
-          {contacts.map((contact) => (
-            <li key={contact.contact_id}>
-              <span className="name">
-                {contact.name}
-                <span className="sub">
-                  {contact.email}
-                  {contact.relation && `, ${contact.relation}`}
-                </span>
-              </span>
-              {manage ? (
-                <form key={`${contact.can_view_status}${contact.can_receive_documents}`} action={manageClient} className="end">
-                  {hidden}
-                  <input type="hidden" name="contact" value={contact.contact_id} />
-                  <label className="check">
-                    <input type="checkbox" name="can_view_status" defaultChecked={contact.can_view_status} /> Sees work status
-                  </label>
-                  <label className="check">
-                    <input type="checkbox" name="can_receive_documents" defaultChecked={contact.can_receive_documents} /> Receives documents
-                  </label>
-                  <button className="b b-secondary" name="intent" value="contact-rights">
-                    Save
-                  </button>
-                  <button className="b b-secondary" name="intent" value="unlink-contact">
-                    Remove
-                  </button>
-                </form>
-              ) : (
-                <span className="end">
-                  {[contact.can_view_status && "Sees work status", contact.can_receive_documents && "Receives documents"].filter(Boolean).join(", ")}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-        {!contacts.length && <p className="hint">No contact people yet.</p>}
-        {manage && (
-          <form action={manageClient} className="fields">
-            {hidden}
+        <aside className="record-side" aria-labelledby="props">
+          <h2 id="props">Details</h2>
+          <dl className="props">
             <div>
-              <label htmlFor="contact-name">Contact&apos;s name</label>
-              <input id="contact-name" name="contact_name" required maxLength={120} />
+              <dt>Kind</dt>
+              <dd>{clientKinds[client.kind as ClientKind]}</dd>
             </div>
             <div>
-              <label htmlFor="contact-email">Contact&apos;s email</label>
-              <input id="contact-email" name="contact_email" type="email" required />
+              <dt>Email</dt>
+              <dd>{email || <span className="hint">None yet</span>}</dd>
             </div>
             <div>
-              <label htmlFor="contact-relation">Who they are, if known</label>
-              <input id="contact-relation" name="relation" maxLength={60} />
-            </div>
-            <label className="check">
-              <input type="checkbox" name="can_view_status" /> Sees work status
-            </label>
-            <label className="check">
-              <input type="checkbox" name="can_receive_documents" /> Receives documents
-            </label>
-            <button className="b b-secondary" name="intent" value="add-contact">
-              Add contact
-            </button>
-          </form>
-        )}
-      </section>
-      )}
-      {tab === "team" && (
-      <section className="panel" aria-labelledby="assigned">
-        <h2 id="assigned">Assigned to</h2>
-        <ul className="rows">
-          {assigned.map((assignment) => (
-            <li key={assignment.value}>
-              <span className="name">{labelOf.get(assignment.value)}</span>
-              <span className="end">
-                {assignmentRoles[assignment.role as keyof typeof assignmentRoles]}
-                {manage && (
-                  <form action={manageClient}>
-                    {hidden}
-                    <input type="hidden" name="who" value={assignment.value} />
-                    <button className="b b-secondary" name="intent" value="unassign">
-                      Unassign
-                    </button>
-                  </form>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-        {!client.client_assignments.length && <p className="hint">Nobody is assigned yet.</p>}
-        {manage && !!unassigned.length && (
-          <form action={manageClient} className="form-row">
-            {hidden}
-            <div>
-              <label htmlFor="assign-who">Person or team</label>
-              <select id="assign-who" name="who">
-                {unassigned.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="assign-role">Does</label>
-              <select id="assign-role" name="role" defaultValue="staff">
-                {Object.entries(assignmentRoles).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button className="b b-secondary" name="intent" value="assign">
-              Assign
-            </button>
-          </form>
-        )}
-      </section>
-      )}
-      {tab === "details" && manage && (
-        <section className="panel" aria-labelledby="details">
-          <h2 id="details">Details</h2>
-          <form action={manageClient} className="fields">
-            {hidden}
-            <div>
-              <label htmlFor="client-name">Name</label>
-              <input id="client-name" name="name" required defaultValue={client.name} />
-            </div>
-            <div>
-              <label htmlFor="client-email">Email</label>
-              <input id="client-email" name="email" type="email" defaultValue={email} />
-            </div>
-            <div>
-              <label htmlFor="client-kind">Kind</label>
-              <select id="client-kind" name="kind" defaultValue={client.kind}>
-                {Object.entries(clientKinds).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="client-group">Group</label>
-              <select id="client-group" name="group" defaultValue={client.group_id ?? ""}>
-                <option value="">No group</option>
-                {clientGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="client-new-group">Or a new group</label>
-              <input id="client-new-group" name="new_group" maxLength={120} />
+              <dt>Group</dt>
+              <dd>{groupName ? <Link href={`/app/clients?group=${client.group_id}`}>{groupName}</Link> : <span className="hint">None</span>}</dd>
             </div>
             {!!branches.length && (
               <div>
-                <label htmlFor="client-branch">Branch</label>
-                <select id="client-branch" name="branch" defaultValue={client.branch_id ?? ""}>
-                  <option value="">No branch</option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
+                <dt>Branch</dt>
+                <dd>{branchName ? <Link href={`/app/clients?branch=${client.branch_id}`}>{branchName}</Link> : <span className="hint">None</span>}</dd>
               </div>
             )}
-            <button className="b b-primary" name="intent" value="details">
-              Save details
-            </button>
-          </form>
-        </section>
-      )}
+            {numbers.map((registration) => (
+              <div key={registration.id}>
+                <dt>{numberKinds[registration.kind as NumberKind].name}</dt>
+                <dd className="num">{registration.number}</dd>
+              </div>
+            ))}
+            <div>
+              <dt>Status</dt>
+              <dd>{client.archived_at ? <Badge tone="late">Archived</Badge> : <Badge tone="done">Active</Badge>}</dd>
+            </div>
+          </dl>
+        </aside>
+      </div>
     </>
   );
 }

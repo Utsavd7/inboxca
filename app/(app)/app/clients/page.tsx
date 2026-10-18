@@ -99,8 +99,8 @@ export default async function Clients({
         </Link>
       </form>
 
-      <section aria-labelledby="register">
-        <div className="section-head">
+      <section className="panel" aria-labelledby="register">
+        <div className="panel-head">
           <h2 id="register">{q ? `Clients matching “${q}”` : groupName ? `${groupName}: ${count}` : count}</h2>
         </div>
         {clients?.length ? (
@@ -136,11 +136,9 @@ export default async function Clients({
             </table>
           </div>
         ) : (
-          <div className="box">
-            <Empty Icon={UsersRound} title={q ? "No client matches" : "No clients here yet"}>
+          <Empty Icon={UsersRound} title={q ? "No client matches" : "No clients here yet"}>
               <span>{q ? "Check the spelling, or search by a whole PAN or GSTIN." : "Add a client above, or import the Excel list your firm already keeps."}</span>
             </Empty>
-          </div>
         )}
       </section>
     </>
