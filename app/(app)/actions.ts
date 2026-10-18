@@ -799,6 +799,25 @@ export async function removeDocument(form: FormData) {
   redirect(restoring ? `${back}&saved=${id}` : `${back}&removed=${id}`);
 }
 
+// Sends one plain message from the firm's own mailbox, or null when none is connected. The
+// message itself is not kept (D6).
+async function firmMailer(firmId: string, firmName: string) {
+  const { data: mailbox } = await supabaseAdmin().from("connected_accounts").select("id, address_enc, credentials_enc, settings, status").eq("firm_id", firmId).eq("kind", "mail").maybeSingle();
+  if (mailbox?.status !== "connected") return null;
+  const crypto = serverCrypto();
+  const from = await crypto.decrypt(firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc);
+  const { password } = JSON.parse(await crypto.decrypt(firmId, `accounts/${mailbox.id}/credentials`, mailbox.credentials_enc));
+  return async (to: string, subject: string, text: string) => {
+    try {
+      await smtpTransport(from, password, (mailbox.settings as MailSettings).smtp).sendMail({ from: `${firmName} <${from}>`, to, subject, text });
+      return true;
+    } catch (failure) {
+      log.warn("firm_mail_failed", { code: (failure as { code?: string }).code ?? "send" });
+      return false;
+    }
+  };
+}
+
 // Asks a client for files for one period (PLAN.md 5.3.1, 8.6). Every member may. The client
 // gets a private upload link, sent from the firm's own mailbox to the client's registered
 // email when both exist; the link works for 30 days and only its hash is kept, so the
@@ -840,36 +859,17 @@ export async function askForDocuments(form: FormData) {
   const link = `${process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? ""}/u/${token}`;
 
   // Sent from the firm's mailbox to the client's registered address, if both are there.
-  const { data: mailbox } = await admin.from("connected_accounts").select("id, address_enc, credentials_enc, settings, status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle();
-  let sent = false;
-  if (mailbox?.status === "connected" && client.email_enc) {
-    const crypto = serverCrypto();
-    const from = await crypto.decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc);
-    const { password } = JSON.parse(await crypto.decrypt(membership.firmId, `accounts/${mailbox.id}/credentials`, mailbox.credentials_enc));
-    const to = await crypto.decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc);
-    const when = period ? ` for ${periodName(period)}` : "";
-    try {
-      await smtpTransport(from, password, (mailbox.settings as MailSettings).smtp).sendMail({
-        from: `${membership.firmName} <${from}>`,
-        to,
-        subject: `Documents needed${when}`,
-        text: [
-          `Dear ${client.name},`,
-          "",
-          `Please upload these documents${when}:`,
-          ...items.map((item) => `- ${item.type}`),
-          "",
-          `Upload them here, no sign in needed: ${link}`,
-          "The link works for 30 days.",
-          "",
-          membership.firmName,
-        ].join("\n"),
-      });
-      sent = true;
-    } catch (failure) {
-      log.warn("request_mail_failed", { code: (failure as { code?: string }).code ?? "send" });
-    }
-  }
+  const mailer = await firmMailer(membership.firmId, membership.firmName);
+  const to = client.email_enc && (await serverCrypto().decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc));
+  const when = period ? ` for ${periodName(period)}` : "";
+  const sent =
+    !!mailer &&
+    !!to &&
+    (await mailer(
+      to,
+      `Documents needed${when}`,
+      [`Dear ${client.name},`, "", `Please upload these documents${when}:`, ...items.map((item) => `- ${item.type}`), "", `Upload them here, no sign in needed: ${link}`, "The link works for 30 days.", "", membership.firmName].join("\n"),
+    ));
   revalidatePath("/app", "layout");
   // The link is shown once, in the address, only when it could not be emailed.
   redirect(sent ? `${back}&asked=sent` : `${back}&asked=${encodeURIComponent(link)}`);
@@ -909,4 +909,52 @@ export async function uploadToRequest(form: FormData) {
   const done = details.items.every((entry) => entry.received.length > 0);
   await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: done ? "done" : "pending" }).eq("id", request.id);
   redirect(`${back}?got=${at}`);
+}
+
+// Sends a filed document to the client, or to one of its contacts allowed to receive
+// documents (PLAN.md 5.10, 8.6): a secure link from the firm's mailbox that works for 7 days
+// and 5 downloads. The owner, a partner or a manager may send; each send is recorded.
+export async function sendDocument(form: FormData) {
+  const { id, userId, membership, back, document } = await visibleDocument(form);
+  if (!canManageClients(membership.role)) redirect(`${back}&error=role`);
+  const admin = supabaseAdmin();
+  const { data: owner } = await admin.from("documents").select("client_id, clients(name, email_enc)").eq("id", id).single();
+  const crypto = serverCrypto();
+  const recipient = String(form.get("to") ?? "");
+  let to = "";
+  let contact: string | null = null;
+  if (recipient === "client" && owner?.clients?.email_enc) to = await crypto.decrypt(membership.firmId, `clients/${owner.client_id}/email`, owner.clients.email_enc);
+  else {
+    const { data: link } = await admin.from("contact_clients").select("contact_id, contacts(email_enc)").eq("client_id", owner?.client_id ?? "").eq("contact_id", recipient).eq("can_receive_documents", true).maybeSingle();
+    if (link?.contacts) {
+      to = await crypto.decrypt(membership.firmId, `contacts/${link.contact_id}/email`, link.contacts.email_enc);
+      contact = link.contact_id;
+    }
+  }
+  if (!to) redirect(`${back}&send=${id}&error=recipient`);
+  const mailer = await firmMailer(membership.firmId, membership.firmName);
+  if (!mailer) redirect(`${back}&send=${id}&error=mailbox`);
+  const token = randomBytes(32).toString("base64url");
+  const share = randomUUID();
+  await admin.from("shares").insert({
+    id: share,
+    firm_id: membership.firmId,
+    document_id: id,
+    contact_id: contact,
+    link_token_hash: createHash("sha256").update(token).digest("hex"),
+    link_expires_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+  });
+  const link = `${process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? ""}/s/${token}`;
+  const sent = await mailer(
+    to,
+    document.name,
+    [`Dear ${owner?.clients?.name},`, "", `${membership.firmName} has shared ${document.name} with you.`, "", `Download it here: ${link}`, "The link works for 7 days and up to 5 downloads.", "", membership.firmName].join("\n"),
+  );
+  if (!sent) {
+    await admin.from("shares").delete().eq("id", share);
+    redirect(`${back}&send=${id}&error=mailbox`);
+  }
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.shared", entity_type: "document", entity_id: id, details: { share } });
+  revalidatePath("/app", "layout");
+  redirect(`${back}&shared=${id}`);
 }
