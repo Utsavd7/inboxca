@@ -70,6 +70,13 @@ describe("the job runner", () => {
     expect(finished[0]).toMatchObject({ outcome: "failed", code: "timeout" });
   });
 
+  it("waits patiently, every hour for 7 days, while the other side is away", async () => {
+    const { store, finished } = memoryStore([{ kind: "file", attempts: MAX_ATTEMPTS }]);
+    await runDueJobs(store, { file: async () => ({ retry: "drive_unreachable", patient: true }) }, { now });
+    expect(finished[0]).toMatchObject({ outcome: "retry", code: "drive_unreachable" });
+    expect(finished[0].at?.toISOString()).toBe("2026-10-14T11:00:00.000Z");
+  });
+
   it("retries a handler that throws, and logs only the error's type", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const { store, finished } = memoryStore([{ kind: "extract" }]);

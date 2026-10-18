@@ -48,6 +48,8 @@ const states = async () =>
 describe("claiming jobs", () => {
   it("claims only what is due, oldest first, up to the batch size", () =>
     rollback(db, async () => {
+      // Jobs a local demo or browser test left due are set aside for this rolled-back check.
+      await db.query("delete from public.jobs where idempotency_key not like $1", [`${PREFIX}%`]);
       await add("later", { run_at: new Date(Date.now() + 3600_000).toISOString() });
       await add("old", { run_at: new Date(Date.now() - 60_000).toISOString() });
       await add("new", { run_at: new Date(Date.now() - 1_000).toISOString() });

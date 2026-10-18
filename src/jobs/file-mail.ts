@@ -7,7 +7,7 @@ import { openDrive } from "@/src/lib/drive-account";
 import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { queueRead } from "./read-document";
-import type { Handler } from "./runner";
+import type { Handler, Outcome } from "./runner";
 
 // Files a client email's attachments into the client's folder in the firm's drive
 // (PLAN.md 5.5.0, D24, D36): Financial year / Client / Work type, named Client - Type -
@@ -34,6 +34,22 @@ export const fileMail: Handler = async (job) => {
   const read = await readAttachments(address, password, (mailbox.settings as MailSettings).imap, event.provider_message_id);
   if ("error" in read) return read.error === "server" ? { retry: "mail_unreachable" } : { done: true };
 
+  try {
+    return await fileAttachments(admin, { ...event, client_id: event.client_id, clients: event.clients }, driveAccount, read, crypto);
+  } catch {
+    // The drive is away or refused: the files wait, and are tried every hour for 7 days.
+    return { retry: "drive_unreachable", patient: true };
+  }
+};
+
+async function fileAttachments(
+  admin: ReturnType<typeof supabaseAdmin>,
+  event: { id: string; firm_id: string; client_id: string; received_at: string; label: string | null; clients: { name: string } },
+  driveAccount: { id: string; provider: string; credentials_enc: string; settings: unknown },
+  read: { subject: string; files: { name: string; bytes: Uint8Array }[] },
+  crypto: ReturnType<typeof serverCrypto>,
+): Promise<Outcome> {
+  const firm = event.firm_id;
   const drive = await openDrive(firm, driveAccount);
   const order = ((driveAccount.settings as { folder_order?: FolderOrder }).folder_order ?? "year_client_work") as FolderOrder;
   const client = event.clients.name;
@@ -71,4 +87,4 @@ export const fileMail: Handler = async (job) => {
     known.push({ email_event_id: event.id, sha256, document_type: about.type, period_key: about.period });
   }
   return { done: true };
-};
+}

@@ -1,7 +1,9 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveVisibility } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
+import { folderOrderNames } from "@/src/lib/drive";
+import { supabaseAdmin } from "@/src/lib/supabase";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
@@ -30,6 +32,9 @@ export default async function Settings({
   const { data: accounts } = await supabase.from("connected_accounts").select("id, kind, provider, address_enc, status");
   const mailbox = accounts?.find((account) => account.kind === "mail");
   const drive = accounts?.find((account) => account.kind === "drive");
+  // Only the server reads a drive's settings; this page is the owner's.
+  const { data: driveSettings } = drive ? await supabaseAdmin().from("connected_accounts").select("settings").eq("id", drive.id).single() : { data: null };
+  const folderOrder = (driveSettings?.settings as { folder_order?: string } | undefined)?.folder_order ?? "year_client_work";
   const driveAddress = drive && (await serverCrypto().decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc));
   const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
   const mailAddress = mailbox && (await serverCrypto().decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc));
@@ -96,7 +101,25 @@ export default async function Settings({
                   Disconnect
                 </button>
               </form>
-            ) : (
+            ) : null}
+            {drive && (
+              <form action={setFolderOrder} className="form-row">
+                <div>
+                  <label htmlFor="folder-order">How new files are arranged</label>
+                  <select id="folder-order" name="order" defaultValue={folderOrder}>
+                    {Object.entries(folderOrderNames).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button className="b b-secondary" type="submit">
+                  Save
+                </button>
+              </form>
+            )}
+            {!drive && (
               <form action={connectDrive}>
                 <fieldset className="fieldset">
                   <legend>Which drive</legend>

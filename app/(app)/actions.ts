@@ -11,7 +11,7 @@ import { checklists, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { folderFor, periodChoices, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
-import { DELETED_FOLDER, workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
+import { DELETED_FOLDER, folderOrders, workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
@@ -538,6 +538,20 @@ export async function manageEmail(form: FormData) {
   if (form.get("intent") === "label" && label in labels)
     await supabase.from("email_events").update({ label, decision_source: "staff" }).eq("id", String(form.get("email") ?? ""));
   else if (form.get("intent") === "done") await supabase.from("requests").update({ status: "done" }).eq("id", String(form.get("request") ?? ""));
+  else if (form.get("intent") === "client") {
+    // Mail from a contact who writes for several clients: a person says which client it is
+    // for, among the contact's own clients they may see; its attachments are then filed.
+    const email = String(form.get("email") ?? "");
+    const { data: client } = await supabase.from("clients").select("id").eq("id", String(form.get("client") ?? "")).maybeSingle();
+    const admin = supabaseAdmin();
+    const { data: event } = await admin.from("email_events").select("id, contact_id").eq("id", email).eq("firm_id", membership.firmId).is("client_id", null).maybeSingle();
+    const { data: link } = await admin.from("contact_clients").select("client_id").eq("contact_id", event?.contact_id ?? "").eq("client_id", client?.id ?? "").maybeSingle();
+    if (event && link) {
+      await admin.from("email_events").update({ client_id: link.client_id }).eq("id", event.id);
+      await admin.from("requests").update({ status: "done" }).eq("kind", "team_reply").eq("entity_id", event.id);
+      await admin.from("jobs").upsert({ firm_id: membership.firmId, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+    }
+  }
   // The sidebar's Inbox count is in the layout.
   revalidatePath("/app", "layout");
 }
@@ -978,4 +992,19 @@ export async function sendDocument(form: FormData) {
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.shared", entity_type: "document", entity_id: id, details: { share } });
   revalidatePath("/app", "layout");
   redirect(`${back}&shared=${id}`);
+}
+
+// Settings → Firm drive: the order of the folders new files go into (§5.5.0). Files already
+// filed stay where they are. The owner's choice.
+export async function setFolderOrder(form: FormData) {
+  const { userId, membership } = await currentMember();
+  const order = String(form.get("order") ?? "");
+  if (membership?.role !== "owner" || !(folderOrders as readonly string[]).includes(order)) redirect("/app/settings");
+  const admin = supabaseAdmin();
+  const { data: account } = await admin.from("connected_accounts").select("id, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
+  if (account) {
+    await admin.from("connected_accounts").update({ settings: { ...(account.settings as object), folder_order: order } }).eq("id", account.id);
+    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "drive.folder_order", entity_type: "account", entity_id: account.id, details: { order } });
+  }
+  revalidatePath("/app/settings");
 }
