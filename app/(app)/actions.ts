@@ -25,6 +25,7 @@ import { queueRead } from "@/src/jobs/read-document";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
 import { firmMailer } from "@/src/lib/firm-mail";
+import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
 import { currentMember } from "@/src/lib/member";
@@ -973,7 +974,17 @@ export async function sendDocument(form: FormData) {
     }
   }
   if (!to) redirect(`${back}&send=${id}&error=recipient`);
-  const sent = await sendShare({ firmId: membership.firmId, firmName: membership.firmName, documentId: id, documentName: document.name, clientName: owner?.clients?.name ?? "", contactId: contact, to });
+  const records = (membership.settings.records ?? {}) as RecordsSettings;
+  const sent = await sendShare({
+    firmId: membership.firmId,
+    firmName: membership.firmName,
+    documentId: id,
+    documentName: document.name,
+    clientName: owner?.clients?.name ?? "",
+    contactId: contact,
+    to,
+    needsCode: !isRoutine(document.document_type, records),
+  });
   if (!sent) redirect(`${back}&send=${id}&error=mailbox`);
   revalidatePath("/app", "layout");
   redirect(`${back}&shared=${id}`);
@@ -1077,6 +1088,7 @@ export async function decideShare(form: FormData) {
       emailEventId: share.email_event_id,
       inReplyTo: event?.provider_message_id,
       waitingId: share.id,
+      needsCode: true,
     }));
   if (sent) await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "share.approved", entity_type: "document", entity_id: share.document_id });
   revalidatePath("/app", "layout");

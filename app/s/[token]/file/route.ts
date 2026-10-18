@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { cookies } from "next/headers";
 import { openDrive } from "@/src/lib/drive-account";
+import { openCookie, opens } from "@/src/lib/share-codes";
 import { supabaseAdmin } from "@/src/lib/supabase";
 
 // One download of a document the firm sent, through its secure link (PLAN.md 8.6): counted
@@ -8,7 +10,11 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 export async function GET(_: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const admin = supabaseAdmin();
-  const { data: used } = await admin.rpc("use_share", { token_hash: createHash("sha256").update(token).digest("hex") });
+  const hash = createHash("sha256").update(token).digest("hex");
+  // A private paper downloads only in a browser that entered its one-time code.
+  const { data: locked } = await admin.from("shares").select("id, needs_code").eq("link_token_hash", hash).maybeSingle();
+  if (locked?.needs_code && !opens(locked.id, (await cookies()).get(openCookie(locked.id).name)?.value)) return new Response("Enter the code from your email first.", { status: 403 });
+  const { data: used } = await admin.rpc("use_share", { token_hash: hash });
   const share = used?.[0];
   if (!share) return new Response("This link has expired or has been used up.", { status: 410 });
   const [{ data: document }, { data: account }] = await Promise.all([

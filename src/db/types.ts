@@ -377,13 +377,13 @@ isOneToOne: false
                   ]
                 },"shares": {
                   Row: {
-                    "contact_id": string | null,"document_id": string,"downloads": number,"email_event_id": string | null,"firm_id": string,"id": string,"link_expires_at": string | null,"link_token_hash": string | null,"status": string
+                    "code_attempts": number,"code_expires_at": string | null,"code_hash": string | null,"contact_id": string | null,"document_id": string,"downloads": number,"email_event_id": string | null,"firm_id": string,"id": string,"link_expires_at": string | null,"link_token_hash": string | null,"needs_code": boolean,"status": string
                   }
                   Insert: {
-                    "contact_id"?: string | null,"document_id": string,"downloads"?: number,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"status"?: string
+                    "code_attempts"?: number,"code_expires_at"?: string | null,"code_hash"?: string | null,"contact_id"?: string | null,"document_id": string,"downloads"?: number,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"needs_code"?: boolean,"status"?: string
                   }
                   Update: {
-                    "contact_id"?: string | null,"document_id"?: string,"downloads"?: number,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"status"?: string
+                    "code_attempts"?: number,"code_expires_at"?: string | null,"code_hash"?: string | null,"contact_id"?: string | null,"document_id"?: string,"downloads"?: number,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"needs_code"?: boolean,"status"?: string
                   }
                   Relationships: [
                     {
