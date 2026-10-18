@@ -11,7 +11,7 @@ import { checklists, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, folderFor, periodChoices, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
-import { DELETED_FOLDER, folderOrders, workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
+import { DELETED_FOLDER, folderOrders, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
@@ -451,7 +451,7 @@ export async function manageClient(form: FormData) {
 export async function saveReminders(form: FormData) {
   const { supabase, membership } = await currentMember();
   if (membership?.role !== "owner") redirect("/app");
-  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on" } }).eq("id", membership.firmId);
+  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", acknowledge: form.get("acknowledge") === "on" } }).eq("id", membership.firmId);
   redirect("/app/settings?saved=reminders#reminders");
 }
 
@@ -659,7 +659,8 @@ function documentValues(form: FormData) {
 async function firmDrive(firmId: string) {
   const { data: account } = await supabaseAdmin().from("connected_accounts").select("id, provider, credentials_enc, settings").eq("firm_id", firmId).eq("kind", "drive").maybeSingle();
   if (!account) return null;
-  return { drive: await openDrive(firmId, account), order: ((account.settings as { folder_order?: FolderOrder }).folder_order ?? "year_client_work") as FolderOrder };
+  const settings = account.settings as { folder_order?: FolderOrder; naming?: Naming };
+  return { drive: await openDrive(firmId, account), order: settings.folder_order ?? "year_client_work", naming: settings.naming };
 }
 
 // A document the person may see, with what moving it needs; the server reads where it is.
@@ -688,7 +689,7 @@ async function placeBefore(firmId: string, id: string, action: string) {
 // in the drive first, to the folder and name its values give, never over another file;
 // rename_document then records the new place and logs the old one for Undo.
 export async function manageDocument(form: FormData) {
-  const { id, userId, membership, back, document, client, drive, order } = await visibleDocument(form);
+  const { id, userId, membership, back, document, client, drive, order, naming } = await visibleDocument(form);
   type Values = { work_type: string; document_type: string; period_key: string; status: string; name?: string };
   let next: Values;
   if (form.get("intent") === "undo") {
@@ -709,7 +710,7 @@ export async function manageDocument(form: FormData) {
   const placed =
     before !== "taken"
       ? { id: before.id, name: next.name! }
-      : await placeUnderFreeName({ client, type: next.document_type, period: periodName(next.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place);
+      : await placeUnderFreeName({ client, type: next.document_type, period: periodName(next.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place, naming);
   if (placed === "taken") redirect(`${back}&error=drive`);
   await supabaseAdmin().rpc("rename_document", {
     target: id,
@@ -746,6 +747,7 @@ async function saveForClient(
     { client: client.name, type: values.document_type, period: periodName(values.period_key), extension: path.extname(file.name) },
     receivedLabel(now),
     (name) => opened.drive.save(folder, name, file.bytes),
+    opened.naming,
   );
   if (placed === "taken") return "drive" as const;
   const id = randomUUID();
@@ -832,7 +834,7 @@ export async function dropPortalFiles(form: FormData) {
 // file moves to the drive's Deleted and old versions folder; the nightly purge sends it to
 // the drive's bin after 30 days. Removing for staff and managers is a request (later).
 export async function removeDocument(form: FormData) {
-  const { id, userId, membership, back, document, client, drive, order } = await visibleDocument(form);
+  const { id, userId, membership, back, document, client, drive, order, naming } = await visibleDocument(form);
   if (membership.role !== "owner") redirect(`${back}&error=owner`);
   const restoring = form.get("intent") === "restore";
   if (restoring !== (document.status === "deleted")) redirect(back);
@@ -849,7 +851,7 @@ export async function removeDocument(form: FormData) {
   const placed =
     first !== "taken"
       ? { id: first.id, name: wanted }
-      : await placeUnderFreeName({ client, type: document.document_type, period: periodName(document.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place);
+      : await placeUnderFreeName({ client, type: document.document_type, period: periodName(document.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place, naming);
   if (placed === "taken") redirect(`${back}&error=drive`);
   await supabaseAdmin().rpc("remove_document", { target: id, actor: userId, new_status: status, new_name: placed.name, new_file: placed.id });
   revalidatePath("/app", "layout");
@@ -982,12 +984,13 @@ export async function sendDocument(form: FormData) {
 export async function setFolderOrder(form: FormData) {
   const { userId, membership } = await currentMember();
   const order = String(form.get("order") ?? "");
-  if (membership?.role !== "owner" || !(folderOrders as readonly string[]).includes(order)) redirect("/app/settings");
+  const naming = String(form.get("naming") ?? "client_type_period");
+  if (membership?.role !== "owner" || !(folderOrders as readonly string[]).includes(order) || !(naming in namings)) redirect("/app/settings");
   const admin = supabaseAdmin();
   const { data: account } = await admin.from("connected_accounts").select("id, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
   if (account) {
-    await admin.from("connected_accounts").update({ settings: { ...(account.settings as object), folder_order: order } }).eq("id", account.id);
-    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "drive.folder_order", entity_type: "account", entity_id: account.id, details: { order } });
+    await admin.from("connected_accounts").update({ settings: { ...(account.settings as object), folder_order: order, naming } }).eq("id", account.id);
+    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "drive.folder_order", entity_type: "account", entity_id: account.id, details: { order, naming } });
   }
   revalidatePath("/app/settings");
 }

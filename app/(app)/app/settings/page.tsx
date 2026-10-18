@@ -4,7 +4,7 @@ import Link from "next/link";
 import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveRecords, saveReminders, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
 import { documentTypes } from "@/src/lib/documents";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
-import { folderOrderNames } from "@/src/lib/drive";
+import { folderOrderNames, namings } from "@/src/lib/drive";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
@@ -37,6 +37,7 @@ export default async function Settings({
   // Only the server reads a drive's settings; this page is the owner's.
   const { data: driveSettings } = drive ? await supabaseAdmin().from("connected_accounts").select("settings").eq("id", drive.id).single() : { data: null };
   const folderOrder = (driveSettings?.settings as { folder_order?: string } | undefined)?.folder_order ?? "year_client_work";
+  const naming = (driveSettings?.settings as { naming?: string } | undefined)?.naming ?? "client_type_period";
   const driveAddress = drive && (await serverCrypto().decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc));
   const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
   const mailAddress = mailbox && (await serverCrypto().decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc));
@@ -127,6 +128,16 @@ export default async function Settings({
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label htmlFor="naming">How new files are named</label>
+                  <select id="naming" name="naming" defaultValue={naming}>
+                    {Object.entries(namings).map(([value, example]) => (
+                      <option key={value} value={value}>
+                        {example}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <button className="b b-secondary" type="submit">
                   Save
                 </button>
@@ -181,6 +192,10 @@ export default async function Settings({
               <label className="check">
                 <input type="checkbox" name="on" defaultChecked={settings.reminders === true} />
                 Email clients before their returns are due
+              </label>
+              <label className="check">
+                <input type="checkbox" name="acknowledge" defaultChecked={settings.acknowledge === true} />
+                Reply to clients when their files arrive, saying what was received
               </label>
               <button className="b b-secondary" type="submit">
                 Save reminders

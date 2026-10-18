@@ -16,6 +16,7 @@ describe("the firm's drive", () => {
     expect(fileName({ client: "Patel Textiles", type: "Purchase bills", period: "Sep 2026", extension: "pdf", suffix: "4 Oct 2026" })).toBe(
       "Patel Textiles - Purchase bills - Sep 2026 - 4 Oct 2026.pdf",
     );
+    expect(fileName({ client: "Patel Textiles", type: "Purchase bills", period: "Sep 2026", extension: "pdf" }, "period_type_client")).toBe("Sep 2026 - Purchase bills - Patel Textiles.pdf");
     expect(safeName(' A/B: "Shah & Sons" | <Ltd>. ')).toBe("A B Shah & Sons Ltd");
   });
   it("never overwrites a file, and never leaves its own folder", async () => {

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { fileName, financialYear, folderPath, type FolderOrder, type WorkType } from "./drive";
+import { fileName, financialYear, folderPath, type FolderOrder, type Naming, type WorkType } from "./drive";
 import type { Label } from "./triage";
 
 // What an attachment is, read by rules from its name and the email's subject (PLAN.md
@@ -97,9 +97,14 @@ export function folderFor(order: FolderOrder, client: string, document: { work: 
 
 // Saves or moves a file under its plain name; a taken name gets the received date, then a
 // short id, so nothing is ever overwritten.
-export async function placeUnderFreeName(parts: { client: string; type: string; period: string; extension: string }, received: string, place: (name: string) => Promise<{ id: string } | "taken">) {
+export async function placeUnderFreeName(
+  parts: { client: string; type: string; period: string; extension: string },
+  received: string,
+  place: (name: string) => Promise<{ id: string } | "taken">,
+  naming?: Naming,
+) {
   for (const suffix of [undefined, received, randomBytes(3).toString("hex")]) {
-    const name = fileName({ ...parts, suffix });
+    const name = fileName({ ...parts, suffix }, naming);
     const placed = await place(name);
     if (placed !== "taken") return { id: placed.id, name };
   }
