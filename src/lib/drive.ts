@@ -1,4 +1,4 @@
-import { link, mkdir, readdir, readFile, statfs, unlink, writeFile } from "node:fs/promises";
+import { link, mkdir, readdir, readFile, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // The firm's own drive (PLAN.md 5.5.1, D36): one interface for every provider. Paths are
@@ -15,7 +15,14 @@ export interface Drive {
   // The daily check: every file in InboxCA's folder, whether the folder is shared with
   // anyone or has a link, and the free space (null when the drive does not say).
   check(): Promise<{ files: { id: string; path: string }[]; shared: boolean; freeBytes: number | null }>;
+  // For the first import: the drive's own top folders outside InboxCA's, and every file
+  // under one of them with its size.
+  folders(): Promise<string[]>;
+  files(folder: string): Promise<{ id: string; path: string; size: number }[]>;
 }
+
+// InboxCA's own folder in the drive, as on Dropbox.
+const OWN = "InboxCA";
 
 // Where a removed file waits 30 days before it goes to the drive's bin.
 export const DELETED_FOLDER = "Deleted and old versions";
@@ -31,7 +38,9 @@ export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? ""): Drive {
   };
   return {
     async ensureFolder(folders) {
-      const relative = path.join(...folders);
+      const relative = path.join(OWN, ...folders);
+      // InboxCA makes folders only inside its own.
+      if (relative !== OWN && !relative.startsWith(OWN + path.sep)) throw new Error("outside the test drive");
       await mkdir(inside(relative), { recursive: true });
       return relative;
     },
@@ -60,10 +69,25 @@ export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? ""): Drive {
     },
     trash: (fileId) => unlink(inside(fileId)),
     async check() {
-      const entries = await readdir(root, { recursive: true, withFileTypes: true });
-      const files = entries.filter((entry) => entry.isFile()).map((entry) => path.relative(root, path.join(entry.parentPath, entry.name)));
+      await mkdir(inside(OWN), { recursive: true });
+      const files = (await this.files(OWN)).map(({ id, path }) => ({ id, path }));
       const space = await statfs(root);
-      return { files: files.map((file) => ({ id: file, path: file })), shared: false, freeBytes: space.bavail * space.bsize };
+      return { files, shared: false, freeBytes: space.bavail * space.bsize };
+    },
+    async folders() {
+      const entries = await readdir(root, { withFileTypes: true });
+      return entries.filter((entry) => entry.isDirectory() && entry.name !== OWN).map((entry) => entry.name);
+    },
+    async files(folder) {
+      const entries = await readdir(inside(folder), { recursive: true, withFileTypes: true });
+      return Promise.all(
+        entries
+          .filter((entry) => entry.isFile())
+          .map(async (entry) => {
+            const relative = path.relative(root, path.join(entry.parentPath, entry.name));
+            return { id: relative, path: relative, size: (await stat(inside(relative))).size };
+          }),
+      );
     },
   };
 }

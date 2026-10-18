@@ -6,15 +6,18 @@ import type { Label } from "./triage";
 // 5.5.0, D29): no AI and nothing kept but the result. Checked in order, so a more
 // specific name comes first; a type's work is used unless it says "other".
 const types: [RegExp, string, WorkType][] = [
-  [/gstr\s?2b/, "GSTR-2B", "gst"],
-  [/gstr\s?2a/, "GSTR-2A", "gst"],
-  [/gstr\s?3b/, "GSTR-3B", "gst"],
-  [/gstr\s?1\b/, "GSTR-1", "gst"],
+  [/itr[\s-]?v\b/, "ITR-V", "income_tax"],
+  [/acknowledg/, "Acknowledgement", "other"],
+  [/audit report|\b3c[abd]\b/, "Audit report", "tax_audit"],
+  [/gstr[\s-]?2b/, "GSTR-2B", "gst"],
+  [/gstr[\s-]?2a/, "GSTR-2A", "gst"],
+  [/gstr[\s-]?3b/, "GSTR-3B", "gst"],
+  [/gstr[\s-]?1\b/, "GSTR-1", "gst"],
   [/purchase/, "Purchase bills", "gst"],
   [/\bsales?\b/, "Sales bills", "gst"],
-  [/e\s?way/, "E-way bills", "gst"],
+  [/e[\s-]?way/, "E-way bills", "gst"],
   [/invoice/, "Invoices", "gst"],
-  [/form\s?16a?\b/, "Form 16", "income_tax"],
+  [/form[\s-]?16a?\b/, "Form 16", "income_tax"],
   [/26\s?as/, "Form 26AS", "income_tax"],
   [/\bais\b/, "AIS", "income_tax"],
   [/salary|pay\s?slip/, "Salary slips", "income_tax"],
@@ -31,7 +34,13 @@ const types: [RegExp, string, WorkType][] = [
   [/bank statement|statement of account/, "Bank statement", "other"],
   [/challan/, "Challan", "other"],
   [/notice|intimation/, "Notice", "other"],
+  [/certificate/, "Certificate", "other"],
+  [/\border\b/, "Order", "other"],
 ];
+
+// Final papers: what clients ask for in later years, and what the first import brings by
+// default (PLAN.md 5.16).
+export const finalPapers = new Set(["ITR-V", "Acknowledgement", "Audit report", "GSTR-1", "GSTR-3B", "Notice", "Order", "Certificate", "Challan", "Form 16", "Balance sheet"]);
 const labelWork: Partial<Record<Label, WorkType>> = { data_gst: "gst", data_income_tax: "income_tax", data_tax_audit: "tax_audit" };
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const monthNames = months.map((month) => month[0].toUpperCase() + month.slice(1));

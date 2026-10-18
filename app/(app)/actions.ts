@@ -16,6 +16,7 @@ import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
+import { planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
@@ -1007,4 +1008,48 @@ export async function setFolderOrder(form: FormData) {
     await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "drive.folder_order", entity_type: "account", entity_id: account.id, details: { order } });
   }
   revalidatePath("/app/settings");
+}
+
+// The first import (PLAN.md 5.16): the owner approves moving past files already in the
+// drive into their client folders. The plan is worked out again here from the drive itself,
+// with the client the owner chose for each folder that did not match; only files with a
+// client move, up to 5,000 an import. A job moves them; Undo puts them back.
+export async function startImport(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const opened = await firmDrive(membership.firmId);
+  if (!opened) redirect("/app/import?error=drive");
+  const own = await opened.drive.folders();
+  const folders = form.getAll("folder").map(String).filter((folder) => own.includes(folder));
+  const scope = (["final", "year", "all"].includes(String(form.get("scope"))) ? String(form.get("scope")) : "final") as Scope;
+  const { data: clients } = await supabase.from("clients").select("id, name").is("archived_at", null);
+  const known = new Set(clients?.map((client) => client.id));
+  const chosen = Object.fromEntries(
+    [...form.entries()].flatMap(([key, value]) => (key.startsWith("map:") && known.has(String(value)) ? [[key.slice(4), String(value)]] : [])),
+  );
+  const listed = (await Promise.all(folders.map((folder) => opened.drive.files(folder)))).flat();
+  const files = planImport(listed, clients ?? [], scope, String(form.get("year") ?? ""), todayInIndia(), chosen)
+    .filter((file): file is Planned & { client: string } => !!file.client)
+    .slice(0, 5000);
+  if (!files.length) redirect("/app/import?error=none");
+  const id = randomUUID();
+  const admin = supabaseAdmin();
+  await admin.from("requests").insert({ id, firm_id: membership.firmId, kind: "import", entity_type: "import", entity_id: id, details: { files, done: 0, moved: [] } as unknown as NonNullable<Json> });
+  await admin.from("jobs").insert({ firm_id: membership.firmId, kind: "import_files", entity_type: "request", entity_id: id, idempotency_key: `import_files:${id}:0` });
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "import.started", entity_type: "request", entity_id: id, details: { files: files.length, scope } });
+  redirect("/app/import?started=1");
+}
+
+export async function undoFirstImport(form: FormData) {
+  const { userId, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const admin = supabaseAdmin();
+  const { data: request } = await admin.from("requests").select("id").eq("id", String(form.get("import") ?? "")).eq("firm_id", membership.firmId).eq("kind", "import").maybeSingle();
+  if (request) {
+    // Stop any batch still to move, then put back what has moved.
+    await admin.from("requests").update({ status: "done" }).eq("id", request.id);
+    await admin.from("jobs").insert({ firm_id: membership.firmId, kind: "undo_import", entity_type: "request", entity_id: request.id, idempotency_key: `undo_import:${request.id}:start` });
+    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "import.undo_asked", entity_type: "request", entity_id: request.id });
+  }
+  redirect("/app/import?undoing=1");
 }

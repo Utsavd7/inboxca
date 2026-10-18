@@ -106,6 +106,11 @@ export default async function Settings({
               </form>
             ) : null}
             {drive && (
+              <p className="hint">
+                Past files already in your drive? <Link href="/app/import">Add old files</Link>, sorted into their client folders in place.
+              </p>
+            )}
+            {drive && (
               <form action={setFolderOrder} className="form-row">
                 <div>
                   <label htmlFor="folder-order">How new files are arranged</label>
