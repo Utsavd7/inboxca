@@ -497,6 +497,9 @@ isOneToOne: false
 "remove_member":
 { Args: { "person": string,"target_firm": string }; Returns: boolean
                            },
+"rename_document":
+{ Args: { "actor": string,"new_file": string,"new_name": string,"new_period": string,"new_status": string,"new_type": string,"new_work": string,"target": string }; Returns: undefined
+                           },
 "restore_member":
 { Args: { "person": string,"target_firm": string }; Returns: boolean
                            },

@@ -1,4 +1,4 @@
-import { Check, Mail } from "lucide-react";
+import { Check, FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageEmail } from "@/app/(app)/actions";
@@ -21,7 +21,7 @@ const when = (at: string) =>
 export default async function Inbox() {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ data: events }, { data: waiting }] = await Promise.all([
+  const [{ data: events }, { data: waiting }, { data: toCheck }] = await Promise.all([
     supabase
       .from("email_events")
       .select("id, client_id, contact_id, received_at, label, decision_source, clients(name), contacts(name_enc)")
@@ -29,6 +29,7 @@ export default async function Inbox() {
       .order("id")
       .limit(100),
     supabase.from("requests").select("id, entity_id, reason_code").eq("kind", "team_reply").eq("status", "pending"),
+    supabase.from("documents").select("id, client_id, name, clients(name)").eq("status", "to_check").limit(50),
   ]);
   const crypto = serverCrypto();
   const sender = new Map(
@@ -85,6 +86,29 @@ export default async function Inbox() {
           )}
         </ul>
       </section>
+
+      {!!toCheck?.length && (
+        <section className="panel" aria-labelledby="to-check">
+          <div className="panel-head">
+            <h2 id="to-check">Files to check</h2>
+            <p className="hint">Saved in the client&apos;s To check folder. Confirm or correct their type and period.</p>
+          </div>
+          <ul className="rows">
+            {toCheck.map((file) => (
+              <li key={file.id}>
+                <FileText size={16} aria-hidden className="file-icon" />
+                <span className="grow">
+                  <span className="name">{file.name}</span>
+                  <span className="sub">{file.clients?.name}</span>
+                </span>
+                <Link className="b b-secondary b-small" href={`/app/clients/${file.client_id}?tab=files`}>
+                  Check
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="panel" aria-labelledby="latest">
         <div className="panel-head">

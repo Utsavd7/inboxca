@@ -1,5 +1,6 @@
 "use server";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -7,7 +8,9 @@ import { z } from "zod";
 import { todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { DRIVE_COOKIE, saveDrive } from "@/src/lib/drive-account";
+import { folderFor, periodChoices, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
+import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
+import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
@@ -583,4 +586,72 @@ export async function findClients(text: string) {
     .order("name")
     .limit(8);
   return data ?? [];
+}
+
+// Confirms or corrects a filed document's type, work and period, or puts back the last
+// change (M4 step 4). It is a rename, which every member may make (5.17.2). The file moves
+// in the drive first, to the folder and name its values give, never over another file;
+// rename_document then records the new place and logs the old one for Undo.
+export async function manageDocument(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  const id = String(form.get("document") ?? "");
+  const { data: visible } = await supabase.from("documents").select("id, client_id").eq("id", id).maybeSingle();
+  if (!membership || !visible) redirect("/app");
+  const back = `/app/clients/${visible.client_id}?tab=files`;
+  const admin = supabaseAdmin();
+  const [{ data: document }, { data: account }] = await Promise.all([
+    admin.from("documents").select("work_type, document_type, period_key, status, name, drive_file_id, clients(name), email_events(received_at)").eq("id", id).single(),
+    admin.from("connected_accounts").select("id, provider, credentials_enc, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
+  ]);
+  if (!document?.clients || !account) redirect(`${back}&error=drive`);
+
+  type Values = { work_type: string; document_type: string; period_key: string; status: string; name?: string };
+  let next: Values;
+  if (form.get("intent") === "undo") {
+    const { data: entry } = await admin
+      .from("activity_log")
+      .select("details")
+      .eq("firm_id", membership.firmId)
+      .eq("entity_id", id)
+      .eq("action", "document.renamed")
+      .order("at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const from = (entry?.details as { from?: Values } | undefined)?.from;
+    if (!from) redirect(back);
+    next = from;
+  } else {
+    const type = form.get("type") === "Other" ? String(form.get("custom") ?? "").trim() : String(form.get("type") ?? "");
+    const work = String(form.get("work") ?? "");
+    const period = String(form.get("period") ?? "");
+    if (!type || type.length > 80 || !(work in workTypes) || (period && !periodChoices(todayInIndia()).includes(period))) redirect(`${back}&edit=${id}&error=document`);
+    next = { work_type: work, document_type: type, period_key: period, status: "filed" };
+  }
+  if (next.work_type === document.work_type && next.document_type === document.document_type && next.period_key === document.period_key && next.status === document.status) redirect(back);
+
+  const drive = await openDrive(membership.firmId, account);
+  const order = ((account.settings as { folder_order?: FolderOrder }).folder_order ?? "year_client_work") as FolderOrder;
+  const client = document.clients.name;
+  const received = document.email_events?.received_at ?? new Date().toISOString();
+  const folder = await drive.ensureFolder(folderFor(order, client, { work: next.work_type as WorkType, period: next.period_key, receivedAt: received, toCheck: next.status === "to_check" }));
+  const place = (name: string) => drive.move(document.drive_file_id, folder, name);
+  // Undo tries the name the file had before; otherwise the plain name, then a free one.
+  const before = next.name ? await place(next.name) : "taken";
+  const placed =
+    before !== "taken"
+      ? { id: before.id, name: next.name! }
+      : await placeUnderFreeName({ client, type: next.document_type, period: periodName(next.period_key), extension: path.extname(document.name) }, receivedLabel(received), place);
+  if (placed === "taken") redirect(`${back}&error=drive`);
+  await admin.rpc("rename_document", {
+    target: id,
+    actor: userId,
+    new_work: next.work_type,
+    new_type: next.document_type,
+    new_period: next.period_key,
+    new_status: next.status,
+    new_name: placed.name,
+    new_file: placed.id,
+  });
+  revalidatePath("/app", "layout");
+  redirect(`${back}&renamed=${id}`);
 }

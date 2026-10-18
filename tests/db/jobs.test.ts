@@ -59,12 +59,13 @@ describe("claiming jobs", () => {
   it("never hands the same job to two workers", async () => {
     for (let i = 0; i < 30; i++) await add(`pair-${i}`);
     await Promise.all([db.query("begin"), second.query("begin")]);
+    // Room for jobs a local demo firm queued meanwhile; only this test's own are counted.
     const [a, b] = await Promise.all([
-      pgJobStore(db).claim(20, 120),
-      pgJobStore(second).claim(20, 120),
+      pgJobStore(db).claim(40, 120),
+      pgJobStore(second).claim(40, 120),
     ]);
     await Promise.all([db.query("commit"), second.query("commit")]);
-    const ids = [...a, ...b].map((job) => job.id);
+    const ids = [...a, ...b].filter((job) => job.idempotency_key.startsWith(`${PREFIX}pair-`)).map((job) => job.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.length).toBe(30);
   });
