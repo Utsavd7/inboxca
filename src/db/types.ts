@@ -452,6 +452,9 @@ isOneToOne: false
 "add_clients":
 { Args: { "clients": Json,"target_firm": string }; Returns: number
                            },
+"assigned_clients":
+{ Args: Record<PropertyKey, never>; Returns: string[]
+                           },
 "can_access_client":
 { Args: { "client": string,"target_firm": string }; Returns: boolean
                            },
@@ -528,10 +531,16 @@ isOneToOne: false
               "codes": (string)[],"due": number,"due_on": string,"filed": number
             }[]
                            },
+"my_firms":
+{ Args: Record<PropertyKey, never>; Returns: string[]
+                           },
 "my_invites":
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_id": string,"firm_name": string,"role": string
             }[]
+                           },
+"open_firms":
+{ Args: Record<PropertyKey, never>; Returns: string[]
                            },
 "open_to":
 { Args: { "at"?: string,"person": Json,"role": string,"settings": Json }; Returns: boolean
