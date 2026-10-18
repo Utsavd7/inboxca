@@ -214,6 +214,10 @@ html:has(.ui) { scrollbar-gutter: stable; background: #fff; }
 .avatar.big { width: 48px; height: 48px; border-radius: var(--r3); font-size: 18px; }
 .who { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
 .file-icon { flex: none; color: var(--ink-3); }
+.sub-head { margin-top: var(--s5); font-size: 14px; font-weight: 600; }
+.ui input[type="file"] { width: 100%; font-size: 13px; color: var(--ink-2); }
+.ui input[type="file"]::file-selector-button { height: var(--control); margin-right: var(--s3); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: #fff; color: var(--ink); font: inherit; font-weight: 500; cursor: pointer; transition: background 120ms; }
+.ui input[type="file"]::file-selector-button:hover { background: var(--hover); }
 .notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s3); padding: var(--s2) var(--s3); border-radius: var(--r2); background: var(--green-bg); color: var(--green-fg); font-size: 13px; }
 
 /* Record pages: the work on the left, the details down the right. */

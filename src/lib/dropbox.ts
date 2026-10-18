@@ -98,6 +98,10 @@ export function dropboxDrive(refreshToken: string): Drive {
       }
       return { id: String((moved.metadata as { id?: string }).id) };
     },
+    async trash(fileId) {
+      const removed = await call(await accessToken(), "files/delete_v2", { path: fileId });
+      if ("error" in removed && !String(removed.error).startsWith("path_lookup/not_found")) throw new Error("dropbox_delete");
+    },
     async read(fileId) {
       const response = await fetch("https://content.dropboxapi.com/2/files/download", {
         method: "POST",

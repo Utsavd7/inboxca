@@ -183,13 +183,13 @@ isOneToOne: false
                   ]
                 },"documents": {
                   Row: {
-                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"sha256": string,"size": number,"status": string,"work_type": string
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"received_at": string,"sha256": string,"size": number,"status": string,"work_type": string
                   }
                   Insert: {
-                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"name": string,"original_name_enc"?: string | null,"period_key"?: string,"sha256": string,"size": number,"status"?: string,"work_type": string
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"name": string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"sha256": string,"size": number,"status"?: string,"work_type": string
                   }
                   Update: {
-                    "client_id"?: string,"document_type"?: string,"drive_file_id"?: string,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"name"?: string,"original_name_enc"?: string | null,"period_key"?: string,"sha256"?: string,"size"?: number,"status"?: string,"work_type"?: string
+                    "client_id"?: string,"document_type"?: string,"drive_file_id"?: string,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"name"?: string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"sha256"?: string,"size"?: number,"status"?: string,"work_type"?: string
                   }
                   Relationships: [
                     {
@@ -493,6 +493,9 @@ isOneToOne: false
                            },
 "open_to":
 { Args: { "at"?: string,"person": Json,"role": string,"settings": Json }; Returns: boolean
+                           },
+"remove_document":
+{ Args: { "actor": string,"new_file": string,"new_name": string,"new_status": string,"target": string }; Returns: undefined
                            },
 "remove_member":
 { Args: { "person": string,"target_firm": string }; Returns: boolean

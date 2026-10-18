@@ -63,6 +63,7 @@ export const fileMail: Handler = async (job) => {
       original_name_enc: file.name ? await crypto.encrypt(firm, `documents/${id}/original_name`, file.name) : null,
       size: file.bytes.length,
       sha256,
+      received_at: event.received_at,
     });
     if (error) return { retry: "document_not_saved" };
     known.push({ email_event_id: event.id, sha256, document_type: about.type, period_key: about.period });
