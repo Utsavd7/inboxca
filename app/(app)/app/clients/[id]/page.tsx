@@ -320,13 +320,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                           <td>
                             <span className="who">
                               <FileText size={16} aria-hidden className="file-icon" />
-                              {owner ? (
-                                <a className="row-link" href={`/app/files/${document.id}`} target="_blank" rel="noopener">
-                                  {document.name}
-                                </a>
-                              ) : (
-                                <span className="name">{document.name}</span>
-                              )}
+                              <Link className="row-link" href={`/app/files/${document.id}/view`}>
+                                {document.name}
+                              </Link>
                             </span>
                             <span className="sub">
                               {[document.document_type, periodName(document.period_key), document.status === "to_check" && sameAs(document)].filter(Boolean).join(", ")}

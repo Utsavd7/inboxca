@@ -5,16 +5,20 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 // Kinds a browser shows safely; anything else (a web page or a script above all) is only
 // ever downloaded, so a file a client sends can never run on InboxCA's own address.
 const shown: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", txt: "text/plain; charset=utf-8" };
+const viewable = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp"]);
 
-// A filed document, read from the firm's drive through InboxCA's server (PLAN.md 5.5.1).
-// For now only the owner opens files; the view-only viewer with a watermark for everyone
-// else comes with the file viewer (M4). The document is found through the person's own
-// access first, so a client they may not see stays hidden.
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { supabase, membership } = await currentMember();
+// A filed document, read from the firm's drive through InboxCA's server (PLAN.md 5.5.1,
+// D18). Everyone who may see the client gets a PDF or picture for the view-only viewer,
+// which asks with its own header; only the owner opens or downloads the file itself. The
+// document is found through the person's own access first, so a client they may not see
+// stays hidden. Every view and download is logged.
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { supabase, userId, membership } = await currentMember();
   const { id } = await params;
-  const { data: visible } = await supabase.from("documents").select("id").eq("id", id).maybeSingle();
-  if (membership?.role !== "owner" || !visible) return new Response("Not found", { status: 404 });
+  const { data: visible } = await supabase.from("documents").select("id, name").eq("id", id).neq("status", "deleted").maybeSingle();
+  const extension = visible?.name.split(".").pop()?.toLowerCase() ?? "";
+  const forViewer = new URL(request.url).searchParams.has("view") && request.headers.get("x-inboxca-viewer") === "1" && viewable.has(extension);
+  if (!membership || !visible || (!forViewer && membership.role !== "owner")) return new Response("Not found", { status: 404 });
   const admin = supabaseAdmin();
   const [{ data: document }, { data: account }] = await Promise.all([
     admin.from("documents").select("drive_file_id, name").eq("id", id).single(),
@@ -22,7 +26,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   ]);
   if (!document || !account) return new Response("The firm's drive is not connected.", { status: 409 });
   const bytes = await (await openDrive(membership.firmId, account)).read(document.drive_file_id);
-  const type = shown[document.name.split(".").pop()?.toLowerCase() ?? ""];
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: forViewer ? "document.viewed" : "document.downloaded", entity_type: "document", entity_id: id });
+  const type = forViewer ? undefined : shown[extension];
   return new Response(new Blob([new Uint8Array(bytes)]), {
     headers: {
       "Content-Type": type ?? "application/octet-stream",

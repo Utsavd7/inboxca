@@ -265,11 +265,16 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const rows = owner.locator("section[aria-labelledby=files] tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
-  // The owner opens a file from the drive through InboxCA, shown in the browser and sandboxed.
-  const href = await rows.getByRole("link", { name: `${mailClient} - Purchase bills - Sep 2026.pdf`, exact: true }).getAttribute("href");
-  const file = await owner.request.get(href!);
+  // A file opens in the view-only viewer. The owner also gets the file itself, sandboxed;
+  // for the viewer it comes as plain bytes, which a browser never shows on its own.
+  await rows.getByRole("link", { name: `${mailClient} - Purchase bills - Sep 2026.pdf`, exact: true }).click();
+  await expect(owner.getByText("View only. Your email and the time are shown across every page.")).toBeVisible();
+  const raw = owner.url().replace(/\/view$/, "");
+  const file = await owner.request.get(raw);
   expect(await file.text()).toBe("%PDF-1.4 invented purchase bills");
   expect(file.headers()).toMatchObject({ "content-type": "application/pdf", "content-security-policy": "sandbox" });
+  expect((await owner.request.get(`${raw}?view=1`, { headers: { "x-inboxca-viewer": "1" } })).headers()["content-type"]).toBe("application/octet-stream");
+  await owner.goBack();
 
   // A person names the unclear scan: it moves out of To check under its new name, and Undo puts it back.
   await rows.getByRole("link", { name: `Change ${mailClient} - Document.pdf` }).click();
