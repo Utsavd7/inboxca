@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
@@ -355,6 +355,15 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(visitor.getByRole("heading", { name: /Loan statement/ })).toBeVisible();
   for (let download = 0; download < 5; download++) expect(await (await visitor.request.get(`${shared}/file`)).text()).toBe("%PDF-1.4 invented loan statement");
   expect((await visitor.request.get(`${shared}/file`)).status()).toBe(410);
+
+  // A file removed in the drive itself is marked missing by the nightly check, and the owner is told.
+  await unlink(path.join(drive, "FY 2025-26", mailClient, "Income tax", `${mailClient} - Form 16 - FY 2025-26.pdf`));
+  await query(local.dbUrl, "select private.queue_drive_checks()");
+  await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  await owner.reload();
+  await expect(rows.filter({ hasText: "Form 16" })).toContainText("Missing in the drive");
+  await owner.goto("/app");
+  await expect(owner.getByRole("alert").filter({ hasText: "no longer in your drive" })).toBeVisible();
 
   await owner.goto("/app/settings");
   for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();

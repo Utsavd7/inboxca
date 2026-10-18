@@ -98,6 +98,27 @@ export function dropboxDrive(refreshToken: string): Drive {
       }
       return { id: String((moved.metadata as { id?: string }).id) };
     },
+    async check() {
+      const token = await accessToken();
+      const files: { id: string; path: string }[] = [];
+      let page = await call(token, "files/list_folder", { path: ROOT, recursive: true, limit: 2000 });
+      for (;;) {
+        if ("error" in page) throw new Error("dropbox_list");
+        for (const entry of page.entries as { ".tag": string; id: string; path_display: string }[]) if (entry[".tag"] === "file") files.push({ id: entry.id, path: entry.path_display });
+        if (!page.has_more) break;
+        page = await call(token, "files/list_folder/continue", { cursor: page.cursor });
+      }
+      const [folder, links, space] = await Promise.all([
+        call(token, "files/get_metadata", { path: ROOT }),
+        call(token, "sharing/list_shared_links", { path: ROOT, direct_only: false }),
+        call(token, "users/get_space_usage", null),
+      ]);
+      const sharing = (folder as { sharing_info?: { shared_folder_id?: string; parent_shared_folder_id?: string } }).sharing_info;
+      const shared = !!(sharing?.shared_folder_id || sharing?.parent_shared_folder_id) || ((links as { links?: unknown[] }).links?.length ?? 0) > 0;
+      const usage = space as { used?: number; allocation?: { allocated?: number } };
+      const freeBytes = usage.allocation?.allocated && usage.used !== undefined ? usage.allocation.allocated - usage.used : null;
+      return { files, shared, freeBytes };
+    },
     async trash(fileId) {
       const removed = await call(await accessToken(), "files/delete_v2", { path: fileId });
       if ("error" in removed && !String(removed.error).startsWith("path_lookup/not_found")) throw new Error("dropbox_delete");
