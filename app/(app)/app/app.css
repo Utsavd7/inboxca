@@ -215,6 +215,11 @@ html:has(.ui) { scrollbar-gutter: stable; background: #fff; }
 .who { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
 .file-icon { flex: none; color: var(--ink-3); }
 .sub-head { margin-top: var(--s5); font-size: 14px; font-weight: 600; }
+.drop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s5); padding: var(--s3) var(--s4); border: 1px dashed var(--line-2); border-radius: var(--r3); }
+.drop > svg { flex: none; color: var(--ink-3); }
+.drop p { display: grid; flex: 1 1 300px; }
+.drop input[type="file"] { width: auto; max-width: 280px; }
+.notice + .notice, .drop + .notice, .drop + .alert { margin-top: var(--s3); }
 /* The view-only file viewer: pages on a quiet ground, nothing to download. */
 .viewer { margin-top: var(--s5); }
 .viewer-pages { display: grid; justify-items: center; gap: var(--s4); padding: var(--s4); border-radius: var(--r3); background: var(--side); user-select: none; }

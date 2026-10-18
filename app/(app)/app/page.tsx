@@ -9,6 +9,7 @@ import { currentMember } from "@/src/lib/member";
 import { roleNames } from "@/src/lib/roles";
 import { labels, type Label } from "@/src/lib/triage";
 import { CountUp } from "./count-up";
+import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { Ribbon } from "./ribbon";
 import { Avatar, Badge, PageHead, type Tone } from "./ui";
 
@@ -36,7 +37,8 @@ const reasons: Record<string, string> = {
 // and every return that needs a hand, in four columns from late to done, each card one
 // click from filed. Mail that waits for a person sits beside it. People who are not
 // technical see what to do next without opening anything else.
-export default async function AppHome() {
+export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string }> }) {
+  const { dropped, error } = await searchParams;
   const { supabase, membership } = await currentMember();
   const { data: invites } = await supabase.rpc("my_invites");
   const closed = membership ? null : (await supabase.rpc("closed_firms")).data?.[0];
@@ -207,6 +209,14 @@ export default async function AppHome() {
             {next.action}
           </Link>
         </div>
+      )}
+
+      <PortalDrop />
+      <DroppedNotice value={dropped} />
+      {error === "drive" && (
+        <p className="alert" role="alert">
+          Connect the firm&apos;s drive in Settings first; portal files are saved there.
+        </p>
       )}
 
       <section className="month" aria-label="This month">

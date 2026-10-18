@@ -10,6 +10,7 @@ import { workTypes, type WorkType } from "@/src/lib/drive";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
 import { LinkTabs } from "../../link-tabs";
+import { DroppedNotice, PortalDrop } from "../../portal-drop";
 import { Avatar, Badge, Empty, PageHead } from "../../ui";
 
 const errors: Record<string, string> = {
@@ -32,10 +33,10 @@ const errors: Record<string, string> = {
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
     .select(
@@ -253,6 +254,8 @@ export default async function Client({ params, searchParams }: { params: Promise
                 )}
               </div>
               <p className="hint">Saved in your firm&apos;s drive. Files marked To check need a person to confirm their type or period.</p>
+              <PortalDrop clientId={client.id} />
+              <DroppedNotice value={dropped} />
               {noticeFile && (
                 <form action={removed ? removeDocument : manageDocument} className="notice" role="status">
                   <input type="hidden" name="document" value={noticeFile.id} />
