@@ -1,10 +1,11 @@
 import { Archive, ChevronLeft, FileText, Send, Upload } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { askForDocuments, findDocuments, manageClient, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
+import { askForDocuments, findDocuments, manageClient, pauseReminders, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, workOfService, type DocumentRequest } from "@/src/lib/checklists";
+import { skipReasons, type Skip } from "@/src/lib/reminders";
 import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { workTypes, type WorkType } from "@/src/lib/drive";
@@ -36,6 +37,10 @@ const errors: Record<string, string> = {
   mailbox: "The file could not be emailed. Connect the firm's email in Settings, or try again in a minute.",
 };
 
+// What reminders did for a return: when it was last reminded, or why it was not.
+const reminderNote = (details: { reminded?: string[]; skipped?: { reason: string } }) =>
+  details.reminded?.length ? `Reminded ${dueLabel(details.reminded.at(-1)!)}` : details.skipped ? skipReasons[details.skipped.reason as Skip] : "";
+
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
 export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string }> }) {
   const { supabase, membership } = await currentMember();
@@ -44,7 +49,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const { data: client } = await supabase
     .from("clients")
     .select(
-      "id, name, kind, archived_at, email_enc, group_id, branch_id, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))",
+      "id, name, kind, archived_at, email_enc, group_id, branch_id, reminders_paused, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -69,7 +74,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
-    supabase.from("tasks").select("id, code, period_key, due_on, status").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
+    supabase.from("tasks").select("id, code, period_key, due_on, status, details").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
     supabase.from("documents").select("id, name, document_type, work_type, period_key, status, sha256, received_at").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
     supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).eq("status", "pending").gt("expires_at", new Date().toISOString()),
   ]);
@@ -573,6 +578,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                               <Badge tone={task.status === "filed" ? "done" : late ? "late" : task.status === "in_progress" ? "blue" : ""}>
                                 {late ? "Overdue" : taskStatuses[task.status as keyof typeof taskStatuses]}
                               </Badge>
+                              <span className="sub">{reminderNote(task.details as { reminded?: string[]; skipped?: { reason: string } })}</span>
                             </td>
                           </tr>
                         );
@@ -702,6 +708,21 @@ export default async function Client({ params, searchParams }: { params: Promise
                   </button>
                 </form>
               )}
+            </section>
+          )}
+          {tab === "details" && manage && (
+            <section className="panel" aria-labelledby="pause-title">
+              <h2 id="pause-title">Reminders</h2>
+              <form action={pauseReminders} className="form-row">
+                <input type="hidden" name="client" value={client.id} />
+                <label className="check">
+                  <input type="checkbox" name="paused" defaultChecked={client.reminders_paused} />
+                  Pause reminders for this client
+                </label>
+                <button className="b b-secondary" type="submit">
+                  Save
+                </button>
+              </form>
             </section>
           )}
           {tab === "details" && manage && (

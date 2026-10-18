@@ -175,3 +175,25 @@ export async function readAttachments(address: string, password: string, server:
     return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };
   }
 }
+
+// Whether a message with this Message-ID is in the mailbox's Sent folder: how a send that
+// may or may not have happened before a crash is checked. A mailbox whose server does not
+// keep sent mail answers no, and the message goes again.
+export async function foundInSent(address: string, password: string, server: Server, messageId: string) {
+  const imap = imapClient(address, password, server);
+  try {
+    await imap.connect();
+    const sent = (await imap.list()).find((box) => box.specialUse === "\\Sent");
+    if (!sent) {
+      await imap.logout();
+      return false;
+    }
+    await imap.mailboxOpen(sent.path, { readOnly: true });
+    const found = await imap.search({ header: { "message-id": messageId } }, { uid: true });
+    await imap.logout();
+    return !!found && found.length > 0;
+  } catch {
+    imap.close();
+    return false;
+  }
+}

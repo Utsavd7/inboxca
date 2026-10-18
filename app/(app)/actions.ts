@@ -23,7 +23,8 @@ import { readSheet } from "@/src/lib/sheet";
 import { queueRead } from "@/src/jobs/read-document";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
-import { checkMailbox, detectSettings, smtpTransport, type MailSettings } from "@/src/lib/mailbox";
+import { firmMailer } from "@/src/lib/firm-mail";
+import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie } from "@/src/lib/session";
@@ -443,6 +444,24 @@ export async function manageClient(form: FormData) {
 }
 
 // Settings → Who sees which clients: everyone (open) or only those assigned (restricted).
+// Settings → Reminders: whether InboxCA emails clients before their returns are due. Off
+// until the owner turns it on, since it writes to the firm's clients.
+export async function saveReminders(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on" } }).eq("id", membership.firmId);
+  redirect("/app/settings?saved=reminders#reminders");
+}
+
+// A client's page → Details: pause or resume reminders for this client.
+export async function pauseReminders(form: FormData) {
+  const { supabase } = await currentMember();
+  const client = String(form.get("client") ?? "");
+  await supabase.from("clients").update({ reminders_paused: form.get("paused") === "on" }).eq("id", client);
+  revalidatePath(`/app/clients/${client}`);
+  redirect(`/app/clients/${client}?tab=details`);
+}
+
 export async function saveVisibility(form: FormData) {
   const { supabase, membership } = await currentMember();
   if (membership?.role !== "owner") redirect("/app");
@@ -835,25 +854,6 @@ export async function removeDocument(form: FormData) {
   redirect(restoring ? `${back}&saved=${id}` : `${back}&removed=${id}`);
 }
 
-// Sends one plain message from the firm's own mailbox, or null when none is connected. The
-// message itself is not kept (D6).
-async function firmMailer(firmId: string, firmName: string) {
-  const { data: mailbox } = await supabaseAdmin().from("connected_accounts").select("id, address_enc, credentials_enc, settings, status").eq("firm_id", firmId).eq("kind", "mail").maybeSingle();
-  if (mailbox?.status !== "connected") return null;
-  const crypto = serverCrypto();
-  const from = await crypto.decrypt(firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc);
-  const { password } = JSON.parse(await crypto.decrypt(firmId, `accounts/${mailbox.id}/credentials`, mailbox.credentials_enc));
-  return async (to: string, subject: string, text: string) => {
-    try {
-      await smtpTransport(from, password, (mailbox.settings as MailSettings).smtp).sendMail({ from: `${firmName} <${from}>`, to, subject, text });
-      return true;
-    } catch (failure) {
-      log.warn("firm_mail_failed", { code: (failure as { code?: string }).code ?? "send" });
-      return false;
-    }
-  };
-}
-
 // Asks a client for files for one period (PLAN.md 5.3.1, 8.6). Every member may. The client
 // gets a private upload link, sent from the firm's own mailbox to the client's registered
 // email when both exist; the link works for 30 days and only its hash is kept, so the
@@ -901,7 +901,7 @@ export async function askForDocuments(form: FormData) {
   const sent =
     !!mailer &&
     !!to &&
-    (await mailer(
+    (await mailer.send(
       to,
       `Documents needed${when}`,
       [`Dear ${client.name},`, "", `Please upload these documents${when}:`, ...items.map((item) => `- ${item.type}`), "", `Upload them here, no sign in needed: ${link}`, "The link works for 30 days.", "", membership.firmName].join("\n"),
@@ -981,7 +981,7 @@ export async function sendDocument(form: FormData) {
     link_expires_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
   });
   const link = `${process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? ""}/s/${token}`;
-  const sent = await mailer(
+  const sent = await mailer.send(
     to,
     document.name,
     [`Dear ${owner?.clients?.name},`, "", `${membership.firmName} has shared ${document.name} with you.`, "", `Download it here: ${link}`, "The link works for 7 days and up to 5 downloads.", "", membership.firmName].join("\n"),
