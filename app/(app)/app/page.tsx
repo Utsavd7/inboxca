@@ -67,7 +67,8 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       .order("due_on")
       .limit(4);
   const count = (query: PromiseLike<{ count: number | null }>) => Promise.resolve(query).then((result) => result.count ?? 0);
-  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices] = await Promise.all([
+  const lead = owner || membership.role === "partner";
+  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices, veryLate, lateNotices] = await Promise.all([
     cards().neq("status", "filed").lt("due_on", today),
     cards().eq("status", "upcoming").gte("due_on", today).lte("due_on", shift(today, 7)),
     cards().eq("status", "in_progress"),
@@ -88,8 +89,11 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
         ])
       : null,
-    owner || membership.role === "partner" ? supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending") : null,
+    lead ? supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending") : null,
     supabase.from("tasks").select("id, client_id, due_on, details, clients(name)", { count: "exact" }).eq("kind", "notice").in("status", ["upcoming", "in_progress"]).order("due_on").limit(5),
+    // Escalation (5.2, 5.6): returns 3 or more days late, and notices past their date, for the owner and partners.
+    lead ? count(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("kind", "compliance").neq("status", "filed").lte("due_on", shift(today, -3))) : 0,
+    lead ? count(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("kind", "notice").in("status", ["upcoming", "in_progress"]).lt("due_on", today)) : 0,
   ]);
   const rule = new Map(rules.data?.map((r) => [r.code, r]));
   const name = (code: string | null) => rule.get(code ?? "")?.name ?? code ?? "";
@@ -223,6 +227,16 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </div>
       )}
 
+      {!!veryLate && (
+        <p className="alert" role="alert">
+          {veryLate} {veryLate === 1 ? "return is" : "returns are"} 3 or more days late. <Link href="/app/calendar?view=overdue">See them</Link>
+        </p>
+      )}
+      {!!lateNotices && (
+        <p className="alert" role="alert">
+          {lateNotices} {lateNotices === 1 ? "notice is" : "notices are"} past {lateNotices === 1 ? "its" : "their"} action date or review deadline. <Link href="/app/notices">See them</Link>
+        </p>
+      )}
       {alerts?.data?.map((alert) => (
         <p key={alert.id} className="alert" role="alert">
           {alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string })}

@@ -17,6 +17,8 @@ export async function sendShare(share: {
   emailEventId?: string | null;
   inReplyTo?: string;
   waitingId?: string;
+  // A private paper: its link opens only with a one-time code (8.6).
+  needsCode?: boolean;
 }) {
   const mailer = await firmMailer(share.firmId, share.firmName);
   if (!mailer) return false;
@@ -25,6 +27,7 @@ export async function sendShare(share: {
   const id = share.waitingId ?? randomUUID();
   const fields = {
     status: "sent",
+    needs_code: !!share.needsCode,
     link_token_hash: createHash("sha256").update(token).digest("hex"),
     link_expires_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
   };
@@ -34,7 +37,7 @@ export async function sendShare(share: {
   const sent = await mailer.send(
     share.to,
     share.inReplyTo ? `Re: your request for ${share.documentName}` : share.documentName,
-    [`Dear ${share.clientName},`, "", `${share.firmName} has shared ${share.documentName} with you.`, "", `Download it here: ${link}`, "The link works for 7 days and up to 5 downloads.", "", share.firmName].join("\n"),
+    [`Dear ${share.clientName},`, "", `${share.firmName} has shared ${share.documentName} with you.`, "", `Download it here: ${link}`, share.needsCode ? "It is private: the page emails a one-time code to this address before it opens. The link works for 7 days and up to 5 downloads." : "The link works for 7 days and up to 5 downloads.", "", share.firmName].join("\n"),
     undefined,
     share.inReplyTo,
   );

@@ -358,6 +358,17 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const shared = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/s\/[\w-]+/)![0];
   await visitor.goto(shared);
   await expect(visitor.getByRole("heading", { name: /Loan statement/ })).toBeVisible();
+  // A loan statement is a private paper: it opens only with the code emailed to the same address.
+  expect((await visitor.request.get(`${shared}/file`)).status()).toBe(403);
+  await visitor.getByRole("button", { name: "Email me a code" }).click();
+  await expect(visitor.getByRole("status")).toContainText("A code is on its way");
+  const oneTime = (await lastMail(`client-${tag}@patel.test`)).match(/Your code is (\d{6})/)![1];
+  await visitor.getByLabel("Code from the email").fill(oneTime === "000000" ? "111111" : "000000");
+  await visitor.getByRole("button", { name: "Open" }).click();
+  await expect(visitor.getByRole("status")).toContainText("That code is not right");
+  await visitor.getByLabel("Code from the email").fill(oneTime);
+  await visitor.getByRole("button", { name: "Open" }).click();
+  await expect(visitor.getByRole("link", { name: "Download" })).toBeVisible();
   for (let download = 0; download < 5; download++) expect(Buffer.from(await (await visitor.request.get(`${shared}/file`)).body())).toEqual(loanPdf);
   expect((await visitor.request.get(`${shared}/file`)).status()).toBe(410);
 
