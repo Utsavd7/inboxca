@@ -152,3 +152,26 @@ export async function readNewMail(
     return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };
   }
 }
+
+// One message's subject and attached files, found again by its Message-ID ("uid:<validity>:
+// <uid>" for one that has none) and opened in memory for filing. Pictures shown inside the
+// text, such as a signature's logo, are left out.
+export async function readAttachments(address: string, password: string, server: Server, messageId: string) {
+  const imap = imapClient(address, password, server);
+  try {
+    await imap.connect();
+    const box = await imap.mailboxOpen("INBOX", { readOnly: true });
+    const own = messageId.match(/^uid:(\d+):(\d+)$/);
+    const uids = own ? (own[1] === String(box.uidValidity) ? [Number(own[2])] : []) : await imap.search({ header: { "message-id": messageId } }, { uid: true });
+    const message = uids && uids.length ? await imap.fetchOne(String(uids[0]), { source: true }, { uid: true }) : null;
+    const parsed = message && message.source ? await simpleParser(message.source) : null;
+    await imap.logout();
+    return {
+      subject: parsed?.subject ?? "",
+      files: (parsed?.attachments ?? []).filter((file) => !file.related).map((file) => ({ name: file.filename ?? "", bytes: new Uint8Array(file.content) })),
+    };
+  } catch (error) {
+    imap.close();
+    return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };
+  }
+}

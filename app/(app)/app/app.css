@@ -213,6 +213,7 @@ html:has(.ui) { scrollbar-gutter: stable; background: #fff; }
 .avatar.square { border-radius: var(--r1); }
 .avatar.big { width: 48px; height: 48px; border-radius: var(--r3); font-size: 18px; }
 .who { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+.file-icon { flex: none; color: var(--ink-3); }
 
 /* Record pages: the work on the left, the details down the right. */
 .record { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--s7); align-items: start; margin-top: var(--s5); }

@@ -71,8 +71,15 @@ export const mailPoll: Handler = async (job) => {
     const { data: saved, error } = await admin
       .from("email_events")
       .upsert(events, { onConflict: "account_id,provider_message_id", ignoreDuplicates: true })
-      .select("id, client_id, label, reason_code");
+      .select("id, client_id, provider_message_id, label, reason_code");
     if (error) return { retry: "events_not_saved" };
+    // A known client's attachments are filed into the firm's drive by a job of their own,
+    // so a drive that is slow or away never holds up reading mail.
+    const withFiles = new Set(read.mail.filter((mail) => mail.content.attachments.length).map((mail) => mail.messageId));
+    const filing = (saved ?? [])
+      .filter((event) => event.client_id && withFiles.has(event.provider_message_id))
+      .map((event) => ({ firm_id: firm, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }));
+    if (filing.length) await admin.from("jobs").upsert(filing, { onConflict: "idempotency_key", ignoreDuplicates: true });
     // Unclear mail, or mail whose client is not known yet, waits for the team.
     const replies = (saved ?? [])
       .filter((event) => event.label === "other" || !event.client_id)

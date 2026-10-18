@@ -1,14 +1,16 @@
-import { Archive, ChevronLeft } from "lucide-react";
+import { Archive, ChevronLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { manageClient } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
+import { periodName } from "@/src/lib/documents";
+import { workTypes, type WorkType } from "@/src/lib/drive";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
 import { LinkTabs } from "../../link-tabs";
-import { Avatar, Badge, PageHead } from "../../ui";
+import { Avatar, Badge, Empty, PageHead } from "../../ui";
 
 const errors: Record<string, string> = {
   details: "Enter a name, choose a kind, and check the email address.",
@@ -53,12 +55,15 @@ export default async function Client({ params, searchParams }: { params: Promise
     })),
   );
   const manage = canManageClients(membership.role);
-  const [{ data: people }, { data: groups }, { data: rules }, { data: tasks }] = await Promise.all([
+  const [{ data: people }, { data: groups }, { data: rules }, { data: tasks }, { data: files }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
     supabase.from("tasks").select("id, code, period_key, due_on, status").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
+    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, email_events(received_at)").eq("client_id", id).limit(500),
   ]);
+  // Newest first, by when the file arrived.
+  const documents = (files ?? []).sort((a, b) => (b.email_events?.received_at ?? "").localeCompare(a.email_events?.received_at ?? ""));
   const rule = new Map(rules?.map((r) => [r.code, r]));
   // Services sit on a number: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN.
   const servicesFor = (kind: string) => rules?.filter((r) => (r.due_rule as { for?: string }).for === kind) ?? [];
@@ -78,6 +83,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   // One part of the client at a time, so the page stays short; each save returns to its tab.
   const tabs: [string, string, number?][] = [
     ["overview", "Overview"],
+    ["files", "Files", documents.length],
     ["due", "Due dates", tasks?.length ?? 0],
     ["contacts", "Contacts", contacts.length],
     ["team", "Team", client.client_assignments.length],
@@ -219,6 +225,58 @@ export default async function Client({ params, searchParams }: { params: Promise
                 )}
               </div>
             </div>
+          )}
+          {tab === "files" && (
+            <section className="panel" aria-labelledby="files">
+              <div className="panel-head">
+                <h2 id="files">Files</h2>
+                <p className="hint">Saved in your firm&apos;s drive. Files marked To check need a person to confirm their type or period.</p>
+              </div>
+              {documents.length ? (
+                <div className="table-wrap">
+                  <table className="t">
+                    <thead>
+                      <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Work</th>
+                        <th scope="col">Received</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {documents.map((document) => (
+                        <tr key={document.id}>
+                          <td>
+                            <span className="who">
+                              <FileText size={16} aria-hidden className="file-icon" />
+                              {membership.role === "owner" ? (
+                                <a className="row-link" href={`/app/files/${document.id}`} target="_blank" rel="noopener">
+                                  {document.name}
+                                </a>
+                              ) : (
+                                <span className="name">{document.name}</span>
+                              )}
+                            </span>
+                            <span className="sub">
+                              {[document.document_type, periodName(document.period_key)].filter(Boolean).join(", ")}
+                            </span>
+                          </td>
+                          <td className="shrink">{workTypes[document.work_type as WorkType]}</td>
+                          <td className="shrink hint">{document.email_events ? dueLabel(document.email_events.received_at.slice(0, 10)) : ""}</td>
+                          <td className="shrink">
+                            <Badge tone={document.status === "to_check" ? "warn" : "done"}>{document.status === "to_check" ? "To check" : "Filed"}</Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <Empty Icon={FileText} title="No files yet">
+                  <span>Attachments this client emails are saved here, in your firm&apos;s drive, once the email and the drive are connected.</span>
+                </Empty>
+              )}
+            </section>
           )}
           {tab === "due" && (
             <section className="panel" aria-labelledby="due">
