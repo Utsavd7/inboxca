@@ -1,7 +1,7 @@
 import { Archive, ChevronLeft, FileText, Send, Upload } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { askForDocuments, manageClient, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
+import { askForDocuments, findDocuments, manageClient, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, workOfService, type DocumentRequest } from "@/src/lib/checklists";
@@ -37,10 +37,10 @@ const errors: Record<string, string> = {
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
     .select(
@@ -75,7 +75,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   ]);
   // The lists for the work this client's services need are ticked when asking for files.
   const usualWork = new Set(client.client_registrations.flatMap((registration) => (registration.services ?? []).map(workOfService)));
-  const documents = (files ?? []).filter((file) => file.status !== "deleted");
+  // A search keeps only the files whose words include every word typed.
+  const matching = find?.trim() ? new Set((await findDocuments(find, id)).map((file) => file.id)) : null;
+  const documents = (files ?? []).filter((file) => file.status !== "deleted" && (!matching || matching.has(file.id)));
   const removedFiles = (files ?? []).filter((file) => file.status === "deleted");
   const owner = membership.role === "owner";
   // A file waiting to be checked because the client already has it, or one like it.
@@ -270,6 +272,18 @@ export default async function Client({ params, searchParams }: { params: Promise
                 </span>
               </div>
               <p className="hint">Saved in your firm&apos;s drive. Files marked To check need a person to confirm their type or period.</p>
+              <form className="toolbar files-find" role="search">
+                <input type="hidden" name="tab" value="files" />
+                <input name="find" defaultValue={find} placeholder="Find a file by a word in it or its name" aria-label="Find a file" />
+                <button className="b b-secondary" type="submit">
+                  Find
+                </button>
+                {find && (
+                  <Link className="b b-ghost" href={`/app/clients/${client.id}?tab=files`}>
+                    Show all
+                  </Link>
+                )}
+              </form>
               <PortalDrop clientId={client.id} />
               <DroppedNotice value={dropped} />
               {sharedFile && (

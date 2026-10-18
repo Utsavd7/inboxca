@@ -6,6 +6,7 @@ import type { FolderOrder } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
+import { queueRead } from "./read-document";
 import type { Handler } from "./runner";
 
 // Files a client email's attachments into the client's folder in the firm's drive
@@ -66,6 +67,7 @@ export const fileMail: Handler = async (job) => {
       received_at: event.received_at,
     });
     if (error) return { retry: "document_not_saved" };
+    await queueRead(firm, id);
     known.push({ email_event_id: event.id, sha256, document_type: about.type, period_key: about.period });
   }
   return { done: true };

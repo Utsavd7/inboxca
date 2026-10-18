@@ -17,7 +17,9 @@ import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { recognisePortalFile } from "@/src/lib/portal-files";
+import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
+import { queueRead } from "@/src/jobs/read-document";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
 import { checkMailbox, detectSettings, smtpTransport, type MailSettings } from "@/src/lib/mailbox";
@@ -591,6 +593,23 @@ export async function findClients(text: string) {
   return data ?? [];
 }
 
+// Files whose words include every word typed, among the clients the person may see; one
+// client's files when a client is given. Words are matched by their keyed tokens.
+export async function findDocuments(text: string, client?: string) {
+  const { supabase, membership } = await currentMember();
+  const typed = words(text.slice(0, 200), 8);
+  if (!membership || !typed.length) return [];
+  let query = supabase
+    .from("documents")
+    .select("id, client_id, name, clients(name)")
+    .contains("search_tokens", await searchTokens(membership.firmId, typed))
+    .neq("status", "deleted")
+    .order("received_at", { ascending: false })
+    .limit(client ? 200 : 8);
+  if (client) query = query.eq("client_id", client);
+  return (await query).data ?? [];
+}
+
 // The type, work and period a person chose for a file, or null when they do not fit.
 function documentValues(form: FormData) {
   const type = form.get("type") === "Other" ? String(form.get("custom") ?? "").trim() : String(form.get("type") ?? "");
@@ -666,6 +685,7 @@ export async function manageDocument(form: FormData) {
     new_name: placed.name,
     new_file: placed.id,
   });
+  await queueRead(membership.firmId, id);
   revalidatePath("/app", "layout");
   redirect(`${back}&renamed=${id}`);
 }
@@ -706,6 +726,7 @@ async function saveForClient(
     received_at: now,
   });
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.uploaded", entity_type: "document", entity_id: id });
+  await queueRead(membership.firmId, id);
   return { id };
 }
 

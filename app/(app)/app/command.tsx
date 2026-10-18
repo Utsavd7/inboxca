@@ -3,7 +3,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { CornerDownLeft, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { findClients } from "@/app/(app)/actions";
+import { findClients, findDocuments } from "@/app/(app)/actions";
 import { clientKinds, type ClientKind } from "@/src/lib/clients";
 
 type Page = { href: string; name: string };
@@ -32,11 +32,13 @@ export function Command({ pages }: { pages: Page[] }) {
     if (!text.trim()) return;
     const timer = setTimeout(
       () =>
-        startTransition(async () =>
-          setClients(
-            (await findClients(text)).map((client) => ({ href: `/app/clients/${client.id}`, name: client.name, note: clientKinds[client.kind as ClientKind] ?? "Client" })),
-          ),
-        ),
+        startTransition(async () => {
+          const [found, files] = await Promise.all([findClients(text), findDocuments(text)]);
+          setClients([
+            ...found.map((client) => ({ href: `/app/clients/${client.id}`, name: client.name, note: clientKinds[client.kind as ClientKind] ?? "Client" })),
+            ...files.map((file) => ({ href: `/app/files/${file.id}/view`, name: file.name, note: file.clients?.name ?? "File" })),
+          ]);
+        }),
       120,
     );
     return () => clearTimeout(timer);

@@ -39,7 +39,7 @@ export function FileViewer({ id, kind, watermark }: { id: string; kind: "pdf" | 
         if (!stopped) mark(canvas);
       } else {
         const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
         const pdf = await pdfjs.getDocument({ data: bytes }).promise;
         for (let number = 1; number <= pdf.numPages && !stopped; number++) {
           const page = await pdf.getPage(number);

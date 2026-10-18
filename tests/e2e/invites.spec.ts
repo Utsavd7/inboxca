@@ -8,6 +8,7 @@ import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import { TEST_WORKER_SECRET } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
+import { pdf } from "@/tests/fixtures/pdf";
 import { emailStep, latestEmail, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
 // The owner invites a new person, who signs in from the invite email, sets up a 2 step
@@ -338,7 +339,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await visitor.goto(link);
   await expect(visitor.getByRole("heading", { name: `Documents for ${mailClient}` })).toBeVisible();
   const loan = visitor.getByRole("listitem").filter({ hasText: "Loan statement" });
-  await loan.getByLabel("File for Loan statement").setInputFiles({ name: "IMG_77.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 invented loan statement") });
+  const loanPdf = Buffer.from(pdf("Invented loan account 99231"));
+  await loan.getByLabel("File for Loan statement").setInputFiles({ name: "IMG_77.pdf", mimeType: "application/pdf", buffer: loanPdf });
   await loan.getByRole("button", { name: "Upload" }).click();
   await expect(visitor.getByRole("status")).toContainText("Received: Loan statement");
   await expect(visitor.getByRole("listitem").filter({ hasText: "Loan statement" })).toContainText("1 file received");
@@ -353,8 +355,20 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const shared = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/s\/[\w-]+/)![0];
   await visitor.goto(shared);
   await expect(visitor.getByRole("heading", { name: /Loan statement/ })).toBeVisible();
-  for (let download = 0; download < 5; download++) expect(await (await visitor.request.get(`${shared}/file`)).text()).toBe("%PDF-1.4 invented loan statement");
+  for (let download = 0; download < 5; download++) expect(Buffer.from(await (await visitor.request.get(`${shared}/file`)).body())).toEqual(loanPdf);
   expect((await visitor.request.get(`${shared}/file`)).status()).toBe(410);
+
+  // Each file is read once after it is filed: a word inside the PDF finds it, as does the name it came with.
+  await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  await owner.getByLabel("Find a file").fill("99231");
+  await owner.getByRole("button", { name: "Find", exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText("Loan statement");
+  await owner.getByLabel("Find a file").fill("IMG_2041");
+  await owner.getByRole("button", { name: "Find", exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText("Form 16");
+  await owner.getByRole("link", { name: "Show all" }).click();
 
   // A file removed in the drive itself is marked missing by the nightly check, and the owner is told.
   await unlink(path.join(drive, "FY 2025-26", mailClient, "Income tax", `${mailClient} - Form 16 - FY 2025-26.pdf`));
