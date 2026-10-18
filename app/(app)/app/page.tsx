@@ -10,6 +10,7 @@ import { roleNames } from "@/src/lib/roles";
 import { labels, type Label } from "@/src/lib/triage";
 import { CountUp } from "./count-up";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
+import { authorities, type NoticeDetails } from "@/src/lib/notices";
 import { Ribbon } from "./ribbon";
 import { Avatar, Badge, PageHead, type Tone } from "./ui";
 
@@ -61,11 +62,12 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     supabase
       .from("tasks")
       .select("id, client_id, code, period_key, due_on, status, details, clients!inner(name, archived_at)", { count: "exact" })
+      .eq("kind", "compliance")
       .is("clients.archived_at", null)
       .order("due_on")
       .limit(4);
   const count = (query: PromiseLike<{ count: number | null }>) => Promise.resolve(query).then((result) => result.count ?? 0);
-  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts] = await Promise.all([
+  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices] = await Promise.all([
     cards().neq("status", "filed").lt("due_on", today),
     cards().eq("status", "upcoming").gte("due_on", today).lte("due_on", shift(today, 7)),
     cards().eq("status", "in_progress"),
@@ -87,6 +89,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         ])
       : null,
     owner || membership.role === "partner" ? supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending") : null,
+    supabase.from("tasks").select("id, client_id, due_on, details, clients(name)", { count: "exact" }).eq("kind", "notice").in("status", ["upcoming", "in_progress"]).order("due_on").limit(5),
   ]);
   const rule = new Map(rules.data?.map((r) => [r.code, r]));
   const name = (code: string | null) => rule.get(code ?? "")?.name ?? code ?? "";
@@ -329,6 +332,40 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           ))}
         </div>
       </section>
+
+      {!!notices.data?.length && (
+        <section className="panel" aria-labelledby="home-notices">
+          <div className="panel-head">
+            <h2 id="home-notices">Open notices: {notices.count}</h2>
+            <Link className="b b-ghost b-small" href="/app/notices">
+              All notices
+            </Link>
+          </div>
+          <ul className="rows">
+            {notices.data.map((notice) => {
+              const details = notice.details as unknown as NoticeDetails;
+              return (
+                <li key={notice.id}>
+                  <Avatar name={notice.clients?.name ?? ""} />
+                  <span className="grow">
+                    <Link className="name" href={`/app/clients/${notice.client_id}`}>
+                      {notice.clients?.name}
+                    </Link>
+                    <span className="sub">
+                      {details.notice_type}, {authorities[details.authority]}
+                    </span>
+                  </span>
+                  {details.action_date ? (
+                    <span className={`when${notice.due_on < today ? " late" : ""}`}>Action by {dueLabel(notice.due_on)}</span>
+                  ) : (
+                    <Badge tone="warn">Review by {dueLabel(notice.due_on)}</Badge>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <div className="grid-2">
         <section className="panel" aria-labelledby="needs">

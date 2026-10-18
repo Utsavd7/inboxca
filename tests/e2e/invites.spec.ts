@@ -412,6 +412,20 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(owner.getByRole("status")).toContainText("Sent");
   expect(await lastMail(`client-${tag}@patel.test`)).toContain(`shared ${mailClient} - Balance sheet - FY 2025-26.pdf with you`);
 
+  // A notice a client emails is recorded with what the rules found; its date is only a
+  // suggestion until a person confirms it.
+  await ask("Income tax notice", "Notice under section 148 of the Income-tax Act. DIN: ITBA/AST/F/148/2026-27/1050012345(1). Please respond on or before 24/12/2026.");
+  await owner.goto("/app/notices");
+  const notice = owner.locator("section[aria-labelledby=open-notices] tbody tr").filter({ hasText: mailClient });
+  await expect(notice).toContainText("Notice u/s 148");
+  await expect(notice).toContainText("ITBA/AST/F/148/2026-27/1050012345");
+  await expect(notice).toContainText("Review by");
+  await expect(notice.getByLabel(`Action date for ${mailClient}`)).toHaveValue("2026-12-24");
+  await notice.getByRole("button", { name: "Confirm date" }).click();
+  await expect(notice).toContainText("24 Dec 2026");
+  await notice.getByLabel(`Status of the notice for ${mailClient}`).selectOption("replied");
+  await expect(owner.locator("section[aria-labelledby=done-notices]")).toContainText(mailClient);
+
   // Reminders: a confirmed return due in 3 days gets one email; a second run that day sends nothing more.
   const code = `TR${tag.toUpperCase()}`;
   await query(local.dbUrl, "insert into public.compliance_types (code, name, frequency, due_rule, source_url, verified_on, approved_by) values ($1, 'Test return', 'monthly', '{\"for\": \"pan\"}', 'https://example.test/notification', current_date, 'test')", [code]);

@@ -74,7 +74,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
-    supabase.from("tasks").select("id, code, period_key, due_on, status, details").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
+    supabase.from("tasks").select("id, code, period_key, due_on, status, details").eq("kind", "compliance").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
     supabase.from("documents").select("id, name, document_type, work_type, period_key, status, sha256, received_at").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
     supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).eq("status", "pending").gt("expires_at", new Date().toISOString()),
   ]);

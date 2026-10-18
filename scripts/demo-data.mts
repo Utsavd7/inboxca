@@ -188,6 +188,14 @@ for (const [client, label, minutesAgo] of mail) {
   events.set(client, { id, label });
 }
 
+// Two invented notices: one with its action date confirmed, one waiting for review.
+await db.query(
+  `insert into public.tasks (firm_id, client_id, kind, status, due_on, details) values
+   ($1, $2, 'notice', 'upcoming', $4::date + 12, jsonb_build_object('authority', 'income_tax', 'notice_type', 'Notice u/s 148', 'reference', 'ITBA/AST/F/148/2026-27/1000000001', 'received_on', $4::date - 1, 'action_date', $4::date + 12)),
+   ($1, $3, 'notice', 'upcoming', $4::date + 1, jsonb_build_object('authority', 'gst', 'notice_type', 'ASMT-10', 'reference', '', 'received_on', $4::date, 'suggested_date', $4::date + 30))`,
+  [firm, ids.get("Patel Textiles Pvt Ltd"), ids.get("Kapoor Enterprises"), today],
+);
+
 const [driveAccount] = (await db.query("select id, provider, credentials_enc from public.connected_accounts where firm_id = $1 and kind = 'drive'", [firm])).rows;
 const month = new Date(`${lastMonth}-01T00:00:00Z`).toLocaleString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
 const files = [
