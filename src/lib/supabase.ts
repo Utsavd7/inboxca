@@ -14,10 +14,13 @@ function connection(key: "SUPABASE_PUBLISHABLE_KEY" | "SUPABASE_SECRET_KEY") {
 }
 
 // Acts as the signed in person: row level security applies to everything it reads.
-export async function supabaseServer() {
+// The signed in person's own connection; `headers` go with every request it makes (the
+// office proof, for one).
+export async function supabaseServer(headers?: Record<string, string>) {
   const store = await cookies();
   const { url, value } = connection("SUPABASE_PUBLISHABLE_KEY");
   return createServerClient<Database>(url, value, {
+    ...(headers && { global: { headers } }),
     cookies: {
       getAll: () => store.getAll(),
       setAll: (list) => {

@@ -113,6 +113,32 @@ test("the owner changes the role, removes the person and brings them back", asyn
   await expect(row.getByRole("button", { name: "Remove" })).toBeVisible();
 });
 
+test("under Office only, staff reach the firm only from the office's internet connection", async () => {
+  // The test server reads each request's address from this header, as it would Cloudflare's.
+  await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
+  await owner.goto("/app/settings#office");
+  await owner.getByLabel("Yes, this is my office").check();
+  await owner.getByRole("button", { name: "Turn on" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "On." })).toContainText("You are on your office internet connection now.");
+
+  await person.setExtraHTTPHeaders({ "x-test-ip": "198.51.100.7" });
+  await person.goto("/app");
+  await expect(person.getByRole("heading", { name: "Use InboxCA from your office." })).toBeVisible();
+  await person.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
+  await person.goto("/app/clients");
+  await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
+
+  // Off again, staff reach the firm from anywhere.
+  await owner.goto("/app/settings#office");
+  await owner.getByRole("button", { name: "Turn off" }).click();
+  await expect(owner.getByText("Are you in your office right now?")).toBeVisible();
+  await person.setExtraHTTPHeaders({ "x-test-ip": "198.51.100.7" });
+  await person.goto("/app/clients");
+  await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
+  await owner.setExtraHTTPHeaders({});
+  await person.setExtraHTTPHeaders({});
+});
+
 test("the owner keeps people to office hours, and the person sees the firm is closed", async () => {
   await owner.getByRole("link", { name: "Settings" }).click();
   for (const day of ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
