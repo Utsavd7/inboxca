@@ -25,7 +25,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     .eq("firm_id", membership.firmId)
     .eq("kind", "compliance")
     .is("clients.archived_at", null)
-    .order("due_on");
+    .order("due_on")
+    .order("id");
   // One day, from the Home ribbon: everything due that day, filed or not.
   const day = /^\d{4}-\d{2}-\d{2}$/.test(params.day ?? "") ? params.day! : null;
   const window: { from?: string; to?: string; filedSince?: string } = day ? {} : calendarViews[view].window(today);

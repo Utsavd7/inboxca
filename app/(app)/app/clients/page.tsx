@@ -40,7 +40,8 @@ export default async function Clients({
     .from("clients")
     .select("id, name, kind, group_id, branch_id", { count: "exact" })
     .eq("firm_id", membership.firmId)
-    .order("name");
+    .order("name")
+    .order("id");
   if (params.group) query = query.eq("group_id", params.group);
   if (params.branch) query = query.eq("branch_id", params.branch);
   query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
