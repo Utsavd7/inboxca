@@ -183,13 +183,13 @@ isOneToOne: false
                   ]
                 },"documents": {
                   Row: {
-                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"received_at": string,"sha256": string,"size": number,"status": string,"work_type": string
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"received_at": string,"search_tokens": (string)[],"sha256": string,"size": number,"status": string,"work_type": string
                   }
                   Insert: {
-                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"name": string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"sha256": string,"size": number,"status"?: string,"work_type": string
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"name": string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"search_tokens"?: (string)[],"sha256": string,"size": number,"status"?: string,"work_type": string
                   }
                   Update: {
-                    "client_id"?: string,"document_type"?: string,"drive_file_id"?: string,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"name"?: string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"sha256"?: string,"size"?: number,"status"?: string,"work_type"?: string
+                    "client_id"?: string,"document_type"?: string,"drive_file_id"?: string,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"name"?: string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"search_tokens"?: (string)[],"sha256"?: string,"size"?: number,"status"?: string,"work_type"?: string
                   }
                   Relationships: [
                     {
