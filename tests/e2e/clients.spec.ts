@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
-import { emailStep, localSupabase, seedFirm, totp } from "./local-supabase";
+import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
 // Adding and finding clients, with numbers encrypted by the firm's key. Skipped when local
 // Supabase is not running.
@@ -141,6 +141,21 @@ test("importing 500 clients with emails adds them all and reports every bad row"
   await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
   await owner.goto("/app/clients?q=client42@example.test");
   await expect(owner.getByRole("link", { name: "Client 42", exact: true })).toBeVisible();
+});
+
+test("the client list shows its true count and a second page", async () => {
+  await query(
+    local.dbUrl,
+    "insert into public.clients (id, firm_id, name, kind) select gen_random_uuid(), $1, 'Paging Client ' || lpad(n::text, 3, '0'), 'individual' from generate_series(1, 51) n",
+    [firm.firmId],
+  );
+  await owner.goto("/app/clients?q=Client");
+  const pager = owner.getByRole("navigation", { name: "Client pages" });
+  await expect(pager).toContainText("Showing 1 to 50 of 551 clients");
+  await expect(pager.getByRole("link", { name: "Next" })).toHaveAttribute("href", "/app/clients?q=Client&page=2");
+  await pager.getByRole("link", { name: "Next" }).click();
+  await expect(owner).toHaveURL(/q=Client&page=2/);
+  await expect(pager).toContainText("Showing 51 to 100 of 551 clients");
 });
 
 test("clients in one group are listed together", async () => {
