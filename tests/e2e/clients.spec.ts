@@ -202,3 +202,33 @@ test("a contact person can act for several clients, with what they may receive",
   await owner.getByRole("button", { name: "Add contact" }).click();
   await expect(owner.getByRole("listitem").filter({ hasText: "ramesh@patel.example" })).toContainText("Ramesh Patel");
 });
+
+test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside it", async () => {
+  await owner.goto("/app/settings");
+  const drive = owner.locator("section#drive");
+  await drive.getByLabel("Test drive on this computer").check();
+  await drive.getByLabel(/I have read this and I agree/).check();
+  await drive.getByRole("button", { name: "Connect drive" }).click();
+  await expect(drive.getByRole("status")).toContainText("Connected");
+
+  // An invented download in the GST portal's layout, and a JSON file that is not one.
+  const gstr2b = Buffer.from(JSON.stringify({ data: { gstin: "27AAPFU0939F1ZV", rtnprd: "092026", version: "1.0", docdata: { b2b: [] } } }));
+  const other = Buffer.from(JSON.stringify({ gstin: "27AAPFU0939F1ZV", note: "not from the portal" }));
+  await owner.goto("/app");
+  const drop = (files: { name: string; buffer: Buffer }[]) =>
+    owner.getByLabel("Add portal files").setInputFiles(files.map((file) => ({ ...file, mimeType: "application/json" })));
+  await drop([
+    { name: "returns.json", buffer: gstr2b },
+    { name: "GSTR2B_september.json", buffer: other },
+  ]);
+  await owner.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(owner.getByRole("status")).toContainText("1 filed in its client's folder; 1 not filed");
+  await drop([{ name: "again.json", buffer: gstr2b }]);
+  await owner.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(owner.getByRole("status")).toContainText("1 already there");
+
+  await owner.goto("/app/clients?q=patel");
+  await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
+  await owner.getByRole("link", { name: /^Files/ }).click();
+  await expect(owner.locator("section[aria-labelledby=files] tbody tr")).toContainText(["Patel Textiles Pvt Ltd - GSTR-2B - Sep 2026"]);
+});

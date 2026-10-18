@@ -14,6 +14,7 @@ import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
+import { recognisePortalFile } from "@/src/lib/portal-files";
 import { readSheet } from "@/src/lib/sheet";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
@@ -667,6 +668,47 @@ export async function manageDocument(form: FormData) {
   redirect(`${back}&renamed=${id}`);
 }
 
+// Saves a file a person brought into the client's folder in the drive and records it,
+// logged with who did it. Refuses a file the client already has.
+async function saveForClient(
+  membership: { firmId: string },
+  userId: string,
+  client: { id: string; name: string },
+  values: { work_type: WorkType; document_type: string; period_key: string; status: "filed" | "to_check" },
+  file: { name: string; bytes: Uint8Array },
+  opened: NonNullable<Awaited<ReturnType<typeof firmDrive>>>,
+) {
+  const admin = supabaseAdmin();
+  const sha256 = createHash("sha256").update(file.bytes).digest("hex");
+  const { data: twin } = await admin.from("documents").select("id").eq("client_id", client.id).eq("sha256", sha256).neq("status", "deleted").limit(1);
+  if (twin?.length) return "twin" as const;
+  const now = new Date().toISOString();
+  const folder = await opened.drive.ensureFolder(folderFor(opened.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: values.status === "to_check" }));
+  const placed = await placeUnderFreeName(
+    { client: client.name, type: values.document_type, period: periodName(values.period_key), extension: path.extname(file.name) },
+    receivedLabel(now),
+    (name) => opened.drive.save(folder, name, file.bytes),
+  );
+  if (placed === "taken") return "drive" as const;
+  const id = randomUUID();
+  await admin.from("documents").insert({
+    id,
+    firm_id: membership.firmId,
+    client_id: client.id,
+    ...values,
+    drive_file_id: placed.id,
+    name: placed.name,
+    original_name_enc: await serverCrypto().encrypt(membership.firmId, `documents/${id}/original_name`, file.name),
+    size: file.bytes.length,
+    sha256,
+    received_at: now,
+  });
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.uploaded", entity_type: "document", entity_id: id });
+  return { id };
+}
+
+const MAX_UPLOAD = 25 * 1024 * 1024;
+
 // A file the owner, a partner or a manager uploads for a client, typed by them, saved into
 // the client's folder in the drive like a file from mail (PLAN.md 5.3). Up to 25 MB until
 // the file worker takes larger files. A file the client already has is refused.
@@ -678,39 +720,53 @@ export async function uploadDocument(form: FormData) {
   if (!canManageClients(membership.role)) redirect(`${back}&error=role`);
   const values = documentValues(form);
   const file = form.get("file");
-  if (!values || !(file instanceof File) || !file.size || file.size > 25 * 1024 * 1024) redirect(`${back}&upload=1&error=upload`);
+  if (!values || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD) redirect(`${back}&upload=1&error=upload`);
   const opened = await firmDrive(membership.firmId);
   if (!opened) redirect(`${back}&error=drive`);
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
-  const admin = supabaseAdmin();
-  const { data: twin } = await admin.from("documents").select("id").eq("client_id", client.id).eq("sha256", sha256).neq("status", "deleted").limit(1);
-  if (twin?.length) redirect(`${back}&upload=1&error=twin`);
-  const now = new Date().toISOString();
-  const folder = await opened.drive.ensureFolder(folderFor(opened.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: false }));
-  const placed = await placeUnderFreeName(
-    { client: client.name, type: values.document_type, period: periodName(values.period_key), extension: path.extname(file.name) },
-    receivedLabel(now),
-    (name) => opened.drive.save(folder, name, bytes),
-  );
-  if (placed === "taken") redirect(`${back}&error=drive`);
-  const id = randomUUID();
-  await admin.from("documents").insert({
-    id,
-    firm_id: membership.firmId,
-    client_id: client.id,
-    ...values,
-    status: "filed",
-    drive_file_id: placed.id,
-    name: placed.name,
-    original_name_enc: await serverCrypto().encrypt(membership.firmId, `documents/${id}/original_name`, file.name),
-    size: bytes.length,
-    sha256,
-    received_at: now,
-  });
-  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.uploaded", entity_type: "document", entity_id: id });
+  const saved = await saveForClient(membership, userId, client, { ...values, status: "filed" }, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, opened);
+  if (saved === "twin") redirect(`${back}&upload=1&error=twin`);
+  if (saved === "drive") redirect(`${back}&error=drive`);
   revalidatePath("/app", "layout");
-  redirect(`${back}&saved=${id}`);
+  redirect(`${back}&saved=${saved.id}`);
+}
+
+// Files staff fetched from the government portals, dropped in one or many at a time (PLAN.md
+// 5.3.1, D39). Each is known by its own contents; the client comes from the GSTIN inside it
+// and must be one the person may see. Every member may do this. A file that is not a known
+// portal file is filed under the client's To check only when the owner, a partner or a
+// manager drops it on that client's page; otherwise it is left out, and the summary says so.
+export async function dropPortalFiles(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  if (!membership) redirect("/app");
+  const onClient = String(form.get("client") ?? "");
+  const back = onClient ? `/app/clients/${onClient}?tab=files&` : "/app?";
+  const opened = await firmDrive(membership.firmId);
+  if (!opened) redirect(`${back}error=drive`);
+  const crypto = serverCrypto();
+  const count = { filed: 0, again: 0, left: 0 };
+  for (const file of form.getAll("files")) {
+    if (!(file instanceof File) || !file.size) continue;
+    if (file.size > MAX_UPLOAD) {
+      count.left++;
+      continue;
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const portal = recognisePortalFile(bytes);
+    const { data: registration } = portal
+      ? await supabase.from("client_registrations").select("client_id, clients(id, name)").eq("kind", "gstin").eq("number_bidx", await crypto.blindIndex(membership.firmId, "gstin", portal.gstin)).maybeSingle()
+      : { data: null };
+    let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
+    if (portal && registration?.clients) saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed" }, { name: file.name, bytes }, opened);
+    else if (onClient && canManageClients(membership.role)) {
+      const { data: client } = await supabase.from("clients").select("id, name").eq("id", onClient).maybeSingle();
+      if (client) saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, { name: file.name, bytes }, opened);
+    }
+    if (saved === "twin") count.again++;
+    else if (saved && saved !== "drive") count.filed++;
+    else count.left++;
+  }
+  revalidatePath("/app", "layout");
+  redirect(`${back}dropped=${count.filed}-${count.again}-${count.left}`);
 }
 
 // The owner removes a file, or puts back one removed in the last 30 days (D18). A removed
