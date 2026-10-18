@@ -7,27 +7,32 @@ import {
   type JobStore,
 } from "@/src/jobs/runner";
 
+const job = (values: Partial<Job>, index = 0): Job => ({
+  id: index + 1,
+  firm_id: null,
+  kind: "test",
+  entity_type: null,
+  entity_id: null,
+  schedule_version: 0,
+  idempotency_key: `k${index}`,
+  run_at: "",
+  state: "claimed",
+  claimed_until: null,
+  attempts: 1,
+  last_error_code: null,
+  ...values,
+});
+
 // An in-memory store that records what the runner asks of it.
 function memoryStore(jobs: Partial<Job>[]) {
   const finished: { id: number; outcome: string; code?: string; at?: Date }[] = [];
   const sending: number[] = [];
+  let claimed = false;
   const store: JobStore = {
     async claim() {
-      return jobs.map((job, index) => ({
-        id: index + 1,
-        firm_id: null,
-        kind: "test",
-        entity_type: null,
-        entity_id: null,
-        schedule_version: 0,
-        idempotency_key: `k${index}`,
-        run_at: "",
-        state: "claimed",
-        claimed_until: null,
-        attempts: 1,
-        last_error_code: null,
-        ...job,
-      }));
+      if (claimed) return [];
+      claimed = true;
+      return jobs.map(job);
     },
     async markSending(id) {
       sending.push(id);
@@ -109,5 +114,55 @@ describe("the job runner", () => {
       { now },
     );
     expect(sending).toEqual([1]);
+  });
+
+  it("stops claiming near the sweep time limit", async () => {
+    let time = 0;
+    let claims = 0;
+    const store = memoryStore([{ id: 1 }]).store;
+    store.claim = async () => {
+      claims++;
+      time += 30;
+      return claims < 3 ? [job({ id: claims }, claims - 1)] : [];
+    };
+    await runDueJobs(store, { test: async () => ({ done: true }) }, { maxRunMs: 50, clock: () => time });
+    expect(claims).toBe(2);
+  });
+
+  it("runs at most five jobs at a time", async () => {
+    const { store } = memoryStore(Array.from({ length: 12 }));
+    let active = 0;
+    let most = 0;
+    await runDueJobs(store, {
+      test: async () => {
+        active++;
+        most = Math.max(most, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active--;
+        return { done: true };
+      },
+    });
+    expect(most).toBe(5);
+  });
+
+  it("does not overlap jobs for one entity", async () => {
+    const { store } = memoryStore([
+      { entity_type: "account", entity_id: "00000000-0000-4000-8000-000000000001" },
+      { entity_type: "account", entity_id: "00000000-0000-4000-8000-000000000001" },
+      { entity_type: "account", entity_id: "00000000-0000-4000-8000-000000000002" },
+    ]);
+    const active = new Set<string>();
+    let overlap = false;
+    await runDueJobs(store, {
+      test: async (job) => {
+        const entity = job.entity_id!;
+        if (active.has(entity)) overlap = true;
+        active.add(entity);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active.delete(entity);
+        return { done: true };
+      },
+    });
+    expect(overlap).toBe(false);
   });
 });

@@ -44,15 +44,18 @@ export function retryDelaySeconds(attempt: number) {
 
 export type RunSummary = { claimed: number; done: number; retried: number; failed: number };
 
-// One sweep: claim what is due, run each job's handler, record the result.
+const entityKey = (job: Job) => job.entity_type && job.entity_id ? `${job.entity_type}:${job.entity_id}` : null;
+
+// One sweep: keep claiming due work for about 45 seconds. Five workers run different
+// entities together, while jobs for one entity stay in order.
 export async function runDueJobs(
   store: JobStore,
   handlers: Record<string, Handler>,
-  { batch = 20, leaseSeconds = 120, now = () => new Date() } = {},
+  { batch = 20, leaseSeconds = 120, concurrency = 5, maxRunMs = 45_000, now = () => new Date(), clock = Date.now } = {},
 ): Promise<RunSummary> {
-  const jobs = await store.claim(batch, leaseSeconds);
-  const summary: RunSummary = { claimed: jobs.length, done: 0, retried: 0, failed: 0 };
-  for (const job of jobs) {
+  const summary: RunSummary = { claimed: 0, done: 0, retried: 0, failed: 0 };
+  const started = clock();
+  const run = async (job: Job) => {
     const handler = handlers[job.kind];
     let outcome: Outcome;
     if (!handler) outcome = { fail: "no_handler" };
@@ -80,6 +83,26 @@ export async function runDueJobs(
       log.warn("job.failed", { jobId: job.id, kind: job.kind, code, attempts: job.attempts });
       summary.failed++;
     }
+  };
+
+  while (clock() - started < maxRunMs) {
+    const jobs = await store.claim(batch, leaseSeconds);
+    if (!jobs.length) break;
+    summary.claimed += jobs.length;
+    const waiting = [...jobs];
+    const active = new Set<string>();
+    const worker = async () => {
+      while (waiting.length) {
+        const at = waiting.findIndex((job) => !entityKey(job) || !active.has(entityKey(job)!));
+        if (at < 0) return;
+        const [job] = waiting.splice(at, 1);
+        const key = entityKey(job);
+        if (key) active.add(key);
+        await run(job);
+        if (key) active.delete(key);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, worker));
   }
   return summary;
 }
