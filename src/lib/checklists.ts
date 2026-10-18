@@ -18,4 +18,4 @@ export function workOfService(code: string): WorkType | null {
 }
 
 export type RequestItem = { type: string; work: WorkType; received: string[] };
-export type DocumentRequest = { period: string; items: RequestItem[]; link_hash: string };
+export type DocumentRequest = { period: string; items: RequestItem[]; link_hash: string; link_enc?: string; followups?: string[] };

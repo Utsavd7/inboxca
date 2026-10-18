@@ -888,7 +888,8 @@ export async function askForDocuments(form: FormData) {
     entity_type: "checklist",
     entity_id: id,
     expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
-    details: { period, items, link_hash: createHash("sha256").update(token).digest("hex") },
+    // The token itself is kept encrypted with the firm's key, only so follow-ups can send the same link.
+    details: { period, items, link_hash: createHash("sha256").update(token).digest("hex"), link_enc: await serverCrypto().encrypt(membership.firmId, `requests/${id}/link`, token) },
   });
   if (error) redirect(`${back}&ask=1&error=ask`);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.created", entity_type: "request", entity_id: id });

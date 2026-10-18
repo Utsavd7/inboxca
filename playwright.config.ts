@@ -14,6 +14,6 @@ export default defineConfig({
     command: "npm run start",
     url: origin,
     reuseExistingServer: !process.env.CI,
-    env: { JOB_WORKER_SECRET: TEST_WORKER_SECRET, MAIL_ALLOW_LOCAL: "1", REMINDERS_ANY_HOUR: "1", DRIVE_LOCAL_DIR: `${tmpdir()}/inboxca-test-drive` },
+    env: { JOB_WORKER_SECRET: TEST_WORKER_SECRET, MAIL_ALLOW_LOCAL: "1", REMINDERS_ANY_HOUR: "1", APP_BASE_URL: origin, DRIVE_LOCAL_DIR: `${tmpdir()}/inboxca-test-drive` },
   },
 });
