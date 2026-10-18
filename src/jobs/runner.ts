@@ -8,7 +8,7 @@ export type Job = Database["public"]["Tables"]["jobs"]["Row"];
 // What a handler reports. Codes are short machine words, never content.
 export type Outcome =
   | { done: true }
-  | { retry: string; patient?: boolean } // try again later, with this reason code; patient when the other side is away
+  | { retry: string; patient?: boolean; at?: Date } // try again later, with this reason code; patient when the other side is away; at a set time
   | { fail: string }; // give up, with this reason code
 
 export type Handler = (
@@ -69,8 +69,9 @@ export async function runDueJobs(
     if ("done" in outcome) {
       await store.finish(job.id, "done");
       summary.done++;
-    } else if ("retry" in outcome && job.attempts < (outcome.patient ? PATIENT_ATTEMPTS : MAX_ATTEMPTS)) {
-      const at = new Date(now().getTime() + (outcome.patient ? 3600 : retryDelaySeconds(job.attempts)) * 1000);
+    } else if ("retry" in outcome && (outcome.at || job.attempts < (outcome.patient ? PATIENT_ATTEMPTS : MAX_ATTEMPTS))) {
+      // A set time (the end of quiet hours, say) is not a failure, so it uses no try.
+      const at = outcome.at ?? new Date(now().getTime() + (outcome.patient ? 3600 : retryDelaySeconds(job.attempts)) * 1000);
       await store.finish(job.id, "retry", outcome.retry, at);
       summary.retried++;
     } else {

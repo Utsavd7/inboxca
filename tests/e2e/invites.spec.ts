@@ -379,6 +379,25 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.goto("/app");
   await expect(owner.getByRole("alert").filter({ hasText: "no longer in your drive" })).toBeVisible();
 
+  // Reminders: a confirmed return due in 3 days gets one email; a second run that day sends nothing more.
+  const code = `TR${tag.toUpperCase()}`;
+  await query(local.dbUrl, "insert into public.compliance_types (code, name, frequency, due_rule, source_url, verified_on, approved_by) values ($1, 'Test return', 'monthly', '{\"for\": \"pan\"}', 'https://example.test/notification', current_date, 'test')", [code]);
+  const [{ id: clientId }] = await query(local.dbUrl, "select id from public.clients where firm_id = $1 and name = $2", [firm.firmId, mailClient]);
+  await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, $3, '2026-09', (now() at time zone 'Asia/Kolkata')::date + 3)", [firm.firmId, clientId, code]);
+  await owner.goto("/app/settings");
+  await owner.getByLabel("Email clients before their returns are due").check();
+  await owner.getByRole("button", { name: "Save reminders" }).click();
+  for (let run = 0; run < 2; run++) {
+    await query(local.dbUrl, "delete from public.jobs where kind = 'reminders' and firm_id = $1", [firm.firmId]);
+    await query(local.dbUrl, "select private.queue_reminders()");
+    await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  }
+  expect(await lastMail(`client-${tag}@patel.test`)).toContain("- Test return for Sep 2026: due in 3 days");
+  const [{ details }] = await query(local.dbUrl, "select details from public.tasks where client_id = $1 and code = $2", [clientId, code]);
+  expect(details.reminded).toHaveLength(1);
+  await query(local.dbUrl, "delete from public.tasks where code = $1", [code]);
+  await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
+
   // Old files already in the drive: final papers are sorted into the client's folder in
   // place after a preview, and can be put back.
   const old = path.join(tmpdir(), "inboxca-test-drive", `Old files ${tag}`);

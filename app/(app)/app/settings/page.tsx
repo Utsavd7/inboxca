@@ -1,7 +1,7 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveReminders, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
 import { folderOrderNames } from "@/src/lib/drive";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { serverCrypto } from "@/src/lib/crypto";
@@ -56,6 +56,7 @@ export default async function Settings({
           {[
             ["#mailbox", "Firm email"],
             ["#drive", "Firm drive"],
+            ["#reminders", "Reminders"],
             ["#visibility", "Who sees clients"],
             ["#hours", "Office hours"],
             ["#special", "Special hours"],
@@ -166,6 +167,23 @@ export default async function Settings({
               </form>
             )}
           </section>
+          <section className="panel" aria-labelledby="reminders-title" id="reminders">
+            <h2 id="reminders-title">Reminders</h2>
+            <p className="hint">
+              InboxCA emails each client once a day at most, from your firm&apos;s address, about returns due in 7, 3 or 1 days, on the day, and 1 and 3 days late. It skips a
+              reminder when the return is filed, the client already sent files for it, or your team is replying to them. Only dates a CA has confirmed are reminded.
+            </p>
+            <form action={saveReminders} className="form-row">
+              <label className="check">
+                <input type="checkbox" name="on" defaultChecked={settings.reminders === true} />
+                Email clients before their returns are due
+              </label>
+              <button className="b b-secondary" type="submit">
+                Save reminders
+              </button>
+            </form>
+          </section>
+
           <section className="panel" aria-labelledby="visibility">
             <h2 id="visibility">Who sees which clients</h2>
             <form action={saveVisibility}>

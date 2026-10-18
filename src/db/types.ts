@@ -76,13 +76,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string
+                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"reminders_paused": boolean
                   }
                   Insert: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"reminders_paused"?: boolean
                   }
                   Update: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"reminders_paused"?: boolean
                   }
                   Relationships: [
                     {
