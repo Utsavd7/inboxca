@@ -44,6 +44,7 @@ export const sendReminders: Handler = async (job) => {
       .from("tasks")
       .select("id, client_id, code, period_key, due_on, details, clients!inner(name, email_enc, reminders_paused, archived_at)")
       .eq("firm_id", firm)
+      .eq("kind", "compliance")
       .neq("status", "filed")
       .is("clients.archived_at", null)
       .gte("due_on", shift(today, -3))

@@ -83,7 +83,11 @@ export const mailPoll: Handler = async (job) => {
     const asking = (saved ?? [])
       .filter((event) => event.client_id && (event.label === "records_past" || event.label === "records_current"))
       .map((event) => ({ firm_id: firm, kind: "records_reply", entity_type: "email", entity_id: event.id, idempotency_key: `records_reply:${event.id}` }));
-    const queued = [...filing, ...asking];
+    // A known client's notice is recorded by a job of its own (5.6).
+    const notices = (saved ?? [])
+      .filter((event) => event.client_id && event.label === "notice_received")
+      .map((event) => ({ firm_id: firm, kind: "notice_from_mail", entity_type: "email", entity_id: event.id, idempotency_key: `notice_from_mail:${event.id}` }));
+    const queued = [...filing, ...asking, ...notices];
     if (queued.length) await admin.from("jobs").upsert(queued, { onConflict: "idempotency_key", ignoreDuplicates: true });
     // Unclear mail, or mail whose client is not known yet, waits for the team.
     const replies = (saved ?? [])

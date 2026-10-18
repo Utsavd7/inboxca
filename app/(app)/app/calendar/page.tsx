@@ -19,6 +19,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   let query = supabase
     .from("tasks")
     .select("id, client_id, code, period_key, due_on, status, details, clients!inner(name, archived_at)")
+    .eq("kind", "compliance")
     .is("clients.archived_at", null)
     .order("due_on")
     .limit(500);

@@ -17,6 +17,7 @@ import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { planImport, type Planned, type Scope } from "@/src/lib/first-import";
+import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
@@ -1087,4 +1088,44 @@ export async function saveRecords(form: FormData) {
   const routine = form.getAll("routine").map(String).filter((type) => documentTypes.includes(type));
   await supabase.from("firms").update({ settings: { ...membership.settings, records: { routine, approve_all: form.get("approve_all") === "on" } } }).eq("id", membership.firmId);
   redirect("/app/settings?saved=records#records");
+}
+
+// The notice tracker (PLAN.md 5.6): a person records a notice by hand, confirms its action
+// date against the notice (only then is it the deadline), or moves it on: in progress,
+// replied, closed. Every member may; notices follow the client's visibility.
+export async function manageNotice(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  if (!membership) redirect("/app");
+  const intent = String(form.get("intent") ?? "");
+  const date = String(form.get("date") ?? "");
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date));
+  if (intent === "add") {
+    const { data: client } = await supabase.from("clients").select("id").eq("id", String(form.get("client") ?? "")).maybeSingle();
+    const authority = String(form.get("authority") ?? "other");
+    const received = String(form.get("received") ?? "") || todayInIndia();
+    if (!client || !(authority in authorities) || !/^\d{4}-\d{2}-\d{2}$/.test(received)) redirect("/app/notices?add=1&error=notice");
+    const details: NoticeDetails = {
+      authority: authority as Authority,
+      notice_type: String(form.get("type") ?? "").trim().slice(0, 80) || "Other",
+      reference: String(form.get("reference") ?? "").trim().toUpperCase().slice(0, 60),
+      received_on: received,
+      ...(validDate && { action_date: date }),
+    };
+    const settings = membership.settings as { notice_review_days?: number; holidays?: string[] };
+    const id = randomUUID();
+    await supabaseAdmin().from("tasks").insert({ id, firm_id: membership.firmId, client_id: client.id, kind: "notice", status: "upcoming", due_on: validDate ? date : reviewBy(received, settings.notice_review_days ?? 1, settings.holidays ?? []), details: details as unknown as NonNullable<Json> });
+    await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.added", entity_type: "task", entity_id: id });
+  } else {
+    const { data: notice } = await supabase.from("tasks").select("id, details").eq("id", String(form.get("notice") ?? "")).eq("kind", "notice").maybeSingle();
+    if (!notice) redirect("/app/notices");
+    const details = notice.details as unknown as NoticeDetails;
+    // Members never move a due date themselves; a confirmed action date is set by the server, logged.
+    if (intent === "confirm" && validDate) {
+      await supabaseAdmin().from("tasks").update({ due_on: date, details: { ...details, action_date: date } as unknown as NonNullable<Json> }).eq("id", notice.id);
+      await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.date_confirmed", entity_type: "task", entity_id: notice.id, details: { date } });
+    }
+    else if (intent in noticeStatuses) await supabase.from("tasks").update({ status: intent }).eq("id", notice.id);
+  }
+  revalidatePath("/app", "layout");
+  redirect("/app/notices");
 }
