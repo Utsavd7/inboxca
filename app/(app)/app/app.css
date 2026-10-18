@@ -215,10 +215,16 @@ html:has(.ui) { scrollbar-gutter: stable; background: #fff; }
 .who { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
 .file-icon { flex: none; color: var(--ink-3); }
 .sub-head { margin-top: var(--s5); font-size: 14px; font-weight: 600; }
+.ask-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--s4); margin-top: var(--s4); }
+.ask-groups fieldset { display: grid; align-content: start; gap: var(--s1); border: 0; }
+.ask-groups legend { margin-bottom: var(--s1); font-weight: 600; }
+.link-once { overflow-wrap: anywhere; user-select: all; }
+.asks { margin-top: var(--s3); }
 .drop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s5); padding: var(--s3) var(--s4); border: 1px dashed var(--line-2); border-radius: var(--r3); }
 .drop > svg { flex: none; color: var(--ink-3); }
 .drop p { display: grid; flex: 1 1 300px; }
-.drop input[type="file"] { width: auto; max-width: 280px; }
+.drop-pick { display: flex; align-items: center; gap: var(--s2); }
+.drop input[type="file"] { width: auto; max-width: 260px; }
 .notice + .notice, .drop + .notice, .drop + .alert { margin-top: var(--s3); }
 /* The view-only file viewer: pages on a quiet ground, nothing to download. */
 .viewer { margin-top: var(--s5); }
@@ -372,6 +378,20 @@ form:has(input[name="task"]:checked) .bulk { opacity: 1; transform: none; pointe
 .app-invite { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: var(--s3); align-items: end; margin-top: var(--s4); }
 .app-invite > div { display: grid; gap: 6px; }
 @media (max-width: 1000px) { .settings { grid-template-columns: 1fr; } .settings-index { position: static; display: flex; flex-wrap: wrap; margin-top: var(--s4); } }
+
+/* The client's upload page, reached from a request's private link. */
+.ui.ui-public { display: block; min-height: 100dvh; background: var(--side); }
+.public-body { max-width: 720px; margin-inline: auto; padding: var(--s7) var(--s4); }
+.public-body h1 { margin-top: var(--s1); font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
+.public-body > .hint { margin-top: var(--s2); }
+.public-firm { color: var(--ink-3); font-size: 13px; font-weight: 600; }
+.public-items { display: grid; gap: var(--s2); margin-top: var(--s5); }
+.public-items li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r3); background: #fff; }
+.public-items .grow { display: grid; flex: 1 1 200px; }
+.public-tick { display: grid; flex: none; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--press); color: var(--ink-2); font-size: 12px; font-weight: 600; }
+.public-tick.done { background: var(--green-bg); color: var(--green-fg); }
+.public-upload { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.public-upload input[type="file"] { width: auto; max-width: 240px; }
 
 /* Search */
 .cmd-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(24, 32, 47, 0.24); transition: opacity 150ms; }

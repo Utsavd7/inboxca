@@ -352,13 +352,13 @@ isOneToOne: false
                   ]
                 },"requests": {
                   Row: {
-                    "client_id": string | null,"entity_id": string,"entity_type": string,"firm_id": string,"id": string,"kind": string,"reason_code": string | null,"status": string
+                    "client_id": string | null,"details": NonNullable<Json>,"entity_id": string,"entity_type": string,"expires_at": string | null,"firm_id": string,"id": string,"kind": string,"reason_code": string | null,"status": string
                   }
                   Insert: {
-                    "client_id"?: string | null,"entity_id": string,"entity_type": string,"firm_id": string,"id"?: string,"kind": string,"reason_code"?: string | null,"status"?: string
+                    "client_id"?: string | null,"details"?: NonNullable<Json>,"entity_id": string,"entity_type": string,"expires_at"?: string | null,"firm_id": string,"id"?: string,"kind": string,"reason_code"?: string | null,"status"?: string
                   }
                   Update: {
-                    "client_id"?: string | null,"entity_id"?: string,"entity_type"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"reason_code"?: string | null,"status"?: string
+                    "client_id"?: string | null,"details"?: NonNullable<Json>,"entity_id"?: string,"entity_type"?: string,"expires_at"?: string | null,"firm_id"?: string,"id"?: string,"kind"?: string,"reason_code"?: string | null,"status"?: string
                   }
                   Relationships: [
                     {

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
+import { ImapFlow } from "imapflow";
 import nodemailer from "nodemailer";
 import { TEST_WORKER_SECRET } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
@@ -18,6 +19,17 @@ const tag = randomUUID().slice(0, 8);
 const ownerEmail = `owner-${tag}@example.test`;
 const newEmail = `new-${tag}@example.test`;
 const mailClient = `Mail Client ${tag}`;
+
+// The newest message in a test mailbox on the GreenMail server, which makes a mailbox for
+// every address it receives mail for.
+async function lastMail(address: string) {
+  const imap = new ImapFlow({ host: "127.0.0.1", port: 3143, secure: false, auth: { user: address, pass: address }, logger: false });
+  await imap.connect();
+  await imap.mailboxOpen("INBOX");
+  const message = await imap.fetchOne("*", { source: true });
+  await imap.logout();
+  return message && message.source ? message.source.toString() : "";
+}
 // A base32 authenticator key, given to the owner directly so their sign in is quick.
 const ownerKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
 let firm: Awaited<ReturnType<typeof seedFirm>>;
@@ -238,7 +250,7 @@ test("the owner connects a drive only after agreeing to the Drive access terms",
   expect(consent.details).toEqual({ provider: "local", level: "whole_drive", terms_version: "2026-10-17" });
 });
 
-test("a client's attachments are filed into its folder in the drive; an unclear one waits under To check", async ({ request }) => {
+test("a client's attachments are filed into its folder in the drive; an unclear one waits under To check", async ({ request, browser }) => {
   const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
   await smtp.sendMail({
     from: `client-${tag}@patel.test`,
@@ -313,6 +325,25 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - Form 16 - FY 2025-26.pdf`);
   expect(await readFile(path.join(drive, "FY 2025-26", mailClient, "Income tax", `${mailClient} - Form 16 - FY 2025-26.pdf`), "utf8")).toBe("%PDF-1.4 invented form 16");
+
+  // Asking the client for files emails them a private link; they upload with no sign in.
+  await owner.getByRole("link", { name: "Ask for files" }).click();
+  await owner.getByLabel("Sales bills").check();
+  await owner.getByLabel("Anything else, by name").fill("Loan statement");
+  await owner.getByRole("button", { name: "Ask for files" }).click();
+  await expect(owner.getByRole("status")).toContainText("emailed a private upload link");
+  const link = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/u\/[\w-]+/)![0];
+  const visitor = await (await browser.newContext()).newPage();
+  await visitor.goto(link);
+  await expect(visitor.getByRole("heading", { name: `Documents for ${mailClient}` })).toBeVisible();
+  const loan = visitor.getByRole("listitem").filter({ hasText: "Loan statement" });
+  await loan.getByLabel("File for Loan statement").setInputFiles({ name: "IMG_77.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 invented loan statement") });
+  await loan.getByRole("button", { name: "Upload" }).click();
+  await expect(visitor.getByRole("status")).toContainText("Received: Loan statement");
+  await expect(visitor.getByRole("listitem").filter({ hasText: "Loan statement" })).toContainText("1 file received");
+  await owner.reload();
+  await expect(owner.getByRole("list", { name: "Files asked for" })).toContainText("1 of 2 received");
+  await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Filed");
 
   await owner.goto("/app/settings");
   for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
