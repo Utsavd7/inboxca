@@ -24,6 +24,10 @@ describe("the firm's drive", () => {
     expect(await drive.save(folder, "bills.pdf", new Uint8Array([1]))).toEqual({ id: path.join(folder, "bills.pdf") });
     expect(await drive.save(folder, "bills.pdf", new Uint8Array([2]))).toBe("taken");
     expect([...(await drive.read(path.join(folder, "bills.pdf")))]).toEqual([1]);
+    await drive.save(folder, "sales.pdf", new Uint8Array([3]));
+    expect(await drive.move(path.join(folder, "sales.pdf"), folder, "bills.pdf")).toBe("taken");
+    const checked = await drive.ensureFolder(["FY 2026-27", "Patel Textiles", "GST", "To check"]);
+    expect(await drive.move(path.join(folder, "sales.pdf"), checked, "sales.pdf")).toEqual({ id: path.join(checked, "sales.pdf") });
     await expect(drive.ensureFolder(["..", "outside"])).rejects.toThrow("outside the test drive");
   });
 });

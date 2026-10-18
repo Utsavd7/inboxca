@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // The firm's own drive (PLAN.md 5.5.1, D36): one interface for every provider. Paths are
@@ -8,6 +8,8 @@ export interface Drive {
   ensureFolder(folders: string[]): Promise<string>;
   save(folderId: string, name: string, bytes: Uint8Array): Promise<{ id: string } | "taken">;
   read(fileId: string): Promise<Uint8Array>;
+  // Moves a file to another folder or name, refusing a name already taken.
+  move(fileId: string, folderId: string, name: string): Promise<{ id: string } | "taken">;
 }
 
 // A test drive in a folder on this computer, for development and the tests only
@@ -36,6 +38,18 @@ export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? ""): Drive {
       }
     },
     read: (fileId) => readFile(inside(fileId)),
+    async move(fileId, folderId, name) {
+      const relative = path.join(folderId, name);
+      // A hard link then an unlink, so a taken name is refused rather than replaced.
+      try {
+        await link(inside(fileId), inside(relative));
+      } catch (error) {
+        if ((error as { code?: string }).code === "EEXIST") return "taken";
+        throw error;
+      }
+      await unlink(inside(fileId));
+      return { id: relative };
+    },
   };
 }
 

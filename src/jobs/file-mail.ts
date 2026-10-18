@@ -1,8 +1,8 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { serverCrypto } from "@/src/lib/crypto";
-import { describeFile, periodName } from "@/src/lib/documents";
-import { fileName, folderPath, type FolderOrder } from "@/src/lib/drive";
+import { describeFile, folderFor, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
+import type { FolderOrder } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -10,9 +10,10 @@ import type { Handler } from "./runner";
 
 // Files a client email's attachments into the client's folder in the firm's drive
 // (PLAN.md 5.5.0, D24, D36): Financial year / Client / Work type, named Client - Type -
-// Period. A file whose type or period the rules could not tell goes under To check for a
-// person to confirm. A taken name gets the received date, then a short id; nothing is
-// overwritten. A retry skips files already filed, by checksum.
+// Period. A file goes under To check for a person to confirm when the rules could not tell
+// its type or period, or when the client already has the same file, or another of the same
+// type and period (the same document again: the team chooses). A retry skips files already
+// filed from this email, by checksum.
 export const fileMail: Handler = async (job) => {
   const admin = supabaseAdmin();
   const { data: event } = await admin
@@ -35,20 +36,17 @@ export const fileMail: Handler = async (job) => {
   const drive = await openDrive(firm, driveAccount);
   const order = ((driveAccount.settings as { folder_order?: FolderOrder }).folder_order ?? "year_client_work") as FolderOrder;
   const client = event.clients.name;
-  const received = new Date(event.received_at).toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
-  const { data: filed } = await admin.from("documents").select("sha256").eq("email_event_id", event.id);
-  const seen = new Set(filed?.map((document) => document.sha256));
+  const { data: existing } = await admin.from("documents").select("email_event_id, sha256, document_type, period_key").eq("client_id", event.client_id);
+  const known = existing ?? [];
   for (const file of read.files) {
     const sha256 = createHash("sha256").update(file.bytes).digest("hex");
-    if (seen.has(sha256)) continue;
-    seen.add(sha256);
+    if (known.some((document) => document.email_event_id === event.id && document.sha256 === sha256)) continue;
     const about = describeFile(file.name, read.subject, event.label, event.received_at);
-    const folder = await drive.ensureFolder([...folderPath(order, about.year, client, about.work), ...(about.sure ? [] : ["To check"])]);
+    const again = known.some((document) => document.sha256 === sha256 || (about.sure && document.document_type === about.type && document.period_key === about.period));
+    const toCheck = !about.sure || again;
+    const folder = await drive.ensureFolder(folderFor(order, client, { ...about, receivedAt: event.received_at, toCheck }));
     const parts = { client, type: about.type, period: periodName(about.period), extension: path.extname(file.name) };
-    let name = fileName(parts);
-    let saved = await drive.save(folder, name, file.bytes);
-    for (const suffix of [received, randomBytes(3).toString("hex")])
-      if (saved === "taken") saved = await drive.save(folder, (name = fileName({ ...parts, suffix })), file.bytes);
+    const saved = await placeUnderFreeName(parts, receivedLabel(event.received_at), (name) => drive.save(folder, name, file.bytes));
     if (saved === "taken") return { retry: "name_taken" };
     const id = randomUUID();
     const { error } = await admin.from("documents").insert({
@@ -58,15 +56,16 @@ export const fileMail: Handler = async (job) => {
       work_type: about.work,
       document_type: about.type,
       period_key: about.period,
-      status: about.sure ? "filed" : "to_check",
+      status: toCheck ? "to_check" : "filed",
       email_event_id: event.id,
       drive_file_id: saved.id,
-      name,
+      name: saved.name,
       original_name_enc: file.name ? await crypto.encrypt(firm, `documents/${id}/original_name`, file.name) : null,
       size: file.bytes.length,
       sha256,
     });
     if (error) return { retry: "document_not_saved" };
+    known.push({ email_event_id: event.id, sha256, document_type: about.type, period_key: about.period });
   }
   return { done: true };
 };

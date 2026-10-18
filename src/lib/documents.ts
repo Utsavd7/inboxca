@@ -1,4 +1,5 @@
-import { financialYear, type WorkType } from "./drive";
+import { randomBytes } from "node:crypto";
+import { fileName, financialYear, folderPath, type FolderOrder, type WorkType } from "./drive";
 import type { Label } from "./triage";
 
 // What an attachment is, read by rules from its name and the email's subject (PLAN.md
@@ -59,4 +60,39 @@ export function describeFile(fileName: string, subject: string, label: string | 
   const work = found && found[2] !== "other" ? found[2] : (labelWork[label as Label] ?? "other");
   const year = financialYear(period.length === 4 ? `${period}-03` : period || receivedAt.slice(0, 7));
   return { type: found?.[1] ?? "Document", work, period, year, sure: !!found && !!period };
+}
+
+// Every type a person can pick when confirming a file, in the order shown.
+export const documentTypes = [...new Set(types.map(([, type]) => type))].sort().concat("Document");
+
+// The periods a person can pick: the last 18 months and the last four financial years.
+export function periodChoices(today: string) {
+  const year = Number(today.slice(0, 4));
+  const monthsBack = Array.from({ length: 18 }, (_, back) => {
+    const at = new Date(Date.UTC(year, Number(today.slice(5, 7)) - 1 - back, 1));
+    return `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, "0")}`;
+  });
+  const lastYearEnd = Number(today.slice(5, 7)) >= 4 ? year + 1 : year;
+  return [...monthsBack, ...Array.from({ length: 4 }, (_, back) => String(lastYearEnd - back))];
+}
+
+// "17 Oct 2026", the India date a file arrived.
+export const receivedLabel = (at: string) => new Date(at).toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
+
+// Where a document goes: its client's folder for the year and work, under To check when a
+// person still has to confirm it.
+export function folderFor(order: FolderOrder, client: string, document: { work: WorkType; period: string; receivedAt: string; toCheck: boolean }) {
+  const year = financialYear(document.period.length === 4 ? `${document.period}-03` : document.period || document.receivedAt.slice(0, 7));
+  return [...folderPath(order, year, client, document.work), ...(document.toCheck ? ["To check"] : [])];
+}
+
+// Saves or moves a file under its plain name; a taken name gets the received date, then a
+// short id, so nothing is ever overwritten.
+export async function placeUnderFreeName(parts: { client: string; type: string; period: string; extension: string }, received: string, place: (name: string) => Promise<{ id: string } | "taken">) {
+  for (const suffix of [undefined, received, randomBytes(3).toString("hex")]) {
+    const name = fileName({ ...parts, suffix });
+    const placed = await place(name);
+    if (placed !== "taken") return { id: placed.id, name };
+  }
+  return "taken" as const;
 }

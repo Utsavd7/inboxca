@@ -266,10 +266,29 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
   // The owner opens a file from the drive through InboxCA, shown in the browser and sandboxed.
-  const href = await rows.getByRole("link", { name: `${mailClient} - Purchase bills - Sep 2026.pdf` }).getAttribute("href");
+  const href = await rows.getByRole("link", { name: `${mailClient} - Purchase bills - Sep 2026.pdf`, exact: true }).getAttribute("href");
   const file = await owner.request.get(href!);
   expect(await file.text()).toBe("%PDF-1.4 invented purchase bills");
   expect(file.headers()).toMatchObject({ "content-type": "application/pdf", "content-security-policy": "sandbox" });
+
+  // A person names the unclear scan: it moves out of To check under its new name, and Undo puts it back.
+  await rows.getByRole("link", { name: `Change ${mailClient} - Document.pdf` }).click();
+  await owner.getByLabel("Type", { exact: true }).selectOption("Other");
+  await owner.getByLabel("Name for Other").fill("HDFC loan sanction letter");
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - HDFC loan sanction letter.pdf`);
+  const gst = path.join(drive, thisYear, mailClient, "GST");
+  expect(await readFile(path.join(gst, `${mailClient} - HDFC loan sanction letter.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
+  await owner.getByRole("button", { name: "Undo" }).click();
+  await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
+  expect(await readFile(path.join(gst, "To check", `${mailClient} - Document.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
+
+  // The same bills sent again wait under To check beside the first copy, for the team to choose.
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Bills again", text: "Sending again.", attachments: [{ filename: "purchase_bills_sep_2026.pdf", content: "%PDF-1.4 invented purchase bills" }] });
+  await query(local.dbUrl, "select private.queue_mail_polls()");
+  for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  await owner.reload();
+  await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
 
   await owner.goto("/app/settings");
   for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();

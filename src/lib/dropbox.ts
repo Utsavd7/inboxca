@@ -90,6 +90,14 @@ export function dropboxDrive(refreshToken: string): Drive {
       if (!response.ok || !result.id) throw new Error("dropbox_upload");
       return { id: result.id };
     },
+    async move(fileId, folderId, name) {
+      const moved = await call(await accessToken(), "files/move_v2", { from_path: fileId, to_path: `${folderId}/${name}`, autorename: false });
+      if ("error" in moved) {
+        if (String(moved.error).startsWith("to/conflict")) return "taken";
+        throw new Error("dropbox_move");
+      }
+      return { id: String((moved.metadata as { id?: string }).id) };
+    },
     async read(fileId) {
       const response = await fetch("https://content.dropboxapi.com/2/files/download", {
         method: "POST",

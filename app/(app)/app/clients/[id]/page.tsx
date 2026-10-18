@@ -1,11 +1,11 @@
 import { Archive, ChevronLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { manageClient } from "@/app/(app)/actions";
+import { manageClient, manageDocument } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { periodName } from "@/src/lib/documents";
+import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { workTypes, type WorkType } from "@/src/lib/drive";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
@@ -24,13 +24,15 @@ const errors: Record<string, string> = {
   linked: "That contact is already linked to this client.",
   services: "Those services do not fit together. Choose one GSTR-1 and one GSTR-3B frequency, and not composition with regular returns.",
   role: "Only the owner, a partner or a manager can change clients.",
+  document: "Choose the file's type, work and period. A type of your own needs a name.",
+  drive: "The firm's drive could not be reached. Try again in a minute.",
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, tab: asked, edit, renamed }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
     .select(
@@ -60,10 +62,19 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
     supabase.from("tasks").select("id, code, period_key, due_on, status").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
-    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, email_events(received_at)").eq("client_id", id).limit(500),
+    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, sha256, email_events(received_at)").eq("client_id", id).limit(500),
   ]);
   // Newest first, by when the file arrived.
   const documents = (files ?? []).sort((a, b) => (b.email_events?.received_at ?? "").localeCompare(a.email_events?.received_at ?? ""));
+  // A file waiting to be checked because the client already has it, or one like it.
+  const sameAs = (file: (typeof documents)[number]) => {
+    const twin = documents.find((other) => other.id !== file.id && other.sha256 === file.sha256);
+    if (twin) return `Same file as ${twin.name}`;
+    const like = file.period_key && documents.find((other) => other.id !== file.id && other.document_type === file.document_type && other.period_key === file.period_key);
+    return like ? `Same type and period as ${like.name}` : "";
+  };
+  const editing = documents.find((file) => file.id === edit);
+  const renamedFile = documents.find((file) => file.id === renamed);
   const rule = new Map(rules?.map((r) => [r.code, r]));
   // Services sit on a number: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN.
   const servicesFor = (kind: string) => rules?.filter((r) => (r.due_rule as { for?: string }).for === kind) ?? [];
@@ -232,6 +243,64 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <h2 id="files">Files</h2>
                 <p className="hint">Saved in your firm&apos;s drive. Files marked To check need a person to confirm their type or period.</p>
               </div>
+              {renamedFile && (
+                <form action={manageDocument} className="notice" role="status">
+                  <input type="hidden" name="document" value={renamedFile.id} />
+                  <span>Saved as {renamedFile.name}.</span>
+                  <button className="b b-ghost b-small" name="intent" value="undo">
+                    Undo
+                  </button>
+                </form>
+              )}
+              {editing && (
+                <section className="reveal-panel" aria-labelledby="edit-file">
+                  <Link className="b b-ghost b-small reveal-close" href={`/app/clients/${client.id}?tab=files`} scroll={false}>
+                    Close
+                  </Link>
+                  <h3 id="edit-file">Correct {editing.name}</h3>
+                  <p className="hint">The file moves to the folder and name these give, in your firm&apos;s drive.</p>
+                  <form action={manageDocument} className="fields">
+                    <input type="hidden" name="document" value={editing.id} />
+                    <div>
+                      <label htmlFor="file-type">Type</label>
+                      <select id="file-type" name="type" defaultValue={documentTypes.includes(editing.document_type) ? editing.document_type : "Other"}>
+                        {documentTypes.map((type) => (
+                          <option key={type}>{type}</option>
+                        ))}
+                        <option value="Other">Other, named below</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="file-custom">Name for Other</label>
+                      <input id="file-custom" name="custom" maxLength={80} defaultValue={documentTypes.includes(editing.document_type) ? "" : editing.document_type} placeholder="HDFC loan sanction letter" />
+                    </div>
+                    <div>
+                      <label htmlFor="file-work">Work</label>
+                      <select id="file-work" name="work" defaultValue={editing.work_type}>
+                        {Object.entries(workTypes).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="file-period">Period</label>
+                      <select id="file-period" name="period" defaultValue={editing.period_key}>
+                        <option value="">No period</option>
+                        {periodChoices(todayInIndia()).map((period) => (
+                          <option key={period} value={period}>
+                            {periodName(period)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button className="b b-primary" name="intent" value="save">
+                      Save
+                    </button>
+                  </form>
+                </section>
+              )}
               {documents.length ? (
                 <div className="table-wrap">
                   <table className="t">
@@ -241,6 +310,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                         <th scope="col">Work</th>
                         <th scope="col">Received</th>
                         <th scope="col">Status</th>
+                        <th scope="col" className="shrink">
+                          <span className="sr-only">Actions</span>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -258,13 +330,31 @@ export default async function Client({ params, searchParams }: { params: Promise
                               )}
                             </span>
                             <span className="sub">
-                              {[document.document_type, periodName(document.period_key)].filter(Boolean).join(", ")}
+                              {[document.document_type, periodName(document.period_key), document.status === "to_check" && sameAs(document)].filter(Boolean).join(", ")}
                             </span>
                           </td>
                           <td className="shrink">{workTypes[document.work_type as WorkType]}</td>
                           <td className="shrink hint">{document.email_events ? dueLabel(document.email_events.received_at.slice(0, 10)) : ""}</td>
                           <td className="shrink">
                             <Badge tone={document.status === "to_check" ? "warn" : "done"}>{document.status === "to_check" ? "To check" : "Filed"}</Badge>
+                          </td>
+                          <td className="shrink">
+                            <form action={manageDocument} className="cell-form">
+                              <input type="hidden" name="document" value={document.id} />
+                              {document.status === "to_check" && (
+                                <>
+                                  <input type="hidden" name="type" value={document.document_type} />
+                                  <input type="hidden" name="work" value={document.work_type} />
+                                  <input type="hidden" name="period" value={document.period_key} />
+                                  <button className="b b-secondary b-small" name="intent" value="save" aria-label={`Confirm ${document.name}`}>
+                                    Confirm
+                                  </button>
+                                </>
+                              )}
+                              <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&edit=${document.id}`} scroll={false} aria-label={`Change ${document.name}`}>
+                                Change
+                              </Link>
+                            </form>
                           </td>
                         </tr>
                       ))}
