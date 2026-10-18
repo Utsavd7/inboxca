@@ -375,6 +375,37 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"shares": {
+                  Row: {
+                    "contact_id": string | null,"document_id": string,"downloads": number,"firm_id": string,"id": string,"link_expires_at": string,"link_token_hash": string
+                  }
+                  Insert: {
+                    "contact_id"?: string | null,"document_id": string,"downloads"?: number,"firm_id": string,"id"?: string,"link_expires_at": string,"link_token_hash": string
+                  }
+                  Update: {
+                    "contact_id"?: string | null,"document_id"?: string,"downloads"?: number,"firm_id"?: string,"id"?: string,"link_expires_at"?: string,"link_token_hash"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "shares_document_id_fkey"
+      columns: ["document_id"]
+isOneToOne: false
+      referencedRelation: "documents"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "shares_firm_id_contact_id_fkey"
+      columns: ["firm_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "shares_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"tasks": {
                   Row: {
                     "client_id": string,"code": string | null,"details": NonNullable<Json>,"due_on": string,"firm_id": string,"id": string,"kind": string,"period_key": string | null,"registration_id": string | null,"status": string
@@ -508,6 +539,11 @@ isOneToOne: false
                            },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string
+                           },
+"use_share":
+{ Args: { "token_hash": string }; Returns: {
+              "document_id": string,"firm_id": string
+            }[]
                            },
 "user_id_for_email":
 { Args: { "address": string }; Returns: string

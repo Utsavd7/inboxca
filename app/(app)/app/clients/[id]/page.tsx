@@ -1,7 +1,7 @@
 import { Archive, ChevronLeft, FileText, Send, Upload } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { askForDocuments, manageClient, manageDocument, removeDocument, uploadDocument } from "@/app/(app)/actions";
+import { askForDocuments, manageClient, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, workOfService, type DocumentRequest } from "@/src/lib/checklists";
@@ -32,13 +32,15 @@ const errors: Record<string, string> = {
   twin: "This client already has this file.",
   owner: "Only the owner can remove a file.",
   ask: "Tick at least one document, or name one, to ask for.",
+  recipient: "Choose who gets the file: the client's own email, or a contact allowed to receive documents.",
+  mailbox: "The file could not be emailed. Connect the firm's email in Settings, or try again in a minute.",
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
     .select(
@@ -85,6 +87,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   };
   const editing = documents.find((file) => file.id === edit);
   const noticeFile = (files ?? []).find((file) => file.id === (renamed ?? saved ?? removed));
+  const sending = documents.find((file) => file.id === send);
+  const sharedFile = documents.find((file) => file.id === shared);
+  const receivers = contacts.filter((contact) => contact.can_receive_documents);
   const rule = new Map(rules?.map((r) => [r.code, r]));
   // Services sit on a number: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN.
   const servicesFor = (kind: string) => rules?.filter((r) => (r.due_rule as { for?: string }).for === kind) ?? [];
@@ -267,6 +272,40 @@ export default async function Client({ params, searchParams }: { params: Promise
               <p className="hint">Saved in your firm&apos;s drive. Files marked To check need a person to confirm their type or period.</p>
               <PortalDrop clientId={client.id} />
               <DroppedNotice value={dropped} />
+              {sharedFile && (
+                <p className="notice" role="status">
+                  Sent {sharedFile.name}. The link works for 7 days and 5 downloads.
+                </p>
+              )}
+              {sending && manage && (
+                <section className="reveal-panel" aria-labelledby="send-file">
+                  <Link className="b b-ghost b-small reveal-close" href={`/app/clients/${client.id}?tab=files`} scroll={false}>
+                    Close
+                  </Link>
+                  <h3 id="send-file">Send {sending.name}</h3>
+                  <p className="hint">Emailed from your firm&apos;s address as a secure link that works for 7 days and 5 downloads.</p>
+                  <form action={sendDocument} className="send-to">
+                    <input type="hidden" name="document" value={sending.id} />
+                    {email && (
+                      <label className="check">
+                        <input type="radio" name="to" value="client" defaultChecked />
+                        {client.name}, {email}
+                      </label>
+                    )}
+                    {receivers.map((contact) => (
+                      <label key={contact.contact_id} className="check">
+                        <input type="radio" name="to" value={contact.contact_id} defaultChecked={!email && contact === receivers[0]} />
+                        {contact.name}, {contact.email}
+                      </label>
+                    ))}
+                    {!email && !receivers.length && <p className="hint">Add the client&apos;s email on Details, or a contact who may receive documents, to send files.</p>}
+                    <button className="b b-primary" type="submit" disabled={!email && !receivers.length}>
+                      <Send size={14} aria-hidden />
+                      Send
+                    </button>
+                  </form>
+                </section>
+              )}
               {askedFor && (
                 <p className="notice" role="status">
                   {askedFor === "sent" ? (
@@ -441,6 +480,11 @@ export default async function Client({ params, searchParams }: { params: Promise
                               <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&edit=${document.id}`} scroll={false} aria-label={`Change ${document.name}`}>
                                 Change
                               </Link>
+                              {manage && document.status === "filed" && (
+                                <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&send=${document.id}`} scroll={false} aria-label={`Send ${document.name}`}>
+                                  Send
+                                </Link>
+                              )}
                               {owner && (
                                 <form action={removeDocument}>
                                   <input type="hidden" name="document" value={document.id} />

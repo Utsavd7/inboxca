@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { ImapFlow } from "imapflow";
+import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import { TEST_WORKER_SECRET } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
@@ -28,7 +29,7 @@ async function lastMail(address: string) {
   await imap.mailboxOpen("INBOX");
   const message = await imap.fetchOne("*", { source: true });
   await imap.logout();
-  return message && message.source ? message.source.toString() : "";
+  return message && message.source ? ((await simpleParser(message.source)).text ?? "") : "";
 }
 // A base32 authenticator key, given to the owner directly so their sign in is quick.
 const ownerKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
@@ -344,6 +345,16 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.reload();
   await expect(owner.getByRole("list", { name: "Files asked for" })).toContainText("1 of 2 received");
   await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Filed");
+
+  // A filed document goes to the client as a secure link that stops after 5 downloads.
+  await rows.getByRole("link", { name: `Send ${mailClient} - Loan statement`, exact: false }).click();
+  await owner.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(owner.getByRole("status")).toContainText("works for 7 days and 5 downloads");
+  const shared = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/s\/[\w-]+/)![0];
+  await visitor.goto(shared);
+  await expect(visitor.getByRole("heading", { name: /Loan statement/ })).toBeVisible();
+  for (let download = 0; download < 5; download++) expect(await (await visitor.request.get(`${shared}/file`)).text()).toBe("%PDF-1.4 invented loan statement");
+  expect((await visitor.request.get(`${shared}/file`)).status()).toBe(410);
 
   await owner.goto("/app/settings");
   for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
