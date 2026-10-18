@@ -59,6 +59,9 @@ describe("claiming jobs", () => {
     }));
 
   it("never hands the same job to two workers", async () => {
+    // Other jobs due now (a local demo's, or ones the browser tests left) wait an hour, so
+    // the two workers share only this test's 30.
+    await db.query("update public.jobs set run_at = now() + interval '1 hour' where state = 'pending' and run_at <= now() and idempotency_key not like $1", [`${PREFIX}%`]);
     for (let i = 0; i < 30; i++) await add(`pair-${i}`);
     await Promise.all([db.query("begin"), second.query("begin")]);
     // Room for jobs a local demo firm queued meanwhile; only this test's own are counted.
