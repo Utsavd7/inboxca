@@ -1,4 +1,4 @@
-import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { link, mkdir, readdir, readFile, statfs, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 // The firm's own drive (PLAN.md 5.5.1, D36): one interface for every provider. Paths are
@@ -12,6 +12,9 @@ export interface Drive {
   move(fileId: string, folderId: string, name: string): Promise<{ id: string } | "taken">;
   // Sends a file to the drive's own bin, where the drive's rules then apply.
   trash(fileId: string): Promise<void>;
+  // The daily check: every file in InboxCA's folder, whether the folder is shared with
+  // anyone or has a link, and the free space (null when the drive does not say).
+  check(): Promise<{ files: { id: string; path: string }[]; shared: boolean; freeBytes: number | null }>;
 }
 
 // Where a removed file waits 30 days before it goes to the drive's bin.
@@ -56,6 +59,12 @@ export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? ""): Drive {
       return { id: relative };
     },
     trash: (fileId) => unlink(inside(fileId)),
+    async check() {
+      const entries = await readdir(root, { recursive: true, withFileTypes: true });
+      const files = entries.filter((entry) => entry.isFile()).map((entry) => path.relative(root, path.join(entry.parentPath, entry.name)));
+      const space = await statfs(root);
+      return { files: files.map((file) => ({ id: file, path: file })), shared: false, freeBytes: space.bavail * space.bsize };
+    },
   };
 }
 

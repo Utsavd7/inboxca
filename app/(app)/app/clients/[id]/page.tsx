@@ -462,7 +462,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                           <td className="shrink">{workTypes[document.work_type as WorkType]}</td>
                           <td className="shrink hint">{dueLabel(document.received_at.slice(0, 10))}</td>
                           <td className="shrink">
-                            <Badge tone={document.status === "to_check" ? "warn" : "done"}>{document.status === "to_check" ? "To check" : "Filed"}</Badge>
+                            <Badge tone={document.status === "to_check" ? "warn" : document.status === "missing" ? "late" : "done"}>
+                              {document.status === "to_check" ? "To check" : document.status === "missing" ? "Missing in the drive" : "Filed"}
+                            </Badge>
                           </td>
                           <td className="shrink">
                             <span className="cell-form">
