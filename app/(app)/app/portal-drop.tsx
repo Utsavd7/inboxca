@@ -14,10 +14,12 @@ export function PortalDrop({ clientId }: { clientId?: string }) {
         </label>
         <span className="hint">GSTR-2B and GSTR-2A downloaded from the GST portal. InboxCA reads the client and month inside each file.</span>
       </p>
-      <input id="portal-files" name="files" type="file" multiple required accept=".json,application/json" />
-      <button className="b b-secondary" type="submit">
-        Add
-      </button>
+      <span className="drop-pick">
+        <input id="portal-files" name="files" type="file" multiple required accept=".json,application/json" />
+        <button className="b b-secondary" type="submit">
+          Add
+        </button>
+      </span>
     </form>
   );
 }

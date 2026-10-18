@@ -1,9 +1,10 @@
-import { Archive, ChevronLeft, FileText, Upload } from "lucide-react";
+import { Archive, ChevronLeft, FileText, Send, Upload } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { manageClient, manageDocument, removeDocument, uploadDocument } from "@/app/(app)/actions";
+import { askForDocuments, manageClient, manageDocument, removeDocument, uploadDocument } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
+import { checklists, workOfService, type DocumentRequest } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { workTypes, type WorkType } from "@/src/lib/drive";
@@ -30,13 +31,14 @@ const errors: Record<string, string> = {
   upload: "Choose a file of up to 25 MB, and its type, work and period.",
   twin: "This client already has this file.",
   owner: "Only the owner can remove a file.",
+  ask: "Tick at least one document, or name one, to ask for.",
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
     .select(
@@ -61,13 +63,16 @@ export default async function Client({ params, searchParams }: { params: Promise
     })),
   );
   const manage = canManageClients(membership.role);
-  const [{ data: people }, { data: groups }, { data: rules }, { data: tasks }, { data: files }] = await Promise.all([
+  const [{ data: people }, { data: groups }, { data: rules }, { data: tasks }, { data: files }, { data: asks }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
     supabase.from("tasks").select("id, code, period_key, due_on, status").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
     supabase.from("documents").select("id, name, document_type, work_type, period_key, status, sha256, received_at").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
+    supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).eq("status", "pending").gt("expires_at", new Date().toISOString()),
   ]);
+  // The lists for the work this client's services need are ticked when asking for files.
+  const usualWork = new Set(client.client_registrations.flatMap((registration) => (registration.services ?? []).map(workOfService)));
   const documents = (files ?? []).filter((file) => file.status !== "deleted");
   const removedFiles = (files ?? []).filter((file) => file.status === "deleted");
   const owner = membership.role === "owner";
@@ -246,16 +251,100 @@ export default async function Client({ params, searchParams }: { params: Promise
             <section className="panel" aria-labelledby="files">
               <div className="panel-head">
                 <h2 id="files">Files</h2>
-                {manage && (
-                  <Link className="b b-secondary b-small" href={`/app/clients/${client.id}?tab=files&upload=1`} scroll={false}>
-                    <Upload size={14} aria-hidden />
-                    Upload a file
+                <span className="page-actions">
+                  <Link className="b b-secondary b-small" href={`/app/clients/${client.id}?tab=files&ask=1`} scroll={false}>
+                    <Send size={14} aria-hidden />
+                    Ask for files
                   </Link>
-                )}
+                  {manage && (
+                    <Link className="b b-secondary b-small" href={`/app/clients/${client.id}?tab=files&upload=1`} scroll={false}>
+                      <Upload size={14} aria-hidden />
+                      Upload a file
+                    </Link>
+                  )}
+                </span>
               </div>
               <p className="hint">Saved in your firm&apos;s drive. Files marked To check need a person to confirm their type or period.</p>
               <PortalDrop clientId={client.id} />
               <DroppedNotice value={dropped} />
+              {askedFor && (
+                <p className="notice" role="status">
+                  {askedFor === "sent" ? (
+                    "The client was emailed a private upload link. What they upload is saved here."
+                  ) : (
+                    <span>
+                      Send the client this private upload link; it is shown only now and works for 30 days: <span className="num link-once">{askedFor}</span>
+                    </span>
+                  )}
+                </p>
+              )}
+              {ask && (
+                <section className="reveal-panel" aria-labelledby="ask-files">
+                  <Link className="b b-ghost b-small reveal-close" href={`/app/clients/${client.id}?tab=files`} scroll={false}>
+                    Close
+                  </Link>
+                  <h3 id="ask-files">Ask {client.name} for files</h3>
+                  <p className="hint">The client gets a private link to upload them, no sign in needed. It works for 30 days.</p>
+                  <form action={askForDocuments}>
+                    <input type="hidden" name="client" value={client.id} />
+                    <div className="ask-groups">
+                      {Object.entries(checklists).map(([work, list]) => (
+                        <fieldset key={work}>
+                          <legend>{workTypes[work as WorkType]}</legend>
+                          {list.map((type) => (
+                            <label key={type} className="check">
+                              <input type="checkbox" name="item" value={`${work}:${type}`} defaultChecked={usualWork.has(work as WorkType)} />
+                              {type}
+                            </label>
+                          ))}
+                        </fieldset>
+                      ))}
+                    </div>
+                    <div className="fields">
+                      <div>
+                        <label htmlFor="ask-others">Anything else, by name</label>
+                        <input id="ask-others" name="others" maxLength={400} placeholder="Loan statement, Property tax receipt" />
+                      </div>
+                      <div>
+                        <label htmlFor="ask-period">For</label>
+                        <select id="ask-period" name="period" defaultValue={periodChoices(todayInIndia())[1]}>
+                          <option value="">No period</option>
+                          {periodChoices(todayInIndia()).map((choice) => (
+                            <option key={choice} value={choice}>
+                              {periodName(choice)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button className="b b-primary" type="submit">
+                        Ask for files
+                      </button>
+                    </div>
+                  </form>
+                </section>
+              )}
+              {!!asks?.length && (
+                <ul className="rows asks" aria-label="Files asked for">
+                  {asks.map((request) => {
+                    const details = request.details as unknown as DocumentRequest;
+                    const got = details.items.filter((item) => item.received.length).length;
+                    return (
+                      <li key={request.id}>
+                        <Send size={16} aria-hidden className="file-icon" />
+                        <span className="grow">
+                          <span className="name">
+                            Asked for {details.items.map((item) => item.type).join(", ")}
+                            {details.period && ` for ${periodName(details.period)}`}
+                          </span>
+                          <span className="sub">
+                            {got} of {details.items.length} received. The link works until {dueLabel(request.expires_at!.slice(0, 10))}.
+                          </span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
               {noticeFile && (
                 <form action={removed ? removeDocument : manageDocument} className="notice" role="status">
                   <input type="hidden" name="document" value={noticeFile.id} />

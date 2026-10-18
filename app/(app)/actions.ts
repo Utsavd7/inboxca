@@ -1,11 +1,13 @@
 "use server";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { todayInIndia } from "@/src/lib/calendar";
+import type { Json } from "@/src/db/types";
+import { checklists, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { folderFor, periodChoices, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
@@ -18,7 +20,7 @@ import { recognisePortalFile } from "@/src/lib/portal-files";
 import { readSheet } from "@/src/lib/sheet";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
-import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
+import { checkMailbox, detectSettings, smtpTransport, type MailSettings } from "@/src/lib/mailbox";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie } from "@/src/lib/session";
@@ -672,7 +674,7 @@ export async function manageDocument(form: FormData) {
 // logged with who did it. Refuses a file the client already has.
 async function saveForClient(
   membership: { firmId: string },
-  userId: string,
+  userId: string | null,
   client: { id: string; name: string },
   values: { work_type: WorkType; document_type: string; period_key: string; status: "filed" | "to_check" },
   file: { name: string; bytes: Uint8Array },
@@ -795,4 +797,116 @@ export async function removeDocument(form: FormData) {
   await supabaseAdmin().rpc("remove_document", { target: id, actor: userId, new_status: status, new_name: placed.name, new_file: placed.id });
   revalidatePath("/app", "layout");
   redirect(restoring ? `${back}&saved=${id}` : `${back}&removed=${id}`);
+}
+
+// Asks a client for files for one period (PLAN.md 5.3.1, 8.6). Every member may. The client
+// gets a private upload link, sent from the firm's own mailbox to the client's registered
+// email when both exist; the link works for 30 days and only its hash is kept, so the
+// person sees it once to send it themselves otherwise.
+export async function askForDocuments(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  const { data: client } = await supabase.from("clients").select("id, name, email_enc").eq("id", String(form.get("client") ?? "")).maybeSingle();
+  if (!membership || !client) redirect("/app");
+  const back = `/app/clients/${client.id}?tab=files`;
+  const period = String(form.get("period") ?? "");
+  const named = form.getAll("item").map(String);
+  const others = String(form.get("others") ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => name && name.length <= 80);
+  const items = [
+    ...named.flatMap((value) => {
+      const [work, type] = value.split(":");
+      return work in workTypes && checklists[work as WorkType]?.includes(type) ? [{ type, work: work as WorkType, received: [] as string[] }] : [];
+    }),
+    ...others.map((type) => ({ type, work: "other" as WorkType, received: [] as string[] })),
+  ];
+  if (!items.length || items.length > 30 || (period && !periodChoices(todayInIndia()).includes(period))) redirect(`${back}&ask=1&error=ask`);
+  const token = randomBytes(32).toString("base64url");
+  const id = randomUUID();
+  const admin = supabaseAdmin();
+  const { error } = await admin.from("requests").insert({
+    id,
+    firm_id: membership.firmId,
+    kind: "documents",
+    client_id: client.id,
+    entity_type: "checklist",
+    entity_id: id,
+    expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    details: { period, items, link_hash: createHash("sha256").update(token).digest("hex") },
+  });
+  if (error) redirect(`${back}&ask=1&error=ask`);
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.created", entity_type: "request", entity_id: id });
+  const link = `${process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? ""}/u/${token}`;
+
+  // Sent from the firm's mailbox to the client's registered address, if both are there.
+  const { data: mailbox } = await admin.from("connected_accounts").select("id, address_enc, credentials_enc, settings, status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle();
+  let sent = false;
+  if (mailbox?.status === "connected" && client.email_enc) {
+    const crypto = serverCrypto();
+    const from = await crypto.decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc);
+    const { password } = JSON.parse(await crypto.decrypt(membership.firmId, `accounts/${mailbox.id}/credentials`, mailbox.credentials_enc));
+    const to = await crypto.decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc);
+    const when = period ? ` for ${periodName(period)}` : "";
+    try {
+      await smtpTransport(from, password, (mailbox.settings as MailSettings).smtp).sendMail({
+        from: `${membership.firmName} <${from}>`,
+        to,
+        subject: `Documents needed${when}`,
+        text: [
+          `Dear ${client.name},`,
+          "",
+          `Please upload these documents${when}:`,
+          ...items.map((item) => `- ${item.type}`),
+          "",
+          `Upload them here, no sign in needed: ${link}`,
+          "The link works for 30 days.",
+          "",
+          membership.firmName,
+        ].join("\n"),
+      });
+      sent = true;
+    } catch (failure) {
+      log.warn("request_mail_failed", { code: (failure as { code?: string }).code ?? "send" });
+    }
+  }
+  revalidatePath("/app", "layout");
+  // The link is shown once, in the address, only when it could not be emailed.
+  redirect(sent ? `${back}&asked=sent` : `${back}&asked=${encodeURIComponent(link)}`);
+}
+
+// A file the client uploads through their private link, against one item asked for. The
+// link must be current and the request still open. Up to 25 MB a file and 100 files a request.
+export async function uploadToRequest(form: FormData) {
+  const token = String(form.get("token") ?? "");
+  const back = `/u/${token}`;
+  const admin = supabaseAdmin();
+  const { data: request } = await admin
+    .from("requests")
+    .select("id, firm_id, client_id, status, expires_at, details, clients(id, name), firms(name)")
+    .eq("kind", "documents")
+    .eq("details->>link_hash", createHash("sha256").update(token).digest("hex"))
+    .maybeSingle();
+  if (!request?.clients || request.status !== "pending" || Date.parse(request.expires_at ?? "") < Date.now()) redirect(back);
+  const details = request.details as unknown as DocumentRequest;
+  const at = Number(form.get("item"));
+  const item = details.items[at];
+  const file = form.get("file");
+  const total = details.items.reduce((sum, entry) => sum + entry.received.length, 0);
+  if (!item || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD || total >= 100) redirect(`${back}?error=file`);
+  const opened = await firmDrive(request.firm_id);
+  if (!opened) redirect(`${back}?error=later`);
+  const saved = await saveForClient(
+    { firmId: request.firm_id },
+    null,
+    request.clients,
+    { work_type: item.work, document_type: item.type, period_key: details.period, status: "filed" },
+    { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) },
+    opened,
+  );
+  if (saved === "drive") redirect(`${back}?error=later`);
+  if (saved !== "twin") item.received.push(saved.id);
+  const done = details.items.every((entry) => entry.received.length > 0);
+  await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: done ? "done" : "pending" }).eq("id", request.id);
+  redirect(`${back}?got=${at}`);
 }
