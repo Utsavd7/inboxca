@@ -373,6 +373,10 @@ form:has(input[name="task"]:checked) .bulk { opacity: 1; transform: none; pointe
 .settings-index a:hover { background: var(--hover); color: var(--ink); }
 .settings h2 { scroll-margin-top: var(--s6); }
 .settings .panel { padding-bottom: var(--s6); border-bottom: 1px solid var(--line); }
+.meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--s3); margin-top: var(--s4); }
+.meters div { padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
+.meters dt { color: var(--ink-3); font-size: 13px; }
+.meters dd { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
 .hours-table { margin-top: var(--s3); border-collapse: collapse; }
 .hours-table th { padding: var(--s1) var(--s4) var(--s1) 0; text-align: left; font-weight: 500; }
 .hours-table td { padding: var(--s1) var(--s3) var(--s1) 0; color: var(--ink-3); }
