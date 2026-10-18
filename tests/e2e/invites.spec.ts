@@ -387,12 +387,16 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.goto("/app/settings");
   await owner.getByLabel("Email clients before their returns are due").check();
   await owner.getByRole("button", { name: "Save reminders" }).click();
+  // The files asked for earlier were asked 3 days ago now, so the same email follows them up.
+  await query(local.dbUrl, "update public.requests set expires_at = now() + interval '27 days' where firm_id = $1 and kind = 'documents'", [firm.firmId]);
   for (let run = 0; run < 2; run++) {
     await query(local.dbUrl, "delete from public.jobs where kind = 'reminders' and firm_id = $1", [firm.firmId]);
     await query(local.dbUrl, "select private.queue_reminders()");
     await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   }
-  expect(await lastMail(`client-${tag}@patel.test`)).toContain("- Test return for Sep 2026: due in 3 days");
+  const reminder = await lastMail(`client-${tag}@patel.test`);
+  expect(reminder).toContain("- Test return for Sep 2026: due in 3 days");
+  expect(reminder).toMatch(/still waiting for these documents.*: Sales bills\.\nUpload them here, no sign in needed: http\S+\/u\//);
   const [{ details }] = await query(local.dbUrl, "select details from public.tasks where client_id = $1 and code = $2", [clientId, code]);
   expect(details.reminded).toHaveLength(1);
   await query(local.dbUrl, "delete from public.tasks where code = $1", [code]);

@@ -28,10 +28,11 @@ const labelTone: Record<string, Tone> = {
   data_tax_audit: "blue",
 };
 // What the daily drive check found, in a sentence the owner can act on.
-const alertText = (reason: string, details: { free_bytes?: number; files?: number }) =>
+const alertText = (reason: string, details: { free_bytes?: number; files?: number; client?: string }) =>
   ({
     drive_shared: "InboxCA's folder in your drive is shared with someone, or has a link. Only you should reach it: stop the sharing in your drive.",
     drive_full: `Your drive has ${((details.free_bytes ?? 0) / 1024 ** 2).toFixed(0)} MB left. Free some space or add more, so new client files can be saved.`,
+    request_stalled: `${details.client} has not uploaded the documents you asked for, after three reminders. A call may help.`,
     drive_missing: `${details.files} ${details.files === 1 ? "file" : "files"} InboxCA filed ${details.files === 1 ? "is" : "are"} no longer in your drive. Each is marked Missing on its client's Files tab.`,
   })[reason] ?? "Something in your drive needs a look.";
 const reasons: Record<string, string> = {
@@ -85,7 +86,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
         ])
       : null,
-    owner ? supabase.from("requests").select("reason_code, details").eq("kind", "alert").eq("status", "pending") : null,
+    owner || membership.role === "partner" ? supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending") : null,
   ]);
   const rule = new Map(rules.data?.map((r) => [r.code, r]));
   const name = (code: string | null) => rule.get(code ?? "")?.name ?? code ?? "";
@@ -220,8 +221,8 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       )}
 
       {alerts?.data?.map((alert) => (
-        <p key={alert.reason_code} className="alert" role="alert">
-          {alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number })}
+        <p key={alert.id} className="alert" role="alert">
+          {alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string })}
         </p>
       ))}
       <PortalDrop />

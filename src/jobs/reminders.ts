@@ -3,7 +3,8 @@ import { todayInIndia } from "@/src/lib/calendar";
 import { workOfService } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
 import { firmMailer } from "@/src/lib/firm-mail";
-import { planReminders, reminderEmail, type ReminderTask } from "@/src/lib/reminders";
+import type { DocumentRequest } from "@/src/lib/checklists";
+import { followUpDue, planReminders, reminderEmail, type FollowUp, type ReminderTask } from "@/src/lib/reminders";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Handler } from "./runner";
 
@@ -13,6 +14,7 @@ const shift = (date: string, days: number) => new Date(Date.parse(date) + days *
 // so a big firm's reminders spread over the morning inside the mailbox's daily limits.
 const PER_RUN = 100;
 
+type RequestDetails = DocumentRequest & { reminder?: { day: string; state: "sending" | "sent" | "failed" } };
 type Details = { reminder?: { day: string; state: "sending" | "sent" | "failed" }; reminded?: string[]; skipped?: { day: string; reason: string } } & Record<string, unknown>;
 
 // 09:30 India time on the next morning reminders may go (04:00 UTC).
@@ -73,11 +75,35 @@ export const sendReminders: Handler = async (job) => {
   }
 
   const crypto = serverCrypto();
+  // Document requests still waiting for files, followed up in the same daily email.
+  const { data: requests } = await admin
+    .from("requests")
+    .select("id, client_id, expires_at, details, clients(name, email_enc, reminders_paused, archived_at)")
+    .eq("firm_id", firm)
+    .eq("kind", "documents")
+    .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString());
+  const follow = new Map<string, (FollowUp & { details: RequestDetails })[]>();
+  const people = new Map(tasks.map((task) => [task.client_id, { name: task.name, email_enc: task.email_enc }]));
+  // A follow-up carries the upload link, which needs the app's own address.
+  for (const request of process.env.APP_BASE_URL ? (requests ?? []) : []) {
+    const details = request.details as unknown as RequestDetails;
+    const client = request.clients;
+    const missing = followUpDue({ expires_at: request.expires_at!, details }, today);
+    if (!missing || !client || !client.email_enc || client.reminders_paused || client.archived_at || !details.link_enc || !request.client_id) continue;
+    const link = `${process.env.APP_BASE_URL}/u/${await crypto.decrypt(firm, `requests/${request.id}/link`, details.link_enc)}`;
+    follow.set(request.client_id, [...(follow.get(request.client_id) ?? []), { requestId: request.id, client_id: request.client_id, period: details.period, missing, link, count: details.followups?.length ?? 0, details }]);
+    people.set(request.client_id, { name: client.name, email_enc: client.email_enc });
+  }
+
   const host = new URL(process.env.APP_BASE_URL ?? "http://inboxca.local").host;
   let sentNow = 0;
-  for (const [clientId, due] of send) {
-    const mine = due as (typeof tasks)[number][];
-    if (mine.every((task) => task.details.reminder?.day === today && task.details.reminder.state === "sent")) continue;
+  for (const clientId of new Set([...send.keys(), ...follow.keys()])) {
+    const mine = (send.get(clientId) ?? []) as (typeof tasks)[number][];
+    const asks = follow.get(clientId) ?? [];
+    // Each task and each request carries the day's send, so nothing goes twice.
+    const states = [...mine.map((task) => task.details.reminder), ...asks.map((ask) => ask.details.reminder)];
+    if (states.every((state) => state?.day === today && state.state === "sent")) continue;
     if (sentNow >= PER_RUN) return { retry: "more_clients", at: new Date(Date.now() + 10 * 60_000) };
     const messageId = `<reminder-${clientId}-${today}@${host}>`;
     const markAll = async (state: "sending" | "sent" | "failed") => {
@@ -86,20 +112,38 @@ export const sendReminders: Handler = async (job) => {
         await save(task, details);
         task.details = { ...task.details, ...details };
       }
+      for (const ask of asks) {
+        ask.details = { ...ask.details, reminder: { day: today, state }, ...(state === "sent" && { followups: [...(ask.details.followups ?? []), today] }) };
+        await admin.from("requests").update({ details: ask.details as unknown as NonNullable<Json> }).eq("id", ask.requestId);
+        // After the third follow-up with nothing back, the owner and partners are told.
+        if (state === "sent" && ask.details.followups?.length === 3)
+          await admin.from("requests").upsert(
+            { firm_id: firm, kind: "alert", entity_type: "request_stalled", entity_id: ask.requestId, client_id: clientId, reason_code: "request_stalled", status: "pending", details: { client: people.get(clientId)?.name ?? "" } },
+            { onConflict: "kind,entity_type,entity_id" },
+          );
+      }
     };
     // A send that may have happened before a crash is looked for first, never repeated blindly.
-    if (mine.some((task) => task.details.reminder?.day === today && task.details.reminder.state === "sending") && (await mailer.sentAlready(messageId))) {
+    if (states.some((state) => state?.day === today && state.state === "sending") && (await mailer.sentAlready(messageId))) {
       await markAll("sent");
       continue;
     }
     await markAll("sending");
-    const to = await crypto.decrypt(firm, `clients/${clientId}/email`, mine[0].email_enc!);
-    const { subject, text } = reminderEmail(mine[0].name, firmRow.name, mine, today);
+    const person = people.get(clientId)!;
+    const to = await crypto.decrypt(firm, `clients/${clientId}/email`, person.email_enc!);
+    const { subject, text } = reminderEmail(person.name, firmRow.name, mine, today, asks);
     const sent = await mailer.send(to, subject, text, messageId);
     await markAll(sent ? "sent" : "failed");
     if (sent) sentNow++;
     // Only what is reminded, never the text, goes in the log.
-    if (sent) await admin.from("activity_log").insert({ firm_id: firm, action: "reminder.sent", entity_type: "client", entity_id: clientId, details: { tasks: mine.map((task) => task.id), works: [...new Set(mine.map((task) => workOfService(task.code)))] } });
+    if (sent)
+      await admin.from("activity_log").insert({
+        firm_id: firm,
+        action: "reminder.sent",
+        entity_type: "client",
+        entity_id: clientId,
+        details: { tasks: mine.map((task) => task.id), requests: asks.map((ask) => ask.requestId), works: [...new Set(mine.map((task) => workOfService(task.code)))] },
+      });
   }
   return { done: true };
 };

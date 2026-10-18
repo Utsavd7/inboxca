@@ -1,5 +1,6 @@
 import { dueLabel, periodLabel } from "./calendar";
 import { checklists, workOfService } from "./checklists";
+import { periodName } from "./documents";
 import type { WorkType } from "./drive";
 
 // Smart reminders (PLAN.md 5.2, 5.2.1, D25): which of a firm's open returns are reminded
@@ -65,9 +66,22 @@ export function planReminders(tasks: ReminderTask[], today: string, filed: Set<s
   return { send, skipped };
 }
 
+// A document request still waiting for files (PLAN.md 5.2): followed up every 3 days, up to
+// 4 times, asking only for what has not arrived.
+export type FollowUp = { requestId: string; client_id: string; period: string; missing: string[]; link: string; count: number };
+export const FOLLOW_UP_DAYS = 3;
+export const MAX_FOLLOW_UPS = 4;
+export function followUpDue(request: { expires_at: string; details: { items: { type: string; received: string[] }[]; followups?: string[] } }, today: string) {
+  const missing = request.details.items.filter((item) => !item.received.length).map((item) => item.type);
+  const asked = new Date(Date.parse(request.expires_at) - 30 * DAY).toISOString().slice(0, 10);
+  const last = request.details.followups?.at(-1) ?? asked;
+  const count = request.details.followups?.length ?? 0;
+  return missing.length && count < MAX_FOLLOW_UPS && -daysUntil(last, today) >= FOLLOW_UP_DAYS ? missing : null;
+}
+
 // The one email a client gets today, in English (Hindi and Gujarati follow once a native
-// speaker has checked the wording).
-export function reminderEmail(client: string, firm: string, tasks: ReminderTask[], today: string) {
+// speaker has checked the wording): returns due, and documents still missing.
+export function reminderEmail(client: string, firm: string, tasks: ReminderTask[], today: string, followUps: FollowUp[] = []) {
   const when = (due: string) => {
     const days = daysUntil(due, today);
     return days === 0 ? "today" : days > 0 ? `in ${days} ${days === 1 ? "day" : "days"}` : `${-days} ${days === -1 ? "day" : "days"} ago`;
@@ -75,15 +89,29 @@ export function reminderEmail(client: string, firm: string, tasks: ReminderTask[
   const lines = tasks.map((task) => `- ${task.rule.name} for ${periodLabel(task.rule.frequency, task.period_key)}: due ${when(task.due_on)}, on ${dueLabel(task.due_on)}`);
   const asks = [...new Set(tasks.flatMap((task) => checklists[workOfService(task.code) as WorkType] ?? []))];
   const late = tasks.some((task) => daysUntil(task.due_on, today) < 0);
+  const waiting = followUps.flatMap((followUp) => [
+    `We are still waiting for these documents${followUp.period ? ` for ${periodName(followUp.period)}` : ""}: ${followUp.missing.join(", ")}.`,
+    `Upload them here, no sign in needed: ${followUp.link}`,
+    "",
+  ]);
   return {
-    subject: tasks.length === 1 ? `${late ? "Overdue" : "Reminder"}: ${tasks[0].rule.name} due ${dueLabel(tasks[0].due_on)}` : `${late ? "Overdue returns" : "Returns due soon"}: ${tasks.length} returns`,
+    subject: !tasks.length
+      ? "Documents still needed"
+      : tasks.length === 1
+        ? `${late ? "Overdue" : "Reminder"}: ${tasks[0].rule.name} due ${dueLabel(tasks[0].due_on)}`
+        : `${late ? "Overdue returns" : "Returns due soon"}: ${tasks.length} returns`,
     text: [
       `Dear ${client},`,
       "",
-      `This is a reminder from ${firm} about:`,
-      ...lines,
-      "",
-      ...(asks.length ? [`If you have not sent them yet, please reply to this email with your ${asks.join(", ").toLowerCase()}.`, ""] : []),
+      ...(tasks.length
+        ? [
+            `This is a reminder from ${firm} about:`,
+            ...lines,
+            "",
+            ...(asks.length ? [`If you have not sent them yet, please reply to this email with your ${asks.join(", ").toLowerCase()}.`, ""] : []),
+          ]
+        : []),
+      ...waiting,
       "If you have already sent everything, please ignore this message.",
       "",
       firm,

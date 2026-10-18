@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planReminders, reminderEmail, type ReminderTask } from "@/src/lib/reminders";
+import { followUpDue, planReminders, reminderEmail, type ReminderTask } from "@/src/lib/reminders";
 
 const today = "2026-10-17";
 const task = (overrides: Partial<ReminderTask> & { id: string }): ReminderTask => ({
@@ -48,5 +48,20 @@ describe("smart reminders", () => {
     expect(subject).toBe("Reminder: GSTR-3B (monthly) due 20 Oct 2026");
     expect(text).toContain("- GSTR-3B (monthly) for Sep 2026: due in 3 days, on 20 Oct 2026");
     expect(text).toContain("please reply to this email with your sales bills, purchase bills, bank statement.");
+  });
+
+  it("follows up a request every 3 days, up to 4 times, asking only for what is missing", () => {
+    // Asked on 10 Oct (the link runs 30 days, to 9 Nov).
+    const request = (followups: string[]) => ({ expires_at: "2026-11-09T00:00:00Z", details: { items: [{ type: "Sales bills", received: ["x"] }, { type: "Bank statement", received: [] }], followups } });
+    expect(followUpDue(request([]), "2026-10-12")).toBeNull();
+    expect(followUpDue(request([]), "2026-10-13")).toEqual(["Bank statement"]);
+    expect(followUpDue(request(["2026-10-13"]), "2026-10-15")).toBeNull();
+    expect(followUpDue(request(["2026-10-13", "2026-10-16", "2026-10-19", "2026-10-22"]), "2026-10-30")).toBeNull();
+    const { subject, text } = reminderEmail("Patel Textiles", "Demo CA Firm", [], today, [
+      { requestId: "r", client_id: "patel", period: "2026-09", missing: ["Bank statement"], link: "https://inboxca.test/u/abc", count: 1 },
+    ]);
+    expect(subject).toBe("Documents still needed");
+    expect(text).toContain("We are still waiting for these documents for Sep 2026: Bank statement.");
+    expect(text).toContain("https://inboxca.test/u/abc");
   });
 });
