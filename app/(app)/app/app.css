@@ -268,6 +268,8 @@ html:has(.ui) { scrollbar-gutter: stable; background: #fff; }
 .toolbar .search input { padding-left: 32px; }
 .toolbar select { width: auto; min-width: 150px; }
 .toolbar-end { display: flex; gap: var(--s2); margin-left: auto; }
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); margin-top: var(--s4); color: var(--ink-3); font-size: 13px; }
+.pager span { display: flex; gap: var(--s2); }
 
 /* Bulk actions rise when rows are ticked. */
 .bulk { position: sticky; bottom: var(--s5); z-index: 2; display: flex; align-items: center; gap: var(--s3); width: fit-content; margin: var(--s4) auto 0; padding: 6px 6px 6px var(--s4); border-radius: var(--r3); background: var(--ink); color: #fff; font-size: 13px; box-shadow: 0 16px 40px -16px rgba(24, 32, 47, 0.6); opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity 180ms var(--out), transform 180ms var(--out); }
