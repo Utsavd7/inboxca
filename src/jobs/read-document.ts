@@ -17,7 +17,7 @@ export const readDocument: Handler = async (job) => {
   try {
     bytes = await (await openDrive(firm, account)).read(document.drive_file_id);
   } catch {
-    return { retry: "drive_unreachable" };
+    return { retry: "drive_unreachable", patient: true };
   }
   const original = document.original_name_enc ? await serverCrypto().decrypt(firm, `documents/${document.id}/original_name`, document.original_name_enc) : "";
   const text = [document.name, document.document_type, original, await readText(document.name, bytes)].join("\n");

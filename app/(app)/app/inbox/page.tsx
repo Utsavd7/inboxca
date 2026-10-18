@@ -13,6 +13,7 @@ const reasons: Record<string, string> = {
   data_unclear: "Data for more than one kind of work",
   client_unclear: "The sender writes for several clients",
 };
+const byIdOf = <T extends { id: string }>(rows: T[] | null, id: string) => rows?.find((row) => row.id === id);
 const when = (at: string) =>
   new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -31,6 +32,9 @@ export default async function Inbox() {
     supabase.from("requests").select("id, entity_id, reason_code").eq("kind", "team_reply").eq("status", "pending"),
     supabase.from("documents").select("id, client_id, name, clients(name)").eq("status", "to_check").limit(50),
   ]);
+  // For mail from a contact who writes for several clients: the clients to choose from.
+  const unclear = (waiting ?? []).flatMap((request) => (request.reason_code === "client_unclear" ? [byIdOf(events, request.entity_id)?.contact_id] : [])).filter(Boolean) as string[];
+  const { data: links } = unclear.length ? await supabase.from("contact_clients").select("contact_id, client_id, clients(name)").in("contact_id", unclear) : { data: [] };
   const crypto = serverCrypto();
   const sender = new Map(
     await Promise.all(
@@ -70,6 +74,23 @@ export default async function Inbox() {
                 <form action={manageEmail} className="end">
                   {event && <span className="when">{when(event.received_at)}</span>}
                   <input type="hidden" name="request" value={request.id} />
+                  {request.reason_code === "client_unclear" && event && (
+                    <>
+                      <input type="hidden" name="email" value={event.id} />
+                      <select name="client" aria-label={`Which client the email from ${name} is for`}>
+                        {links
+                          ?.filter((link) => link.contact_id === event.contact_id)
+                          .map((link) => (
+                            <option key={link.client_id} value={link.client_id}>
+                              {link.clients?.name}
+                            </option>
+                          ))}
+                      </select>
+                      <button className="b b-secondary b-small" name="intent" value="client">
+                        It is for this client
+                      </button>
+                    </>
+                  )}
                   <button className="b b-secondary b-small" name="intent" value="done">
                     <Check size={14} aria-hidden />
                     Done
