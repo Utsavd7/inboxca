@@ -455,6 +455,9 @@ isOneToOne: false
 "assigned_clients":
 { Args: Record<PropertyKey, never>; Returns: string[]
                            },
+"calendar_top_up":
+{ Args: { "target_firm": string,"today"?: string }; Returns: undefined
+                           },
 "can_access_client":
 { Args: { "client": string,"target_firm": string }; Returns: boolean
                            },

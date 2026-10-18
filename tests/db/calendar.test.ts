@@ -119,4 +119,24 @@ describe("the compliance calendar", () => {
       await db.query("select private.plan_tasks(null, '2026-10-01')");
       expect((await due("GSTR3B_M"))[0]).toEqual({ period_key: "2026-09", due_on: "2026-10-25" });
     }));
+
+  it("tops up one firm without touching another firm's tasks", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER);
+      await setServices("gstin", ["GSTR1_M"]);
+      await asOwner(db);
+      const otherClient = "00000000-0000-4000-8000-0000000005c2";
+      await db.query("insert into public.clients (id, firm_id, name, kind) values ($1, $2, 'Other Client', 'business')", [otherClient, OTHER]);
+      await db.query(
+        "insert into public.client_registrations (firm_id, client_id, kind, number_enc, number_bidx, state_code, services) values ($1, $2, 'gstin', 'sealed', 'other-gstin', '27', '{GSTR1_M}')",
+        [OTHER, otherClient],
+      );
+      await db.query("delete from public.tasks where firm_id in ($1, $2)", [FIRM, OTHER]);
+      await db.query("set local role service_role");
+      await db.query("select public.calendar_top_up($1, '2026-10-01')", [FIRM]);
+      await asOwner(db);
+      const counts = await db.query("select firm_id, count(*)::int n from public.tasks where firm_id in ($1, $2) group by firm_id", [FIRM, OTHER]);
+      expect(counts.rows).toEqual([{ firm_id: FIRM, n: 12 }]);
+    }));
 });
