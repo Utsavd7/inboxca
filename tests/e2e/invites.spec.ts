@@ -228,9 +228,12 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await query(local.dbUrl, "select private.queue_mail_polls()");
   await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   await owner.getByRole("link", { name: "Inbox" }).click();
+  // The request for last year's ITR found no ITR in the drive, so it waits for the team too.
   const waiting = owner.locator("section[aria-labelledby=team-reply]").getByRole("listitem");
-  await expect(waiting).toContainText("InboxCA could not tell what it asks");
-  await waiting.getByRole("button", { name: "Done" }).click();
+  await expect(waiting).toHaveCount(2);
+  await expect(waiting.filter({ hasText: "Asks for a paper that is not in the drive" })).toHaveCount(1);
+  for (const reason of ["InboxCA could not tell what it asks", "Asks for a paper that is not in the drive"])
+    await waiting.filter({ hasText: reason }).getByRole("button", { name: "Done" }).click();
   await expect(owner.getByText("Nothing waits for the team.")).toBeVisible();
   const latest = owner.locator("section[aria-labelledby=latest] tbody tr");
   await expect(latest).toHaveCount(2);
@@ -378,6 +381,36 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows.filter({ hasText: "Form 16" })).toContainText("Missing in the drive");
   await owner.goto("/app");
   await expect(owner.getByRole("alert").filter({ hasText: "no longer in your drive" })).toBeVisible();
+
+  // A client asks for papers by email: a routine ITR-V goes back at once as a secure link in
+  // reply; private financial statements wait in the Inbox for one approval.
+  for (const [type, period, content] of [["ITR-V", "FY 2024-25", "invented ITR-V"], ["Balance sheet", "FY 2025-26", "invented balance sheet"]]) {
+    await owner.goto("/app/clients");
+    await owner.getByRole("link", { name: mailClient }).click();
+    await owner.getByRole("link", { name: /^Files/ }).click();
+    await owner.getByRole("link", { name: "Upload a file" }).click();
+    await owner.getByLabel("File", { exact: true }).setInputFiles({ name: `${type}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
+    await owner.getByLabel("Type", { exact: true }).selectOption(type);
+    await owner.getByLabel("Period", { exact: true }).selectOption({ label: period });
+    await owner.getByRole("button", { name: "Upload", exact: true }).click();
+    await expect(owner.getByRole("status")).toContainText("Saved as");
+  }
+  const ask = async (subject: string, text: string) => {
+    await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject, text });
+    await query(local.dbUrl, "select private.queue_mail_polls()");
+    for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  };
+  await ask("ITR copy", "Please send my ITR for AY 2025-26 for the loan.");
+  const reply = await lastMail(`client-${tag}@patel.test`);
+  expect(reply).toContain(`shared ${mailClient} - ITR-V - FY 2024-25.pdf with you`);
+  expect(reply).toMatch(/Download it here: http\S+\/s\//);
+  await ask("Financial statements", "Can you share the financial statements for FY 2025-26?");
+  await owner.goto("/app/inbox");
+  const papers = owner.locator("section[aria-labelledby=papers]");
+  await expect(papers).toContainText(`${mailClient} - Balance sheet - FY 2025-26.pdf`);
+  await papers.getByRole("button", { name: "Approve and send" }).click();
+  await expect(owner.getByRole("status")).toContainText("Sent");
+  expect(await lastMail(`client-${tag}@patel.test`)).toContain(`shared ${mailClient} - Balance sheet - FY 2025-26.pdf with you`);
 
   // Reminders: a confirmed return due in 3 days gets one email; a second run that day sends nothing more.
   const code = `TR${tag.toUpperCase()}`;

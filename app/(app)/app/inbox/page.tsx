@@ -1,7 +1,8 @@
 import { Check, FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { manageEmail } from "@/app/(app)/actions";
+import { decideShare, manageEmail } from "@/app/(app)/actions";
+import { canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { currentMember } from "@/src/lib/member";
 import { AutoSelect } from "../auto-select";
@@ -10,6 +11,9 @@ import { labels } from "@/src/lib/triage";
 
 const reasons: Record<string, string> = {
   no_rule: "InboxCA could not tell what it asks",
+  record_not_found: "Asks for a paper that is not in the drive",
+  record_unclear: "Asks for a paper InboxCA could not pick out",
+  not_allowed: "Asks for a paper, but may not receive this client's papers",
   data_unclear: "Data for more than one kind of work",
   client_unclear: "The sender writes for several clients",
 };
@@ -19,10 +23,11 @@ const when = (at: string) =>
 
 // Client email as InboxCA sorted it: what waits for the team, and the latest mail with its
 // label. Only labels and times are kept; the email itself stays in the firm's mailbox.
-export default async function Inbox() {
+export default async function Inbox({ searchParams }: { searchParams: Promise<{ approved?: string; error?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ data: events }, { data: waiting }, { data: toCheck }] = await Promise.all([
+  const { approved, error } = await searchParams;
+  const [{ data: events }, { data: waiting }, { data: toCheck }, { data: papers }] = await Promise.all([
     supabase
       .from("email_events")
       .select("id, client_id, contact_id, received_at, label, decision_source, clients(name), contacts(name_enc)")
@@ -31,7 +36,9 @@ export default async function Inbox() {
       .limit(100),
     supabase.from("requests").select("id, entity_id, reason_code").eq("kind", "team_reply").eq("status", "pending"),
     supabase.from("documents").select("id, client_id, name, clients(name)").eq("status", "to_check").limit(50),
+    supabase.from("shares").select("id, contact_id, documents(name, clients(name))").eq("status", "waiting").limit(50),
   ]);
+  const approver = canManageClients(membership.role);
   // For mail from a contact who writes for several clients: the clients to choose from.
   const unclear = (waiting ?? []).flatMap((request) => (request.reason_code === "client_unclear" ? [byIdOf(events, request.entity_id)?.contact_id] : [])).filter(Boolean) as string[];
   const { data: links } = unclear.length ? await supabase.from("contact_clients").select("contact_id, client_id, clients(name)").in("contact_id", unclear) : { data: [] };
@@ -108,6 +115,46 @@ export default async function Inbox() {
         </ul>
       </section>
 
+      {approved && (
+        <p className="notice" role="status">
+          Sent. The client got a secure link to the paper, in reply to their email.
+        </p>
+      )}
+      {error === "mailbox" && (
+        <p className="alert" role="alert">
+          The paper could not be sent. Check the firm&apos;s email in Settings, then try again.
+        </p>
+      )}
+      {!!papers?.length && (
+        <section className="panel" aria-labelledby="papers">
+          <div className="panel-head">
+            <h2 id="papers">Papers waiting for approval</h2>
+            <p className="hint">A client asked for a private paper. It goes as a secure link only once someone approves it.</p>
+          </div>
+          <ul className="rows">
+            {papers.map((share) => (
+              <li key={share.id}>
+                <FileText size={16} aria-hidden className="file-icon" />
+                <span className="grow">
+                  <span className="name">{share.documents?.name}</span>
+                  <span className="sub">Asked for by {share.contact_id ? "a contact of " : ""}{share.documents?.clients?.name}</span>
+                </span>
+                {approver && (
+                  <form action={decideShare} className="end">
+                    <input type="hidden" name="share" value={share.id} />
+                    <button className="b b-ghost b-small" name="intent" value="refuse">
+                      Don&apos;t send
+                    </button>
+                    <button className="b b-primary b-small" name="intent" value="approve">
+                      Approve and send
+                    </button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {!!toCheck?.length && (
         <section className="panel" aria-labelledby="to-check">
           <div className="panel-head">
