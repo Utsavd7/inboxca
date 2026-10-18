@@ -1,9 +1,10 @@
 // Fills the local demo firm (npm run demo) with invented data, so every page has
 // something to show: clients with their numbers and services, filed and overdue returns,
 // teams, branches, people, contacts and sorted client mail. Every name, number and email
-// here is made up. Run with `npm run demo:data` after `npm run demo`; running it again
+// here is made up. When the demo firm has a drive connected, a few invented one-page PDFs
+// are saved into its client folders there, as InboxCA would file them from client mail. Run with `npm run demo:data` after `npm run demo`; running it again
 // replaces the demo firm's data with a fresh copy.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 for (const line of readFileSync(".env.local", "utf8").split("\n")) {
@@ -13,6 +14,9 @@ for (const line of readFileSync(".env.local", "utf8").split("\n")) {
 const { default: pg } = await import("pg");
 const { createClient } = await import("@supabase/supabase-js");
 const { serverCrypto } = await import("../src/lib/crypto");
+const { describeFile, periodName } = await import("../src/lib/documents");
+const { fileName, folderPath } = await import("../src/lib/drive");
+const { openDrive } = await import("../src/lib/drive-account");
 
 const BASE36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 // A GSTIN with a correct check character, for a state and a PAN.
@@ -171,6 +175,7 @@ const mail = [
   ["Bhatt Dental Clinic", "other", 75],
   ["Iyer Consultants", "data_income_tax", 120],
 ] as const;
+const events = new Map<string, { id: string; label: string }>();
 for (const [client, label, minutesAgo] of mail) {
   const [{ id }] = (
     await db.query(
@@ -179,6 +184,57 @@ for (const [client, label, minutesAgo] of mail) {
     )
   ).rows;
   if (label === "other") await db.query("insert into public.requests (firm_id, kind, client_id, entity_type, entity_id, reason_code) values ($1, 'team_reply', $2, 'email', $3, 'no_rule')", [firm, ids.get(client), id]);
+  events.set(client, { id, label });
+}
+
+// A one-page PDF that says what it is, so a demo file opens in any viewer.
+function pdf(text: string) {
+  const stream = `BT /F1 16 Tf 72 720 Td (${text.replace(/[()\\]/g, "")}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let body = "%PDF-1.4\n";
+  const offsets = objects.map((object, at) => {
+    const offset = body.length;
+    body += `${at + 1} 0 obj\n${object}\nendobj\n`;
+    return offset;
+  });
+  const table = offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("");
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${table}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${body.length}\n%%EOF`;
+  return new TextEncoder().encode(body);
+}
+const [driveAccount] = (await db.query("select id, provider, credentials_enc from public.connected_accounts where firm_id = $1 and kind = 'drive'", [firm])).rows;
+const month = new Date(`${lastMonth}-01T00:00:00Z`).toLocaleString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
+const files = [
+  ["Mehta Traders", `purchase bills ${month}.pdf`],
+  ["Mehta Traders", `sales register ${month}.pdf`],
+  ["S.K. Builders", `purchase bills ${month}.pdf`],
+  ["Kapoor Enterprises", "trial balance FY 2025-26.pdf"],
+  ["Kapoor Enterprises", "ledger.pdf"],
+  ["Iyer Consultants", "Form 16 FY 2025-26.pdf"],
+  ["Iyer Consultants", "interest certificate FY 2025-26.pdf"],
+  ["Patel Textiles Pvt Ltd", "notice.pdf"],
+] as const;
+if (driveAccount) {
+  const drive = await openDrive(firm, driveAccount);
+  for (const [client, original] of files) {
+    const event = events.get(client)!;
+    const about = describeFile(original, "", event.label, new Date().toISOString());
+    const folder = await drive.ensureFolder([...folderPath("year_client_work", about.year, client, about.work), ...(about.sure ? [] : ["To check"])]);
+    const name = fileName({ client, type: about.type, period: periodName(about.period), extension: "pdf" });
+    const bytes = pdf(`Invented demo file: ${name}`);
+    // Already there from an earlier run: the same file, used again.
+    const saved = await drive.save(folder, name, bytes);
+    const id = randomUUID();
+    await db.query(
+      "insert into public.documents (id, firm_id, client_id, work_type, document_type, period_key, status, email_event_id, drive_file_id, name, original_name_enc, size, sha256) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+      [id, firm, ids.get(client), about.work, about.type, about.period, about.sure ? "filed" : "to_check", event.id, saved === "taken" ? `${folder}/${name}` : saved.id, name, await crypto.encrypt(firm, `documents/${id}/original_name`, original), bytes.length, createHash("sha256").update(bytes).digest("hex")],
+    );
+  }
 }
 await db.end();
-console.log(`Demo firm filled: ${clients.length} clients, ${people.length} people, ${contacts.length} contacts, ${mail.length} client emails.`);
+console.log(`Demo firm filled: ${clients.length} clients, ${people.length} people, ${contacts.length} contacts, ${mail.length} client emails, ${driveAccount ? files.length : 0} files.`);
