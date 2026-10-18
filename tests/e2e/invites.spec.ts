@@ -290,6 +290,25 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.reload();
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
 
+  // The owner removes the second copy: it waits in the drive's Deleted and old versions folder and can be put back.
+  await rows.filter({ hasText: "Same file as" }).getByRole("button", { name: /^Remove/ }).click();
+  await expect(owner.getByRole("status")).toContainText("waits 30 days");
+  expect(await readFile(path.join(drive, "Deleted and old versions", `${mailClient} - Purchase bills - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented purchase bills");
+  await expect(rows).toHaveCount(2);
+  await owner.getByRole("button", { name: "Put back" }).first().click();
+  await expect(rows).toHaveCount(3);
+  await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
+
+  // A manager or the owner uploads a file and types it; it is saved under its name in the client's folder.
+  await owner.getByRole("link", { name: "Upload a file" }).click();
+  await owner.getByLabel("File", { exact: true }).setInputFiles({ name: "IMG_2041.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 invented form 16") });
+  await owner.getByLabel("Type", { exact: true }).selectOption("Form 16");
+  await owner.getByLabel("Work", { exact: true }).selectOption("income_tax");
+  await owner.getByLabel("Period", { exact: true }).selectOption({ label: "FY 2025-26" });
+  await owner.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - Form 16 - FY 2025-26.pdf`);
+  expect(await readFile(path.join(drive, "FY 2025-26", mailClient, "Income tax", `${mailClient} - Form 16 - FY 2025-26.pdf`), "utf8")).toBe("%PDF-1.4 invented form 16");
+
   await owner.goto("/app/settings");
   for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
   await expect(owner.locator("section#drive").getByRole("button", { name: "Connect drive" })).toBeVisible();

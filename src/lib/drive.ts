@@ -10,7 +10,12 @@ export interface Drive {
   read(fileId: string): Promise<Uint8Array>;
   // Moves a file to another folder or name, refusing a name already taken.
   move(fileId: string, folderId: string, name: string): Promise<{ id: string } | "taken">;
+  // Sends a file to the drive's own bin, where the drive's rules then apply.
+  trash(fileId: string): Promise<void>;
 }
+
+// Where a removed file waits 30 days before it goes to the drive's bin.
+export const DELETED_FOLDER = "Deleted and old versions";
 
 // A test drive in a folder on this computer, for development and the tests only
 // (DRIVE_LOCAL_DIR). No deployment sets it.
@@ -50,6 +55,7 @@ export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? ""): Drive {
       await unlink(inside(fileId));
       return { id: relative };
     },
+    trash: (fileId) => unlink(inside(fileId)),
   };
 }
 
