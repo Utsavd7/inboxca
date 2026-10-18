@@ -34,6 +34,8 @@ describe("filed documents", () => {
       const rename = "select public.rename_document($1, $2, 'gst', 'Document', '', 'filed', 'x.pdf', 'Private/salary.pdf')";
       expect((await attempt(db, rename, [DOCUMENT, STAFF])).ok).toBe(false);
       expect((await attempt(db, "update public.documents set drive_file_id = 'Private/salary.pdf'")).ok).toBe(false);
+      // The firm's use is the owner's to see.
+      expect((await db.query("select * from public.firm_usage($1)", [FIRM])).rows).toEqual([]);
       // A send's download count moves only through the server.
       expect((await attempt(db, "select * from public.use_share('x')")).ok).toBe(false);
     }));

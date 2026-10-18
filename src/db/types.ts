@@ -495,6 +495,11 @@ isOneToOne: false
 "firm_state":
 { Args: { "f": Database["public"]['Tables']["firms"]['Row'] }; Returns: string
                            },
+"firm_usage":
+{ Args: { "target_firm": string }; Returns: {
+              "returns_this_year": number,"workspace_bytes": number
+            }[]
+                           },
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
                            },

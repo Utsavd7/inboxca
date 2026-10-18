@@ -45,6 +45,8 @@ export default async function Settings({
   const special = (settings.special_hours as SpecialHours[] | undefined) ?? [];
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number };
   const hoursOnly = access.hours_only ?? false;
+  const { data: used } = await supabase.rpc("firm_usage", { target_firm: membership.firmId });
+  const usage = used?.[0];
 
   return (
     <>
@@ -59,6 +61,7 @@ export default async function Settings({
             ["#special", "Special hours"],
             ["#limits", "Signing in"],
             ["#holidays", "Holidays"],
+            ["#use", "InboxCA use"],
           ].map(([href, name]) => (
             <a key={href} href={href}>
               {name}
@@ -327,6 +330,21 @@ export default async function Settings({
                 Add holiday
               </button>
             </form>
+          </section>
+          <section className="panel" aria-labelledby="use-title" id="use">
+            <h2 id="use-title">InboxCA use</h2>
+            <p className="hint">What sizes a plan. Your files stay in your own drive; InboxCA storage holds the client list, records and what InboxCA reads from files.</p>
+            <dl className="meters">
+              <div>
+                <dt>Returns this financial year</dt>
+                <dd>{usage?.returns_this_year ?? 0}</dd>
+              </div>
+              <div>
+                <dt>InboxCA storage</dt>
+                <dd>{(usage?.workspace_bytes ?? 0) < 1024 ** 2 ? `${Math.ceil((usage?.workspace_bytes ?? 0) / 1024)} KB` : `${((usage?.workspace_bytes ?? 0) / 1024 ** 2).toFixed(1)} MB`}</dd>
+              </div>
+            </dl>
+            <p className="hint">Shown for your information. Plans and their limits come later; nothing is limited or charged by these figures yet.</p>
           </section>
         </div>
       </div>

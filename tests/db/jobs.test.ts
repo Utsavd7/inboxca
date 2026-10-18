@@ -63,8 +63,8 @@ describe("claiming jobs", () => {
     await Promise.all([db.query("begin"), second.query("begin")]);
     // Room for jobs a local demo firm queued meanwhile; only this test's own are counted.
     const [a, b] = await Promise.all([
-      pgJobStore(db).claim(40, 120),
-      pgJobStore(second).claim(40, 120),
+      pgJobStore(db).claim(500, 120),
+      pgJobStore(second).claim(500, 120),
     ]);
     await Promise.all([db.query("commit"), second.query("commit")]);
     const ids = [...a, ...b].filter((job) => job.idempotency_key.startsWith(`${PREFIX}pair-`)).map((job) => job.id);
