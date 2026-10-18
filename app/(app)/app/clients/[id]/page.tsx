@@ -2,7 +2,7 @@ import { Archive, ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { manageClient } from "@/app/(app)/actions";
-import { dueLabel, periodLabel, taskStatuses } from "@/src/lib/calendar";
+import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
@@ -224,23 +224,43 @@ export default async function Client({ params, searchParams }: { params: Promise
             <section className="panel" aria-labelledby="due">
               <h2 id="due">Due dates</h2>
               {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="hint">Dates marked * are not yet confirmed by a CA against the official notification.</p>}
-              <ul className="rows">
-                {tasks?.map((task) => (
-                  <li key={task.id}>
-                    <span className="name">
-                      {rule.get(task.code ?? "")?.name} <span className="sub-inline">{periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}</span>
-                    </span>
-                    <span className="end">
-                      {taskStatuses[task.status as keyof typeof taskStatuses]}
-                      <span className="num">
-                        {dueLabel(task.due_on)}
-                        {!rule.get(task.code ?? "")?.verified_on && "*"}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {!tasks?.length && <p className="hint">No due dates yet. Add a number and choose its services.</p>}
+              {tasks?.length ? (
+                <div className="table-wrap">
+                  <table className="t">
+                    <thead>
+                      <tr>
+                        <th scope="col">Return</th>
+                        <th scope="col">Period</th>
+                        <th scope="col">Due</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tasks.map((task) => {
+                        const r = rule.get(task.code ?? "");
+                        const late = task.status !== "filed" && task.due_on < todayInIndia();
+                        return (
+                          <tr key={task.id}>
+                            <td>{r?.name}</td>
+                            <td className="hint">{periodLabel(r?.frequency ?? null, task.period_key)}</td>
+                            <td className="shrink">
+                              {dueLabel(task.due_on)}
+                              {!r?.verified_on && "*"}
+                            </td>
+                            <td className="shrink">
+                              <Badge tone={task.status === "filed" ? "done" : late ? "late" : task.status === "in_progress" ? "blue" : ""}>
+                                {late ? "Overdue" : taskStatuses[task.status as keyof typeof taskStatuses]}
+                              </Badge>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="hint">No due dates yet. Add a number and choose its services.</p>
+              )}
             </section>
           )}
           {tab === "contacts" && (

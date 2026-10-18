@@ -1,28 +1,41 @@
-import { CalendarClock, CalendarDays, Check, CircleCheck, Inbox, Mail, TriangleAlert } from "lucide-react";
+import { CalendarDays, Check, Inbox, Mail, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { joinFirm } from "@/app/(app)/actions";
-import { calendarViews, dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
+import { joinFirm, manageTasks } from "@/app/(app)/actions";
+import { canManageClients } from "@/src/lib/clients";
+import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { describeHours, type Hours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { roleNames } from "@/src/lib/roles";
 import { labels, type Label } from "@/src/lib/triage";
 import { CountUp } from "./count-up";
 import { Ribbon } from "./ribbon";
-import { Avatar, Badge, Empty, PageHead, type Tone } from "./ui";
+import { Avatar, Badge, PageHead, type Tone } from "./ui";
 
 const DAY = 86_400_000;
+const shift = (date: string, days: number) => new Date(Date.parse(date) + days * DAY).toISOString().slice(0, 10);
 // "today", "tomorrow", "in 3 days" or "4 days late", for a date column.
 const when = (date: string, today: string) => {
   const days = Math.round((Date.parse(date) - Date.parse(today)) / DAY);
   return days === 0 ? "today" : days === 1 ? "tomorrow" : days > 0 ? `in ${days} days` : `${-days} day${days === -1 ? "" : "s"} late`;
 };
-const labelTone: Record<string, Tone> = { other: "warn", notice_received: "late", data_gst: "blue", data_income_tax: "blue", data_tax_audit: "blue" };
+const labelTone: Record<string, Tone> = {
+  other: "warn",
+  notice_received: "late",
+  data_gst: "blue",
+  data_income_tax: "blue",
+  data_tax_audit: "blue",
+};
+const reasons: Record<string, string> = {
+  no_rule: "Could not tell what it asks",
+  data_unclear: "Data for more than one kind of work",
+  client_unclear: "Writes for several clients",
+};
 
-// The signed in start page, kept plain for people who are not technical: four figures for
-// the day, this month's filing days, what needs a person and what comes next. The owner
-// also sees the few setup steps left. With restricted visibility everyone sees only the
-// clients they may see, so staff get their own work.
+// Home is the firm's work board: this month's filings by return, the month's filing days,
+// and every return that needs a hand, in four columns from late to done, each card one
+// click from filed. Mail that waits for a person sits beside it. People who are not
+// technical see what to do next without opening anything else.
 export default async function AppHome() {
   const { supabase, membership } = await currentMember();
   const { data: invites } = await supabase.rpc("my_invites");
@@ -34,15 +47,24 @@ export default async function AppHome() {
   const month = today.slice(0, 7);
   const lastDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
   const owner = membership.role === "owner";
+  const cards = () =>
+    supabase
+      .from("tasks")
+      .select("id, client_id, code, period_key, due_on, status, details, clients!inner(name, archived_at)", { count: "exact" })
+      .is("clients.archived_at", null)
+      .order("due_on")
+      .limit(4);
   const count = (query: PromiseLike<{ count: number | null }>) => Promise.resolve(query).then((result) => result.count ?? 0);
-  const open = () => supabase.from("tasks").select("id", { count: "exact", head: true }).neq("status", "filed");
-  const [waiting, overdue, week, upcoming, mail, rules, setup, load] = await Promise.all([
-    count(supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending")),
-    count(open().lte("due_on", calendarViews.overdue.window(today).to)),
-    count(open().gte("due_on", today).lte("due_on", calendarViews.week.window(today).to)),
-    supabase.from("tasks").select("id, client_id, code, period_key, due_on, clients!inner(name, archived_at)").is("clients.archived_at", null).neq("status", "filed").order("due_on").limit(7),
-    supabase.from("email_events").select("id, client_id, received_at, label, clients(name)").order("received_at", { ascending: false }).order("id").limit(5),
+  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup] = await Promise.all([
+    cards().neq("status", "filed").lt("due_on", today),
+    cards().eq("status", "upcoming").gte("due_on", today).lte("due_on", shift(today, 7)),
+    cards().eq("status", "in_progress"),
+    cards().eq("status", "filed").gte("details->>filed_on", shift(today, -7)),
+    supabase.from("requests").select("id, entity_id, reason_code", { count: "exact" }).eq("kind", "team_reply").eq("status", "pending").limit(5),
+    supabase.from("email_events").select("id, client_id, received_at, label, clients(name)").order("received_at", { ascending: false }).order("id").limit(6),
     supabase.from("compliance_types").select("code, name, frequency").eq("period_key", ""),
+    supabase.rpc("month_load", { first_day: `${month}-01` }),
+    supabase.rpc("month_by_return", { first_day: `${month}-01` }),
     owner
       ? Promise.all([
           supabase
@@ -54,46 +76,92 @@ export default async function AppHome() {
           count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
         ])
       : null,
-    supabase.rpc("month_load", { first_day: `${month}-01` }),
   ]);
   const rule = new Map(rules.data?.map((r) => [r.code, r]));
-  const ribbon = (load.data ?? []).map((row) => ({ date: row.due_on, due: row.due, filed: row.filed, names: row.codes.map((code) => rule.get(code)?.name ?? code) }));
-  const monthDue = ribbon.reduce((sum, day) => sum + day.due, 0);
-  const monthFiled = ribbon.reduce((sum, day) => sum + day.filed, 0);
+  const name = (code: string | null) => rule.get(code ?? "")?.name ?? code ?? "";
+  const ribbon = (load.data ?? []).map((row) => ({
+    date: row.due_on,
+    due: row.due,
+    filed: row.filed,
+    names: row.codes.map((code) => name(code)),
+  }));
+  const monthDue = (byReturn.data ?? []).reduce((sum, row) => sum + row.due, 0);
+  const monthFiled = (byReturn.data ?? []).reduce((sum, row) => sum + row.filed, 0);
+  const mailById = new Map(mail.data?.map((event) => [event.id, event]));
   const steps = setup && [
-    { done: setup[0].includes("mail"), name: "Email", href: "/app/settings#mailbox", action: "Connect the firm's email" },
-    { done: setup[0].includes("drive"), name: "Drive", href: "/app/settings#drive", action: "Link the firm's drive" },
-    { done: !!setup[1], name: "Clients", href: "/app/clients", action: "Add your clients" },
-    { done: !!setup[2], name: "Services", href: "/app/clients", action: "Tick what you file for a client" },
-    { done: setup[3] > 1, name: "Team", href: "/app/people", action: "Invite your team" },
+    {
+      done: setup[0].includes("mail"),
+      name: "Email",
+      href: "/app/settings#mailbox",
+      action: "Connect the firm's email",
+    },
+    {
+      done: setup[0].includes("drive"),
+      name: "Drive",
+      href: "/app/settings#drive",
+      action: "Link the firm's drive",
+    },
+    {
+      done: !!setup[1],
+      name: "Clients",
+      href: "/app/clients",
+      action: "Add your clients",
+    },
+    {
+      done: !!setup[2],
+      name: "Services",
+      href: "/app/clients",
+      action: "Tick what you file for a client",
+    },
+    {
+      done: setup[3] > 1,
+      name: "Team",
+      href: "/app/people",
+      action: "Invite your team",
+    },
   ];
   const next = steps?.find((step) => !step.done);
   const done = steps?.filter((step) => step.done).length ?? 0;
-  const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric" }));
+  const hour = Number(
+    new Date().toLocaleString("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+    }),
+  );
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const needs = [
+  const columns = [
     {
-      number: waiting,
-      one: "client email needs a reply",
-      many: "client emails need a reply",
-      none: "No client email needs a reply",
-      href: "/app/inbox",
-      action: "Open inbox",
-      Icon: Inbox,
-      late: false,
+      key: "late",
+      title: "Overdue",
+      result: late,
+      href: "/app/calendar?view=overdue",
+      empty: "Nothing is late.",
     },
-    { number: overdue, one: "return is overdue", many: "returns are overdue", none: "Nothing is overdue", href: "/app/calendar?view=overdue", action: "See overdue", Icon: TriangleAlert, late: true },
     {
-      number: week,
-      one: "return falls due in the next 7 days",
-      many: "returns fall due in the next 7 days",
-      none: "Nothing falls due in the next 7 days",
+      key: "week",
+      title: "Due this week",
+      result: week,
       href: "/app/calendar?view=week",
-      action: "See the week",
-      Icon: CalendarClock,
-      late: false,
+      empty: "Nothing due in 7 days.",
+    },
+    {
+      key: "doing",
+      title: "In progress",
+      result: doing,
+      href: "/app/calendar?view=month",
+      empty: "Mark a return in progress to see it here.",
+    },
+    {
+      key: "filed",
+      title: "Filed this week",
+      result: filed,
+      href: "/app/calendar?view=filed",
+      empty: "Filed returns land here.",
     },
   ];
+  const monthName = new Date(`${month}-01T00:00:00`).toLocaleString("en-IN", {
+    month: "long",
+  });
 
   return (
     <>
@@ -101,10 +169,18 @@ export default async function AppHome() {
         title={greeting}
         sub={`${membership.firmName}, ${new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" })}`}
         actions={
-          <Link className="b b-secondary" href="/app/calendar">
-            <CalendarDays size={15} aria-hidden />
-            Calendar
-          </Link>
+          <>
+            <Link className="b b-secondary" href="/app/calendar">
+              <CalendarDays size={15} aria-hidden />
+              Calendar
+            </Link>
+            {canManageClients(membership.role) && (
+              <Link className="b b-primary" href="/app/clients?panel=add">
+                <Plus size={15} aria-hidden />
+                New client
+              </Link>
+            )}
+          </>
         }
       />
 
@@ -133,144 +209,164 @@ export default async function AppHome() {
         </div>
       )}
 
-      <section className="kpis" aria-label="Today">
-        <Link className="kpi" href="/app/inbox">
-          <span>
-            <Mail size={14} aria-hidden /> To reply
-          </span>
-          <strong>
-            <CountUp value={waiting} />
-          </strong>
-          <small>client emails waiting</small>
-        </Link>
-        <Link className={`kpi${overdue ? " is-late" : ""}`} href="/app/calendar?view=overdue">
-          <span>
-            <TriangleAlert size={14} aria-hidden /> Overdue
-          </span>
-          <strong>
-            <CountUp value={overdue} />
-          </strong>
-          <small>returns past their date</small>
-        </Link>
-        <Link className="kpi" href="/app/calendar?view=week">
-          <span>
-            <CalendarClock size={14} aria-hidden /> This week
-          </span>
-          <strong>
-            <CountUp value={week} />
-          </strong>
-          <small>returns due in 7 days</small>
-        </Link>
-        <Link className="kpi" href="/app/calendar?view=filed">
-          <span>
-            <CircleCheck size={14} aria-hidden /> Filed this month
-          </span>
-          <strong>
-            <CountUp value={monthFiled} />
-            <small> of {monthDue}</small>
-          </strong>
-          <span className="meter" aria-hidden>
-            <span style={{ width: `${monthDue ? (monthFiled / monthDue) * 100 : 0}%` }} />
-          </span>
-        </Link>
-      </section>
-
-      <section className="panel" aria-labelledby="ribbon-title">
+      <section className="month" aria-label="This month">
+        <div className="progress">
+          <div className="progress-total">
+            <h2>Filed in {monthName}</h2>
+            <p>
+              <strong>
+                <CountUp value={monthFiled} />
+              </strong>{" "}
+              of {monthDue} filed
+            </p>
+            <span className="meter" aria-hidden>
+              <span
+                style={{
+                  width: `${monthDue ? (monthFiled / monthDue) * 100 : 0}%`,
+                }}
+              />
+            </span>
+          </div>
+          <ul className="progress-list" aria-label="By return">
+            {(byReturn.data ?? []).slice(0, 6).map((row) => (
+              <li key={row.code}>
+                <Link href={`/app/calendar?view=month&code=${row.code}`}>
+                  <span>{name(row.code)}</span>
+                  <span className="meter" aria-hidden>
+                    <span style={{ width: `${(row.filed / row.due) * 100}%` }} />
+                  </span>
+                  <span className="hint">
+                    {row.filed}/{row.due}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
         <Ribbon month={month} days={ribbon} today={today} lastDay={lastDay} />
       </section>
 
-      <div className="grid-main">
-        <div>
-          <section className="panel" aria-labelledby="needs">
-            <h2 id="needs">Needs you</h2>
-            <ul className="rows needs">
-              {needs.map(({ number, one, many, none, href, action, Icon, late }) => (
-                <li key={href} className={number && late ? "is-late" : number ? "" : "is-clear"}>
-                  <Icon size={16} aria-hidden />
-                  <span className="grow">
-                    {number ? (
-                      <>
-                        <strong>
-                          <CountUp value={number} />
-                        </strong>{" "}
-                        {number === 1 ? one : many}
-                      </>
-                    ) : (
-                      none
-                    )}
-                  </span>
-                  {!!number && (
-                    <Link className="b b-secondary b-small" href={href}>
-                      {action}
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="panel" aria-labelledby="mail">
-            <div className="panel-head">
-              <h2 id="mail">Latest client email</h2>
-              <Link className="b b-ghost b-small" href="/app/inbox">
-                Inbox
+      <section className="panel" aria-labelledby="board">
+        <div className="panel-head">
+          <h2 id="board">Returns to work on</h2>
+          <Link className="b b-ghost b-small" href="/app/calendar">
+            All returns
+          </Link>
+        </div>
+        <div className="board">
+          {columns.map(({ key, title, result, href, empty }) => (
+            <div key={key} className={`lane lane-${key}`}>
+              <Link className="lane-head" href={href}>
+                <span>{title}</span>
+                <strong>{result.count ?? 0}</strong>
               </Link>
-            </div>
-            {mail.data?.length ? (
-              <ul className="rows">
-                {mail.data.map((event) => (
-                  <li key={event.id}>
-                    <span className="who grow">
-                      <Avatar name={event.clients?.name ?? "Contact"} />
-                      <span>
-                        <span className="name">{event.clients?.name ?? "A contact"}</span>
-                        <span className="sub">
-                          {new Date(event.received_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                        </span>
+              <ul>
+                {result.data?.map((task) => (
+                  <li key={task.id} className="card">
+                    <Link className="card-link" href={`/app/clients/${task.client_id}`}>
+                      <span className="who">
+                        <Avatar name={task.clients.name} />
+                        <strong>{task.clients.name}</strong>
                       </span>
+                      <span className="card-what">
+                        {name(task.code)}, {periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}
+                      </span>
+                    </Link>
+                    <span className="card-foot">
+                      {task.status === "filed" ? (
+                        <Badge tone="done">{(task.details as { ack?: string }).ack ? "Filed, ack saved" : "Filed"}</Badge>
+                      ) : (
+                        <span className={`when${task.due_on < today ? " late" : ""}`} title={dueLabel(task.due_on)}>
+                          {when(task.due_on, today)}
+                        </span>
+                      )}
+                      {task.status !== "filed" && (
+                        <form action={manageTasks}>
+                          <input type="hidden" name="task" value={task.id} />
+                          <button className="b b-ghost b-small" name="intent" value="filed" aria-label={`Mark ${task.clients.name} ${name(task.code)} filed`}>
+                            <Check size={14} aria-hidden />
+                            Filed
+                          </button>
+                        </form>
+                      )}
                     </span>
-                    <Badge tone={labelTone[event.label ?? "other"] ?? ""}>{labels[(event.label ?? "other") as Label]}</Badge>
                   </li>
                 ))}
+                {!result.data?.length && <li className="lane-empty">{empty}</li>}
+                {(result.count ?? 0) > (result.data?.length ?? 0) && (
+                  <li>
+                    <Link className="lane-more" href={href}>
+                      {(result.count ?? 0) - (result.data?.length ?? 0)} more
+                    </Link>
+                  </li>
+                )}
               </ul>
-            ) : (
-              <Empty Icon={Mail} title="No client email yet">
-                <span>Connect the firm&apos;s email in Settings and new client mail shows here, sorted.</span>
-              </Empty>
-            )}
-          </section>
+            </div>
+          ))}
         </div>
+      </section>
 
-        <section className="panel" aria-labelledby="coming">
+      <div className="grid-2">
+        <section className="panel" aria-labelledby="needs">
           <div className="panel-head">
-            <h2 id="coming">Coming up</h2>
-            <Link className="b b-ghost b-small" href="/app/calendar">
-              All dates
+            <h2 id="needs">Needs a reply</h2>
+            <Link className="b b-ghost b-small" href="/app/inbox">
+              Inbox
             </Link>
           </div>
-          {upcoming.data?.length ? (
-            <ul className="rows">
-              {upcoming.data.map((task) => (
-                <li key={task.id}>
+          <ul className="rows needs">
+            {waiting.data?.map((request) => {
+              const event = mailById.get(request.entity_id);
+              const client = event?.clients?.name ?? "A contact";
+              return (
+                <li key={request.id}>
+                  <Avatar name={client} />
                   <span className="grow">
-                    <Link className="name" href={`/app/clients/${task.client_id}`}>
-                      {task.clients.name}
-                    </Link>
-                    <span className="sub">
-                      {rule.get(task.code ?? "")?.name}, {periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}
-                    </span>
-                  </span>
-                  <span className={`when${task.due_on < today ? " late" : ""}`} title={dueLabel(task.due_on)}>
-                    {when(task.due_on, today)}
+                    <span className="name">{client}</span>
+                    <span className="sub">{reasons[request.reason_code ?? ""] ?? "Needs your team"}</span>
                   </span>
                 </li>
-              ))}
-            </ul>
-          ) : (
-            <Empty Icon={CalendarDays} title="No returns due yet">
-              <span>Open a client and tick what you file for them; their due dates appear here.</span>
-            </Empty>
-          )}
+              );
+            })}
+            {!waiting.data?.length && (
+              <li className="is-clear">
+                <Inbox size={16} aria-hidden />
+                <span className="grow">No email waits for a reply.</span>
+              </li>
+            )}
+          </ul>
+        </section>
+
+        <section className="panel" aria-labelledby="mail">
+          <div className="panel-head">
+            <h2 id="mail">Latest client email</h2>
+          </div>
+          <ul className="rows">
+            {mail.data?.map((event) => (
+              <li key={event.id}>
+                <Avatar name={event.clients?.name ?? "Contact"} />
+                <span className="grow">
+                  <span className="name">{event.clients?.name ?? "A contact"}</span>
+                  <span className="sub">
+                    {new Date(event.received_at).toLocaleString("en-IN", {
+                      timeZone: "Asia/Kolkata",
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </span>
+                <Badge tone={labelTone[event.label ?? "other"] ?? ""}>{labels[(event.label ?? "other") as Label]}</Badge>
+              </li>
+            ))}
+            {!mail.data?.length && (
+              <li className="is-clear">
+                <Mail size={16} aria-hidden />
+                <span className="grow">Client mail shows here once the firm&apos;s email is connected.</span>
+              </li>
+            )}
+          </ul>
         </section>
       </div>
     </>

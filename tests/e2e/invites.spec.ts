@@ -38,7 +38,7 @@ test("the owner invites a new person, who appears as invited", async () => {
   await owner.getByLabel("Role").selectOption("manager");
   await owner.getByRole("button", { name: "Invite", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText(`Invited ${newEmail}`);
-  const row = owner.getByRole("listitem").filter({ hasText: newEmail });
+  const row = owner.getByRole("row").filter({ hasText: newEmail });
   await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("manager");
   await expect(row).toContainText("Invited");
 
@@ -72,18 +72,18 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
   await expect(page.getByRole("button", { name: "Invite", exact: true })).toHaveCount(0);
 
   await owner.reload();
-  const row = owner.getByRole("listitem").filter({ hasText: newEmail });
+  const row = owner.getByRole("row").filter({ hasText: newEmail });
   await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("manager");
   await expect(row).not.toContainText("Invited");
 });
 
 test("the owner changes the role, removes the person and brings them back", async () => {
   await owner.goto("/app/people");
-  const row = owner.getByRole("listitem").filter({ hasText: newEmail });
-  await row.getByLabel(`Role for ${newEmail}`).selectOption("staff");
+  const row = owner.getByRole("row").filter({ hasText: newEmail });
+  // A new role saves as soon as it is picked.
   await Promise.all([
     owner.waitForResponse((response) => response.request().method() === "POST"),
-    row.getByRole("button", { name: "Save", exact: true }).click(),
+    row.getByLabel(`Role for ${newEmail}`).selectOption("staff"),
   ]);
   await owner.reload();
   await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("staff");
@@ -141,11 +141,10 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.goto("/app/people");
   await owner.getByLabel("New team").fill("GST team");
   await owner.getByRole("button", { name: "Add team" }).click();
-  const row = owner.getByRole("listitem").filter({ hasText: newEmail });
-  await row.getByLabel(`Team for ${newEmail}`).selectOption({ label: "GST team" });
+  const row = owner.getByRole("row").filter({ hasText: newEmail });
   await Promise.all([
     owner.waitForResponse((response) => response.request().method() === "POST"),
-    row.getByRole("button", { name: "Save", exact: true }).click(),
+    row.getByLabel(`Team for ${newEmail}`).selectOption({ label: "GST team" }),
   ]);
   await expect(owner.locator("section[aria-labelledby=teams]").getByRole("listitem")).toContainText("1 person");
   await owner.goto(`${client}?tab=team`);
@@ -214,10 +213,9 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await expect(waiting).toContainText("InboxCA could not tell what it asks");
   await waiting.getByRole("button", { name: "Done" }).click();
   await expect(owner.getByText("Nothing waits for the team.")).toBeVisible();
-  const latest = owner.locator("section[aria-labelledby=latest]").getByRole("listitem");
+  const latest = owner.locator("section[aria-labelledby=latest] tbody tr");
   await expect(latest).toHaveCount(2);
   await latest.first().getByRole("combobox").selectOption({ label: "Asks for this year's records" });
-  await latest.first().getByRole("button", { name: "Save label" }).click();
   await expect(latest.filter({ hasText: "Corrected" })).toHaveCount(1);
 
   await owner.goto("/app/settings");

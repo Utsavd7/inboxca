@@ -462,7 +462,7 @@ export async function manageTasks(form: FormData) {
       return supabase.from("tasks").update(change).eq("id", id);
     }),
   );
-  revalidatePath("/app/calendar");
+  revalidatePath("/app", "layout");
 }
 
 export type MailboxState = { error?: string; values?: Record<string, string> };

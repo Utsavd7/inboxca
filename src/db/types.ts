@@ -445,6 +445,11 @@ isOneToOne: false
 "member_role":
 { Args: { "target_firm": string }; Returns: string
                            },
+"month_by_return":
+{ Args: { "first_day": string }; Returns: {
+              "code": string,"due": number,"filed": number
+            }[]
+                           },
 "month_load":
 { Args: { "first_day": string }; Returns: {
               "codes": (string)[],"due": number,"due_on": string,"filed": number

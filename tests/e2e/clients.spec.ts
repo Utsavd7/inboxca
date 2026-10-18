@@ -42,7 +42,7 @@ test("services on a client's GSTIN give it its due dates", async () => {
   await gstin.getByLabel("GSTR-3B (monthly)").check();
   await gstin.getByRole("button", { name: "Save services" }).click();
   await owner.getByRole("link", { name: /^Due dates/ }).click();
-  const due = owner.locator("section[aria-labelledby=due]").getByRole("listitem");
+  const due = owner.locator("section[aria-labelledby=due] tbody tr");
   await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");
   await expect(owner.locator("section[aria-labelledby=due]")).toContainText("not yet confirmed by a CA");
   await expect(due).toHaveCount(12);
@@ -61,7 +61,8 @@ test("a return is marked filed with its acknowledgement on the calendar", async 
 
 test("Home shows what needs the owner today and the next setup step", async () => {
   await owner.getByRole("link", { name: "Home" }).click();
-  await expect(owner.locator("section[aria-labelledby=needs]")).toContainText("in the next 7 days");
+  // The work board: the return filed above sits in the last column.
+  await expect(owner.locator(".lane-filed")).toContainText("Patel Textiles");
   // This month's ribbon: a filing day opens that day in the Calendar.
   const day = owner.locator(".ribbon-days a").first();
   await expect(day).toHaveAttribute("aria-label", /GSTR/);
