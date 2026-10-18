@@ -433,7 +433,15 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, $3, '2026-09', (now() at time zone 'Asia/Kolkata')::date + 3)", [firm.firmId, clientId, code]);
   await owner.goto("/app/settings");
   await owner.getByLabel("Email clients before their returns are due").check();
+  await owner.getByLabel("Reply to clients when their files arrive, saying what was received").check();
   await owner.getByRole("button", { name: "Save reminders" }).click();
+  await expect(owner.getByLabel("Reply to clients when their files arrive, saying what was received")).toBeChecked();
+  // Files that arrive now get a short reply saying what was received.
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "August sales", text: "Attached.", attachments: [{ filename: "sales_bills_aug_2026.pdf", content: "%PDF-1.4 invented sales" }] });
+  await query(local.dbUrl, "select private.queue_mail_polls()");
+  for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  const thanks = await lastMail(`client-${tag}@patel.test`);
+  expect(thanks).toContain("Thank you. We have received:\n- Sales bills, Aug 2026");
   // The files asked for earlier were asked 3 days ago now, so the same email follows them up.
   await query(local.dbUrl, "update public.requests set expires_at = now() + interval '27 days' where firm_id = $1 and kind = 'documents'", [firm.firmId]);
   for (let run = 0; run < 2; run++) {

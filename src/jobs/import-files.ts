@@ -3,7 +3,7 @@ import path from "node:path";
 import type { Json } from "@/src/db/types";
 import { serverCrypto } from "@/src/lib/crypto";
 import { folderFor, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
-import type { FolderOrder, WorkType } from "@/src/lib/drive";
+import type { FolderOrder, Naming, WorkType } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import type { Planned } from "@/src/lib/first-import";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -30,6 +30,7 @@ export const importFiles: Handler = async (job) => {
   if (!account) return { retry: "drive_unreachable", patient: true };
   const drive = await openDrive(firm, account);
   const order = ((account.settings as { folder_order?: FolderOrder }).folder_order ?? "year_client_work") as FolderOrder;
+  const naming = (account.settings as { naming?: Naming }).naming;
   const names = new Map(clients?.map((client) => [client.id, client.name]));
   const now = new Date().toISOString();
   try {
@@ -39,7 +40,7 @@ export const importFiles: Handler = async (job) => {
       if (!client) continue;
       const bytes = await drive.read(file.id);
       const folder = await drive.ensureFolder(folderFor(order, client, { work: file.work as WorkType, period: file.period, receivedAt: now, toCheck: file.toCheck }));
-      const placed = await placeUnderFreeName({ client, type: file.type, period: periodName(file.period), extension: path.extname(file.from) }, receivedLabel(now), (name) => drive.move(file.id, folder, name));
+      const placed = await placeUnderFreeName({ client, type: file.type, period: periodName(file.period), extension: path.extname(file.from) }, receivedLabel(now), (name) => drive.move(file.id, folder, name), naming);
       if (placed === "taken") continue;
       const id = randomUUID();
       await admin.from("documents").insert({

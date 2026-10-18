@@ -139,10 +139,19 @@ export function folderPath(order: FolderOrder, year: string, client: string, wor
   return sequence.map((part) => parts[part as keyof typeof parts]);
 }
 
-// "Patel Textiles - Purchase bills - Sep 2026.pdf"; the received date, a version or a
-// short id is added only when the plain name is already taken.
-export function fileName(parts: { client: string; type: string; period: string; extension: string; suffix?: string }) {
-  const base = [parts.client, parts.type, parts.period, parts.suffix].filter(Boolean).join(" - ");
+// The order of a file name's parts, the firm's choice in Settings (5.5.0).
+export const namings = {
+  client_type_period: "Patel Textiles - Purchase bills - Sep 2026",
+  type_period_client: "Purchase bills - Sep 2026 - Patel Textiles",
+  period_type_client: "Sep 2026 - Purchase bills - Patel Textiles",
+} as const;
+export type Naming = keyof typeof namings;
+
+// "Patel Textiles - Purchase bills - Sep 2026.pdf" by default; the received date, a version
+// or a short id is added only when the plain name is already taken.
+export function fileName(parts: { client: string; type: string; period: string; extension: string; suffix?: string }, naming: Naming = "client_type_period") {
+  const ordered = { client_type_period: [parts.client, parts.type, parts.period], type_period_client: [parts.type, parts.period, parts.client], period_type_client: [parts.period, parts.type, parts.client] }[naming] ?? [parts.client, parts.type, parts.period];
+  const base = [...ordered, parts.suffix].filter(Boolean).join(" - ");
   const extension = parts.extension.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 8);
   return safeName(base, 150) + (extension ? `.${extension}` : "");
 }
