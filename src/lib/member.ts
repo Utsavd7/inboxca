@@ -33,6 +33,6 @@ export const currentMember = cache(async () => {
     const last = Math.max(0, ...twoStep, seenAt(userId, (await cookies()).get(SEEN_COOKIE)?.value));
     if (Date.now() - last > idleMinutes * 60_000) redirect("/auth/sign-out?reason=idle");
   }
-  const membership = { firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, idleMinutes };
+  const membership = { firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, idleMinutes, email: String(claims.claims.email ?? "") };
   return { supabase, userId, membership };
 });
