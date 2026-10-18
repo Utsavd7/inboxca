@@ -181,6 +181,37 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"documents": {
+                  Row: {
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"sha256": string,"size": number,"status": string,"work_type": string
+                  }
+                  Insert: {
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"name": string,"original_name_enc"?: string | null,"period_key"?: string,"sha256": string,"size": number,"status"?: string,"work_type": string
+                  }
+                  Update: {
+                    "client_id"?: string,"document_type"?: string,"drive_file_id"?: string,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"name"?: string,"original_name_enc"?: string | null,"period_key"?: string,"sha256"?: string,"size"?: number,"status"?: string,"work_type"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "documents_email_event_id_fkey"
+      columns: ["email_event_id"]
+isOneToOne: false
+      referencedRelation: "email_events"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "documents_firm_id_client_id_fkey"
+      columns: ["firm_id","client_id"]
+isOneToOne: false
+      referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "documents_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"email_events": {
                   Row: {
                     "account_id": string,"client_id": string | null,"contact_id": string | null,"decision_source": string | null,"firm_id": string,"id": string,"label": string | null,"provider_message_id": string,"reason_code": string | null,"received_at": string,"sender_bidx": string,"status": string,"thread_id": string | null

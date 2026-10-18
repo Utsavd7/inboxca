@@ -1,7 +1,11 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import nodemailer from "nodemailer";
 import { TEST_WORKER_SECRET } from "../../playwright.config";
+import { financialYear } from "@/src/lib/drive";
 import { emailStep, latestEmail, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
 // The owner invites a new person, who signs in from the invite email, sets up a 2 step
@@ -13,6 +17,7 @@ test.describe.configure({ mode: "serial", timeout: 90_000 });
 const tag = randomUUID().slice(0, 8);
 const ownerEmail = `owner-${tag}@example.test`;
 const newEmail = `new-${tag}@example.test`;
+const mailClient = `Mail Client ${tag}`;
 // A base32 authenticator key, given to the owner directly so their sign in is quick.
 const ownerKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
 let firm: Awaited<ReturnType<typeof seedFirm>>;
@@ -192,10 +197,10 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await expect(card.getByRole("status")).toHaveText("Connected: office@firm.test");
 
   await owner.goto("/app/clients?panel=add");
-  await owner.getByLabel("Name", { exact: true }).fill("Mail Client");
+  await owner.getByLabel("Name", { exact: true }).fill(mailClient);
   await owner.getByLabel("Email", { exact: true }).fill(`client-${tag}@patel.test`);
   await owner.getByRole("button", { name: "Add client" }).click();
-  await expect(owner.locator(".page-head")).toContainText("Mail Client");
+  await expect(owner.locator(".page-head")).toContainText(mailClient);
   const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
   for (const from of [`Client-${tag}@Patel.test`, `stranger-${tag}@else.test`])
     await smtp.sendMail({ from, to: "office@firm.test", subject: "Please send last year's ITR", text: "Thanks" });
@@ -217,10 +222,6 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await expect(latest).toHaveCount(2);
   await latest.first().getByRole("combobox").selectOption({ label: "Asks for this year's records" });
   await expect(latest.filter({ hasText: "Corrected" })).toHaveCount(1);
-
-  await owner.goto("/app/settings");
-  await card.getByRole("button", { name: "Disconnect" }).click();
-  await expect(card.getByLabel("The firm's email address")).toBeVisible();
 });
 
 test("the owner connects a drive only after agreeing to the Drive access terms", async () => {
@@ -235,6 +236,43 @@ test("the owner connects a drive only after agreeing to the Drive access terms",
   await expect(card.getByRole("status")).toHaveText("Connected: Test drive on this computer");
   const [consent] = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'drive.consent'", [firm.firmId]);
   expect(consent.details).toEqual({ provider: "local", level: "whole_drive", terms_version: "2026-10-17" });
-  await card.getByRole("button", { name: "Disconnect" }).click();
-  await expect(card.getByRole("button", { name: "Connect drive" })).toBeVisible();
+});
+
+test("a client's attachments are filed into its folder in the drive; an unclear one waits under To check", async ({ request }) => {
+  const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
+  await smtp.sendMail({
+    from: `client-${tag}@patel.test`,
+    to: "office@firm.test",
+    subject: "GST data",
+    text: "Please find the bills attached.",
+    attachments: [
+      { filename: "purchase_bills_sep_2026.pdf", content: "%PDF-1.4 invented purchase bills" },
+      { filename: "scan001.pdf", content: "%PDF-1.4 invented scan" },
+    ],
+  });
+  await query(local.dbUrl, "select private.queue_mail_polls()");
+  // The first sweep reads the mail; the second files its attachments.
+  for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  // Bills for September 2026 belong to FY 2026-27; the scan names no period, so it goes in the year it arrived.
+  const drive = path.join(tmpdir(), "inboxca-test-drive");
+  expect(await readFile(path.join(drive, "FY 2026-27", mailClient, "GST", `${mailClient} - Purchase bills - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented purchase bills");
+  const thisYear = financialYear(new Date().toISOString().slice(0, 7));
+  expect(await readFile(path.join(drive, thisYear, mailClient, "GST", "To check", `${mailClient} - Document.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
+
+  await owner.goto("/app/clients");
+  await owner.getByRole("link", { name: mailClient }).click();
+  await owner.getByRole("link", { name: /^Files/ }).click();
+  const rows = owner.locator("section[aria-labelledby=files] tbody tr");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
+  // The owner opens a file from the drive through InboxCA, shown in the browser and sandboxed.
+  const href = await rows.getByRole("link", { name: `${mailClient} - Purchase bills - Sep 2026.pdf` }).getAttribute("href");
+  const file = await owner.request.get(href!);
+  expect(await file.text()).toBe("%PDF-1.4 invented purchase bills");
+  expect(file.headers()).toMatchObject({ "content-type": "application/pdf", "content-security-policy": "sandbox" });
+
+  await owner.goto("/app/settings");
+  for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
+  await expect(owner.locator("section#drive").getByRole("button", { name: "Connect drive" })).toBeVisible();
+  await expect(owner.locator("section[aria-labelledby=mailbox]").getByLabel("The firm's email address")).toBeVisible();
 });
