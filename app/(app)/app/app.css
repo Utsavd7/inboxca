@@ -373,6 +373,14 @@ form:has(input[name="task"]:checked) .bulk { opacity: 1; transform: none; pointe
 .settings-index a:hover { background: var(--hover); color: var(--ink); }
 .settings h2 { scroll-margin-top: var(--s6); }
 .settings .panel { padding-bottom: var(--s6); border-bottom: 1px solid var(--line); }
+.import-choose { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--s4) var(--s6); align-items: start; margin-top: var(--s3); }
+.import-choose fieldset { display: grid; gap: var(--s2); border: 0; }
+.import-choose legend { margin-bottom: var(--s1); font-weight: 600; }
+.import-choose > .b { justify-self: start; }
+.import-unmatched { display: grid; gap: var(--s2); margin-block: var(--s3); }
+.import-map { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); }
+.import-map select { width: auto; min-width: 240px; }
+.import-go { margin-top: var(--s4); }
 .meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--s3); margin-top: var(--s4); }
 .meters div { padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
 .meters dt { color: var(--ink-3); font-size: 13px; }

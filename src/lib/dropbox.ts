@@ -98,16 +98,27 @@ export function dropboxDrive(refreshToken: string): Drive {
       }
       return { id: String((moved.metadata as { id?: string }).id) };
     },
-    async check() {
+    async files(folder) {
       const token = await accessToken();
-      const files: { id: string; path: string }[] = [];
-      let page = await call(token, "files/list_folder", { path: ROOT, recursive: true, limit: 2000 });
+      const files: { id: string; path: string; size: number }[] = [];
+      let page = await call(token, "files/list_folder", { path: folder, recursive: true, limit: 2000 });
       for (;;) {
         if ("error" in page) throw new Error("dropbox_list");
-        for (const entry of page.entries as { ".tag": string; id: string; path_display: string }[]) if (entry[".tag"] === "file") files.push({ id: entry.id, path: entry.path_display });
+        for (const entry of page.entries as { ".tag": string; id: string; path_display: string; size?: number }[])
+          if (entry[".tag"] === "file") files.push({ id: entry.id, path: entry.path_display, size: entry.size ?? 0 });
         if (!page.has_more) break;
         page = await call(token, "files/list_folder/continue", { cursor: page.cursor });
       }
+      return files;
+    },
+    async folders() {
+      const top = await call(await accessToken(), "files/list_folder", { path: "", limit: 2000 });
+      if ("error" in top) throw new Error("dropbox_list");
+      return (top.entries as { ".tag": string; path_display: string }[]).filter((entry) => entry[".tag"] === "folder" && entry.path_display !== ROOT).map((entry) => entry.path_display);
+    },
+    async check() {
+      const token = await accessToken();
+      const files = (await this.files(ROOT)).map(({ id, path }) => ({ id, path }));
       const [folder, links, space] = await Promise.all([
         call(token, "files/get_metadata", { path: ROOT }),
         call(token, "sharing/list_shared_links", { path: ROOT, direct_only: false }),

@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { readFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
@@ -268,7 +268,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   // The first sweep reads the mail; the second files its attachments.
   for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   // Bills for September 2026 belong to FY 2026-27; the scan names no period, so it goes in the year it arrived.
-  const drive = path.join(tmpdir(), "inboxca-test-drive");
+  const drive = path.join(tmpdir(), "inboxca-test-drive", "InboxCA");
   expect(await readFile(path.join(drive, "FY 2026-27", mailClient, "GST", `${mailClient} - Purchase bills - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented purchase bills");
   const thisYear = financialYear(new Date().toISOString().slice(0, 7));
   expect(await readFile(path.join(drive, thisYear, mailClient, "GST", "To check", `${mailClient} - Document.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
@@ -378,6 +378,30 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows.filter({ hasText: "Form 16" })).toContainText("Missing in the drive");
   await owner.goto("/app");
   await expect(owner.getByRole("alert").filter({ hasText: "no longer in your drive" })).toBeVisible();
+
+  // Old files already in the drive: final papers are sorted into the client's folder in
+  // place after a preview, and can be put back.
+  const old = path.join(tmpdir(), "inboxca-test-drive", `Old files ${tag}`);
+  await mkdir(path.join(old, mailClient, "2025-26"), { recursive: true });
+  await mkdir(path.join(old, "Someone else"), { recursive: true });
+  await writeFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2025-26.pdf"), "%PDF-1.4 invented ITR-V");
+  await writeFile(path.join(old, mailClient, "2025-26", "working notes.txt"), "invented notes");
+  await writeFile(path.join(old, "Someone else", "notice.pdf"), "%PDF-1.4 invented notice");
+  await owner.goto("/app/import");
+  await owner.getByLabel(`Old files ${tag}`).check();
+  await owner.getByRole("button", { name: "Show what would move" }).click();
+  await expect(owner.getByRole("heading", { name: /^2 files/ })).toBeVisible();
+  await owner.getByRole("button", { name: "Move these files" }).click();
+  await expect(owner.getByRole("status")).toContainText("Moving your files now");
+  await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  const itrv = path.join(drive, "FY 2024-25", mailClient, "Income tax", `${mailClient} - ITR-V - FY 2024-25.pdf`);
+  expect(await readFile(itrv, "utf8")).toBe("%PDF-1.4 invented ITR-V");
+  await owner.reload();
+  await owner.getByRole("button", { name: "Put them back" }).click();
+  await expect(owner.getByRole("status")).toContainText("Putting the files back");
+  for (let sweep = 0; sweep < 3; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  expect(await readFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2025-26.pdf"), "utf8")).toBe("%PDF-1.4 invented ITR-V");
+  expect(await readFile(path.join(old, "Someone else", "notice.pdf"), "utf8")).toBe("%PDF-1.4 invented notice");
 
   await owner.goto("/app/settings");
   for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
