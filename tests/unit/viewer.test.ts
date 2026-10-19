@@ -37,3 +37,7 @@ it("shows sheets as capped images and draws identity into photos too", async () 
   const photo = await renderPage(original, "photo.png", 1, "Person");
   expect(photo.bytes.equals(original)).toBe(false);
 });
+
+it("does not decode disguised SVG files as photos", async () => {
+  await expect(renderPage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"/>'), "photo.png", 1, "Person")).rejects.toThrow("Not a picture");
+});

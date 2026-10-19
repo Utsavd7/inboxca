@@ -44,7 +44,7 @@ export async function renderPage(bytes: Buffer, name: string, pageNumber: number
       await task.destroy();
     }
   } else if (/\.(xlsx?|csv)$/i.test(name)) {
-    const all = readSheet(bytes, name);
+    const all = readSheet(bytes, name, { rows: viewLimits.rows + 1, columns: viewLimits.columns });
     const rows = all.slice(0, viewLimits.rows);
     limited = all.length > rows.length || rows.some((row) => row.length > viewLimits.columns);
     count = Math.max(1, Math.ceil(rows.length / viewLimits.rowsPerPage));
@@ -74,6 +74,10 @@ export async function renderPage(bytes: Buffer, name: string, pageNumber: number
     });
   } else if (/\.(png|jpe?g|gif|webp)$/i.test(name)) {
     if (pageNumber !== 1) throw new Error("No page");
+    const signature = bytes.subarray(0, 12);
+    const picture = signature.subarray(0, 8).toString("hex") === "89504e470d0a1a0a" || signature.subarray(0, 3).toString("hex") === "ffd8ff"
+      || /^GIF8[79]a/.test(signature.toString("ascii")) || signature.toString("ascii", 0, 4) === "RIFF" && signature.toString("ascii", 8) === "WEBP";
+    if (!picture) throw new Error("Not a picture");
     const image = await loadImage(bytes);
     fit(image.width, image.height);
     const context = canvas.getContext("2d");
@@ -88,6 +92,11 @@ export async function renderPage(bytes: Buffer, name: string, pageNumber: number
   const positions = tiles(canvas.width, canvas.height, context.measureText(label).width, size);
   context.translate(canvas.width / 2, canvas.height / 2);
   context.rotate(-Math.PI / 6);
-  for (const { x, y } of positions) context.fillText(label, x, y);
+  context.strokeStyle = "rgba(255,255,255,0.45)";
+  context.lineWidth = 1;
+  for (const { x, y } of positions) {
+    context.strokeText(label, x, y);
+    context.fillText(label, x, y);
+  }
   return { bytes: await canvas.encode("png"), count, limited, width: canvas.width, height: canvas.height };
 }
