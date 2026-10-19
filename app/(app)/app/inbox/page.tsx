@@ -2,7 +2,10 @@ import { Check, FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { decidePermission, decideShare, manageEmail } from "@/app/(app)/actions";
+import { supabaseAdmin } from "@/src/lib/supabase";
 import { mayDecide, rightWords, switchable, type Right } from "@/src/lib/rights";
+import { personName } from "@/src/lib/roles";
+import { addDays, todayInIndia } from "@/src/lib/calendar";
 import { canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { currentMember } from "@/src/lib/member";
@@ -46,6 +49,21 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
   const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
   const toAnswer = (asks ?? []).filter((request) => me && mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy }, request.details as { by: string; route: "owner" | "manager"; team_id: string | null }));
   const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
+  // The owner's week of approvals (5.17.3, #51): who approved what, newest first.
+  const owner = membership.role === "owner";
+  const { data: week } = owner
+    ? await supabaseAdmin().from("activity_log").select("at, actor_id, action, details").eq("firm_id", membership.firmId)
+      .in("action", ["permission.allowed", "permission.always", "device.approved", "office.confirm", "office.today"])
+      .gt("at", addDays(todayInIndia(), -7)).order("at", { ascending: false }).limit(50)
+    : { data: null };
+  const approvalWords = (action: string, details: { right?: string; for?: string; kind?: string }) =>
+    ({
+      "permission.allowed": details.right === "time" ? `gave ${personName(emailOf.get(details.for ?? ""))} more time` : `allowed ${personName(emailOf.get(details.for ?? ""))} once to ${rightWords[details.right as Right]}`,
+      "permission.always": `always allowed ${personName(emailOf.get(details.for ?? ""))} to ${rightWords[details.right as Right]}`,
+      "device.approved": details.kind === "personal" ? "allowed a device away from the office" : details.kind === "office" ? "approved a PC that stays in the office" : "approved a laptop",
+      "office.confirm": "confirmed an office internet connection",
+      "office.today": "allowed a different internet connection for a day",
+    })[action] ?? action;
   const approver = canManageClients(membership.role);
   // For mail from a contact who writes for several clients: the clients to choose from.
   const unclear = (waiting ?? []).flatMap((request) => (request.reason_code === "client_unclear" ? [byIdOf(events, request.entity_id)?.contact_id] : [])).filter(Boolean) as string[];
@@ -132,6 +150,24 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
         <p className="alert" role="alert">
           The paper could not be sent. Check the firm&apos;s email in Settings, then try again.
         </p>
+      )}
+      {!!week?.length && (
+        <section className="panel" aria-labelledby="approved" id="approved">
+          <div className="panel-head">
+            <h2 id="approved">Approved in the last 7 days</h2>
+            <p className="hint">Withdraw a device in Settings, Office only; a standing permission in Settings, Permissions.</p>
+          </div>
+          <ul className="rows">
+            {week.map((entry) => (
+              <li key={`${entry.at}${entry.action}`}>
+                <span className="grow">
+                  {personName(emailOf.get(entry.actor_id ?? ""))} {approvalWords(entry.action, (entry.details ?? {}) as { right?: string; for?: string; kind?: string })}
+                </span>
+                <span className="sub">{new Date(entry.at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {!!toAnswer.length && (
         <section className="panel" aria-labelledby="questions">

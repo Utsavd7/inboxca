@@ -1,4 +1,5 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createDecipheriv, createECDH, hkdfSync, randomBytes, randomUUID, type ECDH } from "node:crypto";
+import { createServer } from "node:http";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -31,6 +32,19 @@ const pcUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.3
 
 // The newest message in a test mailbox on the GreenMail server, which makes a mailbox for
 // every address it receives mail for.
+// What the owner's browser does with a push (RFC 8291): open the message sealed for it.
+function openPush(body: Buffer, browser: ECDH, auth: Buffer) {
+  const salt = body.subarray(0, 16);
+  const server = body.subarray(21, 21 + body[20]);
+  const ikm = Buffer.from(hkdfSync("sha256", browser.computeSecret(server), auth, Buffer.concat([Buffer.from("WebPush: info\0"), browser.getPublicKey(), server]), 32));
+  const derive = (label: string, length: number) => Buffer.from(hkdfSync("sha256", ikm, salt, Buffer.from(`Content-Encoding: ${label}\0`), length));
+  const sealed = body.subarray(21 + body[20]);
+  const decipher = createDecipheriv("aes-128-gcm", derive("aes128gcm", 16), derive("nonce", 12));
+  decipher.setAuthTag(sealed.subarray(-16));
+  const plain = Buffer.concat([decipher.update(sealed.subarray(0, -16)), decipher.final()]);
+  return plain.subarray(0, plain.lastIndexOf(2)).toString();
+}
+
 async function lastMail(address: string) {
   const imap = new ImapFlow({ host: "127.0.0.1", port: 3143, secure: false, auth: { user: address, pass: address }, logger: false });
   await imap.connect();
@@ -328,10 +342,35 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await expect(owner.locator(".page-head")).toContainText(`Ask Client ${tag}`);
   const files = `${owner.url().split("?")[0]}?tab=files`;
 
+  // The owner turned on phone notifications in one browser: here, a local push service.
+  const browserKey = createECDH("prime256v1");
+  const auth = randomBytes(16);
+  const pushes: { headers: Record<string, string | string[] | undefined>; body: Buffer }[] = [];
+  const pushService = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk) => chunks.push(chunk)).on("end", () => {
+      pushes.push({ headers: request.headers, body: Buffer.concat(chunks) });
+      response.writeHead(201).end();
+    });
+  });
+  await new Promise<void>((resolve) => pushService.listen(0, "127.0.0.1", resolve));
+  const [{ id: ownerId }] = await query(local.dbUrl, "select id from auth.users where email = $1", [ownerEmail]);
+  await query(local.dbUrl, "insert into public.push_subscriptions (user_id, endpoint, keys) values ($1, $2, $3)", [
+    ownerId, `http://127.0.0.1:${(pushService.address() as { port: number }).port}/push`, { p256dh: browserKey.generateKeys("base64url"), auth: auth.toString("base64url") },
+  ]);
+
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload a file" })).toHaveCount(0);
   await person.getByRole("button", { name: "Ask to upload" }).click();
   await expect(person.getByRole("status")).toContainText("Asked.");
+  // Within seconds the owner's browser gets it, sealed for that browser alone, naming no client.
+  await expect.poll(() => pushes.length, { timeout: 15_000 }).toBe(1);
+  expect(pushes[0].headers["content-encoding"]).toBe("aes128gcm");
+  expect(String(pushes[0].headers.authorization)).toMatch(/^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=/);
+  const message = JSON.parse(openPush(pushes[0].body, browserKey, auth));
+  expect(message).toEqual({ title: "A question for you", body: "New asks to upload a file.", url: "/app/inbox" });
+  pushService.close();
+  await query(local.dbUrl, "delete from public.push_subscriptions where user_id = $1", [ownerId]);
   await expect(person.getByText("Asked", { exact: true })).toBeVisible();
 
   // The person has no team manager, so the question goes to the owner.

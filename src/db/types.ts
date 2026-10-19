@@ -369,6 +369,19 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"push_subscriptions": {
+                  Row: {
+                    "endpoint": string,"id": string,"keys": NonNullable<Json>,"user_id": string
+                  }
+                  Insert: {
+                    "endpoint": string,"id"?: string,"keys": NonNullable<Json>,"user_id": string
+                  }
+                  Update: {
+                    "endpoint"?: string,"id"?: string,"keys"?: NonNullable<Json>,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"requests": {
                   Row: {
                     "client_id": string | null,"details": NonNullable<Json>,"entity_id": string,"entity_type": string,"expires_at": string | null,"firm_id": string,"id": string,"kind": string,"reason_code": string | null,"status": string

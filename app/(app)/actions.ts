@@ -24,6 +24,7 @@ import { mayDecide, rightWords, routeOf, switchable, type Permissions, type Righ
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
 import { queueRead } from "@/src/jobs/read-document";
+import { runJobsSoon } from "@/src/jobs/run-soon";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
 import { firmMailer } from "@/src/lib/firm-mail";
@@ -208,6 +209,7 @@ export async function askMoreTime(form: FormData) {
     const { data: me } = await admin.from("firm_members").select("team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single();
     await admin.from("requests").insert({ id, firm_id: membership.firmId, kind: "permission", entity_type: "permission", entity_id: id, reason_code: "time", expires_at: new Date(Date.now() + 4 * 3_600_000).toISOString(), details: { by: userId, route: "owner", team_id: me?.team_id ?? null, day: closing.day, until } });
     await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.asked", entity_type: "request", entity_id: id, details: { right: "time", until } });
+    runJobsSoon();
   }
   redirect("/app?asked=time");
 }
@@ -1291,6 +1293,7 @@ export async function askPermission(form: FormData) {
     details: { by: userId, route: routeOf(right, me, managers?.map((manager) => manager.user_id) ?? []), team_id: me.team_id, ...(document && { document_id: document.id, document_name: document.name }) },
   });
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.asked", entity_type: "request", entity_id: id, details: { right } });
+  runJobsSoon();
   revalidatePath("/app", "layout");
   redirect(`${back}&asked_right=${right}`);
 }
@@ -1363,6 +1366,16 @@ export async function askAwayDevice() {
   await askAway(userId);
   revalidatePath("/app", "layout");
   redirect("/app");
+}
+
+// Phone notifications for this browser (5.17.3): the subscription the browser made, kept by
+// the server only.
+export async function savePushSubscription(json: string) {
+  const { userId, membership } = await currentMember();
+  const parsed = z.object({ endpoint: z.url({ protocol: process.env.NODE_ENV === "production" ? /^https$/ : /^https?$/ }).max(1000), keys: z.object({ p256dh: z.base64url().max(200), auth: z.base64url().max(100) }) }).safeParse((() => { try { return JSON.parse(json); } catch { return null; } })());
+  if (!membership || !parsed.success) return;
+  await supabaseAdmin().from("push_subscriptions").upsert({ user_id: userId, endpoint: parsed.data.endpoint, keys: parsed.data.keys }, { onConflict: "endpoint" });
+  revalidatePath("/app", "layout");
 }
 
 // A suspected screen capture in the viewer (PLAN.md 5.17.2): logged; the third in a day by
