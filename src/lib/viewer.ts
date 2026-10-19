@@ -2,7 +2,29 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { join } from "node:path";
 import { readSheet } from "./sheet";
 
-export const viewLimits = { bytes: 25_000_000, pages: 30, rows: 1000, columns: 12, rowsPerPage: 40 };
+export const viewLimits = { bytes: 25_000_000, pages: 30, rows: 1000, columns: 12, rowsPerPage: 40, pixels: 40_000_000 };
+
+// A picture's size from its header, read before anything is decoded, so a small file that
+// claims to be enormous never reaches the decoder. Null for anything not a known picture.
+export function pictureSize(bytes: Buffer): { width: number; height: number } | null {
+  const ascii = (start: number, end: number) => bytes.toString("ascii", start, end);
+  if (bytes.length >= 24 && bytes.subarray(0, 8).toString("hex") === "89504e470d0a1a0a") return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+  if (bytes.length >= 10 && /^GIF8[79]a$/.test(ascii(0, 6))) return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
+  if (bytes.length >= 30 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") {
+    const kind = ascii(12, 16);
+    if (kind === "VP8X") return { width: 1 + bytes.readUIntLE(24, 3), height: 1 + bytes.readUIntLE(27, 3) };
+    if (kind === "VP8L") return { width: 1 + (bytes.readUInt32LE(21) & 0x3fff), height: 1 + ((bytes.readUInt32LE(21) >> 14) & 0x3fff) };
+    if (kind === "VP8 ") return { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff };
+    return null;
+  }
+  // JPEG: walk the segments to the frame header, which holds the size.
+  for (let at = 2; bytes[0] === 0xff && bytes[1] === 0xd8 && at + 9 < bytes.length; at += 2 + bytes.readUInt16BE(at + 2)) {
+    if (bytes[at] !== 0xff) return null;
+    const marker = bytes[at + 1];
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { width: bytes.readUInt16BE(at + 7), height: bytes.readUInt16BE(at + 5) };
+  }
+  return null;
+}
 
 export function viewerLabel(person: string, firm: string, at = new Date()) {
   return `${person}, ${firm}, ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`;
@@ -74,10 +96,8 @@ export async function renderPage(bytes: Buffer, name: string, pageNumber: number
     });
   } else if (/\.(png|jpe?g|gif|webp)$/i.test(name)) {
     if (pageNumber !== 1) throw new Error("No page");
-    const signature = bytes.subarray(0, 12);
-    const picture = signature.subarray(0, 8).toString("hex") === "89504e470d0a1a0a" || signature.subarray(0, 3).toString("hex") === "ffd8ff"
-      || /^GIF8[79]a/.test(signature.toString("ascii")) || signature.toString("ascii", 0, 4) === "RIFF" && signature.toString("ascii", 8) === "WEBP";
-    if (!picture) throw new Error("Not a picture");
+    const picture = pictureSize(bytes);
+    if (!picture || !picture.width || !picture.height || picture.width * picture.height > viewLimits.pixels) throw new Error("Not a picture this viewer shows");
     const image = await loadImage(bytes);
     fit(image.width, image.height);
     const context = canvas.getContext("2d");

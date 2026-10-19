@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { expect, it } from "vitest";
-import { renderPage, tiles, viewerLabel } from "@/src/lib/viewer";
+import { pictureSize, renderPage, tiles, viewerLabel } from "@/src/lib/viewer";
 import { pdf } from "../fixtures/pdf";
 
 // #53: every page carries the person and server time in its pixels.
@@ -41,4 +41,14 @@ it("shows sheets as capped images and draws identity into photos too", async () 
 
 it("does not decode disguised SVG files as photos", async () => {
   await expect(renderPage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"/>'), "photo.png", 1, "Person")).rejects.toThrow("Not a picture");
+});
+
+// A picture is measured from its header before decoding: one claiming to be enormous is refused.
+it("refuses a picture whose header claims more pixels than the viewer draws", async () => {
+  const photo = createCanvas(30, 20);
+  for (const bytes of [await photo.encode("png"), await photo.encode("jpeg"), await photo.encode("webp")]) expect(pictureSize(bytes)).toEqual({ width: 30, height: 20 });
+  const huge = Buffer.from(await photo.encode("png"));
+  huge.writeUInt32BE(50_000, 16);
+  huge.writeUInt32BE(50_000, 20);
+  await expect(renderPage(huge, "huge.png", 1, "Person")).rejects.toThrow("Not a picture this viewer shows");
 });

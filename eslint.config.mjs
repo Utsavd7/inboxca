@@ -14,8 +14,6 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "brag-output/**",
     "reports/**",
-    // pdf.js's worker, copied from node_modules on install.
-    "public/pdf.worker.min.mjs",
   ]),
 ]);
 
