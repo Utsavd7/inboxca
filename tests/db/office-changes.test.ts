@@ -20,7 +20,7 @@ async function seed() {
     await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, $3, 'active')", [FIRM, person, role]);
   return (await db.query("insert into public.devices (firm_id, token_hash, name, kind, status) values ($1, $2, 'Reception PC', 'laptop', 'approved') returning id", [FIRM, "e".repeat(64)])).rows[0].id as string;
 }
-const observe = async (pc: string, line: object) => (await db.query("select public.observe_office($1, $2, $3, $4) as allowed", [FIRM, STAFF, pc, line])).rows[0].allowed;
+const observe = async (pc: string, line: object, proven = false) => (await db.query("select public.observe_office($1, $2, $3, $4, $5) as allowed", [FIRM, STAFF, pc, line, proven])).rows[0].allowed;
 const lines = async () => (await db.query("select settings -> 'office' -> 'lines' as lines from public.firms where id = $1", [FIRM])).rows[0].lines as Record<string, string>[];
 
 describe("office changes", () => {
@@ -53,8 +53,12 @@ describe("office changes", () => {
     expect(await observe(otherPc, line)).toBe(false);
     expect(await lines()).toEqual([]);
     expect((await db.query("select count(*)::int as n from public.activity_log where firm_id = $1 and action = 'office.refused'", [FIRM])).rows[0].n).toBe(1);
+    // An office PC confirms a new connection only with its own key, checked by the server.
     await db.query("update public.devices set kind = 'office' where id = $1", [pc]);
-    expect(await observe(pc, line)).toBe(true);
+    expect(await observe(pc, line, true)).toBe(false);
+    await db.query("update public.devices set key_id = 'key', key_public = 'public' where id = $1", [pc]);
+    expect(await observe(pc, line)).toBe(false);
+    expect(await observe(pc, line, true)).toBe(true);
     const [{ id }] = (await db.query("select id from public.requests where firm_id = $1 and reason_code = 'office_changed'", [FIRM])).rows;
     await db.query("select public.office_control($1, $2, 'refuse', $3)", [FIRM, DEPUTY, id]);
     expect(await lines()).toEqual([]);

@@ -10,6 +10,7 @@ import { Command } from "./command";
 import { IdleWatch } from "./idle-watch";
 import { NavLinks } from "./nav-links";
 import { PageIn } from "./page-in";
+import { PcKey } from "./pc-key";
 import { Avatar } from "./ui";
 
 export const metadata: Metadata = {
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
 // The app's frame: a quiet rail with the firm, search, the pages this person's role uses
 // and who is signed in; each page sits on one white panel beside it.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership, pcKey } = await currentMember();
   const [{ count: waiting }, { data: auth }] = await Promise.all([
     membership
       ? supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending")
@@ -61,6 +62,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="stage">
         <div className="stage-panel">
           <div className="stage-body">
+            {membership && pcKey === "needed" && (
+              <div className="notice">
+                <span className="grow">The owner marked this PC as staying in the office. Set up its key once, so it can confirm a new office internet connection by itself.</span>
+                <PcKey mode="setup" />
+              </div>
+            )}
             {membership?.viewOnlyUntil && (
               <p className="notice" role="status">
                 Away from the office this device only views, until {longDate(membership.viewOnlyUntil)}.

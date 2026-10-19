@@ -18,7 +18,8 @@ import { DAYS, laterBy, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
-import { askAway, officeApprover, requestLine } from "@/src/lib/office";
+import { askAway, officeApprover, officePc, requestLine } from "@/src/lib/office";
+import { CHALLENGE_COOKIE, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { mayDecide, rightWords, routeOf, switchable, type Permissions, type Right } from "@/src/lib/rights";
 import { searchTokens, words } from "@/src/lib/search";
@@ -1376,6 +1377,55 @@ export async function savePushSubscription(json: string) {
   if (!membership || !parsed.success) return;
   await supabaseAdmin().from("push_subscriptions").upsert({ user_id: userId, endpoint: parsed.data.endpoint, keys: parsed.data.keys }, { onConflict: "endpoint" });
   revalidatePath("/app", "layout");
+}
+
+// An office PC's own key (5.17.4 #32, #50): a one-time question for it, then the new key, or
+// a check with the key that confirms a changed office connection from that PC.
+export async function pcKeyChallenge() {
+  const { userId } = await currentMember();
+  const pc = await officePc(userId);
+  if (!pc) return null;
+  const { challenge, cookie } = newChallenge(pc.device.id);
+  (await cookies()).set(CHALLENGE_COOKIE, cookie, { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 300 });
+  return { challenge, deviceId: pc.device.id, keyId: pc.device.key_id };
+}
+
+const keyAnswer = z.object({ id: z.base64url().max(400), clientDataJSON: z.base64url().max(4000), authenticatorData: z.base64url().max(4000) });
+
+export async function savePcKey(answer: { id: string; clientDataJSON: string; authenticatorData: string; publicKey: string }) {
+  const { userId } = await currentMember();
+  const pc = await officePc(userId);
+  const parsed = keyAnswer.extend({ publicKey: z.base64url().max(400) }).safeParse(answer);
+  if (!pc || pc.device.key_id || !parsed.success) return "This PC's key could not be set up. Reload the page and try again.";
+  const result = checkNewKey(parsed.data, (await headers()).get("origin") ?? "", (await cookies()).get(CHALLENGE_COOKIE)?.value, pc.device.id);
+  const admin = supabaseAdmin();
+  if (result === "synced") {
+    // A key that can leave the PC proves nothing about where it is: the PC works as a laptop.
+    await admin.from("devices").update({ kind: "laptop" }).eq("id", pc.device.id);
+    await admin.from("activity_log").insert({ firm_id: pc.firmId, actor_id: userId, action: "device.key_synced", entity_type: "device", entity_id: pc.device.id });
+    revalidatePath("/app", "layout");
+    return "This PC keeps its keys in an account that copies them to other devices, so it works as a laptop: a new office connection waits for the owner.";
+  }
+  if (result !== "ok") return "This PC's key could not be set up. Reload the page and try again.";
+  await admin.from("devices").update({ key_id: parsed.data.id, key_public: parsed.data.publicKey }).eq("id", pc.device.id);
+  await admin.from("activity_log").insert({ firm_id: pc.firmId, actor_id: userId, action: "device.key_added", entity_type: "device", entity_id: pc.device.id });
+  revalidatePath("/app", "layout");
+  return "";
+}
+
+export async function confirmWithPcKey(answer: { id: string; clientDataJSON: string; authenticatorData: string; signature: string }) {
+  const { userId } = await currentMember();
+  const pc = await officePc(userId);
+  const parsed = keyAnswer.extend({ signature: z.base64url().max(1000) }).safeParse(answer);
+  const line = requestLine(await headers(), todayInIndia());
+  if (!pc?.device.key_public || !parsed.success || parsed.data.id !== pc.device.key_id || !line
+    || !checkKeyUse(parsed.data, pc.device.key_public, (await headers()).get("origin") ?? "", (await cookies()).get(CHALLENGE_COOKIE)?.value, pc.device.id))
+    return "This PC's key did not match. Ask the owner or a deputy to confirm the connection.";
+  (await cookies()).delete(CHALLENGE_COOKIE);
+  const { error } = await supabaseAdmin().rpc("observe_office", { target_firm: pc.firmId, person: userId, pc: pc.device.id, connection: line, proven: true });
+  if (error) throw new Error(`Office check failed: ${error.code}`);
+  revalidatePath("/app", "layout");
+  redirect("/app");
 }
 
 // A suspected screen capture in the viewer (PLAN.md 5.17.2): logged; the third in a day by

@@ -37,7 +37,7 @@ export const currentMember = cache(async () => {
       }
     }
   }
-  if (!data) return { supabase, userId, membership: null, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting };
+  if (!data) return { supabase, userId, membership: null, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting, pcKey: office.pcKey };
   const access = (data.access ?? {}) as Record<string, unknown>;
 
   const settings = (data.firms?.settings ?? {}) as Record<string, unknown>;
@@ -58,7 +58,7 @@ export const currentMember = cache(async () => {
     viewOnlyUntil: office.remoteUntil,
     may: (right: Right) => !office.remoteUntil && may(data.role, right, settings.permissions as Permissions, (access.always ?? []) as string[]),
   };
-  return { supabase, userId, membership, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting };
+  return { supabase, userId, membership, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting, pcKey: office.pcKey };
 });
 
 // For actions that change anything: a view only device gets no further.
