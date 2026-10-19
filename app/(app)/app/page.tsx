@@ -3,6 +3,7 @@ import { CalendarDays, Check, Inbox, Mail, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { askAwayDevice, joinFirm, manageTasks } from "@/app/(app)/actions";
+import { PcKey } from "./pc-key";
 import { PushSwitch } from "./push-switch";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { canManageClients } from "@/src/lib/clients";
@@ -54,11 +55,11 @@ const reasons: Record<string, string> = {
 // technical see what to do next without opening anything else.
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string; asked?: string }> }) {
   const { dropped, error, asked } = await searchParams;
-  const { supabase, userId, membership, deviceStatus, connectionWaiting } = await currentMember();
+  const { supabase, userId, membership, deviceStatus, connectionWaiting, pcKey } = await currentMember();
   const { data: invites } = await supabase.rpc("my_invites");
   const closed = membership ? null : (await supabase.rpc("closed_firms")).data?.[0];
   if (closed?.reason === "session") redirect("/auth/sign-out?reason=session");
-  if (!membership) return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} connectionWaiting={connectionWaiting} />;
+  if (!membership) return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} connectionWaiting={connectionWaiting} pcKey={pcKey} />;
 
   const today = todayInIndia();
   const month = today.slice(0, 7);
@@ -513,8 +514,14 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
 }
 
 // Someone signed in who is not in a firm yet: their invites, or the firm being closed.
-function NoFirm({ closed, invites, deviceStatus, connectionWaiting }: { closed: { firm_name: string; hours: unknown; reason: string } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[]; deviceStatus: "waiting" | "refused" | null; connectionWaiting: boolean }) {
-  if (connectionWaiting) return <PageHead title="Waiting for your firm to confirm the office internet connection" sub="Ask the owner or a deputy to confirm this connection." />;
+function NoFirm({ closed, invites, deviceStatus, connectionWaiting, pcKey }: { closed: { firm_name: string; hours: unknown; reason: string } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[]; deviceStatus: "waiting" | "refused" | null; connectionWaiting: boolean; pcKey: "needed" | "ready" | null }) {
+  if (connectionWaiting)
+    return (
+      <>
+        <PageHead title="Waiting for your firm to confirm the office internet connection" sub={pcKey === "ready" ? "This PC stays in the office, so its key can confirm the new connection. The owner is told." : "Ask the owner or a deputy to confirm this connection."} />
+        {pcKey === "ready" && <PcKey mode="confirm" />}
+      </>
+    );
   if (closed?.reason === "office" && deviceStatus)
     return (
       <PageHead

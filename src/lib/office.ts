@@ -71,6 +71,8 @@ export async function officeDeviceAccess(userId: string, observe = true) {
   let approved = false;
   let connectionWaiting = false;
   let remoteUntil: string | null = null;
+  // A PC that stays in the office: whether it still needs its own key, or has one to prove itself.
+  let pcKey: "needed" | "ready" | null = null;
   if (office?.on && firmRow && officeBound(firmRow.role)) {
     const token = (await cookies()).get(DEVICE_COOKIE)?.value;
     let pc;
@@ -83,12 +85,13 @@ export async function officeDeviceAccess(userId: string, observe = true) {
         });
         if (error) throw new Error(`PC registration failed: ${error.code}`);
       }
-      const { data, error } = await admin.from("devices").select("id, status, kind, person_id, ends_on")
+      const { data, error } = await admin.from("devices").select("id, status, kind, person_id, ends_on, key_id")
         .eq("firm_id", firmRow.firm_id).eq("token_hash", digest).maybeSingle();
       if (error) throw new Error(`PC check failed: ${error.code}`);
       pc = data;
     }
-    if (!observe) return { approved: false, deviceStatus: null, connectionWaiting: pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting", remoteUntil: null };
+    if (!observe) return { approved: false, deviceStatus: null, connectionWaiting: pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting", remoteUntil: null, pcKey: null };
+    if (pc?.status === "approved" && pc.kind === "office") pcKey = pc.key_id ? "ready" : "needed";
     // A personal device works anywhere for its one person until its end date, view only;
     // anyone else on it, or after that day, is refused.
     if (pc?.status === "approved" && pc.kind === "personal") {
@@ -111,7 +114,18 @@ export async function officeDeviceAccess(userId: string, observe = true) {
       if (error) throw new Error(`Office refusal failed: ${error.code}`);
     }
   }
-  return { approved, deviceStatus, connectionWaiting, remoteUntil };
+  return { approved, deviceStatus, connectionWaiting, remoteUntil, pcKey };
+}
+
+// This browser's approved PC in the person's firm, for its key.
+export async function officePc(userId: string) {
+  const admin = supabaseAdmin();
+  const token = (await cookies()).get(DEVICE_COOKIE)?.value;
+  const { data: member } = await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  if (!token || !member) return null;
+  const { data: device } = await admin.from("devices").select("id, kind, key_id, key_public")
+    .eq("firm_id", member.firm_id).eq("token_hash", await deviceHash(token)).eq("status", "approved").maybeSingle();
+  return device?.kind === "office" ? { firmId: member.firm_id, device } : null;
 }
 
 // A staff member away from the office asks to use this device there: it waits for the owner

@@ -293,11 +293,10 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   // The signed browser secret identifies this approved PC, not the person using it.
   const deviceCookie = (await person.context().cookies()).find((cookie) => cookie.name === "inboxca_device")!;
   await query(local.dbUrl, "update public.devices set kind = 'office', name = 'Reception PC' where firm_id = $1 and token_hash = $2", [firm.firmId, await deviceHash(deviceCookie.value)]);
+  // Without its own key a PC that stays in the office waits on a new connection like a laptop.
   await person.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.20" });
   await person.goto("/app/clients");
-  await expect(person.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
-  await owner.goto("/app");
-  await expect(owner.getByText("Your office internet connection changed today (first seen on Reception PC)")).toBeVisible();
+  await expect(person.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
 
   await laptop.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.30" });
   await laptop.goto("/app/clients");
@@ -314,12 +313,6 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   const [{ lines }] = await query(local.dbUrl, "select settings -> 'office' -> 'lines' as lines from public.firms where id = $1", [firm.firmId]);
   expect(lines.find((line: { ipv4: string; until?: string }) => line.ipv4 === "203.0.113.30").until).toContain("18:29:00");
 
-  // Withdraw an automatic confirmation. The PC loses its fixed office mark as well.
-  await owner.goto("/app");
-  await owner.locator(".notice").filter({ hasText: "first seen on Reception PC" }).getByRole("button", { name: "Not my office" }).click();
-  await expect(owner.getByText("first seen on Reception PC", { exact: false })).toHaveCount(0);
-  await person.goto("/app/clients");
-  await expect(person.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
   await deputy.goto("/app/settings#office");
   await deputy.reload();
   await deputy.locator(".notice").filter({ hasText: "Reception PC is on a new internet connection" }).getByRole("button", { name: "This is my office", exact: true }).click();
@@ -333,6 +326,56 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await owner.setExtraHTTPHeaders({});
   await deputy.close();
   await laptop.close();
+});
+
+test("a PC that stays in the office sets up its own key, then confirms a new office connection with it", async ({ browser, baseURL }) => {
+  await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
+  await owner.goto("/app/settings#office");
+  await owner.reload();
+  await owner.getByRole("button", { name: "Turn on" }).click();
+  await expect(owner.getByRole("button", { name: "Turn off", exact: true })).toBeVisible();
+
+  // Browsers make keys only for a named site, so this PC uses localhost; its key is Chrome's
+  // virtual one, kept on the PC like Windows Hello's.
+  const context = await browser.newContext({ baseURL: baseURL!.replace("127.0.0.1", "localhost"), userAgent: pcUserAgent, extraHTTPHeaders: { "x-test-ip": "203.0.113.10" } });
+  const reception = await context.newPage();
+  const cdp = await context.newCDPSession(reception);
+  await cdp.send("WebAuthn.enable");
+  await cdp.send("WebAuthn.addVirtualAuthenticator", { options: { protocol: "ctap2", transport: "internal", hasResidentKey: false, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+  await emailStep(reception, laptopEmail);
+  await reception.getByLabel("6 digit code from the app").fill(totp(deputyKey));
+  await reception.getByRole("button", { name: "Continue" }).click();
+  await expect(reception.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  await owner.reload();
+  await owner.getByRole("listitem").filter({ hasText: "Laptop on Chrome on Windows, first seen today" }).getByRole("button", { name: "Stays in the office" }).click();
+  await expect(owner.getByText("stays in the office, waiting for its key to be set up on it")).toBeVisible();
+
+  await reception.goto("/app");
+  await reception.getByRole("button", { name: "Set up this PC's key" }).click();
+  await expect(reception.getByRole("button", { name: "Set up this PC's key" })).toHaveCount(0);
+  expect(await query(local.dbUrl, "select count(*)::int as count from public.devices where firm_id = $1 and kind = 'office' and key_public is not null", [firm.firmId])).toEqual([{ count: 1 }]);
+
+  // The office connection changes overnight: the PC confirms it with its key and the owner is told.
+  await reception.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.40" });
+  await reception.goto("/app/clients");
+  await reception.getByRole("button", { name: "Confirm with this PC's key" }).click();
+  await expect(reception.getByRole("button", { name: "Confirm with this PC's key" })).toHaveCount(0);
+  await reception.goto("/app/clients");
+  await expect(reception.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+  await owner.goto("/app");
+  const changed = owner.locator(".notice").filter({ hasText: "Your office internet connection changed today" });
+  await expect(changed).toBeVisible();
+
+  // Withdrawn by the owner, the connection goes and the PC waits again.
+  await changed.getByRole("button", { name: "Not my office" }).click();
+  await expect(changed).toHaveCount(0);
+  await reception.goto("/app/clients");
+  await expect(reception.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
+  await owner.goto("/app/settings#office");
+  await owner.getByRole("button", { name: "Turn off", exact: true }).click();
+  await expect(owner.getByText("Are you in your office right now?")).toBeVisible();
+  await owner.setExtraHTTPHeaders({});
+  await context.close();
 });
 
 test("a staff member asks to upload; the owner allows it once from the Inbox", async () => {

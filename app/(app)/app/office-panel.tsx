@@ -20,7 +20,7 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
   const admin = supabaseAdmin();
   const today = todayInIndia();
   const [{ data: pcs }, { data: activity }, { data: people }, { data: requests }] = await Promise.all([
-    admin.from("devices").select("id, name, status, kind, person_id, ends_on").eq("firm_id", membership.firmId),
+    admin.from("devices").select("id, name, status, kind, person_id, ends_on, key_id").eq("firm_id", membership.firmId),
     admin.from("activity_log").select("entity_id, actor_id, action, at, details").eq("firm_id", membership.firmId).in("action", ["device.first_seen", "office.refused", "office.here", "office.confirm", "office.today"]),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     admin.from("requests").select("id, entity_id, reason_code, details").eq("firm_id", membership.firmId).eq("entity_type", "office_connection").eq("status", "pending"),
@@ -35,7 +35,7 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
   // the office, the owner is told once how to get a fixed connection.
   const since = Date.parse(`${today}T00:00:00+05:30`) - FIXED_SUGGESTION_DAYS * 86_400_000;
   const confirmations = (activity ?? []).filter((entry) => entry.action !== "device.first_seen" && entry.action !== "office.refused" && Date.parse(entry.at) >= since).length;
-  const trustedPc = (pcs ?? []).some((pc) => pc.status === "approved" && pc.kind === "office");
+  const trustedPc = (pcs ?? []).some((pc) => pc.status === "approved" && pc.kind === "office" && pc.key_id);
   const suggestFixed =
     owner && office.on && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= FIXED_SUGGESTION_TAPS || !trustedPc);
   if (compact && !requests?.length && !refusals.length && (owner || !waiting.length)) return null;
@@ -94,7 +94,7 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
         {!!approved.length && <div className="device-list">
           <h3 className="sub-head">Approved devices</h3>
           <ul className="rows">{approved.map((pc) => <li key={pc.id}>
-            <span className="grow"><strong>{pc.name}</strong>, {pc.kind === "office" ? "stays in the office" : pc.kind === "laptop" ? "laptop" : `${personName(emails.get(pc.person_id ?? ""))}'s, away from the office until ${dueLabel(pc.ends_on ?? today)}`}</span>
+            <span className="grow"><strong>{pc.name}</strong>, {pc.kind === "office" ? (pc.key_id ? "stays in the office" : "stays in the office, waiting for its key to be set up on it") : pc.kind === "laptop" ? "laptop" : `${personName(emails.get(pc.person_id ?? ""))}'s, away from the office until ${dueLabel(pc.ends_on ?? today)}`}</span>
             <form action={reviewDevice} className="end">
               <input type="hidden" name="device" value={pc.id} />
               <button className="b b-ghost b-small" name="decision" value="withdraw">Withdraw</button>

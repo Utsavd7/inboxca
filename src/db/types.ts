@@ -183,13 +183,13 @@ isOneToOne: false
                   ]
                 },"devices": {
                   Row: {
-                    "ends_on": string | null,"firm_id": string,"id": string,"kind": string | null,"name": string,"person_id": string | null,"status": string,"token_hash": string
+                    "ends_on": string | null,"firm_id": string,"id": string,"key_id": string | null,"key_public": string | null,"kind": string | null,"name": string,"person_id": string | null,"status": string,"token_hash": string
                   }
                   Insert: {
-                    "ends_on"?: string | null,"firm_id": string,"id"?: string,"kind"?: string | null,"name": string,"person_id"?: string | null,"status"?: string,"token_hash": string
+                    "ends_on"?: string | null,"firm_id": string,"id"?: string,"key_id"?: string | null,"key_public"?: string | null,"kind"?: string | null,"name": string,"person_id"?: string | null,"status"?: string,"token_hash": string
                   }
                   Update: {
-                    "ends_on"?: string | null,"firm_id"?: string,"id"?: string,"kind"?: string | null,"name"?: string,"person_id"?: string | null,"status"?: string,"token_hash"?: string
+                    "ends_on"?: string | null,"firm_id"?: string,"id"?: string,"key_id"?: string | null,"key_public"?: string | null,"kind"?: string | null,"name"?: string,"person_id"?: string | null,"status"?: string,"token_hash"?: string
                   }
                   Relationships: [
                     {
@@ -581,7 +581,7 @@ isOneToOne: false
             }[]
                            },
 "observe_office":
-{ Args: { "connection": Json,"pc": string,"person": string,"target_firm": string }; Returns: boolean
+{ Args: { "connection": Json,"pc": string,"person": string,"proven"?: boolean,"target_firm": string }; Returns: boolean
                            },
 "office_allows":
 { Args: { "member_role": string,"settings": Json }; Returns: boolean
