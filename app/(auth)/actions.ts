@@ -3,6 +3,8 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { log } from "@/src/lib/logger";
+import { mailboxLogin } from "@/src/lib/mailbox-login";
+import { officeDeviceAccess } from "@/src/lib/office";
 import { SEEN_COOKIE } from "@/src/lib/session";
 import { supabaseServer } from "@/src/lib/supabase";
 
@@ -15,6 +17,8 @@ export async function requestCode(_prev: CodeState, form: FormData): Promise<Cod
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   if (!z.email().safeParse(email).success)
     return { step: "email", error: "Enter a valid email address." };
+  if (await mailboxLogin(email))
+    return { step: "email", email, error: "The firm's email address cannot be used to sign in." };
   const supabase = await supabaseServer();
   const origin = (await headers()).get("origin") ?? process.env.APP_BASE_URL ?? "";
   const { error } = await supabase.auth.signInWithOtp({
@@ -35,9 +39,12 @@ export async function verifyCode(_prev: CodeState, form: FormData): Promise<Code
   if (!/^\d{6}$/.test(token))
     return { step: "code", email, error: "The code is the 6 digits in the email." };
   const supabase = await supabaseServer();
-  const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+  if (await mailboxLogin(email))
+    return { step: "code", email, error: "The firm's email address cannot be used to sign in." };
+  const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
   if (error)
     return { step: "code", email, error: "That code did not work. Check it, or ask for a new one." };
+  if (data.user && (await officeDeviceAccess(data.user.id)).approved) redirect("/app");
   redirect("/sign-in/two-step");
 }
 

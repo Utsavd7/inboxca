@@ -26,6 +26,7 @@ import { queueRead } from "@/src/jobs/read-document";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
 import { firmMailer } from "@/src/lib/firm-mail";
+import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
@@ -47,6 +48,8 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
   if (membership?.role !== "owner") return { error: "Only the firm's owner can invite people.", values };
   const email = values.email.trim().toLowerCase();
   if (!z.email().safeParse(email).success) return { error: "Enter a valid email address.", values };
+  if (await mailboxLogin(email, membership.firmId))
+    return { error: "The firm's email address cannot be a team login.", values };
   const role = invitable.safeParse(form.get("role"));
   if (!role.success) return { error: "Choose a role.", values };
 
@@ -530,6 +533,7 @@ export async function connectMailbox(_prev: MailboxState, form: FormData): Promi
     kind: "mail",
     provider: "imap",
     address_enc: await crypto.encrypt(membership.firmId, `accounts/${id}/address`, address),
+    address_bidx: await crypto.blindIndex(membership.firmId, "email", address),
     credentials_enc: await crypto.encrypt(membership.firmId, `accounts/${id}/credentials`, JSON.stringify({ password })),
     sync_cursor: checked.cursor,
     settings,
