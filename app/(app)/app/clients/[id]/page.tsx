@@ -1,11 +1,12 @@
 import { Archive, ChevronLeft, FileText, Send, Upload } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { askForDocuments, findDocuments, manageClient, pauseReminders, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
+import { askForDocuments, askPermission, findDocuments, manageClient, pauseReminders, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, workOfService, type DocumentRequest } from "@/src/lib/checklists";
 import { skipReasons, type Skip } from "@/src/lib/reminders";
+import { may, type Permissions, type Right } from "@/src/lib/rights";
 import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { workTypes, type WorkType } from "@/src/lib/drive";
@@ -32,6 +33,8 @@ const errors: Record<string, string> = {
   upload: "Choose a file of up to 25 MB, and its type, work and period.",
   twin: "This client already has this file.",
   owner: "Only the owner can remove a file.",
+  needs: "This needs permission first. Ask, and the button appears here once it is allowed.",
+  asked: "You already have several questions waiting. Wait for an answer first.",
   ask: "Tick at least one document, or name one, to ask for.",
   recipient: "Choose who gets the file: the client's own email, or a contact allowed to receive documents.",
   mailbox: "The file could not be emailed. Connect the firm's email in Settings, or try again in a minute.",
@@ -42,10 +45,10 @@ const reminderNote = (details: { reminded?: string[]; skipped?: { reason: string
   details.reminded?.length ? `Reminded ${dueLabel(details.reminded.at(-1)!)}` : details.skipped ? skipReasons[details.skipped.reason as Skip] : "";
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string }> }) {
-  const { supabase, membership } = await currentMember();
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
+  const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
   const { data: client } = await supabase
     .from("clients")
     .select(
@@ -85,6 +88,34 @@ export default async function Client({ params, searchParams }: { params: Promise
   const documents = (files ?? []).filter((file) => file.status !== "deleted" && (!matching || matching.has(file.id)));
   const removedFiles = (files ?? []).filter((file) => file.status === "deleted");
   const owner = membership.role === "owner";
+  // What this person may do here, with any grant or request of theirs still open (5.17.2).
+  const permissions = membership.settings.permissions as Permissions;
+  const { data: mine } = await supabase
+    .from("requests")
+    .select("reason_code, status, details")
+    .eq("kind", "permission")
+    .eq("client_id", id)
+    .eq("details->>by", userId)
+    .in("status", ["pending", "approved"])
+    .gt("expires_at", new Date().toISOString());
+  const open = (right: Right, status: string, documentId?: string) =>
+    (mine ?? []).some((request) => request.reason_code === right && request.status === status && (!documentId || (request.details as { document_id?: string }).document_id === documentId));
+  const canUpload = may(membership.role, "upload", permissions) || open("upload", "approved");
+  const canSend = (documentId: string) => may(membership.role, "send", permissions) || open("send", "approved", documentId);
+  const canRemove = (documentId: string) => owner || open("remove", "approved", documentId);
+  const askButton = (right: Right, label: string, documentId?: string) =>
+    open(right, "pending", documentId) ? (
+      <span className="hint">Asked</span>
+    ) : (
+      <form action={askPermission}>
+        <input type="hidden" name="client" value={client.id} />
+        <input type="hidden" name="right" value={right} />
+        {documentId && <input type="hidden" name="document" value={documentId} />}
+        <button className="b b-ghost b-small" aria-label={documentId ? `${label}: ${documents.find((file) => file.id === documentId)?.name}` : label}>
+          {label}
+        </button>
+      </form>
+    );
   // A file waiting to be checked because the client already has it, or one like it.
   const sameAs = (file: (typeof documents)[number]) => {
     const twin = documents.find((other) => other.id !== file.id && other.sha256 === file.sha256);
@@ -268,11 +299,13 @@ export default async function Client({ params, searchParams }: { params: Promise
                     <Send size={14} aria-hidden />
                     Ask for files
                   </Link>
-                  {manage && (
+                  {canUpload ? (
                     <Link className="b b-secondary b-small" href={`/app/clients/${client.id}?tab=files&upload=1`} scroll={false}>
                       <Upload size={14} aria-hidden />
                       Upload a file
                     </Link>
+                  ) : (
+                    askButton("upload", "Ask to upload")
                   )}
                 </span>
               </div>
@@ -291,12 +324,17 @@ export default async function Client({ params, searchParams }: { params: Promise
               </form>
               <PortalDrop clientId={client.id} />
               <DroppedNotice value={dropped} />
+              {askedRight && (
+                <p className="notice" role="status">
+                  Asked. Your manager or the owner answers in their Inbox; the button appears here once it is allowed, for one use within an hour.
+                </p>
+              )}
               {sharedFile && (
                 <p className="notice" role="status">
                   Sent {sharedFile.name}. The link works for 7 days and 5 downloads.
                 </p>
               )}
-              {sending && manage && (
+              {sending && canSend(sending.id) && (
                 <section className="reveal-panel" aria-labelledby="send-file">
                   <Link className="b b-ghost b-small reveal-close" href={`/app/clients/${client.id}?tab=files`} scroll={false}>
                     Close
@@ -414,7 +452,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                   )}
                 </form>
               )}
-              {upload && manage && (
+              {upload && canUpload && (
                 <section className="reveal-panel" aria-labelledby="upload-file">
                   <Link className="b b-ghost b-small reveal-close" href={`/app/clients/${client.id}?tab=files`} scroll={false}>
                     Close
@@ -501,12 +539,16 @@ export default async function Client({ params, searchParams }: { params: Promise
                               <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&edit=${document.id}`} scroll={false} aria-label={`Change ${document.name}`}>
                                 Change
                               </Link>
-                              {manage && document.status === "filed" && (
-                                <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&send=${document.id}`} scroll={false} aria-label={`Send ${document.name}`}>
-                                  Send
-                                </Link>
-                              )}
-                              {owner && (
+                              {document.status === "filed" &&
+                                (canSend(document.id) ? (
+                                  <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&send=${document.id}`} scroll={false} aria-label={`Send ${document.name}`}>
+                                    Send
+                                  </Link>
+                                ) : (
+                                  askButton("send", "Ask to send", document.id)
+                                ))}
+                              {!canRemove(document.id) && askButton("remove", "Ask to remove", document.id)}
+                              {canRemove(document.id) && (
                                 <form action={removeDocument}>
                                   <input type="hidden" name="document" value={document.id} />
                                   <button className="b b-ghost b-small" name="intent" value="remove" aria-label={`Remove ${document.name}`}>
