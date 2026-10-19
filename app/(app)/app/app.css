@@ -391,6 +391,8 @@ form:has(input[name="task"]:checked) .bulk { opacity: 1; transform: none; pointe
 .import-map select { width: auto; min-width: 240px; }
 .import-go { margin-top: var(--s4); }
 .routine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--s1) var(--s4); margin-block: var(--s3); }
+.fixed-suggestion { display: grid; gap: var(--s2); margin-top: var(--s4); padding: var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
+.fixed-suggestion blockquote { padding-left: var(--s3); border-left: 2px solid var(--line-2); color: var(--ink-2); }
 .side-doors ul { display: grid; gap: var(--s1); margin-top: var(--s2); padding-left: var(--s5); color: var(--ink-2); list-style: disc; }
 .meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--s3); margin-top: var(--s4); }
 .meters div { padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
