@@ -18,7 +18,7 @@ import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
-import { lineFor, requestAddress, type Office, type OfficeLine } from "@/src/lib/office";
+import { officeApprover, requestLine } from "@/src/lib/office";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
@@ -1150,32 +1150,31 @@ export async function manageNotice(form: FormData) {
   redirect("/app/notices");
 }
 
-// Settings → Staff can use InboxCA only in the office (PLAN.md 5.8, 5.17.3), the owner's.
-// Turning it on asks one question: is the owner in the office right now? If yes, this
-// request's connection is the first office connection. From the office later, "This is my
-// office" adds the connection the owner is on. Turning it off returns staff to how it was.
+// Office changes are checked and logged together in the database.
 export async function setOfficeOnly(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
-  if (membership?.role !== "owner") redirect("/app");
-  const office = (membership.settings.office ?? {}) as Office;
-  const intent = String(form.get("intent") ?? "");
-  const line = lineFor(requestAddress(await headers()), todayInIndia());
-  const lines = office.lines ?? [];
-  const known = (candidate: OfficeLine | null) => !!candidate && lines.some((saved) => saved.ipv4 === candidate.ipv4 && saved.ipv6 === candidate.ipv6);
-  let next: Office = office;
-  if (intent === "on") next = { on: true, lines: form.get("here") === "yes" && line && !known(line) ? [...lines, line] : lines };
-  else if (intent === "here" && line && !known(line)) next = { ...office, lines: [...lines, line] };
-  else if (intent === "off") next = { ...office, on: false };
-  else if (intent === "forget") next = { ...office, lines: [] };
-  await supabase.from("firms").update({ settings: { ...membership.settings, office: next } }).eq("id", membership.firmId);
-  await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: `office.${intent}`, entity_type: "firm", entity_id: membership.firmId });
+  const { userId, membership } = await currentMember();
+  if (!membership || !officeApprover(membership.role, userId, membership.settings)) redirect("/app");
+  const decision = String(form.get("intent") ?? "");
+  const line = requestLine(await headers(), todayInIndia());
+  const deputies = form.getAll("deputy").map(String);
+  const request = String(form.get("request") ?? "");
+  if (decision === "deputies" && deputies.length > 2) redirect("/app/settings?error=deputies#office");
+  if (request && !z.uuid().safeParse(request).success || deputies.some((id) => !z.uuid().safeParse(id).success)) redirect("/app");
+  const { error } = await supabaseAdmin().rpc("office_control", {
+    target_firm: membership.firmId, actor: userId, decision,
+    ...(request && { request_id: request }),
+    ...((decision === "here" || decision === "fixed" || decision === "on" && form.get("here") === "yes") && line && { connection: line }),
+    ...(decision === "deputies" && { deputies }),
+  });
+  if (error) throw new Error(`Office approval failed: ${error.code}`);
+  revalidatePath("/app", "layout");
   redirect("/app/settings#office");
 }
 
 // The owner decides whether a waiting PC stays in the office, travels, or is refused.
 export async function reviewDevice(form: FormData) {
   const { userId, membership } = await currentMember();
-  if (membership?.role !== "owner") redirect("/app");
+  if (!membership || !officeApprover(membership.role, userId, membership.settings)) redirect("/app");
   const decision = String(form.get("decision") ?? "");
   const device = String(form.get("device") ?? "");
   if (!["office", "laptop", "refuse"].includes(decision) || (device && !z.uuid().safeParse(device).success)) redirect("/app/settings#office");

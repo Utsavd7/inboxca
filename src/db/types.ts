@@ -480,6 +480,9 @@ isOneToOne: false
 "can_access_client":
 { Args: { "client": string,"target_firm": string }; Returns: boolean
                            },
+"can_review_office":
+{ Args: { "target_firm": string }; Returns: boolean
+                           },
 "cancel_jobs":
 { Args: { "below_version"?: number,"p_entity_id": string,"p_entity_type": string }; Returns: number
                            },
@@ -561,11 +564,26 @@ isOneToOne: false
               "firm_id": string,"firm_name": string,"role": string
             }[]
                            },
+"observe_office":
+{ Args: { "connection": Json,"pc": string,"person": string,"target_firm": string }; Returns: boolean
+                           },
 "office_allows":
 { Args: { "member_role": string,"settings": Json }; Returns: boolean
                            },
+"office_closes":
+{ Args: { "at"?: string,"settings": Json }; Returns: string
+                           },
+"office_control":
+{ Args: { "actor": string,"connection"?: Json,"decision": string,"deputies"?: (string)[],"request_id"?: string,"target_firm": string }; Returns: undefined
+                           },
+"office_housekeeping":
+{ Args: { "at"?: string,"target_firm": string }; Returns: undefined
+                           },
 "office_proof_key":
 { Args: Record<PropertyKey, never>; Returns: string
+                           },
+"office_refused":
+{ Args: { "person": string,"reason": string,"target_firm": string }; Returns: undefined
                            },
 "open_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]
@@ -592,6 +610,9 @@ isOneToOne: false
                            },
 "review_devices":
 { Args: { "actor": string,"decision": string,"target_device": string,"target_firm": string }; Returns: undefined
+                           },
+"review_firms":
+{ Args: Record<PropertyKey, never>; Returns: string[]
                            },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string

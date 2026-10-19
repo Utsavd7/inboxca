@@ -78,9 +78,9 @@ describe("approved PCs", () => {
   it("shows a firm's PCs only to its members and lets no signed in person write them", () =>
     rollback(db, async () => {
       await asOwner(db);
-      for (const id of [STAFF, OTHER]) await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `${id.slice(-2)}@devices.test`]);
+      for (const id of [OWNER, STAFF, OTHER]) await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `${id.slice(-2)}@devices.test`]);
       await db.query("insert into public.firms (id, name, state_code, status) values ($1, 'First Firm', '24', 'active'), ($2, 'Other Firm', '27', 'active')", [FIRM, OTHER_FIRM]);
-      await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'staff', 'active'), ($3, $4, 'staff', 'active')", [FIRM, STAFF, OTHER_FIRM, OTHER]);
+      await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'staff', 'active'), ($3, $4, 'staff', 'active'), ($1, $5, 'owner', 'active')", [FIRM, STAFF, OTHER_FIRM, OTHER, OWNER]);
       await db.query("insert into public.devices (firm_id, token_hash, name) values ($1, $2, 'Chrome on Windows'), ($3, $4, 'Safari on Mac')", [FIRM, "a".repeat(64), OTHER_FIRM, "b".repeat(64)]);
 
       await actAs(db, STAFF);
@@ -97,8 +97,8 @@ describe("approved PCs", () => {
       // A refusal and its activity entry are one database operation.
       await asOwner(db);
       const device = (await db.query("select id from public.devices where firm_id = $1", [FIRM])).rows[0].id;
-      await db.query("select public.review_devices($1, $2, $3, 'refuse')", [FIRM, STAFF, device]);
+      await db.query("select public.review_devices($1, $2, $3, 'refuse')", [FIRM, OWNER, device]);
       expect((await db.query("select status, kind from public.devices where id = $1", [device])).rows).toEqual([{ status: "refused", kind: null }]);
-      expect((await db.query("select actor_id, action from public.activity_log where entity_id = $1", [device])).rows).toEqual([{ actor_id: STAFF, action: "device.refused" }]);
+      expect((await db.query("select actor_id, action from public.activity_log where entity_id = $1", [device])).rows).toEqual([{ actor_id: OWNER, action: "device.refused" }]);
     }));
 });

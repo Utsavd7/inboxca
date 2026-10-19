@@ -1,3 +1,4 @@
+import { OfficePanel } from "./office-panel";
 import { CalendarDays, Check, Inbox, Mail, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -48,11 +49,11 @@ const reasons: Record<string, string> = {
 // technical see what to do next without opening anything else.
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string }> }) {
   const { dropped, error } = await searchParams;
-  const { supabase, membership, deviceStatus } = await currentMember();
+  const { supabase, membership, deviceStatus, connectionWaiting } = await currentMember();
   const { data: invites } = await supabase.rpc("my_invites");
   const closed = membership ? null : (await supabase.rpc("closed_firms")).data?.[0];
   if (closed?.reason === "session") redirect("/auth/sign-out?reason=session");
-  if (!membership) return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} />;
+  if (!membership) return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} connectionWaiting={connectionWaiting} />;
 
   const today = todayInIndia();
   const month = today.slice(0, 7);
@@ -252,6 +253,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           {lateNotices} {lateNotices === 1 ? "notice is" : "notices are"} past {lateNotices === 1 ? "its" : "their"} action date or review deadline. <Link href="/app/notices">See them</Link>
         </p>
       )}
+      <OfficePanel compact />
       {!!waitingIds.length && (
         <p className="alert" role="alert">
           {waitingToday === waitingIds.length
@@ -260,7 +262,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           <Link href="/app/settings#office">approve</Link>
         </p>
       )}
-      {alerts?.data?.map((alert) => (
+      {alerts?.data?.filter((alert) => !alert.reason_code?.startsWith("office_")).map((alert) => (
         <p key={alert.id} className="alert" role="alert">
           {alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string })}
         </p>
@@ -472,7 +474,8 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
 }
 
 // Someone signed in who is not in a firm yet: their invites, or the firm being closed.
-function NoFirm({ closed, invites, deviceStatus }: { closed: { firm_name: string; hours: unknown; reason: string } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[]; deviceStatus: "waiting" | "refused" | null }) {
+function NoFirm({ closed, invites, deviceStatus, connectionWaiting }: { closed: { firm_name: string; hours: unknown; reason: string } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[]; deviceStatus: "waiting" | "refused" | null; connectionWaiting: boolean }) {
+  if (connectionWaiting) return <PageHead title="Waiting for your firm to confirm the office internet connection" sub="Ask the owner or a deputy to confirm this connection." />;
   if (closed?.reason === "office" && deviceStatus)
     return (
       <PageHead
