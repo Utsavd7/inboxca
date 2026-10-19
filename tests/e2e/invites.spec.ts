@@ -524,6 +524,10 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   // for the viewer it comes as plain bytes, which a browser never shows on its own.
   await rows.getByRole("link", { name: `${mailClient} - Purchase bills - Sep 2026.pdf`, exact: true }).click();
   await expect(owner.getByText("View only. Your email and the time are shown across every page.")).toBeVisible();
+  // A screenshot key blanks the pages for a moment, and each try is logged.
+  await owner.keyboard.press("PrintScreen");
+  await expect(owner.getByText("The document is hidden for a moment.")).toBeVisible();
+  await expect.poll(async () => (await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and action = 'capture_attempt'", [firm.firmId]))[0].n).toBe(1);
   const raw = owner.url().replace(/\/view$/, "");
   const file = await owner.request.get(raw);
   expect(await file.text()).toBe("%PDF-1.4 invented purchase bills");

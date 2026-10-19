@@ -45,7 +45,7 @@ export default async function ViewFile({ params }: { params: Promise<{ id: strin
         }
       />
       {kind ? (
-        <FileViewer id={file.id} kind={kind} watermark={`${membership.email}, ${membership.firmName}, ${when}`} />
+        <FileViewer id={file.id} kind={kind} watermark={`${membership.email}, ${membership.firmName}, ${when}`} hideInactive={membership.settings.viewer_hide_inactive === true} />
       ) : (
         <p className="hint viewer-none">This kind of file cannot be shown in the browser yet. {membership.role === "owner" ? "Download it to open it." : "Ask the owner for it."}</p>
       )}

@@ -1,12 +1,44 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { logCapture } from "@/app/(app)/actions";
 
 // Draws a file page by page onto canvases, each with the viewer's name and the time across
 // it, and offers no download (D18). It discourages copying; it cannot stop a photo of the
 // screen, which is why every page carries who looked and when.
-export function FileViewer({ id, kind, watermark }: { id: string; kind: "pdf" | "image"; watermark: string }) {
+export function FileViewer({ id, kind, watermark, hideInactive = false }: { id: string; kind: "pdf" | "image"; watermark: string; hideInactive?: boolean }) {
   const pages = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<"loading" | "shown" | "failed">("loading");
+  const [blank, setBlank] = useState(false);
+
+  // Capture deterrents (5.17.2): a screenshot key blanks the pages for a few seconds, tries to
+  // clear the clipboard and is logged; with the firm's setting, pages hide while InboxCA is
+  // not the active window. None of this can stop a photo of the screen; the watermark traces it.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Print Screen is seen on key up (some systems send no key down); the Mac's keys on key down.
+    const capture = (event: KeyboardEvent) => {
+      const mac = event.type === "keydown" && event.metaKey && event.shiftKey && ["3", "4", "5"].includes(event.key);
+      if (!(event.type === "keyup" && event.key === "PrintScreen") && !mac) return;
+      setBlank(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setBlank(false), 4000);
+      navigator.clipboard?.writeText("").catch(() => {});
+      void logCapture(id);
+    };
+    const away = () => hideInactive && setBlank(true);
+    const back = () => hideInactive && setBlank(false);
+    window.addEventListener("keydown", capture);
+    window.addEventListener("keyup", capture);
+    window.addEventListener("blur", away);
+    window.addEventListener("focus", back);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", capture);
+      window.removeEventListener("keyup", capture);
+      window.removeEventListener("blur", away);
+      window.removeEventListener("focus", back);
+    };
+  }, [id, hideInactive]);
 
   useEffect(() => {
     let stopped = false;
@@ -26,6 +58,7 @@ export function FileViewer({ id, kind, watermark }: { id: string; kind: "pdf" | 
         for (let x = -reach + ((y / (size * 7)) % 2) * (across / 2); x < reach; x += across) context.fillText(watermark, x, y);
       context.restore();
       canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+      canvas.addEventListener("dragstart", (event) => event.preventDefault());
       holder.append(canvas);
     };
     (async () => {
@@ -65,7 +98,8 @@ export function FileViewer({ id, kind, watermark }: { id: string; kind: "pdf" | 
           The file could not be opened. It may have been moved or removed in the drive.
         </p>
       )}
-      <div ref={pages} className="viewer-pages" />
+      {blank && <p className="hint viewer-blank">The document is hidden for a moment.</p>}
+      <div ref={pages} className={`viewer-pages${blank ? " is-blank" : ""}`} />
     </div>
   );
 }

@@ -31,10 +31,11 @@ const labelTone: Record<string, Tone> = {
   data_tax_audit: "blue",
 };
 // What the daily drive check found, in a sentence the owner can act on.
-const alertText = (reason: string, details: { free_bytes?: number; files?: number; client?: string }) =>
+const alertText = (reason: string, details: { free_bytes?: number; files?: number; client?: string; email?: string; count?: number }) =>
   ({
     drive_shared: "InboxCA's folder in your drive is shared with someone, or has a link. Only you should reach it: stop the sharing in your drive.",
     drive_full: `Your drive has ${((details.free_bytes ?? 0) / 1024 ** 2).toFixed(0)} MB left. Free some space or add more, so new client files can be saved.`,
+    captures: `${details.email} tried to capture a document's screen ${details.count} times today. Each try is logged.`,
     request_stalled: `${details.client} has not uploaded the documents you asked for, after three reminders. A call may help.`,
     drive_missing: `${details.files} ${details.files === 1 ? "file" : "files"} InboxCA filed ${details.files === 1 ? "is" : "are"} no longer in your drive. Each is marked Missing on its client's Files tab.`,
   })[reason] ?? "Something in your drive needs a look.";
@@ -273,9 +274,11 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           <Link href="/app/settings#office">approve</Link>
         </p>
       )}
-      {alerts?.data?.filter((alert) => !alert.reason_code?.startsWith("office_")).map((alert) => (
+      {alerts?.data
+        ?.filter((alert) => !alert.reason_code?.startsWith("office_") && (alert.reason_code !== "captures" || (alert.details as { day?: string }).day === today))
+        .map((alert) => (
         <p key={alert.id} className="alert" role="alert">
-          {alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string })}
+          {alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number })}
         </p>
       ))}
       <PortalDrop />

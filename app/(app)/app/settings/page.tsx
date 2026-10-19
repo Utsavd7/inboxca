@@ -220,6 +220,10 @@ export default async function Settings({
                   </tbody>
                 </table>
               </div>
+              <label className="check">
+                <input type="checkbox" name="hide_inactive" defaultChecked={settings.viewer_hide_inactive === true} />
+                Hide documents when InboxCA is not the active window (staff often read a document while typing in the portal beside it, so this is off unless you need it)
+              </label>
               <div className="form-row">
                 <button className="b b-secondary" name="intent" value="save">
                   Save permissions

@@ -1279,7 +1279,24 @@ export async function savePermissions(form: FormData) {
     form.get("intent") === "reset"
       ? {}
       : Object.fromEntries((["employee", "manager"] as const).map((column) => [column, Object.fromEntries(Object.keys(switchable).map((right) => [right, form.get(`${column}:${right}`) === "on"]))]));
-  await supabase.from("firms").update({ settings: { ...membership.settings, permissions } }).eq("id", membership.firmId);
+  const hideInactive = form.get("intent") !== "reset" && form.get("hide_inactive") === "on";
+  await supabase.from("firms").update({ settings: { ...membership.settings, permissions, viewer_hide_inactive: hideInactive } }).eq("id", membership.firmId);
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions } });
   redirect("/app/settings?saved=permissions#permissions");
+}
+
+// A suspected screen capture in the viewer (PLAN.md 5.17.2): logged; the third in a day by
+// one person tells the owner on Home.
+export async function logCapture(documentId: string) {
+  const { supabase, userId, membership } = await currentMember();
+  const { data: document } = await supabase.from("documents").select("id").eq("id", documentId).maybeSingle();
+  if (!membership || !document) return;
+  const admin = supabaseAdmin();
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "capture_attempt", entity_type: "document", entity_id: document.id });
+  const since = new Date(`${todayInIndia()}T00:00:00+05:30`).toISOString();
+  const { count } = await admin.from("activity_log").select("at", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("actor_id", userId).eq("action", "capture_attempt").gte("at", since);
+  if ((count ?? 0) >= 3)
+    await admin
+      .from("requests")
+      .upsert({ firm_id: membership.firmId, kind: "alert", entity_type: "capture", entity_id: userId, reason_code: "captures", status: "pending", details: { email: membership.email, day: todayInIndia(), count } }, { onConflict: "kind,entity_type,entity_id" });
 }
