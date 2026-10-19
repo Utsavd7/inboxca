@@ -29,7 +29,7 @@ export const DELETED_FOLDER = "Deleted and old versions";
 
 // A test drive in a folder on this computer, for development and the tests only
 // (DRIVE_LOCAL_DIR). No deployment sets it.
-export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? ""): Drive {
+export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? "", onRead?: (id: string) => void, maxBytes = Infinity): Drive {
   if (!root) throw new Error("DRIVE_LOCAL_DIR is not set");
   const inside = (relative: string) => {
     const full = path.resolve(root, relative);
@@ -54,7 +54,12 @@ export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? ""): Drive {
         throw error;
       }
     },
-    read: (fileId) => readFile(inside(fileId)),
+    async read(fileId) {
+      const file = inside(fileId);
+      if (maxBytes !== Infinity && (await stat(file)).size > maxBytes) throw new Error("File too large");
+      onRead?.(fileId);
+      return readFile(file);
+    },
     async move(fileId, folderId, name) {
       const relative = path.join(folderId, name);
       // A hard link then an unlink, so a taken name is refused rather than replaced.

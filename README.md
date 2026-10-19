@@ -16,6 +16,14 @@ npm run build && PORT=3211 npx playwright test tests/e2e/sign-in.spec.ts
 
 Sign in is by invitation only, and invites are not built yet: `tests/e2e/sign-in.spec.ts` shows how a person, a firm and their membership are set up before signing in at `/sign-in`. The emailed code arrives in the mail catcher. After a migration, run `npx supabase migration up --local` and `npm run db:types`. Background jobs run when Supabase Cron calls `/api/jobs`; locally nothing calls it until the worker's address and secret are stored in Supabase Vault as `job_worker_url` and `job_worker_secret`.
 
+## File viewer worker
+
+Run `npm run worker` in a separate terminal (Node 22 or newer). Export `FILE_WORKER_SECRET` there and set the same random secret in the app's `.env.local`, with `FILE_WORKER_URL=http://127.0.0.1:3101`. The worker does not read `.env.local` or need database credentials. For the local test drive, give it the same `DRIVE_LOCAL_DIR` as the app. Playwright starts both production servers with a fresh test secret automatically.
+
+Each opening downloads and parses once, then streams stamped page images. Nothing is written or cached by the viewer worker. Limits remain 25 MB, 30 PDF pages, or 1,000 rows and 12 columns of the first sheet. AWS Lambda setup waits for the AWS account. The existing background PDF text job remains a Node job and is outside the web bundle; moving extraction is separate work.
+
+Run `node --experimental-strip-types scripts/viewer-memory.mts` for a fresh worker memory check, or add `--scans` for the invented 30 page scanned PDF. These checks remove their synthetic files when finished.
+
 ## Run locally
 
 ```sh

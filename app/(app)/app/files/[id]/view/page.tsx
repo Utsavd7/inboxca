@@ -36,8 +36,8 @@ export default async function ViewFile({ params }: { params: Promise<{ id: strin
         }
 
       />
-      {viewable ? (
-        <FileViewer id={file.id} hideInactive={membership.settings.viewer_hide_inactive === true} />
+      {viewable && (!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) ? <p className="hint viewer-none">Documents cannot be shown yet.</p> : viewable ? (
+        <FileViewer key={file.id} id={file.id} hideInactive={membership.settings.viewer_hide_inactive === true} />
       ) : (
         <p className="hint viewer-none">This kind of file cannot be shown here. Ask the owner for it.</p>
       )}

@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
+import { readFrames, viewLimits, type ViewHeader } from "@/src/lib/file-worker";
 import { logCapture } from "@/app/(app)/actions";
 
-// The server draws the file and the viewer's identity into the same image.
+// The file worker sends only stamped pages. Each appears as soon as its frame arrives.
 export function FileViewer({ id, hideInactive = false }: { id: string; hideInactive?: boolean }) {
-  const [pages, setPages] = useState<{ first: string; count: number; limited: boolean; width: number; height: number }>();
+  const [pages, setPages] = useState<{ url: string; width: number; height: number }[]>([]);
+  const [limited, setLimited] = useState(false);
   const [state, setState] = useState<"loading" | "shown" | "failed">("loading");
   const [blank, setBlank] = useState(false);
 
@@ -40,19 +42,32 @@ export function FileViewer({ id, hideInactive = false }: { id: string; hideInact
 
   useEffect(() => {
     const controller = new AbortController();
-    let url: string | undefined;
+    const urls: string[] = [];
     (async () => {
-      const response = await fetch(`/app/files/${id}/pages/1`, { signal: controller.signal });
-      if (!response.ok) throw new Error("file");
-      const blob = await response.blob();
-      if (controller.signal.aborted) return;
-      url = URL.createObjectURL(blob);
-      setPages({ first: url, count: Number(response.headers.get("X-InboxCA-Pages")), limited: response.headers.get("X-InboxCA-Limited") === "true", width: Number(response.headers.get("X-InboxCA-Width")), height: Number(response.headers.get("X-InboxCA-Height")) });
-      setState("shown");
+      const response = await fetch(`/app/files/${id}/stream`, { signal: controller.signal });
+      if (!response.ok || !response.body) throw new Error("file");
+      let header: ViewHeader | undefined, number = 0;
+      for await (const frame of readFrames(response.body)) {
+        if (controller.signal.aborted) return;
+        if (!header) {
+          if (frame.length > 16_384) throw new Error("header");
+          header = JSON.parse(new TextDecoder().decode(frame)) as ViewHeader;
+          if (!Array.isArray(header.pages) || !header.pages.length || header.pages.length > viewLimits.pages || header.pages.some(({ width, height }) => !Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width * height > viewLimits.pixels)) throw new Error("pages");
+          setLimited(header.limited);
+          continue;
+        }
+        const size = header.pages[number++];
+        if (!size || ![1, 2].includes(frame[0])) throw new Error("image");
+        const url = URL.createObjectURL(new Blob([frame.slice(1)], { type: frame[0] === 1 ? "image/png" : "image/jpeg" }));
+        urls.push(url);
+        setPages((previous) => [...previous, { url, ...size }]);
+        setState("shown");
+      }
+      if (!header || number !== header.pages.length) throw new Error("Incomplete file");
     })().catch(() => !controller.signal.aborted && setState("failed"));
     return () => {
       controller.abort();
-      if (url) URL.revokeObjectURL(url);
+      urls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [id]);
 
@@ -65,12 +80,11 @@ export function FileViewer({ id, hideInactive = false }: { id: string; hideInact
         </p>
       )}
       {blank && <p className="hint viewer-blank">The document is hidden for a moment.</p>}
-      {pages?.limited && <p className="hint">Only the first 30 pages, or the first 1,000 rows and 12 columns of the first sheet, are shown here.</p>}
+      {limited && <p className="hint">Only the first 30 pages, or the first 1,000 rows and 12 columns of the first sheet, are shown here.</p>}
       <div className={`viewer-pages${blank ? " is-blank" : ""}`} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} onCopy={(event) => event.preventDefault()}>
-        {pages && Array.from({ length: pages.count }, (_, index) => (
-          // The protected image needs this person's session, so it must bypass the image cache.
+        {pages.map((page, index) => (
           // eslint-disable-next-line @next/next/no-img-element
-          <img key={index} src={index === 0 ? pages.first : `/app/files/${id}/pages/${index + 1}`} alt={`Page ${index + 1}`} width={pages.width} height={pages.height} loading={index === 0 ? "eager" : "lazy"} draggable={false} onError={() => setState("failed")} />
+          <img key={page.url} src={page.url} alt={`Page ${index + 1}`} width={page.width} height={page.height} draggable={false} onError={() => setState("failed")} />
         ))}
       </div>
     </div>

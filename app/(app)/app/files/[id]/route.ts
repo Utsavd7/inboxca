@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 // Kinds a browser shows safely; anything else (a web page or a script above all) is only
 // ever downloaded, so a file a client sends can never run on InboxCA's own address.
 const shown: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", txt: "text/plain; charset=utf-8" };
-// Only the owner may read the original. The viewer has a separate image route.
+// Only the owner may read the original. The viewer has a separate image stream.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   const { id } = await params;
