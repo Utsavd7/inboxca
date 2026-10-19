@@ -6,6 +6,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
+import { createClient } from "@supabase/supabase-js";
 import { TEST_WORKER_SECRET } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
 import { pdf } from "@/tests/fixtures/pdf";
@@ -20,6 +21,8 @@ test.describe.configure({ mode: "serial", timeout: 90_000 });
 const tag = randomUUID().slice(0, 8);
 const ownerEmail = `owner-${tag}@example.test`;
 const newEmail = `new-${tag}@example.test`;
+const emailOnly = `email-only-${tag}@example.test`;
+const mailboxEmail = "office@firm.test";
 const mailClient = `Mail Client ${tag}`;
 const pcUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36";
 
@@ -45,7 +48,7 @@ test.beforeAll(async ({ browser }) => {
   owner = await (await browser.newContext()).newPage();
   person = await (await browser.newContext({ userAgent: pcUserAgent })).newPage();
 });
-test.afterAll(() => firm.remove(newEmail));
+test.afterAll(() => firm.remove(newEmail, emailOnly, mailboxEmail));
 
 test("the owner invites a new person, who appears as invited", async () => {
   await emailStep(owner, ownerEmail);
@@ -158,12 +161,59 @@ test("under Office only, staff need the office connection and an approved PC", a
   await expect(second.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
   await secondContext.close();
 
+  // The approved office PC replaces the phone code for staff.
+  await person.getByRole("button", { name: "Sign out" }).click();
+  await emailStep(person, newEmail);
+  await expect(person).toHaveURL(/\/app$/);
+  await person.getByRole("link", { name: "Clients" }).click();
+  await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
+
+  // A staff member without an authenticator app also uses an already approved office PC.
+  const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
+  const { data: emailOnlyUser, error: emailOnlyError } = await admin.auth.admin.createUser({ email: emailOnly, email_confirm: true });
+  expect(emailOnlyError).toBeNull();
+  await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'staff', 'active')", [firm.firmId, emailOnlyUser.user!.id]);
+  await person.getByRole("button", { name: "Sign out" }).click();
+  await emailStep(person, emailOnly);
+  await expect(person).toHaveURL(/\/app$/);
+  await person.getByRole("link", { name: "Clients" }).click();
+  await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
+  await person.getByRole("button", { name: "Sign out" }).click();
+  await emailStep(person, newEmail);
+  await expect(person).toHaveURL(/\/app$/);
+
+  // The same email-only session loses access when it leaves the office connection.
+  await person.setExtraHTTPHeaders({ "x-test-ip": "198.51.100.7" });
+  await person.goto("/app/clients");
+  await expect(person).toHaveURL(/\/sign-in\/two-step$/);
+  await expect(person.getByRole("heading", { name: "Enter your 2 step code" })).toBeVisible();
+
+  // A new browser on the office connection still needs the phone code and sees no firm data.
+  const waitingContext = await browser.newContext({ userAgent: pcUserAgent });
+  const waiting = await waitingContext.newPage();
+  await waiting.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
+  await emailStep(waiting, newEmail);
+  await expect(waiting).toHaveURL(/\/sign-in\/two-step$/);
+  await waiting.goto("/app/clients");
+  await expect(waiting).toHaveURL(/\/sign-in\/two-step$/);
+  expect(await query(local.dbUrl, "select count(*)::int as count from public.devices where firm_id = $1 and status = 'waiting'", [firm.firmId])).toEqual([{ count: 1 }]);
+  await waitingContext.close();
+
+  // The owner still needs the phone code from the office.
+  await owner.getByRole("button", { name: "Sign out" }).click();
+  await emailStep(owner, ownerEmail);
+  await expect(owner).toHaveURL(/\/sign-in\/two-step$/);
+  await owner.getByLabel("6 digit code from the app").fill(totp(ownerKey));
+  await owner.getByRole("button", { name: "Continue" }).click();
+  await expect(owner).toHaveURL(/\/app$/);
+
   // Off again, staff reach the firm from anywhere.
   await owner.goto("/app/settings#office");
   await owner.getByRole("button", { name: "Turn off" }).click();
   await expect(owner.getByText("Are you in your office right now?")).toBeVisible();
-  await person.setExtraHTTPHeaders({ "x-test-ip": "198.51.100.7" });
-  await person.goto("/app/clients");
+  await person.getByLabel("6 digit code from the app").fill(totp(personKey));
+  await person.getByRole("button", { name: "Continue" }).click();
+  await person.getByRole("link", { name: "Clients" }).click();
   await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
   await owner.setExtraHTTPHeaders({});
   await person.setExtraHTTPHeaders({});
@@ -250,10 +300,15 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
   await expect(person).toHaveURL(/\/sign-in$/);
 });
 
-test("the owner connects the firm's mailbox; client mail is sorted, unclear mail waits for the team, a stranger's is skipped", async ({ request }) => {
+test("the owner connects the firm's mailbox; client mail is sorted, unclear mail waits for the team, a stranger's is skipped", async ({ request, browser }) => {
+  // An address already on the team is refused as soon as it becomes the firm's mailbox.
+  await owner.goto("/app/people");
+  await owner.getByLabel("Their work email").fill(mailboxEmail);
+  await owner.getByRole("button", { name: "Invite", exact: true }).click();
+  await expect(owner.getByRole("status")).toContainText(`Invited ${mailboxEmail}`);
   await owner.goto("/app/settings");
   const card = owner.locator("section[aria-labelledby=mailbox]");
-  await card.getByLabel("The firm's email address").fill("office@firm.test");
+  await card.getByLabel("The firm's email address").fill(mailboxEmail);
   await card.getByLabel("Its password").fill("wrong");
   await card.getByText("Server settings, only if InboxCA asks").click();
   await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
@@ -264,7 +319,21 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await expect(card.getByRole("alert")).toContainText("could not sign in");
   await card.getByLabel("Its password").fill("secret");
   await card.getByRole("button", { name: "Connect email" }).click();
-  await expect(card.getByRole("status")).toHaveText("Connected: office@firm.test");
+  await expect(card.getByRole("status")).toHaveText(`Connected: ${mailboxEmail}`);
+
+  const blocked = await browser.newPage();
+  await blocked.goto("/sign-in");
+  await blocked.getByLabel("Your work email").fill(mailboxEmail);
+  await blocked.getByRole("button", { name: "Email me a code" }).click();
+  await expect(blocked.getByRole("alert").filter({ hasText: "The firm's email address cannot be used to sign in." })).toBeVisible();
+  await blocked.close();
+
+  const [{ user_id: mailboxUser }] = await query(local.dbUrl, "select user_id from public.firm_members m join auth.users u on u.id = m.user_id where m.firm_id = $1 and u.email = $2", [firm.firmId, mailboxEmail]);
+  await query(local.dbUrl, "delete from public.firm_members where firm_id = $1 and user_id = $2", [firm.firmId, mailboxUser]);
+  await owner.goto("/app/people");
+  await owner.getByLabel("Their work email").fill(mailboxEmail);
+  await owner.getByRole("button", { name: "Invite", exact: true }).click();
+  await expect(owner.getByRole("alert").filter({ hasText: "The firm's email address cannot be a team login." })).toBeVisible();
 
   await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill(mailClient);
@@ -273,7 +342,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await expect(owner.locator(".page-head")).toContainText(mailClient);
   const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
   for (const from of [`Client-${tag}@Patel.test`, `stranger-${tag}@else.test`])
-    await smtp.sendMail({ from, to: "office@firm.test", subject: "Please send last year's ITR", text: "Thanks" });
+    await smtp.sendMail({ from, to: mailboxEmail, subject: "Please send last year's ITR", text: "Thanks" });
   await query(local.dbUrl, "select private.queue_mail_polls()");
   await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   const events = await query(local.dbUrl, "select (client_id is not null) as matched, label from public.email_events where firm_id = $1", [firm.firmId]);

@@ -1,4 +1,6 @@
 import { createHmac } from "node:crypto";
+import { cookies, headers } from "next/headers";
+import { DEVICE_COOKIE, deviceHash, deviceName } from "./device";
 import { supabaseAdmin } from "./supabase";
 
 // The office connection (PLAN.md 5.8, 5.17.3): the office's public internet address as the
@@ -30,6 +32,38 @@ export const lineFor = (address: string, today: string): OfficeLine | null =>
 
 export const onOfficeLine = (address: string, office: Office | undefined) =>
   !!address && (office?.lines ?? []).some((line) => (line.ipv4 && line.ipv4 === address) || (line.ipv6 && line.ipv6 === ipv6Prefix(address)));
+
+// The server approves this request only when its office line and PC both match the firm.
+export async function officeDeviceAccess(userId: string) {
+  const admin = supabaseAdmin();
+  const { data: firmRow } = await admin
+    .from("firm_members")
+    .select("firm_id, role, firms(settings)")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  const office = (firmRow?.firms?.settings as { office?: Office } | undefined)?.office;
+  const requestHeaders = await headers();
+  const onLine = !!office?.on && !!firmRow && officeBound(firmRow.role) && onOfficeLine(requestAddress(requestHeaders), office);
+  let deviceStatus: "waiting" | "refused" | null = null;
+  let approved = false;
+  if (onLine && firmRow) {
+    const token = (await cookies()).get(DEVICE_COOKIE)?.value;
+    if (token) {
+      const { data } = await admin.rpc("register_device", {
+        target_firm: firmRow.firm_id,
+        actor: userId,
+        token_digest: await deviceHash(token),
+        label: deviceName(requestHeaders.get("user-agent") ?? ""),
+      });
+      const device = data?.[0];
+      approved = device?.status === "approved";
+      if (device?.status === "waiting" || device?.status === "refused") deviceStatus = device.status;
+    } else deviceStatus = "waiting";
+  }
+  return { approved, deviceStatus };
+}
 
 // The proof the server sends with a staff member's requests from an office line: good for
 // 5 minutes, for this person and session only. The database checks it (office_allows).
