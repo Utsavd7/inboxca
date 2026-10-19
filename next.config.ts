@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  // pdf.js reads PDF text on the server from node_modules; the browser gets its worker
-  // from public/, copied there on install.
-  serverExternalPackages: ["pdfjs-dist"],
+  outputFileTracingIncludes: { "/app/files/**": ["./node_modules/pdfjs-dist/standard_fonts/**", "./node_modules/pdfjs-dist/cmaps/**", "./node_modules/pdfjs-dist/wasm/**"] },
+  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
   // The dev badge sits on top of the sidebar's account row.
   devIndicators: false,
   turbopack: { root: process.cwd() },

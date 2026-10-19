@@ -347,8 +347,9 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await reception.getByRole("button", { name: "Continue" }).click();
   await expect(reception.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
   await owner.reload();
-  await owner.getByRole("listitem").filter({ hasText: "Laptop on Chrome on Windows, first seen today" }).getByRole("button", { name: "Stays in the office" }).click();
-  await expect(owner.getByText("stays in the office, waiting for its key to be set up on it")).toBeVisible();
+  const waitingPc = owner.getByRole("listitem").filter({ hasText: "Laptop on Chrome on Windows, first seen today" });
+  await waitingPc.getByRole("button", { name: "Stays in the office" }).click();
+  await expect(waitingPc).toHaveCount(0);
 
   await reception.goto("/app");
   await reception.getByRole("button", { name: "Set up this PC's key" }).click();
@@ -697,8 +698,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const rows = owner.locator("section[aria-labelledby=files] tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
-  // A file opens in the view-only viewer. The owner also gets the file itself, sandboxed;
-  // for the viewer it comes as plain bytes, which a browser never shows on its own.
+  // A file opens in the viewer. Only the owner can get the original, sandboxed.
   await rows.getByRole("link", { name: `${mailClient} - Purchase bills - Sep 2026.pdf`, exact: true }).click();
   await expect(owner.getByText("View only. Your email and the time are shown across every page.")).toBeVisible();
   // A screenshot key blanks the pages for a moment, and each try is logged.
@@ -709,7 +709,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const file = await owner.request.get(raw);
   expect(await file.text()).toBe("%PDF-1.4 invented purchase bills");
   expect(file.headers()).toMatchObject({ "content-type": "application/pdf", "content-security-policy": "sandbox" });
-  expect((await owner.request.get(`${raw}?view=1`, { headers: { "x-inboxca-viewer": "1" } })).headers()["content-type"]).toBe("application/octet-stream");
+  expect((await owner.request.get(`${raw}?view=1`, { headers: { "x-inboxca-viewer": "1" } })).headers()["content-type"]).toBe("application/pdf");
   await owner.goBack();
 
   // A person names the unclear scan: it moves out of To check under its new name, and Undo puts it back.
