@@ -617,6 +617,12 @@ isOneToOne: false
 "review_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]
                            },
+"session_ended":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"session_live":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
