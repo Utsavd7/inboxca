@@ -126,3 +126,11 @@ export async function actionFields(page: Page, path: string, values: Record<stri
     return fields;
   }, { html, values });
 }
+
+// Only the isolated file worker test server counts reads, without storing file contents.
+export async function workerReads(file: string) {
+  const { FILE_WORKER_URL, FILE_WORKER_SECRET } = await import("../../playwright.config");
+  const response = await fetch(`${FILE_WORKER_URL}/_reads?file=${encodeURIComponent(file)}`, { headers: { Authorization: `Bearer ${FILE_WORKER_SECRET}` } });
+  if (!response.ok) throw new Error("Cannot read test count");
+  return (await response.json()).reads as number;
+}

@@ -26,7 +26,8 @@ export async function readText(name: string, bytes: Uint8Array) {
   const extension = name.split(".").pop()?.toLowerCase() ?? "";
   try {
     if (extension === "pdf") {
-      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      // The existing Node text job stays outside the web bundle too.
+      const pdfjs = await import(/* webpackIgnore: true */ "pdfjs-dist/legacy/build/pdf.mjs");
       const pdf = await pdfjs.getDocument({ data: new Uint8Array(bytes) }).promise;
       const pages: string[] = [];
       for (let number = 1; number <= Math.min(pdf.numPages, 200); number++) {

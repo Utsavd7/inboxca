@@ -32,3 +32,17 @@ describe("the firm's drive", () => {
     await expect(drive.ensureFolder(["..", "outside"])).rejects.toThrow("outside the test drive");
   });
 });
+
+it("refuses oversized local viewer files before reading their contents", async () => {
+  const { rm } = await import("node:fs/promises");
+  const root = await mkdtemp(path.join(tmpdir(), "viewer-drive-"));
+  let reads = 0;
+  try {
+    const drive = localDrive(root, () => reads++, 2);
+    const folder = await drive.ensureFolder(["Invented"]);
+    const saved = await drive.save(folder, "small.pdf", new Uint8Array([1, 2, 3]));
+    if (saved === "taken") throw new Error("Unexpected fixture");
+    await expect(drive.read(saved.id)).rejects.toThrow("File too large");
+    expect(reads).toBe(0);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

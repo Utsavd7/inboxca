@@ -61,6 +61,8 @@ async function call(accessToken: string, route: string, body: unknown) {
 // A header value Dropbox accepts: JSON with every character outside ASCII escaped.
 const apiArg = (value: object) => JSON.stringify(value).replace(/[\u007f-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 
+export const dropboxAccessToken = async (refreshToken: string) => (await token({ grant_type: "refresh_token", refresh_token: refreshToken })).access_token;
+
 export function dropboxDrive(refreshToken: string): Drive {
   let access: Promise<string> | null = null;
   const accessToken = () => (access ??= token({ grant_type: "refresh_token", refresh_token: refreshToken }).then((t) => t.access_token));

@@ -1,7 +1,16 @@
 import { readFileSync } from "node:fs";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { expect, it } from "vitest";
-import { pictureSize, renderPage, tiles, viewerLabel } from "@/src/lib/viewer";
+import { pictureSize, openView, tiles } from "@/worker/render";
+import { viewerLabel } from "@/src/lib/file-worker";
+
+async function renderPage(bytes: Buffer, name: string, number: number, label: string) {
+  const view = await openView(bytes, name, label);
+  try {
+    const image = await view.render(number);
+    return { bytes: Buffer.from(image.subarray(1)), count: view.header.pages.length, limited: view.header.limited, ...view.header.pages[number - 1] };
+  } finally { await view.dispose(); }
+}
 import { pdf } from "../fixtures/pdf";
 
 // #53: every page carries the person and server time in its pixels.
@@ -14,11 +23,11 @@ it("tiles the person's identity, Indian date and time beyond every page edge", (
   expect(Math.max(...positions.map(({ y }) => y))).toBeGreaterThan(1800);
 });
 
-it("draws PDF text and the person's identity into PNG bytes on the server", async () => {
+it("draws PDF text and the person's identity into image bytes in the file worker", async () => {
   const bytes = Buffer.from(pdf("Invented statement"));
   const first = await renderPage(bytes, "test.pdf", 1, "First person, 19 Oct 2026, 15:30");
   const second = await renderPage(bytes, "test.pdf", 1, "Second person, 19 Oct 2026, 15:30");
-  expect(first.bytes.subarray(1, 4).toString()).toBe("PNG");
+  expect(["89504e47", "ffd8ffe0", "ffd8ffe1"]).toContain(first.bytes.subarray(0, 4).toString("hex"));
   expect(first.bytes.equals(second.bytes)).toBe(false);
   expect(first.count).toBe(1);
   await expect(renderPage(bytes, "test.pdf", 2, "Person")).rejects.toThrow("No page");

@@ -1,4 +1,4 @@
-import { readXls } from "./xls";
+import { readXls } from "./xls.ts";
 import { inflateRawSync } from "node:zlib";
 
 // The rows of a CSV file, or of an Excel file's first sheet, as text, for imports. Excel
