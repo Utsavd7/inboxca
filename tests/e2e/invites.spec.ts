@@ -21,6 +21,7 @@ test.describe.configure({ mode: "serial", timeout: 90_000 });
 const tag = randomUUID().slice(0, 8);
 const ownerEmail = `owner-${tag}@example.test`;
 const newEmail = `new-${tag}@example.test`;
+const deputyEmail = `deputy-${tag}@example.test`;
 const emailOnly = `email-only-${tag}@example.test`;
 const mailboxEmail = "office@firm.test";
 const mailClient = `Mail Client ${tag}`;
@@ -48,7 +49,7 @@ test.beforeAll(async ({ browser }) => {
   owner = await (await browser.newContext()).newPage();
   person = await (await browser.newContext({ userAgent: pcUserAgent })).newPage();
 });
-test.afterAll(() => firm.remove(newEmail, emailOnly, mailboxEmail));
+test.afterAll(() => firm.remove(newEmail, emailOnly, deputyEmail, mailboxEmail));
 
 test("the owner invites a new person, who appears as invited", async () => {
   await emailStep(owner, ownerEmail);
@@ -182,7 +183,8 @@ test("under Office only, staff need the office connection and an approved PC", a
   await emailStep(person, newEmail);
   await expect(person).toHaveURL(/\/app$/);
 
-  // The same email-only session loses access when it leaves the office connection.
+  // An approved laptop still loses access when it leaves the office connection.
+  await query(local.dbUrl, "update public.devices set kind = 'laptop' where firm_id = $1 and kind = 'office'", [firm.firmId]);
   await person.setExtraHTTPHeaders({ "x-test-ip": "198.51.100.7" });
   await person.goto("/app/clients");
   await expect(person).toHaveURL(/\/sign-in\/two-step$/);
@@ -217,6 +219,93 @@ test("under Office only, staff need the office connection and an approved PC", a
   await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
   await owner.setExtraHTTPHeaders({});
   await person.setExtraHTTPHeaders({});
+});
+
+test("deputies approve PCs, office PCs confirm changes, and laptops wait for today's approval", async ({ browser }) => {
+  const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
+  const { data, error } = await admin.auth.admin.createUser({ email: deputyEmail, email_confirm: true });
+  expect(error).toBeNull();
+  const deputyKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+  await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'partner', 'active')", [firm.firmId, data.user!.id]);
+  await query(local.dbUrl, "insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, secret, created_at, updated_at) values (gen_random_uuid(), $1, 'Test app', 'totp', 'verified', $2, now(), now())", [data.user!.id, deputyKey]);
+  await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
+  await owner.goto("/app/settings#office");
+  await owner.reload();
+  await expect(owner.getByLabel(deputyEmail, { exact: true })).toBeVisible();
+  await owner.getByLabel(deputyEmail, { exact: true }).check();
+  await owner.getByRole("button", { name: "Save deputies" }).click();
+  await expect(owner.getByLabel(deputyEmail, { exact: true })).toBeChecked();
+  await owner.getByRole("button", { name: "Turn on" }).click();
+
+  const deputy = await browser.newPage();
+  await emailStep(deputy, deputyEmail);
+  await expect(deputy).toHaveURL(/\/sign-in\/two-step$/);
+  await deputy.getByLabel("6 digit code from the app").fill(totp(deputyKey));
+  await deputy.getByRole("button", { name: "Continue" }).click();
+  await expect(deputy).toHaveURL(/\/app$/);
+  await deputy.goto("/app/settings#office");
+  await expect(deputy.getByRole("heading", { name: "Office approvals", exact: true })).toBeVisible();
+  await expect(deputy.getByLabel("The firm's email address")).toHaveCount(0);
+
+  const laptop = await browser.newPage({ userAgent: pcUserAgent });
+  await laptop.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
+  await emailStep(laptop, newEmail);
+  await laptop.getByLabel("6 digit code from the app").fill(totp(personKey));
+  await laptop.getByRole("button", { name: "Continue" }).click();
+  await expect(laptop.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  const { deviceHash } = await import("../../src/lib/device");
+  const laptopCookie = (await laptop.context().cookies()).find((cookie) => cookie.name === "inboxca_device")!;
+  await query(local.dbUrl, "update public.devices set name = 'Travel laptop' where firm_id = $1 and token_hash = $2", [firm.firmId, await deviceHash(laptopCookie.value)]);
+  await deputy.reload();
+  const laptopRow = deputy.getByRole("listitem").filter({ hasText: "Travel laptop" });
+  await laptopRow.getByRole("button", { name: "Laptop", exact: true }).click();
+  await expect(laptopRow).toHaveCount(0);
+  await laptop.goto("/app/clients");
+  await expect(laptop.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+
+  // The signed browser secret identifies this approved PC, not the person using it.
+  const deviceCookie = (await person.context().cookies()).find((cookie) => cookie.name === "inboxca_device")!;
+  await query(local.dbUrl, "update public.devices set kind = 'office', name = 'Reception PC' where firm_id = $1 and token_hash = $2", [firm.firmId, await deviceHash(deviceCookie.value)]);
+  await person.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.20" });
+  await person.goto("/app/clients");
+  await expect(person.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+  await owner.goto("/app");
+  await expect(owner.getByText("Your office internet connection changed today (first seen on Reception PC)")).toBeVisible();
+
+  await laptop.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.30" });
+  await laptop.goto("/app/clients");
+  await expect(laptop.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
+  await deputy.goto("/app");
+  const request = deputy.locator(".notice").filter({ hasText: "Travel laptop is on a new internet connection" });
+  await expect(request).toBeVisible();
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  await query(local.dbUrl, "update public.firms set settings = settings || $2 where id = $1", [firm.firmId, { special_hours: [{ from: today, to: today, open: "00:00", close: "23:59" }] }]);
+  await request.getByRole("button", { name: "Allow this network today" }).click();
+  await expect(request).toHaveCount(0);
+  await laptop.goto("/app/clients");
+  await expect(laptop.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+  const [{ lines }] = await query(local.dbUrl, "select settings -> 'office' -> 'lines' as lines from public.firms where id = $1", [firm.firmId]);
+  expect(lines.find((line: { ipv4: string; until?: string }) => line.ipv4 === "203.0.113.30").until).toContain("18:29:00");
+
+  // Withdraw an automatic confirmation. The PC loses its fixed office mark as well.
+  await owner.goto("/app");
+  await owner.locator(".notice").filter({ hasText: "first seen on Reception PC" }).getByRole("button", { name: "Not my office" }).click();
+  await expect(owner.getByText("first seen on Reception PC", { exact: false })).toHaveCount(0);
+  await person.goto("/app/clients");
+  await expect(person.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
+  await deputy.goto("/app/settings#office");
+  await deputy.reload();
+  await deputy.locator(".notice").filter({ hasText: "Reception PC is on a new internet connection" }).getByRole("button", { name: "This is my office", exact: true }).click();
+  await expect(deputy.getByText("Reception PC is on a new internet connection", { exact: false })).toHaveCount(0);
+  await person.goto("/app/clients");
+  await expect(person.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+  await owner.goto("/app/settings#office");
+  await owner.getByRole("button", { name: "Turn off", exact: true }).click();
+  await query(local.dbUrl, "update public.firms set settings = settings - 'special_hours' where id = $1", [firm.firmId]);
+  await person.setExtraHTTPHeaders({});
+  await owner.setExtraHTTPHeaders({});
+  await deputy.close();
+  await laptop.close();
 });
 
 test("the owner keeps people to office hours, and the person sees the firm is closed", async () => {
