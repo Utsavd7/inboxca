@@ -347,8 +347,9 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await reception.getByRole("button", { name: "Continue" }).click();
   await expect(reception.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
   await owner.reload();
-  await owner.getByRole("listitem").filter({ hasText: "Laptop on Chrome on Windows, first seen today" }).getByRole("button", { name: "Stays in the office" }).click();
-  await expect(owner.getByText("stays in the office, waiting for its key to be set up on it")).toBeVisible();
+  const waitingPc = owner.getByRole("listitem").filter({ hasText: "Laptop on Chrome on Windows, first seen today" });
+  await waitingPc.getByRole("button", { name: "Stays in the office" }).click();
+  await expect(waitingPc).toHaveCount(0);
 
   await reception.goto("/app");
   await reception.getByRole("button", { name: "Set up this PC's key" }).click();
