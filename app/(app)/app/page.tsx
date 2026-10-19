@@ -48,11 +48,11 @@ const reasons: Record<string, string> = {
 // technical see what to do next without opening anything else.
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string }> }) {
   const { dropped, error } = await searchParams;
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership, deviceStatus } = await currentMember();
   const { data: invites } = await supabase.rpc("my_invites");
   const closed = membership ? null : (await supabase.rpc("closed_firms")).data?.[0];
   if (closed?.reason === "session") redirect("/auth/sign-out?reason=session");
-  if (!membership) return <NoFirm closed={closed} invites={invites ?? []} />;
+  if (!membership) return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} />;
 
   const today = todayInIndia();
   const month = today.slice(0, 7);
@@ -68,6 +68,21 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       .limit(4);
   const count = (query: PromiseLike<{ count: number | null }>) => Promise.resolve(query).then((result) => result.count ?? 0);
   const lead = owner || membership.role === "partner";
+  const { data: waitingDevices } = owner
+    ? await supabase.from("devices").select("id").eq("firm_id", membership.firmId).eq("status", "waiting")
+    : { data: [] };
+  const waitingIds = waitingDevices?.map((device) => device.id) ?? [];
+  const waitingToday = waitingIds.length
+    ? await count(
+        supabase
+          .from("activity_log")
+          .select("entity_id", { count: "exact", head: true })
+          .eq("firm_id", membership.firmId)
+          .eq("action", "device.first_seen")
+          .in("entity_id", waitingIds)
+          .gte("at", new Date(`${today}T00:00:00+05:30`).toISOString()),
+      )
+    : 0;
   const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices, veryLate, lateNotices] = await Promise.all([
     cards().neq("status", "filed").lt("due_on", today),
     cards().eq("status", "upcoming").gte("due_on", today).lte("due_on", shift(today, 7)),
@@ -235,6 +250,14 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       {!!lateNotices && (
         <p className="alert" role="alert">
           {lateNotices} {lateNotices === 1 ? "notice is" : "notices are"} past {lateNotices === 1 ? "its" : "their"} action date or review deadline. <Link href="/app/notices">See them</Link>
+        </p>
+      )}
+      {!!waitingIds.length && (
+        <p className="alert" role="alert">
+          {waitingToday === waitingIds.length
+            ? `${waitingToday} ${waitingToday === 1 ? "PC signed" : "PCs signed"} in from your office today: `
+            : `${waitingIds.length} ${waitingIds.length === 1 ? "PC is" : "PCs are"} waiting for approval: `}
+          <Link href="/app/settings#office">approve</Link>
         </p>
       )}
       {alerts?.data?.map((alert) => (
@@ -449,7 +472,14 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
 }
 
 // Someone signed in who is not in a firm yet: their invites, or the firm being closed.
-function NoFirm({ closed, invites }: { closed: { firm_name: string; hours: unknown; reason: string } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[] }) {
+function NoFirm({ closed, invites, deviceStatus }: { closed: { firm_name: string; hours: unknown; reason: string } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[]; deviceStatus: "waiting" | "refused" | null }) {
+  if (closed?.reason === "office" && deviceStatus)
+    return (
+      <PageHead
+        title={deviceStatus === "waiting" ? "This PC is waiting for your firm's approval." : "Your firm refused this PC."}
+        sub={deviceStatus === "waiting" ? "Ask the owner to approve it in Settings. You can try again after that." : "Ask the owner if this PC should be allowed."}
+      />
+    );
   if (closed?.reason === "office")
     return (
       <PageHead

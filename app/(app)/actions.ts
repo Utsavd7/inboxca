@@ -1167,3 +1167,21 @@ export async function setOfficeOnly(form: FormData) {
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: `office.${intent}`, entity_type: "firm", entity_id: membership.firmId });
   redirect("/app/settings#office");
 }
+
+// The owner decides whether a waiting PC stays in the office, travels, or is refused.
+export async function reviewDevice(form: FormData) {
+  const { userId, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const decision = String(form.get("decision") ?? "");
+  const device = String(form.get("device") ?? "");
+  if (!["office", "laptop", "refuse"].includes(decision) || (device && !z.uuid().safeParse(device).success)) redirect("/app/settings#office");
+  const { error } = await supabaseAdmin().rpc("review_devices", {
+    target_firm: membership.firmId,
+    actor: userId,
+    target_device: device || "00000000-0000-0000-0000-000000000000",
+    decision,
+  });
+  if (error) throw new Error(`Device review failed: ${error.code}`);
+  revalidatePath("/app");
+  redirect("/app/settings#office");
+}

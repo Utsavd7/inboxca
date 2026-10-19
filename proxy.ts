@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { DEVICE_COOKIE, newDeviceToken } from "@/src/lib/device";
 
 // Keeps the sign in session fresh on the product's pages. It decides nothing: each page
 // checks the session and the 2 step level itself, and the database checks again.
@@ -20,7 +21,26 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
-  await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
+  if (data?.claims && !request.cookies.has(DEVICE_COOKIE)) {
+    const authCookies = response.cookies.getAll();
+    const authHeaders = [...response.headers];
+    const token = newDeviceToken();
+    request.cookies.set(DEVICE_COOKIE, token);
+    response = NextResponse.next({ request });
+    for (const cookie of authCookies) response.cookies.set(cookie);
+    // Keep Supabase's own headers (cache control), but not the cookies, which are set again
+    // just above, nor Next's request overrides, which the new response makes with the
+    // device cookie in them.
+    for (const [name, value] of authHeaders) if (name !== "set-cookie" && !name.startsWith("x-middleware-")) response.headers.set(name, value);
+    response.cookies.set(DEVICE_COOKIE, token, {
+      httpOnly: true,
+      maxAge: 365 * 24 * 60 * 60,
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
   return response;
 }
 
