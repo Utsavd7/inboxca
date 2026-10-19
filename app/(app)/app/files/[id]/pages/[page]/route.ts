@@ -23,7 +23,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   try {
     const original = await (await openDrive(membership.firmId, account)).read(document.drive_file_id);
     const image = await renderPage(Buffer.from(original), document.name, Number(page), viewerLabel(membership.email, membership.firmName));
-    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.viewed", entity_type: "document", entity_id: id });
+    // One entry per opening, not per page.
+    if (page === "1") await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.viewed", entity_type: "document", entity_id: id });
     return new Response(new Uint8Array(image.bytes), { headers: {
       "Content-Type": "image/png", "Cache-Control": "private, no-store", Vary: "Cookie",
       "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox",
