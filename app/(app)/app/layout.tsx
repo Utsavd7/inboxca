@@ -4,6 +4,7 @@ import { signOut } from "@/app/(auth)/actions";
 import { currentMember } from "@/src/lib/member";
 import { pagesFor, roleLabel } from "@/src/lib/roles";
 import "./app.css";
+import { ClosingWatch } from "./closing-watch";
 import { Command } from "./command";
 import { IdleWatch } from "./idle-watch";
 import { NavLinks } from "./nav-links";
@@ -50,7 +51,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {membership && <small>{roleLabel(role)}</small>}
           </span>
           <form action={signOut} style={{ marginLeft: "auto" }}>
-            <button className="b b-ghost b-icon" type="submit" aria-label="Sign out" title="Sign out">
+            <button className="b b-ghost b-icon" type="submit" aria-label="Sign out" title="Sign out and lock this PC">
               <LogOut size={16} aria-hidden />
             </button>
           </form>
@@ -59,6 +60,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="stage">
         <div className="stage-panel">
           <div className="stage-body">
+            {membership?.closing && <ClosingWatch at={membership.closing.at} close={membership.closing.close} extended={membership.closing.extended} />}
             <PageIn>{children}</PageIn>
           </div>
         </div>

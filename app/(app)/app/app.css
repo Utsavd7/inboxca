@@ -149,6 +149,8 @@ html:has(.ui) { scrollbar-gutter: stable; background: #fff; }
 .subhead { margin: var(--s5) 0 var(--s1); font-size: 14px; font-weight: 600; }
 .points { display: grid; gap: var(--s1); padding-left: var(--s4); list-style: disc; color: var(--ink-2); }
 .alert { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s4); padding: var(--s2) var(--s3); border-radius: var(--r2); background: var(--red-bg); color: var(--red-fg); font-size: 13px; }
+.alert.closing { margin: 0 0 var(--s3); flex-wrap: wrap; }
+.alert.closing > span { flex: 1; }
 .connection { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s3); padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
 .connection > svg { flex: none; color: var(--ink-3); }
 .connection p { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }

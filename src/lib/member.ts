@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { closingToday } from "./hours";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
 import { officeDeviceAccess, officeProof } from "./office";
 import { supabaseAdmin, supabaseServer } from "./supabase";
@@ -47,6 +48,8 @@ export const currentMember = cache(async () => {
     const last = Math.max(0, ...signedAt, seenAt(userId, (await cookies()).get(SEEN_COOKIE)?.value));
     if (Date.now() - last > idleMinutes * 60_000) redirect("/auth/sign-out?reason=idle");
   }
-  const membership = { firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, idleMinutes, email: String(claims.claims.email ?? "") };
+  // Closing time today for anyone office hours bind, for the warning before it.
+  const closing = data.role !== "owner" && accessSetting(settings, data.role, data.access, "hours_only") ? closingToday(settings, data.access) : null;
+  const membership = { firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, access: (data.access ?? {}) as Record<string, unknown>, idleMinutes, closing, email: String(claims.claims.email ?? "") };
   return { supabase, userId, membership, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting };
 });

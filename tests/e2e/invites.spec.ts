@@ -9,6 +9,7 @@ import nodemailer from "nodemailer";
 import { createClient } from "@supabase/supabase-js";
 import { TEST_WORKER_SECRET } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
+import { laterBy } from "@/src/lib/hours";
 import { pdf } from "@/tests/fixtures/pdf";
 import { emailStep, latestEmail, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
@@ -166,9 +167,11 @@ test("under Office only, staff need the office connection and an approved PC", a
   await second.goto("/app/clients");
   await expect(second.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
   await secondContext.close();
+  // Signing in on the second PC ended this person's session on the first.
+  await person.goto("/app/clients");
+  await expect(person).toHaveURL(/\/sign-in/);
 
   // The approved office PC replaces the phone code for staff.
-  await person.getByRole("button", { name: "Sign out" }).click();
   await emailStep(person, newEmail);
   await expect(person).toHaveURL(/\/app$/);
   await person.getByRole("link", { name: "Clients" }).click();
@@ -232,7 +235,12 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   expect(error).toBeNull();
   const deputyKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
   await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'partner', 'active')", [firm.firmId, data.user!.id]);
-  await query(local.dbUrl, "insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, secret, created_at, updated_at) values (gen_random_uuid(), $1, 'Test app', 'totp', 'verified', $2, now(), now())", [data.user!.id, deputyKey]);
+  // The laptop is another staff member's: one person's sign in ends their other session.
+  const laptopEmail = `laptop-${tag}@example.test`;
+  const { data: laptopUser } = await admin.auth.admin.createUser({ email: laptopEmail, email_confirm: true });
+  await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'staff', 'active')", [firm.firmId, laptopUser.user!.id]);
+  for (const [id, key] of [[data.user!.id, deputyKey], [laptopUser.user!.id, deputyKey]])
+    await query(local.dbUrl, "insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, secret, created_at, updated_at) values (gen_random_uuid(), $1, 'Test app', 'totp', 'verified', $2, now(), now())", [id, key]);
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await owner.goto("/app/settings#office");
   await owner.reload();
@@ -254,8 +262,8 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
 
   const laptop = await browser.newPage({ userAgent: pcUserAgent });
   await laptop.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
-  await emailStep(laptop, newEmail);
-  await laptop.getByLabel("6 digit code from the app").fill(totp(personKey));
+  await emailStep(laptop, laptopEmail);
+  await laptop.getByLabel("6 digit code from the app").fill(totp(deputyKey));
   await laptop.getByRole("button", { name: "Continue" }).click();
   await expect(laptop.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
   const { deviceHash } = await import("../../src/lib/device");
@@ -364,6 +372,31 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await person.reload();
   await expect(person.locator(".page-head")).toContainText("Invite Test Firm");
   await expect(person.getByRole("heading", { level: 1 })).not.toContainText("closed");
+
+  // Ten minutes before closing the person is warned and may stay one more hour, once.
+  const close = new Date(Date.now() + 5 * 60_000).toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
+  const [{ id: personId }] = await query(local.dbUrl, "select id from auth.users where email = $1", [newEmail]);
+  await query(local.dbUrl, "update public.firms set settings = jsonb_set(settings, '{special_hours,0,close}', to_jsonb($2::text)) where id = $1", [firm.firmId, close]);
+  await person.reload();
+  const warning = person.getByRole("alert").filter({ hasText: `InboxCA closes for you at ${close}` });
+  await warning.getByRole("button", { name: "Stay 1 more hour" }).click();
+  await expect(warning).toHaveCount(0);
+  expect(await query(local.dbUrl, "select access -> 'extra_time' ->> 'until' as until from public.firm_members where user_id = $1", [personId])).toEqual([{ until: laterBy(close, 60) }]);
+
+  // Longer is a question for the owner, who allows it for today.
+  await query(local.dbUrl, "update public.firm_members set access = jsonb_set(access, '{extra_time,until}', to_jsonb($2::text)) where user_id = $1", [personId, close]);
+  await person.reload();
+  await expect(warning.getByRole("button", { name: "Stay 1 more hour" })).toHaveCount(0);
+  await warning.getByLabel("How much more time").selectOption("2");
+  await warning.getByRole("button", { name: "Ask the owner" }).click();
+  await expect(person.getByRole("status").filter({ hasText: "The owner is asked for more time today." })).toBeVisible();
+  await owner.goto("/app/inbox");
+  const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: `asks to work until ${laterBy(close, 120)} today` });
+  await question.getByRole("button", { name: "Allow today" }).click();
+  await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
+  expect(await query(local.dbUrl, "select access -> 'extra_time' ->> 'until' as until from public.firm_members where user_id = $1", [personId])).toEqual([{ until: laterBy(close, 120) }]);
+  await query(local.dbUrl, "update public.firms set settings = jsonb_set(settings, '{special_hours,0,close}', '\"23:59\"') where id = $1", [firm.firmId]);
+  await query(local.dbUrl, "update public.firm_members set access = access - 'extra_time' where user_id = $1", [personId]);
 });
 
 test("in restricted mode a person sees only clients assigned to them or their team", async () => {

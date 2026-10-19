@@ -24,3 +24,22 @@ export function describeHours(hours: Hours | null | undefined) {
 // "1 July 2026" for a "2026-07-01" date.
 export const longDate = (date: string) =>
   new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+
+// "18:00" plus 60 minutes is "19:00", never past the day's end.
+export const laterBy = (time: string, minutes: number) => {
+  const total = Math.min(23 * 60 + 59, Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5)) + minutes);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+};
+
+// When the firm closes today for one person bound by office hours, India time, counting
+// their extra time today (firm_members.access.extra_time, as open_to() reads it); null on a
+// closed day; `at` is the closing moment in milliseconds.
+export function closingToday(settings: Record<string, unknown>, person: unknown, now = new Date()) {
+  const day = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const special = ((settings.special_hours ?? []) as SpecialHours[]).find((range) => day >= range.from && day <= range.to);
+  const close = special?.close ?? (settings.hours as Hours | undefined)?.[String(new Date(`${day}T00:00:00Z`).getUTCDay())]?.[1];
+  const extra = (person as { extra_time?: { day: string; until: string } } | null)?.extra_time;
+  const extended = extra?.day === day;
+  const until = extended && (!close || extra.until > close) ? extra.until : close;
+  return until ? { day, close: until, extended, at: Date.parse(`${day}T${until}:00+05:30`) } : null;
+}

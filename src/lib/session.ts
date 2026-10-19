@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { todayInIndia } from "./calendar";
+import { supabaseAdmin } from "./supabase";
 
 // A firm's access setting for one person: their own, else their role's, else the firm's,
 // in the same order as the database's access_setting().
@@ -27,4 +29,18 @@ export function seenAt(userId: string, value: string | undefined) {
   const [at, mac = ""] = (value ?? "").split(".");
   const expected = sign(userId, Number(at));
   return mac.length === expected.length && timingSafeEqual(Buffer.from(mac), Buffer.from(expected)) ? Number(at) : 0;
+}
+
+// The third time in a day one person does something worth a look (a screen capture, a sign
+// in that ends their other session) tells the owner and partners on Home, for that day.
+export async function tellOwnerOnRepeat(firmId: string, userId: string, email: string, action: string, reason: string) {
+  const admin = supabaseAdmin();
+  const day = todayInIndia();
+  const { count } = await admin.from("activity_log").select("at", { count: "exact", head: true })
+    .eq("firm_id", firmId).eq("actor_id", userId).eq("action", action).gte("at", new Date(`${day}T00:00:00+05:30`).toISOString());
+  if ((count ?? 0) >= 3)
+    await admin.from("requests").upsert(
+      { firm_id: firmId, kind: "alert", entity_type: reason, entity_id: userId, reason_code: reason, status: "pending", details: { email, day, count } },
+      { onConflict: "kind,entity_type,entity_id" },
+    );
 }
