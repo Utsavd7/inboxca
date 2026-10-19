@@ -489,7 +489,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await query(local.dbUrl, `with ids as (select gen_random_uuid() id from generate_series(1,10))
     insert into public.requests (id,firm_id,kind,entity_type,entity_id,reason_code,expires_at,details)
     select id,$1,'permission','permission',id,'send',now()+interval '4 hours',jsonb_build_object('by',$2::text,'fixture',$3::text) from ids`, [firm.firmId, requester, tag]);
-  await person.getByRole("button", { name: "Ask to upload" }).click();
+  await Promise.all([person.waitForResponse((response) => response.request().method() === "POST"), person.getByRole("button", { name: "Ask to upload" }).click()]);
   expect((await query(local.dbUrl, "select count(*)::int n from public.requests where firm_id=$1 and kind='permission' and status='pending' and expires_at>now()", [firm.firmId]))[0].n).toBe(10);
   await query(local.dbUrl, "delete from public.requests where firm_id=$1 and details->>'fixture'=$2", [firm.firmId, tag]);
 
