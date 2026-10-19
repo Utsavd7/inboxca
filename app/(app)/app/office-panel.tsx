@@ -12,6 +12,10 @@ const personName = (email?: string) => {
 };
 
 // Only office approvers read these requests and the activity behind them.
+// When to suggest a fixed connection; later these move to admin configuration (5.8).
+const FIXED_SUGGESTION_TAPS = 3;
+const FIXED_SUGGESTION_DAYS = 14;
+
 export async function OfficePanel({ compact = false, error = false }: { compact?: boolean; error?: boolean }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) return null;
@@ -20,8 +24,8 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
   const admin = supabaseAdmin();
   const today = todayInIndia();
   const [{ data: pcs }, { data: activity }, { data: people }, { data: requests }] = await Promise.all([
-    admin.from("devices").select("id, name, status").eq("firm_id", membership.firmId),
-    admin.from("activity_log").select("entity_id, actor_id, action, at").eq("firm_id", membership.firmId).in("action", ["device.first_seen", "office.refused"]),
+    admin.from("devices").select("id, name, status, kind").eq("firm_id", membership.firmId),
+    admin.from("activity_log").select("entity_id, actor_id, action, at").eq("firm_id", membership.firmId).in("action", ["device.first_seen", "office.refused", "office.here", "office.confirm", "office.today"]),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     admin.from("requests").select("id, entity_id, reason_code, details").eq("firm_id", membership.firmId).eq("entity_type", "office_connection").eq("status", "pending"),
   ]);
@@ -30,6 +34,13 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
   const waiting = (pcs ?? []).filter((pc) => pc.status === "waiting");
   const refusals = (activity ?? []).filter((entry) => entry.action === "office.refused" && Date.parse(entry.at) >= Date.parse(`${today}T00:00:00+05:30`));
   const here = onOfficeLine(requestAddress(await headers()), office);
+  // Self-adjusting (5.8): after 3 office confirmations in 14 days, or with no PC that stays in
+  // the office, the owner is told once how to get a fixed connection.
+  const since = Date.parse(`${today}T00:00:00+05:30`) - FIXED_SUGGESTION_DAYS * 86_400_000;
+  const confirmations = (activity ?? []).filter((entry) => entry.action !== "device.first_seen" && entry.action !== "office.refused" && Date.parse(entry.at) >= since).length;
+  const trustedPc = (pcs ?? []).some((pc) => pc.status === "approved" && pc.kind === "office");
+  const suggestFixed =
+    owner && office.on && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= FIXED_SUGGESTION_TAPS || !trustedPc);
   if (compact && !requests?.length && !refusals.length && (owner || !waiting.length)) return null;
   return (
     <section className="panel" aria-labelledby={compact ? "office-alerts" : "office-title"} id={compact ? undefined : "office"}>
@@ -85,7 +96,17 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
             <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it from the office</label>
           </fieldset><button className="b b-primary" name="intent" value="on">Turn on</button>
         </form>}
-        {owner && office.on && <form action={setOfficeOnly}>
+        {suggestFixed && <form action={setOfficeOnly} className="fixed-suggestion">
+          <p><strong>To stop these confirmations, ask your internet provider for a fixed address.</strong> Here is what to say:</p>
+          <blockquote>&ldquo;Please add a static public IP to our broadband connection, account number ___. We need it for office software access.&rdquo;</blockquote>
+          <p className="hint">When it is done, press Done from a PC in the office.</p>
+          <span className="form-row">
+            <button className="b b-primary" name="intent" value="fixed">Done</button>
+            <button className="b b-ghost" name="intent" value="no_fixed">My provider doesn&apos;t offer it</button>
+          </span>
+        </form>}
+        {owner && office.on && !suggestFixed && (office as { fixed_declined?: boolean }).fixed_declined && !trustedPc && <p className="hint">Without a fixed connection, mark one desktop in the office as Stays in the office and name a deputy, so a changed connection is confirmed without you.</p>}
+        {owner && office.on && !suggestFixed && <form action={setOfficeOnly}>
           <p className="hint">If your internet provider gave your office a fixed connection, confirm it here from the office.</p>
           <button className="b b-secondary" name="intent" value="fixed">Done</button>
         </form>}

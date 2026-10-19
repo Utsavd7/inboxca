@@ -1169,6 +1169,14 @@ export async function setOfficeOnly(form: FormData) {
   const deputies = form.getAll("deputy").map(String);
   const request = String(form.get("request") ?? "");
   if (decision === "deputies" && deputies.length > 2) redirect("/app/settings?error=deputies#office");
+  // The owner's provider gives no fixed connection: stop suggesting it (5.8).
+  if (decision === "no_fixed") {
+    if (membership.role !== "owner") redirect("/app");
+    const office = (membership.settings.office ?? {}) as Record<string, unknown>;
+    await (await currentMember()).supabase.from("firms").update({ settings: { ...membership.settings, office: { ...office, fixed_declined: true } } }).eq("id", membership.firmId);
+    await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "office.no_fixed", entity_type: "firm", entity_id: membership.firmId });
+    redirect("/app/settings#office");
+  }
   if (request && !z.uuid().safeParse(request).success || deputies.some((id) => !z.uuid().safeParse(id).success)) redirect("/app");
   const { error } = await supabaseAdmin().rpc("office_control", {
     target_firm: membership.firmId, actor: userId, decision,

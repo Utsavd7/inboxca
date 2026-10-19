@@ -126,6 +126,11 @@ test("under Office only, staff need the office connection and an approved PC", a
   await owner.getByLabel("Yes, this is my office").check();
   await owner.getByRole("button", { name: "Turn on" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "On." })).toContainText("You are on your office internet connection now.");
+  // No PC stays in the office yet, so the owner is told how to get a fixed connection, once.
+  await expect(owner.getByText("ask your internet provider for a fixed address")).toBeVisible();
+  await owner.getByRole("button", { name: "My provider doesn't offer it" }).click();
+  await expect(owner.getByText("ask your internet provider for a fixed address")).toHaveCount(0);
+  await expect(owner.getByText("mark one desktop in the office as Stays in the office")).toBeVisible();
 
   await person.setExtraHTTPHeaders({ "x-test-ip": "198.51.100.7" });
   await person.goto("/app");
