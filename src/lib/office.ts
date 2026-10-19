@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { createHmac } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { DEVICE_COOKIE, deviceHash, deviceName } from "./device";
@@ -6,19 +7,21 @@ import { supabaseAdmin } from "./supabase";
 // The office connection (PLAN.md 5.8, 5.17.3): the office's public internet address as the
 // server sees it. IPv4 is matched exactly, IPv6 by its /64 prefix. A firm may have several
 // lines. Nothing a PC says about itself is trusted.
-export type OfficeLine = { ipv4?: string; ipv6?: string; confirmed_on: string };
-export type Office = { on?: boolean; lines?: OfficeLine[] };
+export type OfficeLine = { id?: string; ipv4?: string; ipv6?: string; confirmed_on: string; seen_on?: string; until?: string; fixed?: boolean };
+export type Office = { on?: boolean; lines?: OfficeLine[]; deputies?: string[] };
+export const officeApprover = (role: string, userId: string, settings: Record<string, unknown>) =>
+  role === "owner" || role === "partner" && ((settings.office as Office | undefined)?.deputies ?? []).includes(userId);
 
 // The roles the switch binds; the owner and partners reach the firm from anywhere.
 export const officeBound = (role: string) => ["staff", "manager", "front_desk"].includes(role);
 
 // The address a request came from, read only from the header the host vouches for:
 // Cloudflare's CF-Connecting-IP (OFFICE_IP_HEADER names another, for the tests).
-export const requestAddress = (headers: Headers) => headers.get(process.env.OFFICE_IP_HEADER ?? "cf-connecting-ip")?.trim() ?? "";
+export const requestAddress = (headers: Headers) => headers.get(process.env.OFFICE_IP_HEADER || "cf-connecting-ip")?.trim() ?? "";
 
 // "2001:db8:a:b" for any address in that /64, "" for anything that is not IPv6.
 export function ipv6Prefix(address: string) {
-  if (!address.includes(":")) return "";
+  if (isIP(address) !== 6) return "";
   const [head, tail = ""] = address.toLowerCase().split("::");
   const left = head ? head.split(":") : [];
   const right = address.includes("::") ? (tail ? tail.split(":") : []) : [];
@@ -28,41 +31,77 @@ export function ipv6Prefix(address: string) {
 
 // The line an address would be recorded as.
 export const lineFor = (address: string, today: string): OfficeLine | null =>
-  /^\d{1,3}(\.\d{1,3}){3}$/.test(address) ? { ipv4: address, confirmed_on: today } : ipv6Prefix(address) ? { ipv6: ipv6Prefix(address), confirmed_on: today } : null;
+  isIP(address) === 4 ? { ipv4: address, confirmed_on: today } : ipv6Prefix(address) ? { ipv6: ipv6Prefix(address), confirmed_on: today } : null;
 
-export const onOfficeLine = (address: string, office: Office | undefined) =>
-  !!address && (office?.lines ?? []).some((line) => (line.ipv4 && line.ipv4 === address) || (line.ipv6 && line.ipv6 === ipv6Prefix(address)));
+// Only host supplied addresses can teach a line. A browser cannot supply the other half.
+export function requestLine(request: Headers, today: string) {
+  const line = lineFor(requestAddress(request), today);
+  // Cloudflare's generated IPv4 is not the connection's real IPv4.
+  if (!process.env.OFFICE_IP_HEADER && line?.ipv4 && Number(line.ipv4.split(".")[0]) >= 240) {
+    return lineFor(request.get("cf-connecting-ipv6") ?? "", today);
+  }
+  // This optional second header must be overwritten by the trusted host, like the first.
+  const secondHeader = process.env.OFFICE_SECOND_IP_HEADER;
+  const second = secondHeader ? lineFor(request.get(secondHeader)?.trim() ?? "", today) : null;
+  if (line?.ipv4 && second?.ipv6 || line?.ipv6 && second?.ipv4) return { ...line, ...second };
+  return line;
+}
 
-// The server approves this request only when its office line and PC both match the firm.
-export async function officeDeviceAccess(userId: string) {
+export function connectionRule(line: OfficeLine, office: Office, kind: string, now = Date.now()) {
+  const known = office.lines?.find((saved) => (!saved.until || Date.parse(saved.until) > now) &&
+    (line.ipv4 && saved.ipv4 === line.ipv4 || line.ipv6 && saved.ipv6 === line.ipv6));
+  return known ? "known" : kind === "office" ? "fixed_pc" : "waiting";
+}
+
+export const onOfficeLine = (address: string, office: Office | undefined) => {
+  const line = lineFor(address, "");
+  return !!line && connectionRule(line, office ?? {}, "laptop") === "known";
+};
+
+// The server checks both the approved PC and its connection on every request.
+export async function officeDeviceAccess(userId: string, observe = true) {
   const admin = supabaseAdmin();
-  const { data: firmRow } = await admin
-    .from("firm_members")
-    .select("firm_id, role, firms(settings)")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .limit(1)
-    .maybeSingle();
+  const { data: firmRow } = await admin.from("firm_members").select("firm_id, role, firms(settings)")
+    .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
   const office = (firmRow?.firms?.settings as { office?: Office } | undefined)?.office;
   const requestHeaders = await headers();
-  const onLine = !!office?.on && !!firmRow && officeBound(firmRow.role) && onOfficeLine(requestAddress(requestHeaders), office);
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const line = requestLine(requestHeaders, today);
   let deviceStatus: "waiting" | "refused" | null = null;
   let approved = false;
-  if (onLine && firmRow) {
+  let connectionWaiting = false;
+  if (office?.on && firmRow && officeBound(firmRow.role)) {
     const token = (await cookies()).get(DEVICE_COOKIE)?.value;
+    let pc;
     if (token) {
-      const { data } = await admin.rpc("register_device", {
-        target_firm: firmRow.firm_id,
-        actor: userId,
-        token_digest: await deviceHash(token),
-        label: deviceName(requestHeaders.get("user-agent") ?? ""),
+      const digest = await deviceHash(token);
+      if (observe && line && connectionRule(line, office, "laptop") === "known") {
+        const { error } = await admin.rpc("register_device", {
+          target_firm: firmRow.firm_id, actor: userId, token_digest: digest,
+          label: deviceName(requestHeaders.get("user-agent") ?? ""),
+        });
+        if (error) throw new Error(`PC registration failed: ${error.code}`);
+      }
+      const { data, error } = await admin.from("devices").select("id, status, kind")
+        .eq("firm_id", firmRow.firm_id).eq("token_hash", digest).maybeSingle();
+      if (error) throw new Error(`PC check failed: ${error.code}`);
+      pc = data;
+    }
+    if (!observe) return { approved: false, deviceStatus: null, connectionWaiting: pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting" };
+    if (pc?.status === "approved" && line) {
+      const { data, error } = await admin.rpc("observe_office", {
+        target_firm: firmRow.firm_id, person: userId, pc: pc.id, connection: line,
       });
-      const device = data?.[0];
-      approved = device?.status === "approved";
-      if (device?.status === "waiting" || device?.status === "refused") deviceStatus = device.status;
-    } else deviceStatus = "waiting";
+      if (error) throw new Error(`Office check failed: ${error.code}`);
+      approved = data === true;
+      connectionWaiting = !approved;
+    } else {
+      deviceStatus = pc?.status === "refused" ? "refused" : pc || line && connectionRule(line, office, "laptop") === "known" ? "waiting" : null;
+      const { error } = await admin.rpc("office_refused", { target_firm: firmRow.firm_id, person: userId, reason: "pc" });
+      if (error) throw new Error(`Office refusal failed: ${error.code}`);
+    }
   }
-  return { approved, deviceStatus };
+  return { approved, deviceStatus, connectionWaiting };
 }
 
 // The proof the server sends with a staff member's requests from an office line: good for

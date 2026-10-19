@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
 import { officeDeviceAccess, officeProof } from "./office";
-import { supabaseServer } from "./supabase";
+import { supabaseAdmin, supabaseServer } from "./supabase";
 
 // The signed in person and their firm, for every product page and action; cached for the
 // request, so the layout and the page share one lookup. Sends anyone who has not finished
@@ -24,7 +24,18 @@ export const currentMember = cache(async () => {
     .eq("user_id", userId)
     .limit(1)
     .maybeSingle();
-  if (!data) return { supabase, userId, membership: null, deviceStatus: office.deviceStatus };
+  if (!data) {
+    const { data: closed } = await supabase.rpc("closed_firms");
+    if (closed?.[0]?.reason === "hours") {
+      const { data: firm } = await supabaseAdmin().from("firm_members").select("firm_id")
+        .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+      if (firm) {
+        const { error } = await supabaseAdmin().rpc("office_refused", { target_firm: firm.firm_id, person: userId, reason: "hours" });
+        if (error) throw new Error(`Office refusal failed: ${error.code}`);
+      }
+    }
+  }
+  if (!data) return { supabase, userId, membership: null, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting };
 
   const settings = (data.firms?.settings ?? {}) as Record<string, unknown>;
   const idleMinutes = Number(accessSetting(settings, data.role, data.access, "idle_minutes")) || 0;
@@ -37,5 +48,5 @@ export const currentMember = cache(async () => {
     if (Date.now() - last > idleMinutes * 60_000) redirect("/auth/sign-out?reason=idle");
   }
   const membership = { firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, idleMinutes, email: String(claims.claims.email ?? "") };
-  return { supabase, userId, membership, deviceStatus: office.deviceStatus };
+  return { supabase, userId, membership, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting };
 });
