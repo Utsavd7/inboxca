@@ -24,7 +24,7 @@ export const taskStatuses = { upcoming: "Upcoming", in_progress: "In progress", 
 
 // Today in India, as a date column holds it (YYYY-MM-DD).
 export const todayInIndia = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-const addDays = (date: string, days: number) => new Date(Date.parse(date) + days * 86_400_000).toISOString().slice(0, 10);
+export const addDays = (date: string, days: number) => new Date(Date.parse(date) + days * 86_400_000).toISOString().slice(0, 10);
 
 // The calendar page's views: what is late, what is coming, what was filed.
 export const calendarViews = {

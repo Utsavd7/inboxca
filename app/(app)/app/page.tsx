@@ -2,7 +2,7 @@ import { OfficePanel } from "./office-panel";
 import { CalendarDays, Check, Inbox, Mail, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { joinFirm, manageTasks } from "@/app/(app)/actions";
+import { askAwayDevice, joinFirm, manageTasks } from "@/app/(app)/actions";
 import { canManageClients } from "@/src/lib/clients";
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { describeHours, type Hours } from "@/src/lib/hours";
@@ -289,6 +289,11 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       )}
       <PortalDrop />
       <DroppedNotice value={dropped} />
+      {error === "view_only" && (
+        <p className="alert" role="alert">
+          This device can only view. Make changes from the office.
+        </p>
+      )}
       {error === "drive" && (
         <p className="alert" role="alert">
           Connect the firm&apos;s drive in Settings first; portal files are saved there.
@@ -505,10 +510,16 @@ function NoFirm({ closed, invites, deviceStatus, connectionWaiting }: { closed: 
     );
   if (closed?.reason === "office")
     return (
-      <PageHead
-        title="Use InboxCA from your office."
-        sub={`${closed.firm_name} lets staff use InboxCA only in the office, on the office internet connection. If you are in the office now, ask the owner to confirm this connection.`}
-      />
+      <>
+        <PageHead
+          title="Use InboxCA from your office."
+          sub={`${closed.firm_name} lets staff use InboxCA only in the office, on the office internet connection. If you are in the office now, ask the owner to confirm this connection.`}
+        />
+        <form action={askAwayDevice} className="form-row">
+          <button className="b b-secondary">Ask to use this device away from the office</button>
+          <span className="hint">The owner may allow it for some days, to view only.</span>
+        </form>
+      </>
     );
   return (
     <>

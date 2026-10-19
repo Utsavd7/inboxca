@@ -9,6 +9,10 @@ describe("permissions", () => {
     expect(may("staff", "upload", { employee: { upload: true } })).toBe(true);
     expect(may("partner", "upload", { manager: { upload: true } })).toBe(true);
     expect(may("manager", "remove", { manager: { upload: true, send: true } })).toBe(false);
+    // Always allowed for one person: that right only, and never removing.
+    expect(may("front_desk", "upload", {}, ["upload"])).toBe(true);
+    expect(may("front_desk", "send", {}, ["upload"])).toBe(false);
+    expect(may("staff", "remove", {}, ["remove"])).toBe(false);
   });
   it("routes an employee's request to their team's manager, and everything else to the owner or a deputy", () => {
     expect(routeOf("upload", { role: "staff", team_id: "gst" }, ["priya"])).toBe("manager");

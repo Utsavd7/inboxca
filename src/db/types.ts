@@ -183,13 +183,13 @@ isOneToOne: false
                   ]
                 },"devices": {
                   Row: {
-                    "firm_id": string,"id": string,"kind": string | null,"name": string,"status": string,"token_hash": string
+                    "ends_on": string | null,"firm_id": string,"id": string,"kind": string | null,"name": string,"person_id": string | null,"status": string,"token_hash": string
                   }
                   Insert: {
-                    "firm_id": string,"id"?: string,"kind"?: string | null,"name": string,"status"?: string,"token_hash": string
+                    "ends_on"?: string | null,"firm_id": string,"id"?: string,"kind"?: string | null,"name": string,"person_id"?: string | null,"status"?: string,"token_hash": string
                   }
                   Update: {
-                    "firm_id"?: string,"id"?: string,"kind"?: string | null,"name"?: string,"status"?: string,"token_hash"?: string
+                    "ends_on"?: string | null,"firm_id"?: string,"id"?: string,"kind"?: string | null,"name"?: string,"person_id"?: string | null,"status"?: string,"token_hash"?: string
                   }
                   Relationships: [
                     {
@@ -595,7 +595,7 @@ isOneToOne: false
 { Args: { "at"?: string,"person": Json,"role": string,"settings": Json }; Returns: boolean
                            },
 "register_device":
-{ Args: { "actor": string,"label": string,"target_firm": string,"token_digest": string }; Returns: {
+{ Args: { "actor": string,"away"?: boolean,"label": string,"target_firm": string,"token_digest": string }; Returns: {
               "id": string,"status": string
             }[]
                            },
@@ -612,7 +612,7 @@ isOneToOne: false
 { Args: { "person": string,"target_firm": string }; Returns: boolean
                            },
 "review_devices":
-{ Args: { "actor": string,"decision": string,"target_device": string,"target_firm": string }; Returns: undefined
+{ Args: { "actor": string,"decision": string,"target_device": string,"target_firm": string,"until_day"?: string }; Returns: undefined
                            },
 "review_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]

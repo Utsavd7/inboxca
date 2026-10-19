@@ -70,6 +70,7 @@ export async function officeDeviceAccess(userId: string, observe = true) {
   let deviceStatus: "waiting" | "refused" | null = null;
   let approved = false;
   let connectionWaiting = false;
+  let remoteUntil: string | null = null;
   if (office?.on && firmRow && officeBound(firmRow.role)) {
     const token = (await cookies()).get(DEVICE_COOKIE)?.value;
     let pc;
@@ -82,13 +83,22 @@ export async function officeDeviceAccess(userId: string, observe = true) {
         });
         if (error) throw new Error(`PC registration failed: ${error.code}`);
       }
-      const { data, error } = await admin.from("devices").select("id, status, kind")
+      const { data, error } = await admin.from("devices").select("id, status, kind, person_id, ends_on")
         .eq("firm_id", firmRow.firm_id).eq("token_hash", digest).maybeSingle();
       if (error) throw new Error(`PC check failed: ${error.code}`);
       pc = data;
     }
-    if (!observe) return { approved: false, deviceStatus: null, connectionWaiting: pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting" };
-    if (pc?.status === "approved" && line) {
+    if (!observe) return { approved: false, deviceStatus: null, connectionWaiting: pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting", remoteUntil: null };
+    // A personal device works anywhere for its one person until its end date, view only;
+    // anyone else on it, or after that day, is refused.
+    if (pc?.status === "approved" && pc.kind === "personal") {
+      if (pc.person_id === userId && pc.ends_on! >= today) remoteUntil = pc.ends_on;
+      else {
+        deviceStatus = "refused";
+        const { error } = await admin.rpc("office_refused", { target_firm: firmRow.firm_id, person: userId, reason: "pc" });
+        if (error) throw new Error(`Office refusal failed: ${error.code}`);
+      }
+    } else if (pc?.status === "approved" && line) {
       const { data, error } = await admin.rpc("observe_office", {
         target_firm: firmRow.firm_id, person: userId, pc: pc.id, connection: line,
       });
@@ -101,7 +111,22 @@ export async function officeDeviceAccess(userId: string, observe = true) {
       if (error) throw new Error(`Office refusal failed: ${error.code}`);
     }
   }
-  return { approved, deviceStatus, connectionWaiting };
+  return { approved, deviceStatus, connectionWaiting, remoteUntil };
+}
+
+// A staff member away from the office asks to use this device there: it waits for the owner
+// or a deputy, marked as first used away (5.17.4 #28, #48).
+export async function askAway(userId: string) {
+  const admin = supabaseAdmin();
+  const { data: firmRow } = await admin.from("firm_members").select("firm_id, role, firms(settings)")
+    .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  const token = (await cookies()).get(DEVICE_COOKIE)?.value;
+  if (!firmRow || !token || !(firmRow.firms?.settings as { office?: Office } | undefined)?.office?.on || !officeBound(firmRow.role)) return;
+  const { error } = await admin.rpc("register_device", {
+    target_firm: firmRow.firm_id, actor: userId, token_digest: await deviceHash(token),
+    label: deviceName((await headers()).get("user-agent") ?? ""), away: true,
+  });
+  if (error) throw new Error(`PC registration failed: ${error.code}`);
 }
 
 // The proof the server sends with a staff member's requests from an office line: good for

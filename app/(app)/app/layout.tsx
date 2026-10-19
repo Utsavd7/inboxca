@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LogOut } from "lucide-react";
 import { signOut } from "@/app/(auth)/actions";
+import { longDate } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { pagesFor, roleLabel } from "@/src/lib/roles";
 import "./app.css";
@@ -60,6 +61,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="stage">
         <div className="stage-panel">
           <div className="stage-body">
+            {membership?.viewOnlyUntil && (
+              <p className="notice" role="status">
+                Away from the office this device only views, until {longDate(membership.viewOnlyUntil)}.
+              </p>
+            )}
             {membership?.closing && <ClosingWatch at={membership.closing.at} close={membership.closing.close} extended={membership.closing.extended} />}
             <PageIn>{children}</PageIn>
           </div>

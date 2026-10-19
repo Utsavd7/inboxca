@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { reviewDevice, setOfficeOnly } from "@/app/(app)/actions";
-import { todayInIndia, dueLabel } from "@/src/lib/calendar";
+import { addDays, todayInIndia, dueLabel } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
 import { officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -24,14 +24,15 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
   const admin = supabaseAdmin();
   const today = todayInIndia();
   const [{ data: pcs }, { data: activity }, { data: people }, { data: requests }] = await Promise.all([
-    admin.from("devices").select("id, name, status, kind").eq("firm_id", membership.firmId),
-    admin.from("activity_log").select("entity_id, actor_id, action, at").eq("firm_id", membership.firmId).in("action", ["device.first_seen", "office.refused", "office.here", "office.confirm", "office.today"]),
+    admin.from("devices").select("id, name, status, kind, person_id, ends_on").eq("firm_id", membership.firmId),
+    admin.from("activity_log").select("entity_id, actor_id, action, at, details").eq("firm_id", membership.firmId).in("action", ["device.first_seen", "office.refused", "office.here", "office.confirm", "office.today"]),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     admin.from("requests").select("id, entity_id, reason_code, details").eq("firm_id", membership.firmId).eq("entity_type", "office_connection").eq("status", "pending"),
   ]);
   const emails = new Map(people?.map((person) => [person.user_id, person.email]));
   const first = new Map(activity?.filter((entry) => entry.action === "device.first_seen").map((entry) => [entry.entity_id, entry]));
   const waiting = (pcs ?? []).filter((pc) => pc.status === "waiting");
+  const approved = (pcs ?? []).filter((pc) => pc.status === "approved" && (pc.kind !== "personal" || (pc.ends_on ?? "") >= today));
   const refusals = (activity ?? []).filter((entry) => entry.action === "office.refused" && Date.parse(entry.at) >= Date.parse(`${today}T00:00:00+05:30`));
   const here = onOfficeLine(requestAddress(await headers()), office);
   // Self-adjusting (5.8): after 3 office confirmations in 14 days, or with no PC that stays in
@@ -75,17 +76,34 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
           <ul className="rows">{waiting.map((pc) => {
             const seen = first.get(pc.id);
             const date = seen?.at ? new Date(seen.at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) : today;
+            // Asked from away from the office: only for that person, until a day, view only.
+            const away = !!(seen?.details as { away?: boolean } | null)?.away;
             return <li key={pc.id}>
-              <span className="grow"><strong>{personName(emails.get(seen?.actor_id ?? ""))} on {pc.name}</strong>, first seen {date === today ? "today" : `on ${dueLabel(date)}`}</span>
+              <span className="grow"><strong>{personName(emails.get(seen?.actor_id ?? ""))} on {pc.name}</strong>, {away ? "asks to use it away from the office, to view only" : `first seen ${date === today ? "today" : `on ${dueLabel(date)}`}`}</span>
               <form action={reviewDevice} className="end">
                 <input type="hidden" name="device" value={pc.id} />
-                <button className="b b-primary b-small" name="decision" value="office">Stays in the office</button>
-                <button className="b b-secondary b-small" name="decision" value="laptop">Laptop</button>
-                <button className="b b-ghost b-small" name="decision" value="refuse">Refuse</button>
+                {away ? <>
+                  <label className="until">Until <input type="date" name="until" required min={today} max={addDays(today, 90)} defaultValue={addDays(today, 7)} /></label>
+                  <button className="b b-primary b-small" name="decision" value="personal">Allow</button>
+                </> : <>
+                  <button className="b b-primary b-small" name="decision" value="office">Stays in the office</button>
+                  <button className="b b-secondary b-small" name="decision" value="laptop">Laptop</button>
+                </>}
+                <button className="b b-ghost b-small" name="decision" value="refuse" formNoValidate>Refuse</button>
               </form>
             </li>;
           })}</ul>
           {waiting.length > 1 && <form action={reviewDevice}><button className="b b-secondary" name="decision" value="office">Approve all as staying in the office</button></form>}
+        </div>}
+        {!!approved.length && <div className="device-list">
+          <h3 className="sub-head">Approved devices</h3>
+          <ul className="rows">{approved.map((pc) => <li key={pc.id}>
+            <span className="grow"><strong>{pc.name}</strong>, {pc.kind === "office" ? "stays in the office" : pc.kind === "laptop" ? "laptop" : `${personName(emails.get(pc.person_id ?? ""))}'s, away from the office until ${dueLabel(pc.ends_on ?? today)}`}</span>
+            <form action={reviewDevice} className="end">
+              <input type="hidden" name="device" value={pc.id} />
+              <button className="b b-ghost b-small" name="decision" value="withdraw">Withdraw</button>
+            </form>
+          </li>)}</ul>
         </div>}
         {office.on ? <form action={setOfficeOnly} className="form-row">
           {!here && <button className="b b-primary" name="intent" value="here">This is my office</button>}
