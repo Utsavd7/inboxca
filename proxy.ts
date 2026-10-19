@@ -29,7 +29,10 @@ export async function proxy(request: NextRequest) {
     request.cookies.set(DEVICE_COOKIE, token);
     response = NextResponse.next({ request });
     for (const cookie of authCookies) response.cookies.set(cookie);
-    for (const [name, value] of authHeaders) response.headers.set(name, value);
+    // Keep Supabase's own headers (cache control), but not the cookies, which are set again
+    // just above, nor Next's request overrides, which the new response makes with the
+    // device cookie in them.
+    for (const [name, value] of authHeaders) if (name !== "set-cookie" && !name.startsWith("x-middleware-")) response.headers.set(name, value);
     response.cookies.set(DEVICE_COOKIE, token, {
       httpOnly: true,
       maxAge: 365 * 24 * 60 * 60,
