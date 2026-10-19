@@ -1,7 +1,8 @@
 import { Check, FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { decideShare, manageEmail } from "@/app/(app)/actions";
+import { decidePermission, decideShare, manageEmail } from "@/app/(app)/actions";
+import { mayDecide, rightWords, type Right } from "@/src/lib/rights";
 import { canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { currentMember } from "@/src/lib/member";
@@ -24,10 +25,10 @@ const when = (at: string) =>
 // Client email as InboxCA sorted it: what waits for the team, and the latest mail with its
 // label. Only labels and times are kept; the email itself stays in the firm's mailbox.
 export default async function Inbox({ searchParams }: { searchParams: Promise<{ approved?: string; error?: string }> }) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   const { approved, error } = await searchParams;
-  const [{ data: events }, { data: waiting }, { data: toCheck }, { data: papers }] = await Promise.all([
+  const [{ data: events }, { data: waiting }, { data: toCheck }, { data: papers }, { data: asks }, { data: me }, { data: people }] = await Promise.all([
     supabase
       .from("email_events")
       .select("id, client_id, contact_id, received_at, label, decision_source, clients(name), contacts(name_enc)")
@@ -37,7 +38,14 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
     supabase.from("requests").select("id, entity_id, reason_code").eq("kind", "team_reply").eq("status", "pending"),
     supabase.from("documents").select("id, client_id, name, clients(name)").eq("status", "to_check").limit(50),
     supabase.from("shares").select("id, contact_id, documents(name, clients(name))").eq("status", "waiting").limit(50),
+    supabase.from("requests").select("id, reason_code, details, clients(name)").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(100),
+    supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
+    supabase.rpc("firm_people", { target_firm: membership.firmId }),
   ]);
+  // Questions this person may answer (5.17.2): never their own; a manager only their team's.
+  const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
+  const toAnswer = (asks ?? []).filter((request) => me && mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy }, request.details as { by: string; route: "owner" | "manager"; team_id: string | null }));
+  const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
   const approver = canManageClients(membership.role);
   // For mail from a contact who writes for several clients: the clients to choose from.
   const unclear = (waiting ?? []).flatMap((request) => (request.reason_code === "client_unclear" ? [byIdOf(events, request.entity_id)?.contact_id] : [])).filter(Boolean) as string[];
@@ -124,6 +132,39 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
         <p className="alert" role="alert">
           The paper could not be sent. Check the firm&apos;s email in Settings, then try again.
         </p>
+      )}
+      {!!toAnswer.length && (
+        <section className="panel" aria-labelledby="questions">
+          <div className="panel-head">
+            <h2 id="questions">Questions for you</h2>
+            <p className="hint">Allow once lets them do it one time, within an hour.</p>
+          </div>
+          <ul className="rows">
+            {toAnswer.map((request) => {
+              const details = request.details as { by: string; document_name?: string };
+              return (
+                <li key={request.id}>
+                  <Avatar name={emailOf.get(details.by) ?? "?"} />
+                  <span className="grow">
+                    <span className="name">
+                      {emailOf.get(details.by)} asks to {rightWords[request.reason_code as Right]}
+                    </span>
+                    <span className="sub">{[request.clients?.name, details.document_name].filter(Boolean).join(", ")}</span>
+                  </span>
+                  <form action={decidePermission} className="end">
+                    <input type="hidden" name="request" value={request.id} />
+                    <button className="b b-ghost b-small" name="intent" value="refuse">
+                      Refuse
+                    </button>
+                    <button className="b b-primary b-small" name="intent" value="allow">
+                      Allow once
+                    </button>
+                  </form>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
       {!!papers?.length && (
         <section className="panel" aria-labelledby="papers">

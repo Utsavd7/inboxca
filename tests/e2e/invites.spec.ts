@@ -308,6 +308,30 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await laptop.close();
 });
 
+test("a staff member asks to upload; the owner allows it once from the Inbox", async () => {
+  await owner.goto("/app/clients?panel=add");
+  await owner.getByLabel("Name", { exact: true }).fill(`Ask Client ${tag}`);
+  await owner.getByRole("button", { name: "Add client" }).click();
+  await expect(owner.locator(".page-head")).toContainText(`Ask Client ${tag}`);
+  const files = `${owner.url().split("?")[0]}?tab=files`;
+
+  await person.goto(files);
+  await expect(person.getByRole("link", { name: "Upload a file" })).toHaveCount(0);
+  await person.getByRole("button", { name: "Ask to upload" }).click();
+  await expect(person.getByRole("status")).toContainText("Asked.");
+  await expect(person.getByText("Asked", { exact: true })).toBeVisible();
+
+  // The person has no team manager, so the question goes to the owner.
+  await owner.goto("/app/inbox");
+  const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a file" });
+  await expect(question).toContainText(`Ask Client ${tag}`);
+  await question.getByRole("button", { name: "Allow once" }).click();
+  await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
+
+  await person.goto(files);
+  await expect(person.getByRole("link", { name: "Upload a file" })).toBeVisible();
+});
+
 test("the owner keeps people to office hours, and the person sees the firm is closed", async () => {
   await owner.getByRole("link", { name: "Settings" }).click();
   for (const day of ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
@@ -338,7 +362,7 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
 });
 
 test("in restricted mode a person sees only clients assigned to them or their team", async () => {
-  await owner.goto("/app/clients");
+  await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill("Shared Client");
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText("Shared Client");

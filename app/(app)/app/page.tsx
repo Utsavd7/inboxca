@@ -12,6 +12,7 @@ import { labels, type Label } from "@/src/lib/triage";
 import { CountUp } from "./count-up";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { authorities, type NoticeDetails } from "@/src/lib/notices";
+import { mayDecide } from "@/src/lib/rights";
 import { Ribbon } from "./ribbon";
 import { Avatar, Badge, PageHead, type Tone } from "./ui";
 
@@ -49,7 +50,7 @@ const reasons: Record<string, string> = {
 // technical see what to do next without opening anything else.
 export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string }> }) {
   const { dropped, error } = await searchParams;
-  const { supabase, membership, deviceStatus, connectionWaiting } = await currentMember();
+  const { supabase, userId, membership, deviceStatus, connectionWaiting } = await currentMember();
   const { data: invites } = await supabase.rpc("my_invites");
   const closed = membership ? null : (await supabase.rpc("closed_firms")).data?.[0];
   if (closed?.reason === "session") redirect("/auth/sign-out?reason=session");
@@ -84,7 +85,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           .gte("at", new Date(`${today}T00:00:00+05:30`).toISOString()),
       )
     : 0;
-  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices, veryLate, lateNotices] = await Promise.all([
+  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices, veryLate, lateNotices, asks, me] = await Promise.all([
     cards().neq("status", "filed").lt("due_on", today),
     cards().eq("status", "upcoming").gte("due_on", today).lte("due_on", shift(today, 7)),
     cards().eq("status", "in_progress"),
@@ -110,7 +111,12 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     // Escalation (5.2, 5.6): returns 3 or more days late, and notices past their date, for the owner and partners.
     lead ? count(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("kind", "compliance").neq("status", "filed").lte("due_on", shift(today, -3))) : 0,
     lead ? count(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("kind", "notice").in("status", ["upcoming", "in_progress"]).lt("due_on", today)) : 0,
+    supabase.from("requests").select("details").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(200),
+    supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
   ]);
+  // Questions this person may answer (5.17.2), counted for one line on Home.
+  const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
+  const questions = (asks.data ?? []).filter((request) => me.data && mayDecide({ id: userId, role: me.data.role, team_id: me.data.team_id, deputy }, request.details as { by: string; route: "owner" | "manager"; team_id: string | null })).length;
   const rule = new Map(rules.data?.map((r) => [r.code, r]));
   const name = (code: string | null) => rule.get(code ?? "")?.name ?? code ?? "";
   const ribbon = (load.data ?? []).map((row) => ({
@@ -243,6 +249,11 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </div>
       )}
 
+      {!!questions && (
+        <p className="notice" role="status">
+          {questions} {questions === 1 ? "question waits" : "questions wait"} for your answer. <Link href="/app/inbox">Answer in the Inbox</Link>
+        </p>
+      )}
       {!!veryLate && (
         <p className="alert" role="alert">
           {veryLate} {veryLate === 1 ? "return is" : "returns are"} 3 or more days late. <Link href="/app/calendar?view=overdue">See them</Link>

@@ -20,6 +20,7 @@ import { planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
 import { officeApprover, requestLine } from "@/src/lib/office";
 import { recognisePortalFile } from "@/src/lib/portal-files";
+import { may, mayDecide, rightWords, routeOf, switchable, type Permissions, type Right } from "@/src/lib/rights";
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
 import { queueRead } from "@/src/jobs/read-document";
@@ -681,7 +682,7 @@ async function visibleDocument(form: FormData) {
     firmDrive(membership.firmId),
   ]);
   if (!document?.clients || !opened) redirect(`${back}&error=drive`);
-  return { id, userId, membership, back, document, client: document.clients.name, ...opened };
+  return { id, userId, membership, back, document, client: document.clients.name, clientId: visible.client_id, ...opened };
 }
 
 // The last place a document had before a change of the given kind, from the log.
@@ -784,7 +785,9 @@ export async function uploadDocument(form: FormData) {
   const { data: client } = await supabase.from("clients").select("id, name").eq("id", String(form.get("client") ?? "")).maybeSingle();
   if (!membership || !client) redirect("/app");
   const back = `/app/clients/${client.id}?tab=files`;
-  if (!canManageClients(membership.role)) redirect(`${back}&error=role`);
+  // Uploading is a request unless the owner switched it on for this role (5.17.2).
+  const grant = may(membership.role, "upload", membership.settings.permissions as Permissions) ? null : await grantFor(membership.firmId, userId, "upload", client.id);
+  if (!may(membership.role, "upload", membership.settings.permissions as Permissions) && !grant) redirect(`${back}&error=needs`);
   const values = documentValues(form);
   const file = form.get("file");
   if (!values || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD) redirect(`${back}&upload=1&error=upload`);
@@ -793,6 +796,7 @@ export async function uploadDocument(form: FormData) {
   const saved = await saveForClient(membership, userId, client, { ...values, status: "filed" }, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, opened);
   if (saved === "twin") redirect(`${back}&upload=1&error=twin`);
   if (saved === "drive") redirect(`${back}&error=drive`);
+  await spendGrant(grant);
   revalidatePath("/app", "layout");
   redirect(`${back}&saved=${saved.id}`);
 }
@@ -824,7 +828,7 @@ export async function dropPortalFiles(form: FormData) {
       : { data: null };
     let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
     if (portal && registration?.clients) saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed" }, { name: file.name, bytes }, opened);
-    else if (onClient && canManageClients(membership.role)) {
+    else if (onClient && may(membership.role, "upload", membership.settings.permissions as Permissions)) {
       const { data: client } = await supabase.from("clients").select("id, name").eq("id", onClient).maybeSingle();
       if (client) saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, { name: file.name, bytes }, opened);
     }
@@ -840,9 +844,11 @@ export async function dropPortalFiles(form: FormData) {
 // file moves to the drive's Deleted and old versions folder; the nightly purge sends it to
 // the drive's bin after 30 days. Removing for staff and managers is a request (later).
 export async function removeDocument(form: FormData) {
-  const { id, userId, membership, back, document, client, drive, order, naming } = await visibleDocument(form);
-  if (membership.role !== "owner") redirect(`${back}&error=owner`);
+  const { id, userId, membership, back, document, client, clientId, drive, order, naming } = await visibleDocument(form);
   const restoring = form.get("intent") === "restore";
+  // Removing is the owner's, or once with the owner's or a deputy's grant; putting back is the owner's.
+  const grant = membership.role === "owner" || restoring ? null : await grantFor(membership.firmId, userId, "remove", clientId, id);
+  if (membership.role !== "owner" && !grant) redirect(`${back}&error=owner`);
   if (restoring !== (document.status === "deleted")) redirect(back);
   const from = restoring ? await placeBefore(membership.firmId, id, "document.removed") : undefined;
   const status = restoring ? (from?.status ?? "filed") : "deleted";
@@ -860,6 +866,7 @@ export async function removeDocument(form: FormData) {
       : await placeUnderFreeName({ client, type: document.document_type, period: periodName(document.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place, naming);
   if (placed === "taken") redirect(`${back}&error=drive`);
   await supabaseAdmin().rpc("remove_document", { target: id, actor: userId, new_status: status, new_name: placed.name, new_file: placed.id });
+  await spendGrant(grant);
   revalidatePath("/app", "layout");
   redirect(restoring ? `${back}&saved=${id}` : `${back}&removed=${id}`);
 }
@@ -962,8 +969,10 @@ export async function uploadToRequest(form: FormData) {
 // documents (PLAN.md 5.10, 8.6): a secure link from the firm's mailbox that works for 7 days
 // and 5 downloads. The owner, a partner or a manager may send; each send is recorded.
 export async function sendDocument(form: FormData) {
-  const { id, membership, back, document } = await visibleDocument(form);
-  if (!canManageClients(membership.role)) redirect(`${back}&error=role`);
+  const { id, userId, membership, back, document, clientId } = await visibleDocument(form);
+  // Sending to a client is a request unless the owner switched it on for this role (5.17.2).
+  const grant = may(membership.role, "send", membership.settings.permissions as Permissions) ? null : await grantFor(membership.firmId, userId, "send", clientId, id);
+  if (!may(membership.role, "send", membership.settings.permissions as Permissions) && !grant) redirect(`${back}&error=needs`);
   const admin = supabaseAdmin();
   const { data: owner } = await admin.from("documents").select("client_id, clients(name, email_enc)").eq("id", id).single();
   const crypto = serverCrypto();
@@ -991,6 +1000,7 @@ export async function sendDocument(form: FormData) {
     needsCode: !isRoutine(document.document_type, records),
   });
   if (!sent) redirect(`${back}&send=${id}&error=mailbox`);
+  await spendGrant(grant);
   revalidatePath("/app", "layout");
   redirect(`${back}&shared=${id}`);
 }
@@ -1187,4 +1197,89 @@ export async function reviewDevice(form: FormData) {
   if (error) throw new Error(`Device review failed: ${error.code}`);
   revalidatePath("/app");
   redirect("/app/settings#office");
+}
+
+// Permission requests (PLAN.md 5.17.2): asked by an employee or manager who may not do it
+// themselves, answered by their team's manager or by the owner or a deputy, as routeOf
+// says. Allow once is a grant for one use within an hour.
+const isDeputy = (settings: Record<string, unknown>, userId: string) => ((settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
+
+// The person's unused grant for a right on a client (and file), if they have one now.
+async function grantFor(firmId: string, userId: string, right: Right, clientId: string, documentId?: string) {
+  let query = supabaseAdmin()
+    .from("requests")
+    .select("id")
+    .eq("firm_id", firmId)
+    .eq("kind", "permission")
+    .eq("status", "approved")
+    .eq("reason_code", right)
+    .eq("client_id", clientId)
+    .eq("details->>by", userId)
+    .gt("expires_at", new Date().toISOString());
+  if (documentId) query = query.eq("details->>document_id", documentId);
+  return (await query.limit(1).maybeSingle()).data?.id ?? null;
+}
+const spendGrant = (id: string | null) => (id ? supabaseAdmin().from("requests").update({ status: "used" }).eq("id", id) : null);
+
+export async function askPermission(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  if (!membership) redirect("/app");
+  const right = String(form.get("right") ?? "") as Right;
+  const { data: client } = await supabase.from("clients").select("id").eq("id", String(form.get("client") ?? "")).maybeSingle();
+  const documentId = String(form.get("document") ?? "") || undefined;
+  if (!client || !(right in rightWords)) redirect("/app");
+  const back = `/app/clients/${client.id}?tab=files`;
+  const admin = supabaseAdmin();
+  const [{ data: me }, { data: pending }] = await Promise.all([
+    admin.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
+    admin.from("requests").select("id").eq("firm_id", membership.firmId).eq("kind", "permission").eq("status", "pending").eq("details->>by", userId).gt("expires_at", new Date().toISOString()),
+  ]);
+  // A few open requests at a time, so nobody floods their manager.
+  if (!me || (pending?.length ?? 0) >= 10) redirect(`${back}&error=asked`);
+  const { data: managers } = me.team_id ? await admin.from("firm_members").select("user_id").eq("firm_id", membership.firmId).eq("team_id", me.team_id).eq("role", "manager").eq("status", "active").neq("user_id", userId) : { data: [] };
+  const document = documentId ? (await supabase.from("documents").select("id, name").eq("id", documentId).eq("client_id", client.id).maybeSingle()).data : null;
+  const id = randomUUID();
+  await admin.from("requests").insert({
+    id,
+    firm_id: membership.firmId,
+    kind: "permission",
+    client_id: client.id,
+    entity_type: "permission",
+    entity_id: id,
+    reason_code: right,
+    expires_at: new Date(Date.now() + 4 * 3_600_000).toISOString(),
+    details: { by: userId, route: routeOf(right, me, managers?.map((manager) => manager.user_id) ?? []), team_id: me.team_id, ...(document && { document_id: document.id, document_name: document.name }) },
+  });
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.asked", entity_type: "request", entity_id: id, details: { right } });
+  revalidatePath("/app", "layout");
+  redirect(`${back}&asked_right=${right}`);
+}
+
+export async function decidePermission(form: FormData) {
+  const { userId, membership } = await currentMember();
+  if (!membership) redirect("/app");
+  const admin = supabaseAdmin();
+  const { data: request } = await admin.from("requests").select("id, details, reason_code").eq("id", String(form.get("request") ?? "")).eq("firm_id", membership.firmId).eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).maybeSingle();
+  const { data: me } = await admin.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single();
+  const asked = request?.details as { by: string; route: "owner" | "manager"; team_id: string | null } | undefined;
+  if (!request || !me || !asked || !mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy: isDeputy(membership.settings, userId) }, asked)) redirect("/app/inbox");
+  const allow = form.get("intent") === "allow";
+  await admin.from("requests").update(allow ? { status: "approved", expires_at: new Date(Date.now() + 3_600_000).toISOString() } : { status: "refused" }).eq("id", request.id);
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: allow ? "permission.allowed" : "permission.refused", entity_type: "request", entity_id: request.id, details: { right: request.reason_code, for: asked.by } });
+  revalidatePath("/app", "layout");
+  redirect("/app/inbox");
+}
+
+// Settings → Permissions (owner only): the rights the owner switches on for employees and
+// for managers (partners follow managers), or back to the defaults.
+export async function savePermissions(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const permissions: Permissions =
+    form.get("intent") === "reset"
+      ? {}
+      : Object.fromEntries((["employee", "manager"] as const).map((column) => [column, Object.fromEntries(Object.keys(switchable).map((right) => [right, form.get(`${column}:${right}`) === "on"]))]));
+  await supabase.from("firms").update({ settings: { ...membership.settings, permissions } }).eq("id", membership.firmId);
+  await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions } });
+  redirect("/app/settings?saved=permissions#permissions");
 }

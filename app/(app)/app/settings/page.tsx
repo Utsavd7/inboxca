@@ -1,10 +1,11 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveRecords, saveReminders, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
 import { officeApprover } from "@/src/lib/office";
 import { OfficePanel } from "../office-panel";
 import { documentTypes } from "@/src/lib/documents";
+import { switchable, type Permissions } from "@/src/lib/rights";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { folderOrderNames, namings } from "@/src/lib/drive";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -52,6 +53,7 @@ export default async function Settings({
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number };
   const hoursOnly = access.hours_only ?? false;
   const records = (settings.records ?? {}) as RecordsSettings;
+  const permissions = (settings.permissions ?? {}) as Permissions;
   const { data: used } = await supabase.rpc("firm_usage", { target_firm: membership.firmId });
   const usage = used?.[0];
   return (
@@ -63,6 +65,7 @@ export default async function Settings({
             ["#mailbox", "Firm email"],
             ["#drive", "Firm drive"],
             ["#office", "Office only"],
+            ["#permissions", "Permissions"],
             ["#reminders", "Reminders"],
             ["#records", "Papers on request"],
             ["#visibility", "Who sees clients"],
@@ -186,6 +189,47 @@ export default async function Settings({
             )}
           </section>
           <OfficePanel error={error === "deputies"} />
+
+          <section className="panel" aria-labelledby="permissions-title" id="permissions">
+            <h2 id="permissions-title">Permissions</h2>
+            <p className="hint">
+              Everyone sees every client&apos;s files, view only, and does the filing work: correcting a file&apos;s type or period, adding portal files, marking returns filed.
+              Anything more is a question to their manager or to you, unless you switch it on here. Partners follow managers. Removing files stays yours.
+            </p>
+            <form action={savePermissions}>
+              <div className="table-wrap">
+                <table className="t">
+                  <thead>
+                    <tr>
+                      <th scope="col">Without asking</th>
+                      <th scope="col" className="shrink">Employees</th>
+                      <th scope="col" className="shrink">Managers</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(switchable).map(([right, label]) => (
+                      <tr key={right}>
+                        <td>{label}</td>
+                        {(["employee", "manager"] as const).map((column) => (
+                          <td key={column} className="shrink">
+                            <input type="checkbox" name={`${column}:${right}`} defaultChecked={permissions[column]?.[right as keyof typeof switchable] === true} aria-label={`${label}: ${column === "employee" ? "employees" : "managers"}`} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="form-row">
+                <button className="b b-secondary" name="intent" value="save">
+                  Save permissions
+                </button>
+                <button className="b b-ghost" name="intent" value="reset">
+                  Reset to defaults
+                </button>
+              </div>
+            </form>
+          </section>
 
           <section className="panel" aria-labelledby="reminders-title" id="reminders">
             <h2 id="reminders-title">Reminders</h2>
