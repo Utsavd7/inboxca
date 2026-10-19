@@ -611,6 +611,9 @@ isOneToOne: false
 "review_devices":
 { Args: { "actor": string,"decision": string,"target_device": string,"target_firm": string }; Returns: undefined
                            },
+"review_firms":
+{ Args: Record<PropertyKey, never>; Returns: string[]
+                           },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
