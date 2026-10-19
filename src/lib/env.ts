@@ -32,6 +32,10 @@ const schema = z
     FILE_WORKER_URL: url,
     FILE_WORKER_SECRET: secret,
     JOB_WORKER_SECRET: secret,
+    // Phone notifications (Web Push): a P-256 key pair, base64url. Make one with
+    // node -e "const j=require('crypto').generateKeyPairSync('ec',{namedCurve:'P-256'}).privateKey.export({format:'jwk'});console.log(Buffer.concat([Buffer.of(4),Buffer.from(j.x,'base64url'),Buffer.from(j.y,'base64url')]).toString('base64url'),j.d)"
+    VAPID_PUBLIC_KEY: secret,
+    VAPID_PRIVATE_KEY: secret,
     TEMPLATE_WATCH_SOURCES: z.string().optional(),
 
     AWS_SES_REGION: z.string().default("ap-south-1"),

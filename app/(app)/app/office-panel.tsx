@@ -3,13 +3,9 @@ import { headers } from "next/headers";
 import { reviewDevice, setOfficeOnly } from "@/app/(app)/actions";
 import { addDays, todayInIndia, dueLabel } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
+import { personName } from "@/src/lib/roles";
 import { officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { supabaseAdmin } from "@/src/lib/supabase";
-
-const personName = (email?: string) => {
-  const name = email?.split("@")[0].split(/[._-]/)[0] || "Someone";
-  return name[0].toUpperCase() + name.slice(1);
-};
 
 // Only office approvers read these requests and the activity behind them.
 // When to suggest a fixed connection; later these move to admin configuration (5.8).

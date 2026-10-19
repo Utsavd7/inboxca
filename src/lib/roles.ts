@@ -22,3 +22,9 @@ export const pagesFor = (role: string) => [
   ...(["owner", "partner", "manager"].includes(role) ? [{ href: "/app/people", name: "People" }] : []),
   ...(role === "owner" ? [{ href: "/app/settings", name: "Settings" }] : []),
 ];
+
+// "Ravi" for ravi.shah@firm.in: how messages name a person.
+export const personName = (email?: string) => {
+  const name = email?.split("@")[0].split(/[._-]/)[0] || "Someone";
+  return name[0].toUpperCase() + name.slice(1);
+};

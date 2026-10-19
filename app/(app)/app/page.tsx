@@ -3,6 +3,8 @@ import { CalendarDays, Check, Inbox, Mail, Plus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { askAwayDevice, joinFirm, manageTasks } from "@/app/(app)/actions";
+import { PushSwitch } from "./push-switch";
+import { supabaseAdmin } from "@/src/lib/supabase";
 import { canManageClients } from "@/src/lib/clients";
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { describeHours, type Hours } from "@/src/lib/hours";
@@ -119,6 +121,10 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
   // Questions this person may answer (5.17.2), counted for one line on Home.
   const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
   const questions = (asks.data ?? []).filter((request) => me.data && mayDecide({ id: userId, role: me.data.role, team_id: me.data.team_id, deputy }, request.details as { by: string; route: "owner" | "manager"; team_id: string | null })).length;
+  // Approvers are asked once to get questions on their phone (5.17.3), until one device has it.
+  const pushKey = process.env.VAPID_PUBLIC_KEY ?? "";
+  const askPush = !!pushKey && (owner || deputy || membership.role === "manager")
+    && !(await supabaseAdmin().from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", userId)).count;
   const rule = new Map(rules.data?.map((r) => [r.code, r]));
   const name = (code: string | null) => rule.get(code ?? "")?.name ?? code ?? "";
   const ribbon = (load.data ?? []).map((row) => ({
@@ -251,6 +257,14 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </div>
       )}
 
+      {askPush && (
+        <div className="notice">
+          <span className="grow">
+            Get questions and approvals on your phone: open InboxCA on your phone, add it to the home screen, and turn on notifications there. This device can have them too.
+          </span>
+          <PushSwitch publicKey={pushKey} />
+        </div>
+      )}
       {!!questions && (
         <p className="notice" role="status">
           {questions} {questions === 1 ? "question waits" : "questions wait"} for your answer. <Link href="/app/inbox">Answer in the Inbox</Link>
