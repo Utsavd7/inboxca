@@ -17,6 +17,7 @@ afterAll(async () => {
 });
 
 describe("permission requests", () => {
+  // #42, #44: authenticated callers cannot forge approvals.
   it("can be answered only by the server: nobody signed in approves their own, while Done on a team reply still works", () =>
     rollback(db, async () => {
       await asOwner(db);
@@ -39,6 +40,7 @@ describe("permission requests", () => {
       expect(done.ok && done.count).toBe(1);
     }));
 
+  // #19, #45: unanswered manager requests are nudged only after 30 minutes.
   it("tells approvers of a new question at once, and the owner of a manager's unanswered one after 30 minutes", () =>
     rollback(db, async () => {
       await asOwner(db);
@@ -57,3 +59,13 @@ describe("permission requests", () => {
       expect((await jobs()).filter((job) => job.kind === "approval_nudge")).toEqual([{ kind: "approval_nudge", entity_id: REPLY }]);
     }));
 });
+
+// #51: the weekly summary queues once, even when the cron is called twice.
+it("queues one approvals summary per firm and day", () => rollback(db, async () => {
+  await asOwner(db);
+  await db.query("insert into public.firms (id,name,state_code,status) values ($1,'Summary Firm','24','active')", [FIRM]);
+  await db.query("insert into public.activity_log (firm_id,action) values ($1,'device.approved'),($1,'office.today')", [FIRM]);
+  await db.query("select private.queue_approval_summaries()");
+  await db.query("select private.queue_approval_summaries()");
+  expect((await db.query("select count(*)::int n from public.jobs where firm_id=$1 and kind='approval_summary'", [FIRM])).rows[0].n).toBe(1);
+}));

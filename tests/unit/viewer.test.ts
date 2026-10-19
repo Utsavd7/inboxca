@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 import { renderPage, tiles, viewerLabel } from "@/src/lib/viewer";
 import { pdf } from "../fixtures/pdf";
 
+// #53: every page carries the person and server time in its pixels.
 it("tiles the person's identity, Indian date and time beyond every page edge", () => {
   const label = viewerLabel("viewer@firm.test", "Invented Firm", new Date("2026-10-19T10:00:00Z"));
   expect(label).toBe("viewer@firm.test, Invented Firm, 19 Oct 2026, 03:30 pm");

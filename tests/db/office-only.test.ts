@@ -29,6 +29,7 @@ const role = async (headers: Record<string, string> = {}) => {
 };
 
 describe("Office only for staff", () => {
+  // #24, #25, #35, #37, #41, #47, #55: a proof never bypasses role, status or hours.
   it("lets staff reach the firm only with the server's proof from the office; the owner is not bound", () =>
     rollback(db, async () => {
       await asOwner(db);
@@ -59,6 +60,21 @@ describe("Office only for staff", () => {
       expect(await role({ "x-inboxca-office": proof(key, STAFF, soon) })).toBe("staff");
       expect(await role({ "x-inboxca-office": proof(key, STAFF, soon - 600) })).toBeNull();
 
+      // #5, #47, #55: every bound role needs proof, and a removed member never reaches data.
+      for (const memberRole of ["staff", "manager", "front_desk"]) {
+        await asOwner(db);
+        await db.query("update public.firm_members set role=$3 where firm_id=$1 and user_id=$2", [FIRM, STAFF, memberRole]);
+        await actAs(db, STAFF, "aal1", SESSION(STAFF));
+        expect(await role()).toBeNull();
+        expect(await role({ "x-inboxca-office": proof(key, STAFF, soon) })).toBe(memberRole);
+      }
+      await asOwner(db);
+      await db.query("update public.firm_members set role='staff', status='deactivated' where firm_id=$1 and user_id=$2", [FIRM, STAFF]);
+      await actAs(db, STAFF, "aal1", SESSION(STAFF));
+      expect(await role({ "x-inboxca-office": proof(key, STAFF, soon) })).toBeNull();
+      await asOwner(db);
+      await db.query("update public.firm_members set status='active' where firm_id=$1 and user_id=$2", [FIRM, STAFF]);
+
       // The firm's session limit uses the email code time for this aal1 session.
       await asOwner(db);
       await db.query("update public.firms set settings = $2 where id = $1", [FIRM, { office: { on: true, lines: [] }, access: { session_hours: 1 } }]);
@@ -81,6 +97,7 @@ describe("Office only for staff", () => {
 });
 
 describe("one session and extra time", () => {
+  // #3, #15, #39, #56: old sessions end and extra time is that person, that day.
   it("ends a bound person's other sessions at once and opens the firm to one person after closing that day", () =>
     rollback(db, async () => {
       await asOwner(db);
@@ -116,6 +133,7 @@ describe("one session and extra time", () => {
 });
 
 describe("approved PCs", () => {
+  // #2, #28, #40, #48, #51: new browsers, isolation, personal expiry and withdrawal.
   it("shows a firm's PCs only to its members and lets no signed in person write them", () =>
     rollback(db, async () => {
       await asOwner(db);
@@ -154,3 +172,18 @@ describe("approved PCs", () => {
       expect((await db.query("select status, kind, person_id from public.devices where id = $1", [away])).rows).toEqual([{ status: "refused", kind: null, person_id: null }]);
     }));
 });
+
+// #26: the worker's service role keeps running when human office access is closed.
+it("claims automation jobs while staff cannot open the firm", () => rollback(db, async () => {
+  await asOwner(db);
+  await db.query("insert into auth.users (id,email) values ($1,'worker-staff@office.test')", [STAFF]);
+  await db.query("insert into public.firms (id,name,state_code,status,settings) values ($1,'Closed Office','24','active',$2)", [FIRM, { office: { on: true }, hours: {}, access: { hours_only: true } }]);
+  await db.query("insert into public.firm_members (firm_id,user_id,role,status) values ($1,$2,'staff','active')", [FIRM, STAFF]);
+  await actAs(db, STAFF);
+  expect(await role()).toBeNull();
+  await asOwner(db);
+  await db.query("insert into public.jobs (firm_id,kind,idempotency_key,run_at) values ($1,'test','office-closed-worker',now()-interval '1 second')", [FIRM]);
+  await db.query("set local role service_role");
+  const claimed = (await db.query("select * from public.claim_jobs(10000,120)")).rows;
+  expect(claimed.some((job) => job.idempotency_key === "office-closed-worker")).toBe(true);
+}));

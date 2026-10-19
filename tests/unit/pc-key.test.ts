@@ -11,6 +11,7 @@ const answer = (type: string, challenge: string, flags: number) => {
 };
 
 describe("an office PC's own key", () => {
+  // #32, #36, #50: copied or synced keys cannot confirm a changed office line.
   it("accepts a key kept on the PC, refuses one that syncs to other devices, and checks every use", () => {
     const { challenge, cookie } = newChallenge("pc-1");
     expect(checkNewKey(answer("webauthn.create", challenge, 0x05).response, origin, cookie, "pc-1")).toBe("ok");

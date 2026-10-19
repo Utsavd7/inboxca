@@ -112,7 +112,7 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
         </form>}
         {suggestFixed && <form action={setOfficeOnly} className="fixed-suggestion">
           <p><strong>To stop these confirmations, ask your internet provider for a fixed address.</strong> Here is what to say:</p>
-          <blockquote>&ldquo;Please add a static public IP to our broadband connection, account number ___. We need it for office software access.&rdquo;</blockquote>
+          <blockquote>&ldquo;Please add a fixed internet address to our broadband connection, account number ___. We need it for office software access.&rdquo;</blockquote>
           <p className="hint">When it is done, press Done from a PC in the office.</p>
           <span className="form-row">
             <button className="b b-primary" name="intent" value="fixed">Done</button>

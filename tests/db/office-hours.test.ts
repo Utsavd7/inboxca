@@ -27,6 +27,7 @@ const open = async (role: string, at: string, person: object | null = null, s: o
   (await db.query("select public.open_to($1, $2, $3, $4) as open", [s, role, person, at])).rows[0].open;
 
 describe("office hours", () => {
+  // #1, #14, #17: the server clock decides, including the exact closing time.
   it("open the firm only within the day's hours, and not on a holiday", async () => {
     expect(await open("staff", WEDNESDAY_10_30)).toBe(true);
     expect(await open("staff", WEDNESDAY_18_30)).toBe(false);
@@ -34,6 +35,7 @@ describe("office hours", () => {
     expect(await open("staff", "2026-10-18T05:00:00Z")).toBe(false); // Sunday has no hours
   });
 
+  // #16: season dates still respect holidays.
   it("follow special hours within their dates, and still close on holidays", async () => {
     const season = { ...settings, special_hours: [{ from: "2026-10-14", to: "2026-10-18", open: "09:00", close: "21:00" }] };
     expect(await open("staff", WEDNESDAY_18_30, null, season)).toBe(true);

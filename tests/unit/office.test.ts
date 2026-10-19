@@ -4,6 +4,7 @@ import { connectionRule, ipv6Prefix, lineFor, onOfficeLine, requestLine } from "
 afterEach(() => vi.unstubAllEnvs());
 
 describe("the office connection", () => {
+  // #8, #9, #30, #41: IPv6 differs outside the office; shared IPv4 has the stated limit.
   it("matches IPv4 exactly and IPv6 by its /64, however it is written", () => {
     expect(ipv6Prefix("2001:0db8:000a:000b:1:2:3:4")).toBe("2001:db8:a:b");
     expect(ipv6Prefix("2001:db8:a:b::1")).toBe("2001:db8:a:b");
@@ -16,12 +17,14 @@ describe("the office connection", () => {
     expect(onOfficeLine("2001:db8:a:c::9", office)).toBe(false);
     expect(onOfficeLine("", office)).toBe(false);
   });
+  // #8, #10: only a confirmed address family teaches the other.
   it("learns a new half only with a confirmed half on the same request", () => {
     const office = { lines: [{ ipv4: "203.0.113.10", ipv6: "2001:db8:a:b", confirmed_on: "2026-10-19" }] };
     expect(connectionRule({ ipv4: "203.0.113.11", ipv6: "2001:db8:a:b", confirmed_on: "" }, office, "laptop")).toBe("known");
     expect(connectionRule({ ipv4: "203.0.113.10", ipv6: "2001:db8:a:c", confirmed_on: "" }, office, "laptop")).toBe("known");
     expect(connectionRule({ ipv4: "203.0.113.11", ipv6: "2001:db8:a:c", confirmed_on: "" }, office, "laptop")).toBe("waiting");
   });
+  // #7, #11, #32, #33, #34, #49: laptops and expired lines cannot confirm a move.
   it("never lets laptops confirm new connections or reuse expired approvals", () => {
     const line = { ipv4: "203.0.113.10", confirmed_on: "2026-10-19" };
     expect(connectionRule(line, {}, "laptop")).toBe("waiting");
@@ -29,6 +32,7 @@ describe("the office connection", () => {
     expect(connectionRule(line, { lines: [{ ...line, until: "2026-10-19T12:30:00Z" }] }, "laptop", Date.parse("2026-10-19T12:30:00Z"))).toBe("waiting");
   });
 
+  // #12: only the host supplied headers are trusted.
   it("uses only actual address families from the host's configured headers", () => {
     vi.stubEnv("OFFICE_IP_HEADER", "x-test-ip");
     vi.stubEnv("OFFICE_SECOND_IP_HEADER", "x-test-other");
@@ -38,6 +42,7 @@ describe("the office connection", () => {
     vi.stubEnv("OFFICE_SECOND_IP_HEADER", "");
     expect(requestLine(new Headers({ "cf-connecting-ip": "240.1.2.3", "cf-connecting-ipv6": "2001:db8:a:b::1" }), "2026-10-19"))
       .toEqual({ ipv6: "2001:db8:a:b", confirmed_on: "2026-10-19" });
+    expect(requestLine(new Headers({ "x-forwarded-for": "203.0.113.10", "x-real-ip": "203.0.113.10" }), "2026-10-19")).toBeNull();
     expect(lineFor("999.1.2.3", "2026-10-19")).toBeNull();
     expect(lineFor("made:up", "2026-10-19")).toBeNull();
   });

@@ -762,6 +762,7 @@ export async function manageDocument(form: FormData) {
     new_name: placed.name,
     new_file: placed.id,
   });
+  await tellOwnerOnRepeat(membership.firmId, userId, membership.email, "document.renamed", "renames");
   await queueRead(membership.firmId, id);
   revalidatePath("/app", "layout");
   redirect(`${back}&renamed=${id}`);
@@ -1193,10 +1194,17 @@ export async function manageNotice(form: FormData) {
   redirect("/app/notices");
 }
 
+// A forged approval is refused and kept in the firm's activity, too (5.17.4 #44).
+async function denyApproval(firmId: string, userId: string, kind: string): Promise<never> {
+  await supabaseAdmin().from("activity_log").insert({ firm_id: firmId, actor_id: userId, action: "approval.denied", entity_type: "firm", entity_id: firmId, details: { kind } });
+  redirect("/app");
+}
+
 // Office changes are checked and logged together in the database.
 export async function setOfficeOnly(form: FormData) {
   const { userId, membership } = await currentWriter();
-  if (!membership || !officeApprover(membership.role, userId, membership.settings)) redirect("/app");
+  if (!membership) redirect("/app");
+  if (!officeApprover(membership.role, userId, membership.settings)) await denyApproval(membership.firmId, userId, "office");
   const decision = String(form.get("intent") ?? "");
   const line = requestLine(await headers(), todayInIndia());
   const deputies = form.getAll("deputy").map(String);
@@ -1225,7 +1233,8 @@ export async function setOfficeOnly(form: FormData) {
 // The owner decides whether a waiting PC stays in the office, travels, or is refused.
 export async function reviewDevice(form: FormData) {
   const { userId, membership } = await currentWriter();
-  if (!membership || !officeApprover(membership.role, userId, membership.settings)) redirect("/app");
+  if (!membership) redirect("/app");
+  if (!officeApprover(membership.role, userId, membership.settings)) await denyApproval(membership.firmId, userId, "pc");
   const decision = String(form.get("decision") ?? "");
   const device = String(form.get("device") ?? "");
   const until = String(form.get("until") ?? "");
@@ -1306,12 +1315,13 @@ export async function decidePermission(form: FormData) {
   const { data: request } = await admin.from("requests").select("id, details, reason_code").eq("id", String(form.get("request") ?? "")).eq("firm_id", membership.firmId).eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).maybeSingle();
   const { data: me } = await admin.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single();
   const asked = request?.details as { by: string; route: "owner" | "manager"; team_id: string | null } | undefined;
-  if (!request || !me || !asked || !mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy: isDeputy(membership.settings, userId) }, asked)) redirect("/app/inbox");
+  if (!request || !me || !asked) redirect("/app/inbox");
+  if (!mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy: isDeputy(membership.settings, userId) }, asked)) await denyApproval(membership.firmId, userId, "permission");
   const intent = String(form.get("intent") ?? "");
   // Always allow is the owner's or a deputy's, for uploading or sending (5.17.2): that
   // person may do it from now on, until it is withdrawn in Settings → Permissions.
   if (intent === "always") {
-    if ((me.role !== "owner" && !isDeputy(membership.settings, userId)) || !(request.reason_code && request.reason_code in switchable)) redirect("/app/inbox");
+    if ((me.role !== "owner" && !isDeputy(membership.settings, userId)) || !(request.reason_code && request.reason_code in switchable)) await denyApproval(membership.firmId, userId, "always");
     const { data: person } = await admin.from("firm_members").select("access").eq("firm_id", membership.firmId).eq("user_id", asked.by).single();
     const access = (person?.access ?? {}) as { always?: string[] };
     await admin.from("firm_members").update({ access: { ...access, always: [...new Set([...(access.always ?? []), request.reason_code!])] } }).eq("firm_id", membership.firmId).eq("user_id", asked.by);
