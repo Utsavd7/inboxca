@@ -6,6 +6,7 @@ import { actAs, asOwner, attempt, connect, rollback } from "./db";
 const FIRM = "00000000-0000-4000-8000-0000000008a0";
 const OWNER = "00000000-0000-4000-8000-0000000008a1";
 const STAFF = "00000000-0000-4000-8000-0000000008a2";
+const PARTNER = "00000000-0000-4000-8000-0000000008a3";
 const OTHER_FIRM = "00000000-0000-4000-8000-0000000008b0";
 const OTHER = "00000000-0000-4000-8000-0000000008b1";
 
@@ -28,9 +29,9 @@ describe("Office only for staff", () => {
   it("lets staff reach the firm only with the server's proof from the office; the owner is not bound", () =>
     rollback(db, async () => {
       await asOwner(db);
-      for (const id of [OWNER, STAFF]) await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `${id.slice(-2)}@office.test`]);
+      for (const id of [OWNER, STAFF, PARTNER]) await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `${id.slice(-2)}@office.test`]);
       await db.query("insert into public.firms (id, name, state_code, status, settings) values ($1, 'Office Firm', '24', 'active', $2)", [FIRM, { office: { on: true, lines: [] } }]);
-      await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'owner', 'active'), ($1, $3, 'staff', 'active')", [FIRM, OWNER, STAFF]);
+      await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'owner', 'active'), ($1, $3, 'staff', 'active'), ($1, $4, 'partner', 'active')", [FIRM, OWNER, STAFF, PARTNER]);
       const key = (await db.query("select public.office_proof_key() as key")).rows[0].key as string;
       const soon = Math.floor(Date.now() / 1000) + 300;
 
@@ -46,9 +47,28 @@ describe("Office only for staff", () => {
       expect(await role({ "x-inboxca-office": proof(key, STAFF, soon - 600) })).toBeNull();
       expect((await db.query("select reason from public.closed_firms()")).rows).toEqual([{ reason: "office" }]);
 
-      // Switched off, staff reach the firm from anywhere again.
+      // At aal1 the office proof replaces the phone code only for bound roles.
+      await actAs(db, STAFF, "aal1");
+      expect(await role()).toBeNull();
+      expect(await role({ "x-inboxca-office": proof(key, STAFF, soon) })).toBe("staff");
+      expect(await role({ "x-inboxca-office": proof(key, STAFF, soon - 600) })).toBeNull();
+
+      // The firm's session limit uses the email code time for this aal1 session.
+      await asOwner(db);
+      await db.query("update public.firms set settings = $2 where id = $1", [FIRM, { office: { on: true, lines: [] }, access: { session_hours: 1 } }]);
+      await db.query("set local role authenticated");
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: STAFF, role: "authenticated", aal: "aal1", amr: [{ method: "otp", timestamp: Math.floor(Date.now() / 1000) - 7200 }] })]);
+      expect(await role({ "x-inboxca-office": proof(key, STAFF, soon) })).toBeNull();
+      await actAs(db, OWNER, "aal1");
+      expect(await role({ "x-inboxca-office": proof(key, OWNER, soon) })).toBeNull();
+      await actAs(db, PARTNER, "aal1");
+      expect(await role({ "x-inboxca-office": proof(key, PARTNER, soon) })).toBeNull();
+
+      // Switched off, the phone code is required and then staff reach the firm anywhere.
       await asOwner(db);
       await db.query("update public.firms set settings = '{}' where id = $1", [FIRM]);
+      await actAs(db, STAFF, "aal1");
+      expect(await role({ "x-inboxca-office": proof(key, STAFF, soon) })).toBeNull();
       await actAs(db, STAFF);
       expect(await role()).toBe("staff");
     }));
