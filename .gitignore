@@ -26,6 +26,3 @@ reports/
 
 # Local graphify code map; rebuilt on demand.
 graphify-out/
-
-# pdf.js worker, copied from node_modules on install
-/public/pdf.worker.min.mjs

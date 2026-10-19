@@ -18,3 +18,8 @@ it("reads CSV with quotes, commas and line breaks inside cells, and skips blank 
   ]);
   expect(readSheet(Buffer.from("﻿Name\n\n,\nA\n"), "list.csv")).toEqual([["Name"], ["A"]]);
 });
+
+it("reads cached text and numbers from an Excel 97 sheet and refuses broken files", () => {
+  expect(readSheet(readFileSync("tests/fixtures/statement.xls"), "statement.xls")).toEqual([["Name"], ["Invented Client", "1200"]]);
+  expect(() => readSheet(Buffer.from("not a workbook"), "statement.xls")).toThrow();
+});

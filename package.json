@@ -17,11 +17,11 @@
     "brand:social": "node scripts/generate-social.mjs",
     "demo": "node scripts/demo-firm.mjs",
     "demo:code": "node scripts/demo-firm.mjs code",
-    "demo:data": "npx --yes tsx scripts/demo-data.mts",
-    "postinstall": "node -e \"require('fs').copyFileSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs','public/pdf.worker.min.mjs')\""
+    "demo:data": "npx --yes tsx scripts/demo-data.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
+    "@napi-rs/canvas": "^1.0.11",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.2",
     "clsx": "^2.1.1",

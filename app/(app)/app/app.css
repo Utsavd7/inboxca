@@ -235,13 +235,13 @@ html:has(.ui) { scrollbar-gutter: stable; background: #fff; }
 .viewer { margin-top: var(--s5); }
 .viewer-pages { display: grid; justify-items: center; gap: var(--s4); padding: var(--s4); border-radius: var(--r3); background: var(--side); user-select: none; }
 .viewer-pages:empty { display: none; }
-.viewer-pages canvas { width: min(100%, 1000px); height: auto; border-radius: var(--r1); background: #fff; box-shadow: 0 1px 3px rgba(24, 32, 47, 0.12); }
+.viewer-pages img { width: min(100%, 1000px); height: auto; border-radius: var(--r1); background: #fff; box-shadow: 0 1px 3px rgba(24, 32, 47, 0.12); }
 .viewer-none { margin-top: var(--s5); }
-.viewer-pages.is-blank canvas { visibility: hidden; }
+.viewer-pages.is-blank img { visibility: hidden; }
 .viewer-blank { margin-top: var(--s3); }
 /* Printing is off: a printed viewer page comes out blank. */
 @media print {
-  .viewer-pages, .viewer-pages canvas { display: none !important; }
+  .viewer-pages, .viewer-pages img { display: none !important; }
   .viewer::after { content: "Printing is turned off for documents in InboxCA."; }
 }
 .ui input[type="file"] { width: 100%; font-size: 13px; color: var(--ink-2); }

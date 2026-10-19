@@ -1,4 +1,4 @@
-import { ChevronLeft, Download } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { periodName } from "@/src/lib/documents";
@@ -7,7 +7,6 @@ import { Badge, PageHead } from "../../../ui";
 import { FileViewer } from "./file-viewer";
 
 // One filed document, shown view only to everyone in the firm who may see its client (D18).
-// The owner may also download it.
 export default async function ViewFile({ params }: { params: Promise<{ id: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
@@ -15,8 +14,8 @@ export default async function ViewFile({ params }: { params: Promise<{ id: strin
   const { data: file } = await supabase.from("documents").select("id, client_id, name, document_type, period_key, status, clients(name)").eq("id", id).neq("status", "deleted").maybeSingle();
   if (!file) notFound();
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-  const kind = extension === "pdf" ? "pdf" : ["png", "jpg", "jpeg", "gif", "webp"].includes(extension) ? "image" : null;
-  const when = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv"].includes(extension);
+
 
   return (
     <>
@@ -35,19 +34,12 @@ export default async function ViewFile({ params }: { params: Promise<{ id: strin
             <span className="hint">View only. Your email and the time are shown across every page.</span>
           </span>
         }
-        actions={
-          membership.role === "owner" && (
-            <a className="b b-secondary" href={`/app/files/${file.id}`} download>
-              <Download size={15} aria-hidden />
-              Download
-            </a>
-          )
-        }
+
       />
-      {kind ? (
-        <FileViewer id={file.id} kind={kind} watermark={`${membership.email}, ${membership.firmName}, ${when}`} hideInactive={membership.settings.viewer_hide_inactive === true} />
+      {viewable ? (
+        <FileViewer id={file.id} hideInactive={membership.settings.viewer_hide_inactive === true} />
       ) : (
-        <p className="hint viewer-none">This kind of file cannot be shown in the browser yet. {membership.role === "owner" ? "Download it to open it." : "Ask the owner for it."}</p>
+        <p className="hint viewer-none">This kind of file cannot be shown here. Ask the owner for it.</p>
       )}
     </>
   );

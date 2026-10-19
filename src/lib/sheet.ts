@@ -1,9 +1,10 @@
+import { readXls } from "./xls";
 import { inflateRawSync } from "node:zlib";
 
 // The rows of a CSV file, or of an Excel file's first sheet, as text, for imports. Excel
 // files are zip files of XML, so Node's own zlib reads them; no spreadsheet package.
 export function readSheet(data: Buffer, fileName: string): string[][] {
-  const rows = /\.xlsx$/i.test(fileName) ? readXlsx(data) : readCsv(data.toString("utf8").replace(/^﻿/, ""));
+  const rows = /\.xlsx$/i.test(fileName) ? readXlsx(data) : /\.xls$/i.test(fileName) ? readXls(data) : readCsv(data.toString("utf8").replace(/^﻿/, ""));
   return rows.filter((row) => row.some((cell) => cell.trim()));
 }
 
