@@ -2,10 +2,19 @@ import { serverCrypto } from "./crypto";
 import { supabaseAdmin } from "./supabase";
 
 // A firm's connected mailbox is for client mail, never for a person's sign in.
+// Only the firms the address could sign in to are checked: the given one, or the firms of
+// the person with that address (someone with no account cannot sign in anyway).
 export async function mailboxLogin(email: string, firmId?: string) {
   const admin = supabaseAdmin();
-  let request = admin.from("connected_accounts").select("id, firm_id, address_enc, address_bidx").eq("kind", "mail");
-  if (firmId) request = request.eq("firm_id", firmId);
+  let firms = firmId ? [firmId] : [];
+  if (!firmId) {
+    const { data: userId } = await admin.rpc("user_id_for_email", { address: email });
+    if (!userId) return false;
+    const { data: memberships } = await admin.from("firm_members").select("firm_id").eq("user_id", userId);
+    firms = memberships?.map((membership) => membership.firm_id) ?? [];
+    if (!firms.length) return false;
+  }
+  const request = admin.from("connected_accounts").select("id, firm_id, address_enc, address_bidx").eq("kind", "mail").in("firm_id", firms);
   const { data: accounts, error } = await request;
   if (error) throw new Error(`mailbox login check failed: ${error.code}`);
   const crypto = serverCrypto();
