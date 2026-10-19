@@ -181,6 +181,25 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"devices": {
+                  Row: {
+                    "firm_id": string,"id": string,"kind": string | null,"name": string,"status": string,"token_hash": string
+                  }
+                  Insert: {
+                    "firm_id": string,"id"?: string,"kind"?: string | null,"name": string,"status"?: string,"token_hash": string
+                  }
+                  Update: {
+                    "firm_id"?: string,"id"?: string,"kind"?: string | null,"name"?: string,"status"?: string,"token_hash"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "devices_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"documents": {
                   Row: {
                     "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"received_at": string,"search_tokens": (string)[],"sha256": string,"size": number,"status": string,"work_type": string
@@ -554,6 +573,11 @@ isOneToOne: false
 "open_to":
 { Args: { "at"?: string,"person": Json,"role": string,"settings": Json }; Returns: boolean
                            },
+"register_device":
+{ Args: { "actor": string,"label": string,"target_firm": string,"token_digest": string }; Returns: {
+              "id": string,"status": string
+            }[]
+                           },
 "remove_document":
 { Args: { "actor": string,"new_file": string,"new_name": string,"new_status": string,"target": string }; Returns: undefined
                            },
@@ -565,6 +589,9 @@ isOneToOne: false
                            },
 "restore_member":
 { Args: { "person": string,"target_firm": string }; Returns: boolean
+                           },
+"review_devices":
+{ Args: { "actor": string,"decision": string,"target_device": string,"target_firm": string }; Returns: undefined
                            },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string

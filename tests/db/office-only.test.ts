@@ -1,11 +1,13 @@
 import { createHmac } from "node:crypto";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { actAs, asOwner, connect, rollback } from "./db";
+import { actAs, asOwner, attempt, connect, rollback } from "./db";
 
 const FIRM = "00000000-0000-4000-8000-0000000008a0";
 const OWNER = "00000000-0000-4000-8000-0000000008a1";
 const STAFF = "00000000-0000-4000-8000-0000000008a2";
+const OTHER_FIRM = "00000000-0000-4000-8000-0000000008b0";
+const OTHER = "00000000-0000-4000-8000-0000000008b1";
 
 let db: Client;
 beforeAll(async () => {
@@ -35,6 +37,7 @@ describe("Office only for staff", () => {
       await actAs(db, OWNER);
       expect(await role()).toBe("owner");
       await actAs(db, STAFF);
+      await db.query("select set_config('request.headers', '{}', true)");
       expect(await role()).toBeNull();
       expect(await role({ "x-inboxca-office": proof(key, STAFF, soon) })).toBe("staff");
       // Someone else's proof, a made-up one, or one past its time opens nothing.
@@ -48,5 +51,34 @@ describe("Office only for staff", () => {
       await db.query("update public.firms set settings = '{}' where id = $1", [FIRM]);
       await actAs(db, STAFF);
       expect(await role()).toBe("staff");
+    }));
+});
+
+describe("approved PCs", () => {
+  it("shows a firm's PCs only to its members and lets no signed in person write them", () =>
+    rollback(db, async () => {
+      await asOwner(db);
+      for (const id of [STAFF, OTHER]) await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `${id.slice(-2)}@devices.test`]);
+      await db.query("insert into public.firms (id, name, state_code, status) values ($1, 'First Firm', '24', 'active'), ($2, 'Other Firm', '27', 'active')", [FIRM, OTHER_FIRM]);
+      await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'staff', 'active'), ($3, $4, 'staff', 'active')", [FIRM, STAFF, OTHER_FIRM, OTHER]);
+      await db.query("insert into public.devices (firm_id, token_hash, name) values ($1, $2, 'Chrome on Windows'), ($3, $4, 'Safari on Mac')", [FIRM, "a".repeat(64), OTHER_FIRM, "b".repeat(64)]);
+
+      await actAs(db, STAFF);
+      await db.query("select set_config('request.headers', '{}', true)");
+      expect((await db.query("select name from public.devices order by name")).rows).toEqual([{ name: "Chrome on Windows" }]);
+      expect((await attempt(db, "insert into public.devices (firm_id, token_hash, name) values ($1, $2, 'Made up')", [FIRM, "c".repeat(64)])).ok).toBe(false);
+      expect((await attempt(db, "update public.devices set status = 'refused' where firm_id = $1", [FIRM])).ok).toBe(false);
+      expect((await attempt(db, "delete from public.devices where firm_id = $1", [FIRM])).ok).toBe(false);
+
+      await actAs(db, OTHER);
+      await db.query("select set_config('request.headers', '{}', true)");
+      expect((await db.query("select name from public.devices")).rows).toEqual([{ name: "Safari on Mac" }]);
+
+      // A refusal and its activity entry are one database operation.
+      await asOwner(db);
+      const device = (await db.query("select id from public.devices where firm_id = $1", [FIRM])).rows[0].id;
+      await db.query("select public.review_devices($1, $2, $3, 'refuse')", [FIRM, STAFF, device]);
+      expect((await db.query("select status, kind from public.devices where id = $1", [device])).rows).toEqual([{ status: "refused", kind: null }]);
+      expect((await db.query("select actor_id, action from public.activity_log where entity_id = $1", [device])).rows).toEqual([{ actor_id: STAFF, action: "device.refused" }]);
     }));
 });

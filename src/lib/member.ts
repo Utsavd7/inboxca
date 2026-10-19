@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
 import { officeBound, officeProof, onOfficeLine, requestAddress, type Office } from "./office";
+import { DEVICE_COOKIE, deviceHash, deviceName } from "./device";
 import { supabaseAdmin, supabaseServer } from "./supabase";
 
 // The signed in person and their firm, for every product page and action; cached for the
@@ -16,11 +17,31 @@ export const currentMember = cache(async () => {
   if (!claims) redirect("/sign-in");
   if (claims.claims.aal !== "aal2") redirect("/sign-in/two-step");
   const userId = claims.claims.sub;
-  // Under Office only, a request from an office line carries the server's proof (5.8), so the
-  // database lets staff in; from anywhere else it carries none, and they see nothing.
-  const { data: firmRow } = await supabaseAdmin().from("firm_members").select("role, firms(settings)").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  // Under Office only, the server sends the proof only from an approved PC on an office
+  // line. From anywhere else it sends none, and the database shows staff nothing.
+  const admin = supabaseAdmin();
+  const { data: firmRow } = await admin.from("firm_members").select("firm_id, role, firms(settings)").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
   const office = (firmRow?.firms?.settings as { office?: Office } | undefined)?.office;
-  const fromOffice = !!office?.on && !!firmRow && officeBound(firmRow.role) && onOfficeLine(requestAddress(await headers()), office);
+  const requestHeaders = await headers();
+  const onLine = !!office?.on && !!firmRow && officeBound(firmRow.role) && onOfficeLine(requestAddress(requestHeaders), office);
+  let deviceStatus: "waiting" | "refused" | null = null;
+  let approved = false;
+  if (onLine && firmRow) {
+    const token = (await cookies()).get(DEVICE_COOKIE)?.value;
+    if (token) {
+      const tokenHash = await deviceHash(token);
+      const { data } = await admin.rpc("register_device", {
+        target_firm: firmRow.firm_id,
+        actor: userId,
+        token_digest: tokenHash,
+        label: deviceName(requestHeaders.get("user-agent") ?? ""),
+      });
+      const device = data?.[0];
+      approved = device?.status === "approved";
+      if (device?.status === "waiting" || device?.status === "refused") deviceStatus = device.status;
+    } else deviceStatus = "waiting";
+  }
+  const fromOffice = onLine && approved;
   const supabase = fromOffice ? await supabaseServer({ "x-inboxca-office": await officeProof(userId, String(claims.claims.session_id ?? "")) }) : signedIn;
   const { data } = await supabase
     .from("firm_members")
@@ -28,7 +49,7 @@ export const currentMember = cache(async () => {
     .eq("user_id", userId)
     .limit(1)
     .maybeSingle();
-  if (!data) return { supabase, userId, membership: null };
+  if (!data) return { supabase, userId, membership: null, deviceStatus };
 
   const settings = (data.firms?.settings ?? {}) as Record<string, unknown>;
   const idleMinutes = Number(accessSetting(settings, data.role, data.access, "idle_minutes")) || 0;
@@ -41,5 +62,5 @@ export const currentMember = cache(async () => {
     if (Date.now() - last > idleMinutes * 60_000) redirect("/auth/sign-out?reason=idle");
   }
   const membership = { firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, idleMinutes, email: String(claims.claims.email ?? "") };
-  return { supabase, userId, membership };
+  return { supabase, userId, membership, deviceStatus };
 });

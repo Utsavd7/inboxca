@@ -21,6 +21,7 @@ const tag = randomUUID().slice(0, 8);
 const ownerEmail = `owner-${tag}@example.test`;
 const newEmail = `new-${tag}@example.test`;
 const mailClient = `Mail Client ${tag}`;
+const pcUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36";
 
 // The newest message in a test mailbox on the GreenMail server, which makes a mailbox for
 // every address it receives mail for.
@@ -37,11 +38,12 @@ const ownerKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWX
 let firm: Awaited<ReturnType<typeof seedFirm>>;
 let owner: Page;
 let person: Page;
+let personKey = "";
 
 test.beforeAll(async ({ browser }) => {
   firm = await seedFirm("Invite Test Firm", ownerEmail, ownerKey);
   owner = await (await browser.newContext()).newPage();
-  person = await (await browser.newContext()).newPage();
+  person = await (await browser.newContext({ userAgent: pcUserAgent })).newPage();
 });
 test.afterAll(() => firm.remove(newEmail));
 
@@ -72,8 +74,8 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
   const target = new URL(link!);
   await page.goto(`${baseURL}${target.pathname}${target.search}`);
   await expect(page.getByRole("heading", { name: "Set up your 2 step code" })).toBeVisible();
-  const key = (await page.locator(".secret").textContent())!.trim();
-  await page.getByLabel("6 digit code from the app").fill(totp(key));
+  personKey = (await page.locator(".secret").textContent())!.trim();
+  await page.getByLabel("6 digit code from the app").fill(totp(personKey));
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByText("Invite Test Firm has invited you as manager.")).toBeVisible();
@@ -113,7 +115,7 @@ test("the owner changes the role, removes the person and brings them back", asyn
   await expect(row.getByRole("button", { name: "Remove" })).toBeVisible();
 });
 
-test("under Office only, staff reach the firm only from the office's internet connection", async () => {
+test("under Office only, staff need the office connection and an approved PC", async ({ browser }) => {
   // The test server reads each request's address from this header, as it would Cloudflare's.
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await owner.goto("/app/settings#office");
@@ -126,7 +128,35 @@ test("under Office only, staff reach the firm only from the office's internet co
   await expect(person.getByRole("heading", { name: "Use InboxCA from your office." })).toBeVisible();
   await person.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await person.goto("/app/clients");
+  await expect(person.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+
+  await owner.goto("/app");
+  await expect(owner.getByText("1 PC signed in from your office today:")).toBeVisible();
+  await owner.goto("/app/settings#office");
+  await expect(owner.getByText(/New on Chrome on Windows, first seen today/)).toBeVisible();
+  await owner.getByRole("button", { name: "Stays in the office" }).click();
+  await expect(owner.getByText(/New on Chrome on Windows, first seen today/)).toHaveCount(0);
+  expect(await query(local.dbUrl, "select status, kind from public.devices where firm_id = $1", [firm.firmId])).toEqual([{ status: "approved", kind: "office" }]);
+  await person.goto("/app/clients");
   await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
+
+  // The same person in another browser waits for its own approval.
+  const secondContext = await browser.newContext({ userAgent: pcUserAgent });
+  const second = await secondContext.newPage();
+  await second.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
+  await emailStep(second, newEmail);
+  await second.getByLabel("6 digit code from the app").fill(totp(personKey));
+  await second.getByRole("button", { name: "Continue" }).click();
+  await expect(second.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  expect((await secondContext.cookies()).some((cookie) => cookie.name === "inboxca_device")).toBe(true);
+  expect(await query(local.dbUrl, "select status from public.devices where firm_id = $1 order by status", [firm.firmId])).toEqual([{ status: "approved" }, { status: "waiting" }]);
+  await owner.reload();
+  await owner.getByRole("button", { name: "Laptop" }).click();
+  await expect(owner.getByRole("button", { name: "Laptop" })).toHaveCount(0);
+  expect(await query(local.dbUrl, "select count(*)::int as count from public.activity_log where firm_id = $1 and action = 'device.approved'", [firm.firmId])).toEqual([{ count: 2 }]);
+  await second.goto("/app/clients");
+  await expect(second.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
+  await secondContext.close();
 
   // Off again, staff reach the firm from anywhere.
   await owner.goto("/app/settings#office");

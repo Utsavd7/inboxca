@@ -1,9 +1,9 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, saveRecords, saveReminders, saveVisibility, setFolderOrder, setOfficeOnly } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, reviewDevice, saveHours, saveLimits, saveRecords, saveReminders, saveVisibility, setFolderOrder, setOfficeOnly } from "@/app/(app)/actions";
 import { headers } from "next/headers";
-import { dueLabel } from "@/src/lib/calendar";
+import { dueLabel, todayInIndia } from "@/src/lib/calendar";
 import { onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { documentTypes } from "@/src/lib/documents";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
@@ -56,6 +56,27 @@ export default async function Settings({
   const hereIsOffice = onOfficeLine(requestAddress(await headers()), office);
   const { data: used } = await supabase.rpc("firm_usage", { target_firm: membership.firmId });
   const usage = used?.[0];
+  const { data: waiting } = office.on
+    ? await supabase.from("devices").select("id, name").eq("firm_id", membership.firmId).eq("status", "waiting").order("name")
+    : { data: [] };
+  const deviceIds = waiting?.map((device) => device.id) ?? [];
+  const [{ data: firstSeen }, { data: people }] = deviceIds.length
+    ? await Promise.all([
+        supabase.from("activity_log").select("entity_id, actor_id, at").eq("firm_id", membership.firmId).eq("action", "device.first_seen").in("entity_id", deviceIds),
+        supabase.rpc("firm_people", { target_firm: membership.firmId }),
+      ])
+    : [{ data: [] }, { data: [] }];
+  const emails = new Map(people?.map((person) => [person.user_id, person.email]));
+  const seen = new Map(firstSeen?.map((entry) => [entry.entity_id, entry]));
+  const personName = (email: string | undefined) => {
+    const word = email?.split("@")[0].split(/[._-]/)[0] || "Someone";
+    return word[0].toUpperCase() + word.slice(1);
+  };
+  const firstSeenLabel = (at: string | undefined) => {
+    if (!at) return "recently";
+    const date = new Date(at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    return date === todayInIndia() ? "today" : `on ${dueLabel(date)}`;
+  };
 
   return (
     <>
@@ -205,6 +226,34 @@ export default async function Settings({
                     ? `Office connections: ${office.lines.length}, confirmed ${office.lines.map((line) => dueLabel(line.confirmed_on)).join(", ")}.`
                     : "No office connection yet: staff wait until you confirm one."}
                 </p>
+                {!!waiting?.length && (
+                  <div className="device-list">
+                    <h3 className="sub-head">PCs waiting for approval</h3>
+                    <ul className="rows">
+                      {waiting.map((device) => {
+                        const first = seen.get(device.id);
+                        return (
+                          <li key={device.id}>
+                            <span className="grow">
+                              <strong>{personName(emails.get(first?.actor_id ?? "") ?? undefined)} on {device.name}</strong>, first seen {firstSeenLabel(first?.at)}
+                            </span>
+                            <form action={reviewDevice} className="end">
+                              <input type="hidden" name="device" value={device.id} />
+                              <button className="b b-primary b-small" name="decision" value="office">Stays in the office</button>
+                              <button className="b b-secondary b-small" name="decision" value="laptop">Laptop</button>
+                              <button className="b b-ghost b-small" name="decision" value="refuse">Refuse</button>
+                            </form>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {waiting.length > 1 && (
+                      <form action={reviewDevice}>
+                        <button className="b b-secondary" name="decision" value="office">Approve all as staying in the office</button>
+                      </form>
+                    )}
+                  </div>
+                )}
                 <form action={setOfficeOnly} className="form-row">
                   {!hereIsOffice && (
                     <button className="b b-primary" name="intent" value="here">
