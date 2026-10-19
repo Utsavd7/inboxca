@@ -113,3 +113,16 @@ export async function emailStep(page: Page, email: string) {
   await page.getByLabel("Code from the email").fill(code);
   await page.getByRole("button", { name: "Continue" }).click();
 }
+
+// Use the server's form before browser hydration removes its action fields.
+export async function actionFields(page: Page, path: string, values: Record<string, string>) {
+  const html = await (await page.request.get(path)).text();
+  return page.evaluate(({ html, values }) => {
+    const forms = [...new DOMParser().parseFromString(html, "text/html").forms];
+    const form = forms.find((form) => Object.entries(values).every(([name, value]) => [...form.querySelectorAll<HTMLInputElement>("input,button,select")].some((input) => input.name === name && input.value === value)));
+    if (!form) throw new Error("No matching form");
+    const fields = Object.fromEntries([...new FormData(form)].map(([name, value]) => [name, String(value)]));
+    if (!Object.keys(fields).some((name) => name.startsWith("$ACTION_"))) throw new Error("No action in the server form");
+    return fields;
+  }, { html, values });
+}

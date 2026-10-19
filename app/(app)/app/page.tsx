@@ -38,6 +38,7 @@ const alertText = (reason: string, details: { free_bytes?: number; files?: numbe
   ({
     drive_shared: "InboxCA's folder in your drive is shared with someone, or has a link. Only you should reach it: stop the sharing in your drive.",
     drive_full: `Your drive has ${((details.free_bytes ?? 0) / 1024 ** 2).toFixed(0)} MB left. Free some space or add more, so new client files can be saved.`,
+    renames: `${details.email} renamed ${details.count} files today. Check the changes in each file's history.`,
     captures: `${details.email} tried to capture a document's screen ${details.count} times today. Each try is logged.`,
     parallel: `${details.email} signed in on another PC ${details.count} times today, which ends the other session each time. Ask whether their login is shared.`,
     request_stalled: `${details.client} has not uploaded the documents you asked for, after three reminders. A call may help.`,
@@ -291,7 +292,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </p>
       )}
       {alerts?.data
-        ?.filter((alert) => !alert.reason_code?.startsWith("office_") && (!["captures", "parallel"].includes(alert.reason_code ?? "") || (alert.details as { day?: string }).day === today))
+        ?.filter((alert) => !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames"].includes(alert.reason_code ?? "") || (alert.details as { day?: string }).day === today))
         .map((alert) => (
         <p key={alert.id} className="alert" role="alert">
           {alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number })}

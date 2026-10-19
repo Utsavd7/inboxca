@@ -12,7 +12,7 @@ import { TEST_WORKER_SECRET } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
 import { laterBy } from "@/src/lib/hours";
 import { pdf } from "@/tests/fixtures/pdf";
-import { emailStep, latestEmail, localSupabase, query, seedFirm, totp } from "./local-supabase";
+import { actionFields, askForCode, emailStep, latestEmail, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
 // The owner invites a new person, who signs in from the invite email, sets up a 2 step
 // code and joins the firm. Skipped when local Supabase is not running.
@@ -66,7 +66,7 @@ test.beforeAll(async ({ browser }) => {
   owner = await (await browser.newContext()).newPage();
   person = await (await browser.newContext({ userAgent: pcUserAgent })).newPage();
 });
-test.afterAll(() => firm.remove(newEmail, emailOnly, deputyEmail, mailboxEmail));
+test.afterAll(() => firm.remove(newEmail, emailOnly, deputyEmail, laptopEmail, mailboxEmail));
 
 test("the owner invites a new person, who appears as invited", async () => {
   await emailStep(owner, ownerEmail);
@@ -119,6 +119,7 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
   await expect(row).not.toContainText("Invited");
 });
 
+// #5: removing a person closes access on their next request.
 test("the owner changes the role, removes the person and brings them back", async () => {
   await owner.goto("/app/people");
   const row = owner.getByRole("row").filter({ hasText: newEmail });
@@ -136,6 +137,7 @@ test("the owner changes the role, removes the person and brings them back", asyn
   await expect(row.getByRole("button", { name: "Remove" })).toBeVisible();
 });
 
+// #1, #2, #3, #24, #25, #35, #37, #39, #40, #41, #49, #55: the same approved PC, fresh browsers and changed connections.
 test("under Office only, staff need the office connection and an approved PC", async ({ browser }) => {
   // The test server reads each request's address from this header, as it would Cloudflare's.
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
@@ -245,6 +247,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   await person.setExtraHTTPHeaders({});
 });
 
+// #7, #10, #18, #32, #33, #34, #36, #48, #51: deputies and temporary connections.
 test("deputies approve PCs, office PCs confirm changes, and laptops wait for today's approval", async ({ browser }) => {
   const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
   const { data, error } = await admin.auth.admin.createUser({ email: deputyEmail, email_confirm: true });
@@ -328,6 +331,7 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await laptop.close();
 });
 
+// #32, #36, #38, #50: a real browser key, a changed line and withdrawal.
 test("a PC that stays in the office sets up its own key, then confirms a new office connection with it", async ({ browser, baseURL }) => {
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await owner.goto("/app/settings#office");
@@ -379,6 +383,7 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await context.close();
 });
 
+// #19, #21, #27, #45, #47: request routing, one use, Always allow and withdrawal.
 test("a staff member asks to upload; the owner allows it once from the Inbox", async () => {
   await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill(`Ask Client ${tag}`);
@@ -417,15 +422,42 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await query(local.dbUrl, "delete from public.push_subscriptions where user_id = $1", [ownerId]);
   await expect(person.getByText("Asked", { exact: true })).toBeVisible();
 
+  // #19: an unanswered question expires, and the person can ask again.
+  const [{ id: expired, expires_at: expires }] = await query(local.dbUrl, "select id, expires_at from public.requests where firm_id=$1 and kind='permission' and status='pending'", [firm.firmId]);
+  expect(Date.parse(expires) - Date.now()).toBeGreaterThan(3.9 * 3_600_000);
+  expect(Date.parse(expires) - Date.now()).toBeLessThanOrEqual(4 * 3_600_000);
+  const staleFields = await actionFields(owner, "/app/inbox", { request: expired });
+  await query(local.dbUrl, "update public.requests set expires_at=now()-interval '1 second' where id=$1", [expired]);
+  await owner.request.post("/app/inbox", { multipart: { ...staleFields, intent: "allow" }, headers: { Origin: new URL(owner.url()).origin } });
+  expect((await query(local.dbUrl, "select status from public.requests where id=$1", [expired]))[0].status).toBe("pending");
+  await owner.goto("/app/inbox");
+  await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
+  await person.goto(files);
+  await person.getByRole("button", { name: "Ask to upload" }).click();
+  await expect(person.getByText("Asked", { exact: true })).toBeVisible();
+
   // The person has no team manager, so the question goes to the owner.
   await owner.goto("/app/inbox");
   const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a file" });
   await expect(question).toContainText(`Ask Client ${tag}`);
+  // #42, #44, #57: copying an approval form or visiting its address cannot approve it.
+  const fields = await actionFields(owner, "/app/inbox", { request: await question.locator('input[name="request"]').inputValue() });
+  const [{ user_id: requester }] = await query(local.dbUrl, "select user_id from public.firm_members m join auth.users u on u.id=m.user_id where m.firm_id=$1 and u.email=$2", [firm.firmId, newEmail]);
+  await query(local.dbUrl, "update public.firm_members set role='manager' where firm_id=$1 and user_id=$2", [firm.firmId, requester]);
+  await person.request.post("/app/inbox", { multipart: { ...fields, intent: "allow" }, headers: { Origin: new URL(person.url()).origin } });
+  await query(local.dbUrl, "update public.firm_members set role='staff' where firm_id=$1 and user_id=$2", [firm.firmId, requester]);
+  await owner.request.get(`/app/inbox?request=${fields.request}&intent=allow`);
+  expect((await query(local.dbUrl, "select status from public.requests where id=$1", [fields.request]))[0].status).toBe("pending");
+  expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id=$1 and actor_id=$2 and action='approval.denied'", [firm.firmId, requester]))[0].n).toBe(1);
   await question.getByRole("button", { name: "Allow once" }).click();
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
 
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload a file" })).toBeVisible();
+
+  const [{ expires_at: grantedUntil }] = await query(local.dbUrl, "select expires_at from public.requests where id=$1", [fields.request]);
+  expect(Date.parse(grantedUntil) - Date.now()).toBeGreaterThan(0.9 * 3_600_000);
+  expect(Date.parse(grantedUntil) - Date.now()).toBeLessThanOrEqual(3_600_000);
 
   // Once used the grant is gone. Asked again, the owner always allows it, then withdraws that.
   await query(local.dbUrl, "update public.requests set status = 'used' where firm_id = $1 and kind = 'permission' and status = 'approved'", [firm.firmId]);
@@ -443,8 +475,27 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await expect(standing).toHaveCount(0);
   await person.goto(files);
   await expect(person.getByRole("button", { name: "Ask to upload" })).toBeVisible();
+
+  // #47: a changed role right is read on the next request, and reset removes it.
+  await owner.getByLabel("Upload files: employees").check();
+  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save permissions", exact: true }).click()]);
+  await person.goto(files);
+  await expect(person.getByRole("link", { name: "Upload a file" })).toBeVisible();
+  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Reset to defaults", exact: true }).click()]);
+  await person.goto(files);
+  await expect(person.getByRole("button", { name: "Ask to upload" })).toBeVisible();
+
+  // #21: ten unanswered questions stop an eleventh, even through the normal form.
+  await query(local.dbUrl, `with ids as (select gen_random_uuid() id from generate_series(1,10))
+    insert into public.requests (id,firm_id,kind,entity_type,entity_id,reason_code,expires_at,details)
+    select id,$1,'permission','permission',id,'send',now()+interval '4 hours',jsonb_build_object('by',$2::text,'fixture',$3::text) from ids`, [firm.firmId, requester, tag]);
+  await Promise.all([person.waitForResponse((response) => response.request().method() === "POST"), person.getByRole("button", { name: "Ask to upload" }).click()]);
+  expect((await query(local.dbUrl, "select count(*)::int n from public.requests where firm_id=$1 and kind='permission' and status='pending' and expires_at>now()", [firm.firmId]))[0].n).toBe(10);
+  await query(local.dbUrl, "delete from public.requests where firm_id=$1 and details->>'fixture'=$2", [firm.firmId, tag]);
+
 });
 
+// #28, #48, #51: personal access is for one person, has an end date and only views.
 test("away from the office, the owner allows a staff member's own device to view only, until a day", async ({ browser }) => {
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await owner.goto("/app/settings#office");
@@ -485,6 +536,7 @@ test("away from the office, the owner allows a staff member's own device to view
   await homeContext.close();
 });
 
+// #14, #15, #16, #17: closing, extra time and season hours. Drafts move to M6.
 test("the owner keeps people to office hours, and the person sees the firm is closed", async () => {
   await owner.getByRole("link", { name: "Settings" }).click();
   for (const day of ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
@@ -572,6 +624,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await expect(person.getByRole("heading", { name: "1 client", exact: true })).toBeVisible();
 });
 
+// #3, #4: configured idle lock and the normal sign out control.
 test("after the firm's idle limit, an unattended screen signs out", async () => {
   await owner.goto("/app/settings");
   await owner.getByLabel(/only during office hours/).uncheck();
@@ -591,6 +644,7 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
   await expect(person).toHaveURL(/\/sign-in$/);
 });
 
+// #26, #55, #56: the shared mailbox cannot sign in; automation runs separately.
 test("the owner connects the firm's mailbox; client mail is sorted, unclear mail waits for the team, a stranger's is skipped", async ({ request, browser }) => {
   // An address already on the team is refused as soon as it becomes the firm's mailbox.
   await owner.goto("/app/people");
@@ -712,17 +766,25 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect((await owner.request.get(`${raw}?view=1`, { headers: { "x-inboxca-viewer": "1" } })).headers()["content-type"]).toBe("application/pdf");
   await owner.goBack();
 
-  // A person names the unclear scan: it moves out of To check under its new name, and Undo puts it back.
-  await rows.getByRole("link", { name: `Change ${mailClient} - Document.pdf` }).click();
-  await owner.getByLabel("Type", { exact: true }).selectOption("Other");
-  await owner.getByLabel("Name for Other").fill("HDFC loan sanction letter");
-  await owner.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - HDFC loan sanction letter.pdf`);
-  const gst = path.join(drive, thisYear, mailClient, "GST");
-  expect(await readFile(path.join(gst, `${mailClient} - HDFC loan sanction letter.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
-  await owner.getByRole("button", { name: "Undo" }).click();
-  await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
-  expect(await readFile(path.join(gst, "To check", `${mailClient} - Document.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
+  // #46: corrections and undo are logged; a third rename tells the owner on Home.
+  for (const attempt of [0, 1]) {
+    await rows.getByRole("link", { name: `Change ${mailClient} - Document.pdf` }).click();
+    await owner.getByLabel("Type", { exact: true }).selectOption("Other");
+    await owner.getByLabel("Name for Other").fill("HDFC loan sanction letter");
+    await owner.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - HDFC loan sanction letter.pdf`);
+    const gst = path.join(drive, thisYear, mailClient, "GST");
+    expect(await readFile(path.join(gst, `${mailClient} - HDFC loan sanction letter.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
+    if (attempt === 1) {
+      const back = owner.url();
+      await owner.goto("/app");
+      await expect(owner.getByRole("alert").filter({ hasText: `${ownerEmail} renamed 3 files today.` })).toBeVisible();
+      await owner.goto(back);
+    }
+    await owner.getByRole("button", { name: "Undo" }).click();
+    await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
+    expect(await readFile(path.join(gst, "To check", `${mailClient} - Document.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
+  }
 
   // The same bills sent again wait under To check beside the first copy, for the team to choose.
   await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Bills again", text: "Sending again.", attachments: [{ filename: "purchase_bills_sep_2026.pdf", content: "%PDF-1.4 invented purchase bills" }] });
@@ -915,4 +977,101 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
   await expect(owner.locator("section#drive").getByRole("button", { name: "Connect drive" })).toBeVisible();
   await expect(owner.locator("section[aria-labelledby=mailbox]").getByLabel("The firm's email address")).toBeVisible();
+});
+
+// #1, #2, #20, #31, #35, #37, #44, #52, #56 and M7 acceptance: five staff, one batch approval.
+test("five office PCs need one batch approval, and managers cannot forge office approvals", async ({ browser }) => {
+  const email = `batch-${randomUUID()}@example.test`;
+  const batch = await seedFirm("Batch Office Firm", email, ownerKey);
+  const contexts = [await browser.newContext({ extraHTTPHeaders: { "x-test-ip": "203.0.113.70" } })];
+  const staff: Page[] = [];
+  const emails: string[] = [];
+  const boss = await contexts[0].newPage();
+  try {
+    await emailStep(boss, email);
+    await boss.getByLabel("6 digit code from the app").fill(totp(ownerKey));
+    await boss.getByRole("button", { name: "Continue" }).click();
+    await expect(boss).toHaveURL(/\/app$/);
+    await boss.evaluate(() => Reflect.deleteProperty(window, "PushManager"));
+    await boss.getByRole("button", { name: "Turn on notifications on this device" }).click();
+    await expect(boss.getByText(/On an iPhone, add InboxCA to the home screen first/)).toBeVisible();
+    await boss.goto("/app/settings#office");
+    await boss.getByLabel("Yes, this is my office").check();
+    await boss.getByRole("button", { name: "Turn on", exact: true }).click();
+    await expect(boss.getByRole("button", { name: "Turn off", exact: true })).toBeVisible();
+    await expect(boss.getByRole("heading", { name: "Doors InboxCA cannot close for you" })).toBeVisible();
+    const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
+    for (let n = 0; n < 5; n++) {
+      const address = `batch-staff-${n}-${randomUUID()}@example.test`;
+      const { data, error } = await admin.auth.admin.createUser({ email: address, email_confirm: true });
+      expect(error).toBeNull();
+      emails.push(address);
+      await query(local.dbUrl, "insert into public.firm_members (firm_id,user_id,role,status) values ($1,$2,'staff','active')", [batch.firmId, data.user!.id]);
+      await query(local.dbUrl, "insert into auth.mfa_factors (id,user_id,friendly_name,factor_type,status,secret,created_at,updated_at) values (gen_random_uuid(),$1,'Test app','totp','verified',$2,now(),now())", [data.user!.id, deputyKey]);
+      const context = await browser.newContext({ userAgent: pcUserAgent, extraHTTPHeaders: { "x-test-ip": "203.0.113.70" } });
+      contexts.push(context);
+      const pc = await context.newPage();
+      staff.push(pc);
+      let { code } = await askForCode(pc, address);
+      if (n === 0) {
+        await query(local.dbUrl, "update auth.users set confirmation_sent_at=now()-interval '11 minutes',recovery_sent_at=now()-interval '11 minutes' where id=$1", [data.user!.id]);
+        expect((await admin.auth.verifyOtp({ email: address, token: code, type: "email" })).error).not.toBeNull();
+        code = (await askForCode(pc, address)).code;
+      }
+      await pc.getByLabel("Code from the email").fill(code);
+      await pc.getByRole("button", { name: "Continue", exact: true }).click();
+      await pc.getByLabel("6 digit code from the app").fill(totp(deputyKey));
+      await pc.getByRole("button", { name: "Continue", exact: true }).click();
+      await expect(pc.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+      if (n === 0) expect((await admin.auth.verifyOtp({ email: address, token: code, type: "email" })).error).not.toBeNull();
+    }
+    await boss.goto("/app");
+    await expect(boss.locator(".alert").filter({ hasText: "5 PCs signed in from your office today:" })).toHaveCount(1);
+    await boss.getByRole("link", { name: "approve", exact: true }).click();
+    await boss.getByRole("button", { name: "Approve all as staying in the office" }).click();
+    await expect(boss.getByRole("heading", { name: "PCs waiting for approval" })).toHaveCount(0);
+    expect((await query(local.dbUrl, "select count(*)::int n from public.devices where firm_id=$1 and status='approved'", [batch.firmId]))[0].n).toBe(5);
+    for (const pc of staff) {
+      await pc.goto("/app/clients");
+      await expect(pc.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+    }
+    const words = await boss.locator("section#office").innerText();
+    expect(words).not.toMatch(/\bIP\b|cookie|token|passkey|watermark|device ID/i);
+
+    // A manager copies the owner's forms. Both requests are refused and logged.
+    const [{ user_id: manager }] = await query(local.dbUrl, "select user_id from public.firm_members m join auth.users u on u.id=m.user_id where m.firm_id=$1 and u.email=$2", [batch.firmId, emails[0]]);
+    await query(local.dbUrl, "update public.firm_members set role='manager' where firm_id=$1 and user_id=$2", [batch.firmId, manager]);
+    for (const [button, value] of [["Turn off", { intent: "off" }], ["Withdraw", { decision: "withdraw" }]] as const) {
+      const form = boss.locator("section#office form").filter({ has: boss.getByRole("button", { name: button, exact: true }) }).first();
+      const fields = await actionFields(boss, "/app/settings", button === "Turn off" ? { intent: "off" } : { device: await form.locator('input[name="device"]').inputValue() });
+      await staff[0].request.post("/app/settings", { multipart: { ...fields, ...value }, headers: { Origin: new URL(staff[0].url()).origin } });
+    }
+    expect((await query(local.dbUrl, "select settings->'office'->>'on' as on from public.firms where id=$1", [batch.firmId]))[0].on).toBe("true");
+    expect((await query(local.dbUrl, "select count(*)::int n from public.devices where firm_id=$1 and status='approved'", [batch.firmId]))[0].n).toBe(5);
+    expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id=$1 and actor_id=$2 and action='approval.denied'", [batch.firmId, manager]))[0].n).toBe(2);
+
+    // #44: a manager may answer their team, but can never give Always allow.
+    const [{ id: team }] = await query(local.dbUrl, "insert into public.groups (firm_id,kind,name) values ($1,'team','Test team') returning id", [batch.firmId]);
+    const [{ id: client }] = await query(local.dbUrl, "insert into public.clients (firm_id,name,kind) values ($1,'Test approval client','individual') returning id", [batch.firmId]);
+    const [{ user_id: asker }] = await query(local.dbUrl, "select user_id from public.firm_members m join auth.users u on u.id=m.user_id where m.firm_id=$1 and u.email=$2", [batch.firmId, emails[1]]);
+    await query(local.dbUrl, "update public.firm_members set team_id=$3 where firm_id=$1 and user_id in ($2,$4)", [batch.firmId, manager, team, asker]);
+    const request = randomUUID();
+    await query(local.dbUrl, "insert into public.requests (id,firm_id,kind,client_id,entity_type,entity_id,reason_code,expires_at,details) values ($1,$2,'permission',$3,'permission',$1,'upload',now()+interval '4 hours',jsonb_build_object('by',$4::text,'route','manager','team_id',$5::text))", [request, batch.firmId, client, asker, team]);
+    const fields = await actionFields(boss, "/app/inbox", { request });
+    await staff[0].request.post("/app/inbox", { multipart: { ...fields, intent: "always" }, headers: { Origin: new URL(staff[0].url()).origin } });
+    expect((await query(local.dbUrl, "select status from public.requests where id=$1", [request]))[0].status).toBe("pending");
+    expect((await query(local.dbUrl, "select access->'always' as rights from public.firm_members where firm_id=$1 and user_id=$2", [batch.firmId, asker]))[0].rights).toBeNull();
+    expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id=$1 and actor_id=$2 and action='approval.denied' and details->>'kind'='always'", [batch.firmId, manager]))[0].n).toBe(1);
+
+    // With a trusted PC present, three confirmation taps trigger the suggestion.
+    await query(local.dbUrl, "update public.devices set key_id='test-key',key_public='test-public' where id=(select id from public.devices where firm_id=$1 limit 1)", [batch.firmId]);
+    await boss.reload();
+    await expect(boss.getByText("ask your internet provider for a fixed address")).toHaveCount(0);
+    for (const ipv4 of ["203.0.113.71", "203.0.113.72", "203.0.113.73"]) await query(local.dbUrl, "select public.office_control($1,$2,'here',connection=>$3)", [batch.firmId, batch.ownerId, { ipv4 }]);
+    await boss.reload();
+    await expect(boss.getByText("ask your internet provider for a fixed address")).toBeVisible();
+  } finally {
+    for (const context of contexts) await context.close();
+    await batch.remove(...emails);
+  }
 });
