@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { actAs, asOwner, attempt, connect, rollback } from "./db";
@@ -115,8 +115,10 @@ describe("office changes", () => {
     await db.query("update public.firms set settings = settings || $2 where id = $1", [FIRM, { hours: {}, access: { hours_only: true } }]);
     const key = (await db.query("select public.office_proof_key() as key")).rows[0].key as string;
     const until = Math.floor(Date.now() / 1000) + 300;
-    const proof = `${until}.${createHmac("sha256", key).update(`${STAFF}::${until}`).digest("hex")}`;
-    await actAs(db, STAFF, "aal1");
+    const session = randomUUID();
+    await db.query("insert into auth.sessions (id, user_id) values ($1, $2)", [session, STAFF]);
+    const proof = `${until}.${createHmac("sha256", key).update(`${STAFF}:${session}:${until}`).digest("hex")}`;
+    await actAs(db, STAFF, "aal1", session);
     await db.query("select set_config('request.headers', '{}', true)");
     expect((await db.query("select * from public.closed_firms()")).rows).toEqual([]);
     await db.query("select set_config('request.headers', $1, true)", [JSON.stringify({ "x-inboxca-office": proof })]);

@@ -36,6 +36,7 @@ const alertText = (reason: string, details: { free_bytes?: number; files?: numbe
     drive_shared: "InboxCA's folder in your drive is shared with someone, or has a link. Only you should reach it: stop the sharing in your drive.",
     drive_full: `Your drive has ${((details.free_bytes ?? 0) / 1024 ** 2).toFixed(0)} MB left. Free some space or add more, so new client files can be saved.`,
     captures: `${details.email} tried to capture a document's screen ${details.count} times today. Each try is logged.`,
+    parallel: `${details.email} signed in on another PC ${details.count} times today, which ends the other session each time. Ask whether their login is shared.`,
     request_stalled: `${details.client} has not uploaded the documents you asked for, after three reminders. A call may help.`,
     drive_missing: `${details.files} ${details.files === 1 ? "file" : "files"} InboxCA filed ${details.files === 1 ? "is" : "are"} no longer in your drive. Each is marked Missing on its client's Files tab.`,
   })[reason] ?? "Something in your drive needs a look.";
@@ -49,8 +50,8 @@ const reasons: Record<string, string> = {
 // and every return that needs a hand, in four columns from late to done, each card one
 // click from filed. Mail that waits for a person sits beside it. People who are not
 // technical see what to do next without opening anything else.
-export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string }> }) {
-  const { dropped, error } = await searchParams;
+export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string; asked?: string }> }) {
+  const { dropped, error, asked } = await searchParams;
   const { supabase, userId, membership, deviceStatus, connectionWaiting } = await currentMember();
   const { data: invites } = await supabase.rpc("my_invites");
   const closed = membership ? null : (await supabase.rpc("closed_firms")).data?.[0];
@@ -275,12 +276,17 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </p>
       )}
       {alerts?.data
-        ?.filter((alert) => !alert.reason_code?.startsWith("office_") && (alert.reason_code !== "captures" || (alert.details as { day?: string }).day === today))
+        ?.filter((alert) => !alert.reason_code?.startsWith("office_") && (!["captures", "parallel"].includes(alert.reason_code ?? "") || (alert.details as { day?: string }).day === today))
         .map((alert) => (
         <p key={alert.id} className="alert" role="alert">
           {alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number })}
         </p>
       ))}
+      {asked === "time" && (
+        <p className="notice" role="status">
+          The owner is asked for more time today. You can keep working until closing.
+        </p>
+      )}
       <PortalDrop />
       <DroppedNotice value={dropped} />
       {error === "drive" && (

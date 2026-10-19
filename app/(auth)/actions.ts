@@ -5,8 +5,8 @@ import { z } from "zod";
 import { log } from "@/src/lib/logger";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { officeDeviceAccess } from "@/src/lib/office";
-import { SEEN_COOKIE } from "@/src/lib/session";
-import { supabaseServer } from "@/src/lib/supabase";
+import { SEEN_COOKIE, tellOwnerOnRepeat } from "@/src/lib/session";
+import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
 
 // Sign in: an email code first, then a code from an authenticator app (PLAN.md 4.4).
 // Nobody can sign up here: people are added by their firm's owner or at payment.
@@ -44,8 +44,23 @@ export async function verifyCode(_prev: CodeState, form: FormData): Promise<Code
   const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
   if (error)
     return { step: "code", email, error: "That code did not work. Check it, or ask for a new one." };
-  if (data.user && (await officeDeviceAccess(data.user.id)).approved) redirect("/app");
+  if (data.user && (await officeDeviceAccess(data.user.id)).approved) {
+    await oneSession(supabase, data.user.id, email);
+    redirect("/app");
+  }
   redirect("/sign-in/two-step");
+}
+
+// Under Office only a finished sign in ends the person's other sessions (PLAN.md 5.17.4 #39):
+// a shared login or a second PC stops working at once, and repeats tell the owner.
+async function oneSession(supabase: Awaited<ReturnType<typeof supabaseServer>>, userId: string, email: string) {
+  const { data: ended } = await supabase.rpc("end_other_sessions");
+  if (!ended) return;
+  const admin = supabaseAdmin();
+  const { data: member } = await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  if (!member) return;
+  await admin.from("activity_log").insert({ firm_id: member.firm_id, actor_id: userId, action: "session.ended_other", entity_type: "user", entity_id: userId, details: { ended } });
+  await tellOwnerOnRepeat(member.firm_id, userId, email, "session.ended_other", "parallel");
 }
 
 export type Enrollment = { factorId: string; qr: string; secret: string } | { error: string };
@@ -76,6 +91,8 @@ export async function verifyTwoStep(_prev: StepState, form: FormData): Promise<S
   const supabase = await supabaseServer();
   const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
   if (error) return { error: "That code did not work. Codes change every 30 seconds; try the new one." };
+  const { data: claims } = await supabase.auth.getClaims();
+  if (claims) await oneSession(supabase, claims.claims.sub, String(claims.claims.email ?? ""));
   redirect("/app");
 }
 

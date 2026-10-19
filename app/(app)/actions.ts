@@ -14,7 +14,7 @@ import { documentTypes, folderFor, periodChoices, periodName, placeUnderFreeName
 import { DELETED_FOLDER, folderOrders, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
-import { DAYS, type Hours, type SpecialHours } from "@/src/lib/hours";
+import { DAYS, laterBy, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
@@ -33,7 +33,7 @@ import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
 import { currentMember } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
-import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie } from "@/src/lib/session";
+import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 
 export type InviteState = { error?: string; done?: string; values?: Record<string, string> };
@@ -180,6 +180,36 @@ export async function stillHere() {
     secure: process.env.NODE_ENV === "production",
     path: "/",
   });
+}
+
+// Staying past closing (PLAN.md 5.17.4 #15): in the last 10 minutes a person bound by office
+// hours may stay one more hour, once a day, logged; longer is a question for the owner.
+export async function stayLater() {
+  const { userId, membership } = await currentMember();
+  const closing = membership?.closing;
+  if (!membership || !closing || closing.extended || Date.now() < closing.at - 10 * 60_000) redirect("/app");
+  const until = laterBy(closing.close, 60);
+  const admin = supabaseAdmin();
+  await admin.from("firm_members").update({ access: { ...membership.access, extra_time: { day: closing.day, until } } }).eq("firm_id", membership.firmId).eq("user_id", userId);
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "hours.extended", entity_type: "user", entity_id: userId, details: { until } });
+  revalidatePath("/app", "layout");
+}
+
+export async function askMoreTime(form: FormData) {
+  const { userId, membership } = await currentMember();
+  const hours = Number(form.get("hours"));
+  const closing = membership?.closing;
+  if (!membership || !closing || ![1, 2, 3].includes(hours)) redirect("/app");
+  const admin = supabaseAdmin();
+  const { count } = await admin.from("requests").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("kind", "permission").eq("reason_code", "time").eq("status", "pending").eq("details->>by", userId).gt("expires_at", new Date().toISOString());
+  if (!count) {
+    const id = randomUUID();
+    const until = laterBy(closing.close, hours * 60);
+    const { data: me } = await admin.from("firm_members").select("team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single();
+    await admin.from("requests").insert({ id, firm_id: membership.firmId, kind: "permission", entity_type: "permission", entity_id: id, reason_code: "time", expires_at: new Date(Date.now() + 4 * 3_600_000).toISOString(), details: { by: userId, route: "owner", team_id: me?.team_id ?? null, day: closing.day, until } });
+    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.asked", entity_type: "request", entity_id: id, details: { right: "time", until } });
+  }
+  redirect("/app?asked=time");
 }
 
 // Settings → Special hours: a date range with its own times (a tax season, a late evening).
@@ -1272,7 +1302,13 @@ export async function decidePermission(form: FormData) {
   const asked = request?.details as { by: string; route: "owner" | "manager"; team_id: string | null } | undefined;
   if (!request || !me || !asked || !mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy: isDeputy(membership.settings, userId) }, asked)) redirect("/app/inbox");
   const allow = form.get("intent") === "allow";
-  await admin.from("requests").update(allow ? { status: "approved", expires_at: new Date(Date.now() + 3_600_000).toISOString() } : { status: "refused" }).eq("id", request.id);
+  // More time is given at once: that person's extra time today, which the database reads.
+  const time = request.reason_code === "time" ? (request.details as { day: string; until: string }) : null;
+  if (allow && time) {
+    const { data: person } = await admin.from("firm_members").select("access").eq("firm_id", membership.firmId).eq("user_id", asked.by).single();
+    await admin.from("firm_members").update({ access: { ...(person?.access as object), extra_time: { day: time.day, until: time.until } } }).eq("firm_id", membership.firmId).eq("user_id", asked.by);
+  }
+  await admin.from("requests").update(allow ? (time ? { status: "used" } : { status: "approved", expires_at: new Date(Date.now() + 3_600_000).toISOString() }) : { status: "refused" }).eq("id", request.id);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: allow ? "permission.allowed" : "permission.refused", entity_type: "request", entity_id: request.id, details: { right: request.reason_code, for: asked.by } });
   revalidatePath("/app", "layout");
   redirect("/app/inbox");
@@ -1299,12 +1335,6 @@ export async function logCapture(documentId: string) {
   const { supabase, userId, membership } = await currentMember();
   const { data: document } = await supabase.from("documents").select("id").eq("id", documentId).maybeSingle();
   if (!membership || !document) return;
-  const admin = supabaseAdmin();
-  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "capture_attempt", entity_type: "document", entity_id: document.id });
-  const since = new Date(`${todayInIndia()}T00:00:00+05:30`).toISOString();
-  const { count } = await admin.from("activity_log").select("at", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("actor_id", userId).eq("action", "capture_attempt").gte("at", since);
-  if ((count ?? 0) >= 3)
-    await admin
-      .from("requests")
-      .upsert({ firm_id: membership.firmId, kind: "alert", entity_type: "capture", entity_id: userId, reason_code: "captures", status: "pending", details: { email: membership.email, day: todayInIndia(), count } }, { onConflict: "kind,entity_type,entity_id" });
+  await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "capture_attempt", entity_type: "document", entity_id: document.id });
+  await tellOwnerOnRepeat(membership.firmId, userId, membership.email, "capture_attempt", "captures");
 }

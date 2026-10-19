@@ -22,7 +22,7 @@ export async function rollback<T>(client: Client, fn: () => Promise<T>) {
 
 // Acts as a signed in person from here to the end of the transaction, as Supabase does
 // for a request with that person's sign in token.
-export async function actAs(client: Client, userId: string | null, aal: "aal1" | "aal2" = "aal2") {
+export async function actAs(client: Client, userId: string | null, aal: "aal1" | "aal2" = "aal2", session?: string) {
   await client.query("reset role");
   if (userId === null) {
     await client.query("set local role anon");
@@ -30,7 +30,7 @@ export async function actAs(client: Client, userId: string | null, aal: "aal1" |
   }
   await client.query("set local role authenticated");
   await client.query("select set_config('request.jwt.claims', $1, true)", [
-    JSON.stringify({ sub: userId, role: "authenticated", aal }),
+    JSON.stringify({ sub: userId, role: "authenticated", aal, ...(session && { session_id: session }) }),
   ]);
 }
 

@@ -518,6 +518,9 @@ isOneToOne: false
 "connect_drive":
 { Args: { "account": string,"address": string,"credentials": string,"drive_provider": string,"drive_settings": Json,"level": string,"target_firm": string,"terms_version": string }; Returns: boolean
                            },
+"end_other_sessions":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "finish_job":
 { Args: { "error_code"?: string,"job_id": number,"outcome": string,"retry_at"?: string }; Returns: boolean
                            },
@@ -613,6 +616,12 @@ isOneToOne: false
                            },
 "review_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]
+                           },
+"session_ended":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"session_live":
+{ Args: Record<PropertyKey, never>; Returns: boolean
                            },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string

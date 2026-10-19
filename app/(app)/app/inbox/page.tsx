@@ -141,13 +141,14 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
           </div>
           <ul className="rows">
             {toAnswer.map((request) => {
-              const details = request.details as { by: string; document_name?: string };
+              const details = request.details as { by: string; document_name?: string; until?: string };
+              const time = request.reason_code === "time";
               return (
                 <li key={request.id}>
                   <Avatar name={emailOf.get(details.by) ?? "?"} />
                   <span className="grow">
                     <span className="name">
-                      {emailOf.get(details.by)} asks to {rightWords[request.reason_code as Right]}
+                      {emailOf.get(details.by)} asks {time ? `to work until ${details.until} today` : `to ${rightWords[request.reason_code as Right]}`}
                     </span>
                     <span className="sub">{[request.clients?.name, details.document_name].filter(Boolean).join(", ")}</span>
                   </span>
@@ -157,7 +158,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
                       Refuse
                     </button>
                     <button className="b b-primary b-small" name="intent" value="allow">
-                      Allow once
+                      {time ? "Allow today" : "Allow once"}
                     </button>
                   </form>
                 </li>
