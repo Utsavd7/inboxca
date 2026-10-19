@@ -18,9 +18,9 @@ import { DAYS, laterBy, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
-import { officeApprover, requestLine } from "@/src/lib/office";
+import { askAway, officeApprover, requestLine } from "@/src/lib/office";
 import { recognisePortalFile } from "@/src/lib/portal-files";
-import { may, mayDecide, rightWords, routeOf, switchable, type Permissions, type Right } from "@/src/lib/rights";
+import { mayDecide, rightWords, routeOf, switchable, type Permissions, type Right } from "@/src/lib/rights";
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
 import { queueRead } from "@/src/jobs/read-document";
@@ -31,7 +31,7 @@ import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
-import { currentMember } from "@/src/lib/member";
+import { currentMember, currentWriter } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
@@ -44,7 +44,7 @@ const invitable = z.enum(invitableRoles);
 // password, nothing to set up yet); everyone invited gets a sign in code by email and sees
 // the invite once signed in.
 export async function inviteMember(_prev: InviteState, form: FormData): Promise<InviteState> {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   const values = { email: String(form.get("email") ?? ""), role: String(form.get("role") ?? "staff") };
   if (membership?.role !== "owner") return { error: "Only the firm's owner can invite people.", values };
   const email = values.email.trim().toLowerCase();
@@ -84,7 +84,7 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
 // The owner's controls on each person: save a new role, remove, or bring back. The
 // database checks that the caller is the owner and logs the change.
 export async function manageMember(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (!membership) return;
   const args = { target_firm: membership.firmId, person: String(form.get("person") ?? "") };
   const intent = form.get("intent");
@@ -107,7 +107,7 @@ export async function manageMember(form: FormData) {
 // people without a team and drops its client assignments; removing a branch clears it from
 // its people and clients.
 export async function changeGroup(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const kind = form.get("kind") === "branch" ? "branch" : "team";
   const name = String(form.get("name") ?? "").trim();
@@ -117,7 +117,7 @@ export async function changeGroup(form: FormData) {
 }
 
 export async function joinFirm(form: FormData) {
-  const { supabase } = await currentMember();
+  const { supabase } = await currentWriter();
   await supabase.rpc("accept_invite", { target_firm: String(form.get("firm") ?? "") });
   // The sidebar is in the layout, which a redirect alone does not redraw.
   revalidatePath("/app", "layout");
@@ -126,7 +126,7 @@ export async function joinFirm(form: FormData) {
 
 // Settings → Office hours. The database logs every change to the firm's settings.
 export async function saveHours(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const hours: Hours = {};
   for (const day of DAYS.keys()) {
@@ -143,7 +143,7 @@ export async function saveHours(form: FormData) {
 }
 
 export async function changeHoliday(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const date = String(form.get("date") ?? "");
   if (!/^\d{4}-\d\d-\d\d$/.test(date)) redirect("/app/settings");
@@ -156,7 +156,7 @@ export async function changeHoliday(form: FormData) {
 
 // Settings → Signing in: the idle and session limits (0 is off).
 export async function saveLimits(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const whole = (name: string, allowed: number[]) => {
     const value = Number(form.get(name));
@@ -185,7 +185,7 @@ export async function stillHere() {
 // Staying past closing (PLAN.md 5.17.4 #15): in the last 10 minutes a person bound by office
 // hours may stay one more hour, once a day, logged; longer is a question for the owner.
 export async function stayLater() {
-  const { userId, membership } = await currentMember();
+  const { userId, membership } = await currentWriter();
   const closing = membership?.closing;
   if (!membership || !closing || closing.extended || Date.now() < closing.at - 10 * 60_000) redirect("/app");
   const until = laterBy(closing.close, 60);
@@ -196,7 +196,7 @@ export async function stayLater() {
 }
 
 export async function askMoreTime(form: FormData) {
-  const { userId, membership } = await currentMember();
+  const { userId, membership } = await currentWriter();
   const hours = Number(form.get("hours"));
   const closing = membership?.closing;
   if (!membership || !closing || ![1, 2, 3].includes(hours)) redirect("/app");
@@ -214,7 +214,7 @@ export async function askMoreTime(form: FormData) {
 
 // Settings → Special hours: a date range with its own times (a tax season, a late evening).
 export async function changeSpecialHours(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const [from, to, open, close] = ["from", "to", "open", "close"].map((name) => String(form.get(name) ?? ""));
   const current = (membership.settings.special_hours as SpecialHours[] | undefined) ?? [];
@@ -259,7 +259,7 @@ async function sealClient(firm: string, client: ClientInput) {
 
 // Adds one client from the form.
 export async function addClient(_prev: ClientState, form: FormData): Promise<ClientState> {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   const values = Object.fromEntries(["name", "kind", "pan", "gstin", "email"].map((field) => [field, String(form.get(field) ?? "")]));
   if (!membership || !canManageClients(membership.role))
     return { error: "Only the owner, a partner or a manager can add clients.", values };
@@ -288,7 +288,7 @@ const headings: Record<keyof ClientInput, string[]> = {
 // shows the problems; the second (with the checked rows) checks them again and adds the
 // good ones in one batch. Rows with a problem are left out, never half added.
 export async function importClients(_prev: ImportState, form: FormData): Promise<ImportState> {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (!membership || !canManageClients(membership.role))
     return { error: "Only the owner, a partner or a manager can import clients." };
   const firm = membership.firmId;
@@ -361,7 +361,7 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
 // or restored. Row level security allows only the owner, a partner or a manager, and a
 // trigger logs each change.
 export async function manageClient(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   const id = String(form.get("client") ?? "");
   const tab = String(form.get("tab") ?? "").replace(/[^a-z]/g, "");
   const back = (error?: string) => {
@@ -485,7 +485,7 @@ export async function manageClient(form: FormData) {
 // Settings → Reminders: whether InboxCA emails clients before their returns are due. Off
 // until the owner turns it on, since it writes to the firm's clients.
 export async function saveReminders(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", acknowledge: form.get("acknowledge") === "on" } }).eq("id", membership.firmId);
   redirect("/app/settings?saved=reminders#reminders");
@@ -493,7 +493,7 @@ export async function saveReminders(form: FormData) {
 
 // A client's page → Details: pause or resume reminders for this client.
 export async function pauseReminders(form: FormData) {
-  const { supabase } = await currentMember();
+  const { supabase } = await currentWriter();
   const client = String(form.get("client") ?? "");
   await supabase.from("clients").update({ reminders_paused: form.get("paused") === "on" }).eq("id", client);
   revalidatePath(`/app/clients/${client}`);
@@ -501,7 +501,7 @@ export async function pauseReminders(form: FormData) {
 }
 
 export async function saveVisibility(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const client_visibility = form.get("visibility") === "restricted" ? "restricted" : "open";
   await supabase.from("firms").update({ settings: { ...membership.settings, client_visibility } }).eq("id", membership.firmId);
@@ -512,7 +512,7 @@ export async function saveVisibility(form: FormData) {
 // number), or not filed after a mistake. Row level security limits it to clients the
 // person may see; every change is logged.
 export async function manageTasks(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const intent = form.get("intent");
   const ids = form.getAll("task").map(String);
@@ -542,7 +542,7 @@ const mailboxErrors = {
 // Settings → Firm email: the owner connects the firm's mailbox. Both sign ins are checked
 // first; the address and password are saved encrypted with the firm's key.
 export async function connectMailbox(_prev: MailboxState, form: FormData): Promise<MailboxState> {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const values = Object.fromEntries(["address", "imap_host", "imap_port", "smtp_host", "smtp_port"].map((key) => [key, String(form.get(key) ?? "").trim()]));
   const address = values.address.toLowerCase();
@@ -582,7 +582,7 @@ const serverValues = ({ imap, smtp }: { imap: { host: string; port: number }; sm
 
 // Disconnecting deletes the saved password at once, so nothing more is read or sent.
 export async function disconnectMailbox() {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "mail");
   revalidatePath("/app/settings");
@@ -591,7 +591,7 @@ export async function disconnectMailbox() {
 // Inbox: correct an email's label (a person's choice wins over the rules and is logged), or
 // mark a Needs team reply request done once someone has replied from the mailbox.
 export async function manageEmail(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const label = String(form.get("label") ?? "");
   if (form.get("intent") === "label" && label in labels)
@@ -619,7 +619,7 @@ export async function manageEmail(form: FormData) {
 // access terms. Dropbox signs in on its own page (the callback finishes in
 // /api/drive/callback); the test drive exists only where the server has one.
 export async function connectDrive(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const provider = String(form.get("provider") ?? "");
   if (form.get("agree") !== "on") redirect("/app/settings?error=drive_terms#drive");
@@ -645,7 +645,7 @@ export async function connectDrive(form: FormData) {
 
 // Disconnecting deletes InboxCA's access at once; the files stay in the firm's drive.
 export async function disconnectDrive() {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "drive");
   revalidatePath("/app/settings");
@@ -702,7 +702,7 @@ async function firmDrive(firmId: string) {
 
 // A document the person may see, with what moving it needs; the server reads where it is.
 async function visibleDocument(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentWriter();
   const id = String(form.get("document") ?? "");
   const { data: visible } = await supabase.from("documents").select("id, client_id").eq("id", id).maybeSingle();
   if (!membership || !visible) redirect("/app");
@@ -811,13 +811,13 @@ const MAX_UPLOAD = 25 * 1024 * 1024;
 // the client's folder in the drive like a file from mail (PLAN.md 5.3). Up to 25 MB until
 // the file worker takes larger files. A file the client already has is refused.
 export async function uploadDocument(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentWriter();
   const { data: client } = await supabase.from("clients").select("id, name").eq("id", String(form.get("client") ?? "")).maybeSingle();
   if (!membership || !client) redirect("/app");
   const back = `/app/clients/${client.id}?tab=files`;
   // Uploading is a request unless the owner switched it on for this role (5.17.2).
-  const grant = may(membership.role, "upload", membership.settings.permissions as Permissions) ? null : await grantFor(membership.firmId, userId, "upload", client.id);
-  if (!may(membership.role, "upload", membership.settings.permissions as Permissions) && !grant) redirect(`${back}&error=needs`);
+  const grant = membership.may("upload") ? null : await grantFor(membership.firmId, userId, "upload", client.id);
+  if (!membership.may("upload") && !grant) redirect(`${back}&error=needs`);
   const values = documentValues(form);
   const file = form.get("file");
   if (!values || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD) redirect(`${back}&upload=1&error=upload`);
@@ -837,7 +837,7 @@ export async function uploadDocument(form: FormData) {
 // portal file is filed under the client's To check only when the owner, a partner or a
 // manager drops it on that client's page; otherwise it is left out, and the summary says so.
 export async function dropPortalFiles(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const onClient = String(form.get("client") ?? "");
   const back = onClient ? `/app/clients/${onClient}?tab=files&` : "/app?";
@@ -858,7 +858,7 @@ export async function dropPortalFiles(form: FormData) {
       : { data: null };
     let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
     if (portal && registration?.clients) saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed" }, { name: file.name, bytes }, opened);
-    else if (onClient && may(membership.role, "upload", membership.settings.permissions as Permissions)) {
+    else if (onClient && membership.may("upload")) {
       const { data: client } = await supabase.from("clients").select("id, name").eq("id", onClient).maybeSingle();
       if (client) saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, { name: file.name, bytes }, opened);
     }
@@ -906,7 +906,7 @@ export async function removeDocument(form: FormData) {
 // email when both exist; the link works for 30 days and only its hash is kept, so the
 // person sees it once to send it themselves otherwise.
 export async function askForDocuments(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentWriter();
   const { data: client } = await supabase.from("clients").select("id, name, email_enc").eq("id", String(form.get("client") ?? "")).maybeSingle();
   if (!membership || !client) redirect("/app");
   const back = `/app/clients/${client.id}?tab=files`;
@@ -1001,8 +1001,8 @@ export async function uploadToRequest(form: FormData) {
 export async function sendDocument(form: FormData) {
   const { id, userId, membership, back, document, clientId } = await visibleDocument(form);
   // Sending to a client is a request unless the owner switched it on for this role (5.17.2).
-  const grant = may(membership.role, "send", membership.settings.permissions as Permissions) ? null : await grantFor(membership.firmId, userId, "send", clientId, id);
-  if (!may(membership.role, "send", membership.settings.permissions as Permissions) && !grant) redirect(`${back}&error=needs`);
+  const grant = membership.may("send") ? null : await grantFor(membership.firmId, userId, "send", clientId, id);
+  if (!membership.may("send") && !grant) redirect(`${back}&error=needs`);
   const admin = supabaseAdmin();
   const { data: owner } = await admin.from("documents").select("client_id, clients(name, email_enc)").eq("id", id).single();
   const crypto = serverCrypto();
@@ -1038,7 +1038,7 @@ export async function sendDocument(form: FormData) {
 // Settings → Firm drive: the order of the folders new files go into (§5.5.0). Files already
 // filed stay where they are. The owner's choice.
 export async function setFolderOrder(form: FormData) {
-  const { userId, membership } = await currentMember();
+  const { userId, membership } = await currentWriter();
   const order = String(form.get("order") ?? "");
   const naming = String(form.get("naming") ?? "client_type_period");
   if (membership?.role !== "owner" || !(folderOrders as readonly string[]).includes(order) || !(naming in namings)) redirect("/app/settings");
@@ -1056,7 +1056,7 @@ export async function setFolderOrder(form: FormData) {
 // with the client the owner chose for each folder that did not match; only files with a
 // client move, up to 5,000 an import. A job moves them; Undo puts them back.
 export async function startImport(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const opened = await firmDrive(membership.firmId);
   if (!opened) redirect("/app/import?error=drive");
@@ -1082,7 +1082,7 @@ export async function startImport(form: FormData) {
 }
 
 export async function undoFirstImport(form: FormData) {
-  const { userId, membership } = await currentMember();
+  const { userId, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const admin = supabaseAdmin();
   const { data: request } = await admin.from("requests").select("id").eq("id", String(form.get("import") ?? "")).eq("firm_id", membership.firmId).eq("kind", "import").maybeSingle();
@@ -1098,7 +1098,7 @@ export async function undoFirstImport(form: FormData) {
 // Inbox → Papers waiting for approval (PLAN.md 5.5.2): a private paper a client asked for
 // goes only after one approval by the owner, a partner or a manager; or it is not sent.
 export async function decideShare(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentWriter();
   if (!membership || !canManageClients(membership.role)) redirect("/app/inbox");
   const { data: share } = await supabase.from("shares").select("id, document_id, contact_id, email_event_id, status").eq("id", String(form.get("share") ?? "")).eq("status", "waiting").maybeSingle();
   if (!share) redirect("/app/inbox");
@@ -1143,7 +1143,7 @@ export async function decideShare(form: FormData) {
 // Settings → Papers sent on request: which document types go at once when a client asks,
 // or that every paper waits for approval. The owner's choice.
 export async function saveRecords(form: FormData) {
-  const { supabase, membership } = await currentMember();
+  const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const routine = form.getAll("routine").map(String).filter((type) => documentTypes.includes(type));
   await supabase.from("firms").update({ settings: { ...membership.settings, records: { routine, approve_all: form.get("approve_all") === "on" } } }).eq("id", membership.firmId);
@@ -1154,7 +1154,7 @@ export async function saveRecords(form: FormData) {
 // date against the notice (only then is it the deadline), or moves it on: in progress,
 // replied, closed. Every member may; notices follow the client's visibility.
 export async function manageNotice(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const intent = String(form.get("intent") ?? "");
   const date = String(form.get("date") ?? "");
@@ -1192,7 +1192,7 @@ export async function manageNotice(form: FormData) {
 
 // Office changes are checked and logged together in the database.
 export async function setOfficeOnly(form: FormData) {
-  const { userId, membership } = await currentMember();
+  const { userId, membership } = await currentWriter();
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) redirect("/app");
   const decision = String(form.get("intent") ?? "");
   const line = requestLine(await headers(), todayInIndia());
@@ -1203,7 +1203,7 @@ export async function setOfficeOnly(form: FormData) {
   if (decision === "no_fixed") {
     if (membership.role !== "owner") redirect("/app");
     const office = (membership.settings.office ?? {}) as Record<string, unknown>;
-    await (await currentMember()).supabase.from("firms").update({ settings: { ...membership.settings, office: { ...office, fixed_declined: true } } }).eq("id", membership.firmId);
+    await (await currentWriter()).supabase.from("firms").update({ settings: { ...membership.settings, office: { ...office, fixed_declined: true } } }).eq("id", membership.firmId);
     await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "office.no_fixed", entity_type: "firm", entity_id: membership.firmId });
     redirect("/app/settings#office");
   }
@@ -1221,16 +1221,18 @@ export async function setOfficeOnly(form: FormData) {
 
 // The owner decides whether a waiting PC stays in the office, travels, or is refused.
 export async function reviewDevice(form: FormData) {
-  const { userId, membership } = await currentMember();
+  const { userId, membership } = await currentWriter();
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) redirect("/app");
   const decision = String(form.get("decision") ?? "");
   const device = String(form.get("device") ?? "");
-  if (!["office", "laptop", "refuse"].includes(decision) || (device && !z.uuid().safeParse(device).success)) redirect("/app/settings#office");
+  const until = String(form.get("until") ?? "");
+  if (!["office", "laptop", "personal", "refuse", "withdraw"].includes(decision) || (device && !z.uuid().safeParse(device).success) || (decision === "personal" && !z.iso.date().safeParse(until).success)) redirect("/app/settings#office");
   const { error } = await supabaseAdmin().rpc("review_devices", {
     target_firm: membership.firmId,
     actor: userId,
     target_device: device || "00000000-0000-0000-0000-000000000000",
     decision,
+    ...(decision === "personal" && { until_day: until }),
   });
   if (error) throw new Error(`Device review failed: ${error.code}`);
   revalidatePath("/app");
@@ -1260,7 +1262,7 @@ async function grantFor(firmId: string, userId: string, right: Right, clientId: 
 const spendGrant = (id: string | null) => (id ? supabaseAdmin().from("requests").update({ status: "used" }).eq("id", id) : null);
 
 export async function askPermission(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const right = String(form.get("right") ?? "") as Right;
   const { data: client } = await supabase.from("clients").select("id").eq("id", String(form.get("client") ?? "")).maybeSingle();
@@ -1294,14 +1296,27 @@ export async function askPermission(form: FormData) {
 }
 
 export async function decidePermission(form: FormData) {
-  const { userId, membership } = await currentMember();
+  const { userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const admin = supabaseAdmin();
   const { data: request } = await admin.from("requests").select("id, details, reason_code").eq("id", String(form.get("request") ?? "")).eq("firm_id", membership.firmId).eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).maybeSingle();
   const { data: me } = await admin.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single();
   const asked = request?.details as { by: string; route: "owner" | "manager"; team_id: string | null } | undefined;
   if (!request || !me || !asked || !mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy: isDeputy(membership.settings, userId) }, asked)) redirect("/app/inbox");
-  const allow = form.get("intent") === "allow";
+  const intent = String(form.get("intent") ?? "");
+  // Always allow is the owner's or a deputy's, for uploading or sending (5.17.2): that
+  // person may do it from now on, until it is withdrawn in Settings → Permissions.
+  if (intent === "always") {
+    if ((me.role !== "owner" && !isDeputy(membership.settings, userId)) || !(request.reason_code && request.reason_code in switchable)) redirect("/app/inbox");
+    const { data: person } = await admin.from("firm_members").select("access").eq("firm_id", membership.firmId).eq("user_id", asked.by).single();
+    const access = (person?.access ?? {}) as { always?: string[] };
+    await admin.from("firm_members").update({ access: { ...access, always: [...new Set([...(access.always ?? []), request.reason_code!])] } }).eq("firm_id", membership.firmId).eq("user_id", asked.by);
+    await admin.from("requests").update({ status: "used" }).eq("id", request.id);
+    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.always", entity_type: "request", entity_id: request.id, details: { right: request.reason_code, for: asked.by } });
+    revalidatePath("/app", "layout");
+    redirect("/app/inbox");
+  }
+  const allow = intent === "allow";
   // More time is given at once: that person's extra time today, which the database reads.
   const time = request.reason_code === "time" ? (request.details as { day: string; until: string }) : null;
   if (allow && time) {
@@ -1317,7 +1332,7 @@ export async function decidePermission(form: FormData) {
 // Settings → Permissions (owner only): the rights the owner switches on for employees and
 // for managers (partners follow managers), or back to the defaults.
 export async function savePermissions(form: FormData) {
-  const { supabase, userId, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const permissions: Permissions =
     form.get("intent") === "reset"
@@ -1327,6 +1342,27 @@ export async function savePermissions(form: FormData) {
   await supabase.from("firms").update({ settings: { ...membership.settings, permissions, viewer_hide_inactive: hideInactive } }).eq("id", membership.firmId);
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions } });
   redirect("/app/settings?saved=permissions#permissions");
+}
+
+// Settings → Permissions: the owner withdraws what one person was always allowed.
+export async function withdrawAlways(form: FormData) {
+  const { userId, membership } = await currentWriter();
+  if (membership?.role !== "owner") redirect("/app");
+  const person = String(form.get("person") ?? "");
+  const admin = supabaseAdmin();
+  const { data: member } = await admin.from("firm_members").select("access").eq("firm_id", membership.firmId).eq("user_id", person).maybeSingle();
+  if (!member) redirect("/app/settings#permissions");
+  await admin.from("firm_members").update({ access: { ...(member.access as object), always: [] } }).eq("firm_id", membership.firmId).eq("user_id", person);
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.withdrawn", entity_type: "user", entity_id: person });
+  redirect("/app/settings?saved=permissions#permissions");
+}
+
+// A staff member away from the office asks to use this device there (5.17.4 #48).
+export async function askAwayDevice() {
+  const { userId } = await currentMember();
+  await askAway(userId);
+  revalidatePath("/app", "layout");
+  redirect("/app");
 }
 
 // A suspected screen capture in the viewer (PLAN.md 5.17.2): logged; the third in a day by

@@ -2,7 +2,7 @@ import { Check, FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { decidePermission, decideShare, manageEmail } from "@/app/(app)/actions";
-import { mayDecide, rightWords, type Right } from "@/src/lib/rights";
+import { mayDecide, rightWords, switchable, type Right } from "@/src/lib/rights";
 import { canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { currentMember } from "@/src/lib/member";
@@ -137,7 +137,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
         <section className="panel" aria-labelledby="questions">
           <div className="panel-head">
             <h2 id="questions">Questions for you</h2>
-            <p className="hint">Allow once lets them do it one time, within an hour.</p>
+            <p className="hint">Allow once lets them do it one time, within an hour. Always allow lets that person do it from now on, until you withdraw it in Settings.</p>
           </div>
           <ul className="rows">
             {toAnswer.map((request) => {
@@ -157,6 +157,11 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
                     <button className="b b-ghost b-small" name="intent" value="refuse">
                       Refuse
                     </button>
+                    {(me?.role === "owner" || deputy) && !!request.reason_code && request.reason_code in switchable && (
+                      <button className="b b-secondary b-small" name="intent" value="always">
+                        Always allow
+                      </button>
+                    )}
                     <button className="b b-primary b-small" name="intent" value="allow">
                       {time ? "Allow today" : "Allow once"}
                     </button>

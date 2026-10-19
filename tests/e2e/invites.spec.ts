@@ -24,6 +24,7 @@ const ownerEmail = `owner-${tag}@example.test`;
 const newEmail = `new-${tag}@example.test`;
 const deputyEmail = `deputy-${tag}@example.test`;
 const emailOnly = `email-only-${tag}@example.test`;
+const laptopEmail = `laptop-${tag}@example.test`;
 const mailboxEmail = "office@firm.test";
 const mailClient = `Mail Client ${tag}`;
 const pcUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36";
@@ -39,6 +40,7 @@ async function lastMail(address: string) {
   return message && message.source ? ((await simpleParser(message.source)).text ?? "") : "";
 }
 // A base32 authenticator key, given to the owner directly so their sign in is quick.
+const deputyKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
 const ownerKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
 let firm: Awaited<ReturnType<typeof seedFirm>>;
 let owner: Page;
@@ -233,10 +235,8 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
   const { data, error } = await admin.auth.admin.createUser({ email: deputyEmail, email_confirm: true });
   expect(error).toBeNull();
-  const deputyKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
   await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'partner', 'active')", [firm.firmId, data.user!.id]);
   // The laptop is another staff member's: one person's sign in ends their other session.
-  const laptopEmail = `laptop-${tag}@example.test`;
   const { data: laptopUser } = await admin.auth.admin.createUser({ email: laptopEmail, email_confirm: true });
   await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'staff', 'active')", [firm.firmId, laptopUser.user!.id]);
   for (const [id, key] of [[data.user!.id, deputyKey], [laptopUser.user!.id, deputyKey]])
@@ -272,7 +272,7 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await deputy.reload();
   const laptopRow = deputy.getByRole("listitem").filter({ hasText: "Travel laptop" });
   await laptopRow.getByRole("button", { name: "Laptop", exact: true }).click();
-  await expect(laptopRow).toHaveCount(0);
+  await expect(laptopRow.getByRole("button", { name: "Laptop", exact: true })).toHaveCount(0);
   await laptop.goto("/app/clients");
   await expect(laptop.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
 
@@ -343,6 +343,63 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
 
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload a file" })).toBeVisible();
+
+  // Once used the grant is gone. Asked again, the owner always allows it, then withdraws that.
+  await query(local.dbUrl, "update public.requests set status = 'used' where firm_id = $1 and kind = 'permission' and status = 'approved'", [firm.firmId]);
+  await person.goto(files);
+  await person.getByRole("button", { name: "Ask to upload" }).click();
+  await expect(person.getByText("Asked", { exact: true })).toBeVisible();
+  await owner.goto("/app/inbox");
+  await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a file" }).getByRole("button", { name: "Always allow" }).click();
+  await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
+  await person.goto(files);
+  await expect(person.getByRole("link", { name: "Upload a file" })).toBeVisible();
+  await owner.goto("/app/settings#permissions");
+  const standing = owner.getByRole("listitem").filter({ hasText: "may upload files without asking" });
+  await standing.getByRole("button", { name: "Withdraw" }).click();
+  await expect(standing).toHaveCount(0);
+  await person.goto(files);
+  await expect(person.getByRole("button", { name: "Ask to upload" })).toBeVisible();
+});
+
+test("away from the office, the owner allows a staff member's own device to view only, until a day", async ({ browser }) => {
+  await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
+  await owner.goto("/app/settings#office");
+  await owner.getByLabel("Yes, this is my office").check();
+  await owner.getByRole("button", { name: "Turn on" }).click();
+
+  const homeContext = await browser.newContext({ userAgent: pcUserAgent });
+  const home = await homeContext.newPage();
+  await home.setExtraHTTPHeaders({ "x-test-ip": "198.51.100.50" });
+  await emailStep(home, laptopEmail);
+  await home.getByLabel("6 digit code from the app").fill(totp(deputyKey));
+  await home.getByRole("button", { name: "Continue" }).click();
+  await expect(home.getByRole("heading", { name: "Use InboxCA from your office." })).toBeVisible();
+  await home.getByRole("button", { name: "Ask to use this device away from the office" }).click();
+  await expect(home.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+
+  await owner.reload();
+  const asked = owner.getByRole("listitem").filter({ hasText: "asks to use it away from the office" });
+  await asked.getByRole("button", { name: "Allow" }).click();
+  await expect(asked).toHaveCount(0);
+  await home.goto("/app/clients");
+  await expect(home.getByRole("status").filter({ hasText: "this device only views" })).toBeVisible();
+  await home.getByRole("link", { name: `Ask Client ${tag}` }).click();
+  await home.goto(`${home.url().split("?")[0]}?tab=files`);
+  await expect(home.getByRole("button", { name: "Ask to upload" })).toHaveCount(0);
+  await expect(home.getByRole("link", { name: "Upload a file" })).toHaveCount(0);
+
+  // Withdrawn, the device is refused at once.
+  await owner.reload();
+  const personal = owner.getByRole("listitem").filter({ hasText: "away from the office until" });
+  await personal.getByRole("button", { name: "Withdraw" }).click();
+  await expect(personal).toHaveCount(0);
+  await home.goto("/app");
+  await expect(home.getByRole("heading", { name: "Your firm refused this PC." })).toBeVisible();
+  await owner.getByRole("button", { name: "Turn off", exact: true }).click();
+  await expect(owner.getByText("Are you in your office right now?")).toBeVisible();
+  await owner.setExtraHTTPHeaders({});
+  await homeContext.close();
 });
 
 test("the owner keeps people to office hours, and the person sees the firm is closed", async () => {

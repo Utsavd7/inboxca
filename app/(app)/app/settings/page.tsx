@@ -1,7 +1,7 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveVisibility, setFolderOrder } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveVisibility, setFolderOrder, withdrawAlways } from "@/app/(app)/actions";
 import { officeApprover } from "@/src/lib/office";
 import { OfficePanel } from "../office-panel";
 import { documentTypes } from "@/src/lib/documents";
@@ -54,7 +54,16 @@ export default async function Settings({
   const hoursOnly = access.hours_only ?? false;
   const records = (settings.records ?? {}) as RecordsSettings;
   const permissions = (settings.permissions ?? {}) as Permissions;
-  const { data: used } = await supabase.rpc("firm_usage", { target_firm: membership.firmId });
+  const [{ data: used }, { data: people }] = await Promise.all([
+    supabase.rpc("firm_usage", { target_firm: membership.firmId }),
+    supabase.rpc("firm_people", { target_firm: membership.firmId }),
+  ]);
+  // People the owner or a deputy always allowed something, from a question in the Inbox.
+  const { data: standing } = await supabaseAdmin().from("firm_members").select("user_id, access").eq("firm_id", membership.firmId).not("access->always", "is", null);
+  const always = (standing ?? []).flatMap((member) => {
+    const rights = ((member.access as { always?: string[] }).always ?? []).filter((right) => right in switchable);
+    return rights.length ? [{ id: member.user_id, email: people?.find((person) => person.user_id === member.user_id)?.email ?? "", rights }] : [];
+  });
   const usage = used?.[0];
   return (
     <>
@@ -233,6 +242,24 @@ export default async function Settings({
                 </button>
               </div>
             </form>
+            {!!always.length && (
+              <>
+                <h3 className="sub-head">Always allowed</h3>
+                <ul className="rows">
+                  {always.map((person) => (
+                    <li key={person.id}>
+                      <span className="grow">
+                        <strong>{person.email}</strong> may {person.rights.map((right) => switchable[right as keyof typeof switchable].toLowerCase()).join(" and ")} without asking
+                      </span>
+                      <form action={withdrawAlways} className="end">
+                        <input type="hidden" name="person" value={person.id} />
+                        <button className="b b-ghost b-small">Withdraw</button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </section>
 
           <section className="panel" aria-labelledby="reminders-title" id="reminders">

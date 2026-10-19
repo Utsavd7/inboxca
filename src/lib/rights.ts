@@ -10,10 +10,12 @@ export type Permissions = Partial<Record<Column, Partial<Record<keyof typeof swi
 
 export const columnOf = (role: string): Column | null => (role === "staff" || role === "front_desk" ? "employee" : role === "manager" || role === "partner" ? "manager" : null);
 
-// Whether a role may do it without asking.
-export function may(role: string, right: Right, permissions: Permissions = {}) {
+// Whether a role may do it without asking; `always` lists what the owner or a deputy
+// always allowed this one person.
+export function may(role: string, right: Right, permissions: Permissions = {}, always: string[] = []) {
   if (role === "owner") return true;
   if (right === "remove") return false;
+  if (always.includes(right)) return true;
   const column = columnOf(role);
   return !!column && permissions[column]?.[right] === true;
 }

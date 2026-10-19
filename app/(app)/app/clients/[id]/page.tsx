@@ -6,7 +6,7 @@ import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/cal
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, workOfService, type DocumentRequest } from "@/src/lib/checklists";
 import { skipReasons, type Skip } from "@/src/lib/reminders";
-import { may, type Permissions, type Right } from "@/src/lib/rights";
+import { type Right } from "@/src/lib/rights";
 import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { workTypes, type WorkType } from "@/src/lib/drive";
@@ -89,7 +89,6 @@ export default async function Client({ params, searchParams }: { params: Promise
   const removedFiles = (files ?? []).filter((file) => file.status === "deleted");
   const owner = membership.role === "owner";
   // What this person may do here, with any grant or request of theirs still open (5.17.2).
-  const permissions = membership.settings.permissions as Permissions;
   const { data: mine } = await supabase
     .from("requests")
     .select("reason_code, status, details")
@@ -100,11 +99,13 @@ export default async function Client({ params, searchParams }: { params: Promise
     .gt("expires_at", new Date().toISOString());
   const open = (right: Right, status: string, documentId?: string) =>
     (mine ?? []).some((request) => request.reason_code === right && request.status === status && (!documentId || (request.details as { document_id?: string }).document_id === documentId));
-  const canUpload = may(membership.role, "upload", permissions) || open("upload", "approved");
-  const canSend = (documentId: string) => may(membership.role, "send", permissions) || open("send", "approved", documentId);
-  const canRemove = (documentId: string) => owner || open("remove", "approved", documentId);
+  // A personal device allowed away from the office only views.
+  const viewOnly = !!membership.viewOnlyUntil;
+  const canUpload = !viewOnly && (membership.may("upload") || open("upload", "approved"));
+  const canSend = (documentId: string) => !viewOnly && (membership.may("send") || open("send", "approved", documentId));
+  const canRemove = (documentId: string) => !viewOnly && (owner || open("remove", "approved", documentId));
   const askButton = (right: Right, label: string, documentId?: string) =>
-    open(right, "pending", documentId) ? (
+    viewOnly ? null : open(right, "pending", documentId) ? (
       <span className="hint">Asked</span>
     ) : (
       <form action={askPermission}>

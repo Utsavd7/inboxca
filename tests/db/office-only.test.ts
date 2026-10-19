@@ -141,5 +141,16 @@ describe("approved PCs", () => {
       await db.query("select public.review_devices($1, $2, $3, 'refuse')", [FIRM, OWNER, device]);
       expect((await db.query("select status, kind from public.devices where id = $1", [device])).rows).toEqual([{ status: "refused", kind: null }]);
       expect((await db.query("select actor_id, action from public.activity_log where entity_id = $1", [device])).rows).toEqual([{ actor_id: OWNER, action: "device.refused" }]);
+
+      // A device asked for from away is allowed for its one person until a day, and only by
+      // name: approving all waiting PCs as office PCs leaves it waiting.
+      const away = (await db.query("select id from public.register_device($1, $2, $3, 'Phone', true)", [FIRM, STAFF, "d".repeat(64)])).rows[0].id;
+      await db.query("select public.review_devices($1, $2, '00000000-0000-0000-0000-000000000000', 'office')", [FIRM, OWNER]);
+      expect((await db.query("select status from public.devices where id = $1", [away])).rows).toEqual([{ status: "waiting" }]);
+      expect((await attempt(db, "select public.review_devices($1, $2, $3, 'personal', current_date + 120)", [FIRM, OWNER, away])).ok).toBe(false);
+      await db.query("select public.review_devices($1, $2, $3, 'personal', current_date + 7)", [FIRM, OWNER, away]);
+      expect((await db.query("select kind, person_id, ends_on - current_date as days from public.devices where id = $1", [away])).rows).toEqual([{ kind: "personal", person_id: STAFF, days: 7 }]);
+      await db.query("select public.review_devices($1, $2, $3, 'withdraw')", [FIRM, OWNER, away]);
+      expect((await db.query("select status, kind, person_id from public.devices where id = $1", [away])).rows).toEqual([{ status: "refused", kind: null, person_id: null }]);
     }));
 });
