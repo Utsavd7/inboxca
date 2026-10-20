@@ -906,7 +906,14 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   // A notice a client emails is recorded with what the rules found; its date is only a
   // suggestion until a person confirms it.
-  await ask("Income tax notice", "Notice under section 148 of the Income-tax Act. DIN: ITBA/AST/F/148/2026-27/1050012345(1). Please respond on or before 24/12/2026.");
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Income tax notice", text: "Notice under section 148 of the Income-tax Act. DIN: ITBA/AST/F/148/2026-27/1050012345(1). Please respond on or before 24/12/2026.", attachments: [{ filename: "notice.pdf", content: Buffer.from(pdf("Invented notice under section 148")) }] });
+  await query(local.dbUrl, "select private.queue_mail_polls()");
+  for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  const [noticeFile] = await query(local.dbUrl, "select work_type,drive_file_id from public.documents where firm_id=$1 and document_type='Notice'", [firm.firmId]);
+  expect(noticeFile.work_type).toBe("income_tax");
+  expect(noticeFile.drive_file_id).toContain("/Income tax/");
+  await owner.goto("/app");
+  await expect(owner.getByRole("alert").filter({ hasText: `${mailClient}: a notice's review deadline` })).toBeVisible();
   await owner.goto("/app/notices");
   const notice = owner.locator("section[aria-labelledby=open-notices] tbody tr").filter({ hasText: mailClient });
   await expect(notice).toContainText("Notice u/s 148");

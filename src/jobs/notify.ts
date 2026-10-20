@@ -58,3 +58,22 @@ export const approvalSummary: Handler = async (job) => {
   if (count) await notify((owner ?? []).map((person) => person.user_id), { title: "Your week's approvals", body: `${count} ${count === 1 ? "approval" : "approvals"} this week. See who approved what.`, url: "/app/inbox#approved" });
   return { done: true };
 };
+
+// No client names leave in phone notifications. Home reads the current date and status.
+export const noticeAlert: Handler = async (job) => {
+  const admin = supabaseAdmin();
+  const stage = job.idempotency_key.split(":").at(-1)!;
+  const { data, error } = await admin.rpc("claim_notice_alert", { task_id: job.entity_id!, stage });
+  if (error) return { retry: "notice_not_claimed" };
+  if (!data) return { done: true };
+  const notice = data as { firm_id: string; client_id: string };
+  const [{ data: people }, { data: assignments }] = await Promise.all([
+    admin.from("firm_members").select("user_id,role,team_id").eq("firm_id", notice.firm_id).eq("status", "active"),
+    admin.from("client_assignments").select("user_id,team_id").eq("firm_id", notice.firm_id).eq("client_id", notice.client_id),
+  ]);
+  const recipients = (people ?? []).filter((person) => ["owner","partner"].includes(person.role) || assignments?.some((a) => a.user_id === person.user_id || (a.team_id && a.team_id === person.team_id))).map((person) => person.user_id);
+  const date = stage.startsWith("action_") ? "action date" : "review deadline";
+  const when = stage.endsWith("late") ? "has passed" : stage.endsWith("due") ? "is today" : "is within 3 days";
+  await notify(recipients, { title: "A notice needs attention", body: `A notice's ${date} ${when}.`, url: "/app/notices" });
+  return { done: true };
+};

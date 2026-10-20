@@ -523,6 +523,9 @@ isOneToOne: false
         isOneToOne: false
         isSetofReturn: true
       } },
+"claim_notice_alert":
+{ Args: { "stage": string,"task_id": string }; Returns: Json
+                           },
 "closed_firms":
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_name": string,"hours": Json,"reason": string
@@ -578,6 +581,11 @@ isOneToOne: false
 "my_invites":
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_id": string,"firm_name": string,"role": string
+            }[]
+                           },
+"notice_alerts":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "action_date": string,"client_id": string,"client_name": string,"due_on": string,"id": string
             }[]
                            },
 "observe_office":

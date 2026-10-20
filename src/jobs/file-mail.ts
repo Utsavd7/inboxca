@@ -6,6 +6,7 @@ import type { FolderOrder, Naming } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { firmMailer } from "@/src/lib/firm-mail";
 import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
+import type { NoticeDetails } from "@/src/lib/notices";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { queueRead } from "./read-document";
 import type { Handler } from "./runner";
@@ -84,12 +85,15 @@ async function fileAttachments(
   const order = ((driveAccount.settings as { folder_order?: FolderOrder }).folder_order ?? "year_client_work") as FolderOrder;
   const naming = (driveAccount.settings as { naming?: Naming }).naming;
   const client = event.clients.name;
+  const { data: notices } = event.label === "notice_received" ? await admin.from("tasks").select("details").eq("firm_id", firm).eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1) : { data: [] };
+  const notice = notices?.[0]?.details as NoticeDetails | undefined;
   const { data: existing } = await admin.from("documents").select("email_event_id, sha256, document_type, period_key").eq("client_id", event.client_id);
   const known = existing ?? [];
   for (const file of read.files) {
     const sha256 = createHash("sha256").update(file.bytes).digest("hex");
     if (known.some((document) => document.email_event_id === event.id && document.sha256 === sha256)) continue;
-    const about = describeFile(file.name, read.subject, event.label, event.received_at);
+    const described = describeFile(file.name, read.subject, event.label, event.received_at);
+    const about = notice ? { ...described, work: notice.authority, type: "Notice" } : described;
     const again = known.some((document) => document.sha256 === sha256 || (about.sure && document.document_type === about.type && document.period_key === about.period));
     const toCheck = !about.sure || again;
     const folder = await drive.ensureFolder(folderFor(order, client, { ...about, receivedAt: event.received_at, toCheck }));
