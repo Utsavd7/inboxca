@@ -4,7 +4,7 @@ import { workOfService } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
 import { firmMailer } from "@/src/lib/firm-mail";
 import type { DocumentRequest } from "@/src/lib/checklists";
-import { followUpDue, planReminders, reminderEmail, type FollowUp, type ReminderTask } from "@/src/lib/reminders";
+import { followUpDue, planReminders, reminderEmail, reminderStages, checkedReminder, type FollowUp, type ReminderTask } from "@/src/lib/reminders";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Handler } from "./runner";
 
@@ -68,7 +68,7 @@ export const sendReminders: Handler = async (job) => {
     name: row.clients.name,
     email_enc: row.clients.email_enc,
   }));
-  const { send, skipped } = planReminders(tasks, today, filed, new Set(handling?.map((request) => request.client_id ?? "")));
+  const { send, skipped } = planReminders(tasks, today, filed, new Set(handling?.map((request) => request.client_id ?? "")), reminderStages(firmRow.settings as { reminder_stages?: unknown }));
   const save = (task: { id: string; details: Details }, details: Details) => admin.from("tasks").update({ details: { ...task.details, ...details } as unknown as NonNullable<Json> }).eq("id", task.id);
   for (const { task, reason } of skipped) {
     const details = (task as (typeof tasks)[number]).details;
@@ -100,8 +100,14 @@ export const sendReminders: Handler = async (job) => {
   const host = new URL(process.env.APP_BASE_URL ?? "http://inboxca.local").host;
   let sentNow = 0;
   for (const clientId of new Set([...send.keys(), ...follow.keys()])) {
-    const mine = (send.get(clientId) ?? []) as (typeof tasks)[number][];
+    let mine = (send.get(clientId) ?? []) as (typeof tasks)[number][];
     const asks = follow.get(clientId) ?? [];
+    if (mine.length) {
+      const { data: current, error } = await admin.from("tasks").select("id,details").in("id", mine.map((task) => task.id)).neq("status", "filed");
+      if (error) return { retry: "returns_not_read" };
+      mine = mine.filter((task) => current?.some((row) => row.id === task.id)).map((task) => ({ ...task, details: current!.find((row) => row.id === task.id)!.details as Details }));
+    }
+    if (!mine.length && !asks.length) continue;
     // Each task and each request carries the day's send, so nothing goes twice.
     const states = [...mine.map((task) => task.details.reminder), ...asks.map((ask) => ask.details.reminder)];
     if (states.every((state) => state?.day === today && state.state === "sent")) continue;
@@ -132,7 +138,7 @@ export const sendReminders: Handler = async (job) => {
     await markAll("sending");
     const person = people.get(clientId)!;
     const to = await crypto.decrypt(firm, `clients/${clientId}/email`, person.email_enc!);
-    const { subject, text } = reminderEmail(person.name, firmRow.name, mine, today, asks);
+    const { subject, text } = checkedReminder(undefined, reminderEmail(person.name, firmRow.name, mine, today, asks));
     const sent = await mailer.send(to, subject, text, messageId);
     await markAll(sent ? "sent" : "failed");
     if (sent) sentNow++;

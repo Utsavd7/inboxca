@@ -65,3 +65,25 @@ describe("smart reminders", () => {
     expect(text).toContain("https://inboxca.test/u/abc");
   });
 });
+
+// M5 acceptance: a wrong date, form, period or amount cannot replace the records.
+it("uses the template for an unchecked draft, with AI writing off", async () => {
+  const { checkedReminder } = await import("@/src/lib/reminders");
+  const template = reminderEmail("Invented Textiles", "Test Firm", [task({ id: "a" })], today);
+  expect(checkedReminder(template, template)).toBe(template);
+  for (const draft of [
+    { ...template, text: template.text.replace("20 Oct 2026", "21 Oct 2026") },
+    { ...template, text: template.text.replace("GSTR-3B", "GSTR-1") },
+    { ...template, text: template.text.replace("Sep 2026", "Aug 2026") },
+    { ...template, text: template.text + "\nPay Rs 1,23,456." },
+    { ...template, text: template.text + "\nYou owe two lakh rupees." },
+  ]) expect(checkedReminder(draft, template)).toBe(template);
+});
+
+it("uses the firm's chosen stages, including none, with the current stages as default", async () => {
+  const { reminderStages, STAGES } = await import("@/src/lib/reminders");
+  expect(reminderStages({})).toEqual(STAGES);
+  expect(reminderStages({ reminder_stages: [3, 999] })).toEqual([3]);
+  expect(planReminders([task({ id: "a" })], today, new Set(), new Set(), [1]).send.size).toBe(0);
+  expect(planReminders([task({ id: "a" })], today, new Set(), new Set(), []).send.size).toBe(0);
+});

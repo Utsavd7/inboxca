@@ -14,6 +14,7 @@ import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
 import { Badge, PageHead } from "../ui";
+import { STAGES, stageNames, reminderStages } from "@/src/lib/reminders";
 import { MailboxForm } from "./mailbox-form";
 
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
@@ -265,7 +266,7 @@ export default async function Settings({
           <section className="panel" aria-labelledby="reminders-title" id="reminders">
             <h2 id="reminders-title">Reminders</h2>
             <p className="hint">
-              InboxCA emails each client once a day at most, from your firm&apos;s address, about returns due in 7, 3 or 1 days, on the day, and 1 and 3 days late. It skips a
+              InboxCA emails each client once a day at most, from your firm&apos;s address, at the stages you choose below. It skips a
               reminder when the return is filed, the client already sent files for it, or your team is replying to them. Only dates a CA has confirmed are reminded.
             </p>
             <form action={saveReminders} className="form-row">
@@ -273,6 +274,7 @@ export default async function Settings({
                 <input type="checkbox" name="on" defaultChecked={settings.reminders === true} />
                 Email clients before their returns are due
               </label>
+              <fieldset><legend>When to remind</legend><div className="routine-grid">{STAGES.map((day) => <label className="check" key={day}><input type="checkbox" name="stage" value={day} defaultChecked={reminderStages(settings).includes(day)} />{stageNames[day]}</label>)}</div></fieldset>
               <label className="check">
                 <input type="checkbox" name="acknowledge" defaultChecked={settings.acknowledge === true} />
                 Reply to clients when their files arrive, saying what was received
