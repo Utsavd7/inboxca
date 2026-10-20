@@ -45,7 +45,9 @@ test("services on a client's GSTIN give it its due dates", async () => {
   const due = owner.locator("section[aria-labelledby=due] tbody tr");
   await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");
   await expect(owner.locator("section[aria-labelledby=due]")).toContainText("not yet confirmed by a CA");
-  await expect(due).toHaveCount(12);
+  const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed'",[firm.firmId]);
+  expect(n).toBeGreaterThan(12);
+  await expect(due).toHaveCount(n);
 });
 
 test("a return is marked filed with its acknowledgement on the calendar", async () => {
@@ -246,4 +248,31 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
   await owner.getByRole("link", { name: /^Files/ }).click();
   await expect(owner.locator("section[aria-labelledby=files] tbody tr")).toContainText(["Patel Textiles Pvt Ltd - GSTR-2B - Sep 2026"]);
+});
+
+// M1 acceptance: the available tabs use live records and counts, without M6 placeholders.
+test("client tabs show all return pages, notices and recent activity; Home counts only active clients",async()=>{
+  const client=randomUUID();
+  await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Tabs Test Client','individual')",[client,firm.firmId]);
+  await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) select $1,$2,'GSTR1_M','2026-09',current_date+n from generate_series(1,51) n",[firm.firmId,client]);
+  await query(local.dbUrl,`insert into public.tasks(firm_id,client_id,kind,due_on,details) values ($1,$2,'notice','2026-10-22','{"authority":"income_tax","notice_type":"Invented notice","reference":"TEST-123","received_on":"2026-10-20","suggested_date":"2026-12-24"}')`,[firm.firmId,client]);
+  await owner.goto(`/app/clients/${client}?tab=due`);
+  await expect(owner.getByRole("navigation",{name:"Returns pages"})).toContainText("Showing 1 to 50 of 51 returns");
+  await owner.getByRole("navigation",{name:"Returns pages"}).getByRole("link",{name:"Next"}).click();
+  await expect(owner).toHaveURL(/tab=due&page=2/);
+  await expect(owner.locator("section[aria-labelledby=due] tbody tr")).toHaveCount(1);
+  await owner.getByRole("navigation",{name:"Client",exact:true}).getByRole("link",{name:/^Notices/}).click();
+  const notices=owner.locator("section[aria-labelledby=client-notices]");
+  await expect(notices).toContainText("Invented notice");await expect(notices).toContainText("Review by 22 Oct 2026");
+  await expect(notices).not.toContainText("24 Dec 2026");
+  await owner.getByRole("link",{name:"Activity",exact:true}).click();
+  await expect(owner.locator("section[aria-labelledby=client-activity]")).toContainText("Client added");
+  await expect(owner.getByRole("link",{name:"Extraction",exact:true})).toHaveCount(0);
+  await expect(owner.getByRole("link",{name:"Outputs",exact:true})).toHaveCount(0);
+  await owner.goto("/app");
+  const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.clients where firm_id=$1 and archived_at is null",[firm.firmId]);
+  await expect(owner.getByText(`${n.toLocaleString("en-IN")} active clients`,{exact:true})).toBeVisible();
+  await query(local.dbUrl,"update public.clients set archived_at=now() where id=$1",[client]);
+  await owner.reload();
+  await expect(owner.getByText(`${(n-1).toLocaleString("en-IN")} active clients`,{exact:true})).toBeVisible();
 });

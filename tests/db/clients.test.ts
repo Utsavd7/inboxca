@@ -211,3 +211,33 @@ describe("the client register", () => {
       expect((await db.query("select client_id from public.contact_clients")).rows).toEqual([{ client_id: CLIENT }]);
     }));
 });
+
+// M1 acceptance: client activity follows the same firm and assignment boundaries.
+it("shows only a visible client's recent activity, without private log details",()=>rollback(db,async()=>{
+  await seed();
+  await actAs(db,OWNER);await add(FIRM,CLIENT,pan("activity"));
+  await asOwner(db);
+  const task=(await db.query("insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR1_M','2026-09',current_date) returning id",[FIRM,CLIENT])).rows[0].id;
+  await db.query("update public.tasks set status='in_progress' where id=$1",[task]);
+  await db.query("insert into public.activity_log(firm_id,action,entity_type,entity_id,details) values ($1,'other.private','client',$2,'{\"private\":\"never returned\"}')",[OTHER,CLIENT]);
+  await actAs(db,STAFF);
+  const open=await db.query("select * from public.client_activity($1)",[CLIENT]);
+  expect(open.fields.map((field)=>field.name)).toEqual(["at","action","actor_id"]);
+  expect(open.rows.map((row)=>row.action)).toEqual(expect.arrayContaining(["client.added","task.changed"]));
+  expect(open.rows.some((row)=>row.action==="other.private")).toBe(false);
+  await actAs(db,OWNER);
+  await db.query("update public.firms set settings='{\"client_visibility\":\"restricted\"}' where id=$1",[FIRM]);
+  await actAs(db,STAFF);
+  expect((await db.query("select * from public.client_activity($1)",[CLIENT])).rows).toEqual([]);
+  await actAs(db,OWNER);
+  await db.query("insert into public.client_assignments(firm_id,client_id,user_id,role) values ($1,$2,$3,'staff')",[FIRM,CLIENT,STAFF]);
+  await actAs(db,STAFF);
+  expect((await db.query("select * from public.client_activity($1)",[CLIENT])).rowCount).toBeGreaterThan(0);
+  await asOwner(db);
+  await db.query("insert into public.activity_log(firm_id,action,entity_type,entity_id,at) select $1,'client.changed','client',$2,now()+n*interval '1 second' from generate_series(1,60) n",[FIRM,CLIENT]);
+  await actAs(db,OWNER);
+  const recent=(await db.query("select * from public.client_activity($1)",[CLIENT])).rows;
+  expect(recent).toHaveLength(50);expect(recent[0].at>recent[49].at).toBe(true);
+  await actAs(db,OUTSIDER);expect((await db.query("select * from public.client_activity($1)",[CLIENT])).rows).toEqual([]);
+  await actAs(db,null);expect((await attempt(db,"select * from public.client_activity($1)",[CLIENT])).ok).toBe(false);
+}));

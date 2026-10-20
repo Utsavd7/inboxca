@@ -100,6 +100,7 @@ export const sendReminders: Handler = async (job) => {
 
   const host = new URL(process.env.APP_BASE_URL ?? "http://inboxca.local").host;
   let sentNow = 0;
+  let uncertain = false;
   const started=Date.now();
   for (const clientId of new Set([...send.keys(), ...follow.keys()])) {
     let mine = (send.get(clientId) ?? []) as (typeof tasks)[number][];
@@ -137,9 +138,13 @@ export const sendReminders: Handler = async (job) => {
       }
     };
     // A send that may have happened before a crash is looked for first, never repeated blindly.
-    if (states.some((state) => state?.day === today && state.state === "sending") && (await mailer.sentAlready(messageId))) {
-      await markAll("sent");
-      continue;
+    if (states.some((state) => state?.day === today && state.state === "sending")) {
+      try {
+        if (await mailer.sentAlready(messageId)) { await markAll("sent"); continue; }
+      } catch {
+        uncertain = true;
+        continue;
+      }
     }
     await markAll("sending");
     const person = people.get(clientId)!;
@@ -147,7 +152,11 @@ export const sendReminders: Handler = async (job) => {
     const { subject, text } = checkedReminder(undefined, emailTemplates.reminder(person.name, firmRow.name, mine, today, asks));
     const sent = await mailer.send(to, subject, text, messageId);
     await markAll(sent ? "sent" : mailer.waitUntil ? "failed" : "sending");
-    if (!sent) return mailer.waitUntil ? {retry:"mail_wait",at:mailer.waitUntil} : {retry:"mail_not_sent",patient:true};
+    if (!sent) {
+      if (mailer.waitUntil) return {retry:"mail_wait",at:mailer.waitUntil};
+      uncertain = true;
+      continue;
+    }
     if (sent) sentNow++;
     // Only what is reminded, never the text, goes in the log.
     if (sent)
@@ -159,5 +168,5 @@ export const sendReminders: Handler = async (job) => {
         details: { template:`reminder.en.${TEMPLATE_VERSION}`,tasks: mine.map((task) => task.id), requests: asks.map((ask) => ask.requestId), works: [...new Set(mine.map((task) => workOfService(task.code)))] },
       });
   }
-  return { done: true };
+  return uncertain ? {retry:"mail_not_sent",patient:true} : {done:true};
 };

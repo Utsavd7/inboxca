@@ -10,6 +10,7 @@ import { type Right } from "@/src/lib/rights";
 import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { workTypes, type WorkType } from "@/src/lib/drive";
+import { authorities, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
 import { LinkTabs } from "../../link-tabs";
@@ -45,16 +46,19 @@ const reminderNote = (details: { reminded?: string[]; skipped?: { reason: string
   details.reminded?.length ? `Reminded ${dueLabel(details.reminded.at(-1)!)}` : details.skipped ? skipReasons[details.skipped.reason as Skip] : "";
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; page?: string; show?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, tab: asked, page: askedPage, show, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
+  const page = /^\d{1,6}$/.test(askedPage ?? "") ? Math.max(1,Number(askedPage)) : 1;
+  const start = (page-1)*50;
   const { data: client } = await supabase
     .from("clients")
     .select(
       "id, name, kind, archived_at, email_enc, group_id, branch_id, reminders_paused, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))",
     )
     .eq("id", id)
+    .eq("firm_id",membership.firmId)
     .maybeSingle();
   if (!client) notFound();
   const crypto = serverCrypto();
@@ -73,14 +77,17 @@ export default async function Client({ params, searchParams }: { params: Promise
     })),
   );
   const manage = canManageClients(membership.role);
-  const [{ data: people }, { data: groups }, { data: rules }, { data: tasks }, { data: files }, { data: asks }] = await Promise.all([
+  const [{ data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: files }, { data: asks }, { data: notices, count: noticeCount }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
-    supabase.from("tasks").select("id, code, period_key, due_on, status, details").eq("kind", "compliance").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
+    supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact"}).eq("firm_id",membership.firmId).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
     supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
     supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).eq("status", "pending").gt("expires_at", new Date().toISOString()),
+    supabase.from("tasks").select("id,due_on,status,details",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
   ]);
+  const activity = asked==="activity" ? await supabase.rpc("client_activity",{target_client:id}) : null;
+  if (activity?.error) throw new Error("Client activity could not be read");
   // The lists for the work this client's services need are ticked when asking for files.
   const usualWork = new Set(client.client_registrations.flatMap((registration) => (registration.services ?? []).map(workOfService)));
   // A search keeps only the files whose words include every word typed.
@@ -149,12 +156,34 @@ export default async function Client({ params, searchParams }: { params: Promise
   const tabs: [string, string, number?][] = [
     ["overview", "Overview"],
     ["files", "Files", documents.length],
-    ["due", "Due dates", tasks?.length ?? 0],
+    ["due", "Due dates", taskCount ?? 0],
+    ["notices", "Notices", noticeCount ?? 0],
+    ["activity", "Activity"],
     ["contacts", "Contacts", contacts.length],
     ["team", "Team", client.client_assignments.length],
     ...(manage ? ([["details", "Details"]] as [string, string][]) : []),
   ];
   const tab = tabs.some(([key]) => key === asked) ? asked! : "overview";
+  const pager = (total: number, rows: number, label: string) => (
+    <nav className="pager" aria-label={`${label} pages`}>
+      <p>Showing {rows ? (start + 1).toLocaleString("en-IN") : 0} to {rows ? (start + rows).toLocaleString("en-IN") : 0} of {total.toLocaleString("en-IN")} {label.toLowerCase()}</p>
+      <span>
+        {page > 1 && <Link className="b b-secondary b-small" href={`?tab=${tab}&page=${page - 1}${show === "filed" ? "&show=filed" : ""}`}>Previous</Link>}
+        {start + rows < total && <Link className="b b-secondary b-small" href={`?tab=${tab}&page=${page + 1}${show === "filed" ? "&show=filed" : ""}`}>Next</Link>}
+      </span>
+    </nav>
+  );
+  const activityNames: Record<string, string> = {
+    "client.added": "Client added", "client.changed": "Client details changed",
+    "registration.added": "Number added", "registration.changed": "Services changed", "registration.removed": "Number removed",
+    "assignment.added": "Person or team assigned", "assignment.removed": "Assignment removed",
+    "contact_link.added": "Contact linked", "contact_link.changed": "Contact permissions changed", "contact_link.removed": "Contact removed",
+    "task.changed": "Return or notice updated", "document.viewed": "Document viewed",
+    "document.uploaded": "Document uploaded", "document.filed": "Document filed", "document.renamed": "Document renamed",
+    "document.deleted": "Document removed", "document.shared": "Document shared", "document.downloaded": "Document downloaded",
+    "reminder.sent": "Reminder sent", "email.changed": "Email label corrected",
+    "email.acknowledged": "Files received reply sent", "request.changed": "Request updated",
+  };
   const hidden = (
     <>
       <input type="hidden" name="client" value={client.id} />
@@ -598,6 +627,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           {tab === "due" && (
             <section className="panel" aria-labelledby="due">
               <h2 id="due">Due dates</h2>
+              <p className="hint"><Link href={`?tab=due${show==="filed" ? "" : "&show=filed"}`}>{show==="filed" ? "Show returns still to file" : "Show filed returns"}</Link></p>
               {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="hint">Dates marked * are not yet confirmed by a CA against the official notification.</p>}
               {tasks?.length ? (
                 <div className="table-wrap">
@@ -635,8 +665,54 @@ export default async function Client({ params, searchParams }: { params: Promise
                   </table>
                 </div>
               ) : (
-                <p className="hint">No due dates yet. Add a number and choose its services.</p>
+                <p className="hint">{show==="filed" ? "No filed returns on this page." : "No due dates on this page. Add a number and choose its services."}</p>
               )}
+              {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns")}
+            </section>
+          )}
+          {tab === "notices" && (
+            <section className="panel" aria-labelledby="client-notices">
+              <h2 id="client-notices">Notices</h2>
+              <p className="hint">Review a suggested date against the notice before confirming it. <Link href="/app/notices">Open the notice tracker</Link></p>
+              {notices?.length ? (
+                <div className="table-wrap">
+                  <table className="t">
+                    <thead><tr><th scope="col">Notice</th><th scope="col">Received</th><th scope="col">Action date</th><th scope="col">Status</th></tr></thead>
+                    <tbody>{notices.map((notice) => {
+                      const details = notice.details as unknown as NoticeDetails;
+                      return (
+                        <tr key={notice.id}>
+                          <td>{details.notice_type}<span className="sub">{[authorities[details.authority], details.reference].filter(Boolean).join(", ")}</span></td>
+                          <td>{dueLabel(details.received_on)}</td>
+                          <td>{details.action_date ? dueLabel(details.action_date) : <Badge tone="warn">Review by {dueLabel(notice.due_on)}</Badge>}</td>
+                          <td>{noticeStatuses[notice.status as keyof typeof noticeStatuses]}</td>
+                        </tr>
+                      );
+                    })}</tbody>
+                  </table>
+                </div>
+              ) : <p className="hint">No notices on this page.</p>}
+              {pager(noticeCount ?? 0, notices?.length ?? 0, "Notices")}
+            </section>
+          )}
+          {tab === "activity" && (
+            <section className="panel" aria-labelledby="client-activity">
+              <h2 id="client-activity">Activity</h2>
+              <p className="hint">The latest 50 changes for this client.</p>
+              {activity?.data?.length ? (
+                <div className="table-wrap">
+                  <table className="t">
+                    <thead><tr><th scope="col">When</th><th scope="col">What happened</th><th scope="col">Who</th></tr></thead>
+                    <tbody>{activity.data.map((entry, index) => (
+                      <tr key={index}>
+                        <td className="shrink num">{new Date(entry.at).toLocaleString("en-IN", {timeZone:"Asia/Kolkata", day:"numeric", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:false})}</td>
+                        <td>{activityNames[entry.action] ?? "Client record changed"}</td>
+                        <td>{entry.actor_id ? people?.find((person) => person.user_id === entry.actor_id)?.email ?? "Former team member" : "InboxCA"}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              ) : <p className="hint">No changes recorded yet.</p>}
             </section>
           )}
           {tab === "contacts" && (

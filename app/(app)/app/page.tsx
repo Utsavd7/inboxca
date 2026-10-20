@@ -107,7 +107,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
             .from("connected_accounts")
             .select("kind")
             .then((result) => result.data?.map((row) => row.kind) ?? []),
-          count(supabase.from("clients").select("id", { count: "exact", head: true })),
+          count(supabase.from("clients").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).is("archived_at", null)),
           count(supabase.from("client_registrations").select("id", { count: "exact", head: true }).filter("services", "neq", "{}")),
           count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
         ])
@@ -233,6 +233,8 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           </>
         }
       />
+
+      {owner && setup && <p className="hint">{setup[1].toLocaleString("en-IN")} active {setup[1]===1 ? "client" : "clients"}</p>}
 
       {next && steps && (
         <div className="setup" role="region" aria-labelledby="setup-title">

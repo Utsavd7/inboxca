@@ -529,6 +529,11 @@ isOneToOne: false
 "claim_return_alert":
 { Args: { "task_id": string }; Returns: (string)[]
                            },
+"client_activity":
+{ Args: { "target_client": string }; Returns: {
+              "action": string,"actor_id": string,"at": string
+            }[]
+                           },
 "closed_firms":
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_name": string,"hours": Json,"reason": string

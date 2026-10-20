@@ -758,8 +758,8 @@ test("repeated mailbox failures ask the owner to reconnect, then pending mail re
   await expect(card.getByRole("status")).toHaveText(`Connected: ${mailboxEmail}`);
   for(let n=0;n<2;n++) await sweep();
   expect((await query(local.dbUrl,"select id,status from public.connected_accounts where firm_id=$1 and kind='mail'",[firm.firmId]))[0]).toEqual({id:account,status:"connected"});
-  expect((await query(local.dbUrl,"select count(*)::int n from public.email_events where firm_id=$1 and client_id=$2",[firm.firmId,clients[1]]))[0].n).toBe(1);
-  expect(await mailCount(addresses[0])).toBe(2);
+  await expect.poll(async()=>(await query(local.dbUrl,"select count(*)::int n from public.email_events where firm_id=$1 and client_id=$2",[firm.firmId,clients[1]]))[0].n,{timeout:15_000}).toBe(1);
+  await expect.poll(()=>mailCount(addresses[0]),{timeout:15_000}).toBe(2);
   expect(await lastMail(addresses[0])).toContain("Health test return");
   await owner.goto("/app");
   await expect(owner.getByRole("link",{name:"Reconnect email"})).toHaveCount(0);
