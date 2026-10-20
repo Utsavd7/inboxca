@@ -234,7 +234,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         }
       />
 
-      {owner && setup && <p className="hint"><Link href="/app/clients">{setup[1].toLocaleString("en-IN")} active {setup[1]===1 ? "client" : "clients"}</Link></p>}
+      {owner && setup && <p className="hint">{setup[1].toLocaleString("en-IN")} active {setup[1]===1 ? "client" : "clients"}</p>}
 
       {next && steps && (
         <div className="setup" role="region" aria-labelledby="setup-title">

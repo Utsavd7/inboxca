@@ -261,7 +261,7 @@ test("client tabs show all return pages, notices and recent activity; Home count
   await owner.getByRole("navigation",{name:"Returns pages"}).getByRole("link",{name:"Next"}).click();
   await expect(owner).toHaveURL(/tab=due&page=2/);
   await expect(owner.locator("section[aria-labelledby=due] tbody tr")).toHaveCount(1);
-  await owner.getByRole("link",{name:/^Notices 1$/}).click();
+  await owner.getByRole("navigation",{name:"Client",exact:true}).getByRole("link",{name:/^Notices/}).click();
   const notices=owner.locator("section[aria-labelledby=client-notices]");
   await expect(notices).toContainText("Invented notice");await expect(notices).toContainText("Review by 22 Oct 2026");
   await expect(notices).not.toContainText("24 Dec 2026");
@@ -271,8 +271,8 @@ test("client tabs show all return pages, notices and recent activity; Home count
   await expect(owner.getByRole("link",{name:"Outputs",exact:true})).toHaveCount(0);
   await owner.goto("/app");
   const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.clients where firm_id=$1 and archived_at is null",[firm.firmId]);
-  await expect(owner.getByRole("link",{name:`${n.toLocaleString("en-IN")} active clients`,exact:true})).toBeVisible();
+  await expect(owner.getByText(`${n.toLocaleString("en-IN")} active clients`,{exact:true})).toBeVisible();
   await query(local.dbUrl,"update public.clients set archived_at=now() where id=$1",[client]);
   await owner.reload();
-  await expect(owner.getByRole("link",{name:`${(n-1).toLocaleString("en-IN")} active clients`,exact:true})).toBeVisible();
+  await expect(owner.getByText(`${(n-1).toLocaleString("en-IN")} active clients`,{exact:true})).toBeVisible();
 });
