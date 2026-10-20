@@ -1,6 +1,6 @@
 import { serverCrypto } from "@/src/lib/crypto";
 import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
-import { askedPaper, isRoutine, pickPaper, type RecordsSettings } from "@/src/lib/records";
+import { askedPaper, paperPolicy, pickPaper, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Handler } from "./runner";
@@ -19,11 +19,15 @@ export const recordsReply: Handler = async (job) => {
     .maybeSingle();
   const mailbox = event?.connected_accounts;
   if (!event?.client_id || !event.clients || !event.firms || !["records_past", "records_current"].includes(event.label ?? "") || mailbox?.status !== "connected") return { done: true };
-  const { data: answered } = await admin.from("shares").select("id").eq("email_event_id", event.id).limit(1);
-  if (answered?.length) return { done: true };
+  const { data: answered, error: answeredError } = await admin.from("shares").select("id,status,delivery,document_id").eq("email_event_id", event.id).limit(1);
+  if (answeredError) return {retry:"reply_not_read"};
+  const prior = answered?.[0];
+  if (prior && (prior.delivery as { state?: string } | null)?.state !== "sending") return { done: true };
   const firm = event.firm_id;
-  const toTeam = (reason: string) =>
-    admin.from("requests").upsert({ firm_id: firm, kind: "team_reply", client_id: event.client_id, entity_type: "email", entity_id: event.id, reason_code: reason }, { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true });
+  const toTeam = async (reason: string) => {
+    const {error} = await admin.from("requests").upsert({ firm_id: firm, kind: "team_reply", client_id: event.client_id, entity_type: "email", entity_id: event.id, reason_code: reason }, { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true });
+    if (error) throw new Error("team_reply_not_saved");
+  };
   const crypto = serverCrypto();
 
   // Who may receive: the client's own registered address, or a contact allowed to receive its papers.
@@ -46,16 +50,20 @@ export const recordsReply: Handler = async (job) => {
     await toTeam("record_unclear");
     return { done: true };
   }
-  const { data: documents } = await admin.from("documents").select("id, name, document_type, period_key, status").eq("client_id", event.client_id).in("document_type", asked.types);
-  const picked = pickPaper(documents ?? [], asked);
+  const { data: documents, error: documentsError } = await admin.from("documents").select("id, name, document_type, period_key, status, share_policy").eq("client_id", event.client_id).in("document_type", asked.types);
+  if (documentsError) return {retry:"papers_not_read"};
+  const picked = pickPaper(prior ? (documents ?? []).filter((paper) => paper.id === prior.document_id) : documents ?? [], asked);
   if (!("document" in picked) || !picked.document) {
     await toTeam(picked.reason ?? "record_not_found");
     return { done: true };
   }
   const paper = picked.document;
   const settings = ((event.firms.settings as { records?: RecordsSettings }).records ?? {}) as RecordsSettings;
-  if (!isRoutine(paper.document_type, settings)) {
-    await admin.from("shares").insert({ firm_id: firm, document_id: paper.id, contact_id: event.contact_id, email_event_id: event.id, status: "waiting" });
+  const policy = paperPolicy(paper, settings);
+  if (policy === "internal") { await toTeam("record_internal"); return { done: true }; }
+  if (policy === "approval" && !prior) {
+    const {error} = await admin.from("shares").insert({ firm_id: firm, document_id: paper.id, contact_id: event.contact_id, email_event_id: event.id, status: "waiting" });
+    if (error) return {retry:"approval_not_saved"};
     return { done: true };
   }
   const sent = await sendShare({
@@ -68,6 +76,7 @@ export const recordsReply: Handler = async (job) => {
     to,
     emailEventId: event.id,
     inReplyTo: event.provider_message_id,
+    waitingId: prior?.id,
   });
   return sent ? { done: true } : { retry: "mail_not_sent" };
 };

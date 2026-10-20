@@ -178,8 +178,8 @@ export async function readAttachments(address: string, password: string, server:
 }
 
 // Whether a message with this Message-ID is in the mailbox's Sent folder: how a send that
-// may or may not have happened before a crash is checked. A mailbox whose server does not
-// keep sent mail answers no, and the message goes again.
+// may or may not have happened before a crash is checked. An unavailable Sent folder
+// must never be treated as evidence that the email did not go.
 export async function foundInSent(address: string, password: string, server: Server, messageId: string) {
   const imap = imapClient(address, password, server);
   try {
@@ -187,7 +187,7 @@ export async function foundInSent(address: string, password: string, server: Ser
     const sent = (await imap.list()).find((box) => box.specialUse === "\\Sent");
     if (!sent) {
       await imap.logout();
-      return false;
+      throw new Error("sent_folder_missing");
     }
     await imap.mailboxOpen(sent.path, { readOnly: true });
     const found = await imap.search({ header: { "message-id": messageId } }, { uid: true });
@@ -195,6 +195,6 @@ export async function foundInSent(address: string, password: string, server: Ser
     return !!found && found.length > 0;
   } catch {
     imap.close();
-    return false;
+    throw new Error("sent_not_read");
   }
 }

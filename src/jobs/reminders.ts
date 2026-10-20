@@ -108,9 +108,13 @@ export const sendReminders: Handler = async (job) => {
       mine = mine.filter((task) => current?.some((row) => row.id === task.id)).map((task) => ({ ...task, details: current!.find((row) => row.id === task.id)!.details as Details }));
     }
     if (!mine.length && !asks.length) continue;
+    // New work added after today's email waits for tomorrow, never another email today.
+    const {count: alreadySent,error: sentError}=await admin.from("activity_log").select("at",{count:"exact",head:true}).eq("firm_id",firm).eq("entity_id",clientId).eq("action","reminder.sent").gte("at",`${today}T00:00:00+05:30`);
+    if (sentError) return {retry:"sends_not_read"};
+    if (alreadySent) continue;
     // Each task and each request carries the day's send, so nothing goes twice.
     const states = [...mine.map((task) => task.details.reminder), ...asks.map((ask) => ask.details.reminder)];
-    if (states.every((state) => state?.day === today && state.state === "sent")) continue;
+    if (states.some((state) => state?.day === today && state.state === "sent")) continue;
     if (sentNow >= PER_RUN) return { retry: "more_clients", at: new Date(Date.now() + 10 * 60_000) };
     const messageId = `<reminder-${clientId}-${today}@${host}>`;
     const markAll = async (state: "sending" | "sent" | "failed") => {

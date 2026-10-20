@@ -15,6 +15,7 @@ import { labels } from "@/src/lib/triage";
 
 const reasons: Record<string, string> = {
   no_rule: "InboxCA could not tell what it asks",
+  record_internal: "This paper is kept inside your firm",
   record_not_found: "Asks for a paper that is not in the drive",
   record_unclear: "Asks for a paper InboxCA could not pick out",
   not_allowed: "Asks for a paper, but may not receive this client's papers",

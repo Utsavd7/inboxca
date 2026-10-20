@@ -53,6 +53,11 @@ async function lastMail(address: string) {
   await imap.logout();
   return message && message.source ? ((await simpleParser(message.source)).text ?? "") : "";
 }
+async function mailCount(address:string) {
+  const imap=new ImapFlow({host:"127.0.0.1",port:3143,secure:false,auth:{user:address,pass:address},logger:false});
+  await imap.connect();
+  try { return (await imap.mailboxOpen("INBOX")).exists; } finally { await imap.logout(); }
+}
 // A base32 authenticator key, given to the owner directly so their sign in is quick.
 const deputyKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
 const ownerKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
@@ -686,12 +691,15 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText(mailClient);
   const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
+  // M5 acceptance: an unregistered sender gets nothing, including no refusal email.
+  await smtp.sendMail({from:mailboxEmail,to:`stranger-${tag}@else.test`,subject:"Invented test mailbox",text:"Test setup"});
   for (const from of [`Client-${tag}@Patel.test`, `stranger-${tag}@else.test`])
     await smtp.sendMail({ from, to: mailboxEmail, subject: "Please send last year's ITR", text: "Thanks" });
   await query(local.dbUrl, "select private.queue_mail_polls()");
   await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   const events = await query(local.dbUrl, "select (client_id is not null) as matched, label from public.email_events where firm_id = $1", [firm.firmId]);
   expect(events).toEqual([{ matched: true, label: "records_past" }]);
+  expect(await mailCount(`stranger-${tag}@else.test`)).toBe(1);
 
   // A second email the rules cannot place waits for the team, and a person corrects a label.
   await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Hello", text: "Can we meet next week?" });
@@ -786,7 +794,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
     expect(await readFile(path.join(gst, "To check", `${mailClient} - Document.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
   }
 
-  // The same bills sent again wait under To check beside the first copy, for the team to choose.
+  // M5 acceptance: a duplicate attachment is flagged. The same bills sent again wait under To check beside the first copy, for the team to choose.
   await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Bills again", text: "Sending again.", attachments: [{ filename: "purchase_bills_sep_2026.pdf", content: "%PDF-1.4 invented purchase bills" }] });
   await query(local.dbUrl, "select private.queue_mail_polls()");
   for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
@@ -874,6 +882,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.goto("/app");
   await expect(owner.getByRole("alert").filter({ hasText: "no longer in your drive" })).toBeVisible();
 
+  // M5 acceptance: the registered request gets the right year, and private papers wait.
   // A client asks for papers by email: a routine ITR-V goes back at once as a secure link in
   // reply; private financial statements wait in the Inbox for one approval.
   for (const [type, period, content] of [["ITR-V", "FY 2024-25", "invented ITR-V"], ["Balance sheet", "FY 2025-26", "invented balance sheet"]]) {
@@ -896,6 +905,10 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const reply = await lastMail(`client-${tag}@patel.test`);
   expect(reply).toContain(`shared ${mailClient} - ITR-V - FY 2024-25.pdf with you`);
   expect(reply).toMatch(/Download it here: http\S+\/s\//);
+  const routineLink=reply.match(/Download it here: (http\S+)/)![1];
+  const opened=await request.get(routineLink);
+  expect(await opened.text()).toContain("Download");
+  expect((await (await request.get(`${routineLink}/file`)).body()).toString()).toContain("invented ITR-V");
   await ask("Financial statements", "Can you share the financial statements for FY 2025-26?");
   await owner.goto("/app/inbox");
   const papers = owner.locator("section[aria-labelledby=papers]");
@@ -996,10 +1009,95 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(await readFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2025-26.pdf"), "utf8")).toBe("%PDF-1.4 invented ITR-V");
   expect(await readFile(path.join(old, "Someone else", "notice.pdf"), "utf8")).toBe("%PDF-1.4 invented notice");
 
+});
+
+test("bulk papers go as links, private papers wait, missing papers and addresses are skipped", async ({ request, browser }) => {
+  // Bulk sends keep the existing rule: partners and managers need the owner's send permission.
+  const lead=await browser.newPage();
+  await emailStep(lead,deputyEmail);
+  await lead.getByLabel("6 digit code from the app").fill(totp(deputyKey));
+  await lead.getByRole("button",{name:"Continue"}).click();
+  await expect(lead).toHaveURL(/\/app(?:\?|$)/);
+  await lead.goto("/app/clients");
+  await expect(lead.locator(".rail-me")).toContainText("Partner");
+  await expect(lead.locator("#bulk-send")).toHaveCount(0);
+  const fields=await actionFields(owner,"/app/clients",{type:"AIS"});
+  const [{id: chosenClient}]=await query(local.dbUrl,"select id from public.clients where firm_id=$1 and name=$2",[firm.firmId,mailClient]);
+  await lead.request.post("/app/clients",{multipart:{...fields,client:chosenClient,type:"ITR-V",period:"2025"},headers:{Origin:new URL(lead.url()).origin}});
+  expect((await query(local.dbUrl,"select count(*)::int n from public.requests where firm_id=$1 and kind='bulk_send'",[firm.firmId]))[0].n).toBe(0);
+  await lead.close();
+  const noEmail=`No Email ${tag}`;
+  await query(local.dbUrl,"insert into public.clients(firm_id,name,kind) values ($1,$2,'individual')",[firm.firmId,noEmail]);
+  const send = async (type:string,period:string,names=[mailClient]) => {
+    await owner.goto("/app/clients");
+    await owner.locator("#bulk-send").getByLabel("Paper",{exact:true}).selectOption(type);
+    await owner.locator("#bulk-send").getByLabel("Year",{exact:true}).selectOption(period);
+    for (const name of names) await owner.getByLabel(`Send a paper to ${name}`,{exact:true}).check();
+    await owner.getByRole("button",{name:"Send chosen papers"}).click();
+    await expect(owner).toHaveURL(/\/app\/clients\?bulk=/);
+    await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
+    try {
+      await expect.poll(async()=>{await owner.reload();return owner.locator("section[aria-labelledby=send-progress]").textContent();}).toContain("Every chosen client has been checked.");
+    } catch(error) {
+      const jobs=await query(local.dbUrl,"select state,last_error_code from public.jobs where firm_id=$1 and kind='bulk_send'",[firm.firmId]);
+      throw new Error(`${String(error)}. Jobs: ${JSON.stringify(jobs)}`);
+    }
+  };
+  await send("ITR-V","2025",[mailClient,noEmail]);
+  const progress=owner.locator("section[aria-labelledby=send-progress]");
+  await expect(progress).toContainText(`${mailClient}: Sent`);
+  await expect(progress).toContainText(`${noEmail}: Skipped. No email address`);
+  // Resuming after the mail went but before the list saved its progress sends nothing twice.
+  const batch=new URL(owner.url()).searchParams.get("bulk")!;
+  const before=await mailCount(`client-${tag}@patel.test`);
+  await query(local.dbUrl,"update public.requests set status='pending',details=jsonb_set(details,'{clients,0}',(details#>'{clients,0}')-'state') where id=$1",[batch]);
+  await query(local.dbUrl,"update public.jobs set state='pending',run_at=now() where kind='bulk_send' and entity_id=$1",[batch]);
+  await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
+  expect(await mailCount(`client-${tag}@patel.test`)).toBe(before);
+  await owner.reload();
+  await expect(progress).toContainText(`${mailClient}: Sent`);
+  const sentBefore=await mailCount(`client-${tag}@patel.test`);
+  await owner.goto("/app/clients");
+  const again=await actionFields(owner,"/app/clients",{type:"AIS"});
+  await Promise.all([0,1].map(()=>owner.request.post("/app/clients",{multipart:{...again,client:chosenClient,type:"ITR-V",period:"2025"},headers:{Origin:new URL(owner.url()).origin}})));
+  await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
+  await query(local.dbUrl,"update public.jobs set run_at=now() where firm_id=$1 and kind='bulk_send' and state='pending'",[firm.firmId]);
+  await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
+  expect(await mailCount(`client-${tag}@patel.test`)).toBe(sentBefore);
+  expect(await lastMail(`client-${tag}@patel.test`)).toMatch(/Download it here: http\S+\/s\//);
+  await send("Audit report","2025");
+  await expect(progress).toContainText("Skipped. No filed paper for this year");
+  await send("Balance sheet","2026");
+  await expect(progress).toContainText("Waiting for approval in the Inbox");
+  await owner.goto("/app/inbox");
+  await owner.locator("section[aria-labelledby=papers]").getByRole("button",{name:"Approve and send"}).click();
+  await expect(owner.getByRole("status")).toContainText("Sent");
+  const [{id:client}] = await query(local.dbUrl,"select id from public.clients where firm_id=$1 and name=$2",[firm.firmId,mailClient]);
+  const [{id:doc,name}] = await query(local.dbUrl,"select id,name from public.documents where client_id=$1 and document_type='ITR-V' and status='filed'",[client]);
+  await owner.goto(`/app/clients/${client}?tab=files&edit=${doc}`);
+  await owner.getByLabel("Sending this paper").selectOption("internal");
+  await owner.getByRole("button",{name:"Save sending choice"}).click();
+  await expect.poll(async()=>(await query(local.dbUrl,"select share_policy from public.documents where id=$1",[doc]))[0].share_policy).toBe("internal");
+  await owner.reload();
+  await expect(owner.getByLabel("Sending this paper")).toHaveValue("internal");
+  await expect(owner.getByRole("link",{name:`Send ${name}`,exact:true})).toHaveCount(0);
+  await send("ITR-V","2025");
+  await expect(progress).toContainText("Skipped. Kept inside your firm");
+  const [{n}] = await query(local.dbUrl,"select count(*)::int n from public.shares where document_id=$1 and status='sent'",[doc]);
+  expect(n).toBe(0);
+  // M5 acceptance: an internal paper cannot leave through a records request either.
+  const smtp=nodemailer.createTransport({host:"127.0.0.1",port:3025,secure:false,ignoreTLS:true});
+  await smtp.sendMail({from:`client-${tag}@patel.test`,to:"office@firm.test",subject:"ITR copy",text:"Please send my ITR for AY 2025-26."});
+  await query(local.dbUrl,"select private.queue_mail_polls()");
+  await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
+  await owner.goto("/app/inbox");
+  await expect(owner.locator("section[aria-labelledby=team-reply]")).toContainText("This paper is kept inside your firm");
+  expect(name).toContain("ITR-V");
   await owner.goto("/app/settings");
   for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
   await expect(owner.locator("section#drive").getByRole("button", { name: "Connect drive" })).toBeVisible();
   await expect(owner.locator("section[aria-labelledby=mailbox]").getByLabel("The firm's email address")).toBeVisible();
+
 });
 
 // #1, #2, #20, #31, #35, #37, #44, #52, #56 and M7 acceptance: five staff, one batch approval.

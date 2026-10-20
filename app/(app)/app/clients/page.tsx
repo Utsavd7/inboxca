@@ -1,3 +1,7 @@
+import { sendClientPapers } from "@/app/(app)/actions";
+import { todayInIndia } from "@/src/lib/calendar";
+import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
+import { sendSkip, type BulkSend } from "@/src/lib/records";
 import { Plus, Search, Upload, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -14,7 +18,7 @@ import { Avatar, Badge, Empty, PageHead } from "../ui";
 export default async function Clients({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; panel?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; panel?: string; bulk?: string; error?: string; page?: string }>;
 }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
@@ -32,6 +36,7 @@ export default async function Clients({
     if (params.branch) search.set("branch", params.branch);
     if (params.group) search.set("group", params.group);
     if (archived) search.set("archived", "1");
+    if (params.bulk) search.set("bulk", params.bulk);
     search.set("page", String(next));
     return `/app/clients?${search}`;
   };
@@ -61,8 +66,15 @@ export default async function Clients({
   const filtered = params.group || params.branch;
   const groupName = filtered ? nameOf.get(filtered) : null;
   const manage = canManageClients(membership.role);
+  const canSend = manage && membership.may("send");
   // Adding and importing open in place; a firm with no clients yet starts with Add open.
   const panel = manage ? (params.panel ?? (!clients?.length && !q && !filtered && !archived ? "add" : "")) : "";
+  const {data: batch} = manage && params.bulk ? await supabase.from("requests").select("id,status,details").eq("firm_id",membership.firmId).eq("id",params.bulk).eq("kind","bulk_send").maybeSingle() : {data:null};
+  const progress = batch?.details as unknown as BulkSend | undefined;
+  const {data: chosen} = progress ? await supabase.from("clients").select("id,name").eq("firm_id",membership.firmId).in("id",progress.clients.map((client)=>client.id)) : {data:[]};
+  const clientNames = new Map(chosen?.map((client)=>[client.id,client.name]));
+  const {data: sends} = progress ? await supabase.from("shares").select("id,status").eq("firm_id",membership.firmId).in("id",progress.clients.map((client)=>client.share)) : {data:[]};
+  const sendState = new Map(sends?.map((share)=>[share.id,share.status]));
   const count = `${total ?? 0} ${archived ? "archived " : ""}client${total === 1 ? "" : "s"}`;
   const shownFrom = total ? from + 1 : 0;
   const shownTo = Math.min(from + (clients?.length ?? 0), total ?? 0);
@@ -114,6 +126,23 @@ export default async function Clients({
         </Link>
       </form>
 
+      {params.error === "send_permission" && <p className="alert" role="alert">Your owner needs to allow sending papers first.</p>}
+      {params.error === "send" && <p className="alert" role="alert">Choose clients, a paper and a year. If they could not be queued, try again.</p>}
+      {canSend && !archived && !!clients?.length && <section className="panel" aria-labelledby="send-papers">
+        <h2 id="send-papers">Send filed papers</h2>
+        <p className="hint">Choose clients below. Routine papers go by email as secure links. Private papers wait in the Inbox for approval. The same paper goes to a client only once a day in bulk sends. Papers kept inside your firm are never sent.</p>
+        <form id="bulk-send" action={sendClientPapers} className="form-row">
+          <div><label htmlFor="bulk-paper">Paper</label><select id="bulk-paper" name="type" required>{documentTypes.map((type)=><option key={type}>{type}</option>)}</select></div>
+          <div><label htmlFor="bulk-year">Year</label><select id="bulk-year" name="period" required>{periodChoices(todayInIndia()).filter((key)=>key.length===4).map((key)=><option value={key} key={key}>{periodName(key)} (AY {key}-{String(Number(key)+1).slice(2)})</option>)}</select></div>
+          <button className="b b-secondary">Send chosen papers</button>
+        </form>
+      </section>}
+      {progress && <section className="panel" aria-labelledby="send-progress">
+        <div className="panel-head"><h2 id="send-progress">Sending progress</h2><Link className="b b-secondary b-small" href={pageHref(page)}>Refresh</Link></div>
+        <p className="hint">{progress.type}, {periodName(progress.period)}</p>
+        <p role="status">{batch?.status === "done" ? "Every chosen client has been checked." : "Sending in the background. Refresh to see progress."}</p>
+        <ul className="rows">{progress.clients.map((client)=><li key={client.id}>{clientNames.get(client.id) ?? "Client no longer available"}: {client.state === "skipped" ? `Skipped. ${sendSkip[client.reason ?? ""] ?? "Please check the client's page"}` : sendState.get(client.share)==="refused" ? "Not sent" : client.state === "sent" || sendState.get(client.share)==="sent" ? "Sent" : client.state === "waiting" ? "Waiting for approval in the Inbox" : "Waiting to send"}</li>)}</ul>
+      </section>}
       <section className="panel" aria-labelledby="register">
         <div className="panel-head">
           <h2 id="register">{q ? `Clients matching “${q}”` : groupName ? `${groupName}: ${count}` : count}</h2>
@@ -124,6 +153,7 @@ export default async function Clients({
               <table className="t">
                 <thead>
                   <tr>
+                    {canSend && !archived && <th scope="col">Choose</th>}
                     <th scope="col">Client</th>
                     <th scope="col">Kind</th>
                     <th scope="col">Group</th>
@@ -133,6 +163,7 @@ export default async function Clients({
                 <tbody>
                   {clients.map((client) => (
                     <tr key={client.id}>
+                      {canSend && !archived && <td><input type="checkbox" form="bulk-send" name="client" value={client.id} aria-label={`Send a paper to ${client.name}`} /></td>}
                       <td>
                         <span className="who">
                           <Avatar name={client.name} />
