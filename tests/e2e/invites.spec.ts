@@ -957,6 +957,9 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(reminder).toMatch(/still waiting for these documents.*: Sales bills\.\nUpload them here, no sign in needed: http\S+\/u\//);
   const [{ details }] = await query(local.dbUrl, "select details from public.tasks where client_id = $1 and code = $2", [clientId, code]);
   expect(details.reminded).toHaveLength(1);
+  await query(local.dbUrl, "update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-3 where client_id=$1 and code=$2", [clientId,code]);
+  await owner.goto("/app");
+  await expect(owner.getByRole("alert").filter({hasText: `${mailClient}: a return is 3 or more days late.`})).toBeVisible();
   // M5 acceptance: filing removes this return from the pending firm's reminder run.
   await query(local.dbUrl, "update public.tasks set status='filed',details=(details-'reminder') || jsonb_build_object('filed_on',current_date) where client_id=$1 and code=$2", [clientId,code]);
   await query(local.dbUrl, "delete from public.jobs where kind='reminders' and firm_id=$1", [firm.firmId]);
@@ -964,6 +967,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   const [filedReminder] = await query(local.dbUrl, "select details from public.tasks where client_id=$1 and code=$2", [clientId,code]);
   expect(filedReminder.details.reminder).toBeUndefined();
+  await owner.goto("/app");
+  await expect(owner.getByRole("alert").filter({hasText: `${mailClient}: a return is 3 or more days late.`})).toHaveCount(0);
   await query(local.dbUrl, "delete from public.tasks where code = $1", [code]);
   await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
 
