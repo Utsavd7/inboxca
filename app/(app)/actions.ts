@@ -31,7 +31,7 @@ import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
 import { firmMailer } from "@/src/lib/firm-mail";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
-import { isRoutine, type RecordsSettings } from "@/src/lib/records";
+import { paperPolicy, type BulkSend, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
 import { currentMember, currentWriter } from "@/src/lib/member";
@@ -713,7 +713,7 @@ async function visibleDocument(form: FormData) {
   if (!membership || !visible) redirect("/app");
   const back = `/app/clients/${visible.client_id}?tab=files`;
   const [{ data: document }, opened] = await Promise.all([
-    supabaseAdmin().from("documents").select("work_type, document_type, period_key, status, name, drive_file_id, received_at, clients(name)").eq("id", id).single(),
+    supabaseAdmin().from("documents").select("work_type, document_type, share_policy, period_key, status, name, drive_file_id, received_at, clients(name)").eq("id", id).single(),
     firmDrive(membership.firmId),
   ]);
   if (!document?.clients || !opened) redirect(`${back}&error=drive`);
@@ -1033,7 +1033,7 @@ export async function sendDocument(form: FormData) {
     clientName: owner?.clients?.name ?? "",
     contactId: contact,
     to,
-    needsCode: !isRoutine(document.document_type, records),
+    needsCode: paperPolicy(document, records) === "approval",
   });
   if (!sent) redirect(`${back}&send=${id}&error=mailbox`);
   await spendGrant(grant);
@@ -1448,4 +1448,39 @@ export async function logCapture(documentId: string) {
   if (!membership || !document) return;
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "capture_attempt", entity_type: "document", entity_id: document.id });
   await tellOwnerOnRepeat(membership.firmId, userId, membership.email, "capture_attempt", "captures");
+}
+
+// Clients: one page of chosen clients, with progress kept on a background request.
+export async function sendClientPapers(form: FormData) {
+  const {supabase,userId,membership}=await currentWriter();
+  if (!membership || !canManageClients(membership.role)) redirect("/app/clients");
+  if (!membership.may("send")) redirect("/app/clients?error=send_permission");
+  const ids=[...new Set(form.getAll("client").map(String))];
+  const type=String(form.get("type") ?? ""), period=String(form.get("period") ?? "");
+  if (!ids.length || ids.length>50 || ids.some((id)=>!z.uuid().safeParse(id).success) || !documentTypes.includes(type) || !/^20\d{2}$/.test(period)) redirect("/app/clients?error=send");
+  const {data:clients,error}=await supabase.from("clients").select("id").eq("firm_id",membership.firmId).in("id",ids).is("archived_at",null);
+  if (error || clients?.length!==ids.length) redirect("/app/clients?error=send");
+  const id=randomUUID();
+  const details:BulkSend={by:userId,day:todayInIndia(),type,period,clients:ids.map((id)=>({id,share:randomUUID()}))};
+  const {error:saveError}=await supabaseAdmin().from("requests").insert({id,firm_id:membership.firmId,kind:"bulk_send",entity_type:"bulk_send",entity_id:id,details:details as unknown as NonNullable<Json>});
+  if (saveError) redirect("/app/clients?error=send");
+  await supabaseAdmin().from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"bulk_send.asked",entity_type:"request",entity_id:id,details:{clients:ids.length,type,period}});
+  runJobsSoon();
+  redirect(`/app/clients?bulk=${id}`);
+}
+
+export async function setPaperSharing(form:FormData) {
+  const {supabase,userId,membership}=await currentWriter();
+  if (membership?.role!=="owner") redirect("/app");
+  const policy=String(form.get("policy") ?? "");
+  if (!["","auto","approval","internal"].includes(policy)) redirect("/app/clients");
+  const {data:document}=await supabase.from("documents").select("id,client_id").eq("firm_id",membership.firmId).eq("id",String(form.get("document") ?? "")).maybeSingle();
+  if (!document) redirect("/app/clients");
+  const admin=supabaseAdmin();
+  const {error}=await admin.from("documents").update({share_policy:policy || null}).eq("firm_id",membership.firmId).eq("id",document.id);
+  if (error) redirect(`/app/clients/${document.client_id}?tab=files&error=document`);
+  if (policy==="internal") await admin.from("shares").update({status:"refused",link_token_hash:null,link_expires_at:null,delivery:null}).eq("firm_id",membership.firmId).eq("document_id",document.id);
+  await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"document.sharing",entity_type:"document",entity_id:document.id,details:{policy:policy || "firm"}});
+  revalidatePath("/app","layout");
+  redirect(`/app/clients/${document.client_id}?tab=files&edit=${document.id}`);
 }

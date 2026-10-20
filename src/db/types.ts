@@ -202,13 +202,13 @@ isOneToOne: false
                   ]
                 },"documents": {
                   Row: {
-                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"received_at": string,"search_tokens": (string)[],"sha256": string,"size": number,"status": string,"work_type": string
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"received_at": string,"search_tokens": (string)[],"sha256": string,"share_policy": string | null,"size": number,"status": string,"work_type": string
                   }
                   Insert: {
-                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"name": string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"search_tokens"?: (string)[],"sha256": string,"size": number,"status"?: string,"work_type": string
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"name": string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"search_tokens"?: (string)[],"sha256": string,"share_policy"?: string | null,"size": number,"status"?: string,"work_type": string
                   }
                   Update: {
-                    "client_id"?: string,"document_type"?: string,"drive_file_id"?: string,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"name"?: string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"search_tokens"?: (string)[],"sha256"?: string,"size"?: number,"status"?: string,"work_type"?: string
+                    "client_id"?: string,"document_type"?: string,"drive_file_id"?: string,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"name"?: string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"search_tokens"?: (string)[],"sha256"?: string,"share_policy"?: string | null,"size"?: number,"status"?: string,"work_type"?: string
                   }
                   Relationships: [
                     {
@@ -409,13 +409,13 @@ isOneToOne: false
                   ]
                 },"shares": {
                   Row: {
-                    "code_attempts": number,"code_expires_at": string | null,"code_hash": string | null,"contact_id": string | null,"document_id": string,"downloads": number,"email_event_id": string | null,"firm_id": string,"id": string,"link_expires_at": string | null,"link_token_hash": string | null,"needs_code": boolean,"status": string
+                    "code_attempts": number,"code_expires_at": string | null,"code_hash": string | null,"contact_id": string | null,"delivery": Json | null,"document_id": string,"downloads": number,"email_event_id": string | null,"firm_id": string,"id": string,"link_expires_at": string | null,"link_token_hash": string | null,"needs_code": boolean,"status": string
                   }
                   Insert: {
-                    "code_attempts"?: number,"code_expires_at"?: string | null,"code_hash"?: string | null,"contact_id"?: string | null,"document_id": string,"downloads"?: number,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"needs_code"?: boolean,"status"?: string
+                    "code_attempts"?: number,"code_expires_at"?: string | null,"code_hash"?: string | null,"contact_id"?: string | null,"delivery"?: Json | null,"document_id": string,"downloads"?: number,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"needs_code"?: boolean,"status"?: string
                   }
                   Update: {
-                    "code_attempts"?: number,"code_expires_at"?: string | null,"code_hash"?: string | null,"contact_id"?: string | null,"document_id"?: string,"downloads"?: number,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"needs_code"?: boolean,"status"?: string
+                    "code_attempts"?: number,"code_expires_at"?: string | null,"code_hash"?: string | null,"contact_id"?: string | null,"delivery"?: Json | null,"document_id"?: string,"downloads"?: number,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"link_expires_at"?: string | null,"link_token_hash"?: string | null,"needs_code"?: boolean,"status"?: string
                   }
                   Relationships: [
                     {
@@ -542,6 +542,9 @@ isOneToOne: false
                            },
 "finish_job":
 { Args: { "error_code"?: string,"job_id": number,"outcome": string,"retry_at"?: string }; Returns: boolean
+                           },
+"finish_share":
+{ Args: { "share_id": string }; Returns: undefined
                            },
 "firm_people":
 { Args: { "target_firm": string }; Returns: {

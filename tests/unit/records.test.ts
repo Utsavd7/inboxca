@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { askedPaper, isRoutine, pickPaper } from "@/src/lib/records";
+import { askedPaper, isRoutine, pickPaper, paperPolicy } from "@/src/lib/records";
 
 const papers = [
   { id: "itrv-25", document_type: "ITR-V", period_key: "2025", status: "filed" },
@@ -28,4 +28,11 @@ describe("the records auto-reply", () => {
     expect(isRoutine("Balance sheet", { routine: ["Balance sheet"] })).toBe(true);
     expect(isRoutine("ITR-V", { approve_all: true })).toBe(false);
   });
+});
+
+it("keeps internal papers in the firm and applies individual choices with the firm's approval switch", () => {
+  expect(paperPolicy({document_type:"ITR-V",share_policy:"internal"})).toBe("internal");
+  expect(paperPolicy({document_type:"ITR-V",share_policy:"approval"})).toBe("approval");
+  expect(paperPolicy({document_type:"Balance sheet",share_policy:"auto"})).toBe("auto");
+  expect(paperPolicy({document_type:"ITR-V",share_policy:"auto"},{approve_all:true})).toBe("approval");
 });

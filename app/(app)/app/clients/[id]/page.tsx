@@ -1,7 +1,7 @@
 import { Archive, ChevronLeft, FileText, Send, Upload } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { askForDocuments, askPermission, findDocuments, manageClient, pauseReminders, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
+import { setPaperSharing, askForDocuments, askPermission, findDocuments, manageClient, pauseReminders, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, workOfService, type DocumentRequest } from "@/src/lib/checklists";
@@ -78,7 +78,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
     supabase.from("tasks").select("id, code, period_key, due_on, status, details").eq("kind", "compliance").eq("client_id", id).neq("status", "filed").order("due_on").limit(12),
-    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, sha256, received_at").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
+    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
     supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).eq("status", "pending").gt("expires_at", new Date().toISOString()),
   ]);
   // The lists for the work this client's services need are ticked when asking for files.
@@ -126,7 +126,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   };
   const editing = documents.find((file) => file.id === edit);
   const noticeFile = (files ?? []).find((file) => file.id === (renamed ?? saved ?? removed));
-  const sending = documents.find((file) => file.id === send);
+  const sending = documents.find((file) => file.id === send && file.share_policy !== "internal");
   const sharedFile = documents.find((file) => file.id === shared);
   const receivers = contacts.filter((contact) => contact.can_receive_documents);
   const rule = new Map(rules?.map((r) => [r.code, r]));
@@ -487,6 +487,11 @@ export default async function Client({ params, searchParams }: { params: Promise
                       Save
                     </button>
                   </form>
+                  {owner && <form key={editing.share_policy ?? "firm"} action={setPaperSharing} className="form-row">
+                    <input type="hidden" name="document" value={editing.id} />
+                    <div><label htmlFor="paper-sharing">Sending this paper</label><select id="paper-sharing" name="policy" defaultValue={editing.share_policy ?? ""}><option value="">Use the firm&apos;s choice</option><option value="auto">Routine paper</option><option value="approval">Ask before sending</option><option value="internal">Keep inside the firm</option></select></div>
+                    <button className="b b-secondary">Save sending choice</button>
+                  </form>}
                 </section>
               )}
               {documents.length ? (
@@ -540,7 +545,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                               <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&edit=${document.id}`} scroll={false} aria-label={`Change ${document.name}`}>
                                 Change
                               </Link>
-                              {document.status === "filed" &&
+                              {document.status === "filed" && document.share_policy !== "internal" &&
                                 (canSend(document.id) ? (
                                   <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&send=${document.id}`} scroll={false} aria-label={`Send ${document.name}`}>
                                     Send

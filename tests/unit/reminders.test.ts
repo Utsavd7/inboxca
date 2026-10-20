@@ -52,7 +52,7 @@ describe("smart reminders", () => {
 
   it("follows up a request every 3 days, up to 4 times, asking only for what is missing", () => {
     // Asked on 10 Oct (the link runs 30 days, to 9 Nov).
-    const request = (followups: string[]) => ({ expires_at: "2026-11-09T00:00:00Z", details: { items: [{ type: "Sales bills", received: ["x"] }, { type: "Bank statement", received: [] }], followups } });
+    const request = (followups: string[]) => ({ expires_at: "2026-11-09T00:00:00Z", details: { items: [{ type: "Sales bills", received: ["x"] }, { type: "Purchase bills", received: ["y"] }, { type: "Bank statement", received: [] }], followups } });
     expect(followUpDue(request([]), "2026-10-12")).toBeNull();
     expect(followUpDue(request([]), "2026-10-13")).toEqual(["Bank statement"]);
     expect(followUpDue(request(["2026-10-13"]), "2026-10-15")).toBeNull();

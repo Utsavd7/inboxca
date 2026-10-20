@@ -5,8 +5,12 @@ import { findPeriod } from "./documents";
 
 // Routine papers go at once; every other paper is private and waits for one approval.
 export const ROUTINE_DEFAULT = ["ITR-V", "Acknowledgement", "GSTR-1", "GSTR-3B", "Challan", "Certificate"];
+export type SharePolicy = "auto" | "approval" | "internal";
 export type RecordsSettings = { routine?: string[]; approve_all?: boolean };
 export const isRoutine = (type: string, settings: RecordsSettings = {}) => !settings.approve_all && (settings.routine ?? ROUTINE_DEFAULT).includes(type);
+
+export const paperPolicy = (paper: { document_type: string; share_policy?: string | null }, settings: RecordsSettings = {}): SharePolicy =>
+  paper.share_policy === "internal" ? "internal" : settings.approve_all ? "approval" : paper.share_policy === "approval" ? "approval" : paper.share_policy === "auto" || isRoutine(paper.document_type, settings) ? "auto" : "approval";
 
 // Words for a paper, the most specific first, and the document types that answer them.
 const asks: [RegExp, string[]][] = [
@@ -40,3 +44,6 @@ export function pickPaper<T extends { document_type: string; period_key: string;
   if (matches.length > 1) return { reason: "record_unclear" as const };
   return { document: matches[0] };
 }
+
+export type BulkSend = { by: string; day: string; type: string; period: string; clients: { id: string; share: string; state?: "sent" | "waiting" | "skipped"; reason?: string }[] };
+export const sendSkip: Record<string,string> = { no_email: "No email address", record_not_found: "No filed paper for this year", record_unclear: "More than one matching paper. Please choose on the client's page", record_internal: "Kept inside your firm", archived: "Client is archived or no longer available" };
