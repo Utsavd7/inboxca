@@ -63,14 +63,17 @@ export const approvalSummary: Handler = async (job) => {
 export const noticeAlert: Handler = async (job) => {
   const admin = supabaseAdmin();
   const stage = job.idempotency_key.split(":").at(-1)!;
-  const { data, error } = await admin.rpc("claim_notice_alert", { task_id: job.entity_id!, stage });
-  if (error) return { retry: "notice_not_claimed" };
-  if (!data) return { done: true };
-  const notice = data as { firm_id: string; client_id: string };
-  const [{ data: people }, { data: assignments }] = await Promise.all([
+  const { data: notice, error: missing } = await admin.from("tasks").select("firm_id,client_id").eq("id", job.entity_id!).maybeSingle();
+  if (missing) return { retry: "notice_not_read" };
+  if (!notice) return { done: true };
+  const [{ data: people, error: peopleError }, { data: assignments, error: assignmentsError }] = await Promise.all([
     admin.from("firm_members").select("user_id,role,team_id").eq("firm_id", notice.firm_id).eq("status", "active"),
     admin.from("client_assignments").select("user_id,team_id").eq("firm_id", notice.firm_id).eq("client_id", notice.client_id),
   ]);
+  if (peopleError || assignmentsError) return { retry: "notice_people_not_read" };
+  const { data, error } = await admin.rpc("claim_notice_alert", { task_id: job.entity_id!, stage });
+  if (error) return { retry: "notice_not_claimed" };
+  if (!data) return { done: true };
   const recipients = (people ?? []).filter((person) => ["owner","partner"].includes(person.role) || assignments?.some((a) => a.user_id === person.user_id || (a.team_id && a.team_id === person.team_id))).map((person) => person.user_id);
   const date = stage.startsWith("action_") ? "action date" : "review deadline";
   const when = stage.endsWith("late") ? "has passed" : stage.endsWith("due") ? "is today" : "is within 3 days";
