@@ -6,6 +6,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { STAGES } from "@/src/lib/reminders";
+import { emailTemplates } from "@/src/lib/email-templates";
 import { todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, type DocumentRequest } from "@/src/lib/checklists";
@@ -546,7 +547,7 @@ const mailboxErrors = {
 // Settings → Firm email: the owner connects the firm's mailbox. Both sign ins are checked
 // first; the address and password are saved encrypted with the firm's key.
 export async function connectMailbox(_prev: MailboxState, form: FormData): Promise<MailboxState> {
-  const { supabase, membership } = await currentWriter();
+  const { membership, userId } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const values = Object.fromEntries(["address", "imap_host", "imap_port", "smtp_host", "smtp_port"].map((key) => [key, String(form.get(key) ?? "").trim()]));
   const address = values.address.toLowerCase();
@@ -560,20 +561,27 @@ export async function connectMailbox(_prev: MailboxState, form: FormData): Promi
   const checked = await checkMailbox(address, password, settings);
   if ("error" in checked) return { error: mailboxErrors[checked.error], values: { ...values, ...serverValues(settings) } };
 
-  const id = randomUUID();
-  const crypto = serverCrypto();
-  const { error } = await supabase.from("connected_accounts").insert({
-    id,
-    firm_id: membership.firmId,
-    kind: "mail",
-    provider: "imap",
-    address_enc: await crypto.encrypt(membership.firmId, `accounts/${id}/address`, address),
-    address_bidx: await crypto.blindIndex(membership.firmId, "email", address),
-    credentials_enc: await crypto.encrypt(membership.firmId, `accounts/${id}/credentials`, JSON.stringify({ password })),
-    sync_cursor: checked.cursor,
-    settings,
-  });
-  if (error) return { error: "A mailbox is already connected. Disconnect it first.", values };
+  const admin=supabaseAdmin();
+  const {data:prior,error:readError}=await admin.from("connected_accounts").select("id,status,address_enc,address_bidx,sync_cursor,settings").eq("firm_id",membership.firmId).eq("kind","mail").maybeSingle();
+  if (readError) return {error:"The email connection could not be read. Try again.",values};
+  const crypto=serverCrypto();
+  const index=await crypto.blindIndex(membership.firmId,"email",address);
+  const priorIndex=prior && (prior.address_bidx ?? await crypto.blindIndex(membership.firmId,"email",await crypto.decrypt(membership.firmId,`accounts/${prior.id}/address`,prior.address_enc)));
+  if (prior && (prior.status!=="needs_reconnect" || priorIndex!==index)) return {error:"A mailbox is already connected. Disconnect it first to use another address.",values};
+  const id=prior?.id ?? randomUUID();
+  const fields={
+    id,firm_id:membership.firmId,kind:"mail",provider:"imap",status:"connected",
+    address_enc:await crypto.encrypt(membership.firmId,`accounts/${id}/address`,address),address_bidx:index,
+    credentials_enc:await crypto.encrypt(membership.firmId,`accounts/${id}/credentials`,JSON.stringify({password})),
+    sync_cursor:prior?.sync_cursor ?? checked.cursor,
+    settings:{...(prior?.settings as Record<string,Json> ?? {}),...settings,mail_failures:{read:0,send:0}},
+  };
+  const {error}=prior ? await admin.from("connected_accounts").update(fields).eq("id",id) : await admin.from("connected_accounts").insert(fields);
+  if (error) return {error:"The email connection could not be saved. Try again.",values};
+  await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:prior ? "mailbox.reconnected" : "mailbox.connected",entity_type:"account",entity_id:id});
+  if (prior) await admin.from("jobs").update({run_at:new Date().toISOString()}).eq("firm_id",membership.firmId).eq("state","pending").in("kind",["reminders","bulk_send","records_reply","file_mail","notice_from_mail"]);
+  await admin.from("jobs").insert({firm_id:membership.firmId,kind:"mail_poll",entity_type:"account",entity_id:id,idempotency_key:`mail_poll:${id}:${randomUUID()}`});
+  runJobsSoon();
   revalidatePath("/app/settings");
   return {};
 }
@@ -951,15 +959,8 @@ export async function askForDocuments(form: FormData) {
   // Sent from the firm's mailbox to the client's registered address, if both are there.
   const mailer = await firmMailer(membership.firmId, membership.firmName);
   const to = client.email_enc && (await serverCrypto().decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc));
-  const when = period ? ` for ${periodName(period)}` : "";
-  const sent =
-    !!mailer &&
-    !!to &&
-    (await mailer.send(
-      to,
-      `Documents needed${when}`,
-      [`Dear ${client.name},`, "", `Please upload these documents${when}:`, ...items.map((item) => `- ${item.type}`), "", `Upload them here, no sign in needed: ${link}`, "The link works for 30 days.", "", membership.firmName].join("\n"),
-    ));
+  const message=emailTemplates.request(client.name,membership.firmName,period,items,link);
+  const sent=!!mailer && !!to && await mailer.send(to,message.subject,message.text);
   revalidatePath("/app", "layout");
   // The link is shown once, in the address, only when it could not be emailed.
   redirect(sent ? `${back}&asked=sent` : `${back}&asked=${encodeURIComponent(link)}`);
@@ -1483,4 +1484,14 @@ export async function setPaperSharing(form:FormData) {
   await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"document.sharing",entity_type:"document",entity_id:document.id,details:{policy:policy || "firm"}});
   revalidatePath("/app","layout");
   redirect(`/app/clients/${document.client_id}?tab=files&edit=${document.id}`);
+}
+
+export async function saveMailLimit(form:FormData) {
+  const {supabase,membership}=await currentWriter();
+  if (membership?.role!=="owner") redirect("/app");
+  const limit=z.coerce.number().int().min(1).max(2000).safeParse(form.get("limit"));
+  if (!limit.success) redirect("/app/settings?error=mail_limit#mailbox");
+  await supabase.from("firms").update({settings:{...membership.settings,mail_limit:limit.data}}).eq("id",membership.firmId);
+  revalidatePath("/app/settings");
+  redirect("/app/settings?saved=mail_limit#mailbox");
 }

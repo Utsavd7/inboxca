@@ -4,26 +4,26 @@ import { connectMailbox, type MailboxState } from "@/app/(app)/actions";
 
 // Connect the firm's mailbox: the address and its password; server settings only when
 // InboxCA cannot find them by itself.
-export function MailboxForm() {
-  const [state, connect, connecting] = useActionState(connectMailbox, {} as MailboxState);
+export function MailboxForm({initial={},reconnecting=false}:{initial?:Record<string,string>;reconnecting?:boolean}) {
+  const [state, connect, connecting] = useActionState(connectMailbox, {values:initial} as MailboxState);
   const values = state.values ?? {};
   return (
     <form key={JSON.stringify(values)} action={connect} noValidate>
       <div className="fields">
         <div>
           <label htmlFor="mail-address">The firm&apos;s email address</label>
-          <input id="mail-address" name="address" type="email" autoComplete="off" required defaultValue={values.address} />
+          <input id="mail-address" name="address" type="email" autoComplete="off" required readOnly={reconnecting} defaultValue={values.address} />
         </div>
         <div>
           <label htmlFor="mail-password">Its password</label>
           <input id="mail-password" name="password" type="password" autoComplete="new-password" required />
         </div>
         <button className="b b-primary" type="submit" disabled={connecting}>
-          {connecting ? "Checking" : "Connect email"}
+          {connecting ? "Checking" : reconnecting ? "Reconnect email" : "Connect email"}
         </button>
       </div>
       <p className="hint">Gmail, Google Workspace and Zoho need an app password, made in the account&apos;s security settings.</p>
-      <details className="reveal" open={!!values.imap_host}>
+      <details className="reveal" open={!!state.error && !!values.imap_host}>
         <summary>Server settings, only if InboxCA asks</summary>
         <div className="fields">
           {[

@@ -87,3 +87,15 @@ export const returnAlert: Handler = async (job) => {
   if (data?.length) await notify(data, { title: "A return needs attention", body: "A return is 3 or more days late. Please check with the client.", url: "/app/calendar?view=overdue" });
   return { done: true };
 };
+
+export const mailboxReconnect:Handler=async(job)=>{
+  const admin=supabaseAdmin();
+  const {data:account,error}=await admin.from("connected_accounts").select("firm_id,status").eq("id",job.entity_id!).maybeSingle();
+  if (error) return {retry:"mailbox_not_read"};
+  if (account?.status==="needs_reconnect") {
+    const {data:owners,error}=await admin.from("firm_members").select("user_id").eq("firm_id",account.firm_id).eq("role","owner").eq("status","active");
+    if (error) return {retry:"owner_not_read"};
+    await notify((owners ?? []).map((owner)=>owner.user_id),{title:"Connect your firm's email again",body:"InboxCA could not sign in. Replies will wait until you connect it again.",url:"/app/settings#mailbox"});
+  }
+  return {done:true};
+};

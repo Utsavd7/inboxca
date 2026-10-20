@@ -1,0 +1,34 @@
+import {afterEach,beforeEach,expect,it,vi} from "vitest";
+const mock=vi.hoisted(()=>({rpc:vi.fn(),send:vi.fn(),status:"connected"}));
+vi.mock("@/src/lib/crypto",()=>({serverCrypto:()=>({decrypt:async(_firm:string,place:string)=>place.endsWith("address") ? "office@invented.test" : JSON.stringify({password:"invented"})})}));
+vi.mock("@/src/lib/supabase",()=>({supabaseAdmin:()=>({rpc:mock.rpc,from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:"mailbox",status:mock.status,address_enc:"sealed",credentials_enc:"sealed credentials",settings:{imap:{},smtp:{}}}})})})}));
+vi.mock("@/src/lib/mailbox",()=>({foundInSent:vi.fn(),smtpTransport:()=>({sendMail:mock.send}),signInFailed:(error:{code?:string})=>error.code==="EAUTH"}));
+vi.mock("@/src/lib/logger",()=>({log:{warn:vi.fn()}}));
+import {firmMailer} from "@/src/lib/firm-mail";
+beforeEach(()=>{vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-20T06:00:00Z"));mock.rpc.mockReset();mock.send.mockReset();mock.status="connected";});
+afterEach(()=>vi.useRealTimers());
+it("reserves every send through one mailbox limit, and waits without attempting SMTP",async()=>{
+  const at="2026-10-21T06:00:00Z";
+  mock.rpc.mockResolvedValue({data:{ready:false,at},error:null});
+  const mailer=(await firmMailer("firm","Invented Firm"))!;
+  expect(await mailer.send("client@invented.test","Test","Test")).toBe(false);
+  expect(mailer.waitUntil).toEqual(new Date(at));
+  expect(mock.rpc).toHaveBeenCalledWith("reserve_mail_send",{account_id:"mailbox"});
+  expect(mock.send).not.toHaveBeenCalled();
+  mock.status="needs_reconnect";
+  expect(await firmMailer("firm","Invented Firm")).toBeNull();
+});
+it("spaces SMTP starts and records authentication failures without marking uncertain sends safe to repeat",async()=>{
+  mock.rpc.mockImplementation(async(name:string)=>({data:name==="reserve_mail_send" ? {ready:true,at:new Date(Date.now()+1000).toISOString()} : 1,error:null}));
+  mock.send.mockRejectedValueOnce({code:"EAUTH"}).mockRejectedValueOnce({code:"ECONNECTION"});
+  const mailer=(await firmMailer("firm","Invented Firm"))!;
+  const pending=mailer.send("client@invented.test","Test","Test");
+  await vi.advanceTimersByTimeAsync(999);expect(mock.send).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);expect(await pending).toBe(false);
+  expect(mailer.waitUntil).toEqual(new Date(Date.now()+60_000));
+  expect(mock.rpc).toHaveBeenCalledWith("mail_health",{account_id:"mailbox",phase:"send",failed:true,expected:"sealed credentials"});
+  const uncertain=mailer.send("client@invented.test","Test","Test");
+  await vi.advanceTimersByTimeAsync(1000);expect(await uncertain).toBe(false);
+  expect(mailer.waitUntil).toBeNull();
+  expect(mock.rpc.mock.calls.filter(([name])=>name==="mail_health")).toHaveLength(1);
+});

@@ -21,8 +21,9 @@ export const bulkSend: Handler = async (job) => {
   const details = request.details as unknown as BulkSend;
   const firm = request.firm_id;
   let handled=0;
+  const started=Date.now();
   for (const entry of details.clients.filter((client) => !client.state)) {
-    if (handled++ >= 25) return {retry:"more_clients",at:new Date(Date.now()+10*60_000)};
+    if (handled++ >= 25 || Date.now()-started>=30_000) return {retry:"more_clients",at:new Date(Date.now()+10*60_000)};
     const [{data: client,error: clientError},{data: papers,error: paperError},previous] = await Promise.all([
       admin.from("clients").select("name,email_enc,archived_at").eq("firm_id",firm).eq("id",entry.id).maybeSingle(),
       admin.from("documents").select("id,name,document_type,period_key,status,share_policy").eq("firm_id",firm).eq("client_id",entry.id).eq("document_type",details.type).eq("status","filed"),
@@ -53,9 +54,13 @@ export const bulkSend: Handler = async (job) => {
       else {
         const to=await serverCrypto().decrypt(firm,`clients/${entry.id}/email`,client.email_enc);
         if (!await sendShare({firmId:firm,firmName:request.firms.name,documentId:paper.id,documentName:paper.name,clientName:client.name,contactId:null,to,waitingId:entry.share,needsCode:policy === "approval"}))
-          return {retry:"mail_not_sent",patient:true};
+        {
+          const {data}=await admin.from("shares").select("delivery").eq("id",entry.share).maybeSingle();
+          const at=(data?.delivery as {at?:string} | null)?.at;
+          return at ? {retry:"mail_wait",at:new Date(at)} : {retry:"mail_not_sent",patient:true};
+        }
         entry.state="sent";
-        await new Promise((resolve)=>setTimeout(resolve,250));
+
       }
     }
     const {error: saveError} = await admin.from("requests").update({details:details as unknown as NonNullable<Json>}).eq("id",request.id);
