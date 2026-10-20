@@ -18,7 +18,8 @@ export const noticeFromMail: Handler = async (job) => {
   const mailbox = event?.connected_accounts;
   if (!event?.client_id || event.label !== "notice_received" || mailbox?.status !== "connected") return { done: true };
   const { data: known } = await admin.from("tasks").select("id").eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1);
-  if (known?.length) return { done: true };
+  const queueFiles = () => admin.from("jobs").upsert({ firm_id: event.firm_id, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+  if (known?.length) { await queueFiles(); return { done: true }; }
   const firm = event.firm_id;
   const crypto = serverCrypto();
   const address = await crypto.decrypt(firm, `accounts/${mailbox.id}/address`, mailbox.address_enc);
@@ -37,6 +38,8 @@ export const noticeFromMail: Handler = async (job) => {
     ...(notice.suggested && { suggested_date: notice.suggested }),
     email_event_id: event.id,
   };
-  await admin.from("tasks").insert({ firm_id: firm, client_id: event.client_id, kind: "notice", due_on: reviewBy(receivedOn, settings.notice_review_days ?? 1, settings.holidays ?? []), status: "upcoming", details });
+  const { error } = await admin.from("tasks").insert({ firm_id: firm, client_id: event.client_id, kind: "notice", due_on: reviewBy(receivedOn, settings.notice_review_days ?? 1, settings.holidays ?? []), status: "upcoming", details });
+  if (error) return { retry: "notice_not_saved" };
+  await queueFiles();
   return { done: true };
 };

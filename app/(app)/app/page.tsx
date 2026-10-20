@@ -91,7 +91,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           .gte("at", new Date(`${today}T00:00:00+05:30`).toISOString()),
       )
     : 0;
-  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices, veryLate, lateNotices, asks, me] = await Promise.all([
+  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices, veryLate, noticeAlerts, asks, me] = await Promise.all([
     cards().neq("status", "filed").lt("due_on", today),
     cards().eq("status", "upcoming").gte("due_on", today).lte("due_on", shift(today, 7)),
     cards().eq("status", "in_progress"),
@@ -116,7 +116,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     supabase.from("tasks").select("id, client_id, due_on, details, clients(name)", { count: "exact" }).eq("kind", "notice").in("status", ["upcoming", "in_progress"]).order("due_on").limit(5),
     // Escalation (5.2, 5.6): returns 3 or more days late, and notices past their date, for the owner and partners.
     lead ? count(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("kind", "compliance").neq("status", "filed").lte("due_on", shift(today, -3))) : 0,
-    lead ? count(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("kind", "notice").in("status", ["upcoming", "in_progress"]).lt("due_on", today)) : 0,
+    supabase.rpc("notice_alerts", { target_firm: membership.firmId }).limit(10),
     supabase.from("requests").select("details").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(200),
     supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
   ]);
@@ -277,11 +277,11 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           {veryLate} {veryLate === 1 ? "return is" : "returns are"} 3 or more days late. <Link href="/app/calendar?view=overdue">See them</Link>
         </p>
       )}
-      {!!lateNotices && (
-        <p className="alert" role="alert">
-          {lateNotices} {lateNotices === 1 ? "notice is" : "notices are"} past {lateNotices === 1 ? "its" : "their"} action date or review deadline. <Link href="/app/notices">See them</Link>
+      {noticeAlerts.data?.map((notice) => (
+        <p key={notice.id} className="alert" role="alert">
+          {notice.client_name}: a notice&apos;s {notice.action_date ? "action date" : "review deadline"} {notice.due_on < today ? "has passed" : notice.due_on === today ? "is today" : "is within 3 days"}. <Link href="/app/notices">Review notice</Link>
         </p>
-      )}
+      ))}
       <OfficePanel compact />
       {!!waitingIds.length && (
         <p className="alert" role="alert">

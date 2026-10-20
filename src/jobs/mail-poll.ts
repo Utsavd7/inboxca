@@ -77,7 +77,7 @@ export const mailPoll: Handler = async (job) => {
     // so a drive that is slow or away never holds up reading mail.
     const withFiles = new Set(read.mail.filter((mail) => mail.content.attachments.length).map((mail) => mail.messageId));
     const filing = (saved ?? [])
-      .filter((event) => event.client_id && withFiles.has(event.provider_message_id))
+      .filter((event) => event.client_id && event.label !== "notice_received" && withFiles.has(event.provider_message_id))
       .map((event) => ({ firm_id: firm, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }));
     // A known client asking for a paper is answered by a job of its own (5.5.2).
     const asking = (saved ?? [])

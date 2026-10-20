@@ -606,12 +606,13 @@ export async function manageEmail(form: FormData) {
     const email = String(form.get("email") ?? "");
     const { data: client } = await supabase.from("clients").select("id").eq("id", String(form.get("client") ?? "")).maybeSingle();
     const admin = supabaseAdmin();
-    const { data: event } = await admin.from("email_events").select("id, contact_id").eq("id", email).eq("firm_id", membership.firmId).is("client_id", null).maybeSingle();
+    const { data: event } = await admin.from("email_events").select("id, contact_id, label").eq("id", email).eq("firm_id", membership.firmId).is("client_id", null).maybeSingle();
     const { data: link } = await admin.from("contact_clients").select("client_id").eq("contact_id", event?.contact_id ?? "").eq("client_id", client?.id ?? "").maybeSingle();
     if (event && link) {
       await admin.from("email_events").update({ client_id: link.client_id }).eq("id", event.id);
       await admin.from("requests").update({ status: "done" }).eq("kind", "team_reply").eq("entity_id", event.id);
-      await admin.from("jobs").upsert({ firm_id: membership.firmId, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+      const kind = event.label === "notice_received" ? "notice_from_mail" : "file_mail";
+      await admin.from("jobs").upsert({ firm_id: membership.firmId, kind, entity_type: "email", entity_id: event.id, idempotency_key: `${kind}:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
     }
   }
   // The sidebar's Inbox count is in the layout.
