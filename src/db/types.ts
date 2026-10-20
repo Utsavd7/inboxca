@@ -526,6 +526,9 @@ isOneToOne: false
 "claim_notice_alert":
 { Args: { "stage": string,"task_id": string }; Returns: Json
                            },
+"claim_return_alert":
+{ Args: { "task_id": string }; Returns: (string)[]
+                           },
 "closed_firms":
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_name": string,"hours": Json,"reason": string
@@ -555,6 +558,11 @@ isOneToOne: false
                            },
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
+                           },
+"late_returns":
+{ Args: { "target_firm": string }; Returns: {
+              "client_name": string,"due_on": string,"id": string
+            }[]
                            },
 "maintain_activity_log":
 { Args: { "as_of"?: string }; Returns: undefined

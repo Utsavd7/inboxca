@@ -9,6 +9,10 @@ import type { WorkType } from "./drive";
 
 // Days before (positive) or after (negative) the due date on which a reminder goes.
 export const STAGES = [7, 3, 1, 0, -1, -3];
+export const stageNames: Record<number, string> = { 7: "7 days before", 3: "3 days before", 1: "1 day before", 0: "On the day", "-1": "1 day after", "-3": "3 days after" };
+export function reminderStages(settings: { reminder_stages?: unknown }) {
+  return Array.isArray(settings.reminder_stages) ? STAGES.filter((day) => (settings.reminder_stages as unknown[]).includes(day)) : STAGES;
+}
 const DAY = 86_400_000;
 export const daysUntil = (due: string, today: string) => Math.round((Date.parse(due) - Date.parse(today)) / DAY);
 
@@ -43,11 +47,11 @@ export function periodsOf(frequency: string | null, key: string) {
 
 // Today's reminders by client, and every skip with its reason. `filed` is the firm's files by
 // client, work and period ("<client>:gst:2026-09"); `handling` the clients with an open team reply.
-export function planReminders(tasks: ReminderTask[], today: string, filed: Set<string>, handling: Set<string>) {
+export function planReminders(tasks: ReminderTask[], today: string, filed: Set<string>, handling: Set<string>, stages = STAGES) {
   const send = new Map<string, ReminderTask[]>();
   const skipped: { task: ReminderTask; reason: Skip }[] = [];
   for (const task of tasks) {
-    if (!STAGES.includes(daysUntil(task.due_on, today))) continue;
+    if (!stages.includes(daysUntil(task.due_on, today))) continue;
     const work = workOfService(task.code);
     const reason: Skip | null = !task.rule.verified
       ? "date_not_confirmed"
@@ -117,4 +121,13 @@ export function reminderEmail(client: string, firm: string, tasks: ReminderTask[
       firm,
     ].join("\n"),
   };
+}
+
+// Until AI writing is enabled, even a factually correct paraphrase uses the checked wording.
+// Compare every dated, numbered and named fact, then require the template's sentences too.
+export function checkedReminder(draft: { subject: string; text: string } | undefined, template: { subject: string; text: string }) {
+  if (!draft) return template;
+  const facts = (mail: typeof template) => `${mail.subject} ${mail.text}`.match(/\b(?:\d[\w,./:-]*|[A-Z][A-Z0-9]*(?:-\d[\w()-]*)?|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/g)?.join(" ") ?? "";
+  const words = (value: string) => value.replace(/\s+/g, " ").trim();
+  return facts(draft) === facts(template) && words(draft.subject) === words(template.subject) && words(draft.text) === words(template.text) ? draft : template;
 }

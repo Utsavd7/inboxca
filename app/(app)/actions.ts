@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { STAGES } from "@/src/lib/reminders";
 import { todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, type DocumentRequest } from "@/src/lib/checklists";
@@ -490,7 +491,7 @@ export async function manageClient(form: FormData) {
 export async function saveReminders(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
-  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", acknowledge: form.get("acknowledge") === "on" } }).eq("id", membership.firmId);
+  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", acknowledge: form.get("acknowledge") === "on", reminder_stages: STAGES.filter((day) => form.getAll("stage").includes(String(day))) } }).eq("id", membership.firmId);
   redirect("/app/settings?saved=reminders#reminders");
 }
 

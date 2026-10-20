@@ -114,8 +114,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       : null,
     lead ? supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending") : null,
     supabase.from("tasks").select("id, client_id, due_on, details, clients(name)", { count: "exact" }).eq("kind", "notice").in("status", ["upcoming", "in_progress"]).order("due_on").limit(5),
-    // Escalation (5.2, 5.6): returns 3 or more days late, and notices past their date, for the owner and partners.
-    lead ? count(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("kind", "compliance").neq("status", "filed").lte("due_on", shift(today, -3))) : 0,
+    supabase.rpc("late_returns", { target_firm: membership.firmId }).limit(10),
     supabase.rpc("notice_alerts", { target_firm: membership.firmId }).limit(10),
     supabase.from("requests").select("details").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(200),
     supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
@@ -272,11 +271,11 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           {questions} {questions === 1 ? "question waits" : "questions wait"} for your answer. <Link href="/app/inbox">Answer in the Inbox</Link>
         </p>
       )}
-      {!!veryLate && (
-        <p className="alert" role="alert">
-          {veryLate} {veryLate === 1 ? "return is" : "returns are"} 3 or more days late. <Link href="/app/calendar?view=overdue">See them</Link>
+      {veryLate.data?.map((task) => (
+        <p className="alert" role="alert" key={task.id}>
+          {task.client_name}: a return is 3 or more days late. <Link href="/app/calendar?view=overdue">See returns</Link>
         </p>
-      )}
+      ))}
       {noticeAlerts.data?.map((notice) => (
         <p key={notice.id} className="alert" role="alert">
           {notice.client_name}: a notice&apos;s {notice.action_date ? "action date" : "review deadline"} {notice.due_on < today ? "has passed" : notice.due_on === today ? "is today" : "is within 3 days"}. <Link href="/app/notices">Review notice</Link>

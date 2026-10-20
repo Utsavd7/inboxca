@@ -935,7 +935,9 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.goto("/app/settings");
   await owner.getByLabel("Email clients before their returns are due").check();
   await owner.getByLabel("Reply to clients when their files arrive, saying what was received").check();
+  await owner.getByLabel("1 day before", { exact: true }).uncheck();
   await owner.getByRole("button", { name: "Save reminders" }).click();
+  await expect(owner.getByLabel("1 day before", { exact: true })).not.toBeChecked();
   await expect(owner.getByLabel("Reply to clients when their files arrive, saying what was received")).toBeChecked();
   // Files that arrive now get a short reply saying what was received.
   await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "August sales", text: "Attached.", attachments: [{ filename: "sales_bills_aug_2026.pdf", content: "%PDF-1.4 invented sales" }] });
@@ -955,6 +957,13 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(reminder).toMatch(/still waiting for these documents.*: Sales bills\.\nUpload them here, no sign in needed: http\S+\/u\//);
   const [{ details }] = await query(local.dbUrl, "select details from public.tasks where client_id = $1 and code = $2", [clientId, code]);
   expect(details.reminded).toHaveLength(1);
+  // M5 acceptance: filing removes this return from the pending firm's reminder run.
+  await query(local.dbUrl, "update public.tasks set status='filed',details=(details-'reminder') || jsonb_build_object('filed_on',current_date) where client_id=$1 and code=$2", [clientId,code]);
+  await query(local.dbUrl, "delete from public.jobs where kind='reminders' and firm_id=$1", [firm.firmId]);
+  await query(local.dbUrl, "select private.queue_reminders()");
+  await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  const [filedReminder] = await query(local.dbUrl, "select details from public.tasks where client_id=$1 and code=$2", [clientId,code]);
+  expect(filedReminder.details.reminder).toBeUndefined();
   await query(local.dbUrl, "delete from public.tasks where code = $1", [code]);
   await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
 

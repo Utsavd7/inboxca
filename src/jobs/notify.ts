@@ -80,3 +80,10 @@ export const noticeAlert: Handler = async (job) => {
   await notify(recipients, { title: "A notice needs attention", body: `A notice's ${date} ${when}.`, url: "/app/notices" });
   return { done: true };
 };
+
+export const returnAlert: Handler = async (job) => {
+  const { data, error } = await supabaseAdmin().rpc("claim_return_alert", { task_id: job.entity_id! });
+  if (error) return { retry: "return_not_claimed" };
+  if (data?.length) await notify(data, { title: "A return needs attention", body: "A return is 3 or more days late. Please check with the client.", url: "/app/calendar?view=overdue" });
+  return { done: true };
+};
