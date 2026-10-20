@@ -1,3 +1,4 @@
+import { mailHealth } from "@/src/lib/firm-mail";
 import { serverCrypto } from "@/src/lib/crypto";
 import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
 import { readNotice, reviewBy, type NoticeDetails } from "@/src/lib/notices";
@@ -16,7 +17,8 @@ export const noticeFromMail: Handler = async (job) => {
     .eq("id", job.entity_id ?? "")
     .maybeSingle();
   const mailbox = event?.connected_accounts;
-  if (!event?.client_id || event.label !== "notice_received" || mailbox?.status !== "connected") return { done: true };
+  if (!event?.client_id || event.label !== "notice_received") return { done: true };
+  if (mailbox?.status !== "connected") return {retry:"mail_not_connected",at:new Date(Date.now()+3600_000)};
   const { data: known } = await admin.from("tasks").select("id").eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1);
   const queueFiles = () => admin.from("jobs").upsert({ firm_id: event.firm_id, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
   if (known?.length) { await queueFiles(); return { done: true }; }
@@ -25,7 +27,11 @@ export const noticeFromMail: Handler = async (job) => {
   const address = await crypto.decrypt(firm, `accounts/${mailbox.id}/address`, mailbox.address_enc);
   const { password } = JSON.parse(await crypto.decrypt(firm, `accounts/${mailbox.id}/credentials`, mailbox.credentials_enc));
   const read = await readAttachments(address, password, (mailbox.settings as MailSettings).imap, event.provider_message_id);
-  if ("error" in read) return read.error === "server" ? { retry: "mail_unreachable" } : { done: true };
+  if ("error" in read) {
+    if (read.error==="sign_in") await mailHealth(mailbox.id,"read",true,mailbox.credentials_enc);
+    return {retry:"mail_unreachable",at:new Date(Date.now()+3600_000)};
+  }
+  await mailHealth(mailbox.id,"read",false,mailbox.credentials_enc);
   const pdfs = await Promise.all(read.files.filter((file) => file.name.toLowerCase().endsWith(".pdf")).map((file) => readText(file.name, file.bytes)));
   const receivedOn = new Date(event.received_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const notice = readNotice([read.subject, read.text, ...pdfs].join("\n"), receivedOn);

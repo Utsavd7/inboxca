@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { emailTemplates } from "@/src/lib/email-templates";
 import { serverCrypto } from "@/src/lib/crypto";
 import { firmMailer } from "@/src/lib/firm-mail";
 import { CODE_MINUTES, CODE_TRIES, codeHash, newCode, openCookie, openValue } from "@/src/lib/share-codes";
@@ -34,7 +35,9 @@ export async function requestShareCode(form: FormData) {
     .from("shares")
     .update({ code_hash: codeHash(share.id, code), code_expires_at: new Date(Date.now() + CODE_MINUTES * 60_000).toISOString(), code_attempts: 0 })
     .eq("id", share.id);
-  const sent = await mailer?.send(to, "Your code to open the document", [`Your code is ${code}.`, "", `It works for ${CODE_MINUTES} minutes. If you did not ask for it, you can ignore this email.`, "", share.firms.name].join("\n"));
+  const message=emailTemplates.code(code,share.firms.name);
+  const sent=await mailer?.send(to,message.subject,message.text);
+  if (!sent) await supabaseAdmin().from("shares").update({code_hash:null,code_expires_at:null}).eq("id",share.id);
   redirect(`/s/${token}?code=${sent ? "sent" : "failed"}`);
 }
 

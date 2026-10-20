@@ -73,7 +73,7 @@ export const smtpTransport = (address: string, password: string, { host, port }:
     connectionTimeout: 15_000,
   });
 
-const signInFailed = (error: unknown) => {
+export const signInFailed = (error: unknown) => {
   const failure = error as { authenticationFailed?: boolean; responseCode?: number; code?: string };
   return !!failure.authenticationFailed || failure.responseCode === 535 || failure.code === "EAUTH";
 };
@@ -198,3 +198,8 @@ export async function foundInSent(address: string, password: string, server: Ser
     throw new Error("sent_not_read");
   }
 }
+
+// Gmail supports searching for the original Message-ID. Other providers need their own link.
+export const opensInMailbox = (host:string) => host.toLowerCase() === "imap.gmail.com";
+export const mailboxLink = (host:string,address:string,messageId:string) => opensInMailbox(host)
+  ? `https://mail.google.com/mail/?authuser=${encodeURIComponent(address)}#search/${encodeURIComponent(`rfc822msgid:${messageId.replace(/^<|>$/g, "")}`)}` : null;

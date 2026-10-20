@@ -1,7 +1,7 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveVisibility, setFolderOrder, withdrawAlways } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways } from "@/app/(app)/actions";
 import { officeApprover } from "@/src/lib/office";
 import { OfficePanel } from "../office-panel";
 import { documentTypes } from "@/src/lib/documents";
@@ -19,6 +19,7 @@ import { MailboxForm } from "./mailbox-form";
 
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
 const driveErrors: Record<string, string> = {
+  mail_limit:"Choose a whole number from 1 to 2,000 for the email limit.",
   drive_terms: "Tick the box to agree to the Drive access terms first.",
   drive_provider: "Choose a drive.",
   drive_taken: "A drive is already connected. Disconnect it first.",
@@ -41,6 +42,7 @@ export default async function Settings({
   const drive = accounts?.find((account) => account.kind === "drive");
   // Only the server reads a drive's settings; this page is the owner's.
   const { data: driveSettings } = drive ? await supabaseAdmin().from("connected_accounts").select("settings").eq("id", drive.id).single() : { data: null };
+  const {data:mailServers}=mailbox?.status==="needs_reconnect" ? await supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",membership.firmId).eq("id",mailbox.id).single() : {data:null};
   const folderOrder = (driveSettings?.settings as { folder_order?: string } | undefined)?.folder_order ?? "year_client_work";
   const naming = (driveSettings?.settings as { naming?: string } | undefined)?.naming ?? "client_type_period";
   const driveAddress = drive && (await serverCrypto().decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc));
@@ -109,6 +111,15 @@ export default async function Settings({
             ) : (
               <MailboxForm />
             )}
+            {mailbox?.status==="needs_reconnect" && <>
+              <p className="alert" role="alert">Connect your firm&apos;s email again. Replies will wait until it is connected.</p>
+              <MailboxForm reconnecting initial={{address:mailAddress ?? "",...Object.fromEntries(Object.entries((mailServers?.settings ?? {}) as Record<string,unknown>).filter(([key])=>["imap","smtp"].includes(key)).flatMap(([key,value])=>Object.entries(value as Record<string,string|number>).map(([part,value])=>[`${key}_${part}`,String(value)])))}} />
+            </>}
+            {mailbox && <form action={saveMailLimit} className="form-row">
+              <div><label htmlFor="mail-limit">Emails in 24 hours</label><input id="mail-limit" name="limit" type="number" min="1" max="2000" step="1" className="num" defaultValue={Number(settings.mail_limit) || 500} /></div>
+              <button className="b b-secondary">Save email limit</button>
+              <p className="hint">Every reply and bulk send shares this limit. Lower it if your email provider allows fewer.</p>
+            </form>}
           </section>
 
           <section className="panel" aria-labelledby="drive-title" id="drive">

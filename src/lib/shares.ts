@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { emailTemplates } from "./email-templates";
 import { serverCrypto } from "./crypto";
 import { paperPolicy, type RecordsSettings } from "./records";
 import { firmMailer } from "./firm-mail";
@@ -42,7 +43,7 @@ export async function sendShare(share: {
     if (!allowed) return false;
   }
   share.needsCode ||= policy === "approval";
-  const delivery = existing?.delivery as { state: "sending" | "sent"; link_enc?: string; until?: string } | null;
+  const delivery = existing?.delivery as { state: "ready" | "sending" | "sent"; link_enc?: string; until?: string } | null;
   const messageId = `<share-${id}@${new URL(process.env.APP_BASE_URL ?? "http://inboxca.local").host}>`;
   if (delivery?.state === "sent") return true;
   const crypto = serverCrypto();
@@ -68,14 +69,15 @@ export async function sendShare(share: {
   if (saved.error) throw new Error("share_not_saved");
   if (!saved.data) return false;
   const link = `${process.env.APP_BASE_URL ?? ""}/s/${token}`;
-  const sent = await mailer.send(
-    share.to,
-    share.inReplyTo ? `Re: your request for ${share.documentName}` : share.documentName,
-    [`Dear ${share.clientName},`, "", `${share.firmName} has shared ${share.documentName} with you.`, "", `Download it here: ${link}`, share.needsCode ? "It is private: the page emails a one-time code to this address before it opens. The link works for 7 days and up to 5 downloads." : "The link works for 7 days and up to 5 downloads.", "", share.firmName].join("\n"),
-    messageId,
-    share.inReplyTo,
-  );
-  if (!sent) return false;
+  const message=emailTemplates.paper(share.clientName,share.firmName,share.documentName,link,!!share.needsCode,!!share.inReplyTo);
+  const sent=await mailer.send(share.to,message.subject,message.text,messageId,share.inReplyTo);
+  if (!sent) {
+    if (mailer.waitUntil) {
+      const {error}=await admin.from("shares").update({delivery:{state:"ready",at:mailer.waitUntil.toISOString(),link_enc:fields.delivery.link_enc}}).eq("id",id);
+      if (error) throw new Error("share_not_saved");
+    }
+    return false;
+  }
   await finish();
   return true;
 }

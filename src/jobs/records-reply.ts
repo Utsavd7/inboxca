@@ -1,3 +1,4 @@
+import { mailHealth } from "@/src/lib/firm-mail";
 import { serverCrypto } from "@/src/lib/crypto";
 import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
 import { askedPaper, paperPolicy, pickPaper, type RecordsSettings } from "@/src/lib/records";
@@ -18,7 +19,8 @@ export const recordsReply: Handler = async (job) => {
     .eq("id", job.entity_id ?? "")
     .maybeSingle();
   const mailbox = event?.connected_accounts;
-  if (!event?.client_id || !event.clients || !event.firms || !["records_past", "records_current"].includes(event.label ?? "") || mailbox?.status !== "connected") return { done: true };
+  if (!event?.client_id || !event.clients || !event.firms || !["records_past", "records_current"].includes(event.label ?? "")) return { done: true };
+  if (mailbox?.status !== "connected") return {retry:"mail_not_connected",at:new Date(Date.now()+3600_000)};
   const { data: answered, error: answeredError } = await admin.from("shares").select("id,status,delivery,document_id").eq("email_event_id", event.id).limit(1);
   if (answeredError) return {retry:"reply_not_read"};
   const prior = answered?.[0];
@@ -44,7 +46,11 @@ export const recordsReply: Handler = async (job) => {
   const address = await crypto.decrypt(firm, `accounts/${mailbox.id}/address`, mailbox.address_enc);
   const { password } = JSON.parse(await crypto.decrypt(firm, `accounts/${mailbox.id}/credentials`, mailbox.credentials_enc));
   const read = await readAttachments(address, password, (mailbox.settings as MailSettings).imap, event.provider_message_id);
-  if ("error" in read) return read.error === "server" ? { retry: "mail_unreachable" } : { done: true };
+  if ("error" in read) {
+    if (read.error==="sign_in") await mailHealth(mailbox.id,"read",true,mailbox.credentials_enc);
+    return {retry:"mail_unreachable",at:new Date(Date.now()+3600_000)};
+  }
+  await mailHealth(mailbox.id,"read",false,mailbox.credentials_enc);
   const asked = askedPaper(read.subject, read.text);
   if (!asked.types.length) {
     await toTeam("record_unclear");

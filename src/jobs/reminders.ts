@@ -1,10 +1,11 @@
+import { emailTemplates, TEMPLATE_VERSION } from "@/src/lib/email-templates";
 import type { Json } from "@/src/db/types";
 import { todayInIndia } from "@/src/lib/calendar";
 import { workOfService } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
 import { firmMailer } from "@/src/lib/firm-mail";
 import type { DocumentRequest } from "@/src/lib/checklists";
-import { followUpDue, planReminders, reminderEmail, reminderStages, checkedReminder, type FollowUp, type ReminderTask } from "@/src/lib/reminders";
+import { followUpDue, planReminders, reminderStages, checkedReminder, type FollowUp, type ReminderTask } from "@/src/lib/reminders";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Handler } from "./runner";
 
@@ -36,7 +37,7 @@ export const sendReminders: Handler = async (job) => {
   const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric", hourCycle: "h23" }));
   if (!process.env.REMINDERS_ANY_HOUR && (hour < 9 || hour >= 20)) return { retry: "quiet_hours", at: nextMorning() };
   const mailer = await firmMailer(firm, firmRow.name);
-  if (!mailer) return { done: true };
+  if (!mailer) return {retry:"mail_not_connected",at:new Date(Date.now()+3600_000)};
 
   const today = todayInIndia();
   const [{ data: rows }, { data: rules }, { data: handling }] = await Promise.all([
@@ -99,6 +100,7 @@ export const sendReminders: Handler = async (job) => {
 
   const host = new URL(process.env.APP_BASE_URL ?? "http://inboxca.local").host;
   let sentNow = 0;
+  const started=Date.now();
   for (const clientId of new Set([...send.keys(), ...follow.keys()])) {
     let mine = (send.get(clientId) ?? []) as (typeof tasks)[number][];
     const asks = follow.get(clientId) ?? [];
@@ -115,7 +117,7 @@ export const sendReminders: Handler = async (job) => {
     // Each task and each request carries the day's send, so nothing goes twice.
     const states = [...mine.map((task) => task.details.reminder), ...asks.map((ask) => ask.details.reminder)];
     if (states.some((state) => state?.day === today && state.state === "sent")) continue;
-    if (sentNow >= PER_RUN) return { retry: "more_clients", at: new Date(Date.now() + 10 * 60_000) };
+    if (sentNow >= PER_RUN || Date.now()-started>=30_000) return { retry: "more_clients", at: new Date(Date.now() + 10 * 60_000) };
     const messageId = `<reminder-${clientId}-${today}@${host}>`;
     const markAll = async (state: "sending" | "sent" | "failed") => {
       for (const task of mine) {
@@ -142,9 +144,10 @@ export const sendReminders: Handler = async (job) => {
     await markAll("sending");
     const person = people.get(clientId)!;
     const to = await crypto.decrypt(firm, `clients/${clientId}/email`, person.email_enc!);
-    const { subject, text } = checkedReminder(undefined, reminderEmail(person.name, firmRow.name, mine, today, asks));
+    const { subject, text } = checkedReminder(undefined, emailTemplates.reminder(person.name, firmRow.name, mine, today, asks));
     const sent = await mailer.send(to, subject, text, messageId);
-    await markAll(sent ? "sent" : "failed");
+    await markAll(sent ? "sent" : mailer.waitUntil ? "failed" : "sending");
+    if (!sent) return mailer.waitUntil ? {retry:"mail_wait",at:mailer.waitUntil} : {retry:"mail_not_sent",patient:true};
     if (sent) sentNow++;
     // Only what is reminded, never the text, goes in the log.
     if (sent)
@@ -153,7 +156,7 @@ export const sendReminders: Handler = async (job) => {
         action: "reminder.sent",
         entity_type: "client",
         entity_id: clientId,
-        details: { tasks: mine.map((task) => task.id), requests: asks.map((ask) => ask.requestId), works: [...new Set(mine.map((task) => workOfService(task.code)))] },
+        details: { template:`reminder.en.${TEMPLATE_VERSION}`,tasks: mine.map((task) => task.id), requests: asks.map((ask) => ask.requestId), works: [...new Set(mine.map((task) => workOfService(task.code)))] },
       });
   }
   return { done: true };

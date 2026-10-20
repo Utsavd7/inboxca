@@ -1,3 +1,4 @@
+import { mailHealth } from "@/src/lib/firm-mail";
 import { serverCrypto } from "@/src/lib/crypto";
 import { readNewMail, type MailSettings, type NewMail } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -8,7 +9,7 @@ import type { Handler } from "./runner";
 // Reads a connected mailbox's new mail (PLAN.md 4.5, 5.5). Mail from anyone who is not a
 // client or a contact of the firm is skipped without being opened or kept. The rest is
 // labelled in memory; only the label and reason are kept, and anything unclear becomes a
-// Needs team reply request. A refused password marks the mailbox to be connected again,
+// Needs team reply request. Repeated refused passwords mark the mailbox to be connected again,
 // which stops polling until the owner does.
 export const mailPoll: Handler = async (job) => {
   const admin = supabaseAdmin();
@@ -45,10 +46,11 @@ export const mailPoll: Handler = async (job) => {
   const read = await readNewMail(address, password, (account.settings as MailSettings).imap, account.sync_cursor, keep);
   if ("error" in read) {
     if (read.error === "server") return { retry: "mail_unreachable" };
-    await admin.from("connected_accounts").update({ status: "needs_reconnect" }).eq("id", account.id);
-    return { done: true };
+    const failed=await mailHealth(account.id,"read",true,account.credentials_enc);
+    return failed>=3 ? {done:true} : {retry:"mail_sign_in",at:new Date(Date.now()+2**failed*60_000)};
   }
 
+  await mailHealth(account.id,"read",false,account.credentials_enc);
   const today = todayInIndia();
   const events = read.mail.map((mail) => {
     const sender = senders.get(mail.from)!;

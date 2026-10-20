@@ -8,6 +8,8 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import { createClient } from "@supabase/supabase-js";
+import { loadEnvConfig } from "@next/env";
+import { serverCrypto } from "@/src/lib/crypto";
 import { TEST_WORKER_SECRET } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
 import { laterBy } from "@/src/lib/hours";
@@ -717,6 +719,53 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await expect(latest).toHaveCount(2);
   await latest.first().getByRole("combobox").selectOption({ label: "Asks for this year's records" });
   await expect(latest.filter({ hasText: "Corrected" })).toHaveCount(1);
+});
+
+// M3 acceptance: reconnect preserves unread mail and resumes a waiting send.
+test("repeated mailbox failures ask the owner to reconnect, then pending mail resumes", async ({ request }) => {
+  loadEnvConfig(process.cwd());
+  const crypto=serverCrypto(),clients=[randomUUID(),randomUUID()],code=`HR${tag.toUpperCase()}`;
+  const addresses=[`health-reminder-${tag}@invented.test`,`health-cursor-${tag}@invented.test`];
+  const [{id:account,sync_cursor:cursor}]=await query(local.dbUrl,"select id,sync_cursor from public.connected_accounts where firm_id=$1 and kind='mail'",[firm.firmId]);
+  for (let n=0;n<2;n++) await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind,email_enc,email_bidx) values ($1,$2,$3,'individual',$4,$5)",[clients[n],firm.firmId,`Health Test ${n}`,await crypto.encrypt(firm.firmId,`clients/${clients[n]}/email`,addresses[n]),await crypto.blindIndex(firm.firmId,"email",addresses[n])]);
+  await query(local.dbUrl,`insert into public.compliance_types(code,name,frequency,due_rule,source_url,verified_on,approved_by) values ($1,'Health test return','monthly','{"for":"pan"}','https://example.test/test',current_date,'test')`,[code]);
+  await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,$3,'2026-09',(now() at time zone 'Asia/Kolkata')::date+3)",[firm.firmId,clients[0],code]);
+  await query(local.dbUrl,`update public.firms set settings=settings || '{"reminders":true}' where id=$1`,[firm.firmId]);
+  const smtp=nodemailer.createTransport({host:"127.0.0.1",port:3025,secure:false,ignoreTLS:true});
+  await smtp.sendMail({from:mailboxEmail,to:addresses[0],subject:"Invented test setup",text:"Test setup"});
+  await query(local.dbUrl,"update public.connected_accounts set credentials_enc=$2 where id=$1",[account,await crypto.encrypt(firm.firmId,`accounts/${account}/credentials`,JSON.stringify({password:"invented wrong password"}))]);
+  const sweep=()=>request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
+  for(let n=0;n<3;n++) {
+    await query(local.dbUrl,"select private.queue_mail_polls()");
+    await query(local.dbUrl,"update public.jobs set run_at=now() where firm_id=$1 and kind='mail_poll' and state='pending'",[firm.firmId]);
+    await sweep();
+  }
+  expect((await query(local.dbUrl,"select status,sync_cursor from public.connected_accounts where id=$1",[account]))[0]).toEqual({status:"needs_reconnect",sync_cursor:cursor});
+  expect((await query(local.dbUrl,"select count(*)::int n from public.jobs where firm_id=$1 and kind='mailbox_reconnect'",[firm.firmId]))[0].n).toBe(1);
+  await owner.goto("/app");
+  await expect(owner.getByRole("alert").filter({hasText:"Connect your firm's email again"})).toBeVisible();
+  await query(local.dbUrl,"delete from public.jobs where firm_id=$1 and kind='reminders'",[firm.firmId]);
+  await query(local.dbUrl,"insert into public.jobs(firm_id,kind,entity_type,entity_id,idempotency_key) values ($1,'reminders','firm',$1,$2)",[firm.firmId,`health-reminder-${tag}`]);
+  await sweep();
+  expect((await query(local.dbUrl,"select state,last_error_code from public.jobs where firm_id=$1 and kind='reminders'",[firm.firmId]))[0]).toMatchObject({state:"pending",last_error_code:"mail_not_connected"});
+  expect(await mailCount(addresses[0])).toBe(1);
+  await smtp.sendMail({from:addresses[1],to:mailboxEmail,subject:"Last year's ITR",text:"Please send last year's ITR."});
+  await owner.goto("/app/settings");
+  const card=owner.locator("section[aria-labelledby=mailbox]");
+  await expect(card.getByLabel("The firm's email address")).toHaveValue(mailboxEmail);
+  await card.getByLabel("Its password").fill("secret"); // ggignore: GreenMail's public local test password.
+  await card.getByRole("button",{name:"Reconnect email"}).click();
+  await expect(card.getByRole("status")).toHaveText(`Connected: ${mailboxEmail}`);
+  for(let n=0;n<2;n++) await sweep();
+  expect((await query(local.dbUrl,"select id,status from public.connected_accounts where firm_id=$1 and kind='mail'",[firm.firmId]))[0]).toEqual({id:account,status:"connected"});
+  expect((await query(local.dbUrl,"select count(*)::int n from public.email_events where firm_id=$1 and client_id=$2",[firm.firmId,clients[1]]))[0].n).toBe(1);
+  expect(await mailCount(addresses[0])).toBe(2);
+  expect(await lastMail(addresses[0])).toContain("Health test return");
+  await owner.goto("/app");
+  await expect(owner.getByRole("link",{name:"Reconnect email"})).toHaveCount(0);
+  await query(local.dbUrl,"delete from public.tasks where code=$1",[code]);
+  await query(local.dbUrl,"delete from public.compliance_types where code=$1",[code]);
+  await query(local.dbUrl,"update public.firms set settings=settings || '{\"reminders\":false}' where id=$1",[firm.firmId]);
 });
 
 test("the owner connects a drive only after agreeing to the Drive access terms", async () => {

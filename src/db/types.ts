@@ -233,13 +233,13 @@ isOneToOne: false
                   ]
                 },"email_events": {
                   Row: {
-                    "account_id": string,"client_id": string | null,"contact_id": string | null,"decision_source": string | null,"firm_id": string,"id": string,"label": string | null,"provider_message_id": string,"reason_code": string | null,"received_at": string,"sender_bidx": string,"status": string,"thread_id": string | null
+                    "account_id": string,"client_id": string | null,"contact_id": string | null,"decision_source": string | null,"delivery": NonNullable<Json>,"firm_id": string,"id": string,"label": string | null,"provider_message_id": string,"reason_code": string | null,"received_at": string,"sender_bidx": string,"status": string,"thread_id": string | null
                   }
                   Insert: {
-                    "account_id": string,"client_id"?: string | null,"contact_id"?: string | null,"decision_source"?: string | null,"firm_id": string,"id"?: string,"label"?: string | null,"provider_message_id": string,"reason_code"?: string | null,"received_at": string,"sender_bidx": string,"status"?: string,"thread_id"?: string | null
+                    "account_id": string,"client_id"?: string | null,"contact_id"?: string | null,"decision_source"?: string | null,"delivery"?: NonNullable<Json>,"firm_id": string,"id"?: string,"label"?: string | null,"provider_message_id": string,"reason_code"?: string | null,"received_at": string,"sender_bidx": string,"status"?: string,"thread_id"?: string | null
                   }
                   Update: {
-                    "account_id"?: string,"client_id"?: string | null,"contact_id"?: string | null,"decision_source"?: string | null,"firm_id"?: string,"id"?: string,"label"?: string | null,"provider_message_id"?: string,"reason_code"?: string | null,"received_at"?: string,"sender_bidx"?: string,"status"?: string,"thread_id"?: string | null
+                    "account_id"?: string,"client_id"?: string | null,"contact_id"?: string | null,"decision_source"?: string | null,"delivery"?: NonNullable<Json>,"firm_id"?: string,"id"?: string,"label"?: string | null,"provider_message_id"?: string,"reason_code"?: string | null,"received_at"?: string,"sender_bidx"?: string,"status"?: string,"thread_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -543,6 +543,9 @@ isOneToOne: false
 "finish_job":
 { Args: { "error_code"?: string,"job_id": number,"outcome": string,"retry_at"?: string }; Returns: boolean
                            },
+"finish_mail_ack":
+{ Args: { "event_id": string,"template_version": number }; Returns: undefined
+                           },
 "finish_share":
 { Args: { "share_id": string }; Returns: undefined
                            },
@@ -566,6 +569,9 @@ isOneToOne: false
 { Args: { "target_firm": string }; Returns: {
               "client_name": string,"due_on": string,"id": string
             }[]
+                           },
+"mail_health":
+{ Args: { "account_id": string,"expected": string,"failed": boolean,"phase": string }; Returns: number
                            },
 "maintain_activity_log":
 { Args: { "as_of"?: string }; Returns: undefined
@@ -639,6 +645,9 @@ isOneToOne: false
                            },
 "rename_document":
 { Args: { "actor": string,"new_file": string,"new_name": string,"new_period": string,"new_status": string,"new_type": string,"new_work": string,"target": string }; Returns: undefined
+                           },
+"reserve_mail_send":
+{ Args: { "account_id": string }; Returns: Json
                            },
 "restore_member":
 { Args: { "person": string,"target_firm": string }; Returns: boolean

@@ -91,7 +91,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           .gte("at", new Date(`${today}T00:00:00+05:30`).toISOString()),
       )
     : 0;
-  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices, veryLate, noticeAlerts, asks, me] = await Promise.all([
+  const [late, week, doing, filed, waiting, mail, rules, load, byReturn, setup, alerts, notices, veryLate, noticeAlerts, asks, me, mailboxNotice] = await Promise.all([
     cards().neq("status", "filed").lt("due_on", today),
     cards().eq("status", "upcoming").gte("due_on", today).lte("due_on", shift(today, 7)),
     cards().eq("status", "in_progress"),
@@ -118,6 +118,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     supabase.rpc("notice_alerts", { target_firm: membership.firmId }).limit(10),
     supabase.from("requests").select("details").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(200),
     supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
+    owner ? supabase.from("connected_accounts").select("status").eq("firm_id",membership.firmId).eq("kind","mail").maybeSingle() : null,
   ]);
   // Questions this person may answer (5.17.2), counted for one line on Home.
   const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
@@ -281,6 +282,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           {notice.client_name}: a notice&apos;s {notice.action_date ? "action date" : "review deadline"} {notice.due_on < today ? "has passed" : notice.due_on === today ? "is today" : "is within 3 days"}. <Link href="/app/notices">Review notice</Link>
         </p>
       ))}
+      {mailboxNotice?.data?.status==="needs_reconnect" && <p className="alert" role="alert">Connect your firm&apos;s email again. Replies will wait until it is connected. <Link href="/app/settings#mailbox">Reconnect email</Link></p>}
       <OfficePanel compact />
       {!!waitingIds.length && (
         <p className="alert" role="alert">

@@ -11,6 +11,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { currentMember } from "@/src/lib/member";
 import { AutoSelect } from "../auto-select";
 import { Avatar, Badge, Empty, PageHead } from "../ui";
+import { opensInMailbox } from "@/src/lib/mailbox";
 import { labels } from "@/src/lib/triage";
 
 const reasons: Record<string, string> = {
@@ -78,6 +79,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
       ] as const),
     ),
   );
+  const {data:mailbox}=await supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",membership.firmId).eq("kind","mail").maybeSingle();
+  const openMail=opensInMailbox((mailbox?.settings as {imap?:{host?:string}} | undefined)?.imap?.host ?? "");
   const byId = new Map(events?.map((event) => [event.id, event]));
 
   return (
@@ -105,6 +108,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
                   )}
                   <span className="sub">{reasons[request.reason_code ?? ""] ?? labels.other}</span>
                 </span>
+                {openMail && <a className="b b-ghost b-small" href={`/app/inbox/${request.entity_id}/open`} target="_blank" rel="noreferrer">Open in mailbox</a>}
                 <form action={manageEmail} className="end">
                   {event && <span className="when">{when(event.received_at)}</span>}
                   <input type="hidden" name="request" value={request.id} />
@@ -265,7 +269,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
       <section className="panel" aria-labelledby="latest">
         <div className="panel-head">
           <h2 id="latest">Latest client email</h2>
-          <p className="hint">Pick another label when InboxCA got one wrong; it learns from you.</p>
+          <p className="hint">Pick another label when InboxCA got one wrong; your correction is kept for review.</p>
         </div>
         {events?.length ? (
           <div className="table-wrap">
@@ -294,7 +298,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
                           )}
                         </span>
                       </td>
-                      <td className="shrink when">{when(event.received_at)}</td>
+                      <td className="shrink when">{when(event.received_at)} {openMail && <a href={`/app/inbox/${event.id}/open`} target="_blank" rel="noreferrer">Open in mailbox</a>}</td>
                       <td className="shrink">
                         <form key={`${event.label}`} action={manageEmail} className="cell-form">
                           <input type="hidden" name="email" value={event.id} />
