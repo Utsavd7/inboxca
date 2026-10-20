@@ -1,6 +1,6 @@
 import {randomBytes,randomUUID} from "node:crypto";
 import fs from "node:fs";
-import {mkdtemp,readdir,rm} from "node:fs/promises";
+import {mkdtemp,readdir,readFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import path from "node:path";
 import nodemailer from "nodemailer";
@@ -10,6 +10,7 @@ import {localSupabase} from "../local-env";
 import {firmCrypto,localKek,supabaseKeyStore} from "@/src/lib/crypto";
 import {supabaseAdmin} from "@/src/lib/supabase";
 import {checkMailbox} from "@/src/lib/mailbox";
+import {handlers} from "@/src/jobs/handlers";
 import {mailPoll} from "@/src/jobs/mail-poll";
 import type {Job} from "@/src/jobs/runner";
 import {connect} from "./db";
@@ -51,6 +52,9 @@ it("triages 50 invented emails and keeps their subjects and bodies out of saved 
     const checked=await checkMailbox("office@firm.test",password,settings);
     expect("cursor" in checked).toBe(true);
     await db.query("insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc,settings,sync_cursor) values ($1,$2,'mail','imap',$3,$4,$5,$6)",[account,firm,await crypto.encrypt(firm,`accounts/${account}/address`,"office@firm.test"),await crypto.encrypt(firm,`accounts/${account}/credentials`,JSON.stringify({password})),settings,"cursor" in checked ? checked.cursor : ""]);
+    // The firm's drive is the local test folder, so filing really writes files.
+    const drive=randomUUID();
+    await db.query("insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc) values ($1,$2,'drive','local',$3,$4)",[drive,firm,await crypto.encrypt(firm,`accounts/${drive}/address`,"Local test drive"),await crypto.encrypt(firm,`accounts/${drive}/credentials`,"{}")]);
     await Promise.all(pack.map((sample,n)=>smtp.sendMail({from:email,to:"office@firm.test",messageId:`<triage-${run}-${n}@inboxca.test>`,subject:`${sample.subject} ${markers[n*2]}`,text:`${sample.text}\n${markers[n*2+1]}`,attachments:sample.attachments.map((filename)=>({filename,content:"Invented attachment"}))})));
     await smtp.sendMail({from:`unknown-${run}@invented.test`,to:"office@firm.test",messageId:`<triage-${run}-50@inboxca.test>`,subject:markers[100],text:markers[101]});
     const encrypted=vi.spyOn(crypto,"encrypt"),written=vi.spyOn(fs.promises,"writeFile"),synced=vi.spyOn(fs,"writeFileSync");
@@ -62,6 +66,16 @@ it("triages 50 invented emails and keeps their subjects and bodies out of saved 
     expect(correct/50).toBeGreaterThanOrEqual(0.9);
     low=rows.filter((row)=>row.label==="other").length;
     expect((await db.query("select count(*)::int n from public.requests r join public.email_events e on e.id=r.entity_id where r.firm_id=$1 and r.kind='team_reply' and e.label='other'",[firm])).rows[0].n).toBe(low);
+    // The jobs the poll queued open each email again in memory (filing, notices, records
+    // replies); what they keep must hold no subject or body text either.
+    const queued=(await db.query("select * from public.jobs where firm_id=$1 and state='pending' and kind<>'mail_poll' order by id",[firm])).rows as Job[];
+    expect(new Set(queued.map((job)=>job.kind))).toEqual(new Set(["file_mail","notice_from_mail","records_reply"]));
+    for (const job of queued) expect(await handlers[job.kind](job,{markSending:async()=>{}})).toEqual({done:true});
+    expect((await db.query("select (select count(*)::int from public.documents where firm_id=$1) documents,(select count(*)::int from public.tasks where firm_id=$1 and kind='notice') notices",[firm])).rows[0]).toEqual({documents:22,notices:7});
+    const files=(await readdir(dir,{recursive:true,withFileTypes:true})).filter((entry)=>entry.isFile());
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) expect(contains(file.name) || contains(await readFile(path.join(file.parentPath,file.name)))).toBe(false);
+    expect(contains((await db.query("select to_jsonb(f) data from public.firms f where id=$1",[firm])).rows[0].data)).toBe(false);
     const tables=(await db.query("select table_name from information_schema.columns where table_schema='public' and column_name='firm_id'")).rows;
     for (const {table_name:name} of tables) {
       const quoted='"'+String(name).replaceAll('"','""')+'"';
@@ -72,10 +86,9 @@ it("triages 50 invented emails and keeps their subjects and bodies out of saved 
     expect(encrypted.mock.calls.some((args)=>contains(args[2]))).toBe(false);
     expect([...written.mock.calls,...synced.mock.calls].some((args)=>contains(args[1]))).toBe(false);
     expect(logs.some((spy)=>spy.mock.calls.some((args)=>args.some(contains)))).toBe(false);
-    expect(await readdir(dir)).toEqual([]);
   } finally {
     smtp.close();vi.restoreAllMocks();vi.unstubAllEnvs();
     await db.query("begin");await db.query("select set_config('app.log_purge','on',true)");await db.query("delete from public.firms where id=$1",[firm]);await db.query("commit");await db.end();await rm(dir,{recursive:true,force:true});
   }
   console.info(`Triage: ${correct}/50 correct; ${low}/${low} unclear emails sent to the team; no subject or body markers saved.`);
-},30_000);
+},60_000);
