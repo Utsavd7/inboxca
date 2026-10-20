@@ -116,7 +116,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     supabase.from("tasks").select("id, client_id, due_on, details, clients(name)", { count: "exact" }).eq("kind", "notice").in("status", ["upcoming", "in_progress"]).order("due_on").limit(5),
     // Escalation (5.2, 5.6): returns 3 or more days late, and notices past their date, for the owner and partners.
     lead ? count(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("kind", "compliance").neq("status", "filed").lte("due_on", shift(today, -3))) : 0,
-    supabase.rpc("notice_alerts"),
+    supabase.rpc("notice_alerts", { target_firm: membership.firmId }).limit(10),
     supabase.from("requests").select("details").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(200),
     supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
   ]);
