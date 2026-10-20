@@ -93,7 +93,7 @@ async function fileAttachments(
     const sha256 = createHash("sha256").update(file.bytes).digest("hex");
     if (known.some((document) => document.email_event_id === event.id && document.sha256 === sha256)) continue;
     const described = describeFile(file.name, read.subject, event.label, event.received_at);
-    const about = notice ? { ...described, work: notice.authority, type: "Notice" } : described;
+    const about = notice ? { ...described, work: notice.authority, type: described.type === "Document" && /\.pdf$/i.test(file.name) ? "Notice" : described.type } : described;
     const again = known.some((document) => document.sha256 === sha256 || (about.sure && document.document_type === about.type && document.period_key === about.period));
     const toCheck = !about.sure || again;
     const folder = await drive.ensureFolder(folderFor(order, client, { ...about, receivedAt: event.received_at, toCheck }));
