@@ -1,0 +1,48 @@
+"use server";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { currentWriter } from "@/src/lib/member";
+import { serverCrypto } from "@/src/lib/crypto";
+import { grantFor } from "@/src/lib/permission-grants";
+import { checkFigures, draftSchema, checkValue, openFigures, place, saveDraft } from "@/src/lib/datasets";
+
+export async function reviewFigure(form:FormData) {
+  const {supabase,userId,membership}=await currentWriter();
+  if(!membership) redirect("/app");
+  const input=z.object({client:z.uuid(),draft:z.uuid(),line:z.uuid(),revision:z.coerce.number().int().min(1),intent:z.enum(["confirmed","rejected","edit"])}).safeParse(Object.fromEntries(form));
+  if(!input.success) redirect("/app/clients");
+  const {client,draft:id,line:lineId,revision,intent}=input.data;
+  const back=`/app/clients/${client}?tab=extraction&draft=${id}`;
+  const {data:row}=await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).maybeSingle();
+  if(!row) redirect("/app/clients");
+  if(row.revision!==revision) redirect(`${back}&check=stale`);
+  const data=draftSchema.parse(row.data),line=data.lines.find((item)=>item.id===lineId);
+  if(!line) redirect(back);
+  const {data:document}=await supabase.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",line.source.document).neq("status","deleted").maybeSingle();
+  if(!document) redirect(`${back}&check=source`);
+  const crypto=serverCrypto();
+  const figures=await openFigures(membership.firmId,id,data);
+  let permission:string|null=null;
+  const audit:Record<string,string>={line:lineId,state:intent};
+  if(intent==="edit") {
+    permission=membership.may("edit_figures") ? null : await grantFor(membership.firmId,userId,"edit_figures",client);
+    if(!membership.may("edit_figures") && !permission) redirect(`${back}&check=permission`);
+    const value=String(form.get("value") ?? "").trim(),reason=String(form.get("reason") ?? "").trim();
+    try {checkValue({...figures.get(line.id)!,value});} catch {redirect(`${back}&check=value`);}
+    if(reason.length<3 || reason.length>300) redirect(`${back}&check=reason`);
+    audit.before=line.value_enc;
+    line.value_enc=await crypto.encrypt(membership.firmId,place(id,line.id),JSON.stringify({...figures.get(line.id),value}));
+    audit.after=line.value_enc;
+    audit.reason_enc=await crypto.encrypt(membership.firmId,`${place(id,line.id)}/reason/${revision}`,reason);
+    for(const item of data.lines) {item.state="pending";delete item.by;delete item.at;}
+  } else {
+    if(line.state===intent) redirect(back);
+    line.state=intent;line.by=userId;line.at=new Date().toISOString();
+    if(intent==="confirmed" && checkFigures(data,figures).length) redirect(`${back}&check=totals`);
+  }
+  const saved=await saveDraft(row,data,userId,intent==="edit" ? "dataset.changed" : "dataset.checked",audit,permission);
+  if(!saved) redirect(`${back}&check=stale`);
+  revalidatePath("/app","layout");
+  redirect(`${back}&check=saved`);
+}

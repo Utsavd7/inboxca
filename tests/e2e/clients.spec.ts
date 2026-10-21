@@ -62,6 +62,8 @@ test("a return is marked filed with its acknowledgement on the calendar", async 
 });
 
 test("Home shows what needs the owner today and the next setup step", async () => {
+  // Keep a filing day in this month even after its regular due dates have passed.
+  await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date where id=(select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' limit 1)",[firm.firmId]);
   await owner.getByRole("link", { name: "Home" }).click();
   // The work board: the return filed above sits in the last column.
   await expect(owner.locator(".lane-filed")).toContainText("Patel Textiles");

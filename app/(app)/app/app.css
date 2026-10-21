@@ -457,3 +457,7 @@ form:has(input[name="task"]:checked) .bulk { opacity: 1; transform: none; pointe
   .ui *, .ui *::before, .ui *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
 .until { display: inline-flex; align-items: center; gap: var(--s1); font-size: 13px; color: var(--ink-2); }
+
+.figure-review { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 1.3fr); gap: 20px; align-items: start; }
+.figure-review .viewer { margin: 0; }
+@media (max-width: 900px) { .figure-review { grid-template-columns: 1fr; } }

@@ -82,7 +82,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
       };
     } catch (error) { await dispose(); throw error; }
   } else if (/\.(xlsx?|csv)$/i.test(name)) {
-    const all = readSheet(bytes, name, { rows: viewLimits.rows + 1, columns: viewLimits.columns + 1 });
+    const all = readSheet(bytes, name, { rows: viewLimits.rows + 1, columns: viewLimits.columns + 1, keepEmpty:true });
     const rows = all.slice(0, Math.min(viewLimits.rows, limit * viewLimits.rowsPerPage));
     header.limited = all.length > rows.length || rows.some((row) => row.length > viewLimits.columns);
     const columns = Math.max(1, ...rows.map((row) => Math.min(viewLimits.columns, row.length)));
@@ -98,10 +98,12 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
       context.fillStyle = "#17202f";
       context.font = "20px sans-serif";
       context.fillText(`Sheet 1, page ${number} of ${count}`, 24, 34);
-      const cellWidth = (canvas.width - 48) / columns;
+      const cellWidth = (canvas.width - 84) / columns;
+      for(let column=0;column<columns;column++) context.fillText(String.fromCharCode(65+column),60+column*cellWidth,54);
       rows.slice((number - 1) * viewLimits.rowsPerPage, number * viewLimits.rowsPerPage).forEach((row, index) => {
+        context.fillText(String((number-1)*viewLimits.rowsPerPage+index+1),8,84+index*34);
         for (let column = 0; column < columns; column++) {
-          const x = 24 + column * cellWidth, y = 60 + index * 34;
+          const x = 60 + column * cellWidth, y = 60 + index * 34;
           context.strokeStyle = "#cbd5e1";
           context.strokeRect(x, y, cellWidth, 34);
           context.save();

@@ -3,9 +3,9 @@ import { inflateRawSync } from "node:zlib";
 
 // The rows of a CSV file, or of an Excel file's first sheet, as text, for imports. Excel
 // files are zip files of XML, so Node's own zlib reads them; no spreadsheet package.
-export function readSheet(data: Buffer, fileName: string, limit?: { rows: number; columns: number }): string[][] {
+export function readSheet(data: Buffer, fileName: string, limit?: { rows: number; columns: number; keepEmpty?:boolean }): string[][] {
   const rows = /\.xlsx$/i.test(fileName) ? readXlsx(data, limit) : /\.xls$/i.test(fileName) ? readXls(data) : readCsv(data.toString("utf8").replace(/^﻿/, ""));
-  return rows.filter((row) => row.some((cell) => cell.trim()));
+  return limit?.keepEmpty ? rows : rows.filter((row) => row.some((cell) => cell.trim()));
 }
 
 export function readCsv(text: string) {
@@ -70,12 +70,16 @@ const unescape = (text: string) =>
   );
 const texts = (xml: string) => [...xml.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(([, text]) => unescape(text)).join("");
 
-function readXlsx(data: Buffer, limit?: { rows: number; columns: number }) {
+function readXlsx(data: Buffer, limit?: { rows: number; columns: number; keepEmpty?:boolean }) {
   const files = unzip(data);
   const shared = [...(files.get("xl/sharedStrings.xml")?.().toString() ?? "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map(([, item]) => texts(item));
   const sheet = files.get("xl/worksheets/sheet1.xml") ?? [...files].find(([name]) => name.startsWith("xl/worksheets/"))?.[1];
   if (!sheet) throw new Error("No sheet in the file");
-  return [...sheet().toString().matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)].slice(0, limit?.rows).map(([, cells]) => {
+  const result:string[][]=[];
+  for(const [,attributes,cells] of sheet().toString().matchAll(/<row([^>]*)>([\s\S]*?)<\/row>/g)) {
+    const at=limit?.keepEmpty ? Number(/r="(\d+)"/.exec(attributes)?.[1] ?? result.length+1)-1 : result.length;
+    if(!Number.isSafeInteger(at) || at<0) throw new Error("Invalid Excel row");
+    if(limit && at>=limit.rows) break;
     const row: string[] = [];
     for (const [, attributes, body = ""] of cells.matchAll(/<c([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const column = [.../r="([A-Z]+)/.exec(attributes)?.[1] ?? ""].reduce((sum, letter) => sum * 26 + letter.charCodeAt(0) - 64, 0) - 1;
@@ -85,6 +89,8 @@ function readXlsx(data: Buffer, limit?: { rows: number; columns: number }) {
       if (!Number.isSafeInteger(at) || at >= 16384) throw new Error("Invalid Excel column");
       row[Math.min(at, limit ? limit.columns : at)] = type === "s" ? shared[Number(value)] : type === "inlineStr" ? texts(body) : unescape(value);
     }
-    return Array.from(row, (cell) => cell ?? "");
-  });
+    while(result.length<at) result.push([]);
+    result[at]=Array.from(row, (cell) => cell ?? "");
+  }
+  return result;
 }

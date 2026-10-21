@@ -4,7 +4,7 @@ import { readFrames, viewLimits, type ViewHeader } from "@/src/lib/file-worker";
 import { logCapture } from "@/app/(app)/actions";
 
 // The file worker sends only stamped pages. Each appears as soon as its frame arrives.
-export function FileViewer({ id, hideInactive = false }: { id: string; hideInactive?: boolean }) {
+export function FileViewer({ id, hideInactive = false, page: shownPage }: { id: string; hideInactive?: boolean; page?: number }) {
   const [pages, setPages] = useState<{ url: string; width: number; height: number }[]>([]);
   const [limited, setLimited] = useState(false);
   const [state, setState] = useState<"loading" | "shown" | "failed">("loading");
@@ -84,7 +84,7 @@ export function FileViewer({ id, hideInactive = false }: { id: string; hideInact
       <div className={`viewer-pages${blank ? " is-blank" : ""}`} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} onCopy={(event) => event.preventDefault()}>
         {pages.map((page, index) => (
           // eslint-disable-next-line @next/next/no-img-element
-          <img key={page.url} src={page.url} alt={`Page ${index + 1}`} width={page.width} height={page.height} draggable={false} onError={() => setState("failed")} />
+          (shownPage===undefined || shownPage===index+1) && <img key={page.url} src={page.url} alt={`Page ${index + 1}`} width={page.width} height={page.height} draggable={false} onError={() => setState("failed")} />
         ))}
       </div>
     </div>

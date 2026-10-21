@@ -3,7 +3,7 @@
 // Uploading other files and sending files to clients are requests for employees and
 // managers unless the owner switches them on in Settings → Permissions; removing a file is
 // the owner's alone, whatever the settings. Partners follow the manager column.
-export const switchable = { upload: "Upload files", send: "Send files to clients" } as const;
+export const switchable = { upload: "Upload files", send: "Send files to clients", edit_figures: "Edit figures and prepare forms" } as const;
 export type Right = keyof typeof switchable | "remove";
 export type Column = "employee" | "manager";
 export type Permissions = Partial<Record<Column, Partial<Record<keyof typeof switchable, boolean>>>>;
@@ -36,4 +36,4 @@ export function mayDecide(decider: { id: string; role: string; team_id: string |
   return request.route === "manager" && decider.role === "manager" && !!request.team_id && decider.team_id === request.team_id;
 }
 
-export const rightWords: Record<Right, string> = { upload: "upload a file", send: "send a file to the client", remove: "remove a file" };
+export const rightWords: Record<Right, string> = { upload: "upload a file", send: "send a file to the client", remove: "remove a file", edit_figures: "edit figures and prepare forms" };
