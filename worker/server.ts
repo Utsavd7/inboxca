@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { handle } from "./handler.ts";
+import {formLimit} from "../src/lib/form-worker.ts";
 
 // No .env.local loader: this process never needs the app's database credentials.
 createServer(async (incoming, outgoing) => {
@@ -12,7 +13,7 @@ createServer(async (incoming, outgoing) => {
     let size = 0;
     for await (const chunk of incoming) {
       size += chunk.length;
-      if (size > 16_384) { outgoing.writeHead(413).end(); return; }
+      if (size > (incoming.url?.startsWith("/prepare/") ? formLimit : 16_384)) { outgoing.writeHead(413).end(); return; }
       chunks.push(chunk);
     }
     const request = new Request(`http://worker${incoming.url}`, { method: incoming.method, headers: { authorization: incoming.headers.authorization ?? "" }, body: incoming.method === "POST" ? Buffer.concat(chunks) : undefined, signal: stop.signal });

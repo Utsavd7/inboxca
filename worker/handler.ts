@@ -4,6 +4,8 @@ import { openView } from "./render.ts";
 import { readSheet } from "../src/lib/sheet.ts";
 import { createHash } from "node:crypto";
 import { readPortal } from "./portal.ts";
+import {verifyForm} from "../src/lib/form-worker.ts";
+import {prepare} from "./prepare.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
 const reads = new Map<string, number>();
@@ -37,6 +39,15 @@ export async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
   if (request.method === "GET" && url.pathname === "/health") return new Response("Ready");
   const secret = process.env.FILE_WORKER_SECRET ?? "";
+  if(request.method==="POST" && url.pathname.startsWith("/prepare/")) {
+    let input;
+    try {input=await verifyForm(await request.text(),request.headers.get("authorization") ?? "",secret,url.pathname.slice(9));}
+    catch {return new Response("Not allowed",{status:403});}
+    try {
+      request.signal.throwIfAborted();const output=prepare(input);
+      return new Response(new Uint8Array(output.bytes),{headers:{"Content-Type":output.type,"Cache-Control":"private, no-store"}});
+    } catch {return new Response("The figures do not pass the official form's checks.",{status:422});}
+  }
   if (process.env.FILE_WORKER_TEST === "1" && request.method === "GET" && url.pathname === "/_reads" && secret && request.headers.get("authorization") === `Bearer ${secret}`)
     return Response.json({ reads: reads.get(url.searchParams.get("file") ?? "") ?? 0, peakRssKiB: process.resourceUsage().maxRSS });
   const sheet=url.pathname.startsWith("/sheet/");

@@ -36,7 +36,7 @@ export function extractSales(rows:string[][],asked:SalesMapping) {
     for(let index=0;index<headings.length;index++) {
       const column=mapping.columns[index],raw=rows[row][column]?.trim();
       if(column<0 || !raw || total && /^(grand\s+)?total$/i.test(raw)) continue;
-      const label=headings[index],numeric=/^(Invoice Value|Note Value|Rate|Taxable Value|Cess Amount|Total Value|Integrated Tax Amount|Central Tax Amount|State\/UT Tax Amount|Applicable % of Tax Rate)$/.test(label);
+      const label=headings[index],numeric=/^(Invoice Value|Note Value|Rate|Taxable Value|Cess Amount|Total Value|Total Quantity|Integrated Tax Amount|Central Tax Amount|State\/UT Tax Amount|Applicable % of Tax Rate)$/.test(label);
       if(total && !numeric) continue;
       if(numeric && !/^-?(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})*,\d{3})(\.\d{1,2})?$/.test(raw)) throw new Error(`Check ${label} in row ${row+1}.`);
       const kind:Figure["kind"]=/date$/i.test(label) ? "date" : numeric ? "number" : "text";

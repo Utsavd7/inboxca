@@ -14,10 +14,15 @@ export async function signView(body: string, secret: string) {
   return Array.from(new Uint8Array(await crypto.subtle.sign("HMAC", await key(secret), text.encode(body))), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+export async function validSignature(body:string,signature:string,secret:string) {
+  if(!secret || !/^[a-f0-9]{64}$/.test(signature)) return false;
+  const mac=Uint8Array.from(signature.match(/../g)!,byte=>parseInt(byte,16));
+  return crypto.subtle.verify("HMAC",await key(secret),mac,text.encode(body));
+}
+
 export async function verifyView(body: string, signature: string, secret: string, file: string, now = Date.now() / 1000, purpose?: "sheet" | "portal"): Promise<ViewRequest> {
   if (!secret || body.length > 16_384 || !/^[a-f0-9]{64}$/.test(signature)) throw new Error("Not allowed");
-  const mac = Uint8Array.from(signature.match(/../g)!, (byte) => parseInt(byte, 16));
-  if (!await crypto.subtle.verify("HMAC", await key(secret), mac, text.encode(body))) throw new Error("Not allowed");
+  if (!await validSignature(body,signature,secret)) throw new Error("Not allowed");
   const value = JSON.parse(body) as ViewRequest;
   if (!value || value.purpose !== purpose || typeof value.firm !== "string" || !value.firm || value.file !== file || !file || file.length > 4096 ||
     typeof value.name !== "string" || value.name.length > 2000 || typeof value.label !== "string" || !value.label || value.label.length > 1000 ||
