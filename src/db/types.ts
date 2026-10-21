@@ -76,13 +76,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"reminders_paused": boolean
+                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"reminders_paused": boolean,"sales_mapping_enc": string | null
                   }
                   Insert: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"reminders_paused"?: boolean
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
                   }
                   Update: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"reminders_paused"?: boolean
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
                   }
                   Relationships: [
                     {
@@ -560,6 +560,9 @@ isOneToOne: false
                            },
 "connect_drive":
 { Args: { "account": string,"address": string,"credentials": string,"drive_provider": string,"drive_settings": Json,"level": string,"target_firm": string,"terms_version": string }; Returns: boolean
+                           },
+"create_automatic_dataset":
+{ Args: { "body": Json,"client": string,"draft": string,"firm": string,"form": string,"period": string }; Returns: boolean
                            },
 "end_other_sessions":
 { Args: Record<PropertyKey, never>; Returns: number

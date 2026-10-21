@@ -13,6 +13,10 @@ it("accepts only a valid signed request for this document, within a minute", asy
   await expect(verifyView(body, mac, "", view.file, 1000)).rejects.toThrow("Not allowed");
   const tooMany = JSON.stringify({ ...view, limit: 31 });
   await expect(verifyView(tooMany, await signView(tooMany, secret), secret, view.file, 1000)).rejects.toThrow("Not allowed");
+  const sheet=JSON.stringify({...view,purpose:"sheet"});
+  await expect(verifyView(sheet,await signView(sheet,secret),secret,view.file,1000)).rejects.toThrow("Not allowed");
+  expect((await verifyView(sheet,await signView(sheet,secret),secret,view.file,1000,"sheet")).purpose).toBe("sheet");
+  await expect(verifyView(body,mac,secret,view.file,1000,"sheet")).rejects.toThrow("Not allowed");
 });
 
 it("reads length prefixed frames across arbitrary network chunk boundaries", async () => {

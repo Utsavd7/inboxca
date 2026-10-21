@@ -1,0 +1,3 @@
+GSTR1_Excel_Workbook_Template_V2.2.xlsx: source https://tutorial.gst.gov.in/offlineutilities/returns/gst_offline_tool.zip, archive entry GSTR1_Excel_Workbook_Template_V2.2.xlsx; fetched 21 Oct 2026; SHA-256 425084547928a31eab53123b9247bad9ded1ee421fbc9202d009260e5d9b18e5. The workbook is unchanged.
+
+Archive SHA-256 f0a7d6f66bf71b30e9ecd045a664dda428c8fac239f51127d656e6faac60e312 matched https://www.gst.gov.in/download/returns. No installer or macro was run. The archive's CSV examples with named businesses are not retained or used as test data. Field names and order come from the blank workbook itself.

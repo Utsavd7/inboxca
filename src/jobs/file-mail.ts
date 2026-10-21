@@ -11,6 +11,7 @@ import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
 import type { NoticeDetails } from "@/src/lib/notices";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { queueRead } from "./read-document";
+import { queueSales } from "./read-sales";
 import type { Handler } from "./runner";
 
 // Files a client email's attachments into the client's folder in the firm's drive
@@ -93,12 +94,12 @@ async function fileAttachments(
   const client = event.clients.name;
   const { data: notices } = event.label === "notice_received" ? await admin.from("tasks").select("details").eq("firm_id", firm).eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1) : { data: [] };
   const notice = notices?.[0]?.details as NoticeDetails | undefined;
-  const { data: existing } = await admin.from("documents").select("email_event_id, sha256, document_type, period_key, status").eq("client_id", event.client_id);
+  const { data: existing } = await admin.from("documents").select("id, email_event_id, sha256, document_type, period_key, status").eq("client_id", event.client_id);
   const known = existing ?? [];
   for (const file of read.files) {
     const sha256 = createHash("sha256").update(file.bytes).digest("hex");
     const previous=known.find((document)=>document.email_event_id===event.id && document.sha256===sha256);
-    if (previous) {filed.push({type:previous.document_type,period:previous.period_key,toCheck:previous.status!=="filed"});continue;}
+    if (previous) {if(previous.status==="filed" && /\.(xlsx?|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,previous.id);if(error) throw new Error("sales_not_queued");}filed.push({type:previous.document_type,period:previous.period_key,toCheck:previous.status!=="filed"});continue;}
     const described = describeFile(file.name, read.subject, event.label, event.received_at);
     const about = notice ? { ...described, work: notice.authority, type: described.type === "Document" && /\.pdf$/i.test(file.name) ? "Notice" : described.type } : described;
     const again = known.some((document) => document.sha256 === sha256 || (about.sure && document.document_type === about.type && document.period_key === about.period));
@@ -126,8 +127,9 @@ async function fileAttachments(
     });
     if (error) throw new Error("document_not_saved");
     await queueRead(firm, id);
+    if(about.work==="gst" && !toCheck && /\.(xlsx?|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,id);if(error) throw new Error("sales_not_queued");}
     filed.push({ type: about.type, period: about.period, toCheck });
-    known.push({ email_event_id: event.id, sha256, document_type: about.type, period_key: about.period, status:toCheck ? "to_check" : "filed" });
+    known.push({ id, email_event_id: event.id, sha256, document_type: about.type, period_key: about.period, status:toCheck ? "to_check" : "filed" });
   }
   return filed;
 }

@@ -80,7 +80,7 @@ export function FileViewer({ id, hideInactive = false, page: shownPage }: { id: 
         </p>
       )}
       {blank && <p className="hint viewer-blank">The document is hidden for a moment.</p>}
-      {limited && <p className="hint">Only the first 30 pages, or the first 1,000 rows and 12 columns of the first sheet, are shown here.</p>}
+      {limited && <p className="hint">Only the first 30 pages, or the first 1,000 rows and 26 columns of the first sheet, are shown here.</p>}
       <div className={`viewer-pages${blank ? " is-blank" : ""}`} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} onCopy={(event) => event.preventDefault()}>
         {pages.map((page, index) => (
           // eslint-disable-next-line @next/next/no-img-element
