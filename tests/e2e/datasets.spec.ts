@@ -88,8 +88,8 @@ test("a portal statement becomes encrypted pending figures beside its source, wi
     await query(local.dbUrl,"update public.firm_members set role='staff' where firm_id=$1 and user_id=$2",[firm.firmId,firm.ownerId]);
     await page.goto(`/app/clients/${client}?tab=extraction`);await page.getByRole("button",{name:"Read statement"}).click();
     await expect(page.getByRole("img",{name:"Page 1",exact:true})).toBeVisible();
-    await expect(page.getByText(/entry \/data\/itcsumm\/itcavl\/nonrevsup\/igst/)).toBeVisible();
     const [draft]=await query(local.dbUrl,"select id,data from public.datasets where firm_id=$1 and client_id=$2",[firm.firmId,client]);
+    expect(draft.data.lines[0].source).toMatchObject({document:first,path:"/data/itcsumm/itcavl/nonrevsup/igst",reader:"gstr2b-v4.5",page:1});
     expect(draft.data.lines).toHaveLength(8);expect(draft.data.lines.every((line:{state:string})=>line.state==="pending")).toBe(true);expect(JSON.stringify(draft.data)).not.toContain('"value":');
     expect(JSON.parse(await crypto.decrypt(firm.firmId,place(draft.id,draft.data.lines[0].id),draft.data.lines[0].value_enc)).value).toBe("100");
     await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
