@@ -4,9 +4,9 @@ import {checkFigures,draftSchema,hundredths,confirmedFigures,type Draft} from "@
 import {may} from "@/src/lib/rights";
 const mock=vi.hoisted(()=>({decrypt:vi.fn()}));
 vi.mock("@/src/lib/crypto",()=>({serverCrypto:()=>({decrypt:mock.decrypt})}));
-vi.mock("@/src/lib/supabase",()=>({supabaseAdmin:()=>({from:()=>({select(){return this;},eq(){return this;},neq(){return this;},in(){return this;},single:async()=>({data:{client_id:"client"}}),then(resolve:(value:unknown)=>void){resolve({data:[{id:"document",name:"source.pdf"}]});}})})}));
+vi.mock("@/src/lib/supabase",()=>({supabaseAdmin:()=>({from:()=>({select(){return this;},eq(){return this;},neq(){return this;},in(_key:string,ids:string[]){this.ids=ids;return this;},ids:[] as string[],single:async()=>({data:{client_id:"client"}}),then(resolve:(value:unknown)=>void){resolve({data:this.ids.map((id)=>({id,name:"source.pdf",sha256:"a".repeat(64)}))});}})})}));
 const ids=Array.from({length:5},()=>randomUUID());
-const source={document:randomUUID(),page:1};
+const source={document:randomUUID(),sha256:"a".repeat(64),page:1}; // ggignore: invented source checksum.
 const draft:Draft={lines:ids.map((id,n)=>({id,field:`figure${n}`,value_enc:"invented encrypted figure",source,state:"pending"})),checks:[{kind:"sum",parts:ids.slice(0,2),total:ids[2]},{kind:"tax",base:ids[2],rate:ids[3],total:ids[4]}]};
 const values:Map<string,{label:string;value:string}>=new Map(ids.map((id,n)=>[id,{label:`Figure ${n}`,value:["0.10","0.20","0.30","18.00","0.05"][n]}]));
 it("checks totals and tax without floating point, and blocks missing or rejected figures",()=>{
@@ -32,6 +32,6 @@ it("keeps figure changes off by default and rejects invalid source coordinates",
   expect(may("staff","edit_figures")).toBe(false);
   expect(may("owner","edit_figures")).toBe(true);
   expect(may("staff","edit_figures",{employee:{edit_figures:true}})).toBe(true);
-  const bad=structuredClone(draft);bad.lines[0].source={document:source.document,page:0};
+  const bad=structuredClone(draft);bad.lines[0].source={...source,page:0};
   expect(draftSchema.safeParse(bad).success).toBe(false);
 });

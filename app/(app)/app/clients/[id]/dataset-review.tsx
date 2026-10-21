@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { grantFor } from "@/src/lib/permission-grants";
 import { currentMember } from "@/src/lib/member";
-import { checkFigures, draftSchema, openFigures } from "@/src/lib/datasets";
+import { checkFigures, draftSchema, openFigures, verifySources } from "@/src/lib/datasets";
 import { periodName } from "@/src/lib/documents";
 import { askPermission } from "@/app/(app)/actions";
 import { FileViewer } from "../../files/[id]/view/file-viewer";
@@ -17,6 +17,8 @@ export async function DatasetReview({clientId,draftId,lineId,check}:{clientId:st
   const {data:row,error}=await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("id",selected.id).single();
   if(error || !row) throw new Error("The figures could not be read.");
   const draft=draftSchema.parse(row.data),figures=await openFigures(membership.firmId,row.id,draft);
+  let sourceReady=true;
+  try {await verifySources(membership.firmId,clientId,draft);} catch {sourceReady=false;}
   const issues=checkFigures(draft,figures),active=draft.lines.find((line)=>line.id===lineId) ?? draft.lines.find((line)=>line.state==="pending") ?? draft.lines[0];
   const {data:source}=await supabase.from("documents").select("id,name").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("id",active.source.document).neq("status","deleted").maybeSingle();
   const {data:people}=await supabase.rpc("firm_people",{target_firm:membership.firmId});
@@ -28,6 +30,7 @@ export async function DatasetReview({clientId,draftId,lineId,check}:{clientId:st
     <p className="hint">Check each figure against its source. Nothing is used in a form until every figure is confirmed.</p>
     <nav className="pills" aria-label="Drafts">{rows?.map((item)=><Link key={item.id} href={`?tab=extraction&draft=${item.id}`} aria-current={row.id===item.id ? "page" : undefined}>{item.form_code} {periodName(item.period_key)}</Link>)}</nav>
     {check && messages[check] && <p className="alert" role="status">{messages[check]}</p>}
+    {!sourceReady && <p className="alert" role="alert">A source changed or is not available. Ask your team to restore or read it again before checking these figures.</p>}
     {!!issues.length && <p className="alert" role="alert">{issues.join(" ")} Correct the figures before confirming them.</p>}
     <div className="figure-review">
       <div className="panel">
@@ -39,8 +42,8 @@ export async function DatasetReview({clientId,draftId,lineId,check}:{clientId:st
         {active.by && <p className="hint">Checked by {people?.find((person)=>person.user_id===active.by)?.email ?? "your team"}, {new Date(active.at!).toLocaleString("en-IN",{timeZone:"Asia/Kolkata"})}</p>}
         <form action={reviewFigure} className="fields">
           <input type="hidden" name="client" value={clientId}/><input type="hidden" name="draft" value={row.id}/><input type="hidden" name="line" value={active.id}/><input type="hidden" name="revision" value={row.revision}/>
-          <div className="form-row"><button className="b b-primary" name="intent" value="confirmed" disabled={viewOnly || !source || !!issues.length || active.state==="confirmed"}>Yes, this is right</button><button className="b b-secondary" name="intent" value="rejected" disabled={viewOnly || active.state==="rejected"}>No, this is wrong</button></div>
-          {!viewOnly && canEdit && <><div><label htmlFor="figure-value">Correct figure</label><input id="figure-value" name="value" inputMode={!figures.get(active.id)!.kind || figures.get(active.id)!.kind==="number" ? "decimal" : "text"} type={figures.get(active.id)!.kind==="date" ? "date" : "text"} defaultValue={figures.get(active.id)!.value}/></div><div><label htmlFor="figure-reason">Why it changed</label><input id="figure-reason" name="reason" maxLength={300}/></div><button className="b b-secondary" name="intent" value="edit">Save correction{canEdit ? "" : " with permission"}</button></>}
+          <div className="form-row"><button className="b b-primary" name="intent" value="confirmed" disabled={viewOnly || !sourceReady || !source || !!issues.length || active.state==="confirmed"}>Yes, this is right</button><button className="b b-secondary" name="intent" value="rejected" disabled={viewOnly || active.state==="rejected"}>No, this is wrong</button></div>
+          {!viewOnly && sourceReady && canEdit && <><div><label htmlFor="figure-value">Correct figure</label><input id="figure-value" name="value" inputMode={!figures.get(active.id)!.kind || figures.get(active.id)!.kind==="number" ? "decimal" : "text"} type={figures.get(active.id)!.kind==="date" ? "date" : "text"} defaultValue={figures.get(active.id)!.value}/></div><div><label htmlFor="figure-reason">Why it changed</label><input id="figure-reason" name="reason" maxLength={300}/></div><button className="b b-secondary" name="intent" value="edit">Save correction{canEdit ? "" : " with permission"}</button></>}
         </form>
         {!viewOnly && !canEdit && <form action={askPermission}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-ghost">Ask to edit figures</button></form>}
       </div>
