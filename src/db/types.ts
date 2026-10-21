@@ -503,6 +503,9 @@ isOneToOne: false
 "add_clients":
 { Args: { "clients": Json,"target_firm": string }; Returns: number
                            },
+"append_automatic_dataset":
+{ Args: { "body": Json,"client": string,"draft": string,"expected": number,"firm": string,"form": string,"period": string }; Returns: boolean
+                           },
 "assigned_clients":
 { Args: Record<PropertyKey, never>; Returns: string[]
                            },

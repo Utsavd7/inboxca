@@ -1,5 +1,6 @@
 import { bulkSend } from "./bulk-send";
 import { readSalesRegister } from "./read-sales";
+import { readPortalFile } from "./read-portal";
 import { officeHousekeeping } from "./office-housekeeping";
 import { calendarTopUp } from "./calendar-top-up";
 import { driveCheck } from "./drive-check";
@@ -16,4 +17,4 @@ import type { Handler } from "./runner";
 
 // Every kind of job and the code that runs it. Each kind is added by the step that
 // builds it; a job of a kind not listed here fails with "no_handler".
-export const handlers: Record<string, Handler> = { read_sales:readSalesRegister, mailbox_reconnect:mailboxReconnect, bulk_send: bulkSend, return_alert: returnAlert, notice_alert: noticeAlert, office_housekeeping: officeHousekeeping, calendar_top_up: calendarTopUp, mail_poll: mailPoll, file_mail: fileMail, drive_purge: drivePurge, drive_check: driveCheck, read_document: readDocument, import_files: importFiles, undo_import: undoImport, reminders: sendReminders, records_reply: recordsReply, notice_from_mail: noticeFromMail, notify_request: notifyRequest, notify_devices: notifyDevices, approval_nudge: approvalNudge, approval_summary: approvalSummary };
+export const handlers: Record<string, Handler> = { read_portal:readPortalFile, read_sales:readSalesRegister, mailbox_reconnect:mailboxReconnect, bulk_send: bulkSend, return_alert: returnAlert, notice_alert: noticeAlert, office_housekeeping: officeHousekeeping, calendar_top_up: calendarTopUp, mail_poll: mailPoll, file_mail: fileMail, drive_purge: drivePurge, drive_check: driveCheck, read_document: readDocument, import_files: importFiles, undo_import: undoImport, reminders: sendReminders, records_reply: recordsReply, notice_from_mail: noticeFromMail, notify_request: notifyRequest, notify_devices: notifyDevices, approval_nudge: approvalNudge, approval_summary: approvalSummary };

@@ -47,7 +47,7 @@ export async function DatasetReview({clientId,draftId,lineId,check}:{clientId:st
         </form>
         {!viewOnly && !canEdit && <form action={askPermission}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-ghost">Ask to edit figures</button></form>}
       </div>
-      <div className="panel"><h3>Source</h3><p>{source?.name ?? "Source unavailable"}. {active.source.cell ? `Sheet 1, cell ${active.source.cell}` : `Page ${active.source.page}`}</p>{source && process.env.FILE_WORKER_URL && process.env.FILE_WORKER_SECRET ? <FileViewer key={source.id} id={source.id} page={active.source.page} hideInactive={membership.settings.viewer_hide_inactive===true}/> : <p className="hint">The source cannot be shown here yet.</p>}</div>
+      <div className="panel"><h3>Source</h3><p>{source?.name ?? "Source unavailable"}. {active.source.cell ? `Sheet 1, cell ${active.source.cell}` : `Page ${active.source.page}${active.source.path ? `, entry ${active.source.path}` : ""}`}</p>{source && process.env.FILE_WORKER_URL && process.env.FILE_WORKER_SECRET ? <FileViewer key={source.id} id={source.id} page={active.source.page} hideInactive={membership.settings.viewer_hide_inactive===true}/> : <p className="hint">The source cannot be shown here yet.</p>}</div>
     </div>
   </section>;
 }

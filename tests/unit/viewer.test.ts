@@ -52,6 +52,13 @@ it("does not decode disguised SVG files as photos", async () => {
   await expect(renderPage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"/>'), "photo.png", 1, "Person")).rejects.toThrow("Not a picture");
 });
 
+it("renders a statement as source images with the person's name drawn in",async()=>{
+  const bytes=Buffer.from(JSON.stringify({data:{itcsumm:{igst:123.45}}}));
+  const first=await renderPage(bytes,"statement.json",1,"First person"),second=await renderPage(bytes,"statement.json",1,"Second person");
+  expect(first.count).toBe(1);expect(first.bytes.equals(second.bytes)).toBe(false);
+  expect((await loadImage(first.bytes)).width).toBe(1200);
+});
+
 // A picture is measured from its header before decoding: one claiming to be enormous is refused.
 it("refuses a picture whose header claims more pixels than the viewer draws", async () => {
   const photo = createCanvas(30, 20);
