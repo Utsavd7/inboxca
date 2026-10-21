@@ -17,6 +17,9 @@ it("accepts only a valid signed request for this document, within a minute", asy
   await expect(verifyView(sheet,await signView(sheet,secret),secret,view.file,1000)).rejects.toThrow("Not allowed");
   expect((await verifyView(sheet,await signView(sheet,secret),secret,view.file,1000,"sheet")).purpose).toBe("sheet");
   await expect(verifyView(body,mac,secret,view.file,1000,"sheet")).rejects.toThrow("Not allowed");
+  const portal=JSON.stringify({...view,purpose:"portal"});
+  expect((await verifyView(portal,await signView(portal,secret),secret,view.file,1000,"portal")).purpose).toBe("portal");
+  await expect(verifyView(portal,await signView(portal,secret),secret,view.file,1000,"sheet")).rejects.toThrow("Not allowed");
 });
 
 it("reads length prefixed frames across arbitrary network chunk boundaries", async () => {

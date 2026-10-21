@@ -8,6 +8,8 @@ import {actionFields,emailStep,localSupabase,query,seedFirm,totp} from "./local-
 import {tmpdir} from "node:os";
 import {FILE_WORKER_URL} from "../../playwright.config";
 import {readSalesRegister} from "@/src/jobs/read-sales";
+import {readPortalFile} from "@/src/jobs/read-portal";
+import {inventedGstin,statement} from "../fixtures/portal";
 import type {Job} from "@/src/jobs/runner";
 const local=localSupabase();
 test.skip(!local.url || !local.mailUrl,"Needs local Supabase");
@@ -64,6 +66,44 @@ test("staff check figures beside the source; totals, edit rights and stale revie
     await expect.poll(async()=>(await query(local.dbUrl,"select data from public.datasets where id=$1",[id]))[0].data.lines[0].state).toBe("rejected");
 
   } finally {try {if(artifact) await drive.trash(artifact);} finally {await firm.remove();}}
+});
+
+test("a portal statement becomes encrypted pending figures beside its source, with the client checked and reviewed figures preserved",async({page})=>{
+  test.setTimeout(90_000);loadEnvConfig(process.cwd());process.env.FILE_WORKER_URL=FILE_WORKER_URL;
+  const email=`portal-${randomUUID()}@invented.test`,key=Array.from(randomBytes(16),(byte)=>"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte%32]).join("");
+  const firm=await seedFirm("Portal Test Firm",email,key),crypto=serverCrypto(),client=randomUUID(),account=randomUUID();
+  const drive=localDrive(`${tmpdir()}/inboxca-test-drive`),artifacts:string[]=[];
+  try {
+    await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Portal Client','business')",[client,firm.firmId]);
+    await query(local.dbUrl,"insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc,settings) values ($1,$2,'drive','local',$3,$4,'{}')",[account,firm.firmId,await crypto.encrypt(firm.firmId,`accounts/${account}/address`,'Test drive'),await crypto.encrypt(firm.firmId,`accounts/${account}/credentials`,'{}')]);
+    const register=async(gstin:string)=>query(local.dbUrl,"insert into public.client_registrations(firm_id,client_id,kind,number_enc,number_bidx) values ($1,$2,'gstin',$3,$4)",[firm.firmId,client,await crypto.encrypt(firm.firmId,`clients/${client}/gstin`,gstin),await crypto.blindIndex(firm.firmId,"gstin",gstin)]);
+    await register(inventedGstin());
+    const add=async(value:unknown)=>{
+      const id=randomUUID(),bytes=Buffer.from(JSON.stringify(value)),sha=createHash("sha256").update(bytes).digest("hex");
+      const saved=await drive.save(await drive.ensureFolder([firm.firmId]),`${id}.json`,bytes);if(saved==="taken") throw new Error("Test collision");artifacts.push(saved.id);
+      await query(local.dbUrl,"insert into public.documents(id,firm_id,client_id,work_type,document_type,period_key,name,size,sha256,drive_file_id) values ($1,$2,$3,'gst','GSTR-2B','2026-09',$4,$5,$6,$7)",[id,firm.firmId,client,`${id}.json`,bytes.length,sha,saved.id]);return id;
+    };
+    const first=await add(statement()),job=(id:string)=>({firm_id:firm.firmId,entity_id:id} as Job),tools={markSending:async()=>{}};
+    await emailStep(page,email);await page.getByLabel("6 digit code from the app").fill(totp(key));await page.getByRole("button",{name:"Continue"}).click();await expect(page).toHaveURL(/\/app$/);
+    await query(local.dbUrl,"update public.firm_members set role='staff' where firm_id=$1 and user_id=$2",[firm.firmId,firm.ownerId]);
+    await page.goto(`/app/clients/${client}?tab=extraction`);await page.getByRole("button",{name:"Read statement"}).click();
+    await expect(page.getByRole("img",{name:"Page 1",exact:true})).toBeVisible();
+    const [draft]=await query(local.dbUrl,"select id,data from public.datasets where firm_id=$1 and client_id=$2",[firm.firmId,client]);
+    expect(draft.data.lines[0].source).toMatchObject({document:first,path:"/data/itcsumm/itcavl/nonrevsup/igst",reader:"gstr2b-v4.5",page:1});
+    expect(draft.data.lines).toHaveLength(8);expect(draft.data.lines.every((line:{state:string})=>line.state==="pending")).toBe(true);expect(JSON.stringify(draft.data)).not.toContain('"value":');
+    expect(JSON.parse(await crypto.decrypt(firm.firmId,place(draft.id,draft.data.lines[0].id),draft.data.lines[0].value_enc)).value).toBe("100");
+    await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
+    expect(await readPortalFile(job(first),tools)).toEqual({done:true});
+    expect((await query(local.dbUrl,"select revision from public.datasets where id=$1",[draft.id]))[0].revision).toBe(2);
+    const secondNumber=inventedGstin("ZZZPZ0001Z","2");await register(secondNumber);const second=await add(statement(secondNumber));
+    expect(await readPortalFile(job(second),tools)).toEqual({done:true});
+    const [appended]=await query(local.dbUrl,"select data from public.datasets where id=$1",[draft.id]);
+    expect(appended.data.lines).toHaveLength(16);expect(appended.data.lines[0]).toMatchObject({state:"confirmed",by:firm.ownerId});
+    const wrong=await add(statement(inventedGstin("ZZZPZ0002Z")));
+    expect(await readPortalFile(job(wrong),tools)).toMatchObject({retry:"portal_not_read"});
+    expect((await query(local.dbUrl,"select data from public.datasets where id=$1",[draft.id]))[0].data.lines).toHaveLength(16);
+    const unsupported=await add({gstin:inventedGstin(),fp:"092026",b2b:[]});expect(await readPortalFile(job(unsupported),tools)).toEqual({done:true});
+  } finally {for(const id of artifacts) await drive.trash(id);await firm.remove();}
 });
 
 test("a client's confirmed columns read the next month's register automatically without changing a checked draft",async({page})=>{

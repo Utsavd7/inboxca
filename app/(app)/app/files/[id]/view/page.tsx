@@ -14,7 +14,7 @@ export default async function ViewFile({ params }: { params: Promise<{ id: strin
   const { data: file } = await supabase.from("documents").select("id, client_id, name, document_type, period_key, status, clients(name)").eq("id", id).neq("status", "deleted").maybeSingle();
   if (!file) notFound();
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-  const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv"].includes(extension);
+  const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "json"].includes(extension);
 
 
   return (

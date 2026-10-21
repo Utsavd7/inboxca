@@ -23,7 +23,7 @@ export function recognisePortalFile(bytes: Uint8Array): PortalFile | null {
   const top = json as Record<string, unknown>;
   const data = (top.data ?? {}) as Record<string, unknown>;
   // GSTR-2B: { data: { gstin, rtnprd, docdata: { ... } } }
-  if (typeof data.gstin === "string" && GSTIN.test(data.gstin) && period(data.rtnprd) && data.docdata && typeof data.docdata === "object")
+  if (typeof data.gstin === "string" && GSTIN.test(data.gstin) && period(data.rtnprd) && (data.docdata && typeof data.docdata === "object" || data.itcsumm && typeof data.itcsumm === "object"))
     return { type: "GSTR-2B", gstin: data.gstin, period: period(data.rtnprd) };
   // GSTR-2A: { gstin, fp, b2b: [...], cdn: [...], ... }
   if (typeof top.gstin === "string" && GSTIN.test(top.gstin) && period(top.fp) && SECTIONS_2A.some((section) => Array.isArray(top[section])))

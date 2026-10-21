@@ -4,7 +4,7 @@ import {createDraft,type Draft} from "./datasets";
 import {serverCrypto} from "./crypto";
 import {exactMapping,extractSales,mappingSchema,sameHeadings,type SalesMapping} from "./sales-register";
 import {supabaseAdmin} from "./supabase";
-import {workerSheet} from "./worker-sheet";
+import {workerSheet} from "./worker-read";
 
 export async function savedSalesMappings(firm:string,client:string) {
   const {data}=await supabaseAdmin().from("clients").select("sales_mapping_enc").eq("firm_id",firm).eq("id",client).single();

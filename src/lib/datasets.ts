@@ -3,7 +3,7 @@ import type { Json } from "@/src/db/types";
 import { serverCrypto } from "./crypto";
 import { supabaseAdmin } from "./supabase";
 
-const source = z.object({document:z.uuid(),sha256:z.string().regex(/^[a-f0-9]{64}$/),page:z.number().int().min(1).max(30),sheet:z.literal(1).optional(),cell:z.string().regex(/^[A-Z]([1-9][0-9]{0,2}|1000)$/).optional()}).refine((s)=>!!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-Z]/,""))/40)));
+const source = z.object({document:z.uuid(),sha256:z.string().regex(/^[a-f0-9]{64}$/),page:z.number().int().min(1).max(30),sheet:z.literal(1).optional(),cell:z.string().regex(/^[A-Z]([1-9][0-9]{0,2}|1000)$/).optional(),path:z.string().startsWith("/").max(256).optional(),reader:z.string().regex(/^gstr2b-v4\.[45]$/).optional()}).refine((s)=>!!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-Z]/,""))/40)));
 export const draftSchema = z.object({
   lines:z.array(z.object({id:z.uuid(),field:z.string().regex(/^[a-z][a-z0-9_.]{0,99}$/),value_enc:z.string().min(20).max(20000),source,state:z.enum(["pending","confirmed","rejected"]),by:z.uuid().optional(),at:z.iso.datetime().optional()}).refine((line)=>line.state==="pending" || !!line.by && !!line.at)).min(1).max(10000),
   checks:z.array(z.discriminatedUnion("kind",[
@@ -71,12 +71,12 @@ export async function confirmedFigures(firm:string,id:string,data:unknown) {
   return new Map(draft.lines.map((line)=>[line.field,figures.get(line.id)!]));
 }
 export async function saveDraft(row:{id:string;firm_id:string;client_id:string;form_code:string;period_key:string;revision:number},data:Draft,person:string|null,event:string,audit:Json,permission:string|null=null) {
-  if(person===null && (row.revision!==0 || permission)) throw new Error("Only a new draft may be read automatically.");
+  if(person===null && permission) throw new Error("Automatic reads cannot use a person's permission.");
   draftSchema.parse(data);
   await verifySources(row.firm_id,row.client_id,data);
   if(JSON.stringify(data).length>5_000_000) throw new Error("Split these figures into smaller drafts.");
   const common={draft:row.id,firm:row.firm_id,client:row.client_id,form:row.form_code,period:row.period_key,body:data as unknown as Json};
-  const {data:saved,error}=person===null && row.revision===0 ? await supabaseAdmin().rpc("create_automatic_dataset",common) : await supabaseAdmin().rpc("save_dataset",{...common,expected:row.revision,person:person!,event,audit,...(permission ? {permission} : {})});
+  const {data:saved,error}=person===null ? await (row.revision===0 ? supabaseAdmin().rpc("create_automatic_dataset",common) : supabaseAdmin().rpc("append_automatic_dataset",{...common,expected:row.revision})) : await supabaseAdmin().rpc("save_dataset",{...common,expected:row.revision,person,event,audit,...(permission ? {permission} : {})});
   if(error) throw new Error("The figures could not be saved.");
   return saved===true;
 }
@@ -85,7 +85,7 @@ export async function verifySources(firm:string,client:string,draft:Draft) {
   const ids=[...new Set(draft.lines.map((line)=>line.source.document))];
   if(ids.length>100) throw new Error("Split these source files into smaller drafts.");
   const {data,error}=await supabaseAdmin().from("documents").select("id,name,sha256").eq("firm_id",firm).eq("client_id",client).in("status",["filed","to_check"]).in("id",ids);
-  if(error || data?.length!==ids.length || data.some((doc)=>! /\.(pdf|xlsx|xls|csv)$/i.test(doc.name)) || draft.lines.some((line)=>data.find((doc)=>doc.id===line.source.document)?.sha256!==line.source.sha256)) throw new Error("A source file is not available.");
+  if(error || data?.length!==ids.length || data.some((doc)=>! /\.(pdf|xlsx|xls|csv|json)$/i.test(doc.name)) || draft.lines.some((line)=>data.find((doc)=>doc.id===line.source.document)?.sha256!==line.source.sha256)) throw new Error("A source file is not available.");
 }
 
 // Called by the document jobs, never with email text. Source ids are checked before saving.

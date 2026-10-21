@@ -1,7 +1,7 @@
 // Shared by the app, browser and file worker. No native or Node imports here.
 export const viewLimits = { bytes: 25_000_000, pages: 30, rows: 1000, columns: 26, rowsPerPage: 40, pixels: 40_000_000 };
 export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean };
-export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox"; token: string; purpose?: "sheet" };
+export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox"; token: string; purpose?: "sheet" | "portal" };
 const text = new TextEncoder();
 
 export function viewerLabel(person: string, firm: string, at = new Date()) {
@@ -14,7 +14,7 @@ export async function signView(body: string, secret: string) {
   return Array.from(new Uint8Array(await crypto.subtle.sign("HMAC", await key(secret), text.encode(body))), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function verifyView(body: string, signature: string, secret: string, file: string, now = Date.now() / 1000, purpose?: "sheet"): Promise<ViewRequest> {
+export async function verifyView(body: string, signature: string, secret: string, file: string, now = Date.now() / 1000, purpose?: "sheet" | "portal"): Promise<ViewRequest> {
   if (!secret || body.length > 16_384 || !/^[a-f0-9]{64}$/.test(signature)) throw new Error("Not allowed");
   const mac = Uint8Array.from(signature.match(/../g)!, (byte) => parseInt(byte, 16));
   if (!await crypto.subtle.verify("HMAC", await key(secret), mac, text.encode(body))) throw new Error("Not allowed");

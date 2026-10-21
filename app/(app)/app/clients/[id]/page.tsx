@@ -1,3 +1,4 @@
+import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
 import { DatasetReview } from "./dataset-review";
 import { Archive, ChevronLeft, FileText, Send, Upload } from "lucide-react";
@@ -48,10 +49,10 @@ const reminderNote = (details: { reminded?: string[]; skipped?: { reason: string
   details.reminded?.length ? `Reminded ${dueLabel(details.reminded.at(-1)!)}` : details.skipped ? skipReasons[details.skipped.reason as Skip] : "";
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; page?: string; show?: string; draft?: string; line?: string; check?: string; source?: string; section?: string; header?: string; read?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; page?: string; show?: string; draft?: string; line?: string; check?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked, page: askedPage, show, draft, line, check, source, section, header, read, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, tab: asked, page: askedPage, show, draft, line, check, source, section, header, read, portal, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
   const page = /^\d{1,6}$/.test(askedPage ?? "") ? Math.max(1,Number(askedPage)) : 1;
   const start = (page-1)*50;
   const { data: client } = await supabase
@@ -161,7 +162,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     ["files", "Files", documents.length],
     ["due", "Due dates", taskCount ?? 0],
     ["notices", "Notices", noticeCount ?? 0],
-    ...(drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv)$/i.test(file.name)) ? [["extraction", "Extraction", drafts ?? undefined] as [string,string,number]] : []),
+    ...(drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name)) ? [["extraction", "Extraction", drafts ?? undefined] as [string,string,number]] : []),
     ["activity", "Activity"],
     ["contacts", "Contacts", contacts.length],
     ["team", "Team", client.client_assignments.length],
@@ -720,7 +721,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               ) : <p className="hint">No changes recorded yet.</p>}
             </section>
           )}
-          {tab === "extraction" && <><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
+          {tab === "extraction" && <><PortalInput clientId={id} message={portal}/><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
           {tab === "contacts" && (
             <section className="panel" aria-labelledby="contacts">
               <h2 id="contacts">Contact people</h2>

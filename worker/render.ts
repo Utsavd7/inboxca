@@ -2,6 +2,7 @@ import { createCanvas, loadImage, type Canvas } from "@napi-rs/canvas";
 import { join } from "node:path";
 import { readSheet } from "../src/lib/sheet.ts";
 import { viewLimits, type ViewHeader } from "../src/lib/file-worker.ts";
+import { jsonSource } from "./json-source.ts";
 
 // A picture's size from its header, read before anything is decoded, so a small file that
 // claims to be enormous never reaches the decoder. Null for anything not a known picture.
@@ -81,6 +82,17 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
         return canvas;
       };
     } catch (error) { await dispose(); throw error; }
+  } else if (/\.json$/i.test(name)) {
+    const source=jsonSource(JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,""))),lines=source.lines;
+    const count=Math.max(1,Math.min(limit,Math.ceil(lines.length/40)));
+    header.limited=source.limited || lines.length>count*40;
+    for(let number=1;number<=count;number++) header.pages.push({width:1200,height:1320});
+    draw=async(number)=>{
+      canvas ??= createCanvas(1200,1320);const context=canvas.getContext("2d");
+      context.fillStyle="white";context.fillRect(0,0,1200,1320);context.fillStyle="#17202f";context.font="18px monospace";
+      lines.slice((number-1)*40,number*40).forEach((line,index)=>context.fillText(`${(number-1)*40+index+1} ${line}`,20,40+index*30));
+      return canvas;
+    };
   } else if (/\.(xlsx?|csv)$/i.test(name)) {
     const all = readSheet(bytes, name, { rows: viewLimits.rows + 1, columns: viewLimits.columns + 1, keepEmpty:true });
     const rows = all.slice(0, Math.min(viewLimits.rows, limit * viewLimits.rowsPerPage));

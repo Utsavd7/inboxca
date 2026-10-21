@@ -36,3 +36,23 @@ it("keeps drafts to visible clients, refuses signed in writes and stale reviews,
   expect((await db.query("select id from public.datasets where id=$1",[draft])).rowCount).toBe(0);
 
 }));
+
+it("only the server can append pending figures, without replacing checked lines or accepting a stale revision",()=>rollback(db,async()=>{
+  const firm=randomUUID(),person=randomUUID(),client=randomUUID(),draft=randomUUID();
+  await db.query("insert into auth.users(id,email) values ($1,$2)",[person,`${person}@invented.test`]);
+  await db.query("insert into public.firms(id,name,state_code,status) values ($1,'Portal Test Firm','24','active')",[firm]);
+  await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active')",[firm,person]);
+  await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Portal Client','business')",[client,firm]);
+  const previous={lines:[{id:randomUUID(),value_enc:"invented encrypted amount",state:"confirmed",by:person,at:new Date().toISOString()}],checks:[]};
+  await db.query("insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values ($1,$2,$3,'GSTR3B','2026-09',$4)",[draft,firm,client,JSON.stringify(previous)]);
+  const body={lines:[...previous.lines,{id:randomUUID(),value_enc:"invented second amount",state:"pending"}],checks:[]};
+  const sql="select public.append_automatic_dataset($1,$2,$3,'GSTR3B','2026-09',$4,$5) saved",args=[draft,firm,client,1,JSON.stringify(body)];
+  await actAs(db,person);expect((await attempt(db,sql,args)).ok).toBe(false);await db.query("reset role");
+  for(const invalid of [{...body,lines:body.lines.slice(1)},{...body,lines:body.lines.map((line)=>({...line,state:"confirmed"}))},{...body,lines:body.lines.map((line,index)=>index ? line : {...line,value_enc:"changed old amount"})}])
+    expect((await db.query(sql,[draft,firm,client,1,JSON.stringify(invalid)])).rows[0].saved).toBe(false);
+  expect((await db.query(sql,[draft,randomUUID(),client,1,JSON.stringify(body)])).rows[0].saved).toBe(false);
+  expect((await db.query(sql,args)).rows[0].saved).toBe(true);
+  expect((await db.query(sql,args)).rows[0].saved).toBe(false);
+  const row=(await db.query("select data,revision from public.datasets where id=$1",[draft])).rows[0];
+  expect(row.revision).toBe(2);expect(row.data.lines[0]).toEqual(previous.lines[0]);expect(row.data.lines[1].state).toBe("pending");
+}));

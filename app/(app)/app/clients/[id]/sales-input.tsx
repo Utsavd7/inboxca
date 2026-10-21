@@ -4,7 +4,7 @@ import {z} from "zod";
 import {currentMember,currentWriter} from "@/src/lib/member";
 import {grantFor} from "@/src/lib/permission-grants";
 import {readSales,savedSalesMappings} from "@/src/lib/sales-draft";
-import {workerSheet} from "@/src/lib/worker-sheet";
+import {workerSheet} from "@/src/lib/worker-read";
 import {exactMapping,sameHeadings,mappingSchema} from "@/src/lib/sales-register";
 import {salesSections,type SalesSection} from "@/src/lib/gstr1-fields";
 import {askPermission} from "@/app/(app)/actions";

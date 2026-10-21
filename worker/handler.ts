@@ -3,6 +3,7 @@ import { frameSize, verifyView, viewLimits, type ViewRequest } from "../src/lib/
 import { openView } from "./render.ts";
 import { readSheet } from "../src/lib/sheet.ts";
 import { createHash } from "node:crypto";
+import { readPortal } from "./portal.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
 const reads = new Map<string, number>();
@@ -39,13 +40,18 @@ export async function handle(request: Request): Promise<Response> {
   if (process.env.FILE_WORKER_TEST === "1" && request.method === "GET" && url.pathname === "/_reads" && secret && request.headers.get("authorization") === `Bearer ${secret}`)
     return Response.json({ reads: reads.get(url.searchParams.get("file") ?? "") ?? 0, peakRssKiB: process.resourceUsage().maxRSS });
   const sheet=url.pathname.startsWith("/sheet/");
-  if (request.method !== "POST" || !sheet && !url.pathname.startsWith("/view/")) return new Response("Not found", { status: 404 });
+  const portal=url.pathname.startsWith("/portal/");
+  if (request.method !== "POST" || !sheet && !portal && !url.pathname.startsWith("/view/")) return new Response("Not found", { status: 404 });
   let view: ViewRequest;
-  try { view = await verifyView(await request.text(), request.headers.get("authorization") ?? "", secret, decodeURIComponent(url.pathname.slice(sheet ? 7 : 6)), undefined, sheet ? "sheet" : undefined); }
+  try { view = await verifyView(await request.text(), request.headers.get("authorization") ?? "", secret, decodeURIComponent(url.pathname.slice(portal ? 8 : sheet ? 7 : 6)), undefined, portal ? "portal" : sheet ? "sheet" : undefined); }
   catch { return new Response("Not allowed", { status: 403 }); }
   try {
     request.signal.throwIfAborted();
     const data = await original(view, request.signal);
+    if(portal) {
+      if(!/\.json$/i.test(view.name)) return Response.json({read:null});
+      return Response.json({read:readPortal(data),sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
+    }
     if(sheet) {
       if(!/\.(xlsx?|csv)$/i.test(view.name)) throw new Error("Not a sheet");
       const rows=readSheet(Buffer.from(data.buffer,data.byteOffset,data.byteLength),view.name,{rows:viewLimits.rows+1,columns:viewLimits.columns,keepEmpty:true});
