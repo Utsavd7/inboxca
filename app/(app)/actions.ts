@@ -1,4 +1,5 @@
 "use server";
+import { grantFor } from "@/src/lib/permission-grants";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
@@ -1259,21 +1260,6 @@ export async function reviewDevice(form: FormData) {
 // says. Allow once is a grant for one use within an hour.
 const isDeputy = (settings: Record<string, unknown>, userId: string) => ((settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
 
-// The person's unused grant for a right on a client (and file), if they have one now.
-async function grantFor(firmId: string, userId: string, right: Right, clientId: string, documentId?: string) {
-  let query = supabaseAdmin()
-    .from("requests")
-    .select("id")
-    .eq("firm_id", firmId)
-    .eq("kind", "permission")
-    .eq("status", "approved")
-    .eq("reason_code", right)
-    .eq("client_id", clientId)
-    .eq("details->>by", userId)
-    .gt("expires_at", new Date().toISOString());
-  if (documentId) query = query.eq("details->>document_id", documentId);
-  return (await query.limit(1).maybeSingle()).data?.id ?? null;
-}
 const spendGrant = (id: string | null) => (id ? supabaseAdmin().from("requests").update({ status: "used" }).eq("id", id) : null);
 
 export async function askPermission(form: FormData) {
@@ -1283,7 +1269,7 @@ export async function askPermission(form: FormData) {
   const { data: client } = await supabase.from("clients").select("id").eq("id", String(form.get("client") ?? "")).maybeSingle();
   const documentId = String(form.get("document") ?? "") || undefined;
   if (!client || !(right in rightWords)) redirect("/app");
-  const back = `/app/clients/${client.id}?tab=files`;
+  const back = `/app/clients/${client.id}?tab=${right==="edit_figures" ? "extraction" : "files"}`;
   const admin = supabaseAdmin();
   const [{ data: me }, { data: pending }] = await Promise.all([
     admin.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),

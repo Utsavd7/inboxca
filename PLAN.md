@@ -479,8 +479,8 @@
 |---|---|
 | Tally exports | Excel or XML files exported from Tally and sent by the client or uploaded by staff; parsed deterministically |
 | Excel / CSV | Parsed deterministically; column mapping remembered per client |
-| PDF with text | Deterministic text/table extraction and remembered mappings first; AI structures only unresolved fields |
-| Scans and photos | One-time OCR first; deterministic mappings next; AI vision only for low-confidence fields that cannot otherwise be resolved (transient, D13) |
+| PDF with text | Digital text extraction and remembered mappings only in M6. AI for unresolved fields moves to M9. |
+| Scans and photos | Moved to M9 on 21 Oct 2026. No OCR or AI in M6. |
 | Portal files dropped in by staff (§5.3.1) | GSTR-2B and GSTR-2A (JSON, Excel), Form 26AS, AIS and TIS (PDF, JSON, text): fixed parsers for the government's own layouts, versioned like templates; no AI |
 | Details typed in an email | Deterministic field rules first, then minimum-necessary AI only if unresolved; structured fields may be saved encrypted under §8.0, but the email text itself is not stored |
 
@@ -1311,11 +1311,12 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 
 ### M6: Extraction and government templates
 - [ ] Client page extraction and outputs tabs, moved from M1 on 20 Oct 2026. Build them with the records they show, without empty placeholders.
-- [ ] M5 follow-up (20 Oct 2026): read scanned notices with OCR.
+- [ ] Scanned notices, scans and photos, and AI for unresolved fields moved to M9 on 21 Oct 2026. M6 reads digital text only.
 - [ ] M7 follow-up (19 Oct 2026): keep unsaved form drafts at closing (#14), approved filing downloads (#29), figure checks and a different second approver (#54), the remaining permission rows, and client scopes and end dates on standing grants (#47).
-- [ ] Extraction from Excel/CSV (deterministic), PDFs, scans and email text into encrypted draft datasets
+- [ ] Extraction from Excel/CSV and digital PDF text into encrypted draft datasets. Scans, photos and AI for unresolved fields move to M9.
 - [ ] Fixed parsers for portal files (§5.3.1): GSTR-2B and GSTR-2A, Form 26AS, AIS and TIS, feeding the GSTR-3B and ITR drafts; no AI
-- [ ] Review screen side by side with the source; totals cross-checks
+- [x] Review screen side by side with the source; totals cross-checks
+  - [x] Step 1 (21 Oct 2026): each draft figure is encrypted for its firm and line, with its source page or cell and a named yes or no check. Every employee may check it; corrections need permission, clear the checks and keep the reason encrypted. Totals and tax maths must agree before confirmation. Concurrent changes are refused, and generators reject unconfirmed or missing-source data. Source rows keep their original positions in the viewer. The review tab appears when a client has figures to check.
 - [ ] Template library, mappings and validators for GSTR-1 and GSTR-3B data, then ITR-1 to ITR-4; official output files
 - [ ] Official-format outputs verified as importable: compared with one sample file from each of TaxPower GST and KDK Spectrum, then one test import in each at Paresh bhai's office; the self-serve column mapper for a tool's own layout (§5.13)
 - [ ] Prepared forms (§5.7.4): `Prepared` folder, in-browser view, adjust → new version → re-check, approval reset, approved-only download, uploaded-edit fallback, filed → acknowledgement flow; the daily rules and forms check with self activation and admin alerts (D42)
@@ -1351,6 +1352,7 @@ For CAs who want staff to use Orelu only in the office. **Off by default**; firm
 - Removed on 7 Oct 2026 (D30); nothing to build. The milestone number is kept so later milestones keep their numbers.
 
 ### M9: AI email assistant and leads
+- [ ] Scans and photos, scanned notice OCR and AI for unresolved extracted fields, moved from M6 on 21 Oct 2026. No OCR or AI is built in M6.
 - [ ] M5 follow-up (20 Oct 2026): answer status questions from the records and write reminders with paid AI.
 - [ ] Tools, typed outcomes, guardrails, rate limits, output checks, Needs team reply with AI pause (§5.11)
 - [ ] Eval suite in CI

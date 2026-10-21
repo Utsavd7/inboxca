@@ -56,3 +56,7 @@ it("never inflates unused workbook entries, and caps the entries it needs", () =
   expect(() => readSheet(extraEntry("xl/sharedStrings.xml"), "test.xlsx")).toThrow();
   expect(readSheet(readFileSync("tests/fixtures/clients.xlsx"), "test.xlsx", { rows: 1, columns: 2 })).toHaveLength(1);
 });
+
+it("keeps empty rows when showing a source cell",()=>{
+  expect(readSheet(Buffer.from("Name,Amount\n\nInvented Client,1200"),"source.csv",{rows:1000,columns:12,keepEmpty:true})).toEqual([["Name","Amount"],[""],["Invented Client","1200"]]);
+});

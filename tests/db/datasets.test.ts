@@ -1,0 +1,36 @@
+import {randomUUID} from "node:crypto";
+import type {Client} from "pg";
+import {afterAll,beforeAll,expect,it} from "vitest";
+import {connect,rollback,actAs,attempt} from "./db";
+let db:Client;
+beforeAll(async()=>{db=await connect();});afterAll(async()=>{await db.end();});
+it("keeps drafts to visible clients, refuses signed in writes and stale reviews, and spends edit permission once",()=>rollback(db,async()=>{
+  const firm=randomUUID(),other=randomUUID(),owner=randomUUID(),staff=randomUUID(),outsider=randomUUID(),client=randomUUID(),draft=randomUUID(),permission=randomUUID();
+  for(const user of [owner,staff,outsider]) await db.query("insert into auth.users(id,email) values ($1,$2)",[user,`${user}@invented.test`]);
+  await db.query("insert into public.firms(id,name,state_code,status) values ($1,'Dataset Test Firm','24','active'),($2,'Other Test Firm','24','active')",[firm,other]);
+  await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active'),($1,$3,'staff','active'),($4,$5,'owner','active')",[firm,owner,staff,other,outsider]);
+  await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Dataset Client','business')",[client,firm]);
+  const body=JSON.stringify({lines:[{id:randomUUID(),value_enc:"invented encrypted value"}],checks:[]});
+  const save=(revision:number,grant:string|null=null)=>db.query("select public.save_dataset($1,$2,$3,'GSTR1','2026-09',$4,$5,$6,'dataset.checked','{}',$7) saved",[draft,firm,client,revision,body,staff,grant]);
+  expect((await save(0)).rows[0].saved).toBe(true);
+  await actAs(db,staff);expect((await db.query("select id from public.datasets")).rows).toEqual([{id:draft}]);
+  expect((await attempt(db,"update public.datasets set revision=9 where id=$1",[draft])).ok).toBe(false);
+  expect((await attempt(db,"select public.save_dataset($1,$2,$3,'GSTR1','2026-09',1,$4,$5,'dataset.checked','{}',null)",[draft,firm,client,body,staff])).ok).toBe(false);
+  await actAs(db,outsider);expect((await db.query("select id from public.datasets")).rows).toEqual([]);
+  await db.query("reset role");await db.query("update public.firms set settings='{\"client_visibility\":\"restricted\"}' where id=$1",[firm]);
+  await actAs(db,staff);expect((await db.query("select id from public.datasets")).rows).toEqual([]);
+  await db.query("reset role");await db.query("insert into public.client_assignments(firm_id,client_id,user_id,role) values ($1,$2,$3,'staff')",[firm,client,staff]);
+  await actAs(db,staff);expect((await db.query("select id from public.datasets")).rowCount).toBe(1);
+  await db.query("reset role");
+  await db.query("insert into public.requests(id,firm_id,client_id,kind,entity_type,entity_id,reason_code,status,expires_at,details) values ($1,$2,$3,'permission','permission',$1,'edit_figures','approved',now()+interval '1 hour',jsonb_build_object('by',$4::text))",[permission,firm,client,staff]);
+  expect((await save(1,permission)).rows[0].saved).toBe(true);
+  expect((await save(2,permission)).rows[0].saved).toBe(false);
+  expect((await save(1)).rows[0].saved).toBe(false);
+  expect((await db.query("select count(*)::int n from public.activity_log where firm_id=$1 and action='dataset.checked'",[firm])).rows[0].n).toBe(2);
+  const document=randomUUID();
+  await db.query("insert into public.documents(id,firm_id,client_id,work_type,document_type,name,size,sha256,drive_file_id) values ($1,$2,$3,'gst','Register','source.csv',1,'invented checksum','source')",[document,firm,client]);
+  await db.query("update public.datasets set data=jsonb_set(data,'{lines,0,source}',jsonb_build_object('document',$2::text)) where id=$1",[draft,document]);
+  await db.query("delete from public.documents where id=$1",[document]);
+  expect((await db.query("select id from public.datasets where id=$1",[draft])).rowCount).toBe(0);
+
+}));

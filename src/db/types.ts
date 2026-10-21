@@ -181,6 +181,25 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"datasets": {
+                  Row: {
+                    "client_id": string,"data": NonNullable<Json>,"firm_id": string,"form_code": string,"id": string,"period_key": string,"revision": number
+                  }
+                  Insert: {
+                    "client_id": string,"data": NonNullable<Json>,"firm_id": string,"form_code": string,"id": string,"period_key": string,"revision"?: number
+                  }
+                  Update: {
+                    "client_id"?: string,"data"?: NonNullable<Json>,"firm_id"?: string,"form_code"?: string,"id"?: string,"period_key"?: string,"revision"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "datasets_firm_id_client_id_fkey"
+      columns: ["firm_id","client_id"]
+isOneToOne: false
+      referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    }
+                  ]
                 },"devices": {
                   Row: {
                     "ends_on": string | null,"firm_id": string,"id": string,"key_id": string | null,"key_public": string | null,"kind": string | null,"name": string,"person_id": string | null,"status": string,"token_hash": string
@@ -662,6 +681,9 @@ isOneToOne: false
                            },
 "review_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]
+                           },
+"save_dataset":
+{ Args: { "audit": Json,"body": Json,"client": string,"draft": string,"event": string,"expected": number,"firm": string,"form": string,"period": string,"permission"?: string,"person": string }; Returns: boolean
                            },
 "session_ended":
 { Args: Record<PropertyKey, never>; Returns: boolean

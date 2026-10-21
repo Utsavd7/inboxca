@@ -1,3 +1,4 @@
+import { DatasetReview } from "./dataset-review";
 import { Archive, ChevronLeft, FileText, Send, Upload } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -46,10 +47,10 @@ const reminderNote = (details: { reminded?: string[]; skipped?: { reason: string
   details.reminded?.length ? `Reminded ${dueLabel(details.reminded.at(-1)!)}` : details.skipped ? skipReasons[details.skipped.reason as Skip] : "";
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; page?: string; show?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; page?: string; show?: string; draft?: string; line?: string; check?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked, page: askedPage, show, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, tab: asked, page: askedPage, show, draft, line, check, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
   const page = /^\d{1,6}$/.test(askedPage ?? "") ? Math.max(1,Number(askedPage)) : 1;
   const start = (page-1)*50;
   const { data: client } = await supabase
@@ -86,6 +87,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).eq("status", "pending").gt("expires_at", new Date().toISOString()),
     supabase.from("tasks").select("id,due_on,status,details",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
   ]);
+  const {count:drafts}=await supabase.from("datasets").select("id",{count:"exact",head:true}).eq("firm_id",membership.firmId).eq("client_id",id);
   const activity = asked==="activity" ? await supabase.rpc("client_activity",{target_client:id}) : null;
   if (activity?.error) throw new Error("Client activity could not be read");
   // The lists for the work this client's services need are ticked when asking for files.
@@ -158,6 +160,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     ["files", "Files", documents.length],
     ["due", "Due dates", taskCount ?? 0],
     ["notices", "Notices", noticeCount ?? 0],
+    ...(drafts ? [["extraction", "Extraction", drafts] as [string,string,number]] : []),
     ["activity", "Activity"],
     ["contacts", "Contacts", contacts.length],
     ["team", "Team", client.client_assignments.length],
@@ -174,6 +177,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     </nav>
   );
   const activityNames: Record<string, string> = {
+    "dataset.created": "Figures ready to check", "dataset.checked": "Figure checked", "dataset.changed": "Figure corrected",
     "client.added": "Client added", "client.changed": "Client details changed",
     "registration.added": "Number added", "registration.changed": "Services changed", "registration.removed": "Number removed",
     "assignment.added": "Person or team assigned", "assignment.removed": "Assignment removed",
@@ -715,6 +719,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               ) : <p className="hint">No changes recorded yet.</p>}
             </section>
           )}
+          {tab === "extraction" && <DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/>}
           {tab === "contacts" && (
             <section className="panel" aria-labelledby="contacts">
               <h2 id="contacts">Contact people</h2>
