@@ -1,22 +1,15 @@
-import Ajv from "ajv";
-import {readFileSync} from "node:fs";
 import {isGstin} from "../src/lib/identifiers.ts";
 import {jsonSource} from "./json-source.ts";
+import {officialSchema} from "./schema.ts";
 
 export type PortalRead={kind:"GSTR-2B";version:string;gstin:string;period:string;lines:{field:string;label:string;value:string;path:string;page:number}[];checks:{parts:string[];total:string}[]};
 // Other official layouts join this interface only with their unchanged source and tests.
 export type PortalParser={version:string;read:(value:unknown)=>PortalRead|null};
 const object=(value:unknown):Record<string,unknown>=>value!==null && typeof value==="object" && !Array.isArray(value) ? value as Record<string,unknown> : {};
-const validators=new Map<string,Ajv.ValidateFunction>();
 const schemas=new Map<string,Record<string,unknown>>();
+const hashes:Record<string,string>={"v4.5":"3351e86b8309ebe0cd45abcc217951cbb57401c24336a7bbaaaef5d687202e95","v4.4":"80ef571df18bee03c302af7e1957ecb1d0ae35d21dc14ac96a745f044f42b000"};
 function valid(value:unknown,version:string) {
-  let validate=validators.get(version);
-  if(!validate) {
-    const source=JSON.parse(readFileSync(new URL(`../reference/official/gstn/gstr2b-${version}-response-schema.json`,import.meta.url),"utf8"));
-    schemas.set(version,source);
-    validate=new Ajv({schemaId:"auto",allErrors:true,extendRefs:true,multipleOfPrecision:2,logger:false}).compile(source);
-    validators.set(version,validate);
-  }
+  const {schema,validate}=officialSchema(`gstn/gstr2b-${version}-response-schema.json`,hashes[version]);schemas.set(version,schema);
   return validate(value);
 }
 

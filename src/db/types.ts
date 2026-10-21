@@ -488,6 +488,19 @@ isOneToOne: false
       referencedColumns: ["firm_id","id"]
     }
                   ]
+                },"templates": {
+                  Row: {
+                    "form_code": string,"mappings": NonNullable<Json>,"source": NonNullable<Json>,"status": string,"valid_from": string | null,"valid_until": string | null,"version": string
+                  }
+                  Insert: {
+                    "form_code": string,"mappings": NonNullable<Json>,"source": NonNullable<Json>,"status"?: string,"valid_from"?: string | null,"valid_until"?: string | null,"version": string
+                  }
+                  Update: {
+                    "form_code"?: string,"mappings"?: NonNullable<Json>,"source"?: NonNullable<Json>,"status"?: string,"valid_from"?: string | null,"valid_until"?: string | null,"version"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Views: {

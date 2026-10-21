@@ -1,0 +1,22 @@
+-- Official files are shared reference data, never client figures.
+create table public.templates (
+  form_code text not null,
+  version text not null,
+  valid_from date,
+  valid_until date,
+  status text not null default 'draft' check (status in ('draft','active','retired')),
+  source jsonb not null,
+  mappings jsonb not null,
+  primary key(form_code,version),
+  check (valid_until is null or valid_until>valid_from),
+  check (status='draft' or valid_from is not null)
+);
+alter table public.templates enable row level security;
+revoke all on public.templates from anon,authenticated;
+grant select on public.templates to authenticated;
+create policy templates_read on public.templates for select to authenticated using (true);
+
+insert into public.templates(form_code,version,valid_from,valid_until,status,source,mappings)
+select form_code,version,valid_from,valid_until,status,source,mappings
+from jsonb_to_recordset($templates$[{"form_code":"GSTR1","version":"2.0","valid_from":"2021-05-01","valid_until":"2025-05-01","status":"retired","source":{"file":"gstr1-v2.0/GSTR1_Excel_Workbook_Template_V2.0.xlsx","url":"https://tutorial.gst.gov.in/offlineutilities/returns/gst_offline_tool.zip","sha256":"633209caa23ebd54a1cdc7a96626d466a88044afdb9a1a9bfba2d597f4eb9e6a"},"mappings":{"format":"xlsx","sheets":{"b2b":2,"b2cs":6,"cdnr":8,"hsn":19},"validator":{"file":"gstn/gstr1-v4.0-request-schema.json","sha256":"fa756cbe69a4690688b5bab9ffa9705db47e88c337cd0484de56ebb77d53776a"}}},{"form_code":"GSTR1","version":"2.2","valid_from":"2025-05-01","valid_until":null,"status":"active","source":{"file":"gstr1-v2.2/GSTR1_Excel_Workbook_Template_V2.2.xlsx","url":"https://tutorial.gst.gov.in/offlineutilities/returns/gst_offline_tool.zip","sha256":"425084547928a31eab53123b9247bad9ded1ee421fbc9202d009260e5d9b18e5"},"mappings":{"format":"xlsx","sheets":{"b2b":2,"b2cs":6,"cdnr":8,"hsn_b2b":19,"hsn_b2c":20},"validator":{"file":"gstn/gstr1-v5.0-request-schema.json","sha256":"51c7381fb50688a8b1796dabe0ec57d85da06be4287ed61f50c592cfdf2ca1e5"}}},{"form_code":"GSTR3B","version":"7.1","valid_from":null,"valid_until":null,"status":"draft","source":{"file":"gstn/gstr3b-v7.1-request-schema.json","url":"https://developer.gst.gov.in/pages/apiportal/data/Returns/GSTR3B%20-%20Save%20GSTR3B%20data/v7.1/GSTR3B%20-%20Save%20GSTR3B%20data%20request_schema.json","sha256":"043917ea6fcbe34e97e851fde6cfe9a472aaefb2be503e9438973b16e67480ae"},"mappings":{"format":"json","fields":{}}}]$templates$::jsonb)
+as t(form_code text,version text,valid_from date,valid_until date,status text,source jsonb,mappings jsonb);
