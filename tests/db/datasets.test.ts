@@ -15,6 +15,8 @@ it("keeps drafts to visible clients, refuses signed in writes and stale reviews,
   expect((await save(0)).rows[0].saved).toBe(true);
   await actAs(db,staff);expect((await db.query("select id from public.datasets")).rows).toEqual([{id:draft}]);
   expect((await attempt(db,"update public.datasets set revision=9 where id=$1",[draft])).ok).toBe(false);
+  expect((await attempt(db,"update public.clients set sales_mapping_enc='invented value' where id=$1",[client])).ok).toBe(false);
+  expect((await attempt(db,"select public.create_automatic_dataset($1,$2,$3,'GSTR1','2026-09',$4)",[randomUUID(),firm,client,body])).ok).toBe(false);
   expect((await attempt(db,"select public.save_dataset($1,$2,$3,'GSTR1','2026-09',1,$4,$5,'dataset.checked','{}',null)",[draft,firm,client,body,staff])).ok).toBe(false);
   await actAs(db,outsider);expect((await db.query("select id from public.datasets")).rows).toEqual([]);
   await db.query("reset role");await db.query("update public.firms set settings='{\"client_visibility\":\"restricted\"}' where id=$1",[firm]);

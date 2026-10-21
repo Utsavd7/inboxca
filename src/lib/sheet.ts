@@ -40,7 +40,7 @@ export function readCsv(text: string) {
 }
 
 // Index the zip; inflate only the two XML files we read, at most 20 MB each.
-function unzip(data: Buffer) {
+export function xlsxEntries(data: Buffer) {
   const files = new Map<string, () => Buffer>();
   let end = data.length - 22;
   while (end >= 0 && data.readUInt32LE(end) !== 0x06054b50) end--;
@@ -71,7 +71,7 @@ const unescape = (text: string) =>
 const texts = (xml: string) => [...xml.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(([, text]) => unescape(text)).join("");
 
 function readXlsx(data: Buffer, limit?: { rows: number; columns: number; keepEmpty?:boolean }) {
-  const files = unzip(data);
+  const files = xlsxEntries(data);
   const shared = [...(files.get("xl/sharedStrings.xml")?.().toString() ?? "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map(([, item]) => texts(item));
   const sheet = files.get("xl/worksheets/sheet1.xml") ?? [...files].find(([name]) => name.startsWith("xl/worksheets/"))?.[1];
   if (!sheet) throw new Error("No sheet in the file");

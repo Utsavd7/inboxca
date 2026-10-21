@@ -3,7 +3,7 @@ import type { Json } from "@/src/db/types";
 import { serverCrypto } from "./crypto";
 import { supabaseAdmin } from "./supabase";
 
-const source = z.object({document:z.uuid(),sha256:z.string().regex(/^[a-f0-9]{64}$/),page:z.number().int().min(1).max(30),sheet:z.literal(1).optional(),cell:z.string().regex(/^[A-L]([1-9][0-9]{0,2}|1000)$/).optional()}).refine((s)=>!!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-L]/,""))/40)));
+const source = z.object({document:z.uuid(),sha256:z.string().regex(/^[a-f0-9]{64}$/),page:z.number().int().min(1).max(30),sheet:z.literal(1).optional(),cell:z.string().regex(/^[A-Z]([1-9][0-9]{0,2}|1000)$/).optional()}).refine((s)=>!!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-Z]/,""))/40)));
 export const draftSchema = z.object({
   lines:z.array(z.object({id:z.uuid(),field:z.string().regex(/^[a-z][a-z0-9_.]{0,99}$/),value_enc:z.string().min(20).max(20000),source,state:z.enum(["pending","confirmed","rejected"]),by:z.uuid().optional(),at:z.iso.datetime().optional()}).refine((line)=>line.state==="pending" || !!line.by && !!line.at)).min(1).max(10000),
   checks:z.array(z.discriminatedUnion("kind",[
@@ -70,11 +70,13 @@ export async function confirmedFigures(firm:string,id:string,data:unknown) {
   if(draft.lines.some((line)=>line.state!=="confirmed") || checkFigures(draft,figures).length) throw new Error("Every figure must pass the check first.");
   return new Map(draft.lines.map((line)=>[line.field,figures.get(line.id)!]));
 }
-export async function saveDraft(row:{id:string;firm_id:string;client_id:string;form_code:string;period_key:string;revision:number},data:Draft,person:string,event:string,audit:Json,permission:string|null=null) {
+export async function saveDraft(row:{id:string;firm_id:string;client_id:string;form_code:string;period_key:string;revision:number},data:Draft,person:string|null,event:string,audit:Json,permission:string|null=null) {
+  if(person===null && (row.revision!==0 || permission)) throw new Error("Only a new draft may be read automatically.");
   draftSchema.parse(data);
   await verifySources(row.firm_id,row.client_id,data);
   if(JSON.stringify(data).length>5_000_000) throw new Error("Split these figures into smaller drafts.");
-  const {data:saved,error}=await supabaseAdmin().rpc("save_dataset",{draft:row.id,firm:row.firm_id,client:row.client_id,form:row.form_code,period:row.period_key,expected:row.revision,body:data as unknown as Json,person,event,audit,...(permission ? {permission} : {})});
+  const common={draft:row.id,firm:row.firm_id,client:row.client_id,form:row.form_code,period:row.period_key,body:data as unknown as Json};
+  const {data:saved,error}=person===null && row.revision===0 ? await supabaseAdmin().rpc("create_automatic_dataset",common) : await supabaseAdmin().rpc("save_dataset",{...common,expected:row.revision,person:person!,event,audit,...(permission ? {permission} : {})});
   if(error) throw new Error("The figures could not be saved.");
   return saved===true;
 }
@@ -87,11 +89,11 @@ export async function verifySources(firm:string,client:string,draft:Draft) {
 }
 
 // Called by the document jobs, never with email text. Source ids are checked before saving.
-export async function createDraft(input:{id:string;firm_id:string;client_id:string;form_code:string;period_key:string;lines:(Figure & {id:string;field:string;source:Draft["lines"][number]["source"]})[];checks:Draft["checks"]},person:string) {
+export async function createDraft(input:{id:string;firm_id:string;client_id:string;form_code:string;period_key:string;lines:(Figure & {id:string;field:string;source:Draft["lines"][number]["source"]})[];checks:Draft["checks"]},person:string|null,permission:string|null=null) {
   const crypto=serverCrypto(),lines:Draft["lines"]=[];
   for(const line of input.lines) {
     checkValue(line);
     lines.push({id:line.id,field:line.field,value_enc:await crypto.encrypt(input.firm_id,place(input.id,line.id),JSON.stringify({label:line.label,value:line.value,kind:line.kind})),source:line.source,state:"pending"});
   }
-  return saveDraft({...input,revision:0},{lines,checks:input.checks},person,"dataset.created",{});
+  return saveDraft({...input,revision:0},{lines,checks:input.checks},person,"dataset.created",{},permission);
 }
