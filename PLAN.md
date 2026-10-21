@@ -486,7 +486,7 @@
 
 #### 5.7.2 Review
 
-- The deterministic extraction pipeline starts automatically when a data email is filed and on demand from the client page. It reuses cached OCR, parsers and confirmed mappings. An AI step starts only for unresolved fields, after reserving credits and recording its reason (D29, §5.18).
+- The deterministic extraction pipeline starts automatically when a data email is filed and on demand from the client page. M6 uses digital text, fixed parsers and confirmed mappings only. Scans, photos, OCR and AI for unresolved fields move to M9; none runs in M6.
 - Every extraction produces a **draft dataset** (encrypted fields) linked to its source documents. The review screen shows each figure beside its source page or cell; staff confirm or reject each line (the yes/no check, allowed for every employee, §5.17.2); correcting a figure needs the edit right or a request.
 - Totals are cross-checked (invoice sums vs register totals, tax maths); mismatches block confirmation.
 - Nothing downstream uses unconfirmed data.
