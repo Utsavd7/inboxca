@@ -9,6 +9,24 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { grantFor } from "@/src/lib/permission-grants";
 import { checkFigures, draftSchema, checkValue, openFigures, place, saveDraft } from "@/src/lib/datasets";
 
+export async function saveFigureEdit(form:FormData) {
+  const {supabase,userId,membership}=await currentWriter();
+  if(!membership) return false;
+  const input=z.object({client:z.uuid(),draft:z.uuid(),line:z.uuid(),revision:z.coerce.number().int().positive(),value:z.string().max(2000),reason:z.string().max(300)}).safeParse(Object.fromEntries(form));
+  if(!input.success) return false;
+  const {client,draft,line,revision,value,reason}=input.data;
+  if(!membership.may("edit_figures",client) && !await grantFor(membership.firmId,userId,"edit_figures",client)) return false;
+  const {data:row}=await supabase.from("datasets").select("data,revision").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",draft).maybeSingle();
+  if(!row || row.revision!==revision) return false;
+  const source=draftSchema.parse(row.data).lines.find(item=>item.id===line);
+  if(!source) return false;
+  const {data:document}=await supabase.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",source.source.document).eq("sha256",source.source.sha256).neq("status","deleted").maybeSingle();
+  if(!document) return false;
+  const value_enc=await serverCrypto().encrypt(membership.firmId,`${place(draft,line)}/edit/${userId}`,JSON.stringify({value,reason}));
+  const {data,error}=await supabaseAdmin().rpc("save_figure_edit",{draft,firm:membership.firmId,client,person:userId,line,base:source.value_enc,value_enc});
+  return !error && data===true;
+}
+
 export async function reviewFigure(form:FormData) {
   const {supabase,userId,membership}=await currentWriter();
   if(!membership) redirect("/app");
@@ -16,6 +34,7 @@ export async function reviewFigure(form:FormData) {
   if(!input.success) redirect("/app/clients");
   const {client,draft:id,line:lineId,revision,intent}=input.data;
   const back=`/app/clients/${client}?tab=extraction&draft=${id}`;
+  if(intent!=="edit" && !membership.may("check_figures",client)) redirect(`${back}&check=permission`);
   const {data:row}=await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).maybeSingle();
   if(!row) redirect("/app/clients");
   if(row.revision!==revision) redirect(`${back}&check=stale`);
@@ -28,8 +47,8 @@ export async function reviewFigure(form:FormData) {
   let permission:string|null=null;
   const audit:Record<string,string>={line:lineId,state:intent};
   if(intent==="edit") {
-    permission=membership.may("edit_figures") ? null : await grantFor(membership.firmId,userId,"edit_figures",client);
-    if(!membership.may("edit_figures") && !permission) redirect(`${back}&check=permission`);
+    permission=membership.may("edit_figures", client) ? null : await grantFor(membership.firmId,userId,"edit_figures",client);
+    if(!membership.may("edit_figures", client) && !permission) redirect(`${back}&check=permission`);
     const value=String(form.get("value") ?? "").trim(),reason=String(form.get("reason") ?? "").trim();
     try {checkValue({...figures.get(line.id)!,value});} catch {redirect(`${back}&check=value`);}
     if(reason.length<3 || reason.length>300) redirect(`${back}&check=reason`);

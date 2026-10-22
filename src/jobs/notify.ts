@@ -14,7 +14,7 @@ async function approvers(firmId: string, route: "owner" | "manager", teamId: str
   const { data: people } = await admin.from("firm_members").select("user_id, role, team_id").eq("firm_id", firmId).eq("status", "active");
   return (people ?? [])
     .filter((person) => person.user_id !== except && (route === "manager"
-      ? person.role === "manager" && !!teamId && person.team_id === teamId
+      ? ["manager","partner"].includes(person.role) && !!teamId && person.team_id === teamId
       : person.role === "owner" || deputies.includes(person.user_id)))
     .map((person) => person.user_id);
 }

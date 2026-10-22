@@ -31,7 +31,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   ]);
   const sourceIds=[...new Set(rows?.map(row=>draftSchema.parse(row.data).lines[0].source.document))];
   const {data:sourceNames}=sourceIds.length ? await supabase.from("documents").select("id,name").eq("firm_id",membership.firmId).eq("client_id",client).in("id",sourceIds) : {data:null};
-  const canPrepare=!membership.viewOnlyUntil && (membership.may("edit_figures") || !!await grantFor(membership.firmId,userId,"edit_figures",client));
+  const canPrepare=!membership.viewOnlyUntil && (membership.may("edit_figures", client) || !!await grantFor(membership.firmId,userId,"edit_figures",client));
   const periods=[...new Set(rows?.map(row=>row.period_key))];
   return <section className="panel" aria-labelledby="prepared-title"><h2 id="prepared-title">Prepared forms</h2>
     <p className="hint">Check every figure first. Your firm files the approved file on the portal with its own code or signature.</p>
@@ -51,7 +51,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
           <div><label htmlFor={`why-${file.id}`}>What needs to change</label><input id={`why-${file.id}`} name="explanation" minLength={3} maxLength={300} required/></div>
           <button className="b b-ghost b-small" name="decision" value="rejected">Reject with reason</button>
         </form></details>}
-        {active && meta.status==="approved" && <details><summary>Record filing</summary><form action={markFormFiled} className="fields">
+        {active && meta.status==="approved" && membership.may("mark_filed",client) && <details><summary>Record filing</summary><form action={markFormFiled} className="fields">
           <input type="hidden" name="document" value={file.id}/>
           {confirmations?.some(item=>item.entity_id===file.id) && <p className="hint">An acknowledgement arrived. Check it before confirming this filing.</p>}
           <div><label htmlFor={`paper-${file.id}`}>Acknowledgement already in Files</label><select id={`paper-${file.id}`} name="paper"><option value="">Choose, or add one below</option>{acknowledgements?.filter(paper=>paper.period_key===file.period_key).map(paper=><option key={paper.id} value={paper.id}>{paper.name}</option>)}</select></div>

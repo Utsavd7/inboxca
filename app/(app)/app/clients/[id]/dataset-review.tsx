@@ -1,7 +1,10 @@
 import Link from "next/link";
+import {z} from "zod";
+import {serverCrypto} from "@/src/lib/crypto";
+import {FigureEdit} from "./figure-edit";
 import { grantFor } from "@/src/lib/permission-grants";
 import { currentMember } from "@/src/lib/member";
-import { checkFigures, draftSchema, openFigures, verifySources } from "@/src/lib/datasets";
+import { checkFigures, draftSchema, openFigures, verifySources, place } from "@/src/lib/datasets";
 import { periodName } from "@/src/lib/documents";
 import { askPermission } from "@/app/(app)/actions";
 import { FileViewer } from "../../files/[id]/view/file-viewer";
@@ -24,7 +27,9 @@ export async function DatasetReview({clientId,draftId,lineId,check}:{clientId:st
   const {data:people}=await supabase.rpc("firm_people",{target_firm:membership.firmId});
   const href=(line:string)=>`?tab=extraction&draft=${row.id}&line=${line}`;
   const at=draft.lines.indexOf(active),shown=draft.lines.slice(Math.floor(at/50)*50,Math.floor(at/50)*50+50);
-  const canEdit=membership.may("edit_figures") || !!await grantFor(membership.firmId,userId,"edit_figures",clientId),viewOnly=!!membership.viewOnlyUntil;
+  const canEdit=membership.may("edit_figures", clientId) || !!await grantFor(membership.firmId,userId,"edit_figures",clientId),viewOnly=!!membership.viewOnlyUntil;
+  const kept=draft.edits?.[userId]?.[active.id];
+  const candidate=canEdit && kept?.base===active.value_enc ? z.object({value:z.string().max(2000),reason:z.string().max(300)}).parse(JSON.parse(await serverCrypto().decrypt(membership.firmId,`${place(row.id,active.id)}/edit/${userId}`,kept.value_enc))) : null;
   return <section aria-labelledby="figures">
     <h2 id="figures">Check the figures</h2>
     <p className="hint">Check each figure against its source. Nothing is used in a form until every figure is confirmed.</p>
@@ -42,9 +47,10 @@ export async function DatasetReview({clientId,draftId,lineId,check}:{clientId:st
         {active.by && <p className="hint">Checked by {people?.find((person)=>person.user_id===active.by)?.email ?? "your team"}, {new Date(active.at!).toLocaleString("en-IN",{timeZone:"Asia/Kolkata"})}</p>}
         <form action={reviewFigure} className="fields">
           <input type="hidden" name="client" value={clientId}/><input type="hidden" name="draft" value={row.id}/><input type="hidden" name="line" value={active.id}/><input type="hidden" name="revision" value={row.revision}/>
-          <div className="form-row"><button className="b b-primary" name="intent" value="confirmed" disabled={viewOnly || !sourceReady || !source || !!issues.length || active.state==="confirmed"}>Yes, this is right</button><button className="b b-secondary" name="intent" value="rejected" disabled={viewOnly || active.state==="rejected"}>No, this is wrong</button></div>
-          {!viewOnly && sourceReady && canEdit && <><div><label htmlFor="figure-value">Correct figure</label><input id="figure-value" name="value" inputMode={!figures.get(active.id)!.kind || figures.get(active.id)!.kind==="number" ? "decimal" : "text"} type={figures.get(active.id)!.kind==="date" ? "date" : "text"} defaultValue={figures.get(active.id)!.value}/></div><div><label htmlFor="figure-reason">Why it changed</label><input id="figure-reason" name="reason" maxLength={300}/></div><button className="b b-secondary" name="intent" value="edit">Save correction{canEdit ? "" : " with permission"}</button></>}
+          <div className="form-row"><button className="b b-primary" name="intent" value="confirmed" disabled={viewOnly || !membership.may("check_figures",clientId) || !sourceReady || !source || !!issues.length || active.state==="confirmed"}>Yes, this is right</button><button className="b b-secondary" name="intent" value="rejected" disabled={viewOnly || !membership.may("check_figures",clientId) || active.state==="rejected"}>No, this is wrong</button></div>
+
         </form>
+        {!viewOnly && sourceReady && canEdit && <FigureEdit key={`${row.id}-${active.id}-${row.revision}`} client={clientId} draft={row.id} line={active.id} revision={row.revision} value={candidate?.value ?? figures.get(active.id)!.value} reason={candidate?.reason} kind={figures.get(active.id)!.kind} kept={!!candidate}/>}
         {!viewOnly && !canEdit && <form action={askPermission}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-ghost">Ask to edit figures</button></form>}
       </div>
       <div className="panel"><h3>Source</h3><p>{source?.name ?? "Source unavailable"}. {active.source.cell ? `Sheet ${active.source.sheet}, cell ${active.source.cell}` : `Page ${active.source.page}`}</p>{source && process.env.FILE_WORKER_URL && process.env.FILE_WORKER_SECRET ? <FileViewer key={`${source.id}-${active.source.sheet ?? 1}`} sheet={active.source.sheet ?? 1} id={source.id} page={active.source.page} hideInactive={membership.settings.viewer_hide_inactive===true}/> : <p className="hint">The source cannot be shown here yet.</p>}</div>

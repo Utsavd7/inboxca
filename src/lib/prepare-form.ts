@@ -13,8 +13,8 @@ export async function checkedForm(input:{client:string;registration:string;form:
   if(new Set(input.drafts).size!==input.drafts.length) throw new Error("Choose each source once.");
   const {supabase,membership,userId}=await currentWriter();
   if(!membership) throw new Error("Sign in to your firm first.");
-  const permission=membership.may("edit_figures") ? null : await grantFor(membership.firmId,userId,"edit_figures",input.client);
-  if(!membership.may("edit_figures") && !permission) throw new Error("Ask for permission to prepare a form.");
+  const permission=membership.may("edit_figures", input.client) ? null : await grantFor(membership.firmId,userId,"edit_figures",input.client);
+  if(!membership.may("edit_figures", input.client) && !permission) throw new Error("Ask for permission to prepare a form.");
   const [{data:client},{data:registrations},{data:rows},{data:templates}]=await Promise.all([
     supabase.from("clients").select("id").eq("firm_id",membership.firmId).eq("id",input.client).maybeSingle(),
     supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",input.client).eq("kind","gstin"),

@@ -477,7 +477,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload a file" })).toBeVisible();
   await owner.goto("/app/settings#permissions");
-  const standing = owner.getByRole("listitem").filter({ hasText: "may upload files without asking" });
+  const standing = owner.getByRole("listitem").filter({ hasText: /may upload files.*without asking/ });
   await standing.getByRole("button", { name: "Withdraw" }).click();
   await expect(standing).toHaveCount(0);
   await person.goto(files);

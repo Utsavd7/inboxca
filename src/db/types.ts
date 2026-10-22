@@ -572,6 +572,9 @@ isOneToOne: false
               "action": string,"actor_id": string,"at": string
             }[]
                            },
+"clients_with_right":
+{ Args: { "action": string }; Returns: string[]
+                           },
 "closed_firms":
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_name": string,"hours": Json,"reason": string
@@ -721,6 +724,9 @@ isOneToOne: false
                            },
 "save_dataset":
 { Args: { "audit": Json,"body": Json,"client": string,"draft": string,"event": string,"expected": number,"firm": string,"form": string,"period": string,"permission"?: string,"person": string }; Returns: boolean
+                           },
+"save_figure_edit":
+{ Args: { "base": string,"client": string,"draft": string,"firm": string,"line": string,"person": string,"value_enc": string }; Returns: boolean
                            },
 "session_ended":
 { Args: Record<PropertyKey, never>; Returns: boolean

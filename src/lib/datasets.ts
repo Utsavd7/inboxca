@@ -10,6 +10,7 @@ export const draftSchema = z.object({
     z.object({kind:z.literal("sum"),parts:z.array(z.uuid()).min(1).max(10000),total:z.uuid()}),
     z.object({kind:z.literal("tax"),base:z.uuid(),rate:z.uuid(),total:z.uuid()}),
   ])).max(1000),
+  edits:z.record(z.uuid(),z.record(z.uuid(),z.object({base:z.string(),value_enc:z.string().max(20000)}))).optional(),
 });
 export type Draft = z.infer<typeof draftSchema>;
 export const figureSchema=z.object({label:z.string().min(1).max(120),value:z.string().max(2000),kind:z.enum(["number","text","date"]).optional()});

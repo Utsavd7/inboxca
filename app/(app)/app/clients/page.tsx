@@ -66,7 +66,7 @@ export default async function Clients({
   const filtered = params.group || params.branch;
   const groupName = filtered ? nameOf.get(filtered) : null;
   const manage = canManageClients(membership.role);
-  const canSend = manage && membership.may("send");
+  const canSend = manage && !!clients?.some(client=>membership.may("send",client.id));
   // Adding and importing open in place; a firm with no clients yet starts with Add open.
   const panel = manage ? (params.panel ?? (!clients?.length && !q && !filtered && !archived ? "add" : "")) : "";
   const {data: batch} = manage && params.bulk ? await supabase.from("requests").select("id,status,details").eq("firm_id",membership.firmId).eq("id",params.bulk).eq("kind","bulk_send").maybeSingle() : {data:null};

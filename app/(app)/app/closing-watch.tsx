@@ -10,6 +10,7 @@ export function ClosingWatch({ at, close, extended }: { at: number; close: strin
   useEffect(() => {
     const tick = () => {
       setNow(Date.now());
+      if(at-Date.now()<=20_000 && at>Date.now()) window.dispatchEvent(new Event("inboxca-closing"));
       if (Date.now() >= at) window.location.reload();
     };
     const first = window.setTimeout(tick, 0);

@@ -48,7 +48,22 @@ test("staff check figures beside the source; totals, edit rights and stale revie
     expect(blocked.url()).toContain("check=totals");
     await page.getByRole("button",{name:"Ask to edit figures"}).click();await expect(page).toHaveURL(/asked_right=edit_figures/);
     const [{id:permission}]=await query(local.dbUrl,"update public.requests set status='approved' where firm_id=$1 and kind='permission' returning id",[firm.firmId]);
-    await page.goto(url);await page.getByLabel("Correct figure").fill("300.00");await page.getByLabel("Why it changed").fill("The source total was wrong");await page.getByRole("button",{name:"Save correction",exact:true}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
+    await page.goto(url);await page.getByLabel("Correct figure").fill("300.00");
+    const keptResponse=page.waitForResponse(response=>response.request().method()==="POST" && !!response.request().postData()?.includes("The source total was wrong"),{timeout:15_000});
+    await page.getByLabel("Why it changed").fill("The source total was wrong");
+    expect((await keptResponse).ok()).toBe(true);
+    // #14: the server keeps unfinished edits, including across closing and reopening.
+    await expect(page.getByText("Your draft is kept. Save the correction when it is ready.")).toBeVisible({timeout:15_000});
+    const [unfinished]=await query(local.dbUrl,"select data,revision from public.datasets where id=$1",[id]);
+    expect(unfinished.revision).toBe(1);expect(unfinished.data.lines[2].state).toBe("pending");
+    expect(JSON.stringify(unfinished.data)).not.toContain("The source total was wrong");
+    expect(JSON.parse(await crypto.decrypt(firm.firmId,`${place(id,lines[2])}/edit/${firm.ownerId}`,unfinished.data.edits[firm.ownerId][lines[2]].value_enc))).toEqual({value:"300.00",reason:"The source total was wrong"});
+    const [{settings}]=await query(local.dbUrl,"select settings from public.firms where id=$1",[firm.firmId]);
+    await query(local.dbUrl,"update public.firms set settings=settings||'{\"access\":{\"hours_only\":true},\"hours\":{}}' where id=$1",[firm.firmId]);
+    await page.reload();await expect(page.locator(".page-head")).toContainText("Figure Test Firm is closed now.");
+    await query(local.dbUrl,"update public.firms set settings=$2::jsonb where id=$1",[firm.firmId,JSON.stringify(settings)]);
+    await page.goto(url);await expect(page.getByLabel("Correct figure")).toHaveValue("300.00");await expect(page.getByLabel("Why it changed")).toHaveValue("The source total was wrong");
+    await page.getByRole("button",{name:"Save correction",exact:true}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
     expect((await query(local.dbUrl,"select status from public.requests where id=$1",[permission]))[0].status).toBe("used");
     const stale=await page.request.post(url,{multipart:{...forged,intent:"confirmed"},headers:{Origin:new URL(page.url()).origin}});expect(stale.url()).toContain("check=stale");
     for(const line of lines) {

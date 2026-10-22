@@ -114,8 +114,9 @@ export default async function Client({ params, searchParams }: { params: Promise
     (mine ?? []).some((request) => request.reason_code === right && request.status === status && (!documentId || (request.details as { document_id?: string }).document_id === documentId));
   // A personal device allowed away from the office only views.
   const viewOnly = !!membership.viewOnlyUntil;
-  const canUpload = !viewOnly && (membership.may("upload") || open("upload", "approved"));
-  const canSend = (documentId: string) => !viewOnly && (membership.may("send") || open("send", "approved", documentId));
+  const canRename = !viewOnly && membership.may("rename", id);
+  const canUpload = !viewOnly && (membership.may("upload", id) || open("upload", "approved"));
+  const canSend = (documentId: string) => !viewOnly && (membership.may("send", id) || open("send", "approved", documentId));
   const canRemove = (documentId: string) => !viewOnly && (owner || open("remove", "approved", documentId));
   const askButton = (right: Right, label: string, documentId?: string) =>
     viewOnly ? null : open(right, "pending", documentId) ? (
@@ -182,6 +183,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     </nav>
   );
   const activityNames: Record<string, string> = {
+    "dataset.edit_saved":"Unfinished correction kept", "form.started":"Form preparation started", "form.prepared":"Form prepared", "form.edited_outside":"Corrected form added", "form.downloaded":"Form downloaded for filing", "form.filed":"Form marked filed", "form.approved":"Form approved", "form.rejected":"Form needs a correction",
     "dataset.created": "Figures ready to check", "dataset.checked": "Figure checked", "dataset.changed": "Figure corrected",
     "client.added": "Client added", "client.changed": "Client details changed",
     "registration.added": "Number added", "registration.changed": "Services changed", "registration.removed": "Number removed",
@@ -361,7 +363,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                   </Link>
                 )}
               </form>
-              <PortalDrop clientId={client.id} />
+              {membership.may("portal_files",client.id) && <PortalDrop clientId={client.id} />}
               <DroppedNotice value={dropped} />
               {askedRight && (
                 <p className="notice" role="status">
@@ -484,7 +486,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <form action={removed ? removeDocument : manageDocument} className="notice" role="status">
                   <input type="hidden" name="document" value={noticeFile.id} />
                   <span>{removed ? `Removed ${noticeFile.name}. It waits 30 days in the drive's Deleted and old versions folder.` : `Saved as ${noticeFile.name}.`}</span>
-                  {(renamed || removed) && (
+                  {(removed ? owner : canRename) && (renamed || removed) && (
                     <button className="b b-ghost b-small" name="intent" value={removed ? "restore" : "undo"}>
                       {removed ? "Put back" : "Undo"}
                     </button>
@@ -511,7 +513,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                   </form>
                 </section>
               )}
-              {editing && (
+              {editing && canRename && (
                 <section className="reveal-panel" aria-labelledby="edit-file">
                   <Link className="b b-ghost b-small reveal-close" href={`/app/clients/${client.id}?tab=files`} scroll={false}>
                     Close
@@ -569,7 +571,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                           </td>
                           <td className="shrink">
                             <span className="cell-form">
-                              {document.status === "to_check" && (
+                              {canRename && document.status === "to_check" && (
                                 <form action={manageDocument}>
                                   <input type="hidden" name="document" value={document.id} />
                                   <input type="hidden" name="type" value={document.document_type} />
@@ -580,7 +582,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                                   </button>
                                 </form>
                               )}
-                              {!document.prepared && <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&edit=${document.id}`} scroll={false} aria-label={`Change ${document.name}`}>
+                              {canRename && !document.prepared && <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&edit=${document.id}`} scroll={false} aria-label={`Change ${document.name}`}>
                                 Change
                               </Link>}
                               {document.status === "filed" && document.share_policy !== "internal" &&

@@ -9,7 +9,7 @@ import { Avatar, Badge, Empty, PageHead, type Tone } from "../ui";
 
 // The firm's compliance calendar: overdue, coming up and recently filed returns. Anyone in
 // the firm marks a return in progress or filed, one at a time or many together (5.17.2).
-export default async function Calendar({ searchParams }: { searchParams: Promise<{ view?: string; code?: string; day?: string; page?: string }> }) {
+export default async function Calendar({ searchParams }: { searchParams: Promise<{ view?: string; code?: string; day?: string; page?: string; error?:string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
@@ -60,6 +60,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   return (
     <>
       <PageHead title="Calendar" sub="Every return your firm files, by due date. Tick returns to mark them in progress or filed." />
+      {params.error==="filing" && <p className="alert" role="alert">Your firm has not allowed you to record filing for all the chosen work.</p>}
       <div className="toolbar">
         <LinkTabs
           kind="pills"
