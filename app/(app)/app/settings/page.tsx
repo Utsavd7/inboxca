@@ -1,11 +1,11 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
 import { officeApprover } from "@/src/lib/office";
 import { OfficePanel } from "../office-panel";
 import { documentTypes } from "@/src/lib/documents";
-import { switchable, type Permissions } from "@/src/lib/rights";
+import { switchable, defaults, type Permissions, type Standing } from "@/src/lib/rights";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { folderOrderNames, namings } from "@/src/lib/drive";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -19,6 +19,7 @@ import { MailboxForm } from "./mailbox-form";
 
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
 const driveErrors: Record<string, string> = {
+  permission_scope:"Check the end date and client names. Use the full names shown in Clients, one per line, with no repeated names.",
   mail_limit:"Choose a whole number from 1 to 2,000 for the email limit.",
   drive_terms: "Tick the box to agree to the Drive access terms first.",
   drive_provider: "Choose a drive.",
@@ -64,9 +65,12 @@ export default async function Settings({
   // People the owner or a deputy always allowed something, from a question in the Inbox.
   const { data: standing } = await supabaseAdmin().from("firm_members").select("user_id, access").eq("firm_id", membership.firmId).not("access->always", "is", null);
   const always = (standing ?? []).flatMap((member) => {
-    const rights = ((member.access as { always?: string[] }).always ?? []).filter((right) => right in switchable);
+    const rights = ((member.access as { always?: Standing[] }).always ?? []).map(grant=>typeof grant==="string" ? {right:grant} : grant).filter(grant=>Object.hasOwn(switchable,grant.right));
     return rights.length ? [{ id: member.user_id, email: people?.find((person) => person.user_id === member.user_id)?.email ?? "", rights }] : [];
   });
+  const scopeIds=[...new Set([...Object.values(permissions).flatMap(column=>column?.scope?.clients ?? []),...always.flatMap(person=>person.rights.flatMap(grant=>"clients" in grant ? grant.clients ?? [] : []))])];
+  const {data:scopeClients}=scopeIds.length ? await supabase.from("clients").select("id,name").eq("firm_id",membership.firmId).in("id",scopeIds) : {data:[]};
+  const namesOf=(ids?:string[])=>ids?.map(id=>scopeClients?.find(client=>client.id===id)?.name ?? "Client no longer available").join("\n") ?? "";
   const usage = used?.[0];
   return (
     <>
@@ -233,7 +237,7 @@ export default async function Settings({
                         <td>{label}</td>
                         {(["employee", "manager"] as const).map((column) => (
                           <td key={column} className="shrink">
-                            <input type="checkbox" name={`${column}:${right}`} defaultChecked={permissions[column]?.[right as keyof typeof switchable] === true} aria-label={`${label}: ${column === "employee" ? "employees" : "managers"}`} />
+                            <input type="checkbox" name={`${column}:${right}`} disabled={right==="approve_requests" && column==="employee"} defaultChecked={permissions[column]?.[right as keyof typeof switchable] ?? (right in defaults || right==="approve_requests" && column==="manager")} aria-label={`${label}: ${column === "employee" ? "employees" : "managers"}`} />
                           </td>
                         ))}
                       </tr>
@@ -241,6 +245,7 @@ export default async function Settings({
                   </tbody>
                 </table>
               </div>
+              <details><summary>Limit these role permissions</summary><p className="hint">Leave blank for every client with no end date. View only access stays the same.</p><div className="cols">{(["employee","manager"] as const).map(column=><fieldset key={column} className="fields"><legend>{column==="employee" ? "Employees" : "Managers"}</legend><div><label htmlFor={`${column}-clients`}>Client names, one per line</label><textarea id={`${column}-clients`} name={`${column}:clients`} rows={3} defaultValue={namesOf(permissions[column]?.scope?.clients)}/></div><div><label htmlFor={`${column}-until`}>Last day, if needed</label><input id={`${column}-until`} type="date" name={`${column}:until`} defaultValue={permissions[column]?.scope?.until}/></div></fieldset>)}</div></details>
               <label className="check">
                 <input type="checkbox" name="hide_inactive" defaultChecked={settings.viewer_hide_inactive === true} />
                 Hide documents when InboxCA is not the active window (staff often read a document while typing in the portal beside it, so this is off unless you need it)
@@ -255,6 +260,7 @@ export default async function Settings({
                 </button>
               </div>
             </form>
+            {!!people?.some(person=>person.role!=="owner" && person.status==="active") && <details><summary>Allow one person without asking</summary><form action={allowStanding} className="fields"><div><label htmlFor="standing-person">Person</label><select id="standing-person" name="person" required>{people.filter(person=>person.role!=="owner" && person.status==="active").map(person=><option key={person.user_id} value={person.user_id}>{person.email}</option>)}</select></div><div><label htmlFor="standing-right">What they may do</label><select id="standing-right" name="right">{Object.entries(switchable).map(([right,label])=><option key={right} value={right}>{label}</option>)}</select></div><div><label htmlFor="standing-clients">Client names, one per line. Blank means every client.</label><textarea id="standing-clients" name="clients" rows={3}/></div><div><label htmlFor="standing-until">Last day, if needed</label><input id="standing-until" name="until" type="date"/></div><button className="b b-secondary">Allow this person</button></form></details>}
             {!!always.length && (
               <>
                 <h3 className="sub-head">Always allowed</h3>
@@ -262,7 +268,7 @@ export default async function Settings({
                   {always.map((person) => (
                     <li key={person.id}>
                       <span className="grow">
-                        <strong>{person.email}</strong> may {person.rights.map((right) => switchable[right as keyof typeof switchable].toLowerCase()).join(" and ")} without asking
+                        <strong>{person.email}</strong> may {person.rights.map(grant=>`${switchable[grant.right as keyof typeof switchable].toLowerCase()}${"clients" in grant && grant.clients ? ` for ${namesOf(grant.clients).replaceAll("\n",", ")}` : " for every client"}${"until" in grant && grant.until ? ` until ${longDate(grant.until)}` : ""}`).join("; ")} without asking
                       </span>
                       <form action={withdrawAlways} className="end">
                         <input type="hidden" name="person" value={person.id} />

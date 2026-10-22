@@ -307,7 +307,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           The owner is asked for more time today. You can keep working until closing.
         </p>
       )}
-      <PortalDrop />
+      {membership.may("portal_files") && <PortalDrop />}
       <PreparedForms />
       <DroppedNotice value={dropped} />
       {error === "view_only" && (
@@ -392,7 +392,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
                           {when(task.due_on, today)}
                         </span>
                       )}
-                      {task.status !== "filed" && (
+                      {task.status !== "filed" && membership.may("mark_filed",task.client_id) && (
                         <form action={manageTasks}>
                           <input type="hidden" name="task" value={task.id} />
                           <button className="b b-ghost b-small" name="intent" value="filed" aria-label={`Mark ${task.clients.name} ${name(task.code)} filed`}>

@@ -26,6 +26,10 @@ it("accepts only a valid signed request for this document, within a minute", asy
   const edited=JSON.stringify({...view,purpose:"edited"});
   await expect(verifyView(edited,await signView(edited,secret),secret,view.file,1000)).rejects.toThrow("Not allowed");
   expect((await verifyView(edited,await signView(edited,secret),secret,view.file,1000,"edited")).purpose).toBe("edited");
+  const copy=JSON.stringify({...view,purpose:"copy"});
+  await expect(verifyView(copy,await signView(copy,secret),secret,view.file,1000)).rejects.toThrow("Not allowed");
+  expect((await verifyView(copy,await signView(copy,secret),secret,view.file,1000,"copy")).purpose).toBe("copy");
+  await expect(verifyView(body,mac,secret,view.file,1000,"copy")).rejects.toThrow("Not allowed");
   const portal=JSON.stringify({...view,purpose:"portal"});
   expect((await verifyView(portal,await signView(portal,secret),secret,view.file,1000,"portal")).purpose).toBe("portal");
   await expect(verifyView(portal,await signView(portal,secret),secret,view.file,1000,"sheet")).rejects.toThrow("Not allowed");

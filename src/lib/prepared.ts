@@ -72,6 +72,7 @@ export async function recordFormDecision(id:string,decision:"approved"|"rejected
 
 export async function fileForm(id:string,number:string,paper?:string,file?:File) {
   const {document,membership,userId,supabase}=await visibleForm(id),admin=supabaseAdmin();
+  if(!membership.may("mark_filed",document.client_id)) throw new Error("Ask your firm's owner to let you record filing.");
   number=number.trim();
   if(number.length>80 || /[\r\n\x00-\x1f]/.test(number) || !number && !paper && !file?.size) throw new Error("Add the acknowledgement or its number.");
   const {data:ready}=await admin.rpc("form_ready",{target:id});
@@ -112,8 +113,8 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
 
 export async function uploadEditedForm(id:string,file:File) {
   const {document,membership,userId,supabase}=await visibleForm(id),admin=supabaseAdmin();
-  const permission=membership.may("edit_figures") ? null : await grantFor(membership.firmId,userId,"edit_figures",document.client_id);
-  if(!membership.may("edit_figures") && !permission) throw new Error("Ask to edit figures first.");
+  const permission=membership.may("edit_figures", document.client_id) ? null : await grantFor(membership.firmId,userId,"edit_figures",document.client_id);
+  if(!membership.may("edit_figures", document.client_id) && !permission) throw new Error("Ask to edit figures first.");
   if(!/\.xlsx$/i.test(file.name) || !file.size || file.size>25_000_000) throw new Error("Choose the filled official workbook, up to 25 MB.");
   const meta=document.prepared;
   const [{data:client},{data:account},{data:registration},{data:templates}]=await Promise.all([

@@ -71,6 +71,7 @@ test("Home shows what needs the owner today and the next setup step", async () =
   const day = owner.locator(".ribbon-days a").first();
   await expect(day).toHaveAttribute("aria-label", /GSTR/);
   await day.click();
+  await expect(owner).toHaveURL(/\/app\/calendar\?day=/,{timeout:15_000});
   await expect(owner.getByRole("heading", { name: /^Due on / })).toBeVisible();
   await owner.getByRole("link", { name: "Home" }).click();
   const start = owner.getByRole("region", { name: "Finish setting up" });

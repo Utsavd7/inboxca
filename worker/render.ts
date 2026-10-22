@@ -147,7 +147,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
     };
   } else throw new Error("File not supported");
   return { header, dispose: async () => { if (canvas) { canvas.width = 1; canvas.height = 1; } await dispose(); },
-    async render(number: number) {
+    async render(number: number, jpegOnly=false) {
       signal.throwIfAborted();
       if (!Number.isInteger(number) || number < 1 || number > header.pages.length) throw new Error("No page");
       const page = await draw(number);
@@ -164,9 +164,9 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
       context.lineWidth = 1;
       for (const { x, y } of positions) { context.strokeText(label, x, y); context.fillText(label, x, y); }
       context.restore();
-      const png = await page.encode("png");
-      const jpeg = photograph ? await page.encode("jpeg", 85) : null;
-      const image = jpeg && jpeg.length < png.length ? jpeg : png;
+      const png = jpegOnly ? null : await page.encode("png");
+      const jpeg = jpegOnly || photograph ? await page.encode("jpeg", 85) : null;
+      const image = jpeg && (!png || jpeg.length < png.length) ? jpeg : png!;
       const bytes = new Uint8Array(image.length + 1);
       bytes[0] = image === jpeg ? 2 : 1;
       bytes.set(image, 1);

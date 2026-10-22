@@ -3,6 +3,7 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { expect, it } from "vitest";
 import { pictureSize, openView, tiles } from "@/worker/render";
 import { viewerLabel } from "@/src/lib/file-worker";
+import {stampedPdf} from "@/worker/download";
 
 async function renderPage(bytes: Buffer, name: string, number: number, label: string) {
   const view = await openView(bytes, name, label);
@@ -33,6 +34,19 @@ it("draws PDF text and the person's identity into image bytes in the file worker
   await expect(renderPage(bytes, "test.pdf", 2, "Person")).rejects.toThrow("No page");
   const image = await loadImage(first.bytes);
   expect(image.width).toBe(1200);
+});
+
+// #29, #47: other downloads contain stamped pictures, never reusable source text.
+it("streams a readable PDF made only of personal page pictures",async()=>{
+  const make=async(label:string)=>{
+    const view=await openView(Buffer.from(pdf("Invented private report",2)),"source.pdf",label,2),parts:Buffer[]=[];
+    try {for await(const part of stampedPdf(view)) parts.push(Buffer.from(part));return Buffer.concat(parts);} finally {await view.dispose();}
+  };
+  const first=await make("First person, 22 Oct 2026"),second=await make("Second person, 22 Oct 2026");
+  expect(first.equals(second)).toBe(false);expect(first.includes(Buffer.from("Invented private report"))).toBe(false);
+  const {getDocument}=await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const task=getDocument({data:new Uint8Array(first)});
+  try {const pdf=await task.promise;expect(pdf.numPages).toBe(2);for(const page of [1,2]) expect((await(await pdf.getPage(page)).getTextContent()).items).toEqual([]);} finally {await task.destroy();}
 });
 
 it("shows sheets as capped images and draws identity into photos too", async () => {

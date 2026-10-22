@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { may, mayDecide, routeOf } from "@/src/lib/rights";
 
 describe("permissions", () => {
+  // #47: the same limits apply to personal grants and role switches.
+  it("keeps filing defaults, client scopes and inclusive end dates separate from owner rights",()=>{
+    expect(may("staff","check_figures")).toBe(true);
+    expect(may("staff","check_figures",{employee:{check_figures:false}})).toBe(false);
+    const grant={right:"edit_figures" as const,clients:["a"],until:"2026-10-22"};
+    expect(may("staff","edit_figures",{},[grant],"a","2026-10-22")).toBe(true);
+    expect(may("staff","edit_figures",{},[grant],"b","2026-10-22")).toBe(false);
+    expect(may("staff","edit_figures",{},[grant],"a","2026-10-23")).toBe(false);
+    expect(may("staff","edit_figures",{},[grant],undefined,"2026-10-22")).toBe(false);
+    const permissions={employee:{upload:true,scope:{clients:["a"],until:"2026-10-22"}}};
+    expect(may("staff","upload",permissions,[],"a","2026-10-22")).toBe(true);
+    expect(may("staff","upload",permissions,[],"b","2026-10-22")).toBe(false);
+    expect(may("staff","upload",permissions,[],"a","2026-10-23")).toBe(false);
+    expect(may("owner","upload",permissions,[],"b","2026-10-23")).toBe(true);
+  });
   // #21, #27, #47: grants widen the action, never owner only rights.
   it("lets the owner do everything; others ask, unless the owner switched a right on; removing stays the owner's", () => {
     expect(may("owner", "remove")).toBe(true);

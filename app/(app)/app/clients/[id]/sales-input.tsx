@@ -15,8 +15,8 @@ async function readRegister(form:FormData) {
   if(!membership) redirect("/app");
   const client=z.uuid().parse(form.get("client")),id=z.uuid().parse(form.get("source"));
   const back=`/app/clients/${client}?tab=extraction&source=${id}`;
-  const permission=membership.may("edit_figures") ? null : await grantFor(membership.firmId,userId,"edit_figures",client);
-  if(!membership.may("edit_figures") && !permission) redirect(`${back}&read=permission`);
+  const permission=membership.may("edit_figures", client) ? null : await grantFor(membership.firmId,userId,"edit_figures",client);
+  if(!membership.may("edit_figures", client) && !permission) redirect(`${back}&read=permission`);
   const {data:doc}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,work_type,status").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).eq("work_type","gst").eq("status","filed").single();
   if(!doc) redirect(`${back}&read=source`);
   let draft:string|null=null;
@@ -45,7 +45,7 @@ export async function SalesInput({clientId,source,section:asked,header:askedHead
   const section=asked && Object.hasOwn(salesSections,asked) ? asked as SalesSection : suggestion?.section ?? "b2b";
   const header=Number(askedHeader || (suggestion?.header ?? 0)+1);
   const headings=Number.isInteger(header) && header>=1 && header<=40 ? rows[header-1] ?? [] : [];
-  const canEdit=!membership.viewOnlyUntil && (membership.may("edit_figures") || !!await grantFor(membership.firmId,userId,"edit_figures",clientId));
+  const canEdit=!membership.viewOnlyUntil && (membership.may("edit_figures", clientId) || !!await grantFor(membership.firmId,userId,"edit_figures",clientId));
   return <section className="section"><h2>Read a sales register</h2><p className="hint">Choose one section per file. Tally and other register exports use the columns you confirm here. These choices are remembered for this client. Nothing goes into a form until the figures are checked.</p>
     <nav className="pills" aria-label="Sales registers">{registers.map((file)=><Link href={`?tab=extraction&source=${file.id}`} key={file.id} aria-current={selected?.id===file.id ? "page" : undefined}>{file.name}</Link>)}</nav>
     {(issue || read) && <p className="alert" role="alert">{issue || (read==="permission" ? "Ask for permission to prepare these figures." : "Check the columns, dates and numbers, the file's month, and the drive connection. A changed source must be added again.")}</p>}

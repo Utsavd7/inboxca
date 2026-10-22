@@ -9,6 +9,7 @@ import {editedForm} from "./edited-form.ts";
 import {templateSchema} from "../src/lib/templates.ts";
 import {z} from "zod";
 import {prepare} from "./prepare.ts";
+import {stampedPdf} from "./download.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
 const reads = new Map<string, number>();
@@ -54,11 +55,12 @@ export async function handle(request: Request): Promise<Response> {
   if (process.env.FILE_WORKER_TEST === "1" && request.method === "GET" && url.pathname === "/_reads" && secret && request.headers.get("authorization") === `Bearer ${secret}`)
     return Response.json({ reads: reads.get(url.searchParams.get("file") ?? "") ?? 0, peakRssKiB: process.resourceUsage().maxRSS });
   const sheet=url.pathname.startsWith("/sheet/");
+  const copy=url.pathname.startsWith("/copy/");
   const edited=url.pathname.startsWith("/edited/");
   const portal=url.pathname.startsWith("/portal/");
-  if (request.method !== "POST" || !sheet && !portal && !edited && !url.pathname.startsWith("/view/")) return new Response("Not found", { status: 404 });
+  if (request.method !== "POST" || !sheet && !portal && !edited && !copy && !url.pathname.startsWith("/view/")) return new Response("Not found", { status: 404 });
   let view: ViewRequest;
-  try { view = await verifyView(await request.text(), request.headers.get("authorization") ?? "", secret, decodeURIComponent(url.pathname.slice(portal || edited ? 8 : sheet ? 7 : 6)), undefined, portal ? "portal" : sheet ? "sheet" : edited ? "edited" : undefined); }
+  try { view = await verifyView(await request.text(), request.headers.get("authorization") ?? "", secret, decodeURIComponent(url.pathname.slice(portal || edited ? 8 : sheet ? 7 : 6)), undefined, portal ? "portal" : sheet ? "sheet" : edited ? "edited" : copy ? "copy" : undefined); }
   catch { return new Response("Not allowed", { status: 403 }); }
   try {
     request.signal.throwIfAborted();
@@ -83,6 +85,7 @@ export async function handle(request: Request): Promise<Response> {
     const dispose = async () => { if (!disposed) { disposed = true; await opened.dispose(); } };
     async function* frames() {
       try {
+        if(copy) {yield* stampedPdf(opened);return;}
         const header = new TextEncoder().encode(JSON.stringify(opened.header));
         yield frameSize(header); yield header;
         for (let number = 1; number <= opened.header.pages.length; number++) {
@@ -99,6 +102,6 @@ export async function handle(request: Request): Promise<Response> {
         catch (error) { controller.error(error); await iterator.return(undefined); }
       },
       async cancel() { await iterator.return(undefined); await dispose(); },
-    }, { highWaterMark: 0 }), { headers: { "Content-Type": "application/x-inboxca-pages", "Cache-Control": "private, no-store" } });
+    }, { highWaterMark: 0 }), { headers: { "Content-Type": copy ? "application/pdf" : "application/x-inboxca-pages", "Cache-Control": "private, no-store" } });
   } catch { return new Response("This file could not be opened.", { status: 422 }); }
 }

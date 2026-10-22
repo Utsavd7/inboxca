@@ -3,21 +3,32 @@
 // Uploading other files and sending files to clients are requests for employees and
 // managers unless the owner switches them on in Settings → Permissions; removing a file is
 // the owner's alone, whatever the settings. Partners follow the manager column.
-export const switchable = { upload: "Upload files", send: "Send files to clients", edit_figures: "Edit figures and prepare forms" } as const;
+export const switchable = { upload: "Upload files", send: "Send files to clients", edit_figures: "Edit figures and prepare forms", download: "Download other files, one at a time", rename: "Correct a file's type or period", portal_files: "Add portal files", check_figures: "Check extracted figures", mark_filed: "Mark work filed", approve_requests: "Approve the team's requests" } as const;
 export type Right = keyof typeof switchable | "remove";
 export type Column = "employee" | "manager";
-export type Permissions = Partial<Record<Column, Partial<Record<keyof typeof switchable, boolean>>>>;
+export type Scope = {clients?: string[]; until?: string};
+export type Standing = string | (Scope & {right: keyof typeof switchable});
+export type Permissions = Partial<Record<Column, Partial<Record<keyof typeof switchable, boolean>> & {scope?:Scope}>>;
+export const defaults = {rename:true,portal_files:true,check_figures:true,mark_filed:true};
+export const todayInIndia = (at = Date.now()) => new Date(at + 330 * 60_000).toISOString().slice(0,10);
+
+export function inScope(scope:Scope,client?:string,today=todayInIndia()) {
+  return (!scope.until || /^20\d{2}-\d{2}-\d{2}$/.test(scope.until) && scope.until>=today) && (!scope.clients || scope.clients.length>0 && !!client && scope.clients.includes(client));
+}
 
 export const columnOf = (role: string): Column | null => (role === "staff" || role === "front_desk" ? "employee" : role === "manager" || role === "partner" ? "manager" : null);
 
 // Whether a role may do it without asking; `always` lists what the owner or a deputy
 // always allowed this one person.
-export function may(role: string, right: Right, permissions: Permissions = {}, always: string[] = []) {
+export function may(role: string, right: Right, permissions: Permissions = {}, always: Standing[] = [], client?:string, today=todayInIndia()) {
   if (role === "owner") return true;
   if (right === "remove") return false;
-  if (always.includes(right)) return true;
   const column = columnOf(role);
-  return !!column && permissions[column]?.[right] === true;
+  if(right==="approve_requests" && column!=="manager") return false;
+  if (always.some(grant=>typeof grant==="string" ? grant===right : grant && grant.right===right && inScope(grant,client,today))) return true;
+  if(!column) return false;
+  const value=permissions[column]?.[right] ?? (right in defaults || right==="approve_requests");
+  return value && inScope(permissions[column]?.scope ?? {},client,today);
 }
 
 // Who answers a request (5.17.2): an employee's everyday request goes to their team's
@@ -33,7 +44,7 @@ export function routeOf(right: Right, requester: { role: string; team_id: string
 export function mayDecide(decider: { id: string; role: string; team_id: string | null; deputy: boolean }, request: { by: string; route: "owner" | "manager"; team_id: string | null }) {
   if (decider.id === request.by) return false;
   if (decider.role === "owner" || decider.deputy) return true;
-  return request.route === "manager" && decider.role === "manager" && !!request.team_id && decider.team_id === request.team_id;
+  return request.route === "manager" && ["manager","partner"].includes(decider.role) && !!request.team_id && decider.team_id === request.team_id;
 }
 
-export const rightWords: Record<Right, string> = { upload: "upload a file", send: "send a file to the client", remove: "remove a file", edit_figures: "edit figures and prepare forms" };
+export const rightWords: Record<Right, string> = { upload: "upload a file", send: "send a file to the client", remove: "remove a file", edit_figures: "edit figures and prepare forms", download:"download a file", rename:"correct a file's type or period", portal_files:"add portal files", check_figures:"check extracted figures", mark_filed:"mark work filed", approve_requests:"approve the team's requests" };

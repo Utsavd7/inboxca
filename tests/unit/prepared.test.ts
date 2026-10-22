@@ -1,7 +1,7 @@
 import {expect,it,vi} from "vitest";
 const ids={form:"00000000-0000-4000-a000-000000000001",firm:"00000000-0000-4000-a000-000000000002",client:"00000000-0000-4000-a000-000000000003",person:"00000000-0000-4000-a000-000000000004",paper:"00000000-0000-4000-a000-000000000005"};
 const mock=vi.hoisted(()=>({save:vi.fn(),insert:vi.fn(),rpc:vi.fn(),record:""}));
-vi.mock("@/src/lib/member",()=>({currentWriter:async()=>({userId:ids.person,membership:{firmId:ids.firm,firmName:"Invented Firm",settings:{records:{approve_all:true}}},supabase:{from:(table:string)=>({
+vi.mock("@/src/lib/member",()=>({currentWriter:async()=>({userId:ids.person,membership:{firmId:ids.firm,firmName:"Invented Firm",may:()=>true,settings:{records:{approve_all:true}}},supabase:{from:(table:string)=>({
   select(){return this;},eq(){return this;},neq(){return this;},
   async single(){return {data:{name:"Invented Client"}};},
   async maybeSingle(){return {data:table==="documents" ? {id:ids.form,firm_id:ids.firm,client_id:ids.client,name:"Invented GSTR-1.xlsx",period_key:"2026-09",prepared:{form:"GSTR1",registration:ids.form,version:1,template:"2.2",sources:[{id:ids.form,revision:1}],status:"approved"}} : null};},

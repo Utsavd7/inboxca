@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { closingToday } from "./hours";
-import { may, type Permissions, type Right } from "./rights";
+import { may, type Permissions, type Right, type Standing } from "./rights";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
 import { officeDeviceAccess, officeProof } from "./office";
 import { supabaseAdmin, supabaseServer } from "./supabase";
@@ -56,7 +56,7 @@ export const currentMember = cache(async () => {
     firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, access, idleMinutes, closing, email: String(claims.claims.email ?? ""),
     // On a personal device allowed away from the office the person only views, until its end date.
     viewOnlyUntil: office.remoteUntil,
-    may: (right: Right) => !office.remoteUntil && may(data.role, right, settings.permissions as Permissions, (access.always ?? []) as string[]),
+    may: (right: Right, client?: string) => !office.remoteUntil && may(data.role, right, settings.permissions as Permissions, (access.always ?? []) as Standing[], client),
   };
   return { supabase, userId, membership, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting, pcKey: office.pcKey };
 });

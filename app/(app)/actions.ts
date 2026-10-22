@@ -24,7 +24,7 @@ import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetai
 import { askAway, officeApprover, officePc, requestLine } from "@/src/lib/office";
 import { CHALLENGE_COOKIE, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
 import { recognisePortalFile } from "@/src/lib/portal-files";
-import { mayDecide, rightWords, routeOf, switchable, type Permissions, type Right } from "@/src/lib/rights";
+import { may, mayDecide, rightWords, routeOf, switchable, type Permissions, type Right, type Scope as PermissionScope, type Standing } from "@/src/lib/rights";
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
 import { queueRead } from "@/src/jobs/read-document";
@@ -521,7 +521,12 @@ export async function manageTasks(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const intent = form.get("intent");
-  const ids = form.getAll("task").map(String);
+  const ids = [...new Set(form.getAll("task").map(String))];
+  if(!ids.length || ids.length>100 || ids.some(id=>!z.uuid().safeParse(id).success)) redirect("/app/calendar");
+  if(intent==="filed") {
+    const {data:tasks}=await supabase.from("tasks").select("id,client_id").eq("firm_id",membership.firmId).in("id",ids);
+    if(tasks?.length!==ids.length || tasks.some(task=>!membership.may("mark_filed",task.client_id))) redirect("/app/calendar?error=filing");
+  }
   await Promise.all(
     ids.map((id) => {
       const ack = String(form.get(`ack-${id}`) ?? "").trim().slice(0, 40);
@@ -614,7 +619,7 @@ export async function manageEmail(form: FormData) {
     // Mail from a contact who writes for several clients: a person says which client it is
     // for, among the contact's own clients they may see; its attachments are then filed.
     const email = String(form.get("email") ?? "");
-    const { data: client } = await supabase.from("clients").select("id").eq("id", String(form.get("client") ?? "")).maybeSingle();
+    const { data: client } = await supabase.from("clients").select("id").eq("firm_id",membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
     const admin = supabaseAdmin();
     const { data: event } = await admin.from("email_events").select("id, contact_id, label").eq("id", email).eq("firm_id", membership.firmId).is("client_id", null).maybeSingle();
     const { data: link } = await admin.from("contact_clients").select("client_id").eq("contact_id", event?.contact_id ?? "").eq("client_id", client?.id ?? "").maybeSingle();
@@ -718,11 +723,12 @@ async function firmDrive(firmId: string) {
 async function visibleDocument(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   const id = String(form.get("document") ?? "");
-  const { data: visible } = await supabase.from("documents").select("id, client_id").eq("id", id).maybeSingle();
+  if(!membership) redirect("/app");
+  const { data: visible } = await supabase.from("documents").select("id, client_id").eq("firm_id",membership.firmId).eq("id", id).maybeSingle();
   if (!membership || !visible) redirect("/app");
   const back = `/app/clients/${visible.client_id}?tab=files`;
   const [{ data: document }, opened] = await Promise.all([
-    supabaseAdmin().from("documents").select("work_type, document_type, share_policy, period_key, status, name, drive_file_id, received_at, clients(name)").eq("id", id).single(),
+    supabaseAdmin().from("documents").select("work_type, document_type, share_policy, period_key, status, name, drive_file_id, received_at, clients(name)").eq("firm_id",membership.firmId).eq("id", id).single(),
     firmDrive(membership.firmId),
   ]);
   if (!document?.clients || !opened) redirect(`${back}&error=drive`);
@@ -740,7 +746,8 @@ async function placeBefore(firmId: string, id: string, action: string) {
 // in the drive first, to the folder and name its values give, never over another file;
 // rename_document then records the new place and logs the old one for Undo.
 export async function manageDocument(form: FormData) {
-  const { id, userId, membership, back, document, client, drive, order, naming } = await visibleDocument(form);
+  const { id, userId, membership, back, document, client, clientId, drive, order, naming } = await visibleDocument(form);
+  if(!membership.may("rename",clientId)) redirect(`${back}&error=needs`);
   const {data:prepared}=await supabaseAdmin().from("documents").select("prepared").eq("firm_id",membership.firmId).eq("id",id).single();
   if(prepared?.prepared) redirect(back);
   type Values = { work_type: string; document_type: string; period_key: string; status: string; name?: string };
@@ -829,12 +836,13 @@ const MAX_UPLOAD = 25 * 1024 * 1024;
 // the file worker takes larger files. A file the client already has is refused.
 export async function uploadDocument(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
-  const { data: client } = await supabase.from("clients").select("id, name").eq("id", String(form.get("client") ?? "")).maybeSingle();
+  if(!membership) redirect("/app");
+  const { data: client } = await supabase.from("clients").select("id, name").eq("firm_id",membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
   if (!membership || !client) redirect("/app");
   const back = `/app/clients/${client.id}?tab=files`;
   // Uploading is a request unless the owner switched it on for this role (5.17.2).
-  const grant = membership.may("upload") ? null : await grantFor(membership.firmId, userId, "upload", client.id);
-  if (!membership.may("upload") && !grant) redirect(`${back}&error=needs`);
+  const grant = membership.may("upload", client.id) ? null : await grantFor(membership.firmId, userId, "upload", client.id);
+  if (!membership.may("upload", client.id) && !grant) redirect(`${back}&error=needs`);
   const values = documentValues(form);
   const file = form.get("file");
   if (!values || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD) redirect(`${back}&upload=1&error=upload`);
@@ -871,12 +879,12 @@ export async function dropPortalFiles(form: FormData) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const portal = recognisePortalFile(bytes);
     const { data: registration } = portal
-      ? await supabase.from("client_registrations").select("client_id, clients(id, name)").eq("kind", "gstin").eq("number_bidx", await crypto.blindIndex(membership.firmId, "gstin", portal.gstin)).maybeSingle()
+      ? await supabase.from("client_registrations").select("client_id, clients(id, name)").eq("firm_id",membership.firmId).eq("kind", "gstin").eq("number_bidx", await crypto.blindIndex(membership.firmId, "gstin", portal.gstin)).maybeSingle()
       : { data: null };
     let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
-    if (portal && registration?.clients) saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed" }, { name: file.name, bytes }, opened);
-    else if (onClient && membership.may("upload")) {
-      const { data: client } = await supabase.from("clients").select("id, name").eq("id", onClient).maybeSingle();
+    if (portal && registration?.clients && membership.may("portal_files",registration.client_id)) saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed" }, { name: file.name, bytes }, opened);
+    else if (!portal && onClient && membership.may("upload", onClient)) {
+      const { data: client } = await supabase.from("clients").select("id, name").eq("firm_id",membership.firmId).eq("id", onClient).maybeSingle();
       if (client) saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, { name: file.name, bytes }, opened);
     }
     if (saved === "twin") count.again++;
@@ -1011,8 +1019,8 @@ export async function uploadToRequest(form: FormData) {
 export async function sendDocument(form: FormData) {
   const { id, userId, membership, back, document, clientId } = await visibleDocument(form);
   // Sending to a client is a request unless the owner switched it on for this role (5.17.2).
-  const grant = membership.may("send") ? null : await grantFor(membership.firmId, userId, "send", clientId, id);
-  if (!membership.may("send") && !grant) redirect(`${back}&error=needs`);
+  const grant = membership.may("send", clientId) ? null : await grantFor(membership.firmId, userId, "send", clientId, id);
+  if (!membership.may("send", clientId) && !grant) redirect(`${back}&error=needs`);
   const admin = supabaseAdmin();
   const { data: owner } = await admin.from("documents").select("client_id, clients(name, email_enc)").eq("id", id).single();
   const crypto = serverCrypto();
@@ -1170,7 +1178,7 @@ export async function manageNotice(form: FormData) {
   const date = String(form.get("date") ?? "");
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date));
   if (intent === "add") {
-    const { data: client } = await supabase.from("clients").select("id").eq("id", String(form.get("client") ?? "")).maybeSingle();
+    const { data: client } = await supabase.from("clients").select("id").eq("firm_id",membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
     const authority = String(form.get("authority") ?? "other");
     const received = String(form.get("received") ?? "") || todayInIndia();
     if (!client || !(authority in authorities) || !/^\d{4}-\d{2}-\d{2}$/.test(received)) redirect("/app/notices?add=1&error=notice");
@@ -1268,7 +1276,8 @@ export async function askPermission(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const right = String(form.get("right") ?? "") as Right;
-  const { data: client } = await supabase.from("clients").select("id").eq("id", String(form.get("client") ?? "")).maybeSingle();
+  if(!["upload","send","edit_figures","download","remove"].includes(right)) redirect("/app");
+  const { data: client } = await supabase.from("clients").select("id").eq("firm_id",membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
   const documentId = String(form.get("document") ?? "") || undefined;
   if (!client || !(right in rightWords)) redirect("/app");
   const back = `/app/clients/${client.id}?tab=${right==="edit_figures" ? "extraction" : "files"}`;
@@ -1279,7 +1288,7 @@ export async function askPermission(form: FormData) {
   ]);
   // A few open requests at a time, so nobody floods their manager.
   if (!me || (pending?.length ?? 0) >= 10) redirect(`${back}&error=asked`);
-  const { data: managers } = me.team_id ? await admin.from("firm_members").select("user_id").eq("firm_id", membership.firmId).eq("team_id", me.team_id).eq("role", "manager").eq("status", "active").neq("user_id", userId) : { data: [] };
+  const { data: managers } = me.team_id ? await admin.from("firm_members").select("user_id,role,access").eq("firm_id", membership.firmId).eq("team_id", me.team_id).in("role", ["manager","partner"]).eq("status", "active").neq("user_id", userId) : { data: [] };
   const document = documentId ? (await supabase.from("documents").select("id, name").eq("id", documentId).eq("client_id", client.id).maybeSingle()).data : null;
   const id = randomUUID();
   await admin.from("requests").insert({
@@ -1291,7 +1300,7 @@ export async function askPermission(form: FormData) {
     entity_id: id,
     reason_code: right,
     expires_at: new Date(Date.now() + 4 * 3_600_000).toISOString(),
-    details: { by: userId, route: routeOf(right, me, managers?.map((manager) => manager.user_id) ?? []), team_id: me.team_id, ...(document && { document_id: document.id, document_name: document.name }) },
+    details: { by: userId, route: routeOf(right, me, managers?.filter(manager=>may(manager.role,"approve_requests",membership.settings.permissions as Permissions,((manager.access as {always?:Standing[]})?.always ?? []),client.id)).map(manager=>manager.user_id) ?? []), team_id: me.team_id, ...(document && { document_id: document.id, document_name: document.name }) },
   });
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.asked", entity_type: "request", entity_id: id, details: { right } });
   runJobsSoon();
@@ -1303,19 +1312,22 @@ export async function decidePermission(form: FormData) {
   const { userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const admin = supabaseAdmin();
-  const { data: request } = await admin.from("requests").select("id, details, reason_code").eq("id", String(form.get("request") ?? "")).eq("firm_id", membership.firmId).eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).maybeSingle();
+  const { data: request } = await admin.from("requests").select("id, client_id, details, reason_code").eq("id", String(form.get("request") ?? "")).eq("firm_id", membership.firmId).eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).maybeSingle();
   const { data: me } = await admin.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single();
   const asked = request?.details as { by: string; route: "owner" | "manager"; team_id: string | null } | undefined;
   if (!request || !me || !asked) redirect("/app/inbox");
   if (!mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy: isDeputy(membership.settings, userId) }, asked)) await denyApproval(membership.firmId, userId, "permission");
+  if(["manager","partner"].includes(me.role) && !isDeputy(membership.settings,userId) && !membership.may("approve_requests",request.client_id ?? undefined)) await denyApproval(membership.firmId,userId,"permission");
   const intent = String(form.get("intent") ?? "");
   // Always allow is the owner's or a deputy's, for uploading or sending (5.17.2): that
   // person may do it from now on, until it is withdrawn in Settings → Permissions.
   if (intent === "always") {
-    if ((me.role !== "owner" && !isDeputy(membership.settings, userId)) || !(request.reason_code && request.reason_code in switchable)) await denyApproval(membership.firmId, userId, "always");
+    if (me.role !== "owner" || !(request.reason_code && Object.hasOwn(switchable,request.reason_code))) await denyApproval(membership.firmId, userId, "always");
     const { data: person } = await admin.from("firm_members").select("access").eq("firm_id", membership.firmId).eq("user_id", asked.by).single();
-    const access = (person?.access ?? {}) as { always?: string[] };
-    await admin.from("firm_members").update({ access: { ...access, always: [...new Set([...(access.always ?? []), request.reason_code!])] } }).eq("firm_id", membership.firmId).eq("user_id", asked.by);
+    const access = (person?.access ?? {}) as { always?: Standing[] };
+    const scope=await permissionScope(form,"",membership.firmId);
+    const always=(access.always ?? []).filter(grant=>(typeof grant==="string" ? grant : grant.right)!==request.reason_code);
+    await admin.from("firm_members").update({ access: { ...access, always: [...always,{right:request.reason_code!,...scope}] } }).eq("firm_id", membership.firmId).eq("user_id", asked.by);
     await admin.from("requests").update({ status: "used" }).eq("id", request.id);
     await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.always", entity_type: "request", entity_id: request.id, details: { right: request.reason_code, for: asked.by } });
     revalidatePath("/app", "layout");
@@ -1339,13 +1351,41 @@ export async function decidePermission(form: FormData) {
 export async function savePermissions(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
-  const permissions: Permissions =
-    form.get("intent") === "reset"
-      ? {}
-      : Object.fromEntries((["employee", "manager"] as const).map((column) => [column, Object.fromEntries(Object.keys(switchable).map((right) => [right, form.get(`${column}:${right}`) === "on"]))]));
+  const permissions:Permissions={};
+  try {if(form.get("intent")!=="reset") for(const column of ["employee","manager"] as const) permissions[column]={...Object.fromEntries(Object.keys(switchable).map(right=>[right,form.get(`${column}:${right}`)==="on"])),scope:await permissionScope(form,`${column}:`,membership.firmId)};}
+  catch {redirect("/app/settings?error=permission_scope#permissions");}
   const hideInactive = form.get("intent") !== "reset" && form.get("hide_inactive") === "on";
   await supabase.from("firms").update({ settings: { ...membership.settings, permissions, second_form_approval:form.get("intent")!=="reset" && form.get("second_form_approval")==="on", viewer_hide_inactive: hideInactive } }).eq("id", membership.firmId);
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions } });
+  redirect("/app/settings?saved=permissions#permissions");
+}
+
+async function permissionScope(form:FormData,prefix:string,firm:string) {
+  const until=String(form.get(`${prefix}until`) ?? ""),names=[...new Set(String(form.get(`${prefix}clients`) ?? "").split(/\r?\n/).map(name=>name.trim()).filter(Boolean))];
+  if(names.length>100 || names.some(name=>name.length>200) || until && (!z.iso.date().safeParse(until).success || until<todayInIndia())) throw new Error("Choose a future end date and up to 100 client names, one per line.");
+  const scope:PermissionScope={...(until && {until})};
+  if(names.length) {
+    const {data,error}=await supabaseAdmin().from("clients").select("id,name").eq("firm_id",firm).in("name",names);
+    if(error || data?.length!==names.length || names.some(name=>data.filter(client=>client.name===name).length!==1)) throw new Error("Use each client's full name as shown in Clients. Names must match one client each.");
+    scope.clients=data.map(client=>client.id);
+  }
+  return scope;
+}
+
+export async function allowStanding(form:FormData) {
+  const {userId,membership}=await currentWriter();
+  if(membership?.role!=="owner") redirect("/app");
+  const person=z.uuid().parse(form.get("person")),right=String(form.get("right") ?? "");
+  if(!Object.hasOwn(switchable,right) || person===userId) redirect("/app/settings#permissions");
+  const admin=supabaseAdmin(),{data:member}=await admin.from("firm_members").select("access,role").eq("firm_id",membership.firmId).eq("user_id",person).eq("status","active").maybeSingle();
+  if(!member || member.role==="owner" || right==="approve_requests" && member.role!=="manager" && member.role!=="partner") redirect("/app/settings#permissions");
+  const access=(member.access ?? {}) as {always?:Standing[]};let scope:PermissionScope;
+  try {scope=await permissionScope(form,"",membership.firmId);} catch {redirect("/app/settings?error=permission_scope#permissions");}
+  const always=(access.always ?? []).filter(grant=>(typeof grant==="string" ? grant : grant.right)!==right);
+  const {error}=await admin.from("firm_members").update({access:{...access,always:[...always,{right,...scope}]}}).eq("firm_id",membership.firmId).eq("user_id",person);
+  if(error) throw new Error("The permission could not be saved.");
+  await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"permission.always",entity_type:"user",entity_id:person,details:{right,for:person,...scope}});
+  revalidatePath("/app","layout");
   redirect("/app/settings?saved=permissions#permissions");
 }
 
@@ -1443,8 +1483,8 @@ export async function logCapture(documentId: string) {
 export async function sendClientPapers(form: FormData) {
   const {supabase,userId,membership}=await currentWriter();
   if (!membership || !canManageClients(membership.role)) redirect("/app/clients");
-  if (!membership.may("send")) redirect("/app/clients?error=send_permission");
   const ids=[...new Set(form.getAll("client").map(String))];
+  if(ids.some(id=>!membership.may("send",id))) redirect("/app/clients?error=send_permission");
   const type=String(form.get("type") ?? ""), period=String(form.get("period") ?? "");
   if (!ids.length || ids.length>50 || ids.some((id)=>!z.uuid().safeParse(id).success) || !documentTypes.includes(type) || !/^20\d{2}$/.test(period)) redirect("/app/clients?error=send");
   const {data:clients,error}=await supabase.from("clients").select("id").eq("firm_id",membership.firmId).in("id",ids).is("archived_at",null);

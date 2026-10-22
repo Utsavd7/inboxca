@@ -43,13 +43,13 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
     supabase.from("requests").select("id, entity_id, reason_code").eq("kind", "team_reply").eq("status", "pending"),
     supabase.from("documents").select("id, client_id, name, clients(name)").eq("status", "to_check").limit(50),
     supabase.from("shares").select("id, contact_id, documents(name, clients(name))").eq("status", "waiting").limit(50),
-    supabase.from("requests").select("id, reason_code, details, clients(name)").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(100),
+    supabase.from("requests").select("id, client_id, reason_code, details, clients(name)").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(100),
     supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
   ]);
   // Questions this person may answer (5.17.2): never their own; a manager only their team's.
   const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
-  const toAnswer = (asks ?? []).filter((request) => me && mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy }, request.details as { by: string; route: "owner" | "manager"; team_id: string | null }));
+  const toAnswer = (asks ?? []).filter((request) => me && (!["manager","partner"].includes(me.role) || deputy || membership.may("approve_requests",request.client_id ?? undefined)) && mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy }, request.details as { by: string; route: "owner" | "manager"; team_id: string | null }));
   const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
   // The owner's week of approvals (5.17.3, #51): who approved what, newest first.
   const owner = membership.role === "owner";
@@ -198,7 +198,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
                     <button className="b b-ghost b-small" name="intent" value="refuse">
                       Refuse
                     </button>
-                    {(me?.role === "owner" || deputy) && !!request.reason_code && request.reason_code in switchable && (
+                    {me?.role === "owner" && !!request.reason_code && request.reason_code in switchable && (
                       <button className="b b-secondary b-small" name="intent" value="always">
                         Always allow
                       </button>
