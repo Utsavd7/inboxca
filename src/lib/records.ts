@@ -7,7 +7,7 @@ import { findPeriod } from "./documents";
 export const ROUTINE_DEFAULT = ["ITR-V", "Acknowledgement", "GSTR-1", "GSTR-3B", "Challan", "Certificate"];
 export type SharePolicy = "auto" | "approval" | "internal";
 export type RecordsSettings = { routine?: string[]; approve_all?: boolean };
-export const isRoutine = (type: string, settings: RecordsSettings = {}) => !settings.approve_all && (settings.routine ?? ROUTINE_DEFAULT).includes(type);
+export const isRoutine = (type: string, settings: RecordsSettings = {}) => !settings.approve_all && (settings.routine ?? ROUTINE_DEFAULT).includes(type==="Filing record" ? "Acknowledgement" : type);
 
 export const paperPolicy = (paper: { document_type: string; share_policy?: string | null }, settings: RecordsSettings = {}): SharePolicy =>
   paper.share_policy === "internal" ? "internal" : settings.approve_all ? "approval" : paper.share_policy === "approval" ? "approval" : paper.share_policy === "auto" || isRoutine(paper.document_type, settings) ? "auto" : "approval";

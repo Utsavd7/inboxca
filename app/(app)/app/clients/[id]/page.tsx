@@ -1,3 +1,4 @@
+import {PreparedForms} from "../../prepared-forms";
 import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
 import { DatasetReview } from "./dataset-review";
@@ -49,10 +50,10 @@ const reminderNote = (details: { reminded?: string[]; skipped?: { reason: string
   details.reminded?.length ? `Reminded ${dueLabel(details.reminded.at(-1)!)}` : details.skipped ? skipReasons[details.skipped.reason as Skip] : "";
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; page?: string; show?: string; draft?: string; line?: string; check?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, tab: asked, page: askedPage, show, draft, line, check, source, section, header, read, portal, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, source, section, header, read, portal, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
   const page = /^\d{1,6}$/.test(askedPage ?? "") ? Math.max(1,Number(askedPage)) : 1;
   const start = (page-1)*50;
   const { data: client } = await supabase
@@ -85,11 +86,12 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
     supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact"}).eq("firm_id",membership.firmId).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
-    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
+    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at, prepared").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
     supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).eq("status", "pending").gt("expires_at", new Date().toISOString()),
     supabase.from("tasks").select("id,due_on,status,details",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
   ]);
-  const {count:drafts}=await supabase.from("datasets").select("id",{count:"exact",head:true}).eq("firm_id",membership.firmId).eq("client_id",id);
+  const {count:outputs}=await supabase.from("documents").select("id",{count:"exact",head:true}).eq("firm_id",membership.firmId).eq("client_id",id).not("prepared","is",null).neq("status","deleted");
+  const {data:draftForms,count:drafts}=await supabase.from("datasets").select("form_code",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id);
   const activity = asked==="activity" ? await supabase.rpc("client_activity",{target_client:id}) : null;
   if (activity?.error) throw new Error("Client activity could not be read");
   // The lists for the work this client's services need are ticked when asking for files.
@@ -135,7 +137,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     const like = file.period_key && documents.find((other) => other.id !== file.id && other.document_type === file.document_type && other.period_key === file.period_key);
     return like ? `Same type and period as ${like.name}` : "";
   };
-  const editing = documents.find((file) => file.id === edit);
+  const editing = documents.find((file) => file.id === edit && !file.prepared);
   const noticeFile = (files ?? []).find((file) => file.id === (renamed ?? saved ?? removed));
   const sending = documents.find((file) => file.id === send && file.share_policy !== "internal");
   const sharedFile = documents.find((file) => file.id === shared);
@@ -163,6 +165,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     ["due", "Due dates", taskCount ?? 0],
     ["notices", "Notices", noticeCount ?? 0],
     ...(drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name)) ? [["extraction", "Extraction", drafts ?? undefined] as [string,string,number]] : []),
+    ...(draftForms?.some(row=>row.form_code==="GSTR1") || outputs ? [["outputs","Outputs",outputs ?? 0] as [string,string,number]] : []),
     ["activity", "Activity"],
     ["contacts", "Contacts", contacts.length],
     ["team", "Team", client.client_assignments.length],
@@ -577,9 +580,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                                   </button>
                                 </form>
                               )}
-                              <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&edit=${document.id}`} scroll={false} aria-label={`Change ${document.name}`}>
+                              {!document.prepared && <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&edit=${document.id}`} scroll={false} aria-label={`Change ${document.name}`}>
                                 Change
-                              </Link>
+                              </Link>}
                               {document.status === "filed" && document.share_policy !== "internal" &&
                                 (canSend(document.id) ? (
                                   <Link className="b b-ghost b-small" href={`/app/clients/${client.id}?tab=files&send=${document.id}`} scroll={false} aria-label={`Send ${document.name}`}>
@@ -722,6 +725,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             </section>
           )}
           {tab === "extraction" && <><PortalInput clientId={id} message={portal}/><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
+          {tab === "outputs" && <PreparedForms client={id} message={formMessage}/>}
           {tab === "contacts" && (
             <section className="panel" aria-labelledby="contacts">
               <h2 id="contacts">Contact people</h2>

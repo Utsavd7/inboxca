@@ -245,6 +245,7 @@ export default async function Settings({
                 <input type="checkbox" name="hide_inactive" defaultChecked={settings.viewer_hide_inactive === true} />
                 Hide documents when InboxCA is not the active window (staff often read a document while typing in the portal beside it, so this is off unless you need it)
               </label>
+              <label className="check"><input type="checkbox" name="second_form_approval" defaultChecked={settings.second_form_approval===true}/>Second approval before filing. Another person must approve after the figures are checked.</label>
               <div className="form-row">
                 <button className="b b-secondary" name="intent" value="save">
                   Save permissions

@@ -36,7 +36,7 @@ export function tiles(width: number, height: number, textWidth: number, size: nu
 }
 
 // Parse once, measure pages without rendering, then reuse one canvas for this opening.
-export async function openView(bytes: Buffer, name: string, label: string, limit = viewLimits.pages, signal = new AbortController().signal) {
+export async function openView(bytes: Buffer, name: string, label: string, limit = viewLimits.pages, signal = new AbortController().signal, sheet?:number) {
   signal.throwIfAborted();
   if (bytes.length > viewLimits.bytes) throw new Error("File too large");
   const fit = (width: number, height: number) => {
@@ -82,8 +82,8 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
         return canvas;
       };
     } catch (error) { await dispose(); throw error; }
-  } else if (/\.json$/i.test(name)) {
-    const source=jsonSource(JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,""))),lines=source.lines;
+  } else if (/\.(json|txt)$/i.test(name)) {
+    const source=/\.json$/i.test(name) ? jsonSource(JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,""))) : {lines:bytes.subarray(0,100_000).toString("utf8").split(/\r?\n/),limited:bytes.length>100_000},lines=source.lines;
     const count=Math.max(1,Math.min(limit,Math.ceil(lines.length/40)));
     header.limited=source.limited || lines.length>count*40;
     for(let number=1;number<=count;number++) header.pages.push({width:1200,height:1320});
@@ -94,9 +94,12 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
       return canvas;
     };
   } else if (/\.(xlsx?|csv)$/i.test(name)) {
-    const all = readSheet(bytes, name, { rows: viewLimits.rows + 1, columns: viewLimits.columns + 1, keepEmpty:true });
-    const rows = all.slice(0, Math.min(viewLimits.rows, limit * viewLimits.rowsPerPage));
-    header.limited = all.length > rows.length || rows.some((row) => row.length > viewLimits.columns);
+    const cap=viewLimits.rows+(sheet ? 4 : 0);
+    const all = readSheet(bytes, name, { rows: cap + 1, columns: viewLimits.columns + 1, keepEmpty:true, sheet });
+    const capped=all.length>cap;
+    while(all.length && !all.at(-1)!.some(cell=>cell.trim())) all.pop();
+    const rows = all.slice(0, Math.min(cap, limit * viewLimits.rowsPerPage));
+    header.limited = capped || all.length > rows.length || rows.some((row) => row.length > viewLimits.columns);
     const columns = Math.max(1, ...rows.map((row) => Math.min(viewLimits.columns, row.length)));
     const count = Math.max(1, Math.ceil(rows.length / viewLimits.rowsPerPage));
     for (let number = 1; number <= count; number++) header.pages.push({ width: Math.max(800, columns * 180), height: 110 + Math.max(1, rows.slice((number - 1) * viewLimits.rowsPerPage, number * viewLimits.rowsPerPage).length) * 34 });
@@ -109,7 +112,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
       context.fillRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = "#17202f";
       context.font = "20px sans-serif";
-      context.fillText(`Sheet 1, page ${number} of ${count}`, 24, 34);
+      context.fillText(`Sheet ${sheet ?? 1}, page ${number} of ${count}`, 24, 34);
       const cellWidth = (canvas.width - 84) / columns;
       for(let column=0;column<columns;column++) context.fillText(String.fromCharCode(65+column),60+column*cellWidth,54);
       rows.slice((number - 1) * viewLimits.rowsPerPage, number * viewLimits.rowsPerPage).forEach((row, index) => {

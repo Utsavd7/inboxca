@@ -9,9 +9,9 @@ const shown: Record<string, string> = { pdf: "application/pdf", png: "image/png"
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   const { id } = await params;
-  const { data: visible } = await supabase.from("documents").select("id, name").eq("id", id).neq("status", "deleted").maybeSingle();
+  const { data: visible } = await supabase.from("documents").select("id, name, prepared").eq("firm_id",membership?.firmId ?? "00000000-0000-0000-0000-000000000000").eq("id", id).neq("status", "deleted").maybeSingle();
   const extension = visible?.name.split(".").pop()?.toLowerCase() ?? "";
-  if (!membership || !visible || membership.role !== "owner") return new Response("Not found", { status: 404 });
+  if (!membership || !visible || visible.prepared || membership.role !== "owner") return new Response("Not found", { status: 404 });
   const admin = supabaseAdmin();
   const [{ data: document }, { data: account }] = await Promise.all([
     admin.from("documents").select("drive_file_id, name").eq("id", id).single(),

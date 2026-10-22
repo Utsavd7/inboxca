@@ -1,7 +1,8 @@
 // Shared by the app, browser and file worker. No native or Node imports here.
+import type {Template} from "./templates.ts";
 export const viewLimits = { bytes: 25_000_000, pages: 30, rows: 1000, columns: 26, rowsPerPage: 40, pixels: 40_000_000 };
 export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean };
-export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox"; token: string; purpose?: "sheet" | "portal" };
+export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox"; token: string; purpose?: "sheet" | "portal" | "edited"; sheet?: number; form?:{template:Template;period:string;gstin:string} };
 const text = new TextEncoder();
 
 export function viewerLabel(person: string, firm: string, at = new Date()) {
@@ -20,10 +21,11 @@ export async function validSignature(body:string,signature:string,secret:string)
   return crypto.subtle.verify("HMAC",await key(secret),mac,text.encode(body));
 }
 
-export async function verifyView(body: string, signature: string, secret: string, file: string, now = Date.now() / 1000, purpose?: "sheet" | "portal"): Promise<ViewRequest> {
+export async function verifyView(body: string, signature: string, secret: string, file: string, now = Date.now() / 1000, purpose?: "sheet" | "portal" | "edited"): Promise<ViewRequest> {
   if (!secret || body.length > 16_384 || !/^[a-f0-9]{64}$/.test(signature)) throw new Error("Not allowed");
   if (!await validSignature(body,signature,secret)) throw new Error("Not allowed");
   const value = JSON.parse(body) as ViewRequest;
+  if (value && value.sheet!==undefined && (!Number.isInteger(value.sheet) || value.sheet<1 || value.sheet>100 || value.purpose!==undefined || !/\.xlsx$/i.test(value.name))) throw new Error("Not allowed");
   if (!value || value.purpose !== purpose || typeof value.firm !== "string" || !value.firm || value.file !== file || !file || file.length > 4096 ||
     typeof value.name !== "string" || value.name.length > 2000 || typeof value.label !== "string" || !value.label || value.label.length > 1000 ||
     !Number.isInteger(value.limit) || value.limit < 1 || value.limit > viewLimits.pages || !Number.isInteger(value.expires) || value.expires <= now || value.expires > now + 75 ||

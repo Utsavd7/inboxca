@@ -5,6 +5,9 @@ import { readSheet } from "../src/lib/sheet.ts";
 import { createHash } from "node:crypto";
 import { readPortal } from "./portal.ts";
 import {verifyForm} from "../src/lib/form-worker.ts";
+import {editedForm} from "./edited-form.ts";
+import {templateSchema} from "../src/lib/templates.ts";
+import {z} from "zod";
 import {prepare} from "./prepare.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
@@ -51,14 +54,20 @@ export async function handle(request: Request): Promise<Response> {
   if (process.env.FILE_WORKER_TEST === "1" && request.method === "GET" && url.pathname === "/_reads" && secret && request.headers.get("authorization") === `Bearer ${secret}`)
     return Response.json({ reads: reads.get(url.searchParams.get("file") ?? "") ?? 0, peakRssKiB: process.resourceUsage().maxRSS });
   const sheet=url.pathname.startsWith("/sheet/");
+  const edited=url.pathname.startsWith("/edited/");
   const portal=url.pathname.startsWith("/portal/");
-  if (request.method !== "POST" || !sheet && !portal && !url.pathname.startsWith("/view/")) return new Response("Not found", { status: 404 });
+  if (request.method !== "POST" || !sheet && !portal && !edited && !url.pathname.startsWith("/view/")) return new Response("Not found", { status: 404 });
   let view: ViewRequest;
-  try { view = await verifyView(await request.text(), request.headers.get("authorization") ?? "", secret, decodeURIComponent(url.pathname.slice(portal ? 8 : sheet ? 7 : 6)), undefined, portal ? "portal" : sheet ? "sheet" : undefined); }
+  try { view = await verifyView(await request.text(), request.headers.get("authorization") ?? "", secret, decodeURIComponent(url.pathname.slice(portal || edited ? 8 : sheet ? 7 : 6)), undefined, portal ? "portal" : sheet ? "sheet" : edited ? "edited" : undefined); }
   catch { return new Response("Not allowed", { status: 403 }); }
   try {
     request.signal.throwIfAborted();
     const data = await original(view, request.signal);
+    if(edited) {
+      if(!/\.xlsx$/i.test(view.name)) throw new Error("Choose the official workbook");
+      const context=z.object({template:templateSchema,period:z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/),gstin:z.string().length(15)}).parse(view.form);
+      return Response.json({...editedForm(Buffer.from(data.buffer,data.byteOffset,data.byteLength),context),sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
+    }
     if(portal) {
       if(!/\.json$/i.test(view.name)) return Response.json({read:null});
       return Response.json({read:readPortal(data),sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
@@ -69,7 +78,7 @@ export async function handle(request: Request): Promise<Response> {
       if(rows.length>viewLimits.rows || rows.some((row)=>row.length>viewLimits.columns || row.some((cell)=>cell.length>2000)) || JSON.stringify(rows).length>3_000_000) throw new Error("Split this register into smaller files");
       return Response.json({rows,sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
     }
-    const opened = await openView(Buffer.from(data.buffer, data.byteOffset, data.byteLength), view.name, view.label, view.limit, request.signal);
+    const opened = await openView(Buffer.from(data.buffer, data.byteOffset, data.byteLength), view.name, view.label, view.limit, request.signal, view.sheet);
     let disposed = false;
     const dispose = async () => { if (!disposed) { disposed = true; await opened.dispose(); } };
     async function* frames() {

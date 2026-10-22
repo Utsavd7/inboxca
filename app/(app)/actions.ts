@@ -741,6 +741,8 @@ async function placeBefore(firmId: string, id: string, action: string) {
 // rename_document then records the new place and logs the old one for Undo.
 export async function manageDocument(form: FormData) {
   const { id, userId, membership, back, document, client, drive, order, naming } = await visibleDocument(form);
+  const {data:prepared}=await supabaseAdmin().from("documents").select("prepared").eq("firm_id",membership.firmId).eq("id",id).single();
+  if(prepared?.prepared) redirect(back);
   type Values = { work_type: string; document_type: string; period_key: string; status: string; name?: string };
   let next: Values;
   if (form.get("intent") === "undo") {
@@ -1342,7 +1344,7 @@ export async function savePermissions(form: FormData) {
       ? {}
       : Object.fromEntries((["employee", "manager"] as const).map((column) => [column, Object.fromEntries(Object.keys(switchable).map((right) => [right, form.get(`${column}:${right}`) === "on"]))]));
   const hideInactive = form.get("intent") !== "reset" && form.get("hide_inactive") === "on";
-  await supabase.from("firms").update({ settings: { ...membership.settings, permissions, viewer_hide_inactive: hideInactive } }).eq("id", membership.firmId);
+  await supabase.from("firms").update({ settings: { ...membership.settings, permissions, second_form_approval:form.get("intent")!=="reset" && form.get("second_form_approval")==="on", viewer_hide_inactive: hideInactive } }).eq("id", membership.firmId);
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions } });
   redirect("/app/settings?saved=permissions#permissions");
 }

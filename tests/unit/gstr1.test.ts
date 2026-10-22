@@ -1,6 +1,6 @@
 import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
-import {expect,it} from "vitest";
+import {expect,it,vi} from "vitest";
 import catalog from "../../reference/official/templates.json";
 import {templateSchema} from "@/src/lib/templates";
 import {gstr1Workbook} from "../../worker/gstr1";
@@ -51,4 +51,25 @@ it("checks B2CS and notes against official keys, required fields and code lists"
   const badCheck=b2b(),taxNumber=badCheck.get("b2b.r2.c0")!.value;
   badCheck.get("b2b.r2.c0")!.value=taxNumber.slice(0,-1)+(taxNumber.endsWith("0") ? "1" : "0");
   expect(()=>gstr1Workbook(template,"2026-09",inventedGstin(),[badCheck])).toThrow("last character");
+},30_000);
+
+it("reads an edited official workbook into fresh source cells and rejects changed headings and unsupported work",async()=>{
+  const {editedForm}=await import("../../worker/edited-form"),{writeWorkbook}=await import("../../worker/workbook");
+  const template=templates[1],context={template,period:"2026-09",gstin:inventedGstin()},bytes=gstr1Workbook(template,context.period,context.gstin,[b2b()]);
+  const read=editedForm(bytes,context);
+  expect(read.lines.find(line=>line.field==="b2b.r5.c11")).toMatchObject({value:"100",cell:"L5",sheet:2,page:1,kind:"number"});
+  expect(read.lines.find(line=>line.field==="b2b.r5.c3")?.value).toBe("2026-09-10");
+  for(const [path,ref,value] of [["xl/worksheets/sheet2.xml","L4","Changed heading"],["xl/worksheets/sheet3.xml","A5","Unsupported export"],["xl/worksheets/sheet2.xml","L5","wrong amount"]]) {
+    const changed=writeWorkbook(bytes,new Map([[path,new Map([[ref,{value,number:false}]])]]));
+    expect(()=>editedForm(changed,context)).toThrow();
+  }
+},30_000);
+
+it("refuses a formula in a data cell even when its cached value is blank",async()=>{
+  const {editedForm}=await import("../../worker/edited-form"),sheets=await import("@/src/lib/sheet");
+  const template=templates[1],context={template,period:"2026-09",gstin:inventedGstin()},bytes=gstr1Workbook(template,context.period,context.gstin,[b2b()]);
+  const original=sheets.xlsxEntries,parts=original(bytes),path="xl/worksheets/sheet2.xml",xml=parts.get(path)!().toString();
+  parts.set(path,()=>Buffer.from(xml.replace(/<c\b[^>]*r="L5"[^>]*>[\s\S]*?<\/c>/,'<c r="L5"><f>100+1</f><v></v></c>')));
+  const spy=vi.spyOn(sheets,"xlsxEntries").mockImplementation(input=>input===bytes ? parts : original(input));
+  try {expect(()=>editedForm(bytes,context)).toThrow("Use values");} finally {spy.mockRestore();}
 },30_000);

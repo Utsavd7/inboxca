@@ -261,11 +261,11 @@ html:has(.ui) { scrollbar-gutter: stable; background: #fff; }
 @media (max-width: 1080px) { .record { grid-template-columns: 1fr; gap: var(--s5); } .record-side { position: static; order: -1; padding-left: 0; border-left: 0; } }
 
 /* Tabs and filters */
-.tabs { display: flex; gap: var(--s4); border-bottom: 1px solid var(--line); }
-.tabs a { position: relative; padding: var(--s2) 0 var(--s3); color: var(--ink-3); text-decoration: none; transition: color 120ms; }
+.tabs { display: flex; gap: var(--s4); overflow-x: auto; border-bottom: 1px solid var(--line); }
+.tabs a { position: relative; flex-shrink: 0; white-space: nowrap; padding: var(--s2) 0 var(--s3); color: var(--ink-3); text-decoration: none; transition: color 120ms; }
 .tabs a:hover { color: var(--ink); }
 .tabs a[aria-current="page"] { color: var(--ink); font-weight: 600; }
-.tabs a[aria-current="page"]::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--ink); }
+.tabs a[aria-current="page"]::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--ink); }
 .tabs small { margin-left: 6px; color: var(--ink-3); font-size: 12px; font-weight: 500; }
 .pills { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: var(--r2); background: var(--press); }
 .pills a { display: inline-flex; align-items: center; height: 28px; padding: 0 var(--s3); border-radius: var(--r1); color: var(--ink-2); font-size: 13px; text-decoration: none; transition: background 120ms, color 120ms, box-shadow 120ms; }

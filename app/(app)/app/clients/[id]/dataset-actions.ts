@@ -1,4 +1,6 @@
 "use server";
+import {supabaseAdmin} from "@/src/lib/supabase";
+import {runJobsSoon} from "@/src/jobs/run-soon";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -43,6 +45,17 @@ export async function reviewFigure(form:FormData) {
   }
   const saved=await saveDraft(row,data,userId,intent==="edit" ? "dataset.changed" : "dataset.checked",audit,permission);
   if(!saved) redirect(`${back}&check=stale`);
+  if(data.lines.every(line=>line.state==="confirmed")) {
+    const admin=supabaseAdmin();
+    const {data:forms}=await admin.from("documents").select("id,prepared").eq("firm_id",membership.firmId).eq("client_id",client).eq("prepared->>status","draft").contains("prepared",{sources:[{id}]});
+    for(const form of forms ?? []) {
+      const sources=(form.prepared as {sources:{id:string;revision:number}[]}).sources;
+      if(sources.find(source=>source.id===id)?.revision===revision+1) continue;
+      const {error}=await admin.from("jobs").upsert({firm_id:membership.firmId,kind:"regenerate_form",entity_type:"document",entity_id:form.id,idempotency_key:`regenerate:${form.id}:${id}:${revision+1}`},{onConflict:"idempotency_key",ignoreDuplicates:true});
+      if(error) throw new Error("The corrected form could not be queued.");
+    }
+    if(forms?.length) runJobsSoon();
+  }
   revalidatePath("/app","layout");
   redirect(`${back}&check=saved`);
 }
