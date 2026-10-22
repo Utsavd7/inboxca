@@ -221,13 +221,13 @@ isOneToOne: false
                   ]
                 },"documents": {
                   Row: {
-                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"received_at": string,"search_tokens": (string)[],"sha256": string,"share_policy": string | null,"size": number,"status": string,"work_type": string
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id": string | null,"firm_id": string,"id": string,"name": string,"original_name_enc": string | null,"period_key": string,"prepared": Json | null,"received_at": string,"search_tokens": (string)[],"sha256": string,"share_policy": string | null,"size": number,"status": string,"work_type": string
                   }
                   Insert: {
-                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"name": string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"search_tokens"?: (string)[],"sha256": string,"share_policy"?: string | null,"size": number,"status"?: string,"work_type": string
+                    "client_id": string,"document_type": string,"drive_file_id": string,"email_event_id"?: string | null,"firm_id": string,"id"?: string,"name": string,"original_name_enc"?: string | null,"period_key"?: string,"prepared"?: Json | null,"received_at"?: string,"search_tokens"?: (string)[],"sha256": string,"share_policy"?: string | null,"size": number,"status"?: string,"work_type": string
                   }
                   Update: {
-                    "client_id"?: string,"document_type"?: string,"drive_file_id"?: string,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"name"?: string,"original_name_enc"?: string | null,"period_key"?: string,"received_at"?: string,"search_tokens"?: (string)[],"sha256"?: string,"share_policy"?: string | null,"size"?: number,"status"?: string,"work_type"?: string
+                    "client_id"?: string,"document_type"?: string,"drive_file_id"?: string,"email_event_id"?: string | null,"firm_id"?: string,"id"?: string,"name"?: string,"original_name_enc"?: string | null,"period_key"?: string,"prepared"?: Json | null,"received_at"?: string,"search_tokens"?: (string)[],"sha256"?: string,"share_policy"?: string | null,"size"?: number,"status"?: string,"work_type"?: string
                   }
                   Relationships: [
                     {
@@ -516,6 +516,9 @@ isOneToOne: false
 "add_clients":
 { Args: { "clients": Json,"target_firm": string }; Returns: number
                            },
+"add_edited_form":
+{ Args: { "draft": string,"person": string,"prefix": string,"registration": string,"target": string,"template": string }; Returns: Json
+                           },
 "append_automatic_dataset":
 { Args: { "body": Json,"client": string,"draft": string,"expected": number,"firm": string,"form": string,"period": string }; Returns: boolean
                            },
@@ -580,8 +583,17 @@ isOneToOne: false
 "create_automatic_dataset":
 { Args: { "body": Json,"client": string,"draft": string,"firm": string,"form": string,"period": string }; Returns: boolean
                            },
+"decide_form":
+{ Args: { "decision": string,"person": string,"reason": Json,"target": string }; Returns: boolean
+                           },
 "end_other_sessions":
 { Args: Record<PropertyKey, never>; Returns: number
+                           },
+"file_prepared_form":
+{ Args: { "acknowledgement": string,"paper"?: string,"person": string,"target": string }; Returns: boolean
+                           },
+"finish_form":
+{ Args: { "bytes": number,"checksum": string,"file": string,"firm": string,"permission"?: string,"person": string,"target": string }; Returns: boolean
                            },
 "finish_job":
 { Args: { "error_code"?: string,"job_id": number,"outcome": string,"retry_at"?: string }; Returns: boolean
@@ -604,6 +616,9 @@ isOneToOne: false
 { Args: { "target_firm": string }; Returns: {
               "returns_this_year": number,"workspace_bytes": number
             }[]
+                           },
+"form_ready":
+{ Args: { "target": string }; Returns: boolean
                            },
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
@@ -689,6 +704,9 @@ isOneToOne: false
 "rename_document":
 { Args: { "actor": string,"new_file": string,"new_name": string,"new_period": string,"new_status": string,"new_type": string,"new_work": string,"target": string }; Returns: undefined
                            },
+"reserve_form":
+{ Args: { "choice"?: Json,"client": string,"extension": string,"firm": string,"form": string,"period": string,"person": string,"prefix": string,"registration": string,"sources": Json,"template": string }; Returns: Json
+                           },
 "reserve_mail_send":
 { Args: { "account_id": string }; Returns: Json
                            },
@@ -709,6 +727,9 @@ isOneToOne: false
                            },
 "session_live":
 { Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"take_form_download":
+{ Args: { "person": string,"ticket": string,"token_hash": string }; Returns: string
                            },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string

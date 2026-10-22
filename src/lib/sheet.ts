@@ -3,7 +3,7 @@ import { inflateRawSync } from "node:zlib";
 
 // The rows of a CSV file, or of an Excel file's first sheet, as text, for imports. Excel
 // files are zip files of XML, so Node's own zlib reads them; no spreadsheet package.
-export function readSheet(data: Buffer, fileName: string, limit?: { rows: number; columns: number; keepEmpty?:boolean }): string[][] {
+export function readSheet(data: Buffer, fileName: string, limit?: { rows: number; columns: number; keepEmpty?:boolean; sheet?:number }): string[][] {
   const rows = /\.xlsx$/i.test(fileName) ? readXlsx(data, limit) : /\.xls$/i.test(fileName) ? readXls(data) : readCsv(data.toString("utf8").replace(/^﻿/, ""));
   return limit?.keepEmpty ? rows : rows.filter((row) => row.some((cell) => cell.trim()));
 }
@@ -70,10 +70,12 @@ const unescape = (text: string) =>
   );
 const texts = (xml: string) => [...xml.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(([, text]) => unescape(text)).join("");
 
-function readXlsx(data: Buffer, limit?: { rows: number; columns: number; keepEmpty?:boolean }) {
+function readXlsx(data: Buffer, limit?: { rows: number; columns: number; keepEmpty?:boolean; sheet?:number }) {
   const files = xlsxEntries(data);
   const shared = [...(files.get("xl/sharedStrings.xml")?.().toString() ?? "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map(([, item]) => texts(item));
-  const sheet = files.get("xl/worksheets/sheet1.xml") ?? [...files].find(([name]) => name.startsWith("xl/worksheets/"))?.[1];
+  const number=limit?.sheet ?? 1;
+  if(!Number.isInteger(number) || number<1 || number>100) throw new Error("No sheet in the file");
+  const sheet = files.get(`xl/worksheets/sheet${number}.xml`) ?? (!limit?.sheet ? [...files].find(([path])=>/^xl\/worksheets\/sheet\d+\.xml$/.test(path))?.[1] : undefined);
   if (!sheet) throw new Error("No sheet in the file");
   const result:string[][]=[];
   for(const [,attributes,cells] of sheet().toString().matchAll(/<row([^>]*)>([\s\S]*?)<\/row>/g)) {

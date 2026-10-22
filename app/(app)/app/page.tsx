@@ -1,3 +1,4 @@
+import {PreparedForms} from "./prepared-forms";
 import { OfficePanel } from "./office-panel";
 import { CalendarDays, Check, Inbox, Mail, Plus } from "lucide-react";
 import Link from "next/link";
@@ -307,6 +308,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </p>
       )}
       <PortalDrop />
+      <PreparedForms />
       <DroppedNotice value={dropped} />
       {error === "view_only" && (
         <p className="alert" role="alert">

@@ -17,6 +17,15 @@ it("accepts only a valid signed request for this document, within a minute", asy
   await expect(verifyView(sheet,await signView(sheet,secret),secret,view.file,1000)).rejects.toThrow("Not allowed");
   expect((await verifyView(sheet,await signView(sheet,secret),secret,view.file,1000,"sheet")).purpose).toBe("sheet");
   await expect(verifyView(body,mac,secret,view.file,1000,"sheet")).rejects.toThrow("Not allowed");
+  for(const value of [0,101,1.5]) {
+    const bad=JSON.stringify({...view,name:"invented.xlsx",sheet:value});
+    await expect(verifyView(bad,await signView(bad,secret),secret,view.file,1000)).rejects.toThrow("Not allowed");
+  }
+  const selected=JSON.stringify({...view,name:"invented.xlsx",sheet:2});
+  expect((await verifyView(selected,await signView(selected,secret),secret,view.file,1000)).sheet).toBe(2);
+  const edited=JSON.stringify({...view,purpose:"edited"});
+  await expect(verifyView(edited,await signView(edited,secret),secret,view.file,1000)).rejects.toThrow("Not allowed");
+  expect((await verifyView(edited,await signView(edited,secret),secret,view.file,1000,"edited")).purpose).toBe("edited");
   const portal=JSON.stringify({...view,purpose:"portal"});
   expect((await verifyView(portal,await signView(portal,secret),secret,view.file,1000,"portal")).purpose).toBe("portal");
   await expect(verifyView(portal,await signView(portal,secret),secret,view.file,1000,"sheet")).rejects.toThrow("Not allowed");
