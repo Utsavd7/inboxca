@@ -1,0 +1,69 @@
+/* Calendar, and the Notices page that shares its list: view pills, the strip of days, then
+   a list card whose table scrolls on its own. Sizes, weights and colours from the design rules. */
+.cal.fill, .notices.fill { gap: 16px; }
+.cal .page-head, .notices .page-head { align-items: center; }
+
+/* View pills: the chosen one dark, each with its true count. */
+:is(.cal, .notices) .pills { gap: 8px; padding: 0; background: none; }
+:is(.cal, .notices) .pills a { height: 32px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 6px; color: var(--ink-2); font-weight: 600; transition: background var(--fast) var(--out), color var(--fast) var(--out); }
+:is(.cal, .notices) .pills a:hover { background: var(--hover); color: var(--ink); }
+:is(.cal, .notices) .pills a[aria-current="page"] { border-color: var(--ink); background: var(--ink); color: var(--white); box-shadow: none; }
+:is(.cal, .notices) .pills small { margin-left: 8px; color: inherit; font: 500 12px var(--font-plex), ui-monospace, monospace; }
+
+/* The days ahead, each with a bar for how many returns are still to file. */
+.cal-strip { display: grid; flex: none; grid-auto-columns: minmax(28px, 1fr); grid-auto-flow: column; padding: 8px; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.cal-day { display: grid; justify-items: center; padding: 4px 0; border-radius: 8px; color: var(--ink-2); line-height: 1.3; text-decoration: none; transition: background var(--fast) var(--out); }
+.cal-day:hover { background: var(--hover); }
+.cal-day span { color: var(--ink-3); font-size: 12px; }
+.cal-day strong { color: var(--ink); font-size: 14px; font-weight: 600; }
+.cal-day i { display: flex; align-items: flex-end; width: 8px; height: 24px; margin-top: 4px; }
+.cal-day i::before { content: ""; width: 100%; height: max(2px, calc(var(--n) * 24px)); border-radius: 999px; background: var(--line-3); }
+.cal-day small { min-height: 16px; font: 500 12px var(--font-plex), ui-monospace, monospace; }
+.cal-day.is-today { box-shadow: inset 0 0 0 1px var(--line-2); }
+.cal-day[aria-current] { background: var(--accent-soft); }
+.cal-day[aria-current] :is(strong, small) { color: var(--accent); }
+.cal-day[aria-current] i::before { background: var(--accent); }
+
+/* The list card: tools on top, the table scrolling on its own, pages at the foot. */
+.cal-list { flex-direction: column; }
+.cal-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); }
+.cal-tools form { display: flex; }
+.cal-list > .empty { flex: 1; align-content: center; margin: 16px; gap: 8px; padding: 48px 16px; }
+.cal-list > .empty .b { margin-top: 8px; }
+:is(.cal, .notices) .cal-table { flex: 1; overflow: auto; }
+.cal-table .t { min-width: 760px; }
+.cal-table .t th { position: sticky; top: 0; z-index: 1; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--side); color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.cal-table .t td { height: 40px; padding: 0 12px; font-size: 14px; white-space: nowrap; }
+.cal-table .t td .sub { font-size: 12px; }
+.cal-table .t :is(th, td):first-child { padding-left: 16px; }
+.cal-table .t tbody tr { transition: background var(--fast) var(--out); }
+.cal-table .t tbody tr:hover { background: var(--hover); }
+.cal-table .t tbody tr.on { background: var(--accent-soft); }
+.cal-act { text-align: right; }
+.cal-act form { display: inline-flex; }
+.cal-status { display: inline-flex; align-items: center; gap: 8px; }
+.cal-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 8px 8px 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+.cal-pages span { margin-right: auto; }
+
+/* Ticking returns raises the bar to mark them together; it counts what is ticked. */
+.cal { counter-reset: chosen; }
+.cal input[name="task"]:checked { counter-increment: chosen; }
+.cal-bulk { position: fixed; bottom: 24px; left: 50%; z-index: var(--z-toast); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: max-content; max-width: calc(100vw - 32px); padding: 8px 8px 8px 16px; border-radius: 12px; background: var(--ink); color: var(--white); font-size: 13px; box-shadow: var(--shadow-float); visibility: hidden; opacity: 0; transform: translate(-50%, 8px); transition: opacity var(--base) var(--out), transform var(--base) var(--out), visibility var(--base); }
+.cal:has(input[name="task"]:checked) .cal-bulk { visibility: visible; opacity: 1; transform: translate(-50%, 0); }
+.cal-chosen { margin-right: 8px; }
+.cal-chosen::before { content: counter(chosen) " "; }
+.cal-bulk .b-secondary { border-color: transparent; background: rgba(255, 255, 255, 0.1); color: var(--white); }
+.cal-bulk .b-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
+.cal-bulk .b-primary { background: var(--white); color: var(--ink); }
+.cal-bulk .b-primary:hover:not(:disabled) { background: var(--press); }
+
+/* Marking filed, in the side panel: each chosen return with its acknowledgement number. */
+.cal-marking { display: grid; margin: 16px 0; border: 1px solid var(--line); border-radius: 12px; }
+.cal-marking li { display: grid; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.cal-marking li:first-child { border-top: 0; }
+.cal-marking strong { display: block; font-weight: 600; }
+.cal-mark-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 720px) {
+  :is(.cal, .notices) .cal-table { overflow-x: auto; }
+}

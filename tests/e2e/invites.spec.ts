@@ -1022,15 +1022,20 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.goto("/app");
   await expect(owner.getByRole("alert").filter({ hasText: `${mailClient}: a notice's review deadline` })).toBeVisible();
   await owner.goto("/app/notices");
-  const notice = owner.locator("section[aria-labelledby=open-notices] tbody tr").filter({ hasText: mailClient });
+  const notice = owner.locator("section[aria-label=Notices] tbody tr").filter({ hasText: mailClient });
   await expect(notice).toContainText("Notice u/s 148");
   await expect(notice).toContainText("ITBA/AST/F/148/2026-27/1050012345");
   await expect(notice).toContainText("Review by");
-  await expect(notice.getByLabel(`Action date for ${mailClient}`)).toHaveValue("2026-12-24");
-  await notice.getByRole("button", { name: "Confirm date" }).click();
+  await notice.getByRole("link", { name: `Update the notice for ${mailClient}` }).click();
+  const noticePanel = owner.getByRole("dialog", { name: "Notice u/s 148" });
+  await expect(noticePanel.getByLabel("Action date, as the notice states it")).toHaveValue("2026-12-24");
+  await noticePanel.getByRole("button", { name: "Confirm date" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Action date confirmed." })).toBeVisible();
   await expect(notice).toContainText("24 Dec 2026");
-  await notice.getByLabel(`Status of the notice for ${mailClient}`).selectOption("replied");
-  await expect(owner.locator("section[aria-labelledby=done-notices]")).toContainText(mailClient);
+  await notice.getByRole("link", { name: `Update the notice for ${mailClient}` }).click();
+  await noticePanel.getByRole("button", { name: "Mark replied" }).click();
+  await owner.getByRole("link", { name: /^Replied or closed/ }).click();
+  await expect(owner.locator("section[aria-label=Notices]")).toContainText(mailClient);
 
   // Reminders: a confirmed return due in 3 days gets one email; a second run that day sends nothing more.
   const code = `TR${tag.toUpperCase()}`;

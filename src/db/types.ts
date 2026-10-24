@@ -575,6 +575,11 @@ isOneToOne: false
 "assigned_clients":
 { Args: Record<PropertyKey, never>; Returns: string[]
                            },
+"calendar_days":
+{ Args: { "first_day": string,"last_day": string,"only_code"?: string,"target_firm": string }; Returns: {
+              "due_on": string,"returns": number
+            }[]
+                           },
 "calendar_top_up":
 { Args: { "target_firm": string,"today"?: string }; Returns: undefined
                            },
