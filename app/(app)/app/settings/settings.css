@@ -1,0 +1,102 @@
+/* Settings: a short list of groups on the left, the chosen group's cards on the right.
+   Each card a title, one line, its controls and one Save. Sizes, weights and colours from
+   the design rules. */
+.set { display: grid; grid-template-columns: 200px minmax(0, 760px); gap: 32px; align-items: start; margin-top: 24px; }
+.set-nav { position: sticky; top: 112px; display: grid; gap: 4px; }
+.set-nav a { display: flex; align-items: center; height: 32px; padding: 0 8px; border-radius: 8px; color: var(--ink-2); font-size: 14px; font-weight: 500; text-decoration: none; transition: background var(--fast) var(--out), color var(--fast) var(--out); }
+.set-nav a:hover { background: var(--hover); color: var(--ink); }
+.set-nav a[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.set-body { display: grid; gap: 16px; min-width: 0; }
+.set-page .set-body > .panel { min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; scroll-margin-top: 112px; }
+.set-page .panel h2 { font-size: 16px; font-weight: 600; line-height: 1.3; }
+.set-page .panel h2 + .hint { margin-top: 4px; line-height: 1.5; }
+.set-page .panel > form, .set-page .panel > .connection, .set-page .panel > .reveal > form { margin-top: 16px; }
+.set-page .panel > .reveal > summary, .set-page .panel > .set-foot { margin-top: 16px; }
+.set-page .alert, .set-page .notice { margin: 0; }
+.set-page .set-body > .panel > .alert, .set-page .set-body > .panel > .notice { margin-top: 12px; }
+.set-page .connection { padding: 8px 8px 8px 16px; }
+.set-page textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--white); color: var(--ink); font: inherit; font-size: 14px; resize: vertical; }
+.set-page textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+.set-page legend { margin-bottom: 8px; color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.set-page fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+
+/* Controls stacked, or fields in a two column grid; the Save row always last. */
+.set-stack { display: grid; gap: 12px; }
+.set-stack > .check, .set-stack > label { justify-self: start; }
+.set-page .panel > form > .hint { margin: 0; }
+.set-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: end; }
+.set-fields > div:not(.set-foot), .set-fields > fieldset > div { display: grid; gap: 4px; min-width: 0; }
+.set-fields > :is(.hint, .alert, .set-foot), .set-fields > div:has(textarea) { grid-column: 1 / -1; }
+.set-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.set-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.set-foot .hint { margin: 0; }
+.set-sub { margin: 16px 0 8px; font-size: 14px; font-weight: 600; }
+.set-after { margin-top: 12px; }
+
+/* Office only, drawn by the shared office panel: its forms stacked with a line between. */
+.set-page #office > form:not(.form-row, .fixed-suggestion) { display: grid; gap: 12px; justify-items: start; }
+.set-page #office > form + form { padding-top: 16px; border-top: 1px solid var(--line); }
+.set-page #office .fieldset { display: grid; gap: 8px; justify-items: start; margin: 0; }
+.set-page #office .fieldset legend { margin-bottom: 8px; }
+.set-page #office > form > .form-row { margin: 0; }
+
+/* Ticks and choices line up on one grid. */
+.set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 8px 16px; }
+.set-options { display: grid; gap: 8px; }
+.set-options .check { justify-self: start; }
+.set-choices { display: grid; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; }
+.set-choices label { display: flex; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--line); cursor: pointer; transition: background var(--fast) var(--out); }
+.set-choices label:first-of-type { border-top: 0; }
+.set-choices label:hover { background: var(--hover); }
+.set-choices label:has(:checked) { background: var(--accent-soft); }
+.set-choices input { margin-top: 4px; }
+.set-choices strong { display: block; font-weight: 600; }
+
+/* Office hours: one row a day. */
+.set-hours { border-collapse: collapse; }
+.set-hours :is(th, td) { height: 40px; padding: 0 16px 0 0; border-top: 1px solid var(--line); }
+.set-hours tr:first-child :is(th, td) { border-top: 0; }
+.set-hours th { width: 120px; font-weight: 500; text-align: left; }
+.set-hours td:last-child { display: flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.set-page .set-hours input[type="time"] { width: 120px; }
+
+/* Lists of dates or people, a remove button on each row. */
+.set-rows { margin: 12px 0 0; border-block: 1px solid var(--line); }
+.set-rows li { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 4px 0; border-top: 1px solid var(--line); }
+.set-rows li:first-child { border-top: 0; }
+.set-rows .grow { flex: 1; min-width: 0; }
+.set-rows + form { margin-top: 16px; }
+
+.set-table { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.set-page .set-table .t th { height: 32px; padding: 0 12px; background: var(--side); color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.set-page .set-table .t td { padding: 0 12px; }
+.set-page .set-table .t tbody tr:has(input:checked) { background: none; }
+.set-page .set-table .t tbody tr:hover { background: var(--hover); }
+.set-page .set-table .t th.shrink, .set-page .set-table .t td.shrink { text-align: center; }
+
+.set-meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+.set-meters div { padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; }
+.set-meters dt { color: var(--ink-3); font-size: 13px; }
+.set-meters dd { margin: 4px 0 0; font-size: 16px; font-weight: 600; }
+
+/* Closing the firm sits last, apart, in red. */
+.set-page .set-danger { margin-top: 16px; border-color: var(--red-bg); }
+.set-danger h2 { color: var(--red-fg); }
+.set-page .set-danger .reveal > summary { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 6px; color: var(--red-fg); font-weight: 600; text-decoration: none; transition: background var(--fast) var(--out); }
+.set-page .set-danger .reveal > summary:hover { background: var(--red-bg); }
+.b-danger { border-color: var(--red-fg); background: var(--red-fg); color: var(--white); }
+.b-danger:hover:not(:disabled) { background: var(--red-fg); opacity: 0.9; }
+
+@media (max-width: 1000px) {
+  .set { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .set-nav { position: static; display: flex; gap: 8px; overflow-x: auto; }
+  .set-nav a { flex: none; }
+}
+@media (max-width: 720px) {
+  .set-fields, .set-four { grid-template-columns: minmax(0, 1fr); }
+  .set-hours tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 4px 0; border-top: 1px solid var(--line); }
+  .set-hours tr:first-child { border-top: 0; }
+  .set-hours :is(th, td) { display: flex; align-items: center; width: auto; height: 32px; padding: 0; border: 0; }
+  .set-hours td:last-child { grid-column: 1 / -1; }
+}

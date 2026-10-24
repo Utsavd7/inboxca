@@ -50,7 +50,7 @@ test.beforeAll(async ({ browser }) => {
   await owner.getByRole("button", { name: "Continue" }).click();
   await expect(owner).toHaveURL(/\/app$/);
   await owner.goto("/app/settings");
-  const card = owner.locator("section[aria-labelledby=mailbox]");
+  const card = owner.locator("section#mailbox");
   await card.getByLabel("The firm's email address").fill(office);
   await card.getByLabel("Its password").fill(office);
   await card.getByText("Server settings, only if InboxCA asks").click();

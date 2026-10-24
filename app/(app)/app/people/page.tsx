@@ -1,163 +1,213 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { changeGroup, manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
-import { AutoSelect } from "../auto-select";
-import { Avatar, PageHead } from "../ui";
+import { Avatar, Badge, PageHead, SidePanel } from "../ui";
+import { Pending } from "../pending";
 import { invitableRoles, roleLabel } from "@/src/lib/roles";
 import { InviteForm } from "./invite-form";
+import "./people.css";
 
-const statusNames: Record<string, string> = { invited: "Invited", deactivated: "Removed" };
+const statusNames: Record<string, string> = { active: "Active", invited: "Invited", deactivated: "Removed" };
+// A person is in at most one team and works at most at one branch.
+const kinds = [
+  { kind: "team", column: "team_id", title: "Teams", one: "Team" },
+  { kind: "branch", column: "branch_id", title: "Branches", one: "Branch" },
+] as const;
 
-// The firm's people. Everyone in the firm sees the list; only the owner invites, changes
-// roles and removes people.
-export default async function People() {
+// The firm's people. Everyone who opens People sees the list; only the owner invites,
+// changes roles, teams and branches, and removes people, each in a panel beside the list.
+export default async function People({ searchParams }: { searchParams: Promise<{ panel?: string; person?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   const [{ data: people }, { data: groups }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "branch"]).order("name"),
   ]);
+  const { panel, person: chosen } = await searchParams;
   const groupName = new Map(groups?.map((group) => [group.id, group.name]));
-  // A person is in at most one team and works at most at one branch.
-  const kinds = [
-    { kind: "team", column: "team_id", title: "Teams", one: "team" },
-    { kind: "branch", column: "branch_id", title: "Branches", one: "branch" },
-  ] as const;
   const groupsOf = (kind: string) => groups?.filter((group) => group.kind === kind) ?? [];
   const size = (column: "team_id" | "branch_id", id: string) => {
     const count = people?.filter((person) => person[column] === id).length ?? 0;
     return `${count} ${count === 1 ? "person" : "people"}`;
   };
   const isOwner = membership.role === "owner";
+  const shownKinds = kinds.filter(({ kind }) => groupsOf(kind).length);
+  const person = isOwner && chosen !== userId ? people?.find((one) => one.user_id === chosen) : undefined;
+  const count = people?.filter((one) => one.status !== "deactivated").length ?? 0;
 
   return (
-    <>
-      <PageHead title="People" sub="Everyone in your firm, the teams they work in and the branches they work at." />
-      <section className="panel" aria-labelledby="people">
-        <div className="panel-head">
-          <h2 id="people">{membership.firmName}</h2>
-          {isOwner && <p className="hint">A change saves as soon as you pick it.</p>}
-        </div>
-        <div className="table-wrap">
-          <table className="t">
-            <thead>
-              <tr>
-                <th scope="col">Person</th>
-                <th scope="col">Role</th>
-                {kinds.map(({ kind, one }) => groupsOf(kind).length > 0 && <th key={kind} scope="col">{one[0].toUpperCase() + one.slice(1)}</th>)}
+    <div className="people-page">
+      <PageHead
+        title="People"
+        sub={`${count} ${count === 1 ? "person" : "people"} in ${membership.firmName}, with their role, team and branch.`}
+        actions={
+          <>
+            {(isOwner || !!groups?.length) && (
+              <Link className="b b-secondary" href="/app/people?panel=groups" scroll={false}>
+                Teams and branches
+              </Link>
+            )}
+            {isOwner && (
+              <Link className="b b-primary" href="/app/people?panel=invite" scroll={false}>
+                Invite person
+              </Link>
+            )}
+          </>
+        }
+      />
+      <div className="people-table">
+        <table className="t">
+          <thead>
+            <tr>
+              <th scope="col">Person</th>
+              <th scope="col">Role</th>
+              {shownKinds.map(({ kind, one }) => (
+                <th key={kind} scope="col">
+                  {one}
+                </th>
+              ))}
+              <th scope="col">Status</th>
+              {isOwner && (
                 <th scope="col" className="shrink">
                   <span className="sr-only">Actions</span>
                 </th>
-              </tr>
-            </thead>
-            <tbody>
-              {people?.map((person) => {
-                const editable = isOwner && person.user_id !== userId && person.status !== "deactivated";
-                // Keyed on the saved values, so the form shows them after each change.
-                const form = `person-${person.user_id}`;
-                return (
-                  <tr key={person.user_id + person.role + person.status + person.team_id + person.branch_id} className={person.status === "deactivated" ? "is-off" : undefined}>
-                    <td>
-                      <span className="who">
-                        <Avatar name={person.email} />
-                        <span className="name">{person.email}</span>
-                        {statusNames[person.status] && <span className={`badge tag-${person.status}`}>{statusNames[person.status]}</span>}
-                      </span>
-                    </td>
-                    <td className="shrink">
-                      {editable ? (
-                        <AutoSelect save="role" form={form} name="role" defaultValue={person.role} aria-label={`Role for ${person.email}`}>
-                          {invitableRoles.map((role) => (
-                            <option key={role} value={role}>
-                              {roleLabel(role)}
-                            </option>
-                          ))}
-                        </AutoSelect>
-                      ) : (
-                        roleLabel(person.role)
-                      )}
-                    </td>
-                    {kinds.map(({ kind, column, one }) =>
-                      groupsOf(kind).length ? (
-                        <td key={kind} className="shrink">
-                          {editable ? (
-                            <AutoSelect save="role" form={form} name={kind} defaultValue={person[column] ?? ""} aria-label={`${one[0].toUpperCase() + one.slice(1)} for ${person.email}`}>
-                              <option value="">No {one}</option>
-                              {groupsOf(kind).map((group) => (
-                                <option key={group.id} value={group.id}>
-                                  {group.name}
-                                </option>
-                              ))}
-                            </AutoSelect>
-                          ) : (
-                            <span className="hint">{groupName.get(person[column] ?? "") ?? `No ${one}`}</span>
-                          )}
-                        </td>
-                      ) : null,
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {people?.map((one) => (
+              <tr key={one.user_id} className={`${one.status === "deactivated" ? "is-off" : ""}${one.user_id === person?.user_id ? " on" : ""}`}>
+                <td>
+                  <span className="people-who">
+                    <Avatar name={one.email} />
+                    <span>{one.email}</span>
+                  </span>
+                </td>
+                <td>
+                  <Badge>{roleLabel(one.role)}</Badge>
+                </td>
+                {shownKinds.map(({ kind, column, one: label }) => (
+                  <td key={kind}>{groupName.get(one[column] ?? "") ?? <span className="hint">No {label.toLowerCase()}</span>}</td>
+                ))}
+                <td>{one.status === "invited" ? <Badge tone="warn">Invited</Badge> : <span className={one.status === "active" ? undefined : "hint"}>{statusNames[one.status]}</span>}</td>
+                {isOwner && (
+                  <td className="shrink">
+                    {one.user_id !== userId && (
+                      <Link className="b b-secondary" href={`/app/people?person=${one.user_id}`} scroll={false} aria-label={`Change ${one.email}`}>
+                        Change
+                      </Link>
                     )}
-                    <td className="shrink">
-                      {isOwner && person.user_id !== userId && (
-                        <form id={form} action={manageMember}>
-                          <input type="hidden" name="person" value={person.user_id} />
-                          <button hidden name="intent" value="role" />
-                          {person.status === "deactivated" ? (
-                            <button className="b b-secondary b-small" name="intent" value="restore">
-                              Bring back
-                            </button>
-                          ) : (
-                            <button className="b b-ghost b-small" name="intent" value="remove">
-                              {person.status === "invited" ? "Withdraw invite" : "Remove"}
-                            </button>
-                          )}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {isOwner && panel === "invite" && <InviteForm />}
+
+      {person && (
+        <SidePanel id="person" title={person.email} close="/app/people">
+          {/* Keyed on the saved values, so the form shows them after each change. */}
+          <form key={person.role + person.status + person.team_id + person.branch_id} action={manageMember} className="fields">
+            <input type="hidden" name="person" value={person.user_id} />
+            {person.status === "deactivated" ? (
+              <p className="hint">Removed from the firm. Bring them back to let them sign in again.</p>
+            ) : (
+              <>
+                <div>
+                  <label htmlFor="person-role">Role</label>
+                  <select id="person-role" name="role" defaultValue={person.role}>
+                    {invitableRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {roleLabel(role)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {kinds.map(({ kind, column, one }) =>
+                  groupsOf(kind).length ? (
+                    <div key={kind}>
+                      <label htmlFor={`person-${kind}`}>{one}</label>
+                      <select id={`person-${kind}`} name={kind} defaultValue={person[column] ?? ""}>
+                        <option value="">No {one.toLowerCase()}</option>
+                        {groupsOf(kind).map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null,
+                )}
+                <Pending className="b b-primary" name="intent" value="role">
+                  Save changes
+                </Pending>
+              </>
+            )}
+            <div className="people-leave">
+              {person.status === "deactivated" ? (
+                <Pending className="b b-primary" name="intent" value="restore" busy="Bringing back">
+                  Bring back
+                </Pending>
+              ) : (
+                <>
+                  <p className="hint">{person.status === "invited" ? "The invite stops working." : "They lose access at once. You can bring them back later."}</p>
+                  <Pending className="b b-secondary" name="intent" value="remove" busy="Removing">
+                    {person.status === "invited" ? "Withdraw invite" : "Remove from the firm"}
+                  </Pending>
+                </>
+              )}
+            </div>
+          </form>
+        </SidePanel>
+      )}
+
+      {panel === "groups" && (isOwner || !!groups?.length) && (
+        <SidePanel id="groups" title="Teams and branches" close="/app/people">
+          <p className="hint">Group people into teams, and say which branch each works at. Clients can then be given to a whole team.</p>
+          {kinds.map(({ kind, column, title, one }) => (
+            <section key={kind} aria-labelledby={title.toLowerCase()}>
+              <h3 id={title.toLowerCase()}>{title}</h3>
+              {groupsOf(kind).length ? (
+                <ul className="people-groups">
+                  {groupsOf(kind).map((group) => (
+                    <li key={group.id}>
+                      <span className="grow">{group.name}</span>
+                      <span className="hint">{size(column, group.id)}</span>
+                      {isOwner && (
+                        <form action={changeGroup}>
+                          <input type="hidden" name="kind" value={kind} />
+                          <input type="hidden" name="group" value={group.id} />
+                          <button className="b b-ghost" name="intent" value="remove" aria-label={`Remove ${one.toLowerCase()} ${group.name}`}>
+                            Remove
+                          </button>
                         </form>
                       )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      {kinds.map(({ kind, column, title, one }) =>
-        isOwner || groupsOf(kind).length ? (
-          <section key={kind} className="panel" aria-labelledby={title.toLowerCase()}>
-            <h2 id={title.toLowerCase()}>{title}</h2>
-            <ul className="rows">
-              {groupsOf(kind).map((group) => (
-                <li key={group.id}>
-                  <span className="name">{group.name}</span>
-                  <span className="end">
-                    {size(column, group.id)}
-                    {isOwner && (
-                      <form action={changeGroup}>
-                        <input type="hidden" name="kind" value={kind} />
-                        <input type="hidden" name="group" value={group.id} />
-                        <button className="b b-ghost b-small" name="intent" value="remove">
-                          Remove {one}
-                        </button>
-                      </form>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {isOwner && (
-              <form action={changeGroup} className="form-row">
-                <input type="hidden" name="kind" value={kind} />
-                <div>
-                  <label htmlFor={`${kind}-name`}>New {one}</label>
-                  <input id={`${kind}-name`} name="name" required maxLength={120} />
-                </div>
-                <button className="b b-secondary" type="submit">
-                  Add {one}
-                </button>
-              </form>
-            )}
-          </section>
-        ) : null,
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="hint">No {title.toLowerCase()} yet.</p>
+              )}
+              {isOwner && (
+                <form action={changeGroup} className="form-row">
+                  <input type="hidden" name="kind" value={kind} />
+                  <div>
+                    <label htmlFor={`${kind}-name`}>New {one.toLowerCase()}</label>
+                    <input id={`${kind}-name`} name="name" required maxLength={120} />
+                  </div>
+                  <Pending className="b b-secondary" type="submit" busy="Adding">
+                    Add {one.toLowerCase()}
+                  </Pending>
+                </form>
+              )}
+            </section>
+          ))}
+        </SidePanel>
       )}
-      {isOwner && <InviteForm />}
-    </>
+    </div>
   );
 }

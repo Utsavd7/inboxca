@@ -197,7 +197,7 @@ test("clients in one group are listed together", async () => {
 });
 
 test("a client is served from a branch, and the list filters by branch", async () => {
-  await owner.goto("/app/people");
+  await owner.goto("/app/people?panel=groups");
   await owner.getByLabel("New branch").fill("Surat");
   await owner.getByRole("button", { name: "Add branch" }).click();
   await expect(owner.locator("section[aria-labelledby=branches]").getByRole("listitem")).toContainText("Surat");

@@ -83,16 +83,17 @@ test("the owner invites a new person, who appears as invited", async () => {
 
   await owner.getByRole("link", { name: "People" }).click();
   await expect(owner.getByText(ownerEmail)).toBeVisible();
+  await owner.getByRole("link", { name: "Invite person" }).click();
   await owner.getByLabel("Their work email").fill(newEmail.toUpperCase());
   await owner.getByLabel("Role").selectOption("manager");
-  await owner.getByRole("button", { name: "Invite", exact: true }).click();
+  await owner.getByRole("button", { name: "Send invite" }).click();
   await expect(owner.getByRole("status")).toContainText(`Invited ${newEmail}`);
   const row = owner.getByRole("row").filter({ hasText: newEmail });
-  await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("manager");
+  await expect(row).toContainText("Manager");
   await expect(row).toContainText("Invited");
 
   await owner.getByLabel("Their work email").fill(newEmail);
-  await owner.getByRole("button", { name: "Invite", exact: true }).click();
+  await owner.getByRole("button", { name: "Send invite" }).click();
   await expect(owner.getByRole("alert").filter({ hasText: "already on your firm's list" })).toBeVisible();
 });
 
@@ -118,11 +119,12 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
   // Only the owner invites.
   await page.getByRole("link", { name: "People" }).click();
   await expect(page.getByText(ownerEmail)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Invite", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Invite person" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^Change/ })).toHaveCount(0);
 
   await owner.reload();
   const row = owner.getByRole("row").filter({ hasText: newEmail });
-  await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("manager");
+  await expect(row).toContainText("Manager");
   await expect(row).not.toContainText("Invited");
 });
 
@@ -130,18 +132,20 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
 test("the owner changes the role, removes the person and brings them back", async () => {
   await owner.goto("/app/people");
   const row = owner.getByRole("row").filter({ hasText: newEmail });
-  // A new role saves as soon as it is picked.
-  await Promise.all([
-    owner.waitForResponse((response) => response.request().method() === "POST"),
-    row.getByLabel(`Role for ${newEmail}`).selectOption("staff"),
-  ]);
+  // Changes open in a panel beside the list.
+  await row.getByRole("link", { name: `Change ${newEmail}` }).click();
+  const panel = owner.getByRole("dialog", { name: newEmail });
+  await panel.getByLabel("Role").selectOption("staff");
+  await panel.getByRole("button", { name: "Save changes" }).click();
+  await expect(row).toContainText("Staff");
   await owner.reload();
-  await expect(row.getByLabel(`Role for ${newEmail}`)).toHaveValue("staff");
+  await expect(panel.getByLabel("Role")).toHaveValue("staff");
 
-  await row.getByRole("button", { name: "Remove" }).click();
+  await panel.getByRole("button", { name: "Remove from the firm" }).click();
   await expect(row).toContainText("Removed");
-  await row.getByRole("button", { name: "Bring back" }).click();
-  await expect(row.getByRole("button", { name: "Remove" })).toBeVisible();
+  await panel.getByRole("button", { name: "Bring back" }).click();
+  await expect(panel.getByRole("button", { name: "Remove from the firm" })).toBeVisible();
+  await expect(row).toContainText("Active");
 });
 
 // #1, #2, #3, #24, #25, #35, #37, #39, #40, #41, #49, #55: the same approved PC, fresh browsers and changed connections.
@@ -546,6 +550,7 @@ test("away from the office, the owner allows a staff member's own device to view
 // #14, #15, #16, #17: closing, extra time and season hours. Drafts move to M6.
 test("the owner keeps people to office hours, and the person sees the firm is closed", async () => {
   await owner.getByRole("link", { name: "Settings" }).click();
+  await owner.getByRole("link", { name: "Hours and holidays" }).click();
   for (const day of ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
     await owner.getByRole("row", { name: new RegExp(day) }).getByLabel("Open", { exact: true }).uncheck();
   await owner.getByLabel(/only during office hours/).check();
@@ -563,7 +568,7 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
 
   // Special hours for today open the firm again, closed weekdays or not.
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=hours");
   for (const [label, value] of [["From", today], ["To", today], ["Opens", "00:00"], ["Closes", "23:59"]])
     await owner.getByLabel(label, { exact: true }).fill(value);
   await owner.getByRole("button", { name: "Add special hours" }).click();
@@ -605,7 +610,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await expect(owner.locator(".page-head")).toContainText("Shared Client");
   const client = owner.url();
 
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=people");
   await owner.getByLabel(/Only you, partners and the people assigned/).check();
   await owner.getByRole("button", { name: "Save who sees clients" }).click();
   await expect(owner.getByRole("status")).toHaveText("Who sees clients saved.");
@@ -613,14 +618,17 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await expect(person.locator(".page-head")).toContainText("0 clients.");
 
   // A team: the person joins it, and the client is assigned to the whole team.
-  await owner.goto("/app/people");
+  await owner.goto("/app/people?panel=groups");
   await owner.getByLabel("New team").fill("GST team");
   await owner.getByRole("button", { name: "Add team" }).click();
+  await expect(owner.locator("section[aria-labelledby=teams]").getByRole("listitem")).toContainText("0 people");
+  await owner.getByRole("link", { name: "Close" }).click();
   const row = owner.getByRole("row").filter({ hasText: newEmail });
-  await Promise.all([
-    owner.waitForResponse((response) => response.request().method() === "POST"),
-    row.getByLabel(`Team for ${newEmail}`).selectOption({ label: "GST team" }),
-  ]);
+  await row.getByRole("link", { name: `Change ${newEmail}` }).click();
+  await owner.getByRole("dialog", { name: newEmail }).getByLabel("Team").selectOption({ label: "GST team" });
+  await owner.getByRole("button", { name: "Save changes" }).click();
+  await expect(row).toContainText("GST team");
+  await owner.goto("/app/people?panel=groups");
   await expect(owner.locator("section[aria-labelledby=teams]").getByRole("listitem")).toContainText("1 person");
   await owner.goto(`${client}?tab=team`);
   await owner.getByLabel("Person or team").selectOption({ label: "Team: GST team" });
@@ -633,13 +641,14 @@ test("in restricted mode a person sees only clients assigned to them or their te
 
 // #3, #4: configured idle lock and the normal sign out control.
 test("after the firm's idle limit, an unattended screen signs out", async () => {
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=hours");
   await owner.getByLabel(/only during office hours/).uncheck();
   await owner.getByRole("button", { name: "Save office hours" }).click();
   await expect(owner.getByRole("status")).toHaveText("Office hours saved.");
+  await owner.getByRole("link", { name: "Office and sign in" }).click();
   await owner.getByLabel("Sign out after no activity for").selectOption("15");
   await owner.getByRole("button", { name: "Save signing in limits" }).click();
-  await expect(owner.getByRole("status")).toHaveText("Signing in limits saved.");
+  await expect(owner.getByRole("status").filter({ hasText: "Signing in limits saved." })).toBeVisible();
 
   await person.clock.install();
   await person.goto("/app");
@@ -654,12 +663,12 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
 // #26, #55, #56: the shared mailbox cannot sign in; automation runs separately.
 test("the owner connects the firm's mailbox; client mail is sorted, unclear mail waits for the team, a stranger's is skipped", async ({ request, browser }) => {
   // An address already on the team is refused as soon as it becomes the firm's mailbox.
-  await owner.goto("/app/people");
+  await owner.goto("/app/people?panel=invite");
   await owner.getByLabel("Their work email").fill(mailboxEmail);
-  await owner.getByRole("button", { name: "Invite", exact: true }).click();
+  await owner.getByRole("button", { name: "Send invite" }).click();
   await expect(owner.getByRole("status")).toContainText(`Invited ${mailboxEmail}`);
   await owner.goto("/app/settings");
-  const card = owner.locator("section[aria-labelledby=mailbox]");
+  const card = owner.locator("section#mailbox");
   await card.getByLabel("The firm's email address").fill(mailboxEmail);
   await card.getByLabel("Its password").fill("wrong");
   await card.getByText("Server settings, only if InboxCA asks").click();
@@ -682,9 +691,9 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
 
   const [{ user_id: mailboxUser }] = await query(local.dbUrl, "select user_id from public.firm_members m join auth.users u on u.id = m.user_id where m.firm_id = $1 and u.email = $2", [firm.firmId, mailboxEmail]);
   await query(local.dbUrl, "delete from public.firm_members where firm_id = $1 and user_id = $2", [firm.firmId, mailboxUser]);
-  await owner.goto("/app/people");
+  await owner.goto("/app/people?panel=invite");
   await owner.getByLabel("Their work email").fill(mailboxEmail);
-  await owner.getByRole("button", { name: "Invite", exact: true }).click();
+  await owner.getByRole("button", { name: "Send invite" }).click();
   await expect(owner.getByRole("alert").filter({ hasText: "The firm's email address cannot be a team login." })).toBeVisible();
 
   await owner.goto("/app/clients?panel=add");
@@ -761,7 +770,7 @@ test("repeated mailbox failures ask the owner to reconnect, then pending mail re
   expect(await mailCount(addresses[0])).toBe(1);
   await smtp.sendMail({from:addresses[1],to:mailboxEmail,subject:"Last year's ITR",text:"Please send last year's ITR."});
   await owner.goto("/app/settings");
-  const card=owner.locator("section[aria-labelledby=mailbox]");
+  const card=owner.locator("section#mailbox");
   await expect(card.getByLabel("The firm's email address")).toHaveValue(mailboxEmail);
   await card.getByLabel("Its password").fill("secret"); // ggignore: GreenMail's public local test password.
   await card.getByRole("button",{name:"Reconnect email"}).click();
@@ -1042,7 +1051,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await query(local.dbUrl, "insert into public.compliance_types (code, name, frequency, due_rule, source_url, verified_on, approved_by) values ($1, 'Test return', 'monthly', '{\"for\": \"pan\"}', 'https://example.test/notification', current_date, 'test')", [code]);
   const [{ id: clientId }] = await query(local.dbUrl, "select id from public.clients where firm_id = $1 and name = $2", [firm.firmId, mailClient]);
   await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, $3, '2026-09', (now() at time zone 'Asia/Kolkata')::date + 3)", [firm.firmId, clientId, code]);
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=reminders");
   await owner.getByLabel("Email clients before their returns are due").check();
   await owner.getByLabel("Reply to clients when their files arrive, saying what was received").check();
   await owner.getByLabel("1 day before", { exact: true }).uncheck();
@@ -1194,9 +1203,9 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await expect(owner.getByRole("article", { name: "Open email" })).toContainText("This paper is kept inside your firm");
   expect(name).toContain("ITR-V");
   await owner.goto("/app/settings");
-  for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
+  for (const section of ["section#mailbox", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
   await expect(owner.locator("section#drive").getByRole("button", { name: "Connect drive" })).toBeVisible();
-  await expect(owner.locator("section[aria-labelledby=mailbox]").getByLabel("The firm's email address")).toBeVisible();
+  await expect(owner.locator("section#mailbox").getByLabel("The firm's email address")).toBeVisible();
 
 });
 
@@ -1264,7 +1273,7 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await query(local.dbUrl, "update public.firm_members set role='manager' where firm_id=$1 and user_id=$2", [batch.firmId, manager]);
     for (const [button, value] of [["Turn off", { intent: "off" }], ["Withdraw", { decision: "withdraw" }]] as const) {
       const form = boss.locator("section#office form").filter({ has: boss.getByRole("button", { name: button, exact: true }) }).first();
-      const fields = await actionFields(boss, "/app/settings", button === "Turn off" ? { intent: "off" } : { device: await form.locator('input[name="device"]').inputValue() });
+      const fields = await actionFields(boss, "/app/settings?group=access", button === "Turn off" ? { intent: "off" } : { device: await form.locator('input[name="device"]').inputValue() });
       await staff[0].request.post("/app/settings", { multipart: { ...fields, ...value }, headers: { Origin: new URL(staff[0].url()).origin } });
     }
     expect((await query(local.dbUrl, "select settings->'office'->>'on' as on from public.firms where id=$1", [batch.firmId]))[0].on).toBe("true");

@@ -2,13 +2,14 @@
 import { useActionState } from "react";
 import { inviteMember, type InviteState } from "@/app/(app)/actions";
 import { invitableRoles, roleLabel } from "@/src/lib/roles";
+import { SidePanel } from "../ui";
 
 export function InviteForm() {
   const [state, invite, inviting] = useActionState(inviteMember, {} as InviteState);
   return (
-    <section className="panel" aria-labelledby="invite">
-      <h2 id="invite">Invite someone</h2>
-      <form key={JSON.stringify(state.values)} action={invite} className="auth-form app-invite" noValidate>
+    <SidePanel id="invite" title="Invite person" close="/app/people">
+      <p className="hint">They get an email with a sign in code, then set up their 2 step code.</p>
+      <form key={JSON.stringify(state.values)} action={invite} className="fields" noValidate>
         <div>
           <label htmlFor="invite-email">Their work email</label>
           <input
@@ -33,7 +34,7 @@ export function InviteForm() {
           </select>
         </div>
         <button className="b b-primary" type="submit" disabled={inviting}>
-          {inviting ? "Inviting" : "Invite"}
+          {inviting ? "Sending invite" : "Send invite"}
         </button>
       </form>
       {state.error && (
@@ -46,6 +47,6 @@ export function InviteForm() {
           {state.done}
         </p>
       )}
-    </section>
+    </SidePanel>
   );
 }

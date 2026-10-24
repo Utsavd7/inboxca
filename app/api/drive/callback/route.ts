@@ -11,7 +11,7 @@ import { requestOrigin } from "@/src/lib/origin";
 export async function GET(request: NextRequest) {
   const origin = requestOrigin(request);
   const finish = (error?: string) => {
-    const response = NextResponse.redirect(`${origin}/app/settings${error ? `?error=${error}` : ""}#drive`);
+    const response = NextResponse.redirect(`${origin}/app/settings?group=email${error ? `&error=${error}` : ""}#drive`);
     response.cookies.delete({ name: DRIVE_COOKIE, path: "/api/drive" });
     return response;
   };

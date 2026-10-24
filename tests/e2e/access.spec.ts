@@ -48,7 +48,7 @@ test("the owner chooses a preset in one step, and it sets the office rules", asy
   await preset.getByRole("radio", { name: /^Office only:/ }).check();
   await preset.getByLabel("Yes, I am in the office now").check();
   await preset.getByRole("button", { name: "Use this preset" }).click();
-  await expect(preset.getByRole("status")).toHaveText("Preset saved.");
+  await expect(owner.getByRole("status").filter({ hasText: "Preset saved." })).toBeVisible();
   await expect(preset.getByRole("radio", { name: /^Office only:/ })).toBeChecked();
   const chosen = await settings();
   expect(chosen.office).toMatchObject({ on: true, away: false, lines: [{ ipv4: "203.0.113.30" }] });
