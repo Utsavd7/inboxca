@@ -582,7 +582,7 @@ isOneToOne: false
                            },
 "client_activity":
 { Args: { "target_client": string }; Returns: {
-              "action": string,"actor_id": string,"at": string
+              "action": string,"actor_id": string,"at": string,"document_id": string,"renamed_from": string,"renamed_to": string
             }[]
                            },
 "clients_with_right":

@@ -828,6 +828,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
     await rows.getByRole("link", { name: `Change ${mailClient} - Document.pdf` }).click();
     await owner.getByLabel("Type", { exact: true }).selectOption("Other");
     await owner.getByLabel("Name for Other").fill("HDFC loan sanction letter");
+    if (attempt === 0) await owner.getByLabel("Keep this name as one of the firm's types").check();
     await owner.getByRole("button", { name: "Save", exact: true }).click();
     await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - HDFC loan sanction letter.pdf`);
     const gst = path.join(drive, thisYear, mailClient, "GST");
@@ -842,6 +843,16 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
     await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
     expect(await readFile(path.join(gst, "To check", `${mailClient} - Document.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
   }
+  // The kept name is offered as a type from now on.
+  await owner.getByRole("link", { name: "Upload a file" }).click();
+  await expect(owner.getByLabel("Type", { exact: true }).locator("option", { hasText: "HDFC loan sanction letter" })).toHaveCount(1);
+  // Activity names each rename's old and new name; a manager or the owner puts back the latest in one click.
+  await owner.getByRole("link", { name: "Activity", exact: true }).click();
+  await expect(owner.locator("section[aria-labelledby=client-activity]")).toContainText(`${mailClient} - HDFC loan sanction letter.pdf to ${mailClient} - Document.pdf`);
+  await owner.getByRole("button", { name: `Undo rename of ${mailClient} - Document.pdf` }).click();
+  await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - HDFC loan sanction letter.pdf`);
+  await owner.getByRole("button", { name: "Undo" }).click();
+  await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
 
   // M5 acceptance: a duplicate attachment is flagged. The same bills sent again wait under To check beside the first copy, for the team to choose.
   await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Bills again", text: "Sending again.", attachments: [{ filename: "purchase_bills_sep_2026.pdf", content: "%PDF-1.4 invented purchase bills" }] });
@@ -888,6 +899,20 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.reload();
   await expect(owner.getByRole("list", { name: "Files asked for" })).toContainText("1 of 2 received");
   await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Filed");
+  // The team checks what arrived. Ask again clears an item, so the client's link asks for it once more.
+  const sales = visitor.getByRole("listitem").filter({ hasText: "Sales bills" });
+  await sales.getByLabel("File for Sales bills").setInputFiles({ name: "IMG_78.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf("Invented sales bills")) });
+  await sales.getByRole("button", { name: "Upload" }).click();
+  await expect(visitor.getByText("Everything asked for has arrived.")).toBeVisible();
+  await owner.reload();
+  const asks = owner.getByRole("list", { name: "Files asked for" });
+  await asks.getByRole("button", { name: "Loan statement is right" }).click();
+  await expect(asks.getByRole("button", { name: "Loan statement is right" })).toHaveCount(0);
+  await asks.getByRole("button", { name: "Ask again for Sales bills" }).click();
+  await expect(asks).toContainText("1 of 2 received");
+  await visitor.reload();
+  await expect(visitor.getByRole("listitem").filter({ hasText: "Sales bills" })).not.toContainText("received");
+  await expect(visitor.getByRole("listitem").filter({ hasText: "Loan statement" })).toContainText("1 file received");
 
   // A filed document goes to the client as a secure link that stops after 5 downloads.
   await rows.getByRole("link", { name: `Send ${mailClient} - Loan statement`, exact: false }).click();
