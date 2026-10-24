@@ -120,7 +120,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           )
         }
       />
-      <div className="split docs-split">
+      <div className="split">
         <nav className="pane docs-folders" aria-label="Folders">
           <form className="docs-year">
             {state.kind && <input type="hidden" name="kind" value={state.kind} />}
@@ -146,7 +146,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           ))}
         </nav>
 
-        <section className="pane docs-list" aria-label="Papers">
+        <section className="docs-list" aria-label="Papers">
           <form className="docs-find" role="search">
             {state.year && <input type="hidden" name="year" value={state.year} />}
             {kind && <input type="hidden" name="kind" value={kind} />}
@@ -155,7 +155,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           </form>
           {papers?.length ? (
             <>
-              <div className="docs-table">
+              <div className="pane docs-table">
                 <table>
                   <thead>
                     <tr>
@@ -170,7 +170,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                       <tr key={row.id} className={row.id === paper?.id ? "on" : undefined}>
                         <td>
                           <span className="docs-name">
-                            <Link href={link({ page: state.page, file: row.id })} scroll={false} aria-current={row.id === paper?.id ? "true" : undefined}>
+                            <Link href={link({ page: state.page, file: row.id })} scroll={false} title={row.name} aria-current={row.id === paper?.id ? "true" : undefined}>
                               {row.name}
                             </Link>
                             {tag(row.status)}
