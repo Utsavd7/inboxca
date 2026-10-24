@@ -72,7 +72,8 @@ html:has(.ui) { scrollbar-gutter: stable; background: #fff; }
 .rail-nav a[aria-current="page"] { background: var(--press); color: var(--ink); font-weight: 600; }
 .rail-nav a[aria-current="page"] svg { color: var(--ink); }
 .rail-count { margin-left: auto; color: var(--accent); font-size: 12px; font-weight: 600; }
-.rail-me { display: flex; align-items: center; gap: var(--s2); margin-top: auto; padding: var(--s2); }
+.rail-foot { margin-top: auto; padding-top: var(--s2); border-top: 1px solid var(--line); }
+.rail-me { display: flex; align-items: center; gap: var(--s2); padding: var(--s2); }
 .rail-me span { display: grid; min-width: 0; line-height: 1.3; }
 .rail-me strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .rail-me small { color: var(--ink-3); font-size: 12px; }
