@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/src/db/types";
 import { describeFile, finalPapers } from "./documents";
 import type { WorkType } from "./drive";
 
@@ -40,6 +42,17 @@ export function matchClient(path: string, clients: { id: string; name: string }[
   }
   const found = best as { id: string; folder: string } | null;
   return found && { id: found.id, folder: found.folder };
+}
+
+// Every client the person sees that is not archived, a page at a time: one request returns
+// at most 1,000 rows, and a firm can have 10,000 clients.
+export async function activeClients(supabase: SupabaseClient<Database>) {
+  const all: { id: string; name: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await supabase.from("clients").select("id, name").is("archived_at", null).order("name").order("id").range(from, from + 999);
+    all.push(...(data ?? []));
+    if (!data || data.length < 1000) return all;
+  }
 }
 
 export function planImport(

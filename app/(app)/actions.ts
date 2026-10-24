@@ -19,7 +19,7 @@ import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, laterBy, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
-import { planImport, type Planned, type Scope } from "@/src/lib/first-import";
+import { activeClients, planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
 import { askAway, officeApprover, officePc, requestLine } from "@/src/lib/office";
 import { CHALLENGE_COOKIE, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
@@ -1123,8 +1123,8 @@ export async function startImport(form: FormData) {
   const own = await opened.drive.folders();
   const folders = form.getAll("folder").map(String).filter((folder) => own.includes(folder));
   const scope = (["final", "year", "all"].includes(String(form.get("scope"))) ? String(form.get("scope")) : "final") as Scope;
-  const { data: clients } = await supabase.from("clients").select("id, name").is("archived_at", null);
-  const known = new Set(clients?.map((client) => client.id));
+  const clients = await activeClients(supabase);
+  const known = new Set(clients.map((client) => client.id));
   const chosen = Object.fromEntries(
     [...form.entries()].flatMap(([key, value]) => (key.startsWith("map:") && known.has(String(value)) ? [[key.slice(4), String(value)]] : [])),
   );

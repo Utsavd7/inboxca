@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchClient, planImport } from "@/src/lib/first-import";
+import { activeClients, matchClient, planImport } from "@/src/lib/first-import";
 
 // Folders as a firm keeps them before InboxCA, and where the first import would put each file.
 const clients = [
@@ -32,5 +32,12 @@ describe("the first import", () => {
     // The ITR-V is for AY 2025-26, so FY 2024-25.
     expect(planned.map((file) => file.id)).toEqual(["1", "2"]);
     expect(planImport(files, clients, "all", "", "2026-10-18", { "Clients/Unknown Traders": "desai" }).find((file) => file.id === "4")?.client).toBe("desai");
+  });
+  it("matches against every client, past the 1,000 rows one request returns", async () => {
+    const firm = Array.from({ length: 2500 }, (_, at) => ({ id: String(at), name: `Client ${at}` }));
+    const query = { select: () => query, is: () => query, order: () => query, range: async (from: number, to: number) => ({ data: firm.slice(from, Math.min(to + 1, from + 1000)) }) };
+    const all = await activeClients({ from: () => query } as unknown as Parameters<typeof activeClients>[0]);
+    expect(all).toHaveLength(2500);
+    expect(matchClient("Clients/Client 2499/notice.pdf", all)?.id).toBe("2499");
   });
 });

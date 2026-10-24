@@ -19,10 +19,14 @@ async function privateShare(token: string) {
 }
 
 // Emails a new one-time code to the address the paper was sent to, never to one typed here.
+// At most 5 codes a day for a link, so its 5 tries a code cannot be repeated without end.
 export async function requestShareCode(form: FormData) {
   const token = String(form.get("token") ?? "");
   const share = await privateShare(token);
   if (!share?.documents?.clients || !share.firms) redirect(`/s/${token}`);
+  const { count } = await supabaseAdmin().from("activity_log").select("at", { count: "exact", head: true })
+    .eq("firm_id", share.firm_id).eq("entity_id", share.id).eq("action", "share.code_sent").gte("at", new Date(Date.now() - 86_400_000).toISOString());
+  if ((count ?? 0) >= 5) redirect(`/s/${token}?code=limit`);
   const crypto = serverCrypto();
   let to = "";
   if (share.contact_id) {
@@ -38,6 +42,7 @@ export async function requestShareCode(form: FormData) {
   const message=emailTemplates.code(code,share.firms.name);
   const sent=await mailer?.send(to,message.subject,message.text);
   if (!sent) await supabaseAdmin().from("shares").update({code_hash:null,code_expires_at:null}).eq("id",share.id);
+  else await supabaseAdmin().from("activity_log").insert({ firm_id: share.firm_id, action: "share.code_sent", entity_type: "share", entity_id: share.id });
   redirect(`/s/${token}?code=${sent ? "sent" : "failed"}`);
 }
 
