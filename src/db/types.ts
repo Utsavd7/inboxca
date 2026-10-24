@@ -588,6 +588,9 @@ isOneToOne: false
 "clients_with_right":
 { Args: { "action": string }; Returns: string[]
                            },
+"close_firm":
+{ Args: { "target_firm": string,"typed_name": string }; Returns: boolean
+                           },
 "closed_firms":
 { Args: Record<PropertyKey, never>; Returns: {
               "firm_name": string,"hours": Json,"reason": string
@@ -601,6 +604,9 @@ isOneToOne: false
                            },
 "decide_form":
 { Args: { "decision": string,"person": string,"reason": Json,"target": string }; Returns: boolean
+                           },
+"delete_firm":
+{ Args: { "target_firm": string }; Returns: boolean
                            },
 "end_other_sessions":
 { Args: Record<PropertyKey, never>; Returns: number
@@ -619,6 +625,9 @@ isOneToOne: false
                            },
 "finish_share":
 { Args: { "share_id": string }; Returns: undefined
+                           },
+"firm_export":
+{ Args: { "target_firm": string }; Returns: Json
                            },
 "firm_people":
 { Args: { "target_firm": string }; Returns: {

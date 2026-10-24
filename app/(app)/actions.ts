@@ -670,6 +670,15 @@ export async function disconnectDrive() {
   revalidatePath("/app/settings");
 }
 
+// Closing the firm (PLAN.md 5.5.1): the owner types the firm's name, which the database
+// checks again. Everything InboxCA keeps for the firm is deleted 30 days later.
+export async function closeFirm(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  if (membership?.role !== "owner") redirect("/app");
+  const { data } = await supabase.rpc("close_firm", { target_firm: membership.firmId, typed_name: String(form.get("name") ?? "") });
+  redirect(data ? "/app/settings" : "/app/settings?error=close_name#close");
+}
+
 // The search palette: the firm's current clients whose name matches, as many as fit a list.
 export async function findClients(text: string) {
   const { supabase, membership } = await currentMember();

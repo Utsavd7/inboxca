@@ -1,7 +1,7 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
+import { changeHoliday, changeSpecialHours, closeFirm, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
 import { officeApprover } from "@/src/lib/office";
 import { OfficePanel } from "../office-panel";
 import { documentTypes } from "@/src/lib/documents";
@@ -26,7 +26,9 @@ const driveErrors: Record<string, string> = {
   drive_taken: "A drive is already connected. Disconnect it first.",
   drive_denied: "The drive was not allowed, so nothing was connected.",
   drive_failed: "The drive did not finish connecting. Try again.",
+  close_name: "Type the firm name exactly as it is shown.",
 };
+const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
 
 // The owner's settings: the firm's email, who sees clients, office hours, holidays and
 // signing in limits (PLAN.md 5.13, 5.17).
@@ -38,6 +40,18 @@ export default async function Settings({
   const { supabase, userId, membership } = await currentMember();
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) redirect("/app");
   if (membership.role !== "owner") return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel /></>;
+  // A closed firm keeps only its download until InboxCA deletes it, 30 days on.
+  const { data: closed } = await supabase.from("activity_log").select("at").eq("entity_id", membership.firmId).eq("firm_id", membership.firmId).eq("action", "firm.closed").maybeSingle();
+  if (closed) return (
+    <>
+      <PageHead title="Settings" sub="Only you, the owner, see this page." />
+      <section className="panel" aria-labelledby="data">
+        <h2 id="data">Your firm is closing</h2>
+        <p className="hint">InboxCA deletes everything it keeps for your firm on {longDate(new Date(Date.parse(closed.at) + 30 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }))}. Download your data before then. Files in your firm&apos;s drive stay where they are.</p>
+        {download}
+      </section>
+    </>
+  );
   const { data: accounts } = await supabase.from("connected_accounts").select("id, kind, provider, address_enc, status");
   const mailbox = accounts?.find((account) => account.kind === "mail");
   const drive = accounts?.find((account) => account.kind === "drive");
@@ -90,6 +104,8 @@ export default async function Settings({
             ["#limits", "Signing in"],
             ["#holidays", "Holidays"],
             ["#use", "InboxCA use"],
+            ["#data", "Your data"],
+            ["#close", "Close the firm"],
           ].map(([href, name]) => (
             <a key={href} href={href}>
               {name}
@@ -514,6 +530,23 @@ export default async function Settings({
               </div>
             </dl>
             <p className="hint">Shown for your information. Plans and their limits come later; nothing is limited or charged by these figures yet.</p>
+          </section>
+          <section className="panel" aria-labelledby="data">
+            <h2 id="data">Your data</h2>
+            <p className="hint">Your client list, returns and notices, the list of papers and the activity log, as spreadsheet files in one ZIP. The papers themselves are already in your firm&apos;s drive.</p>
+            {download}
+          </section>
+          <section className="panel" aria-labelledby="close">
+            <h2 id="close">Close the firm</h2>
+            <p className="hint">Everyone is signed out, your team can no longer sign in, and the firm email and drive are disconnected. For 30 days you can still sign in and download your data. Then InboxCA deletes everything it keeps for your firm. Files in your drive are not touched.</p>
+            <details className="reveal" open={error === "close_name"}>
+              <summary>Close the firm</summary>
+              <form action={closeFirm} className="fields">
+                <div><label htmlFor="close-name">Type {membership.firmName} to confirm</label><input id="close-name" name="name" required autoComplete="off" /></div>
+                <button className="b b-secondary" type="submit">Close the firm for good</button>
+              </form>
+              {error === "close_name" && <p className="alert" role="alert">{driveErrors[error]}</p>}
+            </details>
           </section>
         </div>
       </div>
