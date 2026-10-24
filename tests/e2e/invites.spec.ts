@@ -805,7 +805,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   await owner.goto("/app/clients");
   await owner.getByRole("link", { name: mailClient }).click();
-  await owner.getByRole("link", { name: /^Documents/ }).click();
+  await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Documents/ }).click();
   const rows = owner.locator("section[aria-labelledby=files] tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
@@ -970,7 +970,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   for (const [type, period, content] of [["ITR-V", "FY 2024-25", "invented ITR-V"], ["Balance sheet", "FY 2025-26", "invented balance sheet"]]) {
     await owner.goto("/app/clients");
     await owner.getByRole("link", { name: mailClient }).click();
-    await owner.getByRole("link", { name: /^Documents/ }).click();
+    await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Documents/ }).click();
     await owner.getByRole("link", { name: "Upload a file" }).click();
     await owner.getByLabel("File", { exact: true }).setInputFiles({ name: `${type}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
     await owner.getByLabel("Type", { exact: true }).selectOption(type);

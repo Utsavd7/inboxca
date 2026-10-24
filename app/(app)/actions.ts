@@ -371,7 +371,8 @@ export async function manageClient(form: FormData) {
   const id = String(form.get("client") ?? "");
   const tab = String(form.get("tab") ?? "").replace(/[^a-z]/g, "");
   const back = (error?: string) => {
-    const query = new URLSearchParams({ ...(tab && tab !== "overview" && { tab }), ...(error && { error }) }).toString();
+    // The details panel closes once its change is saved; other panels stay open for the next one.
+    const query = new URLSearchParams({ ...(tab && tab !== "overview" && (error || tab !== "details") && { tab }), ...(error && { error }) }).toString();
     return redirect(`/app/clients/${id}${query ? `?${query}` : ""}`);
   };
   if (!membership || !canManageClients(membership.role)) back("role");

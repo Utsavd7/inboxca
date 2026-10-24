@@ -112,11 +112,14 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await owner.getByLabel("Value").fill("muma12345b");
   await owner.getByRole("button", { name: "Add number" }).click();
   await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "TAN" })).toContainText("MUMA12345B");
+  await owner.getByRole("dialog").getByRole("link", { name: "Close" }).click();
 
   await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByLabel("Name", { exact: true }).fill("Patel Textiles Pvt Ltd");
   await owner.getByRole("button", { name: "Save details" }).click();
   await expect(owner.locator(".page-head")).toContainText("Patel Textiles Pvt Ltd");
+  // Saving closes the panel; archiving is in the same panel.
+  await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByRole("button", { name: "Archive client" }).click();
   await expect(owner.locator(".page-head")).toContainText("Archived");
 
@@ -258,7 +261,7 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
 
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
-  await owner.getByRole("link", { name: /^Documents/ }).click();
+  await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Documents/ }).click();
   await expect(owner.locator("section[aria-labelledby=files] tbody tr")).toContainText(["Patel Textiles Pvt Ltd - GSTR-2B - Sep 2026"]);
 });
 
