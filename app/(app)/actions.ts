@@ -1219,11 +1219,14 @@ export async function manageNotice(form: FormData) {
   const intent = String(form.get("intent") ?? "");
   const date = String(form.get("date") ?? "");
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date));
+  // From a client's Notices tab, the change returns there.
+  let back = "/app/notices";
   if (intent === "add") {
     const { data: client } = await supabase.from("clients").select("id").eq("firm_id",membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
     const authority = String(form.get("authority") ?? "other");
     const received = String(form.get("received") ?? "") || todayInIndia();
-    if (!client || !(authority in authorities) || !/^\d{4}-\d{2}-\d{2}$/.test(received)) redirect("/app/notices?add=1&error=notice");
+    if (client && form.get("back") === "client") back = `/app/clients/${client.id}?tab=notices`;
+    if (!client || !(authority in authorities) || !/^\d{4}-\d{2}-\d{2}$/.test(received)) redirect(client && back !== "/app/notices" ? `/app/clients/${client.id}?tab=notice&error=notice` : "/app/notices?add=1&error=notice");
     const details: NoticeDetails = {
       authority: authority as Authority,
       notice_type: String(form.get("type") ?? "").trim().slice(0, 80) || "Other",
@@ -1236,8 +1239,9 @@ export async function manageNotice(form: FormData) {
     await supabaseAdmin().from("tasks").insert({ id, firm_id: membership.firmId, client_id: client.id, kind: "notice", status: "upcoming", due_on: validDate ? date : reviewBy(received, settings.notice_review_days ?? 1, settings.holidays ?? []), details: details as unknown as NonNullable<Json> });
     await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.added", entity_type: "task", entity_id: id });
   } else {
-    const { data: notice } = await supabase.from("tasks").select("id, details").eq("id", String(form.get("notice") ?? "")).eq("kind", "notice").maybeSingle();
+    const { data: notice } = await supabase.from("tasks").select("id, client_id, details").eq("id", String(form.get("notice") ?? "")).eq("kind", "notice").maybeSingle();
     if (!notice) redirect("/app/notices");
+    if (form.get("back") === "client") back = `/app/clients/${notice.client_id}?tab=notices`;
     const details = notice.details as unknown as NoticeDetails;
     // Members never move a due date themselves; a confirmed action date is set by the server, logged.
     if (intent === "confirm" && validDate) {
@@ -1247,7 +1251,7 @@ export async function manageNotice(form: FormData) {
     else if (intent in noticeStatuses) await supabase.from("tasks").update({ status: intent }).eq("id", notice.id);
   }
   revalidatePath("/app", "layout");
-  redirect("/app/notices");
+  redirect(back);
 }
 
 // A forged approval is refused and kept in the firm's activity, too (5.17.4 #44).

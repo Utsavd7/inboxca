@@ -1,4 +1,7 @@
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { PanelEscape } from "./panel-escape";
+import "./side-panel.css";
 
 // The app's small shared pieces, so every page speaks the same visual language.
 
@@ -57,5 +60,22 @@ export function Toast({ children, undo }: { children: React.ReactNode; undo?: Re
       <span>{children}</span>
       {undo}
     </div>
+  );
+}
+
+// A form beside the page, opened by a link, so the list behind it stays in view. Close goes
+// back to the page without the panel.
+export function SidePanel({ id, title, close, children }: { id: string; title: React.ReactNode; close: string; children: React.ReactNode }) {
+  return (
+    <section className="side-panel panel-in" role="dialog" aria-labelledby={id}>
+      <header className="side-panel-head">
+        <h2 id={id}>{title}</h2>
+        <Link className="b b-ghost" href={close} scroll={false} title="Close (Esc)">
+          Close
+        </Link>
+        <PanelEscape />
+      </header>
+      <div className="side-panel-body">{children}</div>
+    </section>
   );
 }
