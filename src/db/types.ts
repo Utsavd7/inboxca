@@ -388,6 +388,19 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"orelu_admins": {
+                  Row: {
+                    "user_id": string
+                  }
+                  Insert: {
+                    "user_id": string
+                  }
+                  Update: {
+                    "user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"platform_settings": {
                   Row: {
                     "key": string,"value": NonNullable<Json>
@@ -532,6 +545,30 @@ isOneToOne: false
 "add_edited_form":
 { Args: { "draft": string,"person": string,"prefix": string,"registration": string,"target": string,"template": string }; Returns: Json
                            },
+"admin_accounts":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "failures": number,"firm": string,"kind": string,"last_error": string,"last_run": string,"provider": string,"status": string
+            }[]
+                           },
+"admin_failed_jobs":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "at": string,"attempts": number,"error": string,"firm": string,"id": number,"kind": string
+            }[]
+                           },
+"admin_firms":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "created_at": string,"drive": boolean,"id": string,"last_active": string,"mailbox": boolean,"members": number,"name": string,"status": string
+            }[]
+                           },
+"admin_retry_job":
+{ Args: { "job_id": number }; Returns: boolean
+                           },
+"admin_review_change":
+{ Args: { "change_at": string,"change_source": string }; Returns: boolean
+                           },
+"admin_watch":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "append_automatic_dataset":
 { Args: { "body": Json,"client": string,"draft": string,"expected": number,"firm": string,"form": string,"period": string }; Returns: boolean
                            },
@@ -652,6 +689,9 @@ isOneToOne: false
                            },
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
+                           },
+"is_orelu_admin":
+{ Args: Record<PropertyKey, never>; Returns: boolean
                            },
 "late_clients":
 { Args: { "target_firm": string }; Returns: {
