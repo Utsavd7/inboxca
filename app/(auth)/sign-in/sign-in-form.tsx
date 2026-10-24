@@ -2,8 +2,9 @@
 import { useActionState } from "react";
 import { requestCode, verifyCode, type CodeState } from "../actions";
 
-export function SignInForm() {
-  const [asked, ask, asking] = useActionState(requestCode, { step: "email" } as CodeState);
+// With an email (just signed up, code already sent) it starts at the code step.
+export function SignInForm({ email }: { email?: string }) {
+  const [asked, ask, asking] = useActionState(requestCode, (email ? { step: "code", email } : { step: "email" }) as CodeState);
   const [checked, check, checking] = useActionState(verifyCode, { step: "code" } as CodeState);
 
   if (asked.step === "email")

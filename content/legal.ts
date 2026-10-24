@@ -213,3 +213,16 @@ export const refundSections = [
     ],
   },
 ] as const;
+
+// A placeholder until the real data processing agreement is published. Sign up records
+// this date as the DPA version a firm accepted.
+export const dpaUpdated = "25 Oct 2026";
+export const dpaSections = [
+  {
+    id: "draft",
+    title: "Not published yet",
+    points: [
+      "The data processing agreement between your firm and InboxCA will be published on this page before the first firm joins.",
+    ],
+  },
+] as const;
