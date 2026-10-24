@@ -62,7 +62,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         {active && meta.status==="approved" && membership.may("mark_filed",client) && <details><summary>Record filing</summary><form action={markFormFiled} className="fields">
           <input type="hidden" name="document" value={file.id}/>
           {confirmations?.some(item=>item.entity_id===file.id) && <p className="hint">An acknowledgement arrived. Check it before confirming this filing.</p>}
-          <div><label htmlFor={`paper-${file.id}`}>Acknowledgement already in Files</label><select id={`paper-${file.id}`} name="paper"><option value="">Choose, or add one below</option>{acknowledgements?.filter(paper=>paper.period_key===file.period_key).map(paper=><option key={paper.id} value={paper.id}>{paper.name}</option>)}</select></div>
+          <div><label htmlFor={`paper-${file.id}`}>Acknowledgement already in Documents</label><select id={`paper-${file.id}`} name="paper"><option value="">Choose, or add one below</option>{acknowledgements?.filter(paper=>paper.period_key===file.period_key).map(paper=><option key={paper.id} value={paper.id}>{paper.name}</option>)}</select></div>
           <div><label htmlFor={`ack-${file.id}`}>Acknowledgement number, if known</label><input id={`ack-${file.id}`} name="ack" maxLength={80}/></div>
           <div><label htmlFor={`upload-${file.id}`}>Or upload the portal acknowledgement</label><input id={`upload-${file.id}`} name="ack_file" type="file" accept=".pdf,.png,.jpg,.jpeg"/></div>
           <p className="hint">With only a number, your client gets a filing record from your firm. This does not replace the portal acknowledgement. Private papers wait for approval in the Inbox.</p>

@@ -13,7 +13,7 @@ import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveItem, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { documentTypes, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
+import { describeFile, documentTypes, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
@@ -765,21 +765,24 @@ export async function findDocuments(text: string, client?: string) {
   return (await query).data ?? [];
 }
 
-// The type, work and period a person chose for a file, or null when they do not fit.
-function documentValues(form: FormData) {
-  const type = form.get("type") === "Other" ? String(form.get("custom") ?? "").trim() : String(form.get("type") ?? "");
-  const work = String(form.get("work") ?? "");
-  const period = String(form.get("period") ?? "");
+// The type, work and period a person chose for a file, or null when they do not fit. An
+// upload of several files sends one set a file, in the files' order.
+function documentValues(form: FormData, at = 0) {
+  const field = (name: string) => String(form.getAll(name)[at] ?? "");
+  const type = field("type") === "Other" ? field("custom").trim() : field("type");
+  const work = field("work");
+  const period = field("period") === "none" ? "" : field("period");
   if (!type || type.length > 80 || !(work in workTypes) || (period && !periodChoices(todayInIndia()).includes(period))) return null;
   return { work_type: work as WorkType, document_type: type, period_key: period };
 }
 
-// An Other name the owner, a partner or a manager keeps as one of the firm's own types, which
-// everyone then chooses from like the usual ones (PLAN.md 5.3, 5.17.2).
-async function keepFirmType(form: FormData, membership: { firmId: string; role: string; settings: Record<string, unknown> }, type: string) {
+// Other names the owner, a partner or a manager adds to the firm's own types, which everyone
+// then chooses from like the usual ones (PLAN.md 5.3, 5.17.2). types are in the files' order.
+async function keepFirmTypes(form: FormData, membership: { firmId: string; role: string; settings: Record<string, unknown> }, types: string[]) {
   const kept = (membership.settings.document_types ?? []) as string[];
-  if (form.get("type") !== "Other" || form.get("keep") !== "on" || !canManageClients(membership.role) || documentTypes.includes(type) || kept.includes(type) || kept.length >= 100) return;
-  await supabaseAdmin().from("firms").update({ settings: { ...membership.settings, document_types: [...kept, type] } }).eq("id", membership.firmId);
+  const added = [...new Set(types.filter((type, at) => form.getAll("type")[at] === "Other" && form.getAll("keep").includes(String(at)) && !documentTypes.includes(type) && !kept.includes(type)))];
+  if (!added.length || !canManageClients(membership.role) || kept.length + added.length > 100) return;
+  await supabaseAdmin().from("firms").update({ settings: { ...membership.settings, document_types: [...kept, ...added] } }).eq("id", membership.firmId);
 }
 
 // The firm's drive and its folder order, or null when no drive is connected.
@@ -853,7 +856,7 @@ export async function manageDocument(form: FormData) {
     new_name: placed.name,
     new_file: placed.id,
   });
-  await keepFirmType(form, membership, next.document_type);
+  await keepFirmTypes(form, membership, [next.document_type]);
   await tellOwnerOnRepeat(membership.firmId, userId, membership.email, "document.renamed", "renames");
   await queueRead(membership.firmId, id);
   revalidatePath("/app", "layout");
@@ -908,9 +911,10 @@ async function saveForClient(
 
 const MAX_UPLOAD = 25 * 1024 * 1024;
 
-// A file the owner, a partner or a manager uploads for a client, typed by them, saved into
-// the client's folder in the drive like a file from mail (PLAN.md 5.3). Up to 25 MB until
-// the file worker takes larger files. A file the client already has is refused.
+// Files the owner, a partner or a manager uploads for a client, one or several at once, each
+// typed by them, saved into the client's folder in the drive like a file from mail (PLAN.md
+// 5.3). Up to 25 MB together until the file worker takes larger files. A file the client
+// already has is refused, or left out of several.
 export async function uploadDocument(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if(!membership) redirect("/app");
@@ -920,22 +924,39 @@ export async function uploadDocument(form: FormData) {
   // Uploading is a request unless the owner switched it on for this role (5.17.2).
   const grant = membership.may("upload", client.id) ? null : await grantFor(membership.firmId, userId, "upload", client.id);
   if (!membership.may("upload", client.id) && !grant) redirect(`${back}&error=needs`);
-  const values = documentValues(form);
-  const file = form.get("file");
-  if (!values || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD) redirect(`${back}&upload=1&error=upload`);
-  // A GST paper of a client with more than one GSTIN names its GSTIN.
+  const files = form.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
+  const values = files.map((_, at) => documentValues(form, at)).filter((value) => !!value);
+  if (!files.length || files.length > 20 || values.length !== files.length || files.reduce((sum, file) => sum + file.size, 0) > MAX_UPLOAD) redirect(`${back}&upload=1&error=upload`);
+  // GST papers of a client with more than one GSTIN name their GSTIN.
   const registration = String(form.get("registration") ?? "");
-  const { data: gstins } = values.work_type === "gst" ? await supabase.from("client_registrations").select("id").eq("firm_id", membership.firmId).eq("client_id", client.id).eq("kind", "gstin") : { data: [] };
+  const { data: gstins } = values.some((value) => value.work_type === "gst") ? await supabase.from("client_registrations").select("id").eq("firm_id", membership.firmId).eq("client_id", client.id).eq("kind", "gstin") : { data: [] };
   if ((gstins?.length ?? 0) > 1 && !gstins?.some((row) => row.id === registration)) redirect(`${back}&upload=1&error=gstin`);
   const opened = await firmDrive(membership.firmId);
   if (!opened) redirect(`${back}&error=drive`);
-  const saved = await saveForClient(membership, userId, client, { ...values, status: "filed", registration_id: registration }, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, opened);
-  if (saved === "twin") redirect(`${back}&upload=1&error=twin`);
-  if (saved === "drive") redirect(`${back}&error=drive`);
+  const saved: string[] = [];
+  for (const [at, file] of files.entries()) {
+    const result = await saveForClient(membership, userId, client, { ...values[at], status: "filed", registration_id: registration }, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, opened);
+    if (result === "drive") redirect(`${back}&error=drive`);
+    if (result !== "twin") saved.push(result.id);
+  }
+  if (files.length === 1 && !saved.length) redirect(`${back}&upload=1&error=twin`);
   await spendGrant(grant);
-  await keepFirmType(form, membership, values.document_type);
+  await keepFirmTypes(form, membership, values.map((value) => value.document_type));
   revalidatePath("/app", "layout");
-  redirect(`${back}&saved=${saved.id}`);
+  // One file says where it went; several say how many were filed and how many were there already.
+  redirect(files.length === 1 ? `${back}&saved=${saved[0]}` : `${back}&dropped=${saved.length}-${files.length - saved.length}-0`);
+}
+
+// What each file's name says it is, by the rules that file attachments from mail, so the
+// upload form starts from a guess the person corrects (PLAN.md 5.5.0). Nothing is kept.
+export async function guessPapers(names: string[]) {
+  const { membership } = await currentMember();
+  if (!membership) return [];
+  const today = todayInIndia();
+  return names.slice(0, 20).map((name) => {
+    const { type, work, period } = describeFile(String(name).slice(0, 255), "", null, today);
+    return { type: type === "Document" ? "" : type, work: work === "other" ? "" : work, period: periodChoices(today).includes(period) ? period : "" };
+  });
 }
 
 // Files staff fetched from the government portals, dropped in one or many at a time (PLAN.md

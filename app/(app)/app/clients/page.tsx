@@ -1,4 +1,3 @@
-import { sendClientPapers } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { sendSkip, type BulkSend } from "@/src/lib/records";
@@ -11,6 +10,7 @@ import { cleanNumber, isGstin, isPan } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
 import { AddClientForm } from "./add-client-form";
+import { BulkSendBar } from "./bulk-send";
 import { ImportForm } from "./import-form";
 import { LinkTabs } from "../link-tabs";
 import { Badge, Empty, PageHead } from "../ui";
@@ -242,7 +242,7 @@ export default async function Clients({
             <tbody>
               {rows.map((client) => (
                 <tr key={client.id}>
-                  {canSend && <td className="shrink"><input type="checkbox" form="bulk-send" name="client" value={client.id} aria-label={`Send a paper to ${client.name}`} /></td>}
+                  {canSend && <td className="shrink"><input type="checkbox" form="bulk-send" name="client" value={client.id} data-name={client.name} aria-label={`Choose ${client.name}`} /></td>}
                   <td>
                     <Link className="row-link" href={`/app/clients/${client.id}`}>
                       {client.name}
@@ -294,24 +294,12 @@ export default async function Clients({
         </span>
       </nav>
       {canSend && (
-        <form id="bulk-send" action={sendClientPapers} className="clients-bulk" aria-label="Send filed papers">
-          <span>Send the chosen clients a filed paper. Private papers wait in the Inbox.</span>
-          <select id="bulk-paper" name="type" required aria-label="Paper">
-            {documentTypes.map((type) => (
-              <option key={type}>{type}</option>
-            ))}
-          </select>
-          <select id="bulk-year" name="period" required aria-label="Year">
-            {periodChoices(todayInIndia())
-              .filter((key) => key.length === 4)
-              .map((key) => (
-                <option value={key} key={key}>
-                  {periodName(key)} (AY {key}-{String(Number(key) + 1).slice(2)})
-                </option>
-              ))}
-          </select>
-          <button className="b b-primary">Send chosen papers</button>
-        </form>
+        <BulkSendBar
+          types={documentTypes}
+          years={periodChoices(todayInIndia())
+            .filter((key) => key.length === 4)
+            .map((key) => [key, `${periodName(key)} (AY ${key}-${String(Number(key) + 1).slice(2)})`])}
+        />
       )}
     </div>
   );

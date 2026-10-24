@@ -45,12 +45,13 @@ test("PDFs, spreadsheets and photos arrive as personal page images, with no file
         await query(local.dbUrl, "update public.firm_members set role='staff' where firm_id=$1 and user_id=$2", [firm.firmId, firm.ownerId]);
       }
       await page.goto(`${clientUrl}?tab=files`);
-      await page.getByRole("link", { name: "Upload a file" }).click();
-      await page.getByLabel("File", { exact: true }).setInputFiles({ ...file, buffer: await file.buffer });
+      await page.getByRole("link", { name: "Upload papers" }).click();
+      await page.getByLabel("Files", { exact: true }).setInputFiles({ ...file, buffer: await file.buffer });
       await page.getByLabel("Type", { exact: true }).selectOption("Other");
-      await page.getByLabel("Name for Other").fill("Sample statement");
+      await page.getByRole("dialog").getByLabel("Name", { exact: true }).fill("Sample statement");
       await page.getByLabel("Work", { exact: true }).selectOption("income_tax");
-      const uploadFields = grant ? await actionFields(page, page.url(), { client: client.id, type: "Document" }) : null;
+      await page.getByLabel("Period", { exact: true }).selectOption({ label: "No period" });
+      const uploadFields = grant ? await actionFields(page, page.url(), { client: client.id, file: "" }) : null;
       await page.getByRole("button", { name: "Upload", exact: true }).click();
       await expect(page.getByRole("status")).toContainText("Saved as");
       if (grant && uploadFields) {

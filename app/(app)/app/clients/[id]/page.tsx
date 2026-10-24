@@ -5,7 +5,7 @@ import { DatasetReview } from "./dataset-review";
 import { FileText } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, findDocuments, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument, uploadDocument } from "@/app/(app)/actions";
+import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, findDocuments, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
 import { addDays, dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, kindChecklist, workOfService, type DocumentRequest } from "@/src/lib/checklists";
@@ -25,6 +25,7 @@ import { LinkTabs } from "../../link-tabs";
 import { DroppedNotice, PortalDrop } from "../../portal-drop";
 import { MarkFiled } from "../../mark-filed";
 import { Badge, Empty, PageHead, SidePanel, Toast } from "../../ui";
+import { UploadForm } from "./upload-form";
 import "../clients.css";
 
 const errors: Record<string, string> = {
@@ -186,6 +187,10 @@ export default async function Client({ params, searchParams }: { params: Promise
   const noticeFile = (files ?? []).find((file) => file.id === (renamed ?? saved ?? removed));
   const sharedFile = documents.find((file) => file.id === shared);
   const receivers = contacts.filter((contact) => contact.can_receive_documents);
+  // Who a filed paper can go to. Sending is its own step that names the paper and the address.
+  const recipients = [...(email ? [{ value: "client", name: client.name, email }] : []), ...receivers.map((contact) => ({ value: contact.contact_id, name: contact.name, email: contact.email }))];
+  const sendable = paper?.status === "filed" && paper.share_policy !== "internal";
+  const confirmSend = !!paper && paper.id === send && sendable && !viewOnly && !ask && canSend(paper.id) && !!recipients.length;
   const order = ((drive?.settings as { folder_order?: FolderOrder } | undefined)?.folder_order ?? "year_client_work") as FolderOrder;
   const rule = new Map(rules?.map((r) => [r.code, r]));
   // The portal file each open monthly GSTR-3B is read from (PLAN.md 5.3.1): the month's GSTR-2B.
@@ -221,8 +226,21 @@ export default async function Client({ params, searchParams }: { params: Promise
       </select>
     </div>
   );
-  // The firm's usual list for this kind of client, ahead of the lists by work.
+  // The firm's usual list for this kind of client, then the lists by work, each paper once.
   const kindList = kindChecklist(membership.settings, client.kind);
+  const askItems = new Map(kindList.map((type) => [type, `kind:${type}`]));
+  for (const [work, list] of Object.entries(checklists)) for (const type of list) if (!askItems.has(type)) askItems.set(type, `${work}:${type}`);
+  // Papers for the work this client's services need start ticked; More papers opens when one of its own is.
+  const usual = ([type, value]: [string, string]) => usualWork.has(value.startsWith("kind:") ? workOfType(type) : (value.split(":")[0] as WorkType));
+  const askBox = (item: [string, string]) => (
+    <label key={item[0]} className="check">
+      <input type="checkbox" name="item" value={item[1]} defaultChecked={usual(item)} />
+      {item[0]}
+    </label>
+  );
+  // Asking is for the month of the next return due for this client, else last month.
+  const { data: due } = ask ? await supabase.from("tasks").select("period_key").eq("firm_id", membership.firmId).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(12) : { data: [] };
+  const askPeriod = due?.map((task) => task.period_key).find((key) => periodChoices(today).includes(key ?? "")) ?? periodChoices(today)[1];
   const openNotices = (notices ?? []).filter((notice) => ["upcoming", "in_progress"].includes(notice.status));
   const showExtraction = !!drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name));
   const showOutputs = !!draftForms?.some(row=>["GSTR1","GSTR3B"].includes(row.form_code)) || !!outputs;
@@ -452,7 +470,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               </form>
               <span className="page-actions">
                 {canUpload ? (
-                  <Link className="b b-secondary" href={`${base}?tab=documents&upload=1`} scroll={false}>Upload a file</Link>
+                  <Link className="b b-secondary" href={`${base}?tab=documents&upload=1`} scroll={false}>Upload papers</Link>
                 ) : (
                   askButton("upload", "Ask to upload")
                 )}
@@ -563,8 +581,8 @@ export default async function Client({ params, searchParams }: { params: Promise
                           </td>
                           <td className="shrink">
                             {!viewOnly && (
-                              <Link className="b b-secondary" href={`${base}?tab=documents&edit=${document.id}`} scroll={false} aria-label={`Change ${document.name}`}>
-                                {document.status === "to_check" ? "Check" : "Change"}
+                              <Link className="b b-secondary" href={`${base}?tab=documents&edit=${document.id}`} scroll={false} aria-label={`${document.status === "to_check" ? "Check" : "Open"} ${document.name}`}>
+                                {document.status === "to_check" ? "Check" : "Open"}
                               </Link>
                             )}
                           </td>
@@ -946,28 +964,16 @@ export default async function Client({ params, searchParams }: { params: Promise
           <p className="hint">The client gets a private link to upload them, no sign in needed. It works for 30 days.</p>
           <form action={askForDocuments}>
             <input type="hidden" name="client" value={client.id} />
-            <div className="ask-groups">
-              <fieldset>
-                <legend>Usual for {clientKinds[client.kind as ClientKind]}</legend>
-                {kindList.map((type) => (
-                  <label key={type} className="check">
-                    <input type="checkbox" name="item" value={`kind:${type}`} defaultChecked={usualWork.has(workOfType(type))} />
-                    {type}
-                  </label>
-                ))}
-              </fieldset>
-              {Object.entries(checklists).map(([work, list]) => [work, list.filter((type) => !kindList.includes(type))] as const).filter(([, list]) => list.length).map(([work, list]) => (
-                <fieldset key={work}>
-                  <legend>{workTypes[work as WorkType]}</legend>
-                  {list.map((type) => (
-                    <label key={type} className="check">
-                      <input type="checkbox" name="item" value={`${work}:${type}`} defaultChecked={usualWork.has(work as WorkType)} />
-                      {type}
-                    </label>
-                  ))}
-                </fieldset>
-              ))}
-            </div>
+            <fieldset className="ask-papers">
+              <legend>Papers</legend>
+              {[...askItems].slice(0, 5).map(askBox)}
+              {askItems.size > 5 && (
+                <details className="reveal" open={[...askItems].slice(5).some(usual)}>
+                  <summary>More papers</summary>
+                  <div className="ask-more">{[...askItems].slice(5).map(askBox)}</div>
+                </details>
+              )}
+            </fieldset>
             <div className="fields">
               <div>
                 <label htmlFor="ask-others">Anything else, by name</label>
@@ -975,7 +981,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               </div>
               <div>
                 <label htmlFor="ask-period">For</label>
-                <select id="ask-period" name="period" defaultValue={periodChoices(today)[1]}>
+                <select id="ask-period" name="period" defaultValue={askPeriod}>
                   <option value="">No period</option>
                   {periodChoices(today).map((choice) => <option key={choice} value={choice}>{periodName(choice)}</option>)}
                 </select>
@@ -1000,23 +1006,27 @@ export default async function Client({ params, searchParams }: { params: Promise
         </SidePanel>
       )}
       {upload && canUpload && !ask && (
-        <SidePanel id="upload-file" title="Upload a file" close={`${base}?tab=documents`}>
+        <SidePanel id="upload-file" title="Upload papers" close={`${base}?tab=documents`}>
           {alert}
-          <p className="hint">Up to 25 MB. It is saved in the client&apos;s folder in your firm&apos;s drive, named by what you choose.</p>
-          <form action={uploadDocument} className="fields">
-            <input type="hidden" name="client" value={client.id} />
-            <div>
-              <label htmlFor="file-file">File</label>
-              <input id="file-file" name="file" type="file" required />
-            </div>
-            <DocumentFields firmTypes={firmTypes} keep={manage} />
+          <p className="hint">Each file is saved in the client&apos;s folder in your firm&apos;s drive, named by the type and period you choose.</p>
+          <UploadForm
+            clientId={client.id}
+            types={[...documentTypes.filter((type) => type !== "Document"), ...firmTypes]}
+            typeWork={Object.fromEntries(documentTypes.map((type) => [type, workOfType(type)]).filter(([, work]) => work !== "other"))}
+            works={Object.entries(workTypes)}
+            periods={periodChoices(today).map((choice) => [choice, periodName(choice)])}
+            keep={manage}
+          >
             {gstinChoice}
-            <button className="b b-primary" type="submit">Upload</button>
-          </form>
-          {membership.may("portal_files",client.id) && <><h3>Files from the GST portal</h3><PortalDrop clientId={client.id} /></>}
+          </UploadForm>
+          {membership.may("portal_files", client.id) && (
+            <p className="hint upload-portal">
+              GSTR-2B or GSTR-2A from the GST portal? <Link href="/app?panel=portal">Add portal files</Link>, and InboxCA finds the client and month inside each.
+            </p>
+          )}
         </SidePanel>
       )}
-      {paper && !viewOnly && !ask && (
+      {paper && !viewOnly && !ask && !confirmSend && (
         <SidePanel id="edit-file" title={paper.name} close={`${base}?tab=documents`}>
           {alert}
           {paper.status === "to_check" && sameAs(paper) && <p className="hint">{sameAs(paper)}.</p>}
@@ -1044,41 +1054,21 @@ export default async function Client({ params, searchParams }: { params: Promise
               </ul>
             </>
           )}
-          {paper.status === "filed" && paper.share_policy !== "internal" && (
+          {sendable && (
             <>
               <h3>Send to the client</h3>
               {canSend(paper.id) ? (
-                <>
-                  <p className="hint">Emailed from your firm&apos;s address as a secure link that works for 7 days and 5 downloads.</p>
-                  <form action={sendDocument} className="send-to">
-                    <input type="hidden" name="document" value={paper.id} />
-                    {email && (
-                      <label className="check">
-                        <input type="radio" name="to" value="client" defaultChecked />
-                        {client.name}, {email}
-                      </label>
-                    )}
-                    {receivers.map((contact) => (
-                      <label key={contact.contact_id} className="check">
-                        <input type="radio" name="to" value={contact.contact_id} defaultChecked={!email && contact === receivers[0]} />
-                        {contact.name}, {contact.email}
-                      </label>
-                    ))}
-                    {!email && !receivers.length && <p className="hint">Add the client&apos;s email in Details, or a contact who may receive documents, to send files.</p>}
-                    <button className="b b-secondary" type="submit" disabled={!email && !receivers.length}>Send</button>
-                  </form>
-                </>
+                recipients.length ? (
+                  <Link className="b b-secondary" href={`${base}?tab=documents&send=${paper.id}`} scroll={false}>
+                    Send this paper
+                  </Link>
+                ) : (
+                  <p className="hint">Add the client&apos;s email in Details, or a contact who may receive documents, to send files.</p>
+                )
               ) : (
                 askButton("send", "Ask to send", paper.id)
               )}
             </>
-          )}
-          {owner && (
-            <form key={paper.share_policy ?? "firm"} action={setPaperSharing} className="form-row">
-              <input type="hidden" name="document" value={paper.id} />
-              <div><label htmlFor="paper-sharing">Sending this paper</label><select id="paper-sharing" name="policy" defaultValue={paper.share_policy ?? ""}><option value="">Use the firm&apos;s choice</option><option value="auto">Routine paper</option><option value="approval">Ask before sending</option><option value="internal">Keep inside the firm</option></select></div>
-              <button className="b b-secondary">Save sending choice</button>
-            </form>
           )}
           <h3>Remove</h3>
           {canRemove(paper.id) ? (
@@ -1090,6 +1080,45 @@ export default async function Client({ params, searchParams }: { params: Promise
           ) : (
             askButton("remove", "Ask to remove", paper.id)
           )}
+          {owner && (
+            <details className="reveal paper-more">
+              <summary>More</summary>
+              <form key={paper.share_policy ?? "firm"} action={setPaperSharing} className="form-row">
+                <input type="hidden" name="document" value={paper.id} />
+                <div><label htmlFor="paper-sharing">Sending this paper</label><select id="paper-sharing" name="policy" defaultValue={paper.share_policy ?? ""}><option value="">Use the firm&apos;s choice</option><option value="auto">Routine paper</option><option value="approval">Ask before sending</option><option value="internal">Keep inside the firm</option></select></div>
+                <button className="b b-secondary">Save sending choice</button>
+              </form>
+            </details>
+          )}
+        </SidePanel>
+      )}
+      {paper && confirmSend && (
+        <SidePanel id="send-file" title="Send to the client" close={`${base}?tab=documents&edit=${paper.id}`}>
+          {alert}
+          <form action={sendDocument} className="send-to">
+            <input type="hidden" name="document" value={paper.id} />
+            {recipients.length === 1 ? (
+              <>
+                <input type="hidden" name="to" value={recipients[0].value} />
+                <p className="send-ask">Send {paper.document_type} to {recipients[0].email}?</p>
+              </>
+            ) : (
+              <fieldset>
+                <legend className="send-ask">Send {paper.document_type} to</legend>
+                {recipients.map((recipient, at) => (
+                  <label key={recipient.value} className="check">
+                    <input type="radio" name="to" value={recipient.value} defaultChecked={!at} />
+                    {recipient.name}, {recipient.email}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <p className="hint">{paper.name} goes from your firm&apos;s address as a secure link that works for 7 days and 5 downloads.</p>
+            <span className="form-row">
+              <button className="b b-primary" type="submit">Send</button>
+              <Link className="b b-secondary" href={`${base}?tab=documents&edit=${paper.id}`} scroll={false}>Back</Link>
+            </span>
+          </form>
         </SidePanel>
       )}
       {filing && (
@@ -1130,13 +1159,14 @@ function DocumentFields({ type = "", work = "other", period = "", firmTypes = []
           <option value="Other">Other, named below</option>
         </select>
       </div>
-      <div>
-        <label htmlFor="file-custom">Name for Other</label>
+      {/* Shown only while Type is Other (clients.css). */}
+      <div className="other-name">
+        <label htmlFor="file-custom">Name</label>
         <input id="file-custom" name="custom" maxLength={80} defaultValue={known ? "" : type} placeholder="HDFC loan sanction letter" />
         {keep && (
           <label className="check">
-            <input type="checkbox" name="keep" />
-            Keep this name as one of the firm&apos;s types
+            <input type="checkbox" name="keep" value="0" />
+            Add to our list of paper types
           </label>
         )}
       </div>

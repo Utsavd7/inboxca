@@ -99,7 +99,7 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
       const drive=await openDrive(membership.firmId,account),folder=await drive.ensureFolder(["GST",financialYear(document.period_key),safeName(client.name),"Prepared"]);
       const name=`${safeName(client.name,100)} - ${formName(document.prepared.form)} - ${periodName(document.period_key)} - ${type} - v${document.prepared.version}.${extension}`;
       const saved=await drive.save(folder,name,bytes);
-      if(saved==="taken") throw new Error("An acknowledgement with this name is already in the drive. Choose it from Files.");
+      if(saved==="taken") throw new Error("An acknowledgement with this name is already in the drive. Choose it from Documents.");
       const {data:row,error}=await admin.from("documents").insert({firm_id:membership.firmId,client_id:document.client_id,name,document_type:type,work_type:"gst",period_key:document.period_key,size:bytes.length,sha256:checksum,drive_file_id:saved.id,share_policy:null}).select("id").single();
       if(error || !row) {await drive.trash(saved.id);throw new Error("The acknowledgement could not be saved.");}
       paper=row.id;
