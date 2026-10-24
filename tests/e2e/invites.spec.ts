@@ -437,7 +437,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   const [{ id: expired, expires_at: expires }] = await query(local.dbUrl, "select id, expires_at from public.requests where firm_id=$1 and kind='permission' and status='pending'", [firm.firmId]);
   expect(Date.parse(expires) - Date.now()).toBeGreaterThan(3.9 * 3_600_000);
   expect(Date.parse(expires) - Date.now()).toBeLessThanOrEqual(4 * 3_600_000);
-  const staleFields = await actionFields(owner, "/app/inbox", { request: expired });
+  const staleFields = await actionFields(owner, `/app/inbox?answer=${expired}`, { request: expired });
   await query(local.dbUrl, "update public.requests set expires_at=now()-interval '1 second' where id=$1", [expired]);
   await owner.request.post("/app/inbox", { multipart: { ...staleFields, intent: "allow" }, headers: { Origin: new URL(owner.url()).origin } });
   expect((await query(local.dbUrl, "select status from public.requests where id=$1", [expired]))[0].status).toBe("pending");
@@ -449,10 +449,11 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
 
   // The person has no team manager, so the question goes to the owner.
   await owner.goto("/app/inbox");
-  const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a file" });
+  const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "New asks to upload a file" });
   await expect(question).toContainText(`Ask Client ${tag}`);
   // #42, #44, #57: copying an approval form or visiting its address cannot approve it.
-  const fields = await actionFields(owner, "/app/inbox", { request: await question.locator('input[name="request"]').inputValue() });
+  const [{ id: asked }] = await query(local.dbUrl, "select id from public.requests where firm_id=$1 and kind='permission' and status='pending' and expires_at>now()", [firm.firmId]);
+  const fields = await actionFields(owner, `/app/inbox?answer=${asked}`, { request: asked });
   const [{ user_id: requester }] = await query(local.dbUrl, "select user_id from public.firm_members m join auth.users u on u.id=m.user_id where m.firm_id=$1 and u.email=$2", [firm.firmId, newEmail]);
   await query(local.dbUrl, "update public.firm_members set role='manager' where firm_id=$1 and user_id=$2", [firm.firmId, requester]);
   await person.request.post("/app/inbox", { multipart: { ...fields, intent: "allow" }, headers: { Origin: new URL(person.url()).origin } });
@@ -460,7 +461,18 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await owner.request.get(`/app/inbox?request=${fields.request}&intent=allow`);
   expect((await query(local.dbUrl, "select status from public.requests where id=$1", [fields.request]))[0].status).toBe("pending");
   expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id=$1 and actor_id=$2 and action='approval.denied'", [firm.firmId, requester]))[0].n).toBe(1);
-  await question.getByRole("button", { name: "Allow once" }).click();
+  // Answer opens the question beside the list, by name; the toast can undo the answer.
+  await question.getByRole("link", { name: "Answer" }).click();
+  const answer = owner.getByRole("dialog", { name: `New asks to upload a file for Ask Client ${tag}` });
+  await answer.getByRole("button", { name: "Refuse" }).click();
+  const toast = owner.getByRole("status").filter({ hasText: "Refused." });
+  await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(question).toBeVisible();
+  expect((await query(local.dbUrl, "select status from public.requests where id=$1", [fields.request]))[0].status).toBe("pending");
+  await question.getByRole("link", { name: "Answer" }).click();
+  await answer.getByRole("button", { name: "Allow once" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "New may upload a file once, within an hour." })).toBeVisible();
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
 
   await person.goto(files);
@@ -476,7 +488,8 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await person.getByRole("button", { name: "Ask to upload" }).click();
   await expect(person.getByText("Asked", { exact: true })).toBeVisible();
   await owner.goto("/app/inbox");
-  await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a file" }).getByRole("button", { name: "Always allow" }).click();
+  await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a file" }).getByRole("link", { name: "Answer" }).click();
+  await owner.getByRole("dialog").getByRole("button", { name: "Always allow New" }).click();
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
@@ -596,7 +609,8 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await expect(person.getByRole("status").filter({ hasText: "The owner is asked for more time today." })).toBeVisible();
   await owner.goto("/app/inbox");
   const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: `asks to work until ${laterBy(close, 120)} today` });
-  await question.getByRole("button", { name: "Allow today" }).click();
+  await question.getByRole("link", { name: "Answer" }).click();
+  await owner.getByRole("dialog").getByRole("button", { name: "Allow today" }).click();
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
   expect(await query(local.dbUrl, "select access -> 'extra_time' ->> 'until' as until from public.firm_members where user_id = $1", [personId])).toEqual([{ until: laterBy(close, 120) }]);
   await query(local.dbUrl, "update public.firms set settings = jsonb_set(settings, '{special_hours,0,close}', '\"23:59\"') where id = $1", [firm.firmId]);
@@ -731,19 +745,21 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   const reasons = [];
   for (const subject of ["Hello", "Please send last year's ITR"]) {
     await waiting.getByText(subject, { exact: true }).click();
-    await expect(open.getByRole("heading", { name: subject })).toBeVisible();
+    // The shared test mailbox holds thousands of emails, so a live read can take seconds.
+    await expect(open.getByRole("heading", { name: subject })).toBeVisible({ timeout: 15_000 });
     reasons.push(await open.locator(".ib-actions + .ib-note").textContent());
-    await open.getByRole("button", { name: "Mark as done" }).click();
-    await expect(open.getByRole("button", { name: "Mark as done" })).toHaveCount(0);
+    await open.getByRole("button", { name: "No reply needed" }).click();
+    await expect(open.getByRole("button", { name: "No reply needed" })).toHaveCount(0, { timeout: 15_000 });
   }
-  expect(reasons.sort()).toEqual(["Asks for a paper that is not in the drive", "InboxCA could not tell what it asks"]);
+  expect(reasons.sort()).toEqual(["Asks for a paper that is not in the drive", "Asks something InboxCA could not answer"]);
   await owner.goto("/app/inbox?show=reply");
   await expect(owner.getByText("No emails here")).toBeVisible();
   await owner.goto("/app/inbox?show=in");
   await expect(waiting).toHaveCount(2);
   await waiting.first().locator(".ib-subject").click();
-  await open.getByLabel("What this email is").selectOption({ label: "Asks for this year's records" });
-  await expect(open.getByText("Corrected")).toBeVisible();
+  await open.getByText("Change", { exact: true }).click();
+  await open.getByRole("form", { name: "What this email is" }).getByRole("button", { name: "Asks for this year's records" }).click();
+  await expect(open.getByText("Corrected")).toBeVisible({ timeout: 15_000 });
 });
 
 // M3 acceptance: reconnect preserves unread mail and resumes a waiting send.
@@ -1337,7 +1353,7 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await query(local.dbUrl, "update public.firm_members set team_id=$3 where firm_id=$1 and user_id in ($2,$4)", [batch.firmId, manager, team, asker]);
     const request = randomUUID();
     await query(local.dbUrl, "insert into public.requests (id,firm_id,kind,client_id,entity_type,entity_id,reason_code,expires_at,details) values ($1,$2,'permission',$3,'permission',$1,'upload',now()+interval '4 hours',jsonb_build_object('by',$4::text,'route','manager','team_id',$5::text))", [request, batch.firmId, client, asker, team]);
-    const fields = await actionFields(boss, "/app/inbox", { request });
+    const fields = await actionFields(boss, `/app/inbox?answer=${request}`, { request });
     await staff[0].request.post("/app/inbox", { multipart: { ...fields, intent: "always" }, headers: { Origin: new URL(staff[0].url()).origin } });
     expect((await query(local.dbUrl, "select status from public.requests where id=$1", [request]))[0].status).toBe("pending");
     expect((await query(local.dbUrl, "select access->'always' as rights from public.firm_members where firm_id=$1 and user_id=$2", [batch.firmId, asker]))[0].rights).toBeNull();

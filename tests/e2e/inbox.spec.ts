@@ -116,7 +116,8 @@ test("client mail and the firm's sent mail show live, filtered by URL, and nothi
 test("the team replies in the conversation from the firm's mailbox, threaded, and the email is done", async () => {
   const [{ id: mail, provider_message_id: original }] = await query(local.dbUrl, "select id, provider_message_id from public.email_events where firm_id = $1", [firm.firmId]);
   await owner.goto(`/app/inbox?mail=${mail}`);
-  await expect(pane().getByRole("button", { name: "Write a reply with AI" })).toBeDisabled();
+  // Without AI set up there is no AI button at all.
+  await expect(pane().getByRole("button", { name: "Write a reply with AI" })).toHaveCount(0);
   await owner.keyboard.press("r");
   await expect(owner.getByLabel("Your reply")).toBeFocused();
   await owner.getByLabel("Your reply").fill("Yes, Tuesday at 11 works for us.");
@@ -179,7 +180,7 @@ test("the team writes a new email to a client, only to the client's known addres
   await expect(owner).toHaveURL(new RegExp(`/app/inbox\\?compose=${clientId}$`));
   await expect(panel.getByRole("checkbox", { name: `${clientName}, ${clientEmail}` })).toBeChecked();
   await expect(panel.getByRole("textbox", { name: "To" })).toHaveCount(0);
-  await expect(panel.getByRole("button", { name: "Write with AI" })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: "Write with AI" })).toHaveCount(0);
 
   await panel.getByLabel("Subject").fill(`Audit plan ${tag}`);
   await panel.getByLabel("Your email").fill("Dear Meera,\n\nWe start the audit on Monday.");
@@ -204,4 +205,52 @@ test("the team writes a new email to a client, only to the client's known addres
   const [{ id: paper }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1", [firm.firmId]);
   const [{ details }] = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'email.written' and entity_id = $2", [firm.firmId, clientId]);
   expect(details).toEqual({ to: 1, files: 1, papers: [paper] });
+});
+
+test("a notice that asks something waits for a reply; No reply needed clears it, with Undo; Esc closes the email", async () => {
+  await smtp.sendMail({ from: clientEmail, to: office, subject: `GST notice ${tag}`, text: "Sir, we received a notice from the GST department. What should we do? Please call." });
+  await readMail();
+  // Today says why it waits, in plain words, and when it came.
+  await owner.goto("/app");
+  await expect(owner.locator("section[aria-labelledby=t-reply] li").filter({ hasText: clientName })).toContainText(/Sent a notice and asks what to do\. Emailed /);
+
+  await owner.goto("/app/inbox?show=reply");
+  const row = list().getByRole("listitem").filter({ hasText: `GST notice ${tag}` });
+  await expect(row).toContainText("Needs reply");
+  await expect(row).toContainText("Notice received");
+  await row.getByText(`GST notice ${tag}`).click();
+  await expect(pane().getByRole("heading", { name: `GST notice ${tag}` })).toBeVisible();
+  await expect(pane()).toContainText("Sent a notice and asks what to do");
+  const [{ id: request }] = await query(local.dbUrl, "select r.id from public.requests r join public.email_events e on e.id = r.entity_id where r.firm_id = $1 and r.kind = 'team_reply' and e.label = 'notice_received'", [firm.firmId]);
+  const status = async () => (await query(local.dbUrl, "select status from public.requests where id = $1", [request]))[0].status;
+
+  // The e key takes it out of Needs reply; the toast undoes that.
+  await owner.keyboard.press("e");
+  const toast = owner.getByRole("status").filter({ hasText: "Moved out of Needs reply." });
+  await expect(toast).toBeVisible();
+  expect(await status()).toBe("done");
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(pane().getByRole("button", { name: "No reply needed" })).toBeVisible();
+  expect(await status()).toBe("pending");
+  await pane().getByRole("button", { name: "No reply needed" }).click();
+  await expect(toast).toBeVisible();
+  expect(await status()).toBe("done");
+
+  // Esc closes the open email back to the list.
+  await owner.locator("body").click({ position: { x: 1, y: 1 } });
+  await owner.keyboard.press("Escape");
+  await expect(owner).not.toHaveURL(/mail=/);
+  await expect(pane()).toContainText("Pick an email to read it here.");
+
+  // The label is a tag with a small menu to change it.
+  await owner.goto("/app/inbox?show=in");
+  await list().getByText(`GST notice ${tag}`).click();
+  await pane().getByText("Change", { exact: true }).click();
+  await pane().getByRole("form", { name: "What this email is" }).getByRole("button", { name: "GST data" }).click();
+  await expect(pane().getByText("Corrected")).toBeVisible();
+  expect(await query(local.dbUrl, "select label, decision_source from public.email_events e join public.requests r on r.entity_id = e.id where r.id = $1", [request])).toEqual([{ label: "data_gst", decision_source: "staff" }]);
+
+  // The client's page lists its emails by subject, read live, with who sent it and when.
+  await owner.goto(`/app/clients/${clientId}?tab=emails`);
+  await expect(owner.getByRole("link", { name: new RegExp(`GST notice ${tag}.*From ${clientName}, `) })).toBeVisible();
 });

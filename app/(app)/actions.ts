@@ -661,15 +661,23 @@ export async function disconnectMailbox() {
 }
 
 // Inbox: correct an email's label (a person's choice wins over the rules and is logged), or
-// mark a Needs team reply request done once someone has replied from the mailbox.
+// take an email out of Needs reply when it needs none (and undo that from the toast).
 export async function manageEmail(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const label = String(form.get("label") ?? "");
+  const request = String(form.get("request") ?? "");
+  const back = String(form.get("back") ?? "");
   if (form.get("intent") === "label" && label in labels)
     await supabase.from("email_events").update({ label, decision_source: "staff" }).eq("id", String(form.get("email") ?? ""));
-  else if (form.get("intent") === "done") await supabase.from("requests").update({ status: "done" }).eq("id", String(form.get("request") ?? ""));
-  else if (form.get("intent") === "client") {
+  else if (form.get("intent") === "done" || form.get("intent") === "undo") {
+    const undo = form.get("intent") === "undo";
+    await supabase.from("requests").update({ status: undo ? "pending" : "done" }).eq("id", request).eq("kind", "team_reply").eq("status", undo ? "done" : "pending");
+    if (back.startsWith("/app/inbox")) {
+      revalidatePath("/app", "layout");
+      redirect(undo ? back : `${back}${back.includes("?") ? "&" : "?"}cleared=${encodeURIComponent(request)}`);
+    }
+  } else if (form.get("intent") === "client") {
     // Mail from a contact who writes for several clients: a person says which client it is
     // for, among the contact's own clients they may see; its attachments are then filed.
     const email = String(form.get("email") ?? "");
@@ -1550,7 +1558,7 @@ export async function decidePermission(form: FormData) {
     await admin.from("requests").update({ status: "used" }).eq("id", request.id);
     await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.always", entity_type: "request", entity_id: request.id, details: { right: request.reason_code, for: asked.by } });
     revalidatePath("/app", "layout");
-    redirect("/app/inbox");
+    redirect(`/app/inbox?decided=${request.id}`);
   }
   const allow = intent === "allow";
   // More time is given at once: that person's extra time today, which the database reads.
@@ -1561,6 +1569,32 @@ export async function decidePermission(form: FormData) {
   }
   await admin.from("requests").update(allow ? (time ? { status: "used" } : { status: "approved", expires_at: new Date(Date.now() + 3_600_000).toISOString() }) : { status: "refused" }).eq("id", request.id);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: allow ? "permission.allowed" : "permission.refused", entity_type: "request", entity_id: request.id, details: { right: request.reason_code, for: asked.by } });
+  revalidatePath("/app", "layout");
+  redirect(`/app/inbox?decided=${request.id}`);
+}
+
+// Undo, from the toast after answering: only the person who answered, within a few minutes,
+// and not once an Allow once was used or more time was given. The question waits again; an
+// Always allow given with it is taken back.
+export async function undoPermission(form: FormData) {
+  const { userId, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const admin = supabaseAdmin();
+  const id = String(form.get("request") ?? "");
+  const [{ data: request }, { data: last }] = await Promise.all([
+    admin.from("requests").select("id, status, reason_code, details").eq("id", id).eq("firm_id", membership.firmId).eq("kind", "permission").neq("reason_code", "time").gt("expires_at", new Date().toISOString()).maybeSingle(),
+    admin.from("activity_log").select("action, actor_id").eq("firm_id", membership.firmId).eq("entity_type", "request").eq("entity_id", id).gt("at", new Date(Date.now() - 15 * 60_000).toISOString()).order("at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const undoable = { "permission.allowed": "approved", "permission.refused": "refused", "permission.always": "used" } as Record<string, string>;
+  if (!request || last?.actor_id !== userId || undoable[last.action] !== request.status) redirect("/app/inbox");
+  const by = (request.details as { by: string }).by;
+  if (last.action === "permission.always") {
+    const { data: person } = await admin.from("firm_members").select("access").eq("firm_id", membership.firmId).eq("user_id", by).single();
+    const access = (person?.access ?? {}) as { always?: Standing[] };
+    await admin.from("firm_members").update({ access: { ...access, always: (access.always ?? []).filter((grant) => (typeof grant === "string" ? grant : grant.right) !== request.reason_code) } }).eq("firm_id", membership.firmId).eq("user_id", by);
+  }
+  await admin.from("requests").update({ status: "pending" }).eq("id", request.id);
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.undone", entity_type: "request", entity_id: request.id, details: { right: request.reason_code, for: by } });
   revalidatePath("/app", "layout");
   redirect("/app/inbox");
 }

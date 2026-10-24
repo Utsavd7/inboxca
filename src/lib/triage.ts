@@ -12,6 +12,17 @@ export const labels = {
   other: "Needs team reply",
 } as const;
 export type Label = keyof typeof labels;
+// Why an email waits for the team, in words for people.
+export const replyReasons: Record<string, string> = {
+  no_rule: "Asks something InboxCA could not answer",
+  notice_question: "Sent a notice and asks what to do",
+  record_internal: "Asks for a paper kept inside your firm",
+  record_not_found: "Asks for a paper that is not in the drive",
+  record_unclear: "Asks for a paper InboxCA could not pick out",
+  not_allowed: "Asks for a paper this sender may not receive",
+  data_unclear: "Sent data for more than one kind of work",
+  client_unclear: "Writes for several clients. Pick which one",
+};
 export type Email = { subject: string; text: string; attachments: string[] };
 
 const words = {
@@ -21,6 +32,7 @@ const words = {
   past: ["last year", "previous year", "old return", "earlier year", "pichhle saal", "pichle saal", "पिछले साल", "ગયા વર્ષ"],
   data_gst: ["gst data", "sales", "purchase", "invoice", "bills", "b2b", "gstr-1 data", "gstr 1 data", "e-way", "बिल", "बिक्री", "खरीद", "વેચાણ", "ખરીદી", "બિલ"],
   data_income_tax: ["form 16", "form16", "salary", "interest certificate", "capital gain", "80c", "investment proof", "rent receipt", "home loan", "itr data", "income details", "pension", "वेतन", "પગાર"],
+  call: ["call", "phone", "फोन", "ફોન"],
   data_tax_audit: ["tax audit", "3cd", "3cb", "trial balance", "ledger", "tally backup", "stock statement", "audit data", "fixed asset"],
 };
 // Whole words, with plurals; a word ending in "*" also matches longer words it starts.
@@ -42,7 +54,8 @@ export function classify(email: Email, today: string): { label: Label; reason: s
   const text = `${email.subject}\n${email.text}`.toLowerCase();
   const files = email.attachments.join(" ").toLowerCase();
   const everything = `${text} ${files}`;
-  if (count(everything, "notice")) return { label: "notice_received", reason: "notice_words" };
+  // A notice that asks something (a question, or to call) also waits for the team.
+  if (count(everything, "notice")) return { label: "notice_received", reason: text.includes("?") || count(text, "call") ? "notice_question" : "notice_words" };
 
   const data = (["data_gst", "data_income_tax", "data_tax_audit"] as const)
     .map((label) => ({ label, score: count(everything, label) }))

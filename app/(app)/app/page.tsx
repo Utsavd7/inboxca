@@ -11,12 +11,12 @@ import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { periodName } from "@/src/lib/documents";
 import { describeHours, type Hours } from "@/src/lib/hours";
-import { currentMember } from "@/src/lib/member";
+import { currentMember, myQuestions } from "@/src/lib/member";
 import { formName, preparedSchema } from "@/src/lib/prepared";
 import { roleNames } from "@/src/lib/roles";
 import { OfficePanel } from "./office-panel";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
-import { mayDecide } from "@/src/lib/rights";
+import { replyReasons } from "@/src/lib/triage";
 import { Badge, PageHead } from "./ui";
 import "./today.css";
 
@@ -33,11 +33,6 @@ const alertText = (reason: string, details: { free_bytes?: number; files?: numbe
     request_stalled: `${details.client} has not uploaded the documents you asked for, after three reminders. A call may help.`,
     drive_missing: `${details.files} ${details.files === 1 ? "paper is" : "papers are"} missing from your drive.`,
   })[reason] ?? "Something in your drive needs a look.";
-const reasons: Record<string, string> = {
-  no_rule: "Could not tell what it asks",
-  data_unclear: "Data for more than one kind of work",
-  client_unclear: "Writes for several clients",
-};
 
 // The phone notifications line stays hidden once the person closes it.
 async function hidePush() {
@@ -77,7 +72,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           .gte("at", new Date(`${today}T00:00:00+05:30`).toISOString()),
       )
     : 0;
-  const [replies, papers, forms, confirming, late, week, rules, setup, alerts, noticeAlerts, asks, me, mailboxNotice] = await Promise.all([
+  const [replies, papers, forms, confirming, late, week, rules, setup, alerts, noticeAlerts, asks, mailboxNotice] = await Promise.all([
     supabase.from("requests").select("id, entity_id, client_id, reason_code, clients(name)", { count: "exact" }).eq("kind", "team_reply").eq("status", "pending").limit(5),
     supabase.from("requests").select("id, client_id, details, clients(name)", { count: "exact" }).eq("kind", "documents").eq("status", "pending").gt("expires_at", new Date().toISOString()).order("expires_at", { ascending: false }).limit(5),
     approver || membership.may("mark_filed")
@@ -100,8 +95,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       : null,
     lead ? supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending").limit(20) : null,
     supabase.rpc("notice_alerts", { target_firm: membership.firmId }).limit(10),
-    supabase.from("requests").select("details").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(200),
-    supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
+    myQuestions(),
     owner ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : null,
   ]);
   // The emails behind the replies, for the time and a link straight to the mail.
@@ -110,7 +104,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
   const eventById = new Map(events?.map((event) => [event.id, event]));
   // Questions this person may answer (5.17.2), counted for one line on Today.
   const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
-  const questions = (asks.data ?? []).filter((request) => me.data && mayDecide({ id: userId, role: me.data.role, team_id: me.data.team_id, deputy }, request.details as { by: string; route: "owner" | "manager"; team_id: string | null })).length;
+  const questions = asks.length;
   // Approvers are asked once to get questions on their phone (5.17.3), until one device has it
   // or they close the line.
   const pushKey = process.env.VAPID_PUBLIC_KEY ?? "";
@@ -287,9 +281,8 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
                     <li key={request.id}>
                       <span className="grow">
                         <strong>{client}</strong>
-                        <span className="sub">{reasons[request.reason_code ?? ""] ?? "Needs your team"}</span>
+                        <span className="sub">{replyReasons[request.reason_code ?? ""] ?? "Needs your team"}{event && `. Emailed ${at(event.received_at)}`}</span>
                       </span>
-                      {event && <span className="today-time">{at(event.received_at)}</span>}
                       <Link className="b b-secondary" href={event ? `/app/inbox?mail=${event.id}` : request.client_id ? `/app/clients/${request.client_id}` : "/app/inbox"} aria-label={`Reply to ${client}`}>
                         Reply
                       </Link>

@@ -1,4 +1,5 @@
 "use client";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { draftEmail, draftReply, sendEmail, sendReply, type Draft } from "./actions";
@@ -6,8 +7,10 @@ import { draftEmail, draftReply, sendEmail, sendReply, type Draft } from "./acti
 type Paper = { id: string; name: string };
 
 // The Inbox's keys, never required: j and k move through the list, Enter opens, r goes to the
-// reply, e marks the open email done, / goes to search, Esc leaves the reply.
+// reply, e takes the open email out of Needs reply, / goes to search, Esc leaves the reply,
+// then closes the open email back to the list.
 export function InboxKeys() {
+  const router = useRouter();
   useEffect(() => {
     const keys = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
@@ -21,6 +24,14 @@ export function InboxKeys() {
         r: () => document.getElementById("reply-text")?.focus(),
         e: () => document.querySelector<HTMLButtonElement>("[data-key=e]")?.click(),
         "/": () => document.querySelector<HTMLInputElement>("#mail-search")?.focus(),
+        Escape: () => {
+          const url = new URL(location.href);
+          // Never with a side panel open, nor over a reply being written.
+          if (document.querySelector(".side-panel") || document.querySelector<HTMLTextAreaElement>("#reply-text")?.value || !(url.searchParams.has("mail") || url.searchParams.has("sent"))) return;
+          url.searchParams.delete("mail");
+          url.searchParams.delete("sent");
+          router.push(`${url.pathname}${url.search}`, { scroll: false });
+        },
       };
       if (!pick[event.key]) return;
       event.preventDefault();
@@ -28,8 +39,29 @@ export function InboxKeys() {
     };
     document.addEventListener("keydown", keys);
     return () => document.removeEventListener("keydown", keys);
-  }, []);
+  }, [router]);
   return null;
+}
+
+// The list and the reading pane: from a click on an email until the address changes, the pane
+// shows its outline (inbox.css) and the list stays as it is.
+export function Reading({ children }: { children: React.ReactNode }) {
+  const now = useSearchParams().toString();
+  const [from, setFrom] = useState<string | null>(null);
+  const [seen, setSeen] = useState(now);
+  if (seen !== now) {
+    setSeen(now);
+    setFrom(null);
+  }
+  const open = (event: React.MouseEvent) => {
+    const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(".ib-row > a");
+    if (link && !event.metaKey && !event.ctrlKey && !event.shiftKey && link.href !== location.href) setFrom(now);
+  };
+  return (
+    <div className="split" data-opening={from === now ? "" : undefined} onClick={open}>
+      {children}
+    </div>
+  );
 }
 
 function Send({ children }: { children: string }) {
@@ -89,8 +121,8 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
   );
 }
 
-// The reply under an open conversation: plain text, papers and files, and an AI draft when
-// AI is set up.
+// The reply under an open conversation: plain text, papers and files, and an AI draft only
+// once AI is set up.
 export function ReplyBox({ mail, papers, suggested, ai, mayAttach }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const text = useRef<HTMLTextAreaElement>(null);
@@ -107,9 +139,11 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach }: { mail: str
       {mayAttach && <Attach papers={papers} chosen={chosen} setChosen={setChosen} offered={[...suggested, ...(draft.papers ?? [])]} />}
       <div className="ib-reply-foot">
         {draft.error && <span className="ib-note" role="status">{draft.error}</span>}
-        <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={!ai || drafting} title={ai ? "A draft for you to check. AI never sends." : "Turns on when AI is set up"}>
-          {drafting ? "Writing a draft" : "Write a reply with AI"}
-        </button>
+        {ai && (
+          <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={drafting} title="A draft for you to check. AI never sends.">
+            {drafting ? "Writing a draft" : "Write a reply with AI"}
+          </button>
+        )}
         <Send>Send reply</Send>
       </div>
     </form>
@@ -146,9 +180,11 @@ export function ComposeBox({ client, recipients, papers, ai, mayAttach }: { clie
       {mayAttach && <Attach papers={papers} chosen={chosen} setChosen={setChosen} />}
       <div className="ib-reply-foot">
         {draft.error && <span className="ib-note" role="status">{draft.error}</span>}
-        <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={!ai || drafting} title={ai ? "A draft for you to check. AI never sends." : "Turns on when AI is set up"}>
-          {drafting ? "Writing a draft" : "Write with AI"}
-        </button>
+        {ai && (
+          <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={drafting} title="A draft for you to check. AI never sends.">
+            {drafting ? "Writing a draft" : "Write with AI"}
+          </button>
+        )}
         <Send>Send email</Send>
       </div>
     </form>

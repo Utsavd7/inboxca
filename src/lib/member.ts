@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { closingToday } from "./hours";
-import { may, type Permissions, type Right, type Standing } from "./rights";
+import { may, mayDecide, type Permissions, type Right, type Standing } from "./rights";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
 import { officeDeviceAccess, officeProof } from "./office";
 import { supabaseAdmin, supabaseServer } from "./supabase";
@@ -59,6 +59,20 @@ export const currentMember = cache(async () => {
     may: (right: Right, client?: string) => !office.remoteUntil && may(data.role, right, settings.permissions as Permissions, (access.always ?? []) as Standing[], client),
   };
   return { supabase, userId, membership, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting, pcKey: office.pcKey };
+});
+
+// The permission questions this person may answer now (5.17.2): never their own; a manager or
+// partner only their team's, with the right to approve. Today, the Inbox and the menu's Inbox
+// count all read this one list.
+export const myQuestions = cache(async () => {
+  const { supabase, userId, membership } = await currentMember();
+  if (!membership) return [];
+  const [{ data: asks }, { data: me }] = await Promise.all([
+    supabase.from("requests").select("id, client_id, reason_code, details, clients(name)").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(200),
+    supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
+  ]);
+  const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
+  return (asks ?? []).filter((request) => me && (!["manager", "partner"].includes(me.role) || deputy || membership.may("approve_requests", request.client_id ?? undefined)) && mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy }, request.details as { by: string; route: "owner" | "manager"; team_id: string | null }));
 });
 
 // For actions that change anything: a view only device gets no further.

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LogOut } from "lucide-react";
 import { signOut } from "@/app/(auth)/actions";
 import { longDate } from "@/src/lib/hours";
-import { currentMember } from "@/src/lib/member";
+import { currentMember, myQuestions } from "@/src/lib/member";
 import { pagesFor, roleLabel } from "@/src/lib/roles";
 import "./app.css";
 import { ClosingWatch } from "./closing-watch";
@@ -22,12 +22,15 @@ export const metadata: Metadata = {
 // and who is signed in; each page sits on one white panel beside it.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { supabase, membership, pcKey } = await currentMember();
-  const [{ count: waiting }, { data: auth }] = await Promise.all([
+  // The Inbox's count: emails waiting for a reply and the questions this person answers.
+  const [{ count: replies }, questions, { data: auth }] = await Promise.all([
     membership
       ? supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending")
       : Promise.resolve({ count: 0 }),
+    myQuestions(),
     supabase.auth.getUser(),
   ]);
+  const waiting = (replies ?? 0) + questions.length;
   const email = auth.user?.email ?? "";
   const role = membership?.role ?? "";
   return (
@@ -43,7 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {membership && <Command pages={pagesFor(role)} />}
         {membership && (
           <nav className="rail-nav" aria-label="InboxCA">
-            <NavLinks role={role} waiting={waiting ?? 0} place="main" />
+            <NavLinks role={role} waiting={waiting} place="main" />
           </nav>
         )}
         {membership && (
