@@ -1,5 +1,5 @@
 // Fills one local scale firm with invented clients and 12 months of returns.
-// Running it again replaces only this firm's data.
+// Running it again replaces only this firm's data; with --remove it deletes the firm and its owner.
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
@@ -59,6 +59,13 @@ try {
 } catch (error) {
   await db.query("rollback");
   throw error;
+}
+if (process.argv.includes("--remove")) {
+  const { error } = await admin.auth.admin.deleteUser(user.id);
+  if (error) throw error;
+  await db.end();
+  console.log(`${FIRM_NAME} and ${OWNER} removed.`);
+  process.exit(0);
 }
 
 const [{ id: firm }] = (

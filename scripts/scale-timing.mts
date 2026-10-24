@@ -121,6 +121,42 @@ for (const [name, run] of checks) {
   console.log(`${name} | ${times.map((value) => value.toFixed(1)).join(", ")} | ${median(times).toFixed(1)}`);
 }
 
+// Every signed in page, through the running app (npm run build, then next start), with the
+// owner's session in the same cookies the app sets.
+const { createServerClient } = await import("@supabase/ssr");
+const jar = new Map<string, string>();
+const ssr = createServerClient(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
+  cookies: {
+    getAll: () => [...jar].map(([name, value]) => ({ name, value })),
+    setAll: (list) => list.forEach(({ name, value }) => jar.set(name, value)),
+  },
+});
+const { error: cookieError } = await ssr.auth.setSession(verified);
+if (cookieError) throw cookieError;
+const [client] = (await db.query("select id from public.clients where firm_id = $1 and name = 'Scale Client 05000'", [membership.firm_id])).rows;
+const site = `http://localhost:${process.env.PORT ?? 3000}`;
+const pages = [
+  ["Home", "/app"], ["Clients", "/app/clients"], ["A client", `/app/clients/${client.id}`], ["Inbox", "/app/inbox"],
+  ["Calendar", "/app/calendar"], ["Notices", "/app/notices"], ["People", "/app/people"], ["Settings", "/app/settings"],
+];
+console.log(`\nPage timings at ${site}, ${RUNS} runs each after one warm up`);
+console.log("Page | Runs ms | Median ms");
+for (const [name, path] of pages) {
+  const times = [];
+  for (let attempt = 0; attempt <= RUNS; attempt++) {
+    const started = performance.now();
+    const response = await fetch(site + path, { headers: { cookie: [...jar].map(([key, value]) => `${key}=${value}`).join("; ") }, redirect: "manual" });
+    await response.text();
+    if (response.status !== 200) throw new Error(`${path} answered ${response.status}`);
+    for (const cookie of response.headers.getSetCookie()) {
+      const [pair] = cookie.split(";");
+      jar.set(pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1));
+    }
+    if (attempt) times.push(performance.now() - started);
+  }
+  console.log(`${name} | ${times.map((value) => value.toFixed(1)).join(", ")} | ${median(times).toFixed(1)}`);
+}
+
 await db.query("begin");
 await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: session.user.id, role: "authenticated", aal: "aal2", amr: [{ method: "totp", timestamp: Math.floor(Date.now() / 1000) }] })]);
 await db.query("select set_config('request.jwt.claim.sub', $1, true)", [session.user.id]);
