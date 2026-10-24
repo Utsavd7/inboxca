@@ -1,10 +1,10 @@
 "use client";
-import { House, Inbox, Settings, Users, UsersRound } from "lucide-react";
+import { FolderOpen, House, Inbox, Settings, Users, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { pagesFor } from "@/src/lib/roles";
 
-const icons: Record<string, typeof House> = { Today: House, Inbox, Clients: UsersRound, People: Users, Settings };
+const icons: Record<string, typeof House> = { Today: House, Inbox, Clients: UsersRound, Documents: FolderOpen, People: Users, Settings };
 
 // The rail's links; the current page is marked for sight and for screen readers.
 export function NavLinks({ role, waiting, place }: { role: string; waiting: number; place: "main" | "foot" }) {

@@ -1,0 +1,70 @@
+/* Documents: folders, the papers and the chosen paper side by side, each scrolling on its own. */
+.docs-folders { display: flex; flex: 0 0 200px; flex-direction: column; gap: 4px; padding: 8px; border-right: 1px solid var(--line); }
+.docs-year .cell-select { width: 100%; height: 32px; color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.docs-folder { display: flex; flex: none; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 8px; color: var(--ink-2); font-size: 14px; font-weight: 500; text-decoration: none; transition: background var(--fast) var(--out), color var(--fast) var(--out); }
+.docs-folder:hover { background: var(--hover); color: var(--ink); }
+.docs-folder[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.docs-n { margin-left: auto; color: var(--ink-3); font: 500 12px var(--font-plex), ui-monospace, monospace; }
+
+.docs-list { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.docs-find { position: relative; display: flex; align-items: center; padding: 12px; border-bottom: 1px solid var(--line); }
+.docs-find svg { position: absolute; left: 24px; color: var(--ink-3); pointer-events: none; }
+.ui .docs-find input[type="search"] { padding-left: 32px; font-size: 14px; }
+.docs-table { flex: 1; overflow-x: auto; }
+.docs-table table { width: 100%; min-width: 560px; table-layout: fixed; border-collapse: collapse; }
+.docs-table th:nth-child(1) { width: 38%; }
+.docs-table th:nth-child(3) { width: 112px; }
+.docs-table th { position: sticky; top: 0; z-index: 1; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--side); color: var(--ink-3); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; }
+.docs-table td { height: 40px; padding: 0 12px; overflow: hidden; border-bottom: 1px solid var(--line); font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
+.docs-table tbody tr { position: relative; transition: background var(--fast) var(--out); }
+.docs-table tbody tr:hover { background: var(--hover); }
+.docs-table tbody tr.on { background: var(--accent-soft); }
+.docs-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.docs-name a { overflow: hidden; color: var(--ink); font-weight: 600; text-decoration: none; text-overflow: ellipsis; }
+/* The whole row chooses the paper. */
+.docs-table td a::after { content: ""; position: absolute; inset: 0; }
+.docs-faint { color: var(--ink-3); }
+.docs-pages { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+.docs-pages span { margin-right: auto; }
+.docs-list > .empty { margin: 16px; }
+
+.docs-detail { display: flex; flex: 0 0 280px; flex-direction: column; gap: 8px; padding: 16px; border-left: 1px solid var(--line); }
+.docs-detail h2 { font-size: 16px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.docs-detail p { font-size: 13px; }
+.docs-preview { display: grid; flex: none; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--side); color: var(--ink-3); font-size: 13px; text-align: center; }
+.docs-preview > a { display: grid; justify-items: center; gap: 8px; color: var(--ink-2); font-weight: 600; text-decoration: none; }
+.docs-preview > a:hover { color: var(--accent); }
+.docs-preview .viewer { align-self: start; width: 100%; margin: 0; }
+.docs-preview .viewer > .hint, .docs-preview .viewer > .alert { margin: 16px; }
+.docs-preview .viewer-pages { padding: 8px; border-radius: 0; }
+.docs-path { color: var(--ink-2); font: 500 12px var(--font-plex), ui-monospace, monospace; overflow-wrap: anywhere; }
+.docs-label { display: block; color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.docs-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* Upload papers opens over the right side; the list stays in view. */
+.docs-shade { position: fixed; inset: 0; z-index: var(--z-panel); background: color-mix(in srgb, var(--ink) 16%, transparent); }
+.docs-sheet { position: fixed; top: 0; right: 0; bottom: 0; z-index: var(--z-panel); display: flex; flex-direction: column; gap: 12px; width: min(400px, 100%); padding: 24px; overflow-y: auto; border-left: 1px solid var(--line); background: var(--white); box-shadow: var(--shadow-float); }
+.docs-sheet h2 { font-size: 16px; font-weight: 600; line-height: 1.3; }
+.docs-sheet p { font-size: 13px; }
+.docs-sheet .docs-find { padding: 0; border: 0; }
+.docs-sheet .docs-find svg { left: 12px; }
+.docs-sheet > .b { align-self: flex-start; }
+.docs-clients { display: flex; flex-direction: column; list-style: none; border: 1px solid var(--line); border-radius: 12px; }
+.docs-clients li { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; border-top: 1px solid var(--line); font-weight: 600; }
+.docs-clients li:first-child { border-top: 0; }
+.docs-clients span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* On a smaller laptop the period stays in the paper's name and on the right. */
+@media (max-width: 1360px) {
+  .docs-table table { min-width: 440px; }
+  .docs-table :is(th, td):nth-child(3) { display: none; }
+}
+@media (max-width: 1100px) {
+  .docs-folders { flex-basis: 160px; }
+  .docs-detail { flex-basis: 240px; }
+}
+@media (max-width: 720px) {
+  .docs-folders, .docs-detail { flex-basis: auto; border: 0; border-top: 1px solid var(--line); }
+  .docs-folders { border-top: 0; }
+  .docs-list { border-top: 1px solid var(--line); }
+}

@@ -17,6 +17,7 @@ export const pagesFor = (role: string) => [
   { href: "/app", name: "Today", place: "main" },
   { href: "/app/inbox", name: "Inbox", place: "main" },
   { href: "/app/clients", name: "Clients", place: "main" },
+  { href: "/app/documents", name: "Documents", place: "main" },
   { href: "/app/calendar", name: "Calendar", place: "search" },
   { href: "/app/notices", name: "Notices", place: "search" },
   ...(["owner", "partner", "manager"].includes(role) ? [{ href: "/app/people", name: "People", place: "foot" }] : []),
