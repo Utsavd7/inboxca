@@ -11,6 +11,8 @@ export const draftSchema = z.object({
     z.object({kind:z.literal("tax"),base:z.uuid(),rate:z.uuid(),total:z.uuid()}),
   ])).max(1000),
   edits:z.record(z.uuid(),z.record(z.uuid(),z.object({base:z.string(),value_enc:z.string().max(20000)}))).optional(),
+  // The client's GST number a register belongs to, when the client has more than one.
+  registration:z.uuid().optional(),
 });
 export type Draft = z.infer<typeof draftSchema>;
 export const figureSchema=z.object({label:z.string().min(1).max(120),value:z.string().max(2000),kind:z.enum(["number","text","date"]).optional()});
@@ -90,11 +92,11 @@ export async function verifySources(firm:string,client:string,draft:Draft) {
 }
 
 // Called by the document jobs, never with email text. Source ids are checked before saving.
-export async function createDraft(input:{id:string;firm_id:string;client_id:string;form_code:string;period_key:string;lines:(Figure & {id:string;field:string;source:Draft["lines"][number]["source"]})[];checks:Draft["checks"]},person:string|null,permission:string|null=null) {
+export async function createDraft(input:{id:string;firm_id:string;client_id:string;form_code:string;period_key:string;lines:(Figure & {id:string;field:string;source:Draft["lines"][number]["source"]})[];checks:Draft["checks"];registration?:string},person:string|null,permission:string|null=null) {
   const crypto=serverCrypto(),lines:Draft["lines"]=[];
   for(const line of input.lines) {
     checkValue(line);
     lines.push({id:line.id,field:line.field,value_enc:await crypto.encrypt(input.firm_id,place(input.id,line.id),JSON.stringify({label:line.label,value:line.value,kind:line.kind})),source:line.source,state:"pending"});
   }
-  return saveDraft({...input,revision:0},{lines,checks:input.checks},person,"dataset.created",{},permission);
+  return saveDraft({...input,revision:0},{lines,checks:input.checks,...(input.registration && {registration:input.registration})},person,"dataset.created",{},permission);
 }

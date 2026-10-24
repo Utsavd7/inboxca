@@ -25,7 +25,10 @@ export async function checkedForm(input:{client:string;registration:string;form:
   const registration=registrations?.find(row=>row.id===input.registration);
   if(!client || !registration || rows?.length!==input.drafts.length) throw new Error("The work could not be found.");
   // Existing registers have no registration choice. Never guess in a multi-number client.
-  if((input.form==="GSTR1" || rows?.some(row=>row.form_code==="GSTR1")) && registrations?.length!==1) throw new Error("This client's registers need a GST number choice before a form can be prepared.");
+  // Each register must name this GST number, or the client must have only one.
+  const named=(row:{data:unknown})=>(row.data as {registration?:string} | null)?.registration;
+  if((input.form==="GSTR1" ? rows : rows.filter(row=>row.form_code==="GSTR1")).some(row=>named(row) ? named(row)!==registration.id : registrations?.length!==1))
+    throw new Error("This client's registers need a GST number choice before a form can be prepared.");
   const template=chooseTemplate((templates ?? []).map(row=>templateSchema.parse(row)),input.form,input.period,input.version,input.reason);
   const gstin=await serverCrypto().decrypt(membership.firmId,`clients/${input.client}/gstin`,registration.number_enc);
   const drafts=[];
