@@ -36,7 +36,7 @@ import { firmMailer } from "@/src/lib/firm-mail";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { paperPolicy, type BulkSend, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
-import { checkMailbox, detectSettings } from "@/src/lib/mailbox";
+import { checkMailbox, detectSettings, providerFor } from "@/src/lib/mailbox";
 import { currentMember, currentWriter } from "@/src/lib/member";
 import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
@@ -581,9 +581,9 @@ export async function manageTasks(form: FormData) {
 export type MailboxState = { error?: string; values?: Record<string, string> };
 const mailboxErrors = {
   invalid: "Enter the firm's email address and its password.",
-  microsoft: "This address is on Outlook or Microsoft 365, which connects with Microsoft sign in. That is coming soon.",
-  sign_in: "InboxCA could not sign in with that address and password. Check the password, or use an app password.",
-  server: "InboxCA could not reach the mail server. Check the server settings below.",
+  microsoft: "This address is on Outlook or Microsoft 365, which connects only with Microsoft sign in. InboxCA cannot use Microsoft sign in yet, so this address cannot be connected for now.",
+  sign_in: "InboxCA could not sign in with that address and password.",
+  server: "InboxCA could not reach the mail server. Check the server settings above.",
 };
 
 // Settings → Firm email: the owner connects the firm's mailbox. Both sign ins are checked
@@ -601,7 +601,7 @@ export async function connectMailbox(_prev: MailboxState, form: FormData): Promi
     : await detectSettings(address);
   if (settings === "microsoft") return { error: mailboxErrors.microsoft, values };
   const checked = await checkMailbox(address, password, settings);
-  if ("error" in checked) return { error: mailboxErrors[checked.error], values: { ...values, ...serverValues(settings) } };
+  if ("error" in checked) return { error: checked.error === "sign_in" ? `${mailboxErrors.sign_in} ${providerFor(settings.imap.host)?.help ?? "Check the password, or use an app password."}` : mailboxErrors.server, values: { ...values, ...serverValues(settings) } };
 
   const admin=supabaseAdmin();
   const {data:prior,error:readError}=await admin.from("connected_accounts").select("id,status,address_enc,address_bidx,sync_cursor,settings").eq("firm_id",membership.firmId).eq("kind","mail").maybeSingle();
@@ -616,7 +616,7 @@ export async function connectMailbox(_prev: MailboxState, form: FormData): Promi
     address_enc:await crypto.encrypt(membership.firmId,`accounts/${id}/address`,address),address_bidx:index,
     credentials_enc:await crypto.encrypt(membership.firmId,`accounts/${id}/credentials`,JSON.stringify({password})),
     sync_cursor:prior?.sync_cursor ?? checked.cursor,
-    settings:{...(prior?.settings as Record<string,Json> ?? {}),...settings,mail_failures:{read:0,send:0}},
+    settings:{...(prior?.settings as Record<string,Json> ?? {}),imap:settings.imap,smtp:settings.smtp,mail_failures:{read:0,send:0}},
   };
   const {error}=prior ? await admin.from("connected_accounts").update(fields).eq("id",id) : await admin.from("connected_accounts").insert(fields);
   if (error) return {error:"The email connection could not be saved. Try again.",values};
@@ -626,6 +626,15 @@ export async function connectMailbox(_prev: MailboxState, form: FormData): Promi
   runJobsSoon();
   revalidatePath("/app/settings");
   return {};
+}
+// What InboxCA finds for an address, in plain words, shown as the owner types it.
+export async function findMailServer(address: string) {
+  const { membership } = await currentMember();
+  if (membership?.role !== "owner" || !z.email().safeParse(address.trim()).success) return "";
+  const found = await detectSettings(address.trim().toLowerCase());
+  if (found === "microsoft") return mailboxErrors.microsoft;
+  const help = providerFor(found.imap.host)?.help;
+  return found.name ? `Found ${found.name}.${help ? ` ${help}` : ""}` : "InboxCA did not find this provider, so it will try the usual server names.";
 }
 const serverValues = ({ imap, smtp }: { imap: { host: string; port: number }; smtp: { host: string; port: number } }) => ({
   imap_host: imap.host,

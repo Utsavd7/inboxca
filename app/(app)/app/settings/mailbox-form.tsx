@@ -1,30 +1,31 @@
 "use client";
-import { useActionState } from "react";
-import { connectMailbox, type MailboxState } from "@/app/(app)/actions";
+import { useActionState, useState } from "react";
+import { connectMailbox, findMailServer, type MailboxState } from "@/app/(app)/actions";
 
-// Connect the firm's mailbox: the address and its password; server settings only when
-// InboxCA cannot find them by itself.
+// Connect the firm's mailbox: the address and its password. InboxCA finds the servers and
+// says what it found; the server settings are changed only when it cannot find them.
 export function MailboxForm({initial={},reconnecting=false}:{initial?:Record<string,string>;reconnecting?:boolean}) {
   const [state, connect, connecting] = useActionState(connectMailbox, {values:initial} as MailboxState);
   const values = state.values ?? {};
+  const [found, setFound] = useState("");
   return (
     <form key={JSON.stringify(values)} action={connect} noValidate>
       <div className="fields">
         <div>
           <label htmlFor="mail-address">The firm&apos;s email address</label>
-          <input id="mail-address" name="address" type="email" autoComplete="off" required readOnly={reconnecting} defaultValue={values.address} />
+          <input id="mail-address" name="address" type="email" autoComplete="off" required readOnly={reconnecting} defaultValue={values.address} onBlur={(event) => findMailServer(event.target.value).then(setFound, () => setFound(""))} />
         </div>
         <div>
           <label htmlFor="mail-password">Its password</label>
           <input id="mail-password" name="password" type="password" autoComplete="new-password" required />
         </div>
         <button className="b b-primary" type="submit" disabled={connecting}>
-          {connecting ? "Checking" : reconnecting ? "Reconnect email" : "Connect email"}
+          {connecting ? "Connecting" : reconnecting ? "Reconnect email" : "Connect email"}
         </button>
       </div>
-      <p className="hint">Gmail, Google Workspace and Zoho need an app password, made in the account&apos;s security settings.</p>
+      <p className="hint" aria-live="polite">{found || "Gmail, Google Workspace and Zoho need an app password, made in the account's security settings."}{connecting && " Connecting..."}</p>
       <details className="reveal" open={!!state.error && !!values.imap_host}>
-        <summary>Server settings, only if InboxCA asks</summary>
+        <summary>Change server settings</summary>
         <div className="fields">
           {[
             ["imap_host", "Incoming (IMAP) server"],
