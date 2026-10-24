@@ -1,8 +1,9 @@
 import { promises as dns } from "node:dns";
 import { isIP } from "node:net";
-import { ImapFlow } from "imapflow";
+import { ImapFlow, type SearchObject } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
+import { mailLimits, snippet, threadKeys, type ListAsk, type MailItem, type MailMessage, type ThreadAsk } from "./mail-view.ts";
 
 // The firm's own mailbox over IMAP and SMTP (PLAN.md 5.13): settings found from the
 // address, both sign ins checked before anything is saved, always over TLS. Only a test
@@ -203,3 +204,136 @@ export async function foundInSent(address: string, password: string, server: Ser
 export const opensInMailbox = (host:string) => host.toLowerCase() === "imap.gmail.com";
 export const mailboxLink = (host:string,address:string,messageId:string) => opensInMailbox(host)
   ? `https://mail.google.com/mail/?authuser=${encodeURIComponent(address)}#search/${encodeURIComponent(`rfc822msgid:${messageId.replace(/^<|>$/g, "")}`)}` : null;
+
+// The Inbox page's live reads (run by the file worker): only what the page shows, opened in
+// memory and returned, never kept. The text of a message is read from its first megabyte;
+// attachment names come from its structure, so no attachment is downloaded.
+type Part = { disposition?: string; dispositionParameters?: Record<string, string>; parameters?: Record<string, string>; childNodes?: Part[] };
+const fileNames = (part?: Part): string[] =>
+  !part ? [] : [...(part.childNodes ?? []).flatMap(fileNames), ...(part.disposition === "attachment" || (part.disposition !== "inline" && part.dispositionParameters?.filename) ? [part.dispositionParameters?.filename ?? part.parameters?.name ?? ""] : [])].filter(Boolean);
+const emails = (list?: { address?: string }[]) => (list ?? []).map((entry) => entry.address?.toLowerCase() ?? "").filter(Boolean);
+const textOr = (q: string): SearchObject => ({ or: [{ subject: q }, { from: q }, { to: q }, { body: q }] });
+const anyOf = (criteria: SearchObject[]): SearchObject => (criteria.length === 1 ? criteria[0] : { or: criteria });
+
+async function readItems(imap: ImapFlow, box: MailItem["box"], uids: number[], full = false) {
+  const read: MailMessage[] = [];
+  if (!uids.length) return read;
+  for await (const message of imap.fetch(uids, { uid: true, envelope: true, internalDate: true, bodyStructure: full, source: { maxLength: full ? 1_000_000 : 16_384 } }, { uid: true })) {
+    const parsed = message.source ? await simpleParser(message.source).catch(() => null) : null;
+    const text = (parsed?.text ?? "").slice(0, mailLimits.text);
+    const references = parsed?.references ?? [];
+    read.push({
+      box,
+      messageId: message.envelope?.messageId ?? "",
+      from: emails(message.envelope?.from)[0] ?? "",
+      to: emails([...(message.envelope?.to ?? []), ...(message.envelope?.cc ?? [])]),
+      date: new Date(message.envelope?.date ?? message.internalDate ?? 0).toISOString(),
+      subject: message.envelope?.subject ?? "",
+      snippet: snippet(text),
+      inReplyTo: message.envelope?.inReplyTo ?? "",
+      references: typeof references === "string" ? [references] : references,
+      text: full ? text : "",
+      attachments: full ? fileNames(message.bodyStructure as Part) : [],
+    });
+  }
+  return read;
+}
+
+const sentFolder = async (imap: ImapFlow) => (await imap.list()).find((box) => box.specialUse === "\\Sent")?.path;
+
+export async function listMail(address: string, password: string, server: Server, ask: ListAsk) {
+  const imap = imapClient(address, password, server);
+  try {
+    await imap.connect();
+    let inbox: MailItem[] = [];
+    if (ask.inbox.length) {
+      await imap.mailboxOpen("INBOX", { readOnly: true });
+      const ids = new Set(ask.inbox);
+      let uids = (await imap.search(ask.q ? textOr(ask.q) : anyOf(ask.inbox.map((id) => ({ header: { "message-id": id } }))), { uid: true })) || [];
+      // A search may match mail of anyone: only the asked messages are opened.
+      if (ask.q) {
+        const kept: number[] = [];
+        for await (const message of imap.fetch(uids.slice(-300), { uid: true, envelope: true }, { uid: true })) if (ids.has(message.envelope?.messageId ?? "")) kept.push(message.uid);
+        uids = kept;
+      }
+      inbox = (await readItems(imap, "inbox", uids.slice(-mailLimits.sent))).filter((item) => ids.has(item.messageId));
+    }
+    let sent: MailItem[] | null = null;
+    const { sent: want } = ask;
+    if (want) {
+      const folder = await sentFolder(imap);
+      sent = [];
+      if (folder) {
+        await imap.mailboxOpen(folder, { readOnly: true });
+        const base: SearchObject = {
+          ...(ask.q && textOr(ask.q)),
+          ...(want.since && { since: new Date(Date.parse(want.since) - 86_400_000) }),
+          ...(want.before && { before: new Date(Date.parse(want.before) + 86_400_000) }),
+          ...(want.reminders && { header: { "message-id": "<reminder-" } }),
+        };
+        const found: number[] = [];
+        for (const to of want.to ?? [null]) found.push(...((await imap.search(to ? { ...base, to } : Object.keys(base).length ? base : { all: true }, { uid: true })) || []));
+        const uids = [...new Set(found)].sort((a, b) => a - b).slice(-want.limit);
+        sent = (await readItems(imap, "sent", uids)).filter((item) => (!want.since || item.date >= want.since) && (!want.before || item.date < want.before));
+      }
+    }
+    await imap.logout();
+    return { inbox: inbox.map(({ box, messageId, from, to, date, subject, snippet }) => ({ box, messageId, from, to, date, subject, snippet })), sent: sent?.map(({ box, messageId, from, to, date, subject, snippet }) => ({ box, messageId, from, to, date, subject, snippet })) ?? null };
+  } catch (error) {
+    imap.close();
+    return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };
+  }
+}
+
+// One message and its conversation: every message in the inbox or the Sent folder that it
+// replies to or that replies to it, by Message-ID, In-Reply-To and References, oldest first.
+export async function readThread(address: string, password: string, server: Server, ask: ThreadAsk) {
+  const imap = imapClient(address, password, server);
+  try {
+    await imap.connect();
+    const boxes = { inbox: "INBOX", sent: await sentFolder(imap) };
+    const open = async (box: MailItem["box"]) => !!boxes[box] && !!(await imap.mailboxOpen(boxes[box]!, { readOnly: true }));
+    const messages = new Map<string, MailMessage>();
+    if (await open(ask.box)) {
+      const uids = (await imap.search({ header: { "message-id": ask.messageId } }, { uid: true })) || [];
+      const opened = (await readItems(imap, ask.box, uids.slice(-1), true)).find((item) => item.messageId === ask.messageId);
+      if (opened) {
+        messages.set(opened.messageId, opened);
+        const criteria: SearchObject[] = threadKeys(opened.messageId, opened.inReplyTo, opened.references).flatMap((key) => ["message-id", "references", "in-reply-to"].map((name) => ({ header: { [name]: key } })));
+        for (const box of ["inbox", "sent"] as const) {
+          if (!(await open(box))) continue;
+          const found = ((await imap.search(anyOf(criteria), { uid: true })) || []).slice(-mailLimits.thread);
+          for (const message of await readItems(imap, box, found, true)) if (message.messageId && !messages.has(message.messageId)) messages.set(message.messageId, message);
+        }
+      }
+    }
+    await imap.logout();
+    return { messages: [...messages.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-mailLimits.thread) };
+  } catch (error) {
+    imap.close();
+    return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };
+  }
+}
+
+// A copy of a message the app sent, put in the Sent folder unless the provider already put
+// it there (Gmail, Zoho and Microsoft do), so the conversation shows the reply. Says
+// whether the Sent folder has it.
+export async function keepInSent(address: string, password: string, server: Server, raw: Buffer, messageId: string) {
+  const imap = imapClient(address, password, server);
+  try {
+    await imap.connect();
+    const folder = await sentFolder(imap);
+    if (!folder) {
+      await imap.logout();
+      return false;
+    }
+    await imap.mailboxOpen(folder);
+    const found = await imap.search({ header: { "message-id": messageId } }, { uid: true });
+    if (!found || !found.length) await imap.append(folder, raw, ["\\Seen"]);
+    await imap.logout();
+    return true;
+  } catch {
+    imap.close();
+    return false;
+  }
+}

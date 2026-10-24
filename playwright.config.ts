@@ -18,7 +18,7 @@ export default defineConfig({
   use: { baseURL: origin, trace: "on-first-retry" },
   webServer: [{
     command: "npm run worker", url: `${FILE_WORKER_URL}/health`,
-    env: { FILE_WORKER_SECRET, FILE_WORKER_PORT: String(Number(process.env.PORT || 3000) + 1), FILE_WORKER_TEST: "1", DRIVE_LOCAL_DIR: `${tmpdir()}/inboxca-test-drive` },
+    env: { FILE_WORKER_SECRET, FILE_WORKER_PORT: String(Number(process.env.PORT || 3000) + 1), FILE_WORKER_TEST: "1", MAIL_ALLOW_LOCAL: "1", DRIVE_LOCAL_DIR: `${tmpdir()}/inboxca-test-drive` },
   }, {
     command: "npm run start",
     url: origin,

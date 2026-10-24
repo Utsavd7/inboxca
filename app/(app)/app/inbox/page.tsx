@@ -1,4 +1,4 @@
-import { Check, FileText, Mail } from "lucide-react";
+import { Mail, Search } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { decidePermission, decideShare, manageEmail } from "@/app/(app)/actions";
@@ -8,12 +8,22 @@ import { personName } from "@/src/lib/roles";
 import { addDays, todayInIndia } from "@/src/lib/calendar";
 import { canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
+import { documentTypes, folderFor } from "@/src/lib/documents";
+import type { FolderOrder } from "@/src/lib/drive";
+import { aiReady } from "@/src/lib/ai";
+import { mailLive } from "@/src/lib/mail-live";
+import { paragraphs, sentKind, suggestPapers, whenRange, whens, type MailItem } from "@/src/lib/mail-view";
 import { currentMember } from "@/src/lib/member";
-import { AutoSelect } from "../auto-select";
-import { Avatar, Badge, Empty, PageHead } from "../ui";
 import { opensInMailbox } from "@/src/lib/mailbox";
+import { askedPaper } from "@/src/lib/records";
 import { labels } from "@/src/lib/triage";
+import { AutoSelect } from "../auto-select";
+import { Empty, PageHead, Toast } from "../ui";
+import { clientsOf, contactName, conversation } from "./conversation";
+import { InboxKeys, ReplyBox } from "./inbox-client";
+import "./inbox.css";
 
+const PAGE = 30;
 const reasons: Record<string, string> = {
   no_rule: "InboxCA could not tell what it asks",
   record_internal: "This paper is kept inside your firm",
@@ -23,29 +33,80 @@ const reasons: Record<string, string> = {
   data_unclear: "Data for more than one kind of work",
   client_unclear: "The sender writes for several clients",
 };
-const byIdOf = <T extends { id: string }>(rows: T[] | null, id: string) => rows?.find((row) => row.id === id);
-const when = (at: string) =>
-  new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const shows = { "": "All", reply: "Needs reply", in: "From clients", out: "Sent to clients" } as const;
+const statuses = { reply: "Needs reply", filed: "Filed", reminder: "Reminder sent", team: "Sent by team", check: "To check" } as const;
+const sentTags = { reminder: "Reminder sent", inboxca: "Sent by InboxCA", team: "Sent by team" } as const;
+type Tag = { text: string; tone: "warn" | "done" | "" };
+type Row = { key: string; href: string; dir: "in" | "out"; client: string; clientId: string | null; at: string; subject: string; snippet: string; tag: Tag; request?: string };
 
-// Client email as InboxCA sorted it: what waits for the team, and the latest mail with its
-// label. Only labels and times are kept; the email itself stays in the firm's mailbox.
-export default async function Inbox({ searchParams }: { searchParams: Promise<{ approved?: string; error?: string }> }) {
+const india = (at: string, options: Intl.DateTimeFormatOptions) => new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", ...options });
+const shortTime = (at: string, today: string) => {
+  const day = new Date(at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return day === today ? india(at, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : day === addDays(today, -1) ? "Yesterday" : india(at, { day: "numeric", month: "short" });
+};
+const longTime = (at: string) => india(at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const uuid = /^[0-9a-f-]{36}$/;
+
+type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "approved" | "error" | "replied" | "unsent", string | undefined>;
+
+// Every email with the firm's clients, both ways (PLAN.md 5.5): the list from InboxCA's
+// records (which client, when, what waits) with subjects and first lines read live from the
+// firm's mailbox, sent mail read live from its Sent folder, and the open conversation read
+// live too. InboxCA keeps no copy of any of it. Questions, papers and files waiting for the
+// team sit in a short list above.
+export default async function Inbox({ searchParams }: { searchParams: Promise<Partial<Search>> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const { approved, error } = await searchParams;
-  const [{ data: events }, { data: waiting }, { data: toCheck }, { data: papers }, { data: asks }, { data: me }, { data: people }] = await Promise.all([
-    supabase
-      .from("email_events")
-      .select("id, client_id, contact_id, received_at, label, decision_source, clients(name), contacts(name_enc)")
-      .order("received_at", { ascending: false })
-      .order("id")
-      .limit(100),
-    supabase.from("requests").select("id, entity_id, reason_code").eq("kind", "team_reply").eq("status", "pending"),
+  const sp = await searchParams;
+  const firm = membership.firmId;
+  const today = todayInIndia();
+  const show = (sp.show && sp.show in shows ? sp.show : "") as keyof typeof shows;
+  const status = (sp.status && sp.status in statuses ? sp.status : show === "reply" ? "reply" : "") as keyof typeof statuses | "";
+  const when = sp.when && sp.when in whens ? sp.when : "";
+  const q = (sp.q ?? "").trim().slice(0, 200);
+  const before = sp.before && !Number.isNaN(Date.parse(sp.before)) ? new Date(sp.before).toISOString() : "";
+  const { data: chosenClient } = sp.client && uuid.test(sp.client) ? await supabase.from("clients").select("id, name").eq("id", sp.client).maybeSingle() : { data: null };
+  const filters = { client: chosenClient?.id, show: show || undefined, status: sp.status && sp.status in statuses ? sp.status : undefined, when: when || undefined, q: q || undefined };
+  const href = (change: Partial<Search> = {}) => {
+    const params = new URLSearchParams(Object.entries({ ...filters, ...change }).filter((entry): entry is [string, string] => !!entry[1]));
+    return `/app/inbox${params.size ? `?${params}` : ""}`;
+  };
+  const wantIn = show !== "out" && status !== "reminder" && status !== "team";
+  const wantOut = show !== "reply" && show !== "in" && !["reply", "filed", "check"].includes(status);
+  const range = whenRange(when, today);
+  const until = [range.until, before].filter(Boolean).sort()[0];
+
+  // Which emails a status keeps, from InboxCA's own records.
+  const { data: only } =
+    status === "reply"
+      ? await supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "pending").limit(1000).then(({ data }) => ({ data: data?.map((row) => row.entity_id) }))
+      : status === "filed" || status === "check"
+        ? await supabase.from("documents").select("email_event_id").eq("status", status === "filed" ? "filed" : "to_check").not("email_event_id", "is", null).limit(1000).then(({ data }) => ({ data: data?.map((row) => row.email_event_id!) }))
+        : { data: null };
+  let events = supabase.from("email_events").select("id, client_id, contact_id, received_at, label, decision_source, provider_message_id, clients(name), contacts(name_enc)").eq("firm_id", firm);
+  if (chosenClient) events = events.eq("client_id", chosenClient.id);
+  if (range.from) events = events.gte("received_at", range.from);
+  if (until) events = events.lt("received_at", until);
+  if (only) events = events.in("id", only);
+  let needsCount = supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending");
+  let inCount = supabase.from("email_events").select("id", { count: "exact", head: true }).eq("firm_id", firm);
+  if (chosenClient) [needsCount, inCount] = [needsCount.eq("client_id", chosenClient.id), inCount.eq("client_id", chosenClient.id)];
+  const cq = (sp.cq ?? "").trim().slice(0, 80);
+  const cpage = Math.min(Math.max(0, Number(sp.cpage) || 0), 500);
+  let pick = supabase.from("clients").select("id, name").is("archived_at", null).order("name").range(cpage * 8, cpage * 8 + 8);
+  if (cq) pick = pick.ilike("name", `%${cq.replace(/[\\%_]/g, "\\$&")}%`);
+  const [{ data: rows }, { count: needs }, { count: fromClients }, { data: pickList }, { data: waiting }, { data: toCheck }, { data: papers }, { data: asks }, { data: me }, { data: people }, { data: accounts }] = await Promise.all([
+    wantIn && (!only || only.length) ? events.order("received_at", { ascending: false }).order("id").limit(q ? 500 : PAGE) : Promise.resolve({ data: [] as never[] }),
+    needsCount,
+    inCount,
+    pick,
+    supabase.from("requests").select("id, entity_id, reason_code").eq("kind", "team_reply").eq("status", "pending").limit(1000),
     supabase.from("documents").select("id, client_id, name, clients(name)").eq("status", "to_check").limit(50),
     supabase.from("shares").select("id, contact_id, documents(name, clients(name))").eq("status", "waiting").limit(50),
     supabase.from("requests").select("id, client_id, reason_code, details, clients(name)").eq("kind", "permission").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(100),
-    supabase.from("firm_members").select("role, team_id").eq("firm_id", membership.firmId).eq("user_id", userId).single(),
-    supabase.rpc("firm_people", { target_firm: membership.firmId }),
+    supabase.from("firm_members").select("role, team_id").eq("firm_id", firm).eq("user_id", userId).single(),
+    supabase.rpc("firm_people", { target_firm: firm }),
+    supabaseAdmin().from("connected_accounts").select("kind, status, settings").eq("firm_id", firm),
   ]);
   // Questions this person may answer (5.17.2): never their own; a manager only their team's.
   const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
@@ -54,9 +115,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
   // The owner's week of approvals (5.17.3, #51): who approved what, newest first.
   const owner = membership.role === "owner";
   const { data: week } = owner
-    ? await supabaseAdmin().from("activity_log").select("at, actor_id, action, details").eq("firm_id", membership.firmId)
+    ? await supabaseAdmin().from("activity_log").select("at, actor_id, action, details").eq("firm_id", firm)
       .in("action", ["permission.allowed", "permission.always", "device.approved", "office.confirm", "office.today"])
-      .gt("at", addDays(todayInIndia(), -7)).order("at", { ascending: false }).limit(50)
+      .gt("at", addDays(today, -7)).order("at", { ascending: false }).limit(50)
     : { data: null };
   const approvalWords = (action: string, details: { right?: string; for?: string; kind?: string }) =>
     ({
@@ -67,264 +128,390 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
       "office.today": "allowed a different internet connection for a day",
     })[action] ?? action;
   const approver = canManageClients(membership.role);
-  // For mail from a contact who writes for several clients: the clients to choose from.
-  const unclear = (waiting ?? []).flatMap((request) => (request.reason_code === "client_unclear" ? [byIdOf(events, request.entity_id)?.contact_id] : [])).filter(Boolean) as string[];
-  const { data: links } = unclear.length ? await supabase.from("contact_clients").select("contact_id, client_id, clients(name)").in("contact_id", unclear) : { data: [] };
+  const mailbox = accounts?.find((account) => account.kind === "mail");
+  const drive = accounts?.find((account) => account.kind === "drive");
+  const connected = mailbox?.status === "connected";
+
+  // Sent mail of one client is searched by that client's own addresses.
+  const admin = supabaseAdmin();
   const crypto = serverCrypto();
-  const sender = new Map(
-    await Promise.all(
-      (events ?? []).map(async (event) => [
-        event.id,
-        event.clients?.name ?? (event.contacts ? await crypto.decrypt(membership.firmId, `contacts/${event.contact_id}/name`, event.contacts.name_enc) : ""),
-      ] as const),
-    ),
+  let addresses: string[] = [];
+  if (chosenClient && wantOut) {
+    const [{ data: own }, { data: links }] = await Promise.all([
+      admin.from("clients").select("email_enc").eq("id", chosenClient.id).single(),
+      admin.from("contact_clients").select("contact_id, contacts(email_enc)").eq("client_id", chosenClient.id),
+    ]);
+    addresses = [
+      ...(own?.email_enc ? [await crypto.decrypt(firm, `clients/${chosenClient.id}/email`, own.email_enc)] : []),
+      ...(await Promise.all((links ?? []).filter((link) => link.contacts?.email_enc).map((link) => crypto.decrypt(firm, `contacts/${link.contact_id}/email`, link.contacts!.email_enc)))),
+    ].slice(0, 20);
+  }
+  const events_ = rows ?? [];
+  // Only what this page shows is read: the listed emails, and the newest sent ones that match.
+  const sentAsk = wantOut && (!chosenClient || addresses.length) ? { limit: PAGE, ...(addresses.length && { to: addresses }), since: range.from, before: until, reminders: status === "reminder" } : null;
+  const live = !connected
+    ? ({ error: "not_connected" } as const)
+    : events_.length || sentAsk
+      ? await mailLive(firm, "list", { inbox: events_.map((event) => event.provider_message_id), q: q || undefined, sent: sentAsk })
+      : { inbox: [], sent: null };
+  const failed = "error" in live ? live.error : null;
+  const liveIn = new Map(("error" in live ? [] : live.inbox).map((item) => [item.messageId, item]));
+
+  const pending = new Map((waiting ?? []).map((request) => [request.entity_id, request]));
+  const shown = (q ? events_.filter((event) => liveIn.has(event.provider_message_id)) : events_).slice(0, PAGE);
+  const [{ data: done }, { data: filedDocs }] = shown.length
+    ? await Promise.all([
+        supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "done").in("entity_id", shown.map((event) => event.id)),
+        supabase.from("documents").select("email_event_id, status").in("email_event_id", shown.map((event) => event.id)),
+      ])
+    : [{ data: [] }, { data: [] }];
+  const inTag = (eventId: string, label: string | null): Tag =>
+    pending.has(eventId) ? { text: "Needs reply", tone: "warn" }
+    : filedDocs?.some((doc) => doc.email_event_id === eventId && doc.status === "to_check") ? { text: "To check", tone: "warn" }
+    : filedDocs?.some((doc) => doc.email_event_id === eventId && doc.status === "filed") ? { text: "Filed", tone: "done" }
+    : done?.some((request) => request.entity_id === eventId) ? { text: "Done", tone: "done" }
+    : { text: labels[(label ?? "other") as keyof typeof labels] ?? labels.other, tone: "" };
+  const inRows: Row[] = await Promise.all(
+    shown.map(async (event) => {
+      const item = liveIn.get(event.provider_message_id);
+      return {
+        key: event.id,
+        href: href({ mail: event.id }),
+        dir: "in" as const,
+        client: event.clients?.name ?? ((await contactName(firm, event)) || "A contact"),
+        clientId: event.client_id,
+        at: event.received_at,
+        subject: item?.subject ?? (failed ? "Subject not available just now" : "(no subject)"),
+        snippet: item?.snippet ?? "",
+        tag: inTag(event.id, event.label),
+        request: pending.get(event.id)?.id,
+      };
+    }),
   );
-  const {data:mailbox}=await supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",membership.firmId).eq("kind","mail").maybeSingle();
-  const openMail=opensInMailbox((mailbox?.settings as {imap?:{host?:string}} | undefined)?.imap?.host ?? "");
-  const byId = new Map(events?.map((event) => [event.id, event]));
+  // Sent mail shows only when it went to a client the person may see.
+  const sentItems = "error" in live ? [] : (live.sent ?? []).filter((item) => status !== "team" || sentKind(item.messageId) === "team");
+  const parties = await clientsOf(firm, sentItems.flatMap((item) => item.to));
+  const partyIds = [...new Set([...parties.values()].flat())];
+  const { data: visible } = partyIds.length ? await supabase.from("clients").select("id, name").in("id", partyIds) : { data: [] };
+  const sentClient = (item: MailItem) => visible?.find((row) => (!chosenClient || row.id === chosenClient.id) && item.to.some((address) => parties.get(address)?.includes(row.id)));
+  const outRows: Row[] = sentItems.flatMap((item) => {
+    const to = sentClient(item);
+    return to ? [{ key: item.messageId, href: href({ sent: item.messageId }), dir: "out" as const, client: to.name, clientId: to.id, at: item.date, subject: item.subject || "(no subject)", snippet: item.snippet, tag: { text: sentTags[sentKind(item.messageId)], tone: "" as const } }] : [];
+  });
+  const list = [...inRows, ...outRows].sort((a, b) => b.at.localeCompare(a.at)).slice(0, PAGE);
+  const older = (events_.length >= PAGE || (live && !("error" in live) && (live.sent?.length ?? 0) >= PAGE)) && list.length ? href({ before: list.at(-1)!.at }) : null;
+
+  // The open email and its conversation, read live.
+  const open = sp.mail || sp.sent ? await conversation(supabase, firm, { mail: sp.mail && uuid.test(sp.mail) ? sp.mail : undefined, sent: sp.mail ? undefined : sp.sent?.slice(0, 998) }) : null;
+  const event = open?.event;
+  const opened = open?.opened;
+  const clientId = open?.client?.id ?? null;
+  const inIds = open?.messages.filter((message) => message.box === "inbox").map((message) => message.messageId) ?? [];
+  const [{ data: threadEvents }, { data: clientPapers }] = await Promise.all([
+    inIds.length ? supabase.from("email_events").select("id, provider_message_id").eq("firm_id", firm).in("provider_message_id", inIds) : Promise.resolve({ data: [] as { id: string; provider_message_id: string }[] }),
+    clientId && event ? supabase.from("documents").select("id, name, document_type, period_key").eq("client_id", clientId).eq("status", "filed").order("received_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] as { id: string; name: string; document_type: string; period_key: string }[] }),
+  ]);
+  const eventOf = new Map(threadEvents?.map((row) => [row.provider_message_id, row.id]));
+  const { data: saved } = threadEvents?.length
+    ? await supabase.from("documents").select("id, name, email_event_id, work_type, period_key, status, received_at").in("email_event_id", threadEvents.map((row) => row.id))
+    : { data: [] };
+  const order = ((drive?.settings ?? {}) as { folder_order?: FolderOrder }).folder_order ?? "year_client_work";
+  const place = (doc: NonNullable<typeof saved>[number]) => folderFor(order, open?.client?.name ?? "", { work: doc.work_type as never, period: doc.period_key, receivedAt: doc.received_at ?? "", toCheck: doc.status === "to_check" }).join(" / ");
+  const request = event ? pending.get(event.id) : undefined;
+  const { data: links } = request?.reason_code === "client_unclear" && event ? await supabase.from("contact_clients").select("client_id, clients(name)").eq("contact_id", event.contact_id ?? "") : { data: [] };
+  const sender = event ? event.clients?.name ?? ((await contactName(firm, event)) || "A contact") : "";
+  const kind = opened && opened.box === "sent" ? sentKind(opened.messageId) : null;
+  const openTag: Tag | null = event ? inTag(event.id, event.label) : kind ? { text: sentTags[kind], tone: "" } : null;
+  const asked = opened ? askedPaper(opened.subject, opened.text) : { types: [], period: "" };
+  const suggested = opened && clientPapers ? suggestPapers(`${opened.subject}\n${opened.text}`, clientPapers, asked, [...documentTypes, ...((membership.settings.document_types ?? []) as string[])]).map((doc) => doc.id) : [];
+  const openKey = sp.mail ?? sp.sent ?? "";
+  const gmail = opensInMailbox(((mailbox?.settings ?? {}) as { imap?: { host?: string } }).imap?.host ?? "");
+  const errors: Record<string, string> = {
+    mailbox: "The email could not be sent. Check the firm's email in Settings, then try again.",
+    reply: "Write the reply first.",
+    needs: "Sending files to this client needs permission. Ask on the client's Documents tab.",
+    upload: "Files can be up to 25 MB together.",
+  };
+  const hasWait = !!toAnswer.length || !!papers?.length || !!toCheck?.length || !!week?.length;
 
   return (
-    <>
-      <PageHead title="Inbox" sub="Client email as InboxCA sorted it. The email itself stays in your mailbox; only its label and time are kept here." />
-      <section className="panel" aria-labelledby="team-reply">
-        <div className="panel-head">
-          <h2 id="team-reply">Needs team reply</h2>
-          <p className="hint">Reply from your own mailbox, then mark it done.</p>
-        </div>
-        <ul className="rows needs">
-          {waiting?.map((request) => {
-            const event = byId.get(request.entity_id);
-            const name = sender.get(request.entity_id) || "A contact";
-            return (
-              <li key={request.id}>
-                <Avatar name={name} />
-                <span className="grow">
-                  {event?.client_id ? (
-                    <Link className="name" href={`/app/clients/${event.client_id}`}>
-                      {name}
-                    </Link>
-                  ) : (
-                    <span className="name">{name}</span>
-                  )}
-                  <span className="sub">{reasons[request.reason_code ?? ""] ?? labels.other}</span>
-                </span>
-                {openMail && <a className="b b-ghost b-small" href={`/app/inbox/${request.entity_id}/open`} target="_blank" rel="noreferrer">Open in mailbox</a>}
-                <form action={manageEmail} className="end">
-                  {event && <span className="when">{when(event.received_at)}</span>}
-                  <input type="hidden" name="request" value={request.id} />
-                  {request.reason_code === "client_unclear" && event && (
-                    <>
-                      <input type="hidden" name="email" value={event.id} />
-                      <select name="client" aria-label={`Which client the email from ${name} is for`}>
-                        {links
-                          ?.filter((link) => link.contact_id === event.contact_id)
-                          .map((link) => (
-                            <option key={link.client_id} value={link.client_id}>
-                              {link.clients?.name}
-                            </option>
-                          ))}
-                      </select>
-                      <button className="b b-secondary b-small" name="intent" value="client">
-                        It is for this client
-                      </button>
-                    </>
-                  )}
-                  <button className="b b-secondary b-small" name="intent" value="done">
-                    <Check size={14} aria-hidden />
-                    Done
-                  </button>
-                </form>
-              </li>
-            );
-          })}
-          {!waiting?.length && (
-            <li className="is-clear">
-              <Check size={16} aria-hidden />
-              <span className="grow">Nothing waits for the team.</span>
-            </li>
-          )}
-        </ul>
-      </section>
+    <div className="ib fill">
+      <InboxKeys />
+      <PageHead title="Inbox" sub="Every email with your clients, both ways. Read live from the firm's mailbox; InboxCA keeps no copy." />
+      {sp.approved && <p className="notice" role="status">Sent. The client got a secure link to the paper, in reply to their email.</p>}
+      {sp.error && errors[sp.error] && <p className="alert" role="alert">{sp.error === "mailbox" && !sp.mail ? "The paper could not be sent. Check the firm's email in Settings, then try again." : errors[sp.error]}</p>}
 
-      {approved && (
-        <p className="notice" role="status">
-          Sent. The client got a secure link to the paper, in reply to their email.
-        </p>
-      )}
-      {error === "mailbox" && (
-        <p className="alert" role="alert">
-          The paper could not be sent. Check the firm&apos;s email in Settings, then try again.
-        </p>
-      )}
-      {!!week?.length && (
-        <section className="panel" aria-labelledby="approved" id="approved">
-          <div className="panel-head">
-            <h2 id="approved">Approved in the last 7 days</h2>
-            <p className="hint">Withdraw a device in Settings, Office only; a standing permission in Settings, Permissions.</p>
-          </div>
-          <ul className="rows">
-            {week.map((entry) => (
-              <li key={`${entry.at}${entry.action}`}>
-                <span className="grow">
-                  {personName(emailOf.get(entry.actor_id ?? ""))} {approvalWords(entry.action, (entry.details ?? {}) as { right?: string; for?: string; kind?: string })}
-                </span>
-                <span className="sub">{new Date(entry.at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {!!toAnswer.length && (
-        <section className="panel" aria-labelledby="questions">
-          <div className="panel-head">
-            <h2 id="questions">Questions for you</h2>
-            <p className="hint">Allow once lets them do it one time, within an hour. Always allow lets that person do it from now on, until you withdraw it in Settings.</p>
-          </div>
-          <ul className="rows">
-            {toAnswer.map((request) => {
-              const details = request.details as { by: string; document_name?: string; until?: string };
-              const time = request.reason_code === "time";
-              return (
-                <li key={request.id}>
-                  <Avatar name={emailOf.get(details.by) ?? "?"} />
-                  <span className="grow">
-                    <span className="name">
-                      {emailOf.get(details.by)} asks {time ? `to work until ${details.until} today` : `to ${rightWords[request.reason_code as Right]}`}
-                    </span>
-                    <span className="sub">{[request.clients?.name, details.document_name].filter(Boolean).join(", ")}</span>
-                  </span>
-                  <form action={decidePermission} className="end">
-                    <input type="hidden" name="request" value={request.id} />
-                    <button className="b b-ghost b-small" name="intent" value="refuse">
-                      Refuse
-                    </button>
-                    {me?.role === "owner" && !!request.reason_code && request.reason_code in switchable && (
-                      <button className="b b-secondary b-small" name="intent" value="always">
-                        Always allow
-                      </button>
-                    )}
-                    <button className="b b-primary b-small" name="intent" value="allow">
-                      {time ? "Allow today" : "Allow once"}
-                    </button>
-                  </form>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-      {!!papers?.length && (
-        <section className="panel" aria-labelledby="papers">
-          <div className="panel-head">
-            <h2 id="papers">Papers waiting for approval</h2>
-            <p className="hint">A client asked for a private paper. It goes as a secure link only once someone approves it.</p>
-          </div>
-          <ul className="rows">
-            {papers.map((share) => (
-              <li key={share.id}>
-                <FileText size={16} aria-hidden className="file-icon" />
-                <span className="grow">
-                  <span className="name">{share.documents?.name}</span>
-                  <span className="sub">Asked for by {share.contact_id ? "a contact of " : ""}{share.documents?.clients?.name}</span>
-                </span>
-                {approver && (
-                  <form action={decideShare} className="end">
-                    <input type="hidden" name="share" value={share.id} />
-                    <button className="b b-ghost b-small" name="intent" value="refuse">
-                      Don&apos;t send
-                    </button>
-                    <button className="b b-primary b-small" name="intent" value="approve">
-                      Approve and send
-                    </button>
-                  </form>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {!!toCheck?.length && (
-        <section className="panel" aria-labelledby="to-check">
-          <div className="panel-head">
-            <h2 id="to-check">Files to check</h2>
-            <p className="hint">Saved in the client&apos;s To check folder. Confirm or correct their type and period.</p>
-          </div>
-          <ul className="rows">
-            {toCheck.map((file) => (
-              <li key={file.id}>
-                <FileText size={16} aria-hidden className="file-icon" />
-                <span className="grow">
-                  <span className="name">{file.name}</span>
-                  <span className="sub">{file.clients?.name}</span>
-                </span>
-                <Link className="b b-secondary b-small" href={`/app/clients/${file.client_id}?tab=files`}>
-                  Check
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="panel" aria-labelledby="latest">
-        <div className="panel-head">
-          <h2 id="latest">Latest client email</h2>
-          <p className="hint">Pick another label when InboxCA got one wrong; your correction is kept for review.</p>
-        </div>
-        {events?.length ? (
-          <div className="table-wrap">
-            <table className="t">
-              <thead>
-                <tr>
-                  <th scope="col">From</th>
-                  <th scope="col">Received</th>
-                  <th scope="col">Label</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((event) => {
-                  const name = sender.get(event.id) || "A contact";
+      {hasWait && (
+        <div className="ib-wait">
+          {!!toAnswer.length && (
+            <section aria-labelledby="questions">
+              <h2 id="questions">Questions for you</h2>
+              <ul>
+                {toAnswer.map((ask) => {
+                  const details = ask.details as { by: string; document_name?: string; until?: string };
+                  const time = ask.reason_code === "time";
                   return (
-                    <tr key={event.id}>
-                      <td>
-                        <span className="who">
-                          <Avatar name={name} />
-                          {event.client_id ? (
-                            <Link className="row-link" href={`/app/clients/${event.client_id}`}>
-                              {name}
-                            </Link>
-                          ) : (
-                            name
-                          )}
-                        </span>
-                      </td>
-                      <td className="shrink when">{when(event.received_at)} {openMail && <a href={`/app/inbox/${event.id}/open`} target="_blank" rel="noreferrer">Open in mailbox</a>}</td>
-                      <td className="shrink">
-                        <form key={`${event.label}`} action={manageEmail} className="cell-form">
-                          <input type="hidden" name="email" value={event.id} />
-                          <AutoSelect save="label" name="label" defaultValue={event.label ?? "other"} aria-label={`Label for ${name}, ${when(event.received_at)}`}>
-                            {Object.entries(labels).map(([value, label]) => (
-                              <option key={value} value={value}>
-                                {label}
-                              </option>
-                            ))}
-                          </AutoSelect>
-                          <button hidden name="intent" value="label" />
-                          {event.decision_source === "staff" && <Badge tone="purple">Corrected</Badge>}
-                        </form>
-                      </td>
-                    </tr>
+                    <li key={ask.id} title="Allow once lets them do it one time, within an hour. Always allow lets them do it from now on, until you withdraw it in Settings.">
+                      <span className="grow">
+                        <strong>{emailOf.get(details.by)} asks {time ? `to work until ${details.until} today` : `to ${rightWords[ask.reason_code as Right]}`}</strong>
+                        <span className="ib-note">{[ask.clients?.name, details.document_name].filter(Boolean).join(", ")}</span>
+                      </span>
+                      <form action={decidePermission}>
+                        <input type="hidden" name="request" value={ask.id} />
+                        <button className="b b-ghost" name="intent" value="refuse">Refuse</button>
+                        {me?.role === "owner" && !!ask.reason_code && ask.reason_code in switchable && <button className="b b-secondary" name="intent" value="always">Always allow</button>}
+                        <button className="b b-secondary" name="intent" value="allow">{time ? "Allow today" : "Allow once"}</button>
+                      </form>
+                    </li>
                   );
                 })}
-              </tbody>
-            </table>
+              </ul>
+            </section>
+          )}
+          {!!papers?.length && (
+            <section aria-labelledby="papers">
+              <h2 id="papers">Papers waiting for approval</h2>
+              <ul>
+                {papers.map((share) => (
+                  <li key={share.id} title="A client asked for a private paper. It goes as a secure link only once someone approves it.">
+                    <span className="grow">
+                      <strong>{share.documents?.name}</strong>
+                      <span className="ib-note">Asked for by {share.contact_id ? "a contact of " : ""}{share.documents?.clients?.name}</span>
+                    </span>
+                    {approver && (
+                      <form action={decideShare}>
+                        <input type="hidden" name="share" value={share.id} />
+                        <button className="b b-ghost" name="intent" value="refuse">Don&apos;t send</button>
+                        <button className="b b-secondary" name="intent" value="approve">Approve and send</button>
+                      </form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {!!toCheck?.length && (
+            <section aria-labelledby="to-check">
+              <h2 id="to-check">Files to check</h2>
+              <ul>
+                {toCheck.map((file) => (
+                  <li key={file.id} title="Saved in the client's To check folder. Confirm or correct their type and period.">
+                    <span className="grow">
+                      <strong>{file.name}</strong>
+                      <span className="ib-note">{file.clients?.name}</span>
+                    </span>
+                    <Link className="b b-secondary" href={`/app/clients/${file.client_id}?tab=files`}>Check</Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {!!week?.length && (
+            <details id="approved" aria-labelledby="approved-title">
+              <summary id="approved-title">Approved in the last 7 days ({week.length})</summary>
+              <ul>
+                {week.map((entry) => (
+                  <li key={`${entry.at}${entry.action}`}>
+                    <span className="grow">{personName(emailOf.get(entry.actor_id ?? ""))} {approvalWords(entry.action, (entry.details ?? {}) as { right?: string; for?: string; kind?: string })}</span>
+                    <span className="ib-note">{longTime(entry.at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
+      <div className="ib-bar">
+        <nav className="ib-pills" aria-label="Show">
+          {Object.entries(shows).map(([key, name]) => {
+            const count = key === "reply" ? needs : key === "in" ? fromClients : null;
+            return (
+              <Link key={key} className="ib-pill" aria-current={show === key ? "page" : undefined} href={href({ show: key || undefined, status: undefined })}>
+                {name}
+                {count !== null && <span className="num">{count ?? 0}</span>}
+              </Link>
+            );
+          })}
+        </nav>
+        <details className="ib-menu" open={!!cq || !!sp.cpage}>
+          <summary>{chosenClient?.name ?? "Client"}</summary>
+          <div className="ib-pop">
+            <form action="/app/inbox" role="search">
+              {Object.entries({ ...filters, client: undefined }).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
+              <input type="search" name="cq" defaultValue={cq} placeholder="Find a client" aria-label="Find a client" />
+            </form>
+            {chosenClient && <Link href={href({ client: undefined })}>All clients</Link>}
+            {pickList?.slice(0, 8).map((row) => (
+              <Link key={row.id} href={href({ client: row.id })} aria-current={row.id === chosenClient?.id ? "true" : undefined}>{row.name}</Link>
+            ))}
+            {!pickList?.length && <span className="ib-note">No client by that name</span>}
+            {(pickList?.length ?? 0) > 8 && <Link href={href({ cq: cq || undefined, cpage: String(cpage + 1) })}>More clients</Link>}
           </div>
-        ) : (
-          <Empty Icon={Mail} title="No client email yet">
-            <span>Connect the firm&apos;s email in Settings and new mail shows here, sorted.</span>
-          </Empty>
-        )}
-      </section>
-    </>
+        </details>
+        <details className="ib-menu">
+          <summary>{status && sp.status ? statuses[status] : "Status"}</summary>
+          <div className="ib-pop">
+            <Link href={href({ status: undefined })}>Any status</Link>
+            {Object.entries(statuses).map(([key, name]) => (
+              <Link key={key} href={href({ status: key, show: undefined })} aria-current={sp.status === key ? "true" : undefined}>{name}</Link>
+            ))}
+          </div>
+        </details>
+        <details className="ib-menu">
+          <summary>{when ? whens[when as keyof typeof whens] : "When"}</summary>
+          <div className="ib-pop">
+            <Link href={href({ when: undefined })}>Any time</Link>
+            {Object.entries(whens).map(([key, name]) => (
+              <Link key={key} href={href({ when: key })} aria-current={when === key ? "true" : undefined}>{name}</Link>
+            ))}
+          </div>
+        </details>
+        <form className="ib-search" action="/app/inbox" role="search">
+          {Object.entries({ ...filters, q: undefined }).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
+          <Search size={14} aria-hidden />
+          <input id="mail-search" type="search" name="q" defaultValue={q} placeholder="Search email" aria-label="Search email" title="Press / to search" />
+        </form>
+      </div>
+
+      <div className="split">
+        <div className="pane ib-list">
+          {failed === "unreachable" && <p className="alert" role="alert">The firm&apos;s mailbox could not be reached just now, so subjects and text are missing. Try again in a minute.</p>}
+          {failed === "not_connected" ? (
+            <Empty Icon={Mail} title="Connect the firm's email">
+              <span>New client mail shows here once the firm&apos;s mailbox is connected.</span>
+              {owner && <Link className="b b-primary" href="/app/settings#mailbox">Connect email</Link>}
+            </Empty>
+          ) : list.length ? (
+            <ul aria-label="Emails">
+              {list.map((row) => (
+                <li key={row.key} className="ib-row" aria-current={row.key === openKey ? "true" : undefined}>
+                  <Link href={row.href}>
+                    <span className="ib-row-top">
+                      <span className={`ib-dir ${row.dir}`}>{row.dir === "in" ? "IN" : "OUT"}</span>
+                      <strong>{row.client}</strong>
+                      <time dateTime={row.at}>{shortTime(row.at, today)}</time>
+                    </span>
+                    <span className="ib-subject">{row.subject}</span>
+                    <span className="ib-row-foot">
+                      <span className="ib-snippet">{row.snippet}</span>
+                      <span className={`ib-tag ${row.tag.tone}`}>{row.tag.text}</span>
+                    </span>
+                  </Link>
+                  <span className="ib-acts">
+                    {row.request && (
+                      <form action={manageEmail}>
+                        <input type="hidden" name="request" value={row.request} />
+                        <button className="b b-secondary" name="intent" value="done">Mark as done</button>
+                      </form>
+                    )}
+                    {row.clientId && <Link className="b b-secondary" href={`/app/clients/${row.clientId}`}>Open client</Link>}
+                  </span>
+                </li>
+              ))}
+              {older && <li className="ib-more"><Link href={older}>Older emails</Link></li>}
+            </ul>
+          ) : q ? (
+            <Empty Icon={Search} title="No emails match">
+              <span>Try other words, or clear the search.</span>
+              <Link className="b b-secondary" href={href({ q: undefined })}>Clear search</Link>
+            </Empty>
+          ) : (
+            <Empty Icon={Mail} title={Object.values(filters).some(Boolean) || before ? "No emails here" : "No client email yet"}>
+              <span>{Object.values(filters).some(Boolean) || before ? "Nothing matches these filters." : "New mail from your clients shows here, sorted."}</span>
+              {(Object.values(filters).some(Boolean) || before) && <Link className="b b-secondary" href="/app/inbox">Show all email</Link>}
+            </Empty>
+          )}
+        </div>
+
+        <article className="pane ib-open" aria-label="Open email">
+          {!openKey ? (
+            <p className="ib-pick">Pick an email to read it here. Use j and k to move, Enter to open.</p>
+          ) : !open ? (
+            <p className="ib-pick">This email is not available.</p>
+          ) : !opened ? (
+            <p className="ib-pick" role="alert">{open.error ? "The firm's mailbox could not be reached just now. Try again in a minute." : "This email is no longer in the firm's mailbox."}</p>
+          ) : (
+            <div className="pane-in ib-convo" key={openKey}>
+              <header className="ib-head">
+                <div>
+                  <h2>{opened.subject || "(no subject)"}</h2>
+                  <p className="ib-note">{event ? `From ${sender}${open.client && event.contact_id ? `, ${open.client.name}` : ""}` : `${kind === "team" ? "Sent by your team" : "Sent by InboxCA"} to ${open.client?.name}`}</p>
+                </div>
+                {openTag && <span className={`ib-tag ${openTag.tone}`}>{openTag.text}</span>}
+              </header>
+              <div className="ib-actions">
+                {event?.client_id && connected && <a className="b b-secondary" href="#reply-text" title="Press r">Reply</a>}
+                {open.client && <Link className="b b-secondary" href={`/app/clients/${open.client.id}`}>Open {open.client.name}</Link>}
+                {request && (
+                  <form action={manageEmail}>
+                    <input type="hidden" name="request" value={request.id} />
+                    <button className="b b-secondary" name="intent" value="done" data-key="e" title="Press e">Mark as done</button>
+                  </form>
+                )}
+                {request?.reason_code === "client_unclear" && event && (
+                  <form action={manageEmail} className="ib-inline">
+                    <input type="hidden" name="request" value={request.id} />
+                    <input type="hidden" name="email" value={event.id} />
+                    <select name="client" aria-label={`Which client the email from ${sender} is for`}>
+                      {links?.map((link) => <option key={link.client_id} value={link.client_id}>{link.clients?.name}</option>)}
+                    </select>
+                    <button className="b b-secondary" name="intent" value="client">It is for this client</button>
+                  </form>
+                )}
+                {event && (
+                  <form key={`${event.label}`} action={manageEmail} className="ib-inline">
+                    <input type="hidden" name="email" value={event.id} />
+                    <AutoSelect save="label" name="label" defaultValue={event.label ?? "other"} aria-label="What this email is" title="Pick another label when InboxCA got one wrong">
+                      {Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </AutoSelect>
+                    <button hidden name="intent" value="label" />
+                    {event.decision_source === "staff" && <span className="ib-tag">Corrected</span>}
+                  </form>
+                )}
+                {event && gmail && <a className="b b-ghost" href={`/app/inbox/${event.id}/open`} target="_blank" rel="noreferrer">Open in Gmail</a>}
+              </div>
+              {request && request.reason_code && reasons[request.reason_code] && <p className="ib-note">{reasons[request.reason_code]}</p>}
+              <ol className="ib-thread" aria-label="Conversation">
+                {open.messages.map((message) => {
+                  const files = saved?.filter((doc) => doc.email_event_id === eventOf.get(message.messageId)) ?? [];
+                  return (
+                    <li key={message.messageId} className={message.messageId === opened.messageId ? "on" : undefined}>
+                      <p className="ib-who">
+                        <strong>{message.box === "sent" ? (sentKind(message.messageId) === "team" ? "Your team" : "InboxCA") : message.messageId === opened.messageId ? sender || open.client?.name : open.client?.name}</strong>
+                        <time dateTime={message.date}>{longTime(message.date)}</time>
+                      </p>
+                      <div className="ib-body">{paragraphs(message.text).map((part, index) => <p key={index}>{part}</p>)}</div>
+                      {(files.length > 0 || message.attachments.length > 0) && (
+                        <ul className="ib-files" aria-label="Attachments">
+                          {files.map((doc) => (
+                            <li key={doc.id}>
+                              <span className="ib-ext" aria-hidden>{(doc.name.split(".").pop() ?? "").slice(0, 4).toUpperCase()}</span>
+                              <span className="grow"><strong>{doc.name}</strong><span className="ib-path">Saved to {place(doc)}</span></span>
+                              <Link className="b b-secondary" href={`/app/files/${doc.id}/view`}>View</Link>
+                            </li>
+                          ))}
+                          {!files.length && message.attachments.map((name, index) => (
+                            <li key={`${name}${index}`}>
+                              <span className="ib-ext" aria-hidden>{(name.split(".").pop() ?? "").slice(0, 4).toUpperCase()}</span>
+                              <span className="grow"><strong>{name}</strong><span className="ib-note">{message.box === "sent" ? "Sent with this email" : "Not saved in the drive"}</span></span>
+                            </li>
+                          ))}
+                          {!!files.length && message.attachments.length > files.length && <li className="ib-note">{message.attachments.length - files.length} more not saved in the drive</li>}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+              {event?.client_id && connected && (
+                <ReplyBox mail={event.id} papers={(clientPapers ?? []).map(({ id, name }) => ({ id, name }))} suggested={suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} />
+              )}
+            </div>
+          )}
+        </article>
+      </div>
+      {sp.replied && <Toast>Reply sent{sp.unsent ? `. ${sp.unsent} ${sp.unsent === "1" ? "paper" : "papers"} could not go; send from the client's Documents tab.` : ""}</Toast>}
+    </div>
   );
 }

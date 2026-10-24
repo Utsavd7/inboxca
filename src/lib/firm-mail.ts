@@ -1,5 +1,6 @@
 import { serverCrypto } from "./crypto";
-import { foundInSent, smtpTransport, signInFailed, type MailSettings } from "./mailbox";
+import nodemailer from "nodemailer";
+import { foundInSent, keepInSent, smtpTransport, signInFailed, type MailSettings } from "./mailbox";
 import { log } from "./logger";
 import { supabaseAdmin } from "./supabase";
 
@@ -23,7 +24,9 @@ export async function firmMailer(firmId: string, firmName: string) {
   let waitUntil:Date|null=null;
   return {
     get waitUntil(){return waitUntil;},
-    async send(to: string, subject: string, text: string, messageId?: string, inReplyTo?: string) {
+    // A reply from the Inbox also carries its whole References chain and attached files, and
+    // a copy is put in the Sent folder when the provider does not keep one itself.
+    async send(to: string, subject: string, text: string, messageId?: string, inReplyTo?: string, reply?: { references: string[]; attachments: { filename: string; content: Buffer }[] }) {
       waitUntil=null;
       const {data,error}=await supabaseAdmin().rpc("reserve_mail_send",{account_id:mailbox.id});
       if (error) throw new Error("mail_limit_not_read");
@@ -31,15 +34,21 @@ export async function firmMailer(firmId: string, firmName: string) {
       if (!slot.ready) { waitUntil=new Date(slot.at); return false; }
       await new Promise((resolve)=>setTimeout(resolve,Math.max(0,Date.parse(slot.at)-Date.now())));
       try {
-        await smtpTransport(from, password, settings.smtp).sendMail({
+        const message = {
           from: `${firmName} <${from}>`,
           to,
           subject,
           text,
           ...(messageId && { messageId }),
           ...(inReplyTo && { inReplyTo, references: inReplyTo }),
-        });
+          ...(reply && { references: reply.references, attachments: reply.attachments, date: new Date() }),
+        };
+        await smtpTransport(from, password, settings.smtp).sendMail(message);
         await mailHealth(mailbox.id,"send",false,mailbox.credentials_enc);
+        if (reply && messageId) {
+          const copy = await nodemailer.createTransport({ streamTransport: true, buffer: true }).sendMail(message);
+          await keepInSent(from, password, settings.imap, copy.message as Buffer, messageId);
+        }
         return true;
       } catch (failure) {
         if (signInFailed(failure)) {

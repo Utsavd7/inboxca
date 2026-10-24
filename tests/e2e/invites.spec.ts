@@ -709,16 +709,26 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   await owner.getByRole("link", { name: "Inbox" }).click();
   // The request for last year's ITR found no ITR in the drive, so it waits for the team too.
-  const waiting = owner.locator("section[aria-labelledby=team-reply]").getByRole("listitem");
+  await owner.getByRole("link", { name: /^Needs reply/ }).click();
+  const waiting = owner.getByRole("list", { name: "Emails" }).getByRole("listitem");
+  const open = owner.getByRole("article", { name: "Open email" });
   await expect(waiting).toHaveCount(2);
-  await expect(waiting.filter({ hasText: "Asks for a paper that is not in the drive" })).toHaveCount(1);
-  for (const reason of ["InboxCA could not tell what it asks", "Asks for a paper that is not in the drive"])
-    await waiting.filter({ hasText: reason }).getByRole("button", { name: "Done" }).click();
-  await expect(owner.getByText("Nothing waits for the team.")).toBeVisible();
-  const latest = owner.locator("section[aria-labelledby=latest] tbody tr");
-  await expect(latest).toHaveCount(2);
-  await latest.first().getByRole("combobox").selectOption({ label: "Asks for this year's records" });
-  await expect(latest.filter({ hasText: "Corrected" })).toHaveCount(1);
+  const reasons = [];
+  for (const subject of ["Hello", "Please send last year's ITR"]) {
+    await waiting.getByText(subject, { exact: true }).click();
+    await expect(open.getByRole("heading", { name: subject })).toBeVisible();
+    reasons.push(await open.locator(".ib-actions + .ib-note").textContent());
+    await open.getByRole("button", { name: "Mark as done" }).click();
+    await expect(open.getByRole("button", { name: "Mark as done" })).toHaveCount(0);
+  }
+  expect(reasons.sort()).toEqual(["Asks for a paper that is not in the drive", "InboxCA could not tell what it asks"]);
+  await owner.goto("/app/inbox?show=reply");
+  await expect(owner.getByText("No emails here")).toBeVisible();
+  await owner.goto("/app/inbox?show=in");
+  await expect(waiting).toHaveCount(2);
+  await waiting.first().locator(".ib-subject").click();
+  await open.getByLabel("What this email is").selectOption({ label: "Asks for this year's records" });
+  await expect(open.getByText("Corrected")).toBeVisible();
 });
 
 // M3 acceptance: reconnect preserves unread mail and resumes a waiting send.
@@ -1173,8 +1183,9 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await smtp.sendMail({from:`client-${tag}@patel.test`,to:"office@firm.test",subject:"ITR copy",text:"Please send my ITR for AY 2025-26."});
   await query(local.dbUrl,"select private.queue_mail_polls()");
   await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
-  await owner.goto("/app/inbox");
-  await expect(owner.locator("section[aria-labelledby=team-reply]")).toContainText("This paper is kept inside your firm");
+  await owner.goto("/app/inbox?show=reply");
+  await owner.getByRole("list", { name: "Emails" }).getByText("ITR copy").first().click();
+  await expect(owner.getByRole("article", { name: "Open email" })).toContainText("This paper is kept inside your firm");
   expect(name).toContain("ITR-V");
   await owner.goto("/app/settings");
   for (const section of ["section[aria-labelledby=mailbox]", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
