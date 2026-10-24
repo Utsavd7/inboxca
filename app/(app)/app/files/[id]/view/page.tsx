@@ -19,7 +19,8 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
   if (!file) notFound();
   const meta=file.prepared ? preparedSchema.parse(file.prepared) : null;
   const {data:template}=meta ? await supabase.from("templates").select("*").eq("form_code",meta.form).eq("version",meta.template).maybeSingle() : {data:null};
-  const sheets=template ? Object.entries(templateSchema.parse(template).mappings.sheets ?? {}) : [];
+  // In the official workbook's order, so B2B comes first.
+  const sheets=template ? Object.entries(templateSchema.parse(template).mappings.sheets ?? {}).sort(([,a],[,b])=>a-b) : [];
   const asked=(await searchParams).sheet;
   const sheet=sheets.find(([,number])=>String(number)===asked)?.[1] ?? sheets[0]?.[1] ?? 1;
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";

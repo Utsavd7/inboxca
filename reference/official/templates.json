@@ -16,7 +16,13 @@
         "b2b": 2,
         "b2cs": 6,
         "cdnr": 8,
-        "hsn": 19
+        "hsn": 19,
+        "b2cl": 4,
+        "cdnur": 10,
+        "exp": 12,
+        "at": 14,
+        "atadj": 16,
+        "docs": 20
       },
       "validator": {
         "file": "gstn/gstr1-v4.0-request-schema.json",
@@ -42,7 +48,13 @@
         "b2cs": 6,
         "cdnr": 8,
         "hsn_b2b": 19,
-        "hsn_b2c": 20
+        "hsn_b2c": 20,
+        "b2cl": 4,
+        "cdnur": 10,
+        "exp": 12,
+        "at": 14,
+        "atadj": 16,
+        "docs": 21
       },
       "validator": {
         "file": "gstn/gstr1-v5.0-request-schema.json",

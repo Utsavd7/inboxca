@@ -2,7 +2,7 @@ import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {xlsxEntries} from "../src/lib/sheet.ts";
 import {chooseTemplate,type Template} from "../src/lib/templates.ts";
-import {salesSections,type SalesSection} from "../src/lib/gstr1-fields.ts";
+import {numericHeadings,salesSections,type SalesSection} from "../src/lib/gstr1-fields.ts";
 import type {Figure} from "../src/lib/datasets.ts";
 import {gstr1Workbook} from "./gstr1.ts";
 
@@ -57,7 +57,7 @@ export function editedForm(bytes:Buffer,context:{template:Template;period:string
       if(!value?.value) continue;
       const column=col.charCodeAt(0)-65,heading=salesSections[section].headings[column];
       if(col.length!==1 || !heading || row>1004 || value.formula || value.value.length>2000) throw new Error("Use values in the form's data cells, up to 1,000 rows");
-      const kind:Figure["kind"]=/date$/i.test(heading) ? "date" : /^(Invoice Value|Note Value|Rate|Taxable Value|Cess Amount|Total Value|Total Quantity|Integrated Tax Amount|Central Tax Amount|State\/UT Tax Amount|Applicable % of Tax Rate)$/.test(heading) ? "number" : "text";
+      const kind:Figure["kind"]=/date$/i.test(heading) ? "date" : numericHeadings.test(heading) ? "number" : "text";
       let read=value.value;
       if(kind==="date") {
         if(!/^\d{1,6}$/.test(read)) throw new Error("Keep the official Excel date cells");
