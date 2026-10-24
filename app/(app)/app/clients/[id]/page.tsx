@@ -186,7 +186,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   // Who can be assigned: teams and active people, each as "team:<id>" or "person:<id>".
   const choices = [
     ...(teams ?? []).map((team) => ({ value: `team:${team.id}`, label: `Team: ${team.name}` })),
-    ...(people ?? []).filter((person) => person.status === "active").map((person) => ({ value: `person:${person.user_id}`, label: person.email })),
+    ...(people ?? []).filter((person) => person.status === "active").map((person) => ({ value: `person:${person.user_id}`, label: personName(person.email), email: person.email })),
   ];
   const assigned = client.client_assignments.map((a) => ({ ...a, value: a.team_id ? `team:${a.team_id}` : `person:${a.user_id}` }));
   const labelOf = new Map(choices.map((choice) => [choice.value, choice.label]));
@@ -194,7 +194,6 @@ export default async function Client({ params, searchParams }: { params: Promise
   const lead = [...client.client_assignments].sort((a, b) => lookAfter.indexOf(a.role) - lookAfter.indexOf(b.role))[0];
   const leadName = lead ? (lead.team_id ? teams?.find((team) => team.id === lead.team_id)?.name : personName(people?.find((person) => person.user_id === lead.user_id)?.email)) : "";
   const gstin = numbers.find((registration) => registration.kind === "gstin")?.number;
-  const writeTo = email || receivers[0]?.email;
   const openNotices = (notices ?? []).filter((notice) => ["upcoming", "in_progress"].includes(notice.status));
   const showExtraction = !!drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name));
   const showOutputs = !!draftForms?.some(row=>["GSTR1","GSTR3B"].includes(row.form_code)) || !!outputs;
@@ -222,6 +221,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     "document.deleted": "Document removed", "document.shared": "Document shared", "document.downloaded": "Document downloaded", "share.code_sent": "Code emailed for a private document",
     "reminder.sent": "Reminder sent", "email.changed": "Email label corrected",
     "email.acknowledged": "Files received reply sent", "request.changed": "Request updated",
+    "email.replied": "Reply sent", "email.written": "Email written to the client",
   };
   // Each save returns to the panel it came from.
   const hidden = (back: string) => (
@@ -278,10 +278,10 @@ export default async function Client({ params, searchParams }: { params: Promise
                 Ask for papers
               </Link>
             )}
-            {writeTo && (
-              <a className="b b-primary" href={`mailto:${writeTo}`}>
+            {(email || contacts.length > 0) && !client.archived_at && (
+              <Link className="b b-primary" href={`/app/inbox?compose=${client.id}`}>
                 Write to client
-              </a>
+              </Link>
             )}
           </>
         }
@@ -784,7 +784,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               <div>
                 <label htmlFor="assign-who">Person or team</label>
                 <select id="assign-who" name="who">
-                  {unassigned.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                  {unassigned.map((choice) => <option key={choice.value} value={choice.value}>{"email" in choice ? `${choice.label}, ${choice.email}` : choice.label}</option>)}
                 </select>
               </div>
               <div>

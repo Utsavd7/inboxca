@@ -18,9 +18,9 @@ import { opensInMailbox } from "@/src/lib/mailbox";
 import { askedPaper } from "@/src/lib/records";
 import { labels } from "@/src/lib/triage";
 import { AutoSelect } from "../auto-select";
-import { Empty, PageHead, Toast } from "../ui";
+import { Empty, PageHead, SidePanel, Toast } from "../ui";
 import { clientsOf, contactName, conversation } from "./conversation";
-import { InboxKeys, ReplyBox } from "./inbox-client";
+import { ComposeBox, InboxKeys, ReplyBox } from "./inbox-client";
 import "./inbox.css";
 
 const PAGE = 30;
@@ -47,7 +47,7 @@ const shortTime = (at: string, today: string) => {
 const longTime = (at: string) => india(at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const uuid = /^[0-9a-f-]{36}$/;
 
-type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "approved" | "error" | "replied" | "unsent", string | undefined>;
+type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "compose" | "approved" | "error" | "replied" | "written" | "unsent", string | undefined>;
 
 // Every email with the firm's clients, both ways (PLAN.md 5.5): the list from InboxCA's
 // records (which client, when, what waits) with subjects and first lines read live from the
@@ -229,17 +229,56 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const errors: Record<string, string> = {
     mailbox: "The email could not be sent. Check the firm's email in Settings, then try again.",
     reply: "Write the reply first.",
+    write: "Write a subject and the email first.",
+    to: "Choose who gets the email.",
     needs: "Sending files to this client needs permission. Ask on the client's Documents tab.",
     upload: "Files can be up to 25 MB together.",
   };
   const hasWait = !!toAnswer.length || !!papers?.length || !!toCheck?.length || !!week?.length;
 
+  // Writing to a client: the client is picked like the filter's, then who gets the email is
+  // picked from the client's own address and its contact people (row level security decides).
+  const composing = connected && !!sp.compose;
+  const { data: writeTo } = composing && uuid.test(sp.compose ?? "")
+    ? await supabase.from("clients").select("id, name, email_enc, contact_clients(contact_id, contacts(name_enc, email_enc))").eq("id", sp.compose!).is("archived_at", null).maybeSingle()
+    : { data: null };
+  const recipients = writeTo
+    ? [
+        ...(writeTo.email_enc ? [{ value: "client", label: `${writeTo.name}, ${await crypto.decrypt(firm, `clients/${writeTo.id}/email`, writeTo.email_enc)}` }] : []),
+        ...(await Promise.all(writeTo.contact_clients.filter((link) => link.contacts).map(async (link) => ({ value: link.contact_id, label: `${await crypto.decrypt(firm, `contacts/${link.contact_id}/name`, link.contacts!.name_enc)}, ${await crypto.decrypt(firm, `contacts/${link.contact_id}/email`, link.contacts!.email_enc)}` })))),
+      ]
+    : [];
+  const mayWriteAttach = !!writeTo && membership.may("send", writeTo.id);
+  const { data: writePapers } = mayWriteAttach ? await supabase.from("documents").select("id, name").eq("client_id", writeTo.id).eq("status", "filed").order("received_at", { ascending: false }).limit(50) : { data: [] };
+  // The paging client picker, for the filter and for writing: a search, eight names a page.
+  const clientPicker = (summary: string, keep: Partial<Search>, link: (id: string) => string, current?: string, open = !!cq || !!sp.cpage) => (
+    <details className="ib-menu" open={open}>
+      <summary>{summary}</summary>
+      <div className="ib-pop">
+        <form action="/app/inbox" role="search">
+          {Object.entries(keep).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
+          <input type="search" name="cq" defaultValue={cq} placeholder="Find a client" aria-label="Find a client" />
+        </form>
+        {current && !keep.compose && <Link href={href({ client: undefined })}>All clients</Link>}
+        {pickList?.slice(0, 8).map((row) => (
+          <Link key={row.id} href={link(row.id)} aria-current={row.id === current ? "true" : undefined}>{row.name}</Link>
+        ))}
+        {!pickList?.length && <span className="ib-note">No client by that name</span>}
+        {(pickList?.length ?? 0) > 8 && <Link href={href({ compose: keep.compose, cq: cq || undefined, cpage: String(cpage + 1) })}>More clients</Link>}
+      </div>
+    </details>
+  );
+
   return (
     <div className="ib fill">
       <InboxKeys />
-      <PageHead title="Inbox" sub="Every email with your clients, both ways. Read live from the firm's mailbox; InboxCA keeps no copy." />
+      <PageHead
+        title="Inbox"
+        sub="Every email with your clients, both ways. Read live from the firm's mailbox; InboxCA keeps no copy."
+        actions={connected && <Link className="b b-primary" href={href({ compose: "1" })} scroll={false}>Write to a client</Link>}
+      />
       {sp.approved && <p className="notice" role="status">Sent. The client got a secure link to the paper, in reply to their email.</p>}
-      {sp.error && errors[sp.error] && <p className="alert" role="alert">{sp.error === "mailbox" && !sp.mail ? "The paper could not be sent. Check the firm's email in Settings, then try again." : errors[sp.error]}</p>}
+      {sp.error && errors[sp.error] && !composing && <p className="alert" role="alert">{sp.error === "mailbox" && !sp.mail ? "The paper could not be sent. Check the firm's email in Settings, then try again." : errors[sp.error]}</p>}
 
       {hasWait && (
         <div className="ib-wait">
@@ -334,21 +373,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             );
           })}
         </nav>
-        <details className="ib-menu" open={!!cq || !!sp.cpage}>
-          <summary>{chosenClient?.name ?? "Client"}</summary>
-          <div className="ib-pop">
-            <form action="/app/inbox" role="search">
-              {Object.entries({ ...filters, client: undefined }).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
-              <input type="search" name="cq" defaultValue={cq} placeholder="Find a client" aria-label="Find a client" />
-            </form>
-            {chosenClient && <Link href={href({ client: undefined })}>All clients</Link>}
-            {pickList?.slice(0, 8).map((row) => (
-              <Link key={row.id} href={href({ client: row.id })} aria-current={row.id === chosenClient?.id ? "true" : undefined}>{row.name}</Link>
-            ))}
-            {!pickList?.length && <span className="ib-note">No client by that name</span>}
-            {(pickList?.length ?? 0) > 8 && <Link href={href({ cq: cq || undefined, cpage: String(cpage + 1) })}>More clients</Link>}
-          </div>
-        </details>
+        {clientPicker(chosenClient?.name ?? "Client", { ...filters, client: undefined }, (id) => href({ client: id }), chosenClient?.id, !composing && (!!cq || !!sp.cpage))}
         <details className="ib-menu">
           <summary>{status && sp.status ? statuses[status] : "Status"}</summary>
           <div className="ib-pop">
@@ -511,7 +536,27 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           )}
         </article>
       </div>
+      {composing && (
+        <SidePanel id="compose-title" title="Write to a client" close={href()}>
+          {sp.error && errors[sp.error] && <p className="alert" role="alert">{errors[sp.error]}</p>}
+          <div className="ib-write">
+            <div className="ib-field">
+              <span>Client</span>
+              {clientPicker(writeTo?.name ?? "Choose a client", { ...filters, compose: sp.compose }, (id) => href({ compose: id }), writeTo?.id, !writeTo || !!cq || !!sp.cpage)}
+            </div>
+            {writeTo &&
+              (recipients.length ? (
+                <ComposeBox key={writeTo.id} client={writeTo.id} recipients={recipients} papers={writePapers ?? []} ai={aiReady()} mayAttach={mayWriteAttach} />
+              ) : (
+                <p className="ib-note">
+                  {writeTo.name} has no email address yet. Add one on <Link href={`/app/clients/${writeTo.id}?tab=details`}>the client&apos;s page</Link>.
+                </p>
+              ))}
+          </div>
+        </SidePanel>
+      )}
       {sp.replied && <Toast>Reply sent{sp.unsent ? `. ${sp.unsent} ${sp.unsent === "1" ? "paper" : "papers"} could not go; send from the client's Documents tab.` : ""}</Toast>}
+      {sp.written && <Toast>Email sent{sp.unsent ? `. ${sp.unsent} ${sp.unsent === "1" ? "paper" : "papers"} could not go; send from the client's Documents tab.` : ""}</Toast>}
     </div>
   );
 }

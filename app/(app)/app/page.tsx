@@ -179,7 +179,12 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         actions={
           <>
             {portal && (
-              <Link className="b b-secondary" href="/app?panel=upload" scroll={false}>
+              <Link className="b b-secondary" href="/app?panel=portal" scroll={false}>
+                Add portal files
+              </Link>
+            )}
+            {!membership.viewOnlyUntil && (
+              <Link className="b b-secondary" href="/app/documents?upload=1">
                 Upload papers
               </Link>
             )}
@@ -435,10 +440,10 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </div>
       </div>
 
-      {portal && panel === "upload" && (
-        <aside className="today-panel panel-in" aria-labelledby="upload-title">
+      {portal && panel === "portal" && (
+        <aside className="today-panel panel-in" aria-labelledby="portal-title">
           <div className="today-head">
-            <h2 id="upload-title">Upload papers</h2>
+            <h2 id="portal-title">Files from the GST portal</h2>
             <Link className="b b-ghost b-icon" href="/app" scroll={false} aria-label="Close">
               <X size={16} aria-hidden />
             </Link>

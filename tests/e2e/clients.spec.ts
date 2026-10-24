@@ -251,7 +251,9 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
   const gstr2b = Buffer.from(JSON.stringify({ data: { gstin: "27AAPFU0939F1ZV", rtnprd: "092026", version: "1.0", docdata: { b2b: [] } } }));
   const other = Buffer.from(JSON.stringify({ gstin: "27AAPFU0939F1ZV", note: "not from the portal" }));
   await owner.goto("/app");
-  await owner.getByRole("link", { name: "Upload papers" }).click();
+  // Upload papers is the Documents page's; portal files have their own box on Today.
+  await expect(owner.getByRole("link", { name: "Upload papers" })).toHaveAttribute("href", "/app/documents?upload=1");
+  await owner.getByRole("link", { name: "Add portal files" }).click();
   const drop = (files: { name: string; buffer: Buffer }[]) =>
     owner.getByLabel("Add portal files").setInputFiles(files.map((file) => ({ ...file, mimeType: "application/json" })));
   await drop([
@@ -260,7 +262,7 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
   ]);
   await owner.getByRole("button", { name: "Add", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText("1 filed in its client's folder; 1 not filed");
-  await owner.goto("/app?panel=upload");
+  await owner.goto("/app?panel=portal");
   await drop([{ name: "again.json", buffer: gstr2b }]);
   await owner.getByRole("button", { name: "Add", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText("1 already there");
@@ -319,4 +321,23 @@ test("a notice is added from the Notices page by finding its client", async () =
   await panel.getByRole("button", { name: "Add notice" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Notice added." })).toBeVisible();
   await expect(owner.locator("section[aria-label=Notices] tbody tr").filter({ hasText: "TEST-PICK-1" })).toContainText("Patel Textiles");
+});
+
+test("the people looking after a client show by name, not email", async () => {
+  const client = randomUUID();
+  await query(local.dbUrl, "insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Names Test Client','individual')", [client, firm.firmId]);
+  await owner.goto(`/app/clients/${client}?tab=team`);
+  const panel = owner.getByRole("dialog", { name: "Looked after by" });
+  await panel.getByLabel("Person or team").selectOption({ label: `Clients, ${ownerEmail}` });
+  await panel.getByRole("button", { name: "Assign" }).click();
+  await expect(panel.getByRole("listitem")).toContainText(["Clients"]);
+  await expect(panel.getByRole("list")).not.toContainText("@");
+  await owner.goto(`/app/clients/${client}`);
+  await expect(owner.locator("section[aria-labelledby=team-card]")).toContainText("Clients");
+  await expect(owner.locator("section[aria-labelledby=team-card]")).not.toContainText("@");
+  await expect(owner.locator(".client-meta")).toContainText("looked after by Clients");
+  await owner.goto("/app/clients?q=Names%20Test");
+  const row = owner.getByRole("row").filter({ hasText: "Names Test Client" });
+  await expect(row).toContainText("Clients");
+  await expect(row).not.toContainText("@");
 });
