@@ -92,10 +92,9 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     const link = (await page.locator(".link-once").textContent())!;
     const visitor = await (await browser.newContext()).newPage();
     await visitor.goto(link);
-    for (const [content, received] of [["Invented sales bills", "1 file received"], ["Invented sales bills, corrected", "2 files received"]]) {
+    for (const [content, received] of [["Invented sales bills", "Received: 1 file"], ["Invented sales bills, corrected", "Received: 2 files"]]) {
       const sales = visitor.getByRole("listitem").filter({ hasText: "Sales bills" });
-      await sales.getByLabel("File for Sales bills").setInputFiles({ name: "sales.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
-      await sales.getByRole("button", { name: "Upload" }).click();
+      await sales.getByLabel("Add Sales bills (photo or PDF)").setInputFiles({ name: "sales.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
       await expect(sales).toContainText(received);
     }
     await visitor.close();

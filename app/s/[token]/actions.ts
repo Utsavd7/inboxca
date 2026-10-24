@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { emailTemplates } from "@/src/lib/email-templates";
-import { serverCrypto } from "@/src/lib/crypto";
 import { firmMailer } from "@/src/lib/firm-mail";
 import { CODE_MINUTES, CODE_TRIES, codeHash, newCode, openCookie, openValue } from "@/src/lib/share-codes";
 import { supabaseAdmin } from "@/src/lib/supabase";
+import { shareRecipient } from "./recipient";
 
 // The private paper behind a link, if the link is current.
 async function privateShare(token: string) {
@@ -27,12 +27,7 @@ export async function requestShareCode(form: FormData) {
   const { count } = await supabaseAdmin().from("activity_log").select("at", { count: "exact", head: true })
     .eq("firm_id", share.firm_id).eq("entity_id", share.id).eq("action", "share.code_sent").gte("at", new Date(Date.now() - 86_400_000).toISOString());
   if ((count ?? 0) >= 5) redirect(`/s/${token}?code=limit`);
-  const crypto = serverCrypto();
-  let to = "";
-  if (share.contact_id) {
-    const { data: contact } = await supabaseAdmin().from("contacts").select("email_enc").eq("id", share.contact_id).maybeSingle();
-    if (contact) to = await crypto.decrypt(share.firm_id, `contacts/${share.contact_id}/email`, contact.email_enc);
-  } else if (share.documents.clients.email_enc) to = await crypto.decrypt(share.firm_id, `clients/${share.documents.client_id}/email`, share.documents.clients.email_enc);
+  const to = await shareRecipient(share);
   const mailer = to ? await firmMailer(share.firm_id, share.firms.name) : null;
   const code = newCode();
   await supabaseAdmin()

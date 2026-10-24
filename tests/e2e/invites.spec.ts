@@ -910,20 +910,26 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(link);
   await expect(visitor.getByRole("heading", { name: `Documents for ${mailClient}` })).toBeVisible();
+  await expect(visitor.getByText(`Questions? Email ${mailboxEmail}`)).toBeVisible();
+  // One button an item: choosing files sends them at once, with no second step.
   const loan = visitor.getByRole("listitem").filter({ hasText: "Loan statement" });
   const loanPdf = Buffer.from(pdf("Invented loan account 99231"));
-  await loan.getByLabel("File for Loan statement").setInputFiles({ name: "IMG_77.pdf", mimeType: "application/pdf", buffer: loanPdf });
-  await loan.getByRole("button", { name: "Upload" }).click();
-  await expect(visitor.getByRole("status")).toContainText("Received: Loan statement");
-  await expect(visitor.getByRole("listitem").filter({ hasText: "Loan statement" })).toContainText("1 file received");
+  await expect(loan.getByLabel("Add Loan statement (photo or PDF)")).toHaveAttribute("accept", "image/*,application/pdf");
+  await loan.getByLabel("Add Loan statement (photo or PDF)").setInputFiles({ name: "IMG_77.pdf", mimeType: "application/pdf", buffer: loanPdf });
+  await expect(loan.getByRole("status")).toHaveText("Received: 1 file");
   await owner.reload();
   await expect(owner.getByRole("list", { name: "Files asked for" })).toContainText("1 of 2 received");
   await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Filed");
   // The team checks what arrived. Ask again clears an item, so the client's link asks for it once more.
+  // Several files chosen together all arrive before the request closes.
   const sales = visitor.getByRole("listitem").filter({ hasText: "Sales bills" });
-  await sales.getByLabel("File for Sales bills").setInputFiles({ name: "IMG_78.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf("Invented sales bills")) });
-  await sales.getByRole("button", { name: "Upload" }).click();
+  await sales.getByLabel("Add Sales bills (photo or PDF)").setInputFiles([
+    { name: "IMG_78.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf("Invented sales bills")) },
+    { name: "IMG_79.jpg", mimeType: "image/jpeg", buffer: Buffer.from("invented photo of a sales bill") },
+  ]);
   await expect(visitor.getByText("Everything asked for has arrived.")).toBeVisible();
+  await expect(sales.getByRole("status")).toHaveText("Received: 2 files");
+  await expect(visitor.getByLabel(/^Add /)).toHaveCount(0);
   await owner.reload();
   const asks = owner.getByRole("list", { name: "Files asked for" });
   await asks.getByRole("button", { name: "Loan statement is right" }).click();
@@ -931,8 +937,13 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await asks.getByRole("button", { name: "Ask again for Sales bills" }).click();
   await expect(asks).toContainText("1 of 2 received");
   await visitor.reload();
-  await expect(visitor.getByRole("listitem").filter({ hasText: "Sales bills" })).not.toContainText("received");
-  await expect(visitor.getByRole("listitem").filter({ hasText: "Loan statement" })).toContainText("1 file received");
+  await expect(visitor.getByRole("listitem").filter({ hasText: "Sales bills" })).not.toContainText("Received");
+  await expect(visitor.getByRole("listitem").filter({ hasText: "Loan statement" })).toContainText("Received: 1 file");
+  // A link copied wrong names nothing of the firm.
+  await visitor.goto(`${link}x`);
+  await expect(visitor.getByRole("heading")).toHaveText("This link has ended or was copied wrong.");
+  await expect(visitor.getByText("Ask your CA's office to send a new one.")).toBeVisible();
+  await expect(visitor.getByText("Questions?")).toHaveCount(0);
 
   // A filed document goes to the client as a secure link that stops after 5 downloads.
   await rows.getByRole("link", { name: `Change ${mailClient} - Loan statement`, exact: false }).click();
@@ -944,7 +955,13 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   // A loan statement is a private paper: it opens only with the code emailed to the same address.
   expect((await visitor.request.get(`${shared}/file`)).status()).toBe(403);
   await visitor.getByRole("button", { name: "Email me a code" }).click();
-  await expect(visitor.getByRole("status")).toContainText("A code is on its way");
+  await expect(visitor.getByRole("status")).toHaveText("We sent a code to c•••@patel.test. It works for 10 minutes.");
+  await expect(visitor.getByLabel("Code from the email")).toBeFocused();
+  const first = (await lastMail(`client-${tag}@patel.test`)).match(/Your code is (\d{6})/)![1];
+  // A new code replaces the first.
+  await visitor.getByRole("button", { name: "Send a new code" }).click();
+  await expect(visitor.getByRole("status")).toHaveText("We sent a code to c•••@patel.test. It works for 10 minutes.");
+  await expect.poll(async () => (await lastMail(`client-${tag}@patel.test`)).match(/Your code is (\d{6})/)![1]).not.toBe(first);
   const oneTime = (await lastMail(`client-${tag}@patel.test`)).match(/Your code is (\d{6})/)![1];
   await visitor.getByLabel("Code from the email").fill(oneTime === "000000" ? "111111" : "000000");
   await visitor.getByRole("button", { name: "Open" }).click();
