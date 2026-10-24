@@ -1,21 +1,18 @@
 /* The Clients list and each client's page. Sizes, weights and colours from the design rules. */
-.clients-page { line-height: 1.5; }
-.clients-page .page-head h1 { font-size: 24px; line-height: 1.3; letter-spacing: normal; }
-.clients-page .page-head p { margin-top: var(--s1); }
+.clients-page.fill { gap: var(--s4); }
 .clients-page .b { border-radius: var(--r1); font-size: 13px; font-weight: 600; }
 .clients-page .b-small { height: var(--control); padding: 0 var(--s3); }
 .clients-page .badge { height: 20px; font-weight: 600; }
-.clients-page .num { font-size: 12px; }
 .clients-page .alert, .clients-page .notice { margin: var(--s4) 0 0; }
 .clients-page .empty { margin-top: var(--s5); padding: var(--s7) var(--s4); gap: var(--s2); }
 .clients-page .empty .b { margin-top: var(--s2); }
 
 /* Filter pills and search on one line under the header. */
-.clients-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); margin-top: var(--s5); }
+.clients-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .clients-page .pills { gap: var(--s2); padding: 0; background: none; }
 .clients-page .pills a { height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); color: var(--ink-2); font-weight: 600; transition: background 120ms var(--out), color 120ms var(--out); }
 .clients-page .pills a:hover { background: var(--hover); color: var(--ink); }
-.clients-page .pills a[aria-current="page"] { border-color: var(--ink); background: var(--ink); color: var(--side); box-shadow: none; }
+.clients-page .pills a[aria-current="page"] { border-color: var(--ink); background: var(--ink); color: var(--white); box-shadow: none; }
 .clients-page .pills small { margin-left: var(--s2); color: inherit; font-size: 13px; font-weight: 600; }
 .clients-find { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .clients-find .search { position: relative; width: 280px; max-width: 100%; }
@@ -24,7 +21,7 @@
 .clients-page .clients-find select[name] { width: auto; }
 
 /* Tables in a card that scrolls on its own, head kept in view. */
-.clients-table { overflow: auto; margin-top: var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
+.clients-table { overflow: auto; border: 1px solid var(--line); border-radius: var(--r3); }
 .clients-page .t { min-width: 760px; }
 .clients-page .t th { position: sticky; top: 0; z-index: 1; height: var(--row); padding: 0 var(--s3); border-bottom: 1px solid var(--line); background: var(--side); color: var(--ink-3); font-size: 12px; font-weight: 600; }
 .clients-page .t td { height: var(--row); padding: 0 var(--s3); font-size: 14px; white-space: nowrap; }
@@ -34,27 +31,27 @@
 .clients-page .t tbody tr:has(input[type="checkbox"]:checked) { background: var(--accent-soft); }
 .clients-table .row-link::after { content: ""; position: absolute; inset: 0; }
 .clients-table input[type="checkbox"] { position: relative; z-index: 1; }
-.clients-page .pager { margin-top: var(--s3); }
+.clients-page.fill > .pager { margin-top: 0; }
 .clients-page .pager p:empty { display: none; }
 
-.clients-progress { margin-top: var(--s4); padding: var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
+.clients-progress { padding: var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
 .clients-progress h2 { font-size: 16px; font-weight: 600; }
 .clients-progress ul { display: grid; gap: var(--s1); margin-top: var(--s2); }
 
 /* Ticking clients raises the bar to send them a paper. */
-.clients-bulk { position: sticky; bottom: var(--s4); z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); width: fit-content; max-width: 100%; margin: var(--s3) auto 0; padding: var(--s2) var(--s2) var(--s2) var(--s4); border-radius: var(--r3); background: var(--ink); color: var(--side); font-size: 13px; visibility: hidden; opacity: 0; transform: translateY(var(--s2)); transition: opacity 180ms var(--out), transform 180ms var(--out), visibility 180ms; }
-.clients-page:has(input[name="client"]:checked) .clients-bulk { visibility: visible; opacity: 1; transform: none; }
+.clients-bulk { position: fixed; bottom: var(--s5); left: 50%; z-index: var(--z-toast); display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); width: max-content; max-width: calc(100vw - var(--s6)); padding: var(--s2) var(--s2) var(--s2) var(--s4); border-radius: var(--r3); background: var(--ink); color: var(--white); font-size: 13px; box-shadow: var(--shadow-float); visibility: hidden; opacity: 0; transform: translate(-50%, var(--s2)); transition: opacity var(--base) var(--out), transform var(--base) var(--out), visibility var(--base); }
+.clients-page:has(input[name="client"]:checked) .clients-bulk { visibility: visible; opacity: 1; transform: translate(-50%, 0); }
 .clients-page .clients-bulk select[name] { width: auto; max-width: 220px; }
 
 /* One client: header, tabs, then the tab's content. */
 .client-meta { color: var(--ink-3); }
 .client-meta .num { color: var(--ink-2); }
-.clients-page .tabs { gap: var(--s5); margin-top: var(--s4); border-bottom-color: var(--line-2); }
+.clients-page .tabs { flex: none; gap: var(--s5); border-bottom-color: var(--line-2); }
 .clients-page .tabs a { display: inline-flex; align-items: center; height: var(--row); padding: 0; color: var(--ink-3); font-weight: 600; }
 .clients-page .tabs a[aria-current="page"] { color: var(--accent); }
 .clients-page .tabs a[aria-current="page"]::after { background: var(--accent); }
 .clients-page .tabs small { margin-left: var(--s2); font-size: 12px; font-weight: 600; }
-.client-pane { padding-top: var(--s4); }
+.client-pane { flex: 1; }
 .client-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: var(--s4); align-items: start; }
 .client-col { display: grid; gap: var(--s4); }
 @media (max-width: 1000px) { .client-grid { grid-template-columns: minmax(0, 1fr); } }
