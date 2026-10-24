@@ -35,6 +35,19 @@ it("keeps drafts to visible clients, refuses signed in writes and stale reviews,
   await db.query("delete from public.documents where id=$1",[document]);
   expect((await db.query("select id from public.datasets where id=$1",[draft])).rowCount).toBe(0);
 
+  // A draft fed by two files keeps the other file's figures and checks when one is purged.
+  const [first,second,mixed]=[randomUUID(),randomUUID(),randomUUID()],[a,b,c]=[randomUUID(),randomUUID(),randomUUID()];
+  await db.query("insert into public.documents(id,firm_id,client_id,work_type,document_type,name,size,sha256,drive_file_id) values ($1,$3,$4,'gst','GSTR-2B','a.json',1,'invented checksum','a'),($2,$3,$4,'gst','GSTR-2B','b.json',1,'invented checksum','b')",[first,second,firm,client]);
+  const line=(id:string,doc:string,state="confirmed")=>({id,field:"gstr2b.total",value_enc:"invented encrypted value",state,source:{document:doc}});
+  await db.query("insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values ($1,$2,$3,'GSTR3B','2026-09',$4)",[mixed,firm,client,JSON.stringify({lines:[line(a,first),line(b,second),line(c,second)],checks:[{kind:"sum",parts:[a],total:b},{kind:"sum",parts:[b],total:c}]})]);
+  await db.query("delete from public.documents where id=$1",[first]);
+  const {rows:[kept]}=await db.query("select revision,data from public.datasets where id=$1",[mixed]);
+  expect(kept.revision).toBe(2);
+  expect(kept.data.lines.map((l:{id:string})=>l.id)).toEqual([b,c]);
+  expect(kept.data.checks).toEqual([{kind:"sum",parts:[b],total:c}]);
+  await db.query("delete from public.documents where id=$1",[second]);
+  expect((await db.query("select id from public.datasets where id=$1",[mixed])).rowCount).toBe(0);
+
 }));
 
 it("only the server can append pending figures, without replacing checked lines or accepting a stale revision",()=>rollback(db,async()=>{
