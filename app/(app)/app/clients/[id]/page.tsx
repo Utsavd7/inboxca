@@ -5,7 +5,7 @@ import { DatasetReview } from "./dataset-review";
 import { Archive, ChevronLeft, FileText, Send, Upload } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { setPaperSharing, askForDocuments, askPermission, findDocuments, manageClient, pauseReminders, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
+import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, findDocuments, manageClient, pauseReminders, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, workOfService, type DocumentRequest } from "@/src/lib/checklists";
@@ -87,7 +87,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
     supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact"}).eq("firm_id",membership.firmId).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
     supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at, prepared").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
-    supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).eq("status", "pending").gt("expires_at", new Date().toISOString()),
+    supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
     supabase.from("tasks").select("id,due_on,status,details",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
   ]);
   const {count:outputs}=await supabase.from("documents").select("id",{count:"exact",head:true}).eq("firm_id",membership.firmId).eq("client_id",id).not("prepared","is",null).neq("status","deleted");
@@ -101,6 +101,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   const documents = (files ?? []).filter((file) => file.status !== "deleted" && (!matching || matching.has(file.id)));
   const removedFiles = (files ?? []).filter((file) => file.status === "deleted");
   const owner = membership.role === "owner";
+  // Requests stay listed until every file the client sent has been checked.
+  const asking = (asks ?? []).filter((request) => (request.details as unknown as DocumentRequest).items.some((item) => !item.checked));
+  const firmTypes = (membership.settings.document_types ?? []) as string[];
   // What this person may do here, with any grant or request of theirs still open (5.17.2).
   const { data: mine } = await supabase
     .from("requests")
@@ -460,9 +463,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                   </form>
                 </section>
               )}
-              {!!asks?.length && (
+              {!!asking.length && (
                 <ul className="rows asks" aria-label="Files asked for">
-                  {asks.map((request) => {
+                  {asking.map((request) => {
                     const details = request.details as unknown as DocumentRequest;
                     const got = details.items.filter((item) => item.received.length).length;
                     return (
@@ -477,6 +480,25 @@ export default async function Client({ params, searchParams }: { params: Promise
                             {got} of {details.items.length} received. The link works until {dueLabel(request.expires_at!.slice(0, 10))}.
                           </span>
                         </span>
+                        {!viewOnly && (
+                          <span className="cell-form">
+                            {details.items.map((item, at) =>
+                              item.received.length && !item.checked ? (
+                                <form key={at} action={checkRequestItem}>
+                                  <input type="hidden" name="request" value={request.id} />
+                                  <input type="hidden" name="item" value={at} />
+                                  <span className="hint">{item.type}</span>
+                                  <button className="b b-secondary b-small" name="intent" value="checked" aria-label={`${item.type} is right`}>
+                                    Checked
+                                  </button>
+                                  <button className="b b-ghost b-small" name="intent" value="again" aria-label={`Ask again for ${item.type}`}>
+                                    Ask again
+                                  </button>
+                                </form>
+                              ) : null,
+                            )}
+                          </span>
+                        )}
                       </li>
                     );
                   })}
@@ -506,7 +528,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                       <label htmlFor="file-file">File</label>
                       <input id="file-file" name="file" type="file" required />
                     </div>
-                    <DocumentFields />
+                    <DocumentFields firmTypes={firmTypes} keep={manage} />
                     <button className="b b-primary" type="submit">
                       Upload
                     </button>
@@ -522,7 +544,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                   <p className="hint">The file moves to the folder and name these give, in your firm&apos;s drive.</p>
                   <form action={manageDocument} className="fields">
                     <input type="hidden" name="document" value={editing.id} />
-                    <DocumentFields type={editing.document_type} work={editing.work_type} period={editing.period_key} />
+                    <DocumentFields type={editing.document_type} work={editing.work_type} period={editing.period_key} firmTypes={firmTypes} keep={manage} />
                     <button className="b b-primary" name="intent" value="save">
                       Save
                     </button>
@@ -717,7 +739,19 @@ export default async function Client({ params, searchParams }: { params: Promise
                     <tbody>{activity.data.map((entry, index) => (
                       <tr key={index}>
                         <td className="shrink num">{new Date(entry.at).toLocaleString("en-IN", {timeZone:"Asia/Kolkata", day:"numeric", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:false})}</td>
-                        <td>{activityNames[entry.action] ?? "Client record changed"}</td>
+                        <td>
+                          {activityNames[entry.action] ?? "Client record changed"}
+                          {entry.renamed_from && <span className="sub">{entry.renamed_to ? `${entry.renamed_from} to ${entry.renamed_to}` : `Was ${entry.renamed_from}`}</span>}
+                          {/* A manager or the owner puts back the latest rename of a file in one click (5.17.2). */}
+                          {manage && !viewOnly && activity.data.findIndex((other) => other.document_id === entry.document_id) === index && documents.some((file) => file.id === entry.document_id && !file.prepared) && (
+                            <form action={manageDocument}>
+                              <input type="hidden" name="document" value={entry.document_id} />
+                              <button className="b b-ghost b-small" name="intent" value="undo" aria-label={`Undo rename of ${entry.renamed_to ?? entry.renamed_from}`}>
+                                Undo
+                              </button>
+                            </form>
+                          )}
+                        </td>
                         <td>{entry.actor_id ? people?.find((person) => person.user_id === entry.actor_id)?.email ?? "Former team member" : "InboxCA"}</td>
                       </tr>
                     ))}</tbody>
@@ -959,14 +993,14 @@ export default async function Client({ params, searchParams }: { params: Promise
 }
 
 // Type, work and period for a file, filled in when correcting one.
-function DocumentFields({ type = "", work = "other", period = "" }: { type?: string; work?: string; period?: string }) {
-  const known = !type || documentTypes.includes(type);
+function DocumentFields({ type = "", work = "other", period = "", firmTypes = [], keep = false }: { type?: string; work?: string; period?: string; firmTypes?: string[]; keep?: boolean }) {
+  const known = !type || documentTypes.includes(type) || firmTypes.includes(type);
   return (
     <>
       <div>
         <label htmlFor="file-type">Type</label>
         <select id="file-type" name="type" defaultValue={known ? type || "Document" : "Other"}>
-          {documentTypes.map((choice) => (
+          {[...documentTypes, ...firmTypes].map((choice) => (
             <option key={choice}>{choice}</option>
           ))}
           <option value="Other">Other, named below</option>
@@ -975,6 +1009,12 @@ function DocumentFields({ type = "", work = "other", period = "" }: { type?: str
       <div>
         <label htmlFor="file-custom">Name for Other</label>
         <input id="file-custom" name="custom" maxLength={80} defaultValue={known ? "" : type} placeholder="HDFC loan sanction letter" />
+        {keep && (
+          <label className="check">
+            <input type="checkbox" name="keep" />
+            Keep this name as one of the firm&apos;s types
+          </label>
+        )}
       </div>
       <div>
         <label htmlFor="file-work">Work</label>

@@ -222,9 +222,16 @@ it("shows only a visible client's recent activity, without private log details",
   await db.query("insert into public.activity_log(firm_id,action,entity_type,entity_id,details) values ($1,'other.private','client',$2,'{\"private\":\"never returned\"}')",[OTHER,CLIENT]);
   await actAs(db,STAFF);
   const open=await db.query("select * from public.client_activity($1)",[CLIENT]);
-  expect(open.fields.map((field)=>field.name)).toEqual(["at","action","actor_id"]);
+  expect(open.fields.map((field)=>field.name)).toEqual(["at","action","actor_id","document_id","renamed_from","renamed_to"]);
   expect(open.rows.map((row)=>row.action)).toEqual(expect.arrayContaining(["client.added","task.changed"]));
   expect(open.rows.some((row)=>row.action==="other.private")).toBe(false);
+  // A rename names the file's old and new name, and the document, so it can be put back.
+  await asOwner(db);
+  const document=(await db.query("insert into public.documents(firm_id,client_id,work_type,document_type,drive_file_id,name,size,sha256) values ($1,$2,'other','Document','a','Client - Document.pdf',1,'x') returning id",[FIRM,CLIENT])).rows[0].id;
+  await db.query("select public.rename_document($1,$2,'gst','Purchase bills','2026-09','filed','Client - Purchase bills - Sep 2026.pdf','b')",[document,OWNER]);
+  await actAs(db,STAFF);
+  expect((await db.query("select document_id,renamed_from,renamed_to from public.client_activity($1) where action='document.renamed'",[CLIENT])).rows).toEqual([{document_id:document,renamed_from:"Client - Document.pdf",renamed_to:"Client - Purchase bills - Sep 2026.pdf"}]);
+  expect((await db.query("select count(*)::int n from public.client_activity($1) where action<>'document.renamed' and coalesce(document_id::text,renamed_from,renamed_to) is not null",[CLIENT])).rows[0].n).toBe(0);
   await actAs(db,OWNER);
   await db.query("update public.firms set settings='{\"client_visibility\":\"restricted\"}' where id=$1",[FIRM]);
   await actAs(db,STAFF);

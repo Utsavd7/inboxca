@@ -711,6 +711,14 @@ function documentValues(form: FormData) {
   return { work_type: work as WorkType, document_type: type, period_key: period };
 }
 
+// An Other name the owner, a partner or a manager keeps as one of the firm's own types, which
+// everyone then chooses from like the usual ones (PLAN.md 5.3, 5.17.2).
+async function keepFirmType(form: FormData, membership: { firmId: string; role: string; settings: Record<string, unknown> }, type: string) {
+  const kept = (membership.settings.document_types ?? []) as string[];
+  if (form.get("type") !== "Other" || form.get("keep") !== "on" || !canManageClients(membership.role) || documentTypes.includes(type) || kept.includes(type) || kept.length >= 100) return;
+  await supabaseAdmin().from("firms").update({ settings: { ...membership.settings, document_types: [...kept, type] } }).eq("id", membership.firmId);
+}
+
 // The firm's drive and its folder order, or null when no drive is connected.
 async function firmDrive(firmId: string) {
   const { data: account } = await supabaseAdmin().from("connected_accounts").select("id, provider, credentials_enc, settings").eq("firm_id", firmId).eq("kind", "drive").maybeSingle();
@@ -749,7 +757,7 @@ export async function manageDocument(form: FormData) {
   const { id, userId, membership, back, document, client, clientId, drive, order, naming } = await visibleDocument(form);
   if(!membership.may("rename",clientId)) redirect(`${back}&error=needs`);
   const {data:prepared}=await supabaseAdmin().from("documents").select("prepared").eq("firm_id",membership.firmId).eq("id",id).single();
-  if(prepared?.prepared) redirect(back);
+  if(prepared?.prepared || document.status === "deleted") redirect(back);
   type Values = { work_type: string; document_type: string; period_key: string; status: string; name?: string };
   let next: Values;
   if (form.get("intent") === "undo") {
@@ -782,6 +790,7 @@ export async function manageDocument(form: FormData) {
     new_name: placed.name,
     new_file: placed.id,
   });
+  await keepFirmType(form, membership, next.document_type);
   await tellOwnerOnRepeat(membership.firmId, userId, membership.email, "document.renamed", "renames");
   await queueRead(membership.firmId, id);
   revalidatePath("/app", "layout");
@@ -852,6 +861,7 @@ export async function uploadDocument(form: FormData) {
   if (saved === "twin") redirect(`${back}&upload=1&error=twin`);
   if (saved === "drive") redirect(`${back}&error=drive`);
   await spendGrant(grant);
+  await keepFirmType(form, membership, values.document_type);
   revalidatePath("/app", "layout");
   redirect(`${back}&saved=${saved.id}`);
 }
@@ -1011,6 +1021,29 @@ export async function uploadToRequest(form: FormData) {
   const done = details.items.every((entry) => entry.received.length > 0);
   await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: done ? "done" : "pending" }).eq("id", request.id);
   redirect(`${back}?got=${at}`);
+}
+
+// A person checks a file the client sent for an item asked for (PLAN.md 5.3.1). Checked keeps
+// it; Ask again leaves the file filed but clears the item, so the client's link asks for it
+// once more, reminders count it as missing, and the request is open again.
+export async function checkRequestItem(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const { data: request } = await supabase.from("requests").select("id, client_id, details").eq("firm_id", membership.firmId).eq("kind", "documents").eq("id", String(form.get("request") ?? "")).maybeSingle();
+  if (!request) redirect("/app");
+  const back = `/app/clients/${request.client_id}?tab=files`;
+  const details = request.details as unknown as DocumentRequest;
+  const item = details.items[Number(form.get("item"))];
+  if (!item?.received.length) redirect(back);
+  if (form.get("intent") === "again") {
+    item.received = [];
+    delete item.checked;
+  } else item.checked = true;
+  const admin = supabaseAdmin();
+  await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: details.items.every((entry) => entry.received.length) ? "done" : "pending" }).eq("id", request.id);
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.changed", entity_type: "request", entity_id: request.id });
+  revalidatePath("/app", "layout");
+  redirect(back);
 }
 
 // Sends a filed document to the client, or to one of its contacts allowed to receive

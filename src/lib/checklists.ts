@@ -17,5 +17,5 @@ export function workOfService(code: string): WorkType | null {
   return null;
 }
 
-export type RequestItem = { type: string; work: WorkType; received: string[] };
+export type RequestItem = { type: string; work: WorkType; received: string[]; checked?: boolean };
 export type DocumentRequest = { period: string; items: RequestItem[]; link_hash: string; link_enc?: string; followups?: string[] };
