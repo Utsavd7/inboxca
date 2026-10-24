@@ -2,6 +2,7 @@ import { localDrive } from "../src/lib/drive.ts";
 import { frameSize, verifyView, viewLimits, type ViewRequest } from "../src/lib/file-worker.ts";
 import { openView } from "./render.ts";
 import { readSheet } from "../src/lib/sheet.ts";
+import { exactMapping } from "../src/lib/sales-register.ts";
 import { createHash } from "node:crypto";
 import { readPortal } from "./portal.ts";
 import {verifyForm} from "../src/lib/form-worker.ts";
@@ -76,7 +77,16 @@ export async function handle(request: Request): Promise<Response> {
     }
     if(sheet) {
       if(!/\.(xlsx?|csv)$/i.test(view.name)) throw new Error("Not a sheet");
-      const rows=readSheet(Buffer.from(data.buffer,data.byteOffset,data.byteLength),view.name,{rows:viewLimits.rows+1,columns:viewLimits.columns,keepEmpty:true});
+      // The official GSTR-1 workbook opens with its help sheet: read the first sheet whose
+      // headings are a register's and that has rows under them, else the first sheet.
+      const bytes=Buffer.from(data.buffer,data.byteOffset,data.byteLength),read=(sheet?:number)=>readSheet(bytes,view.name,{rows:viewLimits.rows+1,columns:viewLimits.columns,keepEmpty:true,sheet});
+      let rows=read();
+      if(/\.xlsx$/i.test(view.name)) for(let sheet=1;sheet<=40;sheet++) {
+        let candidate:string[][];
+        try {candidate=read(sheet);} catch {break;}
+        const mapping=exactMapping(candidate);
+        if(mapping && candidate.slice(mapping.header+1).some((row)=>row.some((cell)=>cell.trim()))) {rows=candidate;break;}
+      }
       if(rows.length>viewLimits.rows || rows.some((row)=>row.length>viewLimits.columns || row.some((cell)=>cell.length>2000)) || JSON.stringify(rows).length>3_000_000) throw new Error("Split this register into smaller files");
       return Response.json({rows,sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
     }

@@ -1,5 +1,5 @@
 import {z} from "zod";
-import {numericHeadings,salesSections,type SalesSection} from "./gstr1-fields";
+import {numericHeadings,salesSections,type SalesSection} from "./gstr1-fields.ts";
 import type {Figure} from "./datasets";
 
 export const mappingSchema=z.object({section:z.enum(Object.keys(salesSections) as [SalesSection,...SalesSection[]]),header:z.number().int().min(0).max(39),headings:z.array(z.string().max(200)).min(1).max(26),columns:z.array(z.number().int().min(-1).max(25)).max(26)});
@@ -8,7 +8,9 @@ const normal=(text:string)=>text.trim().toLowerCase().replace(/\s+/g," ");
 export function sameHeadings(a:string[],b:string[]) {return a.length===b.length && a.every((v,i)=>normal(v)===normal(b[i]));}
 export function exactMapping(rows:string[][]):SalesMapping|undefined {
   for(let header=0;header<Math.min(40,rows.length);header++) {
-    const matches=Object.entries(salesSections).filter(([,{headings}])=>headings.every((name)=>rows[header].filter((value)=>normal(value)===normal(name)).length===1));
+    // A B2B row also holds every B2CL heading: the table matching the most headings is meant.
+    const all=Object.entries(salesSections).filter(([,{headings}])=>headings.every((name)=>rows[header].filter((value)=>normal(value)===normal(name)).length===1));
+    const most=Math.max(0,...all.map(([,{headings}])=>headings.length)),matches=all.filter(([,{headings}])=>headings.length===most);
     if(matches.length>1) return;
     if(matches.length===1) {const [section,{headings}]=matches[0];return {section:section as SalesSection,header,headings:rows[header],columns:headings.map((name)=>rows[header].findIndex((value)=>normal(value)===normal(name)))};}
   }
