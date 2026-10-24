@@ -259,8 +259,8 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               ) : !process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET ? (
                 <span>Papers cannot be shown yet.</span>
               ) : (
-                // The paper first in the list shows its first page as a thumbnail, which is not
-                // logged; choosing a paper opens it, which is logged as viewed.
+                // The paper first in the list shows its first page as a thumbnail, logged as a
+                // thumbnail view; choosing a paper opens it, logged as viewed.
                 <FileViewer id={paper.id} page={1} thumb={!chosen} hideInactive={membership.settings.viewer_hide_inactive === true} />
               )}
             </div>

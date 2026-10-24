@@ -45,10 +45,12 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     await expect(papers.getByRole("row", { name: /Form 16/ })).toContainText("Brought in from the drive");
     // The paper's whole name shows, with its work on a second line.
     await expect(papers.getByRole("link", { name: "Purchase bills.pdf", exact: true })).toBeVisible();
-    // The first paper shows its first page at once; nobody opened it, so no view is logged.
+    // The first paper shows its first page at once, logged as a thumbnail, not as an opened view.
     const detail = page.getByRole("complementary", { name: "Paper" });
     await expect(detail.getByRole("img", { name: "Page 1" })).toBeVisible();
-    const views = async () => (await query(local.dbUrl, "select count(*)::int as n from public.activity_log where entity_id = $1 and action = 'document.viewed'", [bills.id]))[0].n;
+    const count = async (thumb: boolean) => (await query(local.dbUrl, "select count(*)::int as n from public.activity_log where entity_id = $1 and action = 'document.viewed' and (coalesce(details->>'thumb', 'false') = 'true') = $2", [bills.id, thumb]))[0].n;
+    const views = () => count(false);
+    await expect.poll(() => count(true)).toBe(1);
     expect(await views()).toBe(0);
 
     // Filter by kind: only GST papers.

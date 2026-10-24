@@ -12,8 +12,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { supabase, userId, membership } = copy ? await currentWriter() : await currentMember();
   const { id } = await params;
   const sheet=new URL(request.url).searchParams.get("sheet");
-  // A thumbnail, the first page of the paper a list shows first, is not a view the person
-  // chose, so it is not logged; anything more is opened and logged as a view.
+  // A thumbnail, the first page of the paper a list shows first, is one page only; it is still
+  // logged, marked as a thumbnail, so every page anyone sees has a record.
   const thumb=!copy && sheet===null && new URL(request.url).searchParams.get("thumb")==="1";
   if(sheet!==null && !/^(?:[1-9]|[1-9][0-9]|100)$/.test(sheet)) return new Response("Not found",{status:404});
   if (!membership) return new Response("Not found", { status: 404 });
@@ -45,7 +45,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const {data:spent,error}=await admin.from("requests").update({status:"used"}).eq("id",permission).eq("firm_id",membership.firmId).eq("status","approved").gt("expires_at",new Date().toISOString()).select("id").maybeSingle();
       if(error || !spent) {await response.body.cancel();return new Response("Ask for permission again.",{status:403,headers});}
     }
-    const { error } = thumb ? { error: null } : await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: copy ? "document.downloaded" : "document.viewed", entity_type: "document", entity_id: id, ...(copy && {details:{stamped:true,limit:viewLimits.pages,...(sheet && {sheet:Number(sheet)}),permission}}) });
+    const { error } = await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: copy ? "document.downloaded" : "document.viewed", entity_type: "document", entity_id: id, ...(copy && {details:{stamped:true,limit:viewLimits.pages,...(sheet && {sheet:Number(sheet)}),permission}}), ...(thumb && {details:{thumb:true}}) });
     if (error) { await response.body.cancel(); throw error; }
     // Do not collect the body. Cancellation and backpressure reach the worker through fetch.
     return new Response(response.body, { headers: { ...headers, "Content-Type": copy ? "application/pdf" : "application/x-inboxca-pages", ...(copy && {"Content-Disposition":"attachment; filename=\"document-pages.pdf\""}) } });
