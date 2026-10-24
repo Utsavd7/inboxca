@@ -47,3 +47,15 @@ export function Empty({ Icon, title, children }: { Icon: LucideIcon; title: stri
     </div>
   );
 }
+
+// A short note at the bottom after an action, for a page that read ?saved= or similar from
+// its address. It slides up, then hides itself after five seconds (CSS only). undo is a small
+// form or button that reverses the action, when one exists.
+export function Toast({ children, undo }: { children: React.ReactNode; undo?: React.ReactNode }) {
+  return (
+    <div className="toast" role="status">
+      <span>{children}</span>
+      {undo}
+    </div>
+  );
+}
