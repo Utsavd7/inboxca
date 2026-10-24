@@ -26,3 +26,7 @@ reports/
 
 # Local graphify code map; rebuilt on demand.
 graphify-out/
+
+# Planning notes and agent instructions stay on this computer, never on GitHub.
+*.md
+!/README.md

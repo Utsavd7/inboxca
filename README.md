@@ -1,12 +1,12 @@
 # InboxCA
 
-InboxCA is a product by Orelu for Indian CA firms. This private repo contains the public site and the app, built in steps tracked in `PLAN.md`. Development runs locally; cloud deployment is still pending.
+InboxCA is a product by Orelu for Indian CA firms. This repo contains the public site and the app, built in small steps. Development runs locally; cloud deployment is still pending.
 
 ## Architecture
 
 ![InboxCA architecture: the firm team uses the app, Supabase and background jobs; a separate file worker handles the firm drive and planned workspace, with cloud deployment pending.](docs/assets/architecture.png)
 
-[Open the diagram source](docs/architecture.html). The diagram follows [PLAN.md sections 4, 5.15 and 8](PLAN.md#4-architecture). It shows the target design, with planned cloud services labelled. The web app, database, jobs and file worker run locally. Hosting for the mail library remains open under M11.
+[Open the diagram source](docs/architecture.html). It shows the target design, with planned cloud services labelled. The web app, database, jobs and file worker run locally. Hosting for the mail library remains open under M11.
 
 The file worker receives signed, short lived requests after the app checks access. It receives a drive access token, never a Supabase key. A viewer opening downloads once and streams stamped page images, keeping no pages or cache. Backblaze is for the separate ingest, encrypted records, safety copies and backup paths. Client originals and prepared forms stay in the firm's own drive. Email subjects and bodies are never stored.
 
@@ -66,11 +66,11 @@ Next.js App Router, strict TypeScript, Tailwind CSS, shadcn's Base UI dialog, Lu
 
 | Location | Purpose |
 | --- | --- |
-| `PLAN.md`, `InboxCA-Paresh.pdf`, `Orelu-CA-Firms-Plan.pptx`, `InboxCA-Brand-Kit.png` | Protected planning, business deck, client deck and brand sources |
+| `InboxCA-Paresh.pdf`, `Orelu-CA-Firms-Plan.pptx`, `InboxCA-Brand-Kit.png` | Business deck, client deck and brand sources |
 | `brag-output/` | Original film deliverables and source, preserved separately |
 | `reference/` | Original workflow reference, not a running integration |
 | `app/(site)/page.tsx` | Static page and section order |
-| `app/(site)/security/page.tsx`, `content/security.ts` | Security policy page, drafted from PLAN section 8. A lawyer must review it before the site is public |
+| `app/(site)/security/page.tsx`, `content/security.ts` | Security policy page. A lawyer must review it before the site is public |
 | `components/site/` | Floating navigation, the clickable demo, the control cards, the plan finder and the invite dialog |
 | `components/ui/dialog.tsx` | Accessible shadcn dialog primitives |
 | `content/` | Source based copy and estimated plans |
@@ -78,10 +78,10 @@ Next.js App Router, strict TypeScript, Tailwind CSS, shadcn's Base UI dialog, Lu
 | `app/fonts/` | Only the self hosted fonts in use, with SIL licences |
 | `public/brand/` | Only assets the page uses |
 | `public/brand/tools/` | Other companies' logos for the "built to work with" row, each the owner's own file, unchanged (Gmail, Outlook, OneDrive, Dropbox and Excel from svgl.app; Zoho Mail, Tally, TaxPower GST and KDK Spectrum from their own sites). Check each brand's usage rules before the site is public |
-| `docs/architecture.html`, `docs/assets/architecture.png` | Architecture source and README image, derived from PLAN |
+| `docs/architecture.html`, `docs/assets/architecture.png` | Architecture source and README image |
 | `tests/e2e/`, `scripts/` | Browser checks, audit capture and social image generation |
 
-Every screen on the page is an original illustration with sample data, based on PLAN. The page has five parts: a hero with a demo that follows one email through the five jobs, the control cards, plans, questions and a closing invite. The film in `brag-output/` is not used by the page.
+Every screen on the page is an original illustration with sample data. The page has five parts: a hero with a demo that follows one email through the five jobs, the control cards, plans, questions and a closing invite. The film in `brag-output/` is not used by the page.
 
 ## Two switches
 
@@ -111,7 +111,7 @@ Deploy it as a web app that runs as you and that anyone can reach, and use its a
 
 ## Policy pages
 
-`/security`, `/privacy`, `/terms` and `/refunds` share one layout (`components/site/policy.tsx`); their words are in `content/security.ts` and `content/legal.ts`. They are drafts from PLAN and say that InboxCA is in development. A lawyer must review them before the site is public or takes a payment.
+`/security`, `/privacy`, `/terms` and `/refunds` share one layout (`components/site/policy.tsx`); their words are in `content/security.ts` and `content/legal.ts`. They are drafts and say that InboxCA is in development. A lawyer must review them before the site is public or takes a payment.
 
 ## Browser review
 
