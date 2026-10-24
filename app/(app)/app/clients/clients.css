@@ -1,8 +1,6 @@
 /* The Clients list and each client's page. Sizes, weights and colours from the design rules. */
 .clients-page.fill { gap: var(--s4); }
-.clients-page .b { border-radius: var(--r1); font-size: 13px; font-weight: 600; }
 .clients-page .b-small { height: var(--control); padding: 0 var(--s3); }
-.clients-page .badge { height: 20px; font-weight: 600; }
 .clients-page .alert, .clients-page .notice { margin: var(--s4) 0 0; }
 .clients-page .empty { margin-top: var(--s5); padding: var(--s7) var(--s4); gap: var(--s2); }
 .clients-page .empty .b { margin-top: var(--s2); }
