@@ -63,17 +63,19 @@ test("a return is marked filed with its acknowledgement on the calendar", async 
 });
 
 test("Today shows what needs the owner today and the next setup step", async () => {
-  // Keep a filing day in this month even after its regular due dates have passed.
-  await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date where id=(select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' limit 1)",[firm.firmId]);
+  // One return falls due today and two are 4 days late: the client's late returns are one row.
+  await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date where id=(select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and code='GSTR3B_M' order by due_on desc limit 1)",[firm.firmId]);
+  await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-4 where id in (select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and code='GSTR1_M' order by due_on desc limit 2)",[firm.firmId]);
+  const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and due_on<(now() at time zone 'Asia/Kolkata')::date",[firm.firmId]);
   await owner.getByRole("link", { name: "Today" }).click();
-  // The work board: the return filed above sits in the last column.
-  await expect(owner.locator(".lane-filed")).toContainText("Patel Textiles");
-  // This month's ribbon: a filing day opens that day in the Calendar.
-  const day = owner.locator(".ribbon-days a").first();
-  await expect(day).toHaveAttribute("aria-label", /GSTR/);
-  await day.click();
-  await expect(owner).toHaveURL(/\/app\/calendar\?day=/,{timeout:15_000});
-  await expect(owner.getByRole("heading", { name: /^Due on / })).toBeVisible();
+  await expect(owner.locator(".page-head")).toContainText(/\d+ things? needs? you today\./);
+  const late = owner.locator("section[aria-labelledby=t-late]").getByRole("listitem");
+  await expect(late).toHaveCount(1);
+  await expect(late).toContainText("Patel Textiles");
+  await expect(late).toContainText(`and ${n-1} more`);
+  await expect(owner.locator("section[aria-labelledby=t-week]").getByRole("listitem").filter({ hasText: "GSTR-3B (monthly)" })).toContainText("1 client");
+  await late.getByRole("link", { name: "See returns for Patel Textiles" }).click();
+  await expect(owner).toHaveURL(/\/app\/clients\/[^/]+\?tab=due$/,{timeout:15_000});
   await owner.getByRole("link", { name: "Today" }).click();
   const start = owner.getByRole("region", { name: "Finish setting up" });
   await expect(start.getByRole("listitem").filter({ hasText: "Clients" }).getByLabel("Done")).toBeVisible();
@@ -236,6 +238,7 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
   const gstr2b = Buffer.from(JSON.stringify({ data: { gstin: "27AAPFU0939F1ZV", rtnprd: "092026", version: "1.0", docdata: { b2b: [] } } }));
   const other = Buffer.from(JSON.stringify({ gstin: "27AAPFU0939F1ZV", note: "not from the portal" }));
   await owner.goto("/app");
+  await owner.getByRole("link", { name: "Upload papers" }).click();
   const drop = (files: { name: string; buffer: Buffer }[]) =>
     owner.getByLabel("Add portal files").setInputFiles(files.map((file) => ({ ...file, mimeType: "application/json" })));
   await drop([
@@ -244,6 +247,7 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
   ]);
   await owner.getByRole("button", { name: "Add", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText("1 filed in its client's folder; 1 not filed");
+  await owner.goto("/app?panel=upload");
   await drop([{ name: "again.json", buffer: gstr2b }]);
   await owner.getByRole("button", { name: "Add", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText("1 already there");
@@ -255,7 +259,7 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
 });
 
 // M1 acceptance: the available tabs use live records and counts, without M6 placeholders.
-test("client tabs show all return pages, notices and recent activity; Home counts only active clients",async()=>{
+test("client tabs show all return pages, notices and recent activity; Today leaves out archived clients",async()=>{
   const client=randomUUID();
   await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Tabs Test Client','individual')",[client,firm.firmId]);
   await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) select $1,$2,'GSTR1_M','2026-09',current_date+n from generate_series(1,51) n",[firm.firmId,client]);
@@ -273,10 +277,12 @@ test("client tabs show all return pages, notices and recent activity; Home count
   await expect(owner.locator("section[aria-labelledby=client-activity]")).toContainText("Client added");
   await expect(owner.getByRole("link",{name:"Extraction",exact:true})).toHaveCount(0);
   await expect(owner.getByRole("link",{name:"Outputs",exact:true})).toHaveCount(0);
+  // The client's oldest late return leads Today's late returns until the client is archived.
+  await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR1_M','2026-01',current_date-300)",[firm.firmId,client]);
   await owner.goto("/app");
-  const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.clients where firm_id=$1 and archived_at is null",[firm.firmId]);
-  await expect(owner.getByText(`${n.toLocaleString("en-IN")} active clients`,{exact:true})).toBeVisible();
+  const late=owner.locator("section[aria-labelledby=t-late]").getByRole("listitem").filter({hasText:"Tabs Test Client"});
+  await expect(late).toContainText("GSTR-1 (monthly) for Jan 2026");
   await query(local.dbUrl,"update public.clients set archived_at=now() where id=$1",[client]);
   await owner.reload();
-  await expect(owner.getByText(`${(n-1).toLocaleString("en-IN")} active clients`,{exact:true})).toBeVisible();
+  await expect(late).toHaveCount(0);
 });

@@ -608,6 +608,11 @@ isOneToOne: false
 "delete_firm":
 { Args: { "target_firm": string }; Returns: boolean
                            },
+"due_soon":
+{ Args: { "target_firm": string }; Returns: {
+              "clients": number,"code": string,"due_on": string,"filed": number
+            }[]
+                           },
 "end_other_sessions":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
@@ -647,6 +652,11 @@ isOneToOne: false
                            },
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
+                           },
+"late_clients":
+{ Args: { "target_firm": string }; Returns: {
+              "client_id": string,"client_name": string,"code": string,"due_on": string,"period_key": string,"returns": number
+            }[]
                            },
 "late_returns":
 { Args: { "target_firm": string }; Returns: {
