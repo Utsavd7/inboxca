@@ -65,3 +65,13 @@ it("groups late returns by client and counts the week's returns by form", () => 
   await actAs(db,PARTNER);
   expect((await db.query("select returns from public.late_clients($1)",[FIRM])).rows).toEqual([{returns:2}]);
 }));
+// The Calendar's strip: returns still to file each day, for one form or all; archived clients left out.
+it("counts the returns still to file on each day of the calendar strip", () => rollback(db,async () => {
+  const {client}=await seed();
+  const other=(await db.query("insert into public.clients(firm_id,name,kind,archived_at) values ($1,'Archived Mills','individual',now()) returning id",[FIRM])).rows[0].id;
+  await db.query("insert into public.tasks(firm_id,client_id,kind,code,period_key,due_on,status,details) values ($1,$2,'compliance','GSTR1_M','2026-09','2030-01-11','upcoming','{}'),($1,$2,'compliance','GSTR3B_M','2026-09','2030-01-11','in_progress','{}'),($1,$2,'compliance','GSTR3B_M','2026-08','2030-01-20','filed',jsonb_build_object('filed_on',current_date)),($1,$3,'compliance','GSTR1_M','2026-09','2030-01-11','upcoming','{}')",[FIRM,client,other]);
+  await actAs(db,OWNER);
+  const days=(code:string|null)=>db.query("select to_char(due_on,'YYYY-MM-DD') due_on,returns from public.calendar_days($1,'2030-01-01','2030-01-31',$2)",[FIRM,code]).then((result)=>result.rows);
+  expect(await days(null)).toEqual([{due_on:"2030-01-11",returns:2}]);
+  expect(await days("GSTR1_M")).toEqual([{due_on:"2030-01-11",returns:1}]);
+}));

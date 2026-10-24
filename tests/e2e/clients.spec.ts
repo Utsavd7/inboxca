@@ -54,12 +54,18 @@ test("services on a client's GSTIN give it its due dates", async () => {
 
 test("a return is marked filed with its acknowledgement on the calendar", async () => {
   await owner.goto("/app/calendar");
+  await expect(owner.getByRole("navigation", { name: "Days" }).getByRole("link")).toHaveCount(31);
   const row = owner.getByRole("row").filter({ hasText: "GSTR-3B (monthly)" }).first();
   await row.getByRole("checkbox").check();
-  await row.getByLabel(/Acknowledgement for/).fill("AA240925123456X");
   await owner.getByRole("button", { name: "Mark chosen as filed" }).click();
-  await owner.getByRole("link", { name: "Filed in the last 30 days" }).click();
-  await expect(owner.getByRole("heading", { name: /^Filed in the last 30 days/ })).toBeVisible();
+  const panel = owner.getByRole("dialog", { name: "Mark filed" });
+  await panel.getByLabel(/Acknowledgement for/).fill("AA240925123456X");
+  await panel.getByRole("button", { name: "Mark filed" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "1 return marked filed." })).toBeVisible();
+  const filed = owner.getByRole("link", { name: /^Filed in the last 30 days/ });
+  await expect(filed).toContainText("1");
+  await filed.click();
+  await expect(filed).toHaveAttribute("aria-current", "page");
   await expect(owner.getByRole("row").filter({ hasText: "Patel Textiles" })).toContainText("AA240925123456X");
 });
 
@@ -293,4 +299,24 @@ test("client tabs show all return pages, notices and recent activity; Today leav
   await query(local.dbUrl,"update public.clients set archived_at=now() where id=$1",[client]);
   await owner.reload();
   await expect(late).toHaveCount(0);
+});
+
+// The Notices page finds the client a page at a time, so a firm of any size can add a notice.
+test("a notice is added from the Notices page by finding its client", async () => {
+  await owner.goto("/app/notices");
+  await owner.getByRole("link", { name: "Add a notice" }).first().click();
+  const panel = owner.getByRole("dialog", { name: "Add a notice" });
+  const pages = panel.getByRole("navigation", { name: "Client pages" });
+  await expect(pages).toContainText(/^1 to 8 of \d/);
+  await pages.getByRole("link", { name: "Next" }).click();
+  await expect(pages).toContainText(/^9 to 16 of \d/);
+  await panel.getByLabel("Client name").fill("patel textiles");
+  await panel.getByRole("button", { name: "Find" }).click();
+  await panel.getByRole("link", { name: /^Choose Patel Textiles/ }).first().click();
+  await expect(panel).toContainText("Patel Textiles");
+  await panel.getByLabel("Notice", { exact: true }).fill("Notice u/s 143(2)");
+  await panel.getByLabel("Reference or DIN").fill("TEST-PICK-1");
+  await panel.getByRole("button", { name: "Add notice" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Notice added." })).toBeVisible();
+  await expect(owner.locator("section[aria-label=Notices] tbody tr").filter({ hasText: "TEST-PICK-1" })).toContainText("Patel Textiles");
 });

@@ -571,6 +571,11 @@ export async function manageTasks(form: FormData) {
     }),
   );
   revalidatePath("/app", "layout");
+  // From the Calendar: back to the same view, with a note of what changed and an Undo.
+  if (form.has("view")) {
+    const back = new URLSearchParams([...["view", "day", "code", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["saved", String(intent)], ["t", ids.join(".")]].filter(([, value]) => value));
+    redirect(`/app/calendar?${back}`);
+  }
 }
 
 export type MailboxState = { error?: string; values?: Record<string, string> };
@@ -1257,7 +1262,7 @@ export async function manageNotice(form: FormData) {
     const authority = String(form.get("authority") ?? "other");
     const received = String(form.get("received") ?? "") || todayInIndia();
     if (client && form.get("back") === "client") back = `/app/clients/${client.id}?tab=notices`;
-    if (!client || !(authority in authorities) || !/^\d{4}-\d{2}-\d{2}$/.test(received)) redirect(client && back !== "/app/notices" ? `/app/clients/${client.id}?tab=notice&error=notice` : "/app/notices?add=1&error=notice");
+    if (!client || !(authority in authorities) || !/^\d{4}-\d{2}-\d{2}$/.test(received)) redirect(client && back !== "/app/notices" ? `/app/clients/${client.id}?tab=notice&error=notice` : `/app/notices?add=1&error=notice${client ? `&client=${client.id}` : ""}`);
     const details: NoticeDetails = {
       authority: authority as Authority,
       notice_type: String(form.get("type") ?? "").trim().slice(0, 80) || "Other",
@@ -1282,6 +1287,8 @@ export async function manageNotice(form: FormData) {
     else if (intent in noticeStatuses) await supabase.from("tasks").update({ status: intent }).eq("id", notice.id);
   }
   revalidatePath("/app", "layout");
+  // On the Notices page: back to the same list, with a note of what changed.
+  if (back === "/app/notices") back += `?${new URLSearchParams([...["show", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["saved", intent]].filter(([, value]) => value))}`;
   redirect(back);
 }
 
