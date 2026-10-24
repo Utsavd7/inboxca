@@ -1,0 +1,8 @@
+/* Marking filed, in the side panel: the day filed, then each return with its ARN. */
+.mark-filed > div:first-of-type { display: grid; gap: 4px; max-width: 200px; margin-top: 16px; }
+.mark-filed ul { display: grid; margin: 16px 0; border: 1px solid var(--line); border-radius: 12px; }
+.mark-filed li { display: grid; gap: 4px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.mark-filed li:first-child { border-top: 0; }
+.mark-filed li > span { margin-bottom: 4px; }
+.mark-filed strong { display: block; font-weight: 600; }
+.mark-filed-actions { display: flex; flex-wrap: wrap; gap: 8px; }

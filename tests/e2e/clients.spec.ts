@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
+import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
 // Adding and finding clients, with numbers encrypted by the firm's key. Skipped when local
@@ -59,7 +60,7 @@ test("a return is marked filed with its acknowledgement on the calendar", async 
   await row.getByRole("checkbox").check();
   await owner.getByRole("button", { name: "Mark chosen as filed" }).click();
   const panel = owner.getByRole("dialog", { name: "Mark filed" });
-  await panel.getByLabel(/Acknowledgement for/).fill("AA240925123456X");
+  await panel.getByLabel(/ARN for/).fill("AA240925123456X");
   await panel.getByRole("button", { name: "Mark filed" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "1 return marked filed." })).toBeVisible();
   const filed = owner.getByRole("link", { name: /^Filed in the last 30 days/ });
@@ -87,6 +88,62 @@ test("Today shows what needs the owner today and the next setup step", async () 
   const start = owner.getByRole("region", { name: "Finish setting up" });
   await expect(start.getByRole("listitem").filter({ hasText: "Clients" }).getByLabel("Done")).toBeVisible();
   await expect(start.getByRole("link", { name: "Connect the firm's email" })).toHaveAttribute("href", "/app/settings#mailbox");
+  // With returns late, the Calendar opens on them; a link to another view still works.
+  await owner.goto("/app/calendar");
+  const views = owner.getByRole("navigation", { name: "Show" });
+  await expect(views.getByRole("link", { name: /^Late/ })).toHaveAttribute("aria-current", "page");
+  await expect(owner.getByRole("row").filter({ hasText: "GSTR-1 (monthly)" }).first()).toContainText("Late");
+  await owner.goto("/app/calendar?view=month");
+  await expect(views.getByRole("link", { name: /^Due in 30 days/ })).toHaveAttribute("aria-current", "page");
+});
+
+test("late clients lead the list, and a client's return is marked filed from its Returns tab with an undo", async () => {
+  const [{ id: patel }] = await query(local.dbUrl, "select id from public.clients where firm_id=$1 and name='Patel Textiles'", [firm.firmId]);
+  const [{ id: other }] = await query(local.dbUrl, "insert into public.clients(firm_id,name,kind) values ($1,'Anand Dairy','individual') returning id", [firm.firmId]);
+  await query(local.dbUrl, "insert into public.requests(firm_id,client_id,kind,entity_type,entity_id,expires_at) values ($1,$2,'documents','client',gen_random_uuid(),now()+interval '7 days')", [firm.firmId, patel]);
+  const [{ n }] = await query(local.dbUrl, "select count(*)::int n from public.tasks where client_id=$1 and kind='compliance' and status<>'filed' and due_on<(now() at time zone 'Asia/Kolkata')::date", [patel]);
+  await owner.goto("/app/clients");
+  const rows = owner.locator(".clients-table tbody tr");
+  await expect(rows.first()).toContainText("Patel Textiles");
+  await expect(rows.first().locator(".badge")).toHaveText([`Late: ${n} returns`, "Missing papers"]);
+  await expect(rows.first()).toContainText(/Late since \d{1,2} \w{3}( \d{4})?: GSTR-1 \(monthly\) \w{3} \d{4}/);
+  await expect(rows.nth(1)).toContainText("Anand Dairy");
+  await query(local.dbUrl, "delete from public.clients where id=$1", [other]);
+  await query(local.dbUrl, "delete from public.requests where client_id=$1 and kind='documents'", [patel]);
+
+  // Mark filed only for returns late or due within 30 days.
+  await owner.goto(`/app/clients/${patel}?tab=returns`);
+  const due = owner.locator("section[aria-labelledby=due] li");
+  const [{ soon }] = await query(local.dbUrl, "select count(*)::int soon from public.tasks where client_id=$1 and kind='compliance' and status<>'filed' and due_on<=(now() at time zone 'Asia/Kolkata')::date+30", [patel]);
+  await expect(due.getByRole("link", { name: /^Mark .* filed$/ })).toHaveCount(soon);
+  await expect(due.last().getByRole("link")).toHaveCount(0);
+  const late = due.filter({ has: owner.locator(".badge", { hasText: "Late" }) }).first();
+  const title = (await late.locator(".name").textContent())!;
+  await late.getByRole("link", { name: `Mark ${title} filed` }).click();
+  const panel = owner.getByRole("dialog", { name: "Mark filed" });
+  await expect(panel.getByLabel("Filed on")).toHaveValue(todayInIndia());
+  await panel.getByLabel(/ARN for/).fill("AB0000000000001");
+  await panel.getByRole("button", { name: "Mark filed" }).click();
+  const toast = owner.getByRole("status").filter({ hasText: `${title} marked filed.` });
+  await expect(toast).toBeVisible();
+  await expect(due.filter({ hasText: title })).toHaveCount(0);
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: `${title} marked not filed.` })).toBeVisible();
+  await expect(due.filter({ hasText: title })).toHaveCount(1);
+
+  // Filed returns say when, by whom and the ARN, and can be put back.
+  await due.filter({ hasText: title }).getByRole("link", { name: `Mark ${title} filed` }).click();
+  const filedOn = addDays(todayInIndia(), -1);
+  await panel.getByLabel("Filed on").fill(filedOn);
+  await panel.getByLabel(/ARN for/).fill("AB0000000000001");
+  await panel.getByRole("button", { name: "Mark filed" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: `${title} marked filed.` })).toBeVisible();
+  await owner.getByRole("link", { name: "Show filed returns" }).click();
+  const filed = due.filter({ hasText: title });
+  await expect(filed).toContainText(`Filed ${dueLabel(filedOn)} by Clients, ARN AB0000000000001`);
+  await filed.getByRole("button", { name: "Not filed after all" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: `${title} marked not filed.` })).toBeVisible();
+  await expect(due.filter({ hasText: title })).toHaveCount(0);
 });
 
 test("search finds a client by name, email or whole PAN, and the same PAN is refused twice", async () => {

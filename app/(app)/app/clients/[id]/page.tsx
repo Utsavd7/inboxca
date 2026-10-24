@@ -6,7 +6,7 @@ import { FileText } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, findDocuments, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument, uploadDocument } from "@/app/(app)/actions";
-import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
+import { addDays, dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, kindChecklist, workOfService, type DocumentRequest } from "@/src/lib/checklists";
 import { skipReasons, type Skip } from "@/src/lib/reminders";
@@ -23,7 +23,8 @@ import { labels, type Label } from "@/src/lib/triage";
 import { AutoSelect } from "../../auto-select";
 import { LinkTabs } from "../../link-tabs";
 import { DroppedNotice, PortalDrop } from "../../portal-drop";
-import { Badge, Empty, PageHead, SidePanel } from "../../ui";
+import { MarkFiled } from "../../mark-filed";
+import { Badge, Empty, PageHead, SidePanel, Toast } from "../../ui";
 import "../clients.css";
 
 const errors: Record<string, string> = {
@@ -66,12 +67,14 @@ type Main = keyof typeof mains;
 const tabOf: Record<string, Main> = { files: "documents", due: "returns", extraction: "returns", outputs: "returns", notice: "notices", numbers: "overview", services: "overview", contacts: "overview", team: "overview", details: "overview", activity: "overview" };
 const panels = ["notice", "numbers", "services", "contacts", "team", "details", "activity"];
 const lookAfter = ["partner_in_charge", "manager", "staff"];
+const uuid = /^[0-9a-f-]{36}$/;
+const taskChanges: Record<string, string> = { filed: "marked filed", in_progress: "marked in progress", reopen: "marked not filed" };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; task?: string; marked?: string; t?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, source, section, header, read, portal, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, source, section, header, read, portal, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
   const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "overview";
   const sub = asked === "extraction" || asked === "outputs" ? asked : tab;
   const panel = panels.includes(asked ?? "") ? asked! : "";
@@ -151,6 +154,12 @@ export default async function Client({ params, searchParams }: { params: Promise
   const canSend = (documentId: string) => !viewOnly && (membership.may("send", id) || open("send", "approved", documentId));
   const canRemove = (documentId: string) => !viewOnly && (owner || open("remove", "approved", documentId));
   const canFile = !viewOnly && membership.may("mark_filed", id);
+  // Returns tab: the return being marked filed in the side panel, and the ones just changed.
+  const doneIds = markedIds?.split(".").filter((taskId) => uuid.test(taskId)).slice(0, 100) ?? [];
+  const [{ data: filing }, { data: done }] = await Promise.all([
+    tab === "returns" && canFile && uuid.test(marking ?? "") ? supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", membership.firmId).eq("kind", "compliance").eq("client_id", id).eq("id", marking!).neq("status", "filed").maybeSingle() : Promise.resolve({ data: null }),
+    tab === "returns" && taskChanges[marked ?? ""] && doneIds.length ? supabase.from("tasks").select("id, code, period_key").eq("firm_id", membership.firmId).eq("client_id", id).in("id", doneIds) : Promise.resolve({ data: null }),
+  ]);
   const askButton = (right: Right, label: string, documentId?: string) =>
     viewOnly ? null : open(right, "pending", documentId) ? (
       <span className="hint">Asked</span>
@@ -220,6 +229,15 @@ export default async function Client({ params, searchParams }: { params: Promise
   const counts: Record<Main, number | undefined> = { overview: undefined, emails: mailCount ?? 0, documents: documents.length, returns: show === "filed" ? undefined : taskCount ?? 0, notices: noticeCount ?? 0 };
   const base = `/app/clients/${client.id}`;
   const here = `${base}${tab === "overview" ? "" : `?tab=${tab}`}`;
+  // The Returns tab as it is, for the filing panel and each filing form to come back to.
+  const returnsHref = `${base}?tab=returns${show === "filed" ? "&show=filed" : ""}${page > 1 ? `&page=${page}` : ""}`;
+  const returnsState = (
+    <>
+      <input type="hidden" name="client" value={client.id} />
+      {show === "filed" && <input type="hidden" name="show" value="filed" />}
+      {page > 1 && <input type="hidden" name="page" value={page} />}
+    </>
+  );
   const pager = (total: number, rows: number, label: string, key: string) => (
     <nav className="pager" aria-label={`${label} pages`}>
       <p>Showing {rows ? (start + 1).toLocaleString("en-IN") : 0} to {rows ? (start + rows).toLocaleString("en-IN") : 0} of {total.toLocaleString("en-IN")} {label.toLowerCase()}</p>
@@ -599,19 +617,29 @@ export default async function Client({ params, searchParams }: { params: Promise
                     const r = rule.get(task.code ?? "");
                     const overdue = task.status !== "filed" && task.due_on < today;
                     const note = reminderNote(task.details as { reminded?: string[]; skipped?: { reason: string } });
+                    const filed = task.details as { filed_on?: string; by?: string; ack?: string };
+                    const title = `${r?.name} ${periodLabel(r?.frequency ?? null, task.period_key)}`;
                     return (
                       <li key={task.id}>
                         <span className="grow">
-                          <span className="name">{r?.name} {periodLabel(r?.frequency ?? null, task.period_key)}</span>
-                          <span className="sub">Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}</span>
+                          <span className="name">{title}</span>
+                          <span className="sub">
+                            {task.status === "filed"
+                              ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span></>}</>
+                              : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}</>}
+                          </span>
                         </span>
                         <Badge tone={task.status === "filed" ? "done" : overdue ? "late" : task.status === "in_progress" ? "blue" : ""}>
-                          {overdue ? "Overdue" : taskStatuses[task.status as keyof typeof taskStatuses]}
+                          {overdue ? "Late" : taskStatuses[task.status as keyof typeof taskStatuses]}
                         </Badge>
-                        {task.status !== "filed" && canFile && (
+                        {canFile && task.status !== "filed" && task.due_on <= addDays(today, 30) && (
+                          <Link className="b b-secondary" href={`${returnsHref}&task=${task.id}`} scroll={false} aria-label={`Mark ${title} filed`}>Mark filed</Link>
+                        )}
+                        {canFile && task.status === "filed" && (
                           <form action={manageTasks}>
+                            {returnsState}
                             <input type="hidden" name="task" value={task.id} />
-                            <button className="b b-secondary" name="intent" value="filed" aria-label={`Mark ${r?.name} ${periodLabel(r?.frequency ?? null, task.period_key)} filed`}>Mark filed</button>
+                            <button className="b b-secondary" name="intent" value="reopen" aria-label={`${title} was not filed after all`}>Not filed after all</button>
                           </form>
                         )}
                       </li>
@@ -1063,6 +1091,26 @@ export default async function Client({ params, searchParams }: { params: Promise
             askButton("remove", "Ask to remove", paper.id)
           )}
         </SidePanel>
+      )}
+      {filing && (
+        <SidePanel id="mark-filed" title="Mark filed" close={returnsHref}>
+          <MarkFiled state={returnsState} rows={[{ id: filing.id, name: `${rule.get(filing.code ?? "")?.name ?? filing.code} ${periodLabel(rule.get(filing.code ?? "")?.frequency ?? null, filing.period_key)}`, sub: `Due ${dueLabel(filing.due_on)}` }]} />
+        </SidePanel>
+      )}
+      {!!done?.length && (
+        <Toast
+          undo={
+            marked !== "reopen" && (
+              <form action={manageTasks}>
+                {returnsState}
+                {done.map((task) => <input key={task.id} type="hidden" name="task" value={task.id} />)}
+                <button className="b" name="intent" value="reopen">Undo</button>
+              </form>
+            )
+          }
+        >
+          {done.length === 1 ? `${rule.get(done[0].code ?? "")?.name ?? done[0].code} ${periodLabel(rule.get(done[0].code ?? "")?.frequency ?? null, done[0].period_key)}` : `${done.length} returns`} {taskChanges[marked!]}.
+        </Toast>
       )}
     </div>
   );

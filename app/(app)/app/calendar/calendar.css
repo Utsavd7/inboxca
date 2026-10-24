@@ -57,13 +57,6 @@
 .cal-bulk .b-primary { background: var(--white); color: var(--ink); }
 .cal-bulk .b-primary:hover:not(:disabled) { background: var(--press); }
 
-/* Marking filed, in the side panel: each chosen return with its acknowledgement number. */
-.cal-marking { display: grid; margin: 16px 0; border: 1px solid var(--line); border-radius: 12px; }
-.cal-marking li { display: grid; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
-.cal-marking li:first-child { border-top: 0; }
-.cal-marking strong { display: block; font-weight: 600; }
-.cal-mark-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-
 @media (max-width: 720px) {
   :is(.cal, .notices) .cal-table { overflow-x: auto; }
 }

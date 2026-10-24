@@ -98,3 +98,5 @@
 /* The firm's usual list for a kind of client, one paper a line, in Ask for papers. */
 .ask-list { width: 100%; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); background: var(--white); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; }
 .ask-list:focus { border-color: var(--accent); }
+/* A client late and missing papers shows both tags, late first. */
+.clients-tags { display: inline-flex; gap: 4px; }

@@ -398,6 +398,8 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
                 </ul>
                 {lateCount > late.data.length && <SeeAll href="/app/calendar?view=overdue">See all {lateCount} clients</SeeAll>}
               </>
+            ) : late.error ? (
+              <p className="today-empty">Late returns could not load. Refresh the page.</p>
             ) : (
               <p className="today-empty">No return is late.</p>
             )}

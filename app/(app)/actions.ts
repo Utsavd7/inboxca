@@ -549,10 +549,13 @@ export async function saveVisibility(form: FormData) {
 // number), or not filed after a mistake. Row level security limits it to clients the
 // person may see; every change is logged.
 export async function manageTasks(form: FormData) {
-  const { supabase, membership } = await currentWriter();
+  const { supabase, membership, userId } = await currentWriter();
   if (!membership) redirect("/app");
   const intent = form.get("intent");
   const ids = [...new Set(form.getAll("task").map(String))];
+  // The day it was filed, if typed: never ahead of today.
+  const typed = String(form.get("filed_on") ?? "");
+  const filedOn = /^\d{4}-\d{2}-\d{2}$/.test(typed) && !Number.isNaN(Date.parse(typed)) && typed <= todayInIndia() ? typed : todayInIndia();
   if(!ids.length || ids.length>100 || ids.some(id=>!z.uuid().safeParse(id).success)) redirect("/app/calendar");
   if(intent==="filed") {
     const {data:tasks}=await supabase.from("tasks").select("id,client_id").eq("firm_id",membership.firmId).in("id",ids);
@@ -563,7 +566,7 @@ export async function manageTasks(form: FormData) {
       const ack = String(form.get(`ack-${id}`) ?? "").trim().slice(0, 40);
       const change =
         intent === "filed"
-          ? { status: "filed", details: { filed_on: todayInIndia(), ...(ack && { ack }) } }
+          ? { status: "filed", details: { filed_on: filedOn, by: userId, ...(ack && { ack }) } }
           : intent === "in_progress"
             ? { status: "in_progress" }
             : { status: "upcoming", details: {} };
@@ -575,6 +578,12 @@ export async function manageTasks(form: FormData) {
   if (form.has("view")) {
     const back = new URLSearchParams([...["view", "day", "code", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["saved", String(intent)], ["t", ids.join(".")]].filter(([, value]) => value));
     redirect(`/app/calendar?${back}`);
+  }
+  // From a client's Returns tab: back to it, the same way.
+  const client = String(form.get("client") ?? "");
+  if (z.uuid().safeParse(client).success) {
+    const back = new URLSearchParams([["tab", "returns"], ...["show", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["marked", String(intent)], ["t", ids.join(".")]].filter(([, value]) => value));
+    redirect(`/app/clients/${client}?${back}`);
   }
 }
 

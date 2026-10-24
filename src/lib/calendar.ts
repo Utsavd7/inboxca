@@ -28,7 +28,7 @@ export const addDays = (date: string, days: number) => new Date(Date.parse(date)
 
 // The calendar page's views: what is late, what is coming, what was filed.
 export const calendarViews = {
-  overdue: { label: "Overdue", window: (today: string) => ({ to: addDays(today, -1) }) },
+  overdue: { label: "Late", window: (today: string) => ({ to: addDays(today, -1) }) },
   week: { label: "Due in 7 days", window: (today: string) => ({ from: today, to: addDays(today, 7) }) },
   month: { label: "Due in 30 days", window: (today: string) => ({ from: today, to: addDays(today, 30) }) },
   filed: { label: "Filed in the last 30 days", window: (today: string) => ({ filedSince: addDays(today, -30) }) },
