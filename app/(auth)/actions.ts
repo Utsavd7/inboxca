@@ -93,7 +93,8 @@ export async function verifyTwoStep(_prev: StepState, form: FormData): Promise<S
   if (error) return { error: "That code did not work. Codes change every 30 seconds; try the new one." };
   const { data: claims } = await supabase.auth.getClaims();
   if (claims) await oneSession(supabase, claims.claims.sub, String(claims.claims.email ?? ""));
-  redirect("/app");
+  const { data: admin } = await supabase.rpc("is_orelu_admin");
+  redirect(admin ? "/admin" : "/app");
 }
 
 // Signs out this browser only; the person's other devices stay signed in.
