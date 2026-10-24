@@ -5,7 +5,7 @@ import { z } from "zod";
 import { log } from "@/src/lib/logger";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { officeDeviceAccess } from "@/src/lib/office";
-import { SEEN_COOKIE, tellOwnerOnRepeat } from "@/src/lib/session";
+import { recoveryDigest, SEEN_COOKIE, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
 
 // Sign in: an email code first, then a code from an authenticator app (PLAN.md 4.4).
@@ -41,9 +41,12 @@ export async function verifyCode(_prev: CodeState, form: FormData): Promise<Code
   const supabase = await supabaseServer();
   if (await mailboxLogin(email))
     return { step: "code", email, error: "The firm's email address cannot be used to sign in." };
+  // A shared PC (5.17.4 #3): whoever was signed in on this browser before is signed out.
+  const { data: before } = await supabase.auth.getSession();
   const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
   if (error)
     return { step: "code", email, error: "That code did not work. Check it, or ask for a new one." };
+  if (before.session) await supabaseAdmin().auth.admin.signOut(before.session.access_token, "local");
   if (data.user && (await officeDeviceAccess(data.user.id)).approved) {
     await oneSession(supabase, data.user.id, email);
     redirect("/app");
@@ -95,6 +98,27 @@ export async function verifyTwoStep(_prev: StepState, form: FormData): Promise<S
   if (claims) await oneSession(supabase, claims.claims.sub, String(claims.claims.email ?? ""));
   const { data: admin } = await supabase.rpc("is_orelu_admin");
   redirect(admin ? "/admin" : "/app");
+}
+
+// Lost phone (5.17.4 #23): after the email code, one of the owner's recovery codes removes
+// the authenticator app, so a new one is set up next. Each code works once.
+export async function recoverTwoStep(_prev: StepState, form: FormData): Promise<StepState> {
+  const supabase = await supabaseServer();
+  const { data: claims } = await supabase.auth.getClaims();
+  if (!claims) redirect("/sign-in");
+  const userId = claims.claims.sub;
+  const admin = supabaseAdmin();
+  const { data } = await admin.auth.admin.getUserById(userId);
+  const saved = (data.user?.app_metadata.recovery ?? []) as string[];
+  const digest = recoveryDigest(userId, String(form.get("recovery") ?? ""));
+  if (!saved.includes(digest)) return { error: "That recovery code did not work. Check it, or use another one." };
+  const { error } = await admin.auth.admin.updateUserById(userId, { app_metadata: { recovery: saved.filter((code) => code !== digest) } });
+  if (error) throw new Error(`Recovery code not used: ${error.code}`);
+  const { data: factors } = await admin.auth.admin.mfa.listFactors({ userId });
+  for (const factor of factors?.factors ?? []) await admin.auth.admin.mfa.deleteFactor({ id: factor.id, userId });
+  const { data: member } = await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  if (member) await admin.from("activity_log").insert({ firm_id: member.firm_id, actor_id: userId, action: "recovery.used", entity_type: "user", entity_id: userId, details: { left: saved.length - 1 } });
+  redirect("/sign-in/two-step");
 }
 
 // Signs out this browser only; the person's other devices stay signed in.

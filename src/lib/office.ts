@@ -8,9 +8,12 @@ import { supabaseAdmin } from "./supabase";
 // server sees it. IPv4 is matched exactly, IPv6 by its /64 prefix. A firm may have several
 // lines. Nothing a PC says about itself is trusted.
 export type OfficeLine = { id?: string; ipv4?: string; ipv6?: string; confirmed_on: string; seen_on?: string; until?: string; fixed?: boolean };
-export type Office = { on?: boolean; lines?: OfficeLine[]; deputies?: string[] };
+export type Office = { on?: boolean; lines?: OfficeLine[]; deputies?: string[]; co_admin?: string | null; away?: boolean };
 export const officeApprover = (role: string, userId: string, settings: Record<string, unknown>) =>
   role === "owner" || role === "partner" && ((settings.office as Office | undefined)?.deputies ?? []).includes(userId);
+// The owner, or the deputy named co-admin, who also changes the access settings (5.17.4 #22).
+export const firmAdmin = (role: string, userId: string, settings: Record<string, unknown>) =>
+  role === "owner" || officeApprover(role, userId, settings) && (settings.office as Office | undefined)?.co_admin === userId;
 
 // The roles the switch binds; the owner and partners reach the firm from anywhere.
 export const officeBound = (role: string) => ["staff", "manager", "front_desk"].includes(role);
@@ -93,9 +96,9 @@ export async function officeDeviceAccess(userId: string, observe = true) {
     if (!observe) return { approved: false, deviceStatus: null, connectionWaiting: pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting", remoteUntil: null, pcKey: null };
     if (pc?.status === "approved" && pc.kind === "office") pcKey = pc.key_id ? "ready" : "needed";
     // A personal device works anywhere for its one person until its end date, view only;
-    // anyone else on it, or after that day, is refused.
+    // anyone else on it, after that day, or once the firm stops working away, is refused.
     if (pc?.status === "approved" && pc.kind === "personal") {
-      if (pc.person_id === userId && pc.ends_on! >= today) remoteUntil = pc.ends_on;
+      if (pc.person_id === userId && pc.ends_on! >= today && office.away !== false) remoteUntil = pc.ends_on;
       else {
         deviceStatus = "refused";
         const { error } = await admin.rpc("office_refused", { target_firm: firmRow.firm_id, person: userId, reason: "pc" });
@@ -135,7 +138,9 @@ export async function askAway(userId: string) {
   const { data: firmRow } = await admin.from("firm_members").select("firm_id, role, firms(settings)")
     .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
   const token = (await cookies()).get(DEVICE_COOKIE)?.value;
-  if (!firmRow || !token || !(firmRow.firms?.settings as { office?: Office } | undefined)?.office?.on || !officeBound(firmRow.role)) return;
+  const office = (firmRow?.firms?.settings as { office?: Office } | undefined)?.office;
+  // The Office only and Solo CA presets turn asking off (5.17).
+  if (!firmRow || !token || !office?.on || office.away === false || !officeBound(firmRow.role)) return;
   const { error } = await admin.rpc("register_device", {
     target_firm: firmRow.firm_id, actor: userId, token_digest: await deviceHash(token),
     label: deviceName((await headers()).get("user-agent") ?? ""), away: true,

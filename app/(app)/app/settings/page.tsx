@@ -1,8 +1,9 @@
 import { HardDrive, Mail } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, closeFirm, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
-import { officeApprover } from "@/src/lib/office";
+import { changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
+import { firmAdmin, officeApprover, type Office } from "@/src/lib/office";
+import { presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
 import { documentTypes } from "@/src/lib/documents";
 import { switchable, defaults, type Permissions, type Standing } from "@/src/lib/rights";
@@ -39,7 +40,8 @@ export default async function Settings({
 }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) redirect("/app");
-  if (membership.role !== "owner") return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel /></>;
+  if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel /></>;
+  const owner = membership.role === "owner";
   // A closed firm keeps only its download until InboxCA deletes it, 30 days on.
   const { data: closed } = await supabase.from("activity_log").select("at").eq("entity_id", membership.firmId).eq("firm_id", membership.firmId).eq("action", "firm.closed").maybeSingle();
   if (closed) return (
@@ -86,26 +88,23 @@ export default async function Settings({
   const {data:scopeClients}=scopeIds.length ? await supabase.from("clients").select("id,name").eq("firm_id",membership.firmId).in("id",scopeIds) : {data:[]};
   const namesOf=(ids?:string[])=>ids?.map(id=>scopeClients?.find(client=>client.id===id)?.name ?? "Client no longer available").join("\n") ?? "";
   const usage = used?.[0];
+  const preset = presetOf(settings);
   return (
     <>
-      <PageHead title="Settings" sub="How your firm uses InboxCA. Only you, the owner, see this page." />
+      <PageHead title="Settings" sub={owner ? "How your firm uses InboxCA. Only you, the owner, see this page." : "How your firm keeps client data safe. As co-admin you change these with the owner."} />
       <div className="settings">
         <nav className="settings-index" aria-label="Settings">
           {[
-            ["#mailbox", "Firm email"],
-            ["#drive", "Firm drive"],
+            ...(owner ? [["#mailbox", "Firm email"], ["#drive", "Firm drive"]] : []),
+            ["#preset", "Access preset"],
             ["#office", "Office only"],
             ["#permissions", "Permissions"],
-            ["#reminders", "Reminders"],
-            ["#records", "Papers on request"],
-            ["#visibility", "Who sees clients"],
+            ...(owner ? [["#reminders", "Reminders"], ["#records", "Papers on request"], ["#visibility", "Who sees clients"]] : []),
             ["#hours", "Office hours"],
             ["#special", "Special hours"],
             ["#limits", "Signing in"],
             ["#holidays", "Holidays"],
-            ["#use", "InboxCA use"],
-            ["#data", "Your data"],
-            ["#close", "Close the firm"],
+            ...(owner ? [["#recovery", "Recovery codes"], ["#use", "InboxCA use"], ["#data", "Your data"], ["#close", "Close the firm"]] : []),
           ].map(([href, name]) => (
             <a key={href} href={href}>
               {name}
@@ -113,6 +112,7 @@ export default async function Settings({
           ))}
         </nav>
         <div>
+          {owner && <>
           <section className="panel" aria-labelledby="mailbox">
             <h2 id="mailbox">Firm email</h2>
             <p className="hint">The address your clients write to. InboxCA reads only mail from your clients and their contacts, keeps no copy of it, and replies from this address.</p>
@@ -229,6 +229,27 @@ export default async function Settings({
               </form>
             )}
           </section>
+          </>}
+
+          <section className="panel" aria-labelledby="preset-title" id="preset">
+            <h2 id="preset-title">Access preset</h2>
+            <p className="hint">One choice sets Office only, office hours and signing out below. You can change each of them after.</p>
+            <form action={choosePreset}>
+              {Object.entries(presets).map(([key, { name, line }]) => (
+                <label key={key} className="check check-row">
+                  <input type="radio" name="preset" value={key} required defaultChecked={preset === key} />
+                  <span><strong>{name}</strong>: {line}</span>
+                </label>
+              ))}
+              {!(settings.office as Office | undefined)?.on && <fieldset className="fieldset"><legend>If you choose an office preset: are you in the office now?</legend>
+                <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, I am in the office now</label>
+                <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it there later</label>
+              </fieldset>}
+              <button className="b b-primary" type="submit">Use this preset</button>
+              {saved === "preset" && <p className="ok" role="status">Preset saved.</p>}
+              {!preset && <p className="hint">Your rules no longer match a preset.</p>}
+            </form>
+          </section>
           <OfficePanel error={error === "deputies"} />
 
           <section className="panel" aria-labelledby="permissions-title" id="permissions">
@@ -297,6 +318,7 @@ export default async function Settings({
             )}
           </section>
 
+          {owner && <>
           <section className="panel" aria-labelledby="reminders-title" id="reminders">
             <h2 id="reminders-title">Reminders</h2>
             <p className="hint">
@@ -368,6 +390,7 @@ export default async function Settings({
               )}
             </form>
           </section>
+          </>}
 
           <section className="panel" aria-labelledby="hours">
             <h2 id="hours">Office hours</h2>
@@ -516,6 +539,12 @@ export default async function Settings({
               </button>
             </form>
           </section>
+          {owner && <>
+          <section className="panel" aria-labelledby="recovery-title" id="recovery">
+            <h2 id="recovery-title">Recovery codes</h2>
+            <p className="hint">If you lose the phone with your 2 step code, one of these codes lets you set it up again after the email code. Each code works once. Making new codes stops the old ones. Keep them printed or saved away from your phone.</p>
+            <form action="/app/settings/recovery-codes" method="post"><button className="b b-secondary" type="submit">Download 10 new codes</button></form>
+          </section>
           <section className="panel" aria-labelledby="use-title" id="use">
             <h2 id="use-title">InboxCA use</h2>
             <p className="hint">What sizes a plan. Your files stay in your own drive; InboxCA storage holds the client list, records and what InboxCA reads from files.</p>
@@ -548,6 +577,7 @@ export default async function Settings({
               {error === "close_name" && <p className="alert" role="alert">{driveErrors[error]}</p>}
             </details>
           </section>
+          </>}
         </div>
       </div>
     </>

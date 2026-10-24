@@ -4,7 +4,7 @@ import { reviewDevice, setOfficeOnly } from "@/app/(app)/actions";
 import { addDays, todayInIndia, dueLabel } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
-import { officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
+import { firmAdmin, officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { supabaseAdmin } from "@/src/lib/supabase";
 
 // Only office approvers read these requests and the activity behind them.
@@ -17,6 +17,7 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) return null;
   const office = (membership.settings.office ?? {}) as Office;
   const owner = membership.role === "owner";
+  const isAdmin = firmAdmin(membership.role, userId, membership.settings);
   const admin = supabaseAdmin();
   const today = todayInIndia();
   const [{ data: pcs }, { data: activity }, { data: people }, { data: requests }] = await Promise.all([
@@ -37,7 +38,7 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
   const confirmations = (activity ?? []).filter((entry) => entry.action !== "device.first_seen" && entry.action !== "office.refused" && Date.parse(entry.at) >= since).length;
   const trustedPc = (pcs ?? []).some((pc) => pc.status === "approved" && pc.kind === "office" && pc.key_id);
   const suggestFixed =
-    owner && office.on && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= FIXED_SUGGESTION_TAPS || !trustedPc);
+    isAdmin && office.on && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= FIXED_SUGGESTION_TAPS || !trustedPc);
   if (compact && !requests?.length && !refusals.length && (owner || !waiting.length)) return null;
   return (
     <section className="panel" aria-labelledby={compact ? "office-alerts" : "office-title"} id={compact ? undefined : "office"}>
@@ -103,8 +104,8 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
         </div>}
         {office.on ? <form action={setOfficeOnly} className="form-row">
           {!here && <button className="b b-primary" name="intent" value="here">This is my office</button>}
-          {owner && <><button className="b b-ghost" name="intent" value="forget">Forget office connections</button><button className="b b-secondary" name="intent" value="off">Turn off</button></>}
-        </form> : owner && <form action={setOfficeOnly}>
+          {isAdmin && <><button className="b b-ghost" name="intent" value="forget">Forget office connections</button><button className="b b-secondary" name="intent" value="off">Turn off</button></>}
+        </form> : isAdmin && <form action={setOfficeOnly}>
           <fieldset className="fieldset"><legend>Are you in your office right now?</legend>
             <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, this is my office</label>
             <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it from the office</label>
@@ -119,8 +120,8 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
             <button className="b b-ghost" name="intent" value="no_fixed">My provider doesn&apos;t offer it</button>
           </span>
         </form>}
-        {owner && office.on && !suggestFixed && (office as { fixed_declined?: boolean }).fixed_declined && !trustedPc && <p className="hint">Without a fixed connection, mark one desktop in the office as Stays in the office and name a deputy, so a changed connection is confirmed without you.</p>}
-        {owner && office.on && !suggestFixed && <form action={setOfficeOnly}>
+        {isAdmin && office.on && !suggestFixed && (office as { fixed_declined?: boolean }).fixed_declined && !trustedPc && <p className="hint">Without a fixed connection, mark one desktop in the office as Stays in the office and name a deputy, so a changed connection is confirmed without you.</p>}
+        {isAdmin && office.on && !suggestFixed && <form action={setOfficeOnly}>
           <p className="hint">If your internet provider gave your office a fixed connection, confirm it here from the office.</p>
           <button className="b b-secondary" name="intent" value="fixed">Done</button>
         </form>}
@@ -130,9 +131,18 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
             {people?.filter((person) => person.role === "partner" && person.status === "active").map((person) => <label className="check" key={person.user_id}>
               <input type="checkbox" name="deputy" value={person.user_id} defaultChecked={office.deputies?.includes(person.user_id)} />{person.email}
             </label>)}
-          </fieldset><button className="b b-secondary" name="intent" value="deputies">Save deputies</button>
+          </fieldset>
+          <div className="form-row"><div>
+            <label htmlFor="co-admin">Co-admin</label>
+            <select id="co-admin" name="co_admin" defaultValue={office.co_admin ?? ""}>
+              <option value="">No co-admin</option>
+              {people?.filter((person) => person.role === "partner" && person.status === "active").map((person) => <option key={person.user_id} value={person.user_id}>{person.email}</option>)}
+            </select>
+          </div></div>
+          <p className="hint">A partner who is also a deputy and changes the access preset, Office only, office hours, signing in and permissions like you. Your email, drive, people, recovery codes and closing the firm stay yours.</p>
+          <button className="b b-secondary" name="intent" value="deputies">Save deputies and co-admin</button>
         </form>}
-        {owner && office.on && <div className="side-doors"><h3 className="sub-head">Doors InboxCA cannot close for you</h3><ul>
+        {isAdmin && office.on && <div className="side-doors"><h3 className="sub-head">Doors InboxCA cannot close for you</h3><ul>
           <li>Don&apos;t give staff the firm mailbox&apos;s password; InboxCA does the email work.</li>
           <li>Uninstall remote desktop tools such as AnyDesk and TeamViewer from office PCs.</li>
           <li>Ask clients to send documents to the firm&apos;s email, not to staff phones.</li>
