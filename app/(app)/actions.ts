@@ -1090,9 +1090,10 @@ export async function saveChecklist(form: FormData) {
 
 // A file the client uploads through their private link, against one item asked for. The
 // link must be current and the request still open. Up to 25 MB a file and 100 files a request.
-export async function uploadToRequest(form: FormData) {
+// The page sends a pick of several files one at a time, with more set on all but the last,
+// so the request closes only after the whole pick is in. It says what happened.
+export async function uploadToRequest(form: FormData): Promise<"got" | "file" | "full" | "later" | "closed"> {
   const token = String(form.get("token") ?? "");
-  const back = `/u/${token}`;
   const admin = supabaseAdmin();
   const { data: request } = await admin
     .from("requests")
@@ -1100,15 +1101,14 @@ export async function uploadToRequest(form: FormData) {
     .eq("kind", "documents")
     .eq("details->>link_hash", createHash("sha256").update(token).digest("hex"))
     .maybeSingle();
-  if (!request?.clients || request.status !== "pending" || Date.parse(request.expires_at ?? "") < Date.now()) redirect(back);
+  if (!request?.clients || request.status !== "pending" || Date.parse(request.expires_at ?? "") < Date.now()) return "closed";
   const details = request.details as unknown as DocumentRequest;
-  const at = Number(form.get("item"));
-  const item = details.items[at];
+  const item = details.items[Number(form.get("item"))];
   const file = form.get("file");
-  const total = details.items.reduce((sum, entry) => sum + entry.received.length, 0);
-  if (!item || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD || total >= 100) redirect(`${back}?error=file`);
+  if (details.items.reduce((sum, entry) => sum + entry.received.length, 0) >= 100) return "full";
+  if (!item || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD) return "file";
   const opened = await firmDrive(request.firm_id);
-  if (!opened) redirect(`${back}?error=later`);
+  if (!opened) return "later";
   const saved = await saveForClient(
     { firmId: request.firm_id },
     null,
@@ -1117,11 +1117,11 @@ export async function uploadToRequest(form: FormData) {
     { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) },
     opened,
   );
-  if (saved === "drive") redirect(`${back}?error=later`);
+  if (saved === "drive") return "later";
   if (saved !== "twin") item.received.push(saved.id);
-  const done = details.items.every((entry) => entry.received.length > 0);
+  const done = !form.get("more") && details.items.every((entry) => entry.received.length > 0);
   await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: done ? "done" : "pending" }).eq("id", request.id);
-  redirect(`${back}?got=${at}`);
+  return "got";
 }
 
 // A person checks a file the client sent for an item asked for (PLAN.md 5.3.1). Checked keeps

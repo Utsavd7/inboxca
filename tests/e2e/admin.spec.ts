@@ -25,6 +25,16 @@ test("an Orelu admin sees firm health and retries a failed job; a firm owner is 
     await expect(owner).toHaveURL(/\/app$/);
     expect((await owner.goto("/admin/firms"))?.status()).toBe(404);
     await expect(owner.getByText(name)).toHaveCount(0);
+    // A page that is not there says so and leads back: to Today when signed in, inside the app's frame for its own pages.
+    await expect(owner.getByRole("heading", { name: "Page not found" })).toBeVisible();
+    await expect(owner.getByRole("link", { name: "Go to Today" })).toHaveAttribute("href", "/app");
+    await owner.goto(`/app/clients/${randomUUID()}`);
+    await expect(owner.getByRole("heading", { name: "Page not found" })).toBeVisible();
+    await expect(owner.getByRole("navigation", { name: "InboxCA" })).toBeVisible();
+    await owner.getByRole("link", { name: "Go to Today" }).click();
+    await expect(owner).toHaveURL(/[/]app$/);
+    expect((await page.goto("/no-such-page"))?.status()).toBe(404);
+    await expect(page.getByRole("link", { name: "Go to Home" })).toHaveAttribute("href", "/");
 
     await emailStep(page, adminEmail);
     await page.getByLabel("6 digit code from the app").fill(totp(key));

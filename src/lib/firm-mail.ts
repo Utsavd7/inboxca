@@ -62,3 +62,10 @@ export async function firmMailer(firmId: string, firmName: string) {
     sentAlready: (messageId: string) => foundInSent(from, password, settings.imap, messageId),
   };
 }
+
+// The firm's email address, for its clients' pages to show how to reach it; empty until a
+// mailbox is connected.
+export async function firmAddress(firmId: string) {
+  const { data: mailbox } = await supabaseAdmin().from("connected_accounts").select("id, address_enc").eq("firm_id", firmId).eq("kind", "mail").maybeSingle();
+  return mailbox ? serverCrypto().decrypt(firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc) : "";
+}
