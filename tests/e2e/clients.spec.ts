@@ -31,21 +31,22 @@ test("a client added with only a GSTIN gets its PAN too, and opens with both", a
   await owner.getByLabel("Email", { exact: true }).fill("Accounts@Patel.example");
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText("Patel Textiles");
-  await expect(owner.locator(".record-side")).toContainText("accounts@patel.example");
+  await expect(owner.locator("section[aria-labelledby=details-card]")).toContainText("accounts@patel.example");
   await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "PAN" })).toContainText("AAPFU0939F");
   await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "GSTIN" })).toContainText("27AAPFU0939F1ZV");
 });
 
 test("services on a client's GSTIN give it its due dates", async () => {
-  const gstin = owner.locator("section[aria-labelledby=services]").getByRole("listitem").filter({ hasText: "GSTIN" });
+  await owner.getByRole("link", { name: "Change services" }).click();
+  const gstin = owner.getByRole("dialog", { name: "Services" }).getByRole("listitem").filter({ hasText: "GSTIN" });
   await gstin.getByLabel("GSTR-1 (monthly)").check();
   await gstin.getByLabel("GSTR-3B (monthly)").check();
   // Wait for the save: it is what adds the due dates.
   await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), gstin.getByRole("button", { name: "Save services" }).click()]);
-  await owner.getByRole("link", { name: /^Due dates/ }).click();
-  const due = owner.locator("section[aria-labelledby=due] tbody tr");
+  await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Returns/ }).click();
+  const due = owner.locator("section[aria-labelledby=due] li");
   await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");
-  await expect(owner.locator("section[aria-labelledby=due]")).toContainText("not yet confirmed by a CA");
+  await expect(owner.locator(".client-pane")).toContainText("not yet confirmed by a CA");
   const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed'",[firm.firmId]);
   expect(n).toBeGreaterThan(12);
   await expect(due).toHaveCount(n);
@@ -102,6 +103,7 @@ test("search finds a client by name, email or whole PAN, and the same PAN is ref
 test("a client's page adds and checks numbers, renames, archives and restores", async () => {
   await owner.goto("/app/clients");
   await owner.getByRole("link", { name: "Patel Textiles" }).click();
+  await owner.getByRole("link", { name: "Change numbers" }).click();
   await owner.getByLabel("Number", { exact: true }).selectOption("gstin");
   await owner.getByLabel("Value").fill("29AAGCB7383J1Z4"); // a valid GSTIN with another PAN
   await owner.getByRole("button", { name: "Add number" }).click();
@@ -110,11 +112,14 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await owner.getByLabel("Value").fill("muma12345b");
   await owner.getByRole("button", { name: "Add number" }).click();
   await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "TAN" })).toContainText("MUMA12345B");
+  await owner.getByRole("dialog").getByRole("link", { name: "Close" }).click();
 
-  await owner.getByRole("link", { name: "Details", exact: true }).click();
+  await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByLabel("Name", { exact: true }).fill("Patel Textiles Pvt Ltd");
   await owner.getByRole("button", { name: "Save details" }).click();
   await expect(owner.locator(".page-head")).toContainText("Patel Textiles Pvt Ltd");
+  // Saving closes the panel; archiving is in the same panel.
+  await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByRole("button", { name: "Archive client" }).click();
   await expect(owner.locator(".page-head")).toContainText("Archived");
 
@@ -122,6 +127,7 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await expect(owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" })).toHaveCount(0);
   await owner.getByRole("link", { name: "Show archived clients" }).click();
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
+  await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByRole("button", { name: "Restore client" }).click();
   await expect(owner.locator(".page-head")).not.toContainText("Archived");
 });
@@ -169,18 +175,18 @@ test("the client list shows its true count and a second page", async () => {
 test("clients in one group are listed together", async () => {
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
-  await owner.getByRole("link", { name: "Details", exact: true }).click();
+  await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByLabel("Or a new group").fill("Patel family");
   await owner.getByRole("button", { name: "Save details" }).click();
-  await expect(owner.locator(".record-side").getByRole("link", { name: "Patel family" })).toBeVisible();
+  await expect(owner.locator("section[aria-labelledby=details-card]").getByRole("link", { name: "Patel family" })).toBeVisible();
 
   await owner.goto("/app/clients?q=Client 321");
   await owner.getByRole("link", { name: "Client 321" }).click();
-  await owner.getByRole("link", { name: "Details", exact: true }).click();
+  await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByLabel("Group", { exact: true }).selectOption({ label: "Patel family" });
   await owner.getByRole("button", { name: "Save details" }).click();
-  await owner.locator(".record-side").getByRole("link", { name: "Patel family" }).click();
-  await expect(owner.getByRole("heading", { name: "Patel family: 2 clients" })).toBeVisible();
+  await owner.locator("section[aria-labelledby=details-card]").getByRole("link", { name: "Patel family" }).click();
+  await expect(owner.locator(".page-head")).toContainText("Patel family: 2 clients");
   await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
 });
 
@@ -191,22 +197,23 @@ test("a client is served from a branch, and the list filters by branch", async (
   await expect(owner.locator("section[aria-labelledby=branches]").getByRole("listitem")).toContainText("Surat");
   await owner.goto("/app/clients?q=Client 42");
   await owner.getByRole("link", { name: "Client 42", exact: true }).click();
-  await owner.getByRole("link", { name: "Details", exact: true }).click();
+  await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.locator("section[aria-labelledby=details]").getByLabel("Branch").selectOption({ label: "Surat" });
   await owner.getByRole("button", { name: "Save details" }).click();
-  await owner.locator(".record-side").getByRole("link", { name: "Surat" }).click();
-  await expect(owner.getByRole("heading", { name: "Surat: 1 client" })).toBeVisible();
+  await owner.locator("section[aria-labelledby=details-card]").getByRole("link", { name: "Surat" }).click();
+  await expect(owner.locator(".page-head")).toContainText("Surat: 1 client.");
 });
 
 test("a contact person can act for several clients, with what they may receive", async () => {
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
-  await owner.getByRole("link", { name: /^Contacts/ }).click();
+  await owner.getByRole("link", { name: "Change contacts" }).click();
+  const panel = owner.getByRole("dialog", { name: "Contact people" });
   await owner.getByLabel("Contact's name").fill("Ramesh Patel");
   await owner.getByLabel("Contact's email").fill("ramesh@patel.example");
   await owner.getByLabel("Who they are, if known").fill("Director");
   await owner.getByRole("button", { name: "Add contact" }).click();
-  const row = owner.getByRole("listitem").filter({ hasText: "Ramesh Patel" });
+  const row = panel.getByRole("listitem").filter({ hasText: "Ramesh Patel" });
   await expect(row).toContainText("ramesh@patel.example, Director");
   await row.getByLabel("Receives documents").check();
   await Promise.all([
@@ -214,16 +221,16 @@ test("a contact person can act for several clients, with what they may receive",
     row.getByRole("button", { name: "Save", exact: true }).click(),
   ]);
   await owner.reload();
-  await expect(owner.getByRole("listitem").filter({ hasText: "Ramesh Patel" }).getByLabel("Receives documents")).toBeChecked();
+  await expect(panel.getByRole("listitem").filter({ hasText: "Ramesh Patel" }).getByLabel("Receives documents")).toBeChecked();
 
   // The same email on another client links the same person.
   await owner.goto("/app/clients?q=Client 321");
   await owner.getByRole("link", { name: "Client 321" }).click();
-  await owner.getByRole("link", { name: /^Contacts/ }).click();
+  await owner.getByRole("link", { name: "Change contacts" }).click();
   await owner.getByLabel("Contact's name").fill("R Patel");
   await owner.getByLabel("Contact's email").fill("RAMESH@patel.example");
   await owner.getByRole("button", { name: "Add contact" }).click();
-  await expect(owner.getByRole("listitem").filter({ hasText: "ramesh@patel.example" })).toContainText("Ramesh Patel");
+  await expect(panel.getByRole("listitem").filter({ hasText: "ramesh@patel.example" })).toContainText("Ramesh Patel");
 });
 
 test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside it", async () => {
@@ -254,7 +261,7 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
 
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
-  await owner.getByRole("link", { name: /^Files/ }).click();
+  await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Documents/ }).click();
   await expect(owner.locator("section[aria-labelledby=files] tbody tr")).toContainText(["Patel Textiles Pvt Ltd - GSTR-2B - Sep 2026"]);
 });
 
@@ -267,16 +274,17 @@ test("client tabs show all return pages, notices and recent activity; Today leav
   await owner.goto(`/app/clients/${client}?tab=due`);
   await expect(owner.getByRole("navigation",{name:"Returns pages"})).toContainText("Showing 1 to 50 of 51 returns");
   await owner.getByRole("navigation",{name:"Returns pages"}).getByRole("link",{name:"Next"}).click();
-  await expect(owner).toHaveURL(/tab=due&page=2/);
-  await expect(owner.locator("section[aria-labelledby=due] tbody tr")).toHaveCount(1);
+  await expect(owner).toHaveURL(/tab=returns&page=2/);
+  await expect(owner.locator("section[aria-labelledby=due] li")).toHaveCount(1);
   await owner.getByRole("navigation",{name:"Client",exact:true}).getByRole("link",{name:/^Notices/}).click();
   const notices=owner.locator("section[aria-labelledby=client-notices]");
   await expect(notices).toContainText("Invented notice");await expect(notices).toContainText("Review by 22 Oct 2026");
   await expect(notices).not.toContainText("24 Dec 2026");
+  await owner.getByRole("navigation",{name:"Client",exact:true}).getByRole("link",{name:"Overview"}).click();
   await owner.getByRole("link",{name:"Activity",exact:true}).click();
   await expect(owner.locator("section[aria-labelledby=client-activity]")).toContainText("Client added");
-  await expect(owner.getByRole("link",{name:"Extraction",exact:true})).toHaveCount(0);
-  await expect(owner.getByRole("link",{name:"Outputs",exact:true})).toHaveCount(0);
+  await expect(owner.getByRole("link",{name:"Figures",exact:true})).toHaveCount(0);
+  await expect(owner.getByRole("link",{name:"Prepared forms",exact:true})).toHaveCount(0);
   // The client's oldest late return leads Today's late returns until the client is archived.
   await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR1_M','2026-01',current_date-300)",[firm.firmId,client]);
   await owner.goto("/app");

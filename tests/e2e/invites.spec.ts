@@ -610,7 +610,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.getByRole("button", { name: "Save who sees clients" }).click();
   await expect(owner.getByRole("status")).toHaveText("Who sees clients saved.");
   await person.goto("/app/clients");
-  await expect(person.getByRole("heading", { name: "0 clients" })).toBeVisible();
+  await expect(person.locator(".page-head")).toContainText("0 clients.");
 
   // A team: the person joins it, and the client is assigned to the whole team.
   await owner.goto("/app/people");
@@ -625,10 +625,10 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.goto(`${client}?tab=team`);
   await owner.getByLabel("Person or team").selectOption({ label: "Team: GST team" });
   await owner.getByRole("button", { name: "Assign" }).click();
-  await expect(owner.getByRole("listitem").filter({ hasText: "Team: GST team" })).toContainText("Staff");
+  await expect(owner.getByRole("dialog", { name: "Looked after by" }).getByRole("listitem").filter({ hasText: "Team: GST team" })).toContainText("Staff");
   await person.reload();
   await expect(person.getByRole("link", { name: "Shared Client" })).toBeVisible();
-  await expect(person.getByRole("heading", { name: "1 client", exact: true })).toBeVisible();
+  await expect(person.locator(".page-head")).toContainText("1 client.");
 });
 
 // #3, #4: configured idle lock and the normal sign out control.
@@ -805,7 +805,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   await owner.goto("/app/clients");
   await owner.getByRole("link", { name: mailClient }).click();
-  await owner.getByRole("link", { name: /^Files/ }).click();
+  await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Documents/ }).click();
   const rows = owner.locator("section[aria-labelledby=files] tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
@@ -847,7 +847,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.getByRole("link", { name: "Upload a file" }).click();
   await expect(owner.getByLabel("Type", { exact: true }).locator("option", { hasText: "HDFC loan sanction letter" })).toHaveCount(1);
   // Activity names each rename's old and new name; a manager or the owner puts back the latest in one click.
-  await owner.getByRole("link", { name: "Activity", exact: true }).click();
+  await owner.goto(`${owner.url().split("?")[0]}?tab=activity`);
   await expect(owner.locator("section[aria-labelledby=client-activity]")).toContainText(`${mailClient} - HDFC loan sanction letter.pdf to ${mailClient} - Document.pdf`);
   await owner.getByRole("button", { name: `Undo rename of ${mailClient} - Document.pdf` }).click();
   await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - HDFC loan sanction letter.pdf`);
@@ -862,7 +862,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
 
   // The owner removes the second copy: it waits in the drive's Deleted and old versions folder and can be put back.
-  await rows.filter({ hasText: "Same file as" }).getByRole("button", { name: /^Remove/ }).click();
+  await rows.filter({ hasText: "Same file as" }).getByRole("link", { name: /^Change/ }).click();
+  await owner.getByRole("dialog").getByRole("button", { name: /^Remove/ }).click();
   await expect(owner.getByRole("status")).toContainText("waits 30 days");
   expect(await readFile(path.join(drive, "Deleted and old versions", `${mailClient} - Purchase bills - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented purchase bills");
   await expect(rows).toHaveCount(2);
@@ -881,10 +882,10 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(await readFile(path.join(drive, "FY 2025-26", mailClient, "Income tax", `${mailClient} - Form 16 - FY 2025-26.pdf`), "utf8")).toBe("%PDF-1.4 invented form 16");
 
   // Asking the client for files emails them a private link; they upload with no sign in.
-  await owner.getByRole("link", { name: "Ask for files" }).click();
+  await owner.getByRole("link", { name: "Ask for papers" }).click();
   await owner.getByLabel("Sales bills").check();
   await owner.getByLabel("Anything else, by name").fill("Loan statement");
-  await owner.getByRole("button", { name: "Ask for files" }).click();
+  await owner.getByRole("button", { name: "Ask for papers" }).click();
   await expect(owner.getByRole("status")).toContainText("emailed a private upload link");
   const link = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/u\/[\w-]+/)![0];
   const visitor = await (await browser.newContext()).newPage();
@@ -915,7 +916,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(visitor.getByRole("listitem").filter({ hasText: "Loan statement" })).toContainText("1 file received");
 
   // A filed document goes to the client as a secure link that stops after 5 downloads.
-  await rows.getByRole("link", { name: `Send ${mailClient} - Loan statement`, exact: false }).click();
+  await rows.getByRole("link", { name: `Change ${mailClient} - Loan statement`, exact: false }).click();
   await owner.getByRole("button", { name: "Send", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText("works for 7 days and 5 downloads");
   const shared = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/s\/[\w-]+/)![0];
@@ -969,7 +970,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   for (const [type, period, content] of [["ITR-V", "FY 2024-25", "invented ITR-V"], ["Balance sheet", "FY 2025-26", "invented balance sheet"]]) {
     await owner.goto("/app/clients");
     await owner.getByRole("link", { name: mailClient }).click();
-    await owner.getByRole("link", { name: /^Files/ }).click();
+    await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Documents/ }).click();
     await owner.getByRole("link", { name: "Upload a file" }).click();
     await owner.getByLabel("File", { exact: true }).setInputFiles({ name: `${type}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
     await owner.getByLabel("Type", { exact: true }).selectOption(type);
@@ -1112,9 +1113,9 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await query(local.dbUrl,"insert into public.clients(firm_id,name,kind) values ($1,$2,'individual')",[firm.firmId,noEmail]);
   const send = async (type:string,period:string,names=[mailClient]) => {
     await owner.goto("/app/clients");
+    for (const name of names) await owner.getByLabel(`Send a paper to ${name}`,{exact:true}).check();
     await owner.locator("#bulk-send").getByLabel("Paper",{exact:true}).selectOption(type);
     await owner.locator("#bulk-send").getByLabel("Year",{exact:true}).selectOption(period);
-    for (const name of names) await owner.getByLabel(`Send a paper to ${name}`,{exact:true}).check();
     await owner.getByRole("button",{name:"Send chosen papers"}).click();
     await expect(owner).toHaveURL(/\/app\/clients\?bulk=/);
     await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
@@ -1162,7 +1163,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await expect.poll(async()=>(await query(local.dbUrl,"select share_policy from public.documents where id=$1",[doc]))[0].share_policy).toBe("internal");
   await owner.reload();
   await expect(owner.getByLabel("Sending this paper")).toHaveValue("internal");
-  await expect(owner.getByRole("link",{name:`Send ${name}`,exact:true})).toHaveCount(0);
+  await expect(owner.getByRole("dialog").getByRole("button",{name:"Send",exact:true})).toHaveCount(0);
   await send("ITR-V","2025");
   await expect(progress).toContainText("Skipped. Kept inside your firm");
   const [{n}] = await query(local.dbUrl,"select count(*)::int n from public.shares where document_id=$1 and status='sent'",[doc]);

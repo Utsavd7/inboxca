@@ -1,7 +1,7 @@
 "use client";
-import Link from "next/link";
 import { useActionState } from "react";
 import { importClients, type ImportState } from "@/app/(app)/actions";
+import { SidePanel } from "../ui";
 
 // Import clients from a spreadsheet: choose a file, see every row's problem, then add the
 // good rows in one go.
@@ -11,11 +11,7 @@ export function ImportForm() {
   const ready = (state.rows?.length ?? 0) - problems.length;
 
   return (
-    <section className="reveal-panel" aria-labelledby="import">
-      <Link className="b b-ghost b-small reveal-close" href="/app/clients" scroll={false}>
-        Close
-      </Link>
-      <h3 id="import">Import from Excel or CSV</h3>
+    <SidePanel id="import" title="Import from Excel or CSV" close="/app/clients">
       {state.done ? (
         <p className="ok" role="status">
           Imported {state.done} clients.
@@ -78,6 +74,6 @@ export function ImportForm() {
           {state.error}
         </p>
       )}
-    </section>
+    </SidePanel>
   );
 }

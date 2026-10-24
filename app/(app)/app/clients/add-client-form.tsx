@@ -1,17 +1,13 @@
 "use client";
-import Link from "next/link";
 import { useActionState } from "react";
 import { addClient, type ClientState } from "@/app/(app)/actions";
 import { clientKinds } from "@/src/lib/clients";
+import { SidePanel } from "../ui";
 
 export function AddClientForm() {
   const [state, add, adding] = useActionState(addClient, {} as ClientState);
   return (
-    <section className="reveal-panel" aria-labelledby="add-client">
-      <Link className="b b-ghost b-small reveal-close" href="/app/clients" scroll={false}>
-        Close
-      </Link>
-      <h3 id="add-client">Add a client</h3>
+    <SidePanel id="add-client" title="Add a client" close="/app/clients">
       <p className="hint">Only the name is needed. Add the email, PAN and GSTIN if you have them; InboxCA uses them to recognise the client&apos;s emails and documents.</p>
       <form key={JSON.stringify(state.values)} action={add} className="fields" noValidate>
         <div>
@@ -49,6 +45,6 @@ export function AddClientForm() {
           {state.error}
         </p>
       )}
-    </section>
+    </SidePanel>
   );
 }
