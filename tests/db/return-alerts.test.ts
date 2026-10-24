@@ -49,3 +49,19 @@ it("drops a pending alert when filed and falls back from an inactive partner", (
   await actAs(db,OWNER);
   expect((await db.query("select id from public.late_returns($1)",[FIRM])).rows).toEqual([]);
 }));
+// Today: late returns are one row a client for the same people, and the week ahead by form.
+it("groups late returns by client and counts the week's returns by form", () => rollback(db,async () => {
+  const {client}=await seed();
+  await db.query("insert into public.tasks(firm_id,client_id,kind,code,period_key,due_on,status,details) values ($1,$2,'compliance','GSTR1_M','2026-08',(now() at time zone 'Asia/Kolkata')::date-1,'upcoming','{}'),($1,$2,'compliance','GSTR1_M','2026-09',(now() at time zone 'Asia/Kolkata')::date+2,'upcoming','{}'),($1,$2,'compliance','GSTR3B_M','2026-09',(now() at time zone 'Asia/Kolkata')::date+2,'filed',jsonb_build_object('filed_on',current_date))",[FIRM,client]);
+  await actAs(db,OWNER);
+  expect((await db.query("select client_id,client_name,returns,code from public.late_clients($1)",[FIRM])).rows).toEqual([{client_id:client,client_name:"Invented Textiles",returns:2,code:null}]);
+  expect((await db.query("select code,clients,filed from public.due_soon($1) order by code",[FIRM])).rows).toEqual([{code:"GSTR1_M",clients:1,filed:0},{code:"GSTR3B_M",clients:1,filed:1}]);
+  await actAs(db,STAFF);
+  expect((await db.query("select client_id from public.late_clients($1)",[FIRM])).rows).toEqual([]);
+  await asOwner(db);
+  await db.query("insert into public.client_assignments(firm_id,client_id,user_id,role) values ($1,$2,$3,'partner_in_charge')",[FIRM,client,PARTNER]);
+  await actAs(db,OWNER);
+  expect((await db.query("select client_id from public.late_clients($1)",[FIRM])).rows).toEqual([]);
+  await actAs(db,PARTNER);
+  expect((await db.query("select returns from public.late_clients($1)",[FIRM])).rows).toEqual([{returns:2}]);
+}));

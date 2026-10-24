@@ -108,7 +108,7 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
 
   await expect(page.getByText("Invite Test Firm has invited you as manager.")).toBeVisible();
   await page.getByRole("button", { name: "Join Invite Test Firm" }).click();
-  await expect(page.locator(".page-head")).toContainText("Invite Test Firm");
+  await expect(page.locator(".rail-firm")).toContainText("Invite Test Firm");
   await expect(page.locator(".rail-me")).toContainText("Manager");
   // A manager's sidebar has People but not Settings, which is the owner's.
   await expect(page.getByRole("link", { name: "People" })).toBeVisible();
@@ -166,7 +166,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   await expect(person.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
 
   await owner.goto("/app");
-  await expect(owner.getByText("1 PC signed in from your office today:")).toBeVisible();
+  await expect(owner.getByText("1 PC signed in from your office today.")).toBeVisible();
   await owner.goto("/app/settings#office");
   await expect(owner.getByText(/New on Chrome on Windows, first seen today/)).toBeVisible();
   await owner.getByRole("button", { name: "Stays in the office" }).click();
@@ -559,7 +559,7 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await person.goto("/app");
   await expect(person.locator(".page-head")).toContainText("Invite Test Firm is closed now.");
   await owner.goto("/app");
-  await expect(owner.locator(".page-head")).toContainText("Invite Test Firm");
+  await expect(owner.locator(".rail-firm")).toContainText("Invite Test Firm");
 
   // Special hours for today open the firm again, closed weekdays or not.
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -569,7 +569,7 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await owner.getByRole("button", { name: "Add special hours" }).click();
   await expect(owner.getByText("00:00 to 23:59")).toBeVisible();
   await person.reload();
-  await expect(person.locator(".page-head")).toContainText("Invite Test Firm");
+  await expect(person.locator(".rail-firm")).toContainText("Invite Test Firm");
   await expect(person.getByRole("heading", { level: 1 })).not.toContainText("closed");
 
   // Ten minutes before closing the person is warned and may stay one more hour, once.
@@ -643,7 +643,7 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
 
   await person.clock.install();
   await person.goto("/app");
-  await expect(person.locator(".page-head")).toContainText("Invite Test Firm");
+  await expect(person.locator(".rail-firm")).toContainText("Invite Test Firm");
   await person.clock.fastForward("16:00");
   await expect(person).toHaveURL(/\/sign-in\?reason=idle$/);
   await expect(person.getByRole("status")).toContainText("signed out after a while without activity");
@@ -1053,7 +1053,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(details.reminded).toHaveLength(1);
   await query(local.dbUrl, "update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-3 where client_id=$1 and code=$2", [clientId,code]);
   await owner.goto("/app");
-  await expect(owner.getByRole("alert").filter({hasText: `${mailClient}: a return is 3 or more days late.`})).toBeVisible();
+  const late = owner.locator("section[aria-labelledby=t-late] li").filter({ hasText: mailClient });
+  await expect(late).toBeVisible();
   // M5 acceptance: filing removes this return from the pending firm's reminder run.
   await query(local.dbUrl, "update public.tasks set status='filed',details=(details-'reminder') || jsonb_build_object('filed_on',current_date) where client_id=$1 and code=$2", [clientId,code]);
   await query(local.dbUrl, "delete from public.jobs where kind='reminders' and firm_id=$1", [firm.firmId]);
@@ -1062,7 +1063,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const [filedReminder] = await query(local.dbUrl, "select details from public.tasks where client_id=$1 and code=$2", [clientId,code]);
   expect(filedReminder.details.reminder).toBeUndefined();
   await owner.goto("/app");
-  await expect(owner.getByRole("alert").filter({hasText: `${mailClient}: a return is 3 or more days late.`})).toHaveCount(0);
+  await expect(late).toHaveCount(0);
   await query(local.dbUrl, "delete from public.tasks where code = $1", [code]);
   await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
 
@@ -1228,8 +1229,8 @@ test("five office PCs need one batch approval, and managers cannot forge office 
       if (n === 0) expect((await admin.auth.verifyOtp({ email: address, token: code, type: "email" })).error).not.toBeNull();
     }
     await boss.goto("/app");
-    await expect(boss.locator(".alert").filter({ hasText: "5 PCs signed in from your office today:" })).toHaveCount(1);
-    await boss.getByRole("link", { name: "approve", exact: true }).click();
+    await expect(boss.getByRole("alert").filter({ hasText: "5 PCs signed in from your office today." })).toHaveCount(1);
+    await boss.getByRole("link", { name: "Approve", exact: true }).click();
     await boss.getByRole("button", { name: "Approve all as staying in the office" }).click();
     await expect(boss.getByRole("heading", { name: "PCs waiting for approval" })).toHaveCount(0);
     expect((await query(local.dbUrl, "select count(*)::int n from public.devices where firm_id=$1 and status='approved'", [batch.firmId]))[0].n).toBe(5);
