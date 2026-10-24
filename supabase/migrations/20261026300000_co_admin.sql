@@ -92,3 +92,28 @@ end
 $$;
 create trigger firms_admin_guard before update of name, settings on public.firms for each row execute function private.firms_admin_guard();
 revoke all on function private.firms_admin_guard() from public, anon, authenticated, service_role;
+
+-- Staff kept out by Office only see whether they may ask to use their own device away from
+-- the office: under the Office only and Solo CA presets they may not.
+drop function if exists public.closed_firms();
+create function public.closed_firms()
+returns table (firm_name text, hours jsonb, reason text, away boolean)
+language sql stable security definer set search_path = '' as $$
+  select f.name, f.settings -> 'hours',
+    case when public.session_ended() and coalesce((f.settings -> 'office' ->> 'on')::boolean, false)
+           and m.role in ('staff', 'manager', 'front_desk') then 'session'
+         when not public.open_to(f.settings, m.role, m.access) then 'hours'
+         when not public.office_allows(f.settings, m.role) then 'office'
+         else 'session' end,
+    coalesce((f.settings -> 'office' ->> 'away')::boolean, true)
+  from public.firm_members m join public.firms f on f.id = m.firm_id
+  where m.user_id = (select auth.uid()) and m.status = 'active'
+    and ((select auth.jwt() ->> 'aal') = 'aal2'
+      or ((select auth.jwt() ->> 'aal') = 'aal1'
+        and coalesce((f.settings -> 'office' ->> 'on')::boolean, false)
+        and m.role in ('staff', 'manager', 'front_desk')
+        and (public.office_allows(f.settings, m.role) or public.session_ended())))
+    and public.member_role(f.id) is null
+$$;
+revoke all on function public.closed_firms() from public, anon, authenticated, service_role;
+grant execute on function public.closed_firms() to authenticated;

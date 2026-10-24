@@ -630,7 +630,7 @@ isOneToOne: false
                            },
 "closed_firms":
 { Args: Record<PropertyKey, never>; Returns: {
-              "firm_name": string,"hours": Json,"reason": string
+              "away": boolean,"firm_name": string,"hours": Json,"reason": string
             }[]
                            },
 "connect_drive":
