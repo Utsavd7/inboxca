@@ -73,3 +73,47 @@ it("refuses a formula in a data cell even when its cached value is blank",async(
   const spy=vi.spyOn(sheets,"xlsxEntries").mockImplementation(input=>input===bytes ? parts : original(input));
   try {expect(()=>editedForm(bytes,context)).toThrow("Use values");} finally {spy.mockRestore();}
 },30_000);
+
+// The supplier is in Gujarat (24); Maharashtra (27) is another State.
+it("fills large B2C sales, unregistered notes, exports, advances and documents issued in both workbooks",()=>{
+  for(const template of templates) {
+    const period=template.version==="2.0" ? "2024-09" : "2026-09",day=`${period}-10`;
+    const filled=[
+      rows("b2cl",["INV/7",day,"236000","27-Maharashtra","","18","200000","0",""]),
+      rows("cdnur",["B2CL","CN/7",day,"C","27-Maharashtra","11800","","18","10000","0"]),
+      rows("cdnur",["EXPWP","CN/8",day,"C","","5900","","18","5000",""]),
+      rows("exp",["WPAY","EXP/1",day,"118000","INNSA1","1234567",day,"18","100000","0"]),
+      rows("at",["27-Maharashtra","","18","50000","0"]),
+      rows("atadj",["27-Maharashtra","","18","20000",""]),
+      rows("docs",["Invoices for outward supply","INV/1","INV/250","250","3"]),
+      rows("exemp",["Intra-State supplies to unregistered persons","1200","0","350.50"]),
+    ];
+    const files=xlsxEntries(gstr1Workbook(template,period,inventedGstin(),filled));
+    for(const [section,text] of [["b2cl","INV/7"],["cdnur","CN/7"],["exp","EXP/1"],["docs","INV/250"]] as const)
+      expect(files.get(`xl/worksheets/sheet${template.mappings.sheets![section]}.xml`)!().toString()).toContain(`>${text}<`);
+    expect(files.get(`xl/worksheets/sheet${template.mappings.sheets!.at}.xml`)!().toString()).toContain("<v>50000</v>");
+    expect(files.get(`xl/worksheets/sheet${template.mappings.sheets!.exemp}.xml`)!().toString()).toContain("<v>350.50</v>");
+  }
+},30_000);
+
+it("refuses rows the official rules put elsewhere or leave out",()=>{
+  const template=templates[1],day="2026-09-10",gstin=inventedGstin();
+  const refused:[string,string[],string][]=[
+    ["b2cl",["INV/7",day,"236000","24-Gujarat","","18","200000","0",""],"inter-State"],
+    ["b2cl",["INV/7",day,"90000","27-Maharashtra","","18","76271","0",""],"B2CS"],
+    ["cdnur",["EXPWP","CN/8",day,"C","27-Maharashtra","5900","","18","5000",""],"empty"],
+    ["cdnur",["B2CL","CN/7",day,"C","","11800","","18","10000",""],"place of supply"],
+    ["exp",["WITH PAY","EXP/1",day,"118000","","","","18","100000",""],"official choices"],
+    ["docs",["Invoices",  "INV/1","INV/250","250","3"],"official choices"],
+    ["docs",["Invoices for outward supply","INV/1","INV/250","2.5","0"],"whole number"],
+    ["docs",["Invoices for outward supply","INV/1","INV/250","2","3"],"cancelled"],
+    ["exemp",["Supplies to registered persons","1","0","0"],"official choices"],
+    ["exemp",["Inter-State supplies to registered persons","1","0",""],"required"],
+  ];
+  for(const [section,values,message] of refused) expect(()=>gstr1Workbook(template,"2026-09",gstin,[rows(section,values)])).toThrow(message);
+  // Before August 2024 the large B2C limit was Rs 2.5 lakh.
+  expect(()=>gstr1Workbook(templates[0],"2024-07",gstin,[rows("b2cl",["INV/7","2024-07-10","200000","27-Maharashtra","","18","169491","0",""])])).toThrow("B2CS");
+  // A shipping bill dated after the month is allowed; the invoice is not.
+  expect(gstr1Workbook(template,"2026-09",gstin,[rows("exp",["WOPAY","EXP/2",day,"100000","","","2026-10-02","0","100000",""])]).length).toBeGreaterThan(1000);
+  expect(()=>gstr1Workbook(template,"2026-09",gstin,[rows("exp",["WOPAY","EXP/2","2026-10-02","100000","","","","0","100000",""])])).toThrow("after");
+},30_000);

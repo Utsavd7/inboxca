@@ -41,7 +41,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
       return <li key={file.id}><div className="grow">
         <Link href={`/app/files/${file.id}/view`}>{file.name}</Link>
         <p className="hint">{meta.status[0].toUpperCase()+meta.status.slice(1)}. Official form {meta.template}.{!latest.has(file.id) && " Earlier version."}{meta.external && " Edited outside InboxCA."}</p>
-        {meta.form==="GSTR1" && <p className="hint">This file has B2B sales, small B2C sales, credit and debit notes and the HSN summary only. Add any large B2C sales, exports, advances, nil rated or exempt supplies and documents issued in the offline tool or on the portal before filing.</p>}
+        {meta.form==="GSTR1" && <p className="hint">This file does not include amendments of earlier months or supplies through e-commerce operators (tables 14 and 15). Add any of these in the offline tool or on the portal before filing.</p>}
         <div className="form-row">{meta.sources.map((source,n)=><Link key={source.id} href={`?tab=extraction&draft=${source.id}`}>Check source figures{meta.sources.length>1 ? ` ${n+1}` : ""}</Link>)}
           {active && ["approved","filed"].includes(meta.status) && <form action={`/app/files/${file.id}/filing`} method="post"><button className="b b-secondary b-small">Download for filing</button></form>}
           {active && meta.status==="draft" && ["owner","partner","manager"].includes(membership.role) && <form action={decideForm}><input type="hidden" name="document" value={file.id}/><button className="b b-secondary b-small" name="decision" value="approved">Give second approval</button></form>}
