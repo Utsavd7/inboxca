@@ -41,7 +41,7 @@ test("a new firm signs up, signs in with the email code and reaches the app", as
   await page.getByLabel("6 digit code from the app").fill(totp(secret));
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.locator(".page-head")).toContainText(firmName);
+  await expect(page.locator(".rail-firm")).toContainText(firmName);
 
   const [firm] = await query(
     local.dbUrl,
