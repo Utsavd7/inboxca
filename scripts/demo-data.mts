@@ -1,8 +1,9 @@
 // Fills the local demo firm (npm run demo) with invented data, so every page has
 // something to show: clients with their numbers and services, filed and overdue returns,
 // teams, branches, people, contacts and sorted client mail. Every name, number and email
-// here is made up. When the demo firm has a drive connected, a few invented one-page PDFs
-// are saved into its client folders there, as InboxCA would file them from client mail. Run with `npm run demo:data` after `npm run demo`; running it again
+// here is made up. When the demo firm has a drive connected, invented client papers that look
+// like the real ones (scripts/demo-files.mts) are saved into its client folders there, as
+// InboxCA would file them from client mail. Run with `npm run demo:data` after `npm run demo`; running it again
 // replaces the demo firm's data with a fresh copy.
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -17,19 +18,8 @@ const { serverCrypto } = await import("../src/lib/crypto");
 const { describeFile, periodName } = await import("../src/lib/documents");
 const { fileName, folderPath } = await import("../src/lib/drive");
 const { openDrive } = await import("../src/lib/drive-account");
-const { pdf } = await import("../tests/fixtures/pdf");
+const { demoFiles, gstin } = await import("./demo-files.mts");
 
-const BASE36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-// A GSTIN with a correct check character, for a state and a PAN.
-function gstin(state: string, pan: string) {
-  const body = `${state}${pan}1Z`;
-  let sum = 0;
-  for (let at = 0; at < 14; at++) {
-    const value = BASE36.indexOf(body[at]) * (at % 2 ? 2 : 1);
-    sum += Math.floor(value / 36) + (value % 36);
-  }
-  return body + BASE36[(36 - (sum % 36)) % 36];
-}
 
 type Client = { name: string; kind: string; email?: string; pan: string; gst?: [string, string[]]; tan?: string[]; panServices?: string[]; llpin?: [string, string[]]; group?: string; branch?: string };
 const clients: Client[] = [
@@ -197,25 +187,14 @@ await db.query(
 );
 
 const [driveAccount] = (await db.query("select id, provider, credentials_enc from public.connected_accounts where firm_id = $1 and kind = 'drive'", [firm])).rows;
-const month = new Date(`${lastMonth}-01T00:00:00Z`).toLocaleString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
-const files = [
-  ["Mehta Traders", `purchase bills ${month}.pdf`],
-  ["Mehta Traders", `sales register ${month}.pdf`],
-  ["S.K. Builders", `purchase bills ${month}.pdf`],
-  ["Kapoor Enterprises", "trial balance FY 2025-26.pdf"],
-  ["Kapoor Enterprises", "ledger.pdf"],
-  ["Iyer Consultants", "Form 16 FY 2025-26.pdf"],
-  ["Iyer Consultants", "interest certificate FY 2025-26.pdf"],
-  ["Patel Textiles Pvt Ltd", "notice.pdf"],
-] as const;
+const files = demoFiles(lastMonth, today);
 if (driveAccount) {
   const drive = await openDrive(firm, driveAccount);
-  for (const [client, original] of files) {
+  for (const { client, original, bytes } of files) {
     const event = events.get(client)!;
     const about = describeFile(original, "", event.label, new Date().toISOString());
     const folder = await drive.ensureFolder([...folderPath("year_client_work", about.year, client, about.work), ...(about.sure ? [] : ["To check"])]);
-    const name = fileName({ client, type: about.type, period: periodName(about.period), extension: "pdf" });
-    const bytes = pdf(`Invented demo file: ${name}`);
+    const name = fileName({ client, type: about.type, period: periodName(about.period), extension: original.split(".").pop()! });
     // Already there from an earlier run: the same file, used again.
     const saved = await drive.save(folder, name, bytes);
     const id = randomUUID();
