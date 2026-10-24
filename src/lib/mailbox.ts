@@ -13,33 +13,51 @@ export type Server = { host: string; port: number };
 export type MailSettings = { imap: Server; smtp: Server };
 export type MailCheck = { cursor: string } | { error: "sign_in" | "server" };
 
-const providers: Record<string, MailSettings> = {
-  google: { imap: { host: "imap.gmail.com", port: 993 }, smtp: { host: "smtp.gmail.com", port: 465 } },
-  zoho_in: { imap: { host: "imap.zoho.in", port: 993 }, smtp: { host: "smtp.zoho.in", port: 465 } },
-  zoho: { imap: { host: "imap.zoho.com", port: 993 }, smtp: { host: "smtp.zoho.com", port: 465 } },
-};
+// The providers Indian firms use most, with each one's published servers: found by the
+// address's own domain, or by where a firm's own domain receives mail.
+const zohoHelp = "Zoho Mail needs an app password (Zoho Accounts, Security, App passwords) and IMAP access turned on in Mail settings.";
+const providers: (MailSettings & { name: string; domains: string[]; mx: RegExp; help: string })[] = [
+  { name: "Gmail", domains: ["gmail.com", "googlemail.com"], mx: /google(mail)?\.com/, imap: { host: "imap.gmail.com", port: 993 }, smtp: { host: "smtp.gmail.com", port: 465 }, help: "Gmail needs an app password: Google Account, Security, App passwords." },
+  { name: "Zoho Mail", domains: ["zoho.in", "zohomail.in"], mx: /zoho\.in/, imap: { host: "imap.zoho.in", port: 993 }, smtp: { host: "smtp.zoho.in", port: 465 }, help: zohoHelp },
+  { name: "Zoho Mail", domains: ["zoho.com", "zohomail.com"], mx: /zoho(mail)?\.com/, imap: { host: "imap.zoho.com", port: 993 }, smtp: { host: "smtp.zoho.com", port: 465 }, help: zohoHelp },
+  { name: "Yahoo Mail", domains: ["yahoo.com", "yahoo.co.in", "ymail.com", "rocketmail.com"], mx: /yahoodns\.net/, imap: { host: "imap.mail.yahoo.com", port: 993 }, smtp: { host: "smtp.mail.yahoo.com", port: 465 }, help: "Yahoo Mail needs an app password: Account info, Account security, Generate app password." },
+  { name: "GoDaddy email", domains: [], mx: /secureserver\.net/, imap: { host: "imap.secureserver.net", port: 993 }, smtp: { host: "smtpout.secureserver.net", port: 465 }, help: "Use this mailbox's own password, the one set for it at GoDaddy." },
+  { name: "Hostinger email", domains: [], mx: /hostinger\.com/, imap: { host: "imap.hostinger.com", port: 993 }, smtp: { host: "smtp.hostinger.com", port: 465 }, help: "Use this mailbox's own password, the one set for it at Hostinger." },
+];
+export const providerFor = (imapHost: string) => providers.find((provider) => provider.imap.host === imapHost);
 
-// Finds the servers for an address from where its domain receives mail; "microsoft" means
-// Outlook or Microsoft 365, which connect with Microsoft sign in instead of a password.
-export async function detectSettings(address: string): Promise<MailSettings | "microsoft"> {
+// Finds the servers for an address: the list above, then Thunderbird's public list of mail
+// providers and the domain's own published settings, then where the domain receives mail,
+// then the usual names. "microsoft" means Outlook or Microsoft 365, which connect with
+// Microsoft sign in instead of a password.
+export async function detectSettings(address: string): Promise<(MailSettings & { name?: string }) | "microsoft"> {
   const domain = address.split("@")[1]?.toLowerCase() ?? "";
   if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) return "microsoft";
-  const mx = (await dns.resolveMx(domain).catch(() => [])).map((record) => record.exchange.toLowerCase()).join(" ");
-  if (/google(mail)?\.com/.test(mx)) return providers.google;
-  if (mx.includes("outlook.com")) return "microsoft";
-  if (mx.includes("zoho.in")) return providers.zoho_in;
-  if (mx.includes("zoho.")) return providers.zoho;
-  // Thunderbird's public list of mail providers, then the usual names.
-  const xml = await fetch(`https://autoconfig.thunderbird.net/v1.1/${encodeURIComponent(domain)}`, { signal: AbortSignal.timeout(5000) })
-    .then((response) => (response.ok ? response.text() : ""))
-    .catch(() => "");
-  const server = (type: string, fallback: Server): Server => {
-    const block = xml.match(new RegExp(`<(?:incoming|outgoing)Server type="${type}">([\\s\\S]*?)</`))?.[1] ?? "";
+  const listed = providers.find((provider) => provider.domains.includes(domain));
+  if (listed) return listed;
+  // A domain's own settings are asked for only from a public server, never this network.
+  const config = async (url: string) =>
+    (await isPublic(new URL(url).hostname))
+      ? fetch(url, { redirect: "error", signal: AbortSignal.timeout(5000) }).then((response) => (response.ok ? response.text() : "")).catch(() => "")
+      : "";
+  const [xmls, mx] = await Promise.all([
+    Promise.all([
+      `https://autoconfig.thunderbird.net/v1.1/${encodeURIComponent(domain)}`,
+      `https://autoconfig.${domain}/mail/config-v1.1.xml?emailaddress=${encodeURIComponent(address)}`,
+      `https://${domain}/.well-known/autoconfig/mail/config-v1.1.xml`,
+    ].map((url) => config(url).catch(() => ""))),
+    dns.resolveMx(domain).then((records) => records.map((record) => record.exchange.toLowerCase()).join(" "), () => ""),
+  ]);
+  const server = (xml: string, type: string): Server | undefined => {
+    const block = xml.match(new RegExp(`<(?:incoming|outgoing)Server type="${type}">([\\s\\S]*?)</(?:incoming|outgoing)Server>`))?.[1] ?? "";
     const host = block.match(/<hostname>([^<]+)</)?.[1];
     const port = Number(block.match(/<port>(\d+)</)?.[1]);
-    return host && port ? { host: host.replace("%EMAILDOMAIN%", domain), port } : fallback;
+    return host && port ? { host: host.replace("%EMAILDOMAIN%", domain), port } : undefined;
   };
-  return { imap: server("imap", { host: `imap.${domain}`, port: 993 }), smtp: server("smtp", { host: `smtp.${domain}`, port: 465 }) };
+  const xml = xmls.find((text) => server(text, "imap") && server(text, "smtp"));
+  if (xml) return { name: xml.match(/<displayShortName>([^<]+)</)?.[1], imap: server(xml, "imap")!, smtp: server(xml, "smtp")! };
+  if (mx.includes("outlook.com")) return "microsoft";
+  return providers.find((provider) => provider.mx.test(mx)) ?? { imap: { host: `imap.${domain}`, port: 993 }, smtp: { host: `smtp.${domain}`, port: 465 } };
 }
 
 const testServer = (host: string) => process.env.MAIL_ALLOW_LOCAL === "1" && (host === "127.0.0.1" || host === "localhost");

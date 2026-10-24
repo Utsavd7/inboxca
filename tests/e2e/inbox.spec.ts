@@ -53,7 +53,7 @@ test.beforeAll(async ({ browser }) => {
   const card = owner.locator("section#mailbox");
   await card.getByLabel("The firm's email address").fill(office);
   await card.getByLabel("Its password").fill(office);
-  await card.getByText("Server settings, only if InboxCA asks").click();
+  await card.getByText("Change server settings").click();
   await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
   await card.getByLabel("Incoming port").fill("3143");
   await card.getByLabel("Outgoing (SMTP) server").fill("127.0.0.1");
