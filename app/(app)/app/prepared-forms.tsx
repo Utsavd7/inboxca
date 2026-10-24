@@ -2,6 +2,7 @@ import Link from "next/link";
 import {currentMember} from "@/src/lib/member";
 import {preparedSchema,formName} from "@/src/lib/prepared";
 import {draftSchema} from "@/src/lib/datasets";
+import {itrYear} from "@/src/lib/itr";
 import {periodName} from "@/src/lib/documents";
 import {grantFor} from "@/src/lib/permission-grants";
 import {askPermission} from "@/app/(app)/actions";
@@ -24,15 +25,15 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     return review?.length ? <section className="panel"><h2>Forms to review</h2><ul className="rows">{review.map(file=><li key={file.id}><Link href={`/app/clients/${file.client_id}?tab=outputs`}>{file.clients?.name}: {file.name}</Link>{waiting?.some(item=>item.entity_id===file.id) && <span className="hint">An acknowledgement arrived. Confirm filing.</span>}</li>)}</ul></section> : null;
   }
   const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations}]=await Promise.all([
-    supabase.from("datasets").select("id,form_code,period_key,data").eq("firm_id",membership.firmId).eq("client_id",client).eq("form_code","GSTR1").order("period_key",{ascending:false}).limit(100),
-    supabase.from("client_registrations").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","gstin"),
-    supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",client).eq("document_type","Acknowledgement").eq("status","filed").limit(100),
+    supabase.from("datasets").select("id,form_code,period_key,data").eq("firm_id",membership.firmId).eq("client_id",client).in("form_code",["GSTR1","ITR"]).order("period_key",{ascending:false}).limit(100),
+    supabase.from("client_registrations").select("id,kind").eq("firm_id",membership.firmId).eq("client_id",client).in("kind",["gstin","pan"]),
+    supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",client).in("document_type",["Acknowledgement","ITR-V"]).eq("status","filed").limit(100),
     supabase.from("requests").select("entity_id,details").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","form_confirmation").eq("status","pending"),
   ]);
-  const sourceIds=[...new Set(rows?.map(row=>draftSchema.parse(row.data).lines[0].source.document))];
+  const sourceIds=[...new Set(rows?.map(row=>draftSchema.parse(row.data).lines[0].source.document).filter((id):id is string=>!!id))];
   const {data:sourceNames}=sourceIds.length ? await supabase.from("documents").select("id,name").eq("firm_id",membership.firmId).eq("client_id",client).in("id",sourceIds) : {data:null};
   const canPrepare=!membership.viewOnlyUntil && (membership.may("edit_figures", client) || !!await grantFor(membership.firmId,userId,"edit_figures",client));
-  const periods=[...new Set(rows?.map(row=>row.period_key))];
+  const work=[...new Set(rows?.flatMap(row=>row.form_code==="ITR" ? (draftSchema.parse(row.data).target ? [draftSchema.parse(row.data).target!.form] : ["ITR1","ITR4"]).map(form=>`${form}:${row.period_key}`) : [`${row.form_code}:${row.period_key}`]))];
   return <section className="panel" aria-labelledby="prepared-title"><h2 id="prepared-title">Prepared forms</h2>
     <p className="hint">Check every figure first. Your firm files the approved file on the portal with its own code or signature.</p>
     {message && <p className="alert" role="status">{message==="edited" ? "Choose the filled official workbook. Its headings, supported cells and figures must pass the checks, and you need permission to edit figures." : message==="ack" ? "Add the acknowledgement or its number for the latest approved form. Check that the drive is connected." : message==="approval" ? "Another person must approve the latest checked figures. A rejection needs a reason." : "Check the figures, permission, drive and official form for this month, then try again."}</p>}
@@ -62,11 +63,21 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
           <button className="b b-secondary b-small">Mark filed</button>
         </form></details>}
         {active && canPrepare && <details><summary>File corrected outside InboxCA</summary><form action={addEditedForm} className="fields">
-          <input type="hidden" name="document" value={file.id}/><div><label htmlFor={`edited-${file.id}`}>Filled official workbook</label><input id={`edited-${file.id}`} name="edited_file" type="file" accept=".xlsx" required/></div>
+          <input type="hidden" name="document" value={file.id}/><div><label htmlFor={`edited-${file.id}`}>{meta.form.startsWith("ITR") ? "Official return file" : "Filled official workbook"}</label><input id={`edited-${file.id}`} name="edited_file" type="file" accept={meta.form.startsWith("ITR") ? ".json" : ".xlsx"} required/></div>
           <p className="hint">Prefer correcting the source figures. An uploaded correction is a new version, checked against the official form. Its figures must be checked again.</p><button className="b b-secondary b-small">Add corrected version</button>
         </form></details>}
       </div></li>;
     })}</ul>}
-    {!!rows?.length && <><h3>Prepare from checked figures</h3>{registrations?.length!==1 ? <p className="hint">A single GST number is needed before these registers can be used together.</p> : canPrepare ? periods.map(period=>{const previous=forms?.find(file=>file.period_key===period && latest.has(file.id)),preferred=previous ? new Set(preparedSchema.parse(previous.prepared).sources.map(source=>source.id)) : null;return <form action={prepareForm} className="fields" key={period}><input type="hidden" name="client" value={client}/><input type="hidden" name="registration" value={registrations[0].id}/><input type="hidden" name="period" value={period}/><fieldset><legend>{formName("GSTR1")} {periodName(period)}</legend>{rows.filter(row=>row.period_key===period).map(row=>{const data=draftSchema.parse(row.data),ready=data.lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready && (!preferred || preferred.has(row.id))} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Source file"}</Link>, {data.lines.length} figures{ready ? ", checked" : ", check these first"}</label>;})}</fieldset><details><summary>Choose a different official version</summary><label htmlFor={`version-${period}`}>Version, if your team needs another one</label><input id={`version-${period}`} name="version" maxLength={20}/><label htmlFor={`choice-${period}`}>Reason</label><select id={`choice-${period}`} name="reason"><option value="">Choose</option><option value="amendment">Earlier work being corrected</option><option value="software">Filing software needs the earlier version</option></select></details><button className="b b-primary">Prepare {periodName(period)}</button></form>;}) : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-secondary">Ask to prepare forms</button></form>}</>}
+    {!!rows?.length && <><h3>Prepare from checked figures</h3>{canPrepare ? work.map(key=>{
+      const [form,period]=key.split(":"),itr=form.startsWith("ITR"),numbers=registrations?.filter(row=>row.kind===(itr ? "pan" : "gstin")),label=itr ? itrYear(period) : periodName(period);
+      if(numbers?.length!==1) return <p className="hint" key={key}>A single {itr ? "PAN" : "GST number"} is needed before preparing {formName(form)}.</p>;
+      const sources=rows.filter(row=>row.period_key===period && row.form_code===(itr ? "ITR" : form) && (!itr || !draftSchema.parse(row.data).target || draftSchema.parse(row.data).target!.form===form));
+      return <form action={prepareForm} className="fields" key={key}><input type="hidden" name="client" value={client}/><input type="hidden" name="registration" value={numbers[0].id}/><input type="hidden" name="period" value={period}/><input type="hidden" name="form" value={form}/>
+        <fieldset><legend>{formName(form)} {label}</legend>{sources.map(row=>{const data=draftSchema.parse(row.data),ready=data.lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Entered figures"}</Link>, {data.lines.length} figures{ready ? ", checked" : ", check these first"}</label>;})}</fieldset>
+        {itr && <p className="hint">ITR filing files are not available yet. Software registration and the remaining official checks still need verification.</p>}
+        <details><summary>Choose a different official version</summary><label htmlFor={`version-${key}`}>Version, if your team needs another one</label><input id={`version-${key}`} name="version" maxLength={20}/><label htmlFor={`choice-${key}`}>Reason</label><select id={`choice-${key}`} name="reason"><option value="">Choose</option><option value="amendment">Earlier work being corrected</option><option value="software">Filing software needs the earlier version</option></select></details><button className="b b-primary">Prepare {label}</button>
+      </form>;
+    }) : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-secondary">Ask to prepare forms</button></form>}</>}
+
   </section>;
 }

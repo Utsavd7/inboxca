@@ -3,9 +3,11 @@ import type { Json } from "@/src/db/types";
 import { serverCrypto } from "./crypto";
 import { supabaseAdmin } from "./supabase";
 
-const source = z.object({document:z.uuid(),sha256:z.string().regex(/^[a-f0-9]{64}$/),page:z.number().int().min(1).max(30),sheet:z.number().int().min(1).max(100).optional(),cell:z.string().regex(/^[A-Z]([1-9][0-9]{0,2}|100[0-4])$/).optional(),path:z.string().startsWith("/").max(256).optional(),reader:z.string().regex(/^gstr2b-v4\.[45]$/).optional()}).refine((s)=>!!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-Z]/,""))/40)));
+const source = z.object({document:z.uuid().optional(),sha256:z.string().regex(/^[a-f0-9]{64}$/).optional(),page:z.number().int().min(1).max(30).optional(),sheet:z.number().int().min(1).max(100).optional(),cell:z.string().regex(/^[A-Z]([1-9][0-9]{0,2}|100[0-4])$/).optional(),path:z.string().startsWith("/").max(256).optional(),reader:z.string().regex(/^gstr2b-v4\.[45]$/).optional(),entered_by:z.uuid().optional(),entered_at:z.iso.datetime().optional()}).refine(s=>s.entered_by ? !!s.entered_at && !s.document && !s.sha256 && !s.page && !s.sheet && !s.cell && !s.path && !s.reader : !s.entered_at && !!s.document && !!s.sha256 && !!s.page && !!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-Z]/,""))/40)));
+
 export const draftSchema = z.object({
   lines:z.array(z.object({id:z.uuid(),field:z.string().regex(/^[a-z][a-z0-9_.]{0,99}$/),value_enc:z.string().min(20).max(20000),source,state:z.enum(["pending","confirmed","rejected"]),by:z.uuid().optional(),at:z.iso.datetime().optional()}).refine((line)=>line.state==="pending" || !!line.by && !!line.at)).min(1).max(10000),
+  target:z.object({form:z.enum(["ITR1","ITR4"]),version:z.string().regex(/^\d+(\.\d+){0,3}$/)}).optional(),
   checks:z.array(z.discriminatedUnion("kind",[
     z.object({kind:z.literal("sum"),parts:z.array(z.uuid()).min(1).max(10000),total:z.uuid()}),
     z.object({kind:z.literal("tax"),base:z.uuid(),rate:z.uuid(),total:z.uuid()}),
@@ -83,18 +85,20 @@ export async function saveDraft(row:{id:string;firm_id:string;client_id:string;f
 }
 
 export async function verifySources(firm:string,client:string,draft:Draft) {
-  const ids=[...new Set(draft.lines.map((line)=>line.source.document))];
+  const documents=draft.lines.filter(line=>line.source.document);
+  const ids=[...new Set(documents.map(line=>line.source.document!))];
+  if(!ids.length) return;
   if(ids.length>100) throw new Error("Split these source files into smaller drafts.");
   const {data,error}=await supabaseAdmin().from("documents").select("id,name,sha256").eq("firm_id",firm).eq("client_id",client).in("status",["filed","to_check"]).in("id",ids);
-  if(error || data?.length!==ids.length || data.some((doc)=>! /\.(pdf|xlsx|xls|csv|json)$/i.test(doc.name)) || draft.lines.some((line)=>data.find((doc)=>doc.id===line.source.document)?.sha256!==line.source.sha256)) throw new Error("A source file is not available.");
+  if(error || data?.length!==ids.length || data.some((doc)=>! /\.(pdf|xlsx|xls|csv|json)$/i.test(doc.name)) || documents.some((line)=>data.find((doc)=>doc.id===line.source.document)?.sha256!==line.source.sha256)) throw new Error("A source file is not available.");
 }
 
 // Called by the document jobs, never with email text. Source ids are checked before saving.
-export async function createDraft(input:{id:string;firm_id:string;client_id:string;form_code:string;period_key:string;lines:(Figure & {id:string;field:string;source:Draft["lines"][number]["source"]})[];checks:Draft["checks"]},person:string|null,permission:string|null=null) {
+export async function createDraft(input:{id:string;firm_id:string;client_id:string;form_code:string;period_key:string;lines:(Figure & {id:string;field:string;source:Draft["lines"][number]["source"]})[];checks:Draft["checks"];target?:Draft["target"]},person:string|null,permission:string|null=null) {
   const crypto=serverCrypto(),lines:Draft["lines"]=[];
   for(const line of input.lines) {
     checkValue(line);
     lines.push({id:line.id,field:line.field,value_enc:await crypto.encrypt(input.firm_id,place(input.id,line.id),JSON.stringify({label:line.label,value:line.value,kind:line.kind})),source:line.source,state:"pending"});
   }
-  return saveDraft({...input,revision:0},{lines,checks:input.checks},person,"dataset.created",{},permission);
+  return saveDraft({...input,revision:0},{lines,checks:input.checks,...(input.target && {target:input.target})},person,"dataset.created",{},permission);
 }

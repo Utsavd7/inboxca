@@ -35,3 +35,14 @@ it("keeps figure changes off by default and rejects invalid source coordinates",
   const bad=structuredClone(draft);bad.lines[0].source={...source,page:0};
   expect(draftSchema.safeParse(bad).success).toBe(false);
 });
+
+it("keeps typed figures pending until checked and requires the person and time of entry",async()=>{
+  const typed:Draft={lines:[{...draft.lines[0],source:{entered_by:randomUUID(),entered_at:"2026-10-24T05:00:00.000Z"}}],checks:[]};
+  mock.decrypt.mockResolvedValue(JSON.stringify({label:"Entered salary",value:"100",kind:"number"}));
+  expect(draftSchema.safeParse(typed).success).toBe(true);
+  await expect(confirmedFigures("firm","draft",typed)).rejects.toThrow("Every figure");
+  typed.lines[0].state="confirmed";typed.lines[0].by=randomUUID();typed.lines[0].at="2026-10-24T05:01:00.000Z";
+  expect((await confirmedFigures("firm","draft",typed)).get("figure0")?.value).toBe("100");
+  delete typed.lines[0].source.entered_at;expect(draftSchema.safeParse(typed).success).toBe(false);
+  typed.lines[0].source={...source,entered_by:randomUUID(),entered_at:"2026-10-24T05:00:00.000Z"};expect(draftSchema.safeParse(typed).success).toBe(false);
+});

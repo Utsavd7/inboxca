@@ -8,6 +8,7 @@ import { currentWriter } from "@/src/lib/member";
 import { serverCrypto } from "@/src/lib/crypto";
 import { grantFor } from "@/src/lib/permission-grants";
 import { checkFigures, draftSchema, checkValue, openFigures, place, saveDraft } from "@/src/lib/datasets";
+import {checkItr} from "@/src/lib/itr";
 
 export async function saveFigureEdit(form:FormData) {
   const {supabase,userId,membership}=await currentWriter();
@@ -20,8 +21,10 @@ export async function saveFigureEdit(form:FormData) {
   if(!row || row.revision!==revision) return false;
   const source=draftSchema.parse(row.data).lines.find(item=>item.id===line);
   if(!source) return false;
-  const {data:document}=await supabase.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",source.source.document).eq("sha256",source.source.sha256).neq("status","deleted").maybeSingle();
-  if(!document) return false;
+  if(source.source.document) {
+    const {data:document}=await supabase.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",source.source.document).eq("sha256",source.source.sha256!).neq("status","deleted").maybeSingle();
+    if(!document) return false;
+  }
   const value_enc=await serverCrypto().encrypt(membership.firmId,`${place(draft,line)}/edit/${userId}`,JSON.stringify({value,reason}));
   const {data,error}=await supabaseAdmin().rpc("save_figure_edit",{draft,firm:membership.firmId,client,person:userId,line,base:source.value_enc,value_enc});
   return !error && data===true;
@@ -40,8 +43,10 @@ export async function reviewFigure(form:FormData) {
   if(row.revision!==revision) redirect(`${back}&check=stale`);
   const data=draftSchema.parse(row.data),line=data.lines.find((item)=>item.id===lineId);
   if(!line) redirect(back);
-  const {data:document}=await supabase.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",line.source.document).neq("status","deleted").maybeSingle();
-  if(!document) redirect(`${back}&check=source`);
+  if(line.source.document) {
+    const {data:document}=await supabase.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",line.source.document).neq("status","deleted").maybeSingle();
+    if(!document) redirect(`${back}&check=source`);
+  }
   const crypto=serverCrypto();
   const figures=await openFigures(membership.firmId,id,data);
   let permission:string|null=null;
@@ -61,6 +66,10 @@ export async function reviewFigure(form:FormData) {
     if(line.state===intent) redirect(back);
     line.state=intent;line.by=userId;line.at=new Date().toISOString();
     if(intent==="confirmed" && checkFigures(data,figures).length) redirect(`${back}&check=totals`);
+    if(intent==="confirmed" && data.target) {
+      const issues=await checkItr(client,row.period_key,id,revision,data,figures).catch(()=>["The figures could not be checked."]);
+      if(issues.length) redirect(`${back}&check=totals`);
+    }
   }
   const saved=await saveDraft(row,data,userId,intent==="edit" ? "dataset.changed" : "dataset.checked",audit,permission);
   if(!saved) redirect(`${back}&check=stale`);

@@ -165,8 +165,8 @@ export default async function Client({ params, searchParams }: { params: Promise
     ["files", "Files", documents.length],
     ["due", "Due dates", taskCount ?? 0],
     ["notices", "Notices", noticeCount ?? 0],
-    ...(drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name)) ? [["extraction", "Extraction", drafts ?? undefined] as [string,string,number]] : []),
-    ...(draftForms?.some(row=>row.form_code==="GSTR1") || outputs ? [["outputs","Outputs",outputs ?? 0] as [string,string,number]] : []),
+    ...(drafts || client.client_registrations.some(row=>row.kind==="pan") || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name)) ? [["extraction", "Extraction", drafts ?? undefined] as [string,string,number]] : []),
+    ...(draftForms?.some(row=>["GSTR1","ITR"].includes(row.form_code)) || outputs ? [["outputs","Outputs",outputs ?? 0] as [string,string,number]] : []),
     ["activity", "Activity"],
     ["contacts", "Contacts", contacts.length],
     ["team", "Team", client.client_assignments.length],
@@ -726,7 +726,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               ) : <p className="hint">No changes recorded yet.</p>}
             </section>
           )}
-          {tab === "extraction" && <><PortalInput clientId={id} message={portal}/><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
+          {tab === "extraction" && <>{client.client_registrations.some(row=>row.kind==="pan") && <p><Link href={`/app/clients/${id}/itr`}>Enter income tax figures</Link></p>}<PortalInput clientId={id} message={portal}/><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
           {tab === "outputs" && <PreparedForms client={id} message={formMessage}/>}
           {tab === "contacts" && (
             <section className="panel" aria-labelledby="contacts">
