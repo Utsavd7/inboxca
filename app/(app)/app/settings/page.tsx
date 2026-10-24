@@ -47,7 +47,7 @@ export default async function Settings({
       <PageHead title="Settings" sub="Only you, the owner, see this page." />
       <section className="panel" aria-labelledby="data">
         <h2 id="data">Your firm is closing</h2>
-        <p className="hint">InboxCA deletes everything it keeps for your firm on {longDate(new Date(Date.parse(closed.at) + 30 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }))}. Download your data before then. Files in your firm&apos;s drive stay where they are.</p>
+        <p className="hint">InboxCA deletes your firm&apos;s data on {longDate(new Date(Date.parse(closed.at) + 30 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }))}. Download your data before then. The activity log is kept one more year, as Indian rules require, then deleted. Files in your firm&apos;s drive stay where they are.</p>
         {download}
       </section>
     </>
@@ -538,7 +538,7 @@ export default async function Settings({
           </section>
           <section className="panel" aria-labelledby="close">
             <h2 id="close">Close the firm</h2>
-            <p className="hint">Everyone is signed out, your team can no longer sign in, and the firm email and drive are disconnected. For 30 days you can still sign in and download your data. Then InboxCA deletes everything it keeps for your firm. Files in your drive are not touched.</p>
+            <p className="hint">Everyone is signed out, your team can no longer sign in, and the firm email and drive are disconnected. For 30 days you can still sign in and download your data. Then InboxCA deletes your firm&apos;s data; the activity log is kept one more year, as Indian rules require. Files in your drive are not touched.</p>
             <details className="reveal" open={error === "close_name"}>
               <summary>Close the firm</summary>
               <form action={closeFirm} className="fields">

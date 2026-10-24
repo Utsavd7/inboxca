@@ -671,7 +671,7 @@ export async function disconnectDrive() {
 }
 
 // Closing the firm (PLAN.md 5.5.1): the owner types the firm's name, which the database
-// checks again. Everything InboxCA keeps for the firm is deleted 30 days later.
+// checks again. Its data is deleted 30 days later and its log a year after that.
 export async function closeFirm(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");

@@ -60,13 +60,24 @@ $$;
 revoke all on function public.close_firm(uuid, text) from public, anon;
 grant execute on function public.close_firm(uuid, text) to authenticated;
 
--- Thirty days after closing: the firm and everything under it, its log included, and the
--- logins of its people who belong to no other firm. Server only.
+-- Thirty days after closing: everything InboxCA keeps for the firm, and the logins of its
+-- people who belong to no other firm. The firm's activity log stays a year longer (logs are
+-- kept at least 12 months, PLAN.md 8.1), then a second run removes it with the firm itself.
+-- Server only; each run checks its own dates.
 create function public.delete_firm(target_firm uuid) returns boolean
 language plpgsql volatile security definer set search_path = '' as $$
 declare
   people uuid[];
+  deleted_on date := (select (settings ->> 'data_deleted_on')::date from public.firms where id = target_firm and status = 'closed');
+  part regclass;
 begin
+  if deleted_on is not null then
+    if deleted_on > current_date - 365 then return false; end if;
+    perform set_config('app.log_purge', 'on', true);
+    delete from public.firms where id = target_firm;
+    perform set_config('app.log_purge', 'off', true);
+    return true;
+  end if;
   if not exists (select 1 from public.firms where id = target_firm and status = 'closed')
     or not exists (select 1 from public.activity_log where firm_id = target_firm and action = 'firm.closed'
       and at <= now() - interval '30 days') then
@@ -75,9 +86,16 @@ begin
   select array_agg(m.user_id) into people from public.firm_members m
   where m.firm_id = target_firm
     and not exists (select 1 from public.firm_members o where o.user_id = m.user_id and o.firm_id <> target_firm);
-  perform set_config('app.log_purge', 'on', true);
-  delete from public.firms where id = target_firm;
-  perform set_config('app.log_purge', 'off', true);
+  -- Every table that hangs off the firm, except the log; their own children go by cascade.
+  for part in select distinct c.conrelid::regclass from pg_catalog.pg_constraint c
+    where c.contype = 'f' and c.confrelid = 'public.firms'::regclass and c.conrelid::regclass::text not like '%activity_log%'
+  loop
+    execute format('delete from %s where firm_id = $1', part) using target_firm;
+  end loop;
+  update public.firms set settings = jsonb_build_object('data_deleted_on', current_date) where id = target_firm;
+  insert into public.activity_log (firm_id, action, entity_type, entity_id) values (target_firm, 'firm.data_deleted', 'firm', target_firm);
+  insert into public.jobs (kind, entity_type, entity_id, run_at, idempotency_key)
+    values ('delete_firm', 'firm', target_firm, now() + interval '366 days', 'delete_firm_log:' || target_firm);
   delete from auth.users where id = any(people);
   return true;
 end;
