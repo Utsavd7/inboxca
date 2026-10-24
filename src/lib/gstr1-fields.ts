@@ -8,6 +8,7 @@ export const salesSections = {
   exp: {name:"Exports", headings:["Export Type", "Invoice Number", "Invoice date", "Invoice Value", "Port Code", "Shipping Bill Number", "Shipping Bill Date", "Rate", "Taxable Value", "Cess Amount"]},
   at: {name:"Advances received", headings:["Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Received", "Cess Amount"]},
   atadj: {name:"Advances adjusted", headings:["Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Adjusted", "Cess Amount"]},
+  exemp: {name:"Nil rated, exempt and non-GST supplies", headings:["Description", "Nil Rated Supplies", "Exempted(other than nil rated/non GST supply)", "Non-GST Supplies"]},
   docs: {name:"Documents issued", headings:["Nature of Document", "Sr. No. From", "Sr. No. To", "Total Number", "Cancelled"]},
   hsn_b2b: {name:"HSN for B2B", headings:["HSN", "Description", "UQC", "Total Quantity", "Total Value", "Rate", "Taxable Value", "Integrated Tax Amount", "Central Tax Amount", "State/UT Tax Amount", "Cess Amount"]},
   hsn_b2c: {name:"HSN for B2C", headings:["HSN", "Description", "UQC", "Total Quantity", "Total Value", "Rate", "Taxable Value", "Integrated Tax Amount", "Central Tax Amount", "State/UT Tax Amount", "Cess Amount"]},
@@ -16,4 +17,13 @@ export const salesSections = {
 export type SalesSection = keyof typeof salesSections;
 
 // Headings whose cells hold amounts or counts; every other column is text or a date.
-export const numericHeadings = /^(Invoice Value|Note Value|Rate|Taxable Value|Cess Amount|Total Value|Total Quantity|Integrated Tax Amount|Central Tax Amount|State\/UT Tax Amount|Applicable % of Tax Rate|Gross Advance Received|Gross Advance Adjusted|Total Number|Cancelled)$/;
+export const numericHeadings = /^(Invoice Value|Note Value|Rate|Taxable Value|Cess Amount|Total Value|Total Quantity|Integrated Tax Amount|Central Tax Amount|State\/UT Tax Amount|Applicable % of Tax Rate|Gross Advance Received|Gross Advance Adjusted|Total Number|Cancelled|Nil Rated Supplies|Exempted\(other than nil rated\/non GST supply\)|Non-GST Supplies)$/;
+
+// The exemp rows, from the offline tool's official exemp.csv (reference/official/returns-offline),
+// with the schema's supply type for each.
+export const exemptRows: Record<string,string> = {
+  "Inter-State supplies to registered persons":"INTRB2B",
+  "Intra-State supplies to registered persons":"INTRAB2B",
+  "Inter-State supplies to unregistered persons":"INTRB2C",
+  "Intra-State supplies to unregistered persons":"INTRAB2C",
+};

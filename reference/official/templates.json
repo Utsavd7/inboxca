@@ -22,7 +22,8 @@
         "exp": 12,
         "at": 14,
         "atadj": 16,
-        "docs": 20
+        "docs": 20,
+        "exemp": 18
       },
       "validator": {
         "file": "gstn/gstr1-v4.0-request-schema.json",
@@ -54,7 +55,8 @@
         "exp": 12,
         "at": 14,
         "atadj": 16,
-        "docs": 21
+        "docs": 21,
+        "exemp": 18
       },
       "validator": {
         "file": "gstn/gstr1-v5.0-request-schema.json",

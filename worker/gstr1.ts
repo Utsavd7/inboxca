@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
-import {numericHeadings,salesSections,type SalesSection} from "../src/lib/gstr1-fields.ts";
+import {exemptRows,numericHeadings,salesSections,type SalesSection} from "../src/lib/gstr1-fields.ts";
 import {xlsxEntries} from "../src/lib/sheet.ts";
 import type {Figure} from "../src/lib/datasets.ts";
 import {chooseTemplate,type Template} from "../src/lib/templates.ts";
@@ -47,7 +47,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
         checkedSheets.add(section);
       }
       // Mandatory fields in the official Help Instruction and request schemas.
-      const required=({b2b:[0,2,3,4,5,6,8,10,11],cdnr:[0,2,3,4,5,6,7,8,10,11],b2cs:[0,1,3,4],b2cl:[0,1,2,3,5,6],cdnur:[0,1,2,3,5,7,8],exp:[0,1,2,3,7,8],at:[0,2,3],atadj:[0,2,3],docs:[0,1,2,3]} as Record<string,number[]>)[section] ?? [0,2,3,5,6];
+      const required=({b2b:[0,2,3,4,5,6,8,10,11],cdnr:[0,2,3,4,5,6,7,8,10,11],b2cs:[0,1,3,4],b2cl:[0,1,2,3,5,6],cdnur:[0,1,2,3,5,7,8],exp:[0,1,2,3,7,8],at:[0,2,3],atadj:[0,2,3],docs:[0,1,2,3],exemp:[0,1,2,3]} as Record<string,number[]>)[section] ?? [0,2,3,5,6];
       if(required.some((column)=>!row.get(column)?.value)) throw new Error("A required register field is missing");
       const path=`xl/worksheets/sheet${sheet}.xml`,at=next.get(section) ?? 5;next.set(section,at+1);
       if(at>1004) throw new Error("Use at most 1,000 rows per section");
@@ -119,6 +119,10 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
         const entry={pos:get(0).slice(0,2),sply_ty:gstin.slice(0,2)===get(0).slice(0,2) ? "INTRA" : "INTER",itms:[{rt:num(2),ad_amt:num(3),...optional([["csamt",4]])}]};
         const key=section==="at" ? "at" : "txpd";
         data[key]=v5 ? {[`${key}_b2c`]:[entry]} : [entry];
+      } else if(section==="exemp") {
+        if(!Object.hasOwn(exemptRows,get(0))) throw new Error("Check Description against the official choices");
+        if([1,2,3].some((column)=>num(column)<0)) throw new Error("Nil rated, exempt and non-GST amounts cannot be negative");
+        data.nil={inv:[{sply_ty:exemptRows[get(0)],nil_amt:num(1),expt_amt:num(2),ngsup_amt:num(3)}]};
       } else if(section==="docs") {
         // doc_num is the document's place in the official Nature of Document list (1 to 12).
         const position=(lists.get("DOCUMENT") ?? []).indexOf(get(0))+1;
@@ -131,7 +135,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
       else data.hsn={[section==="hsn" ? "data" : section]:[{num:at-4,...(get(0) ? {hsn_sc:get(0)} : {}),...(get(1) ? {desc:get(1)} : {}),uqc:get(2).split("-")[0],qty:num(3),rt:num(5),txval:num(6),...optional([["iamt",7],["camt",8],["samt",9],["csamt",10]])}]};
       // The workbook ignores HSN Total Value from May 2021; only taxable value is imported.
       if(!["b2b","cdnr","b2cl","cdnur","exp"].includes(section)) {
-        const identity=section==="b2cs" ? `${section}:${get(0)}:${get(1)}:${get(2)}:${get(3)}:${get(6)}` : section==="at" || section==="atadj" ? `${section}:${get(0)}:${get(1)}:${get(2)}` : section==="docs" ? `${section}:${get(0)}:${get(1)}` : `${section}:${get(0)}:${get(2)}:${get(5)}`;
+        const identity=section==="b2cs" ? `${section}:${get(0)}:${get(1)}:${get(2)}:${get(3)}:${get(6)}` : section==="at" || section==="atadj" ? `${section}:${get(0)}:${get(1)}:${get(2)}` : section==="docs" ? `${section}:${get(0)}:${get(1)}` : section==="exemp" ? `${section}:${get(0)}` : `${section}:${get(0)}:${get(2)}:${get(5)}`;
         if(summaries.has(identity)) throw new Error("Combine repeated summary rows in the register first");
         summaries.add(identity);
       }

@@ -86,11 +86,13 @@ it("fills large B2C sales, unregistered notes, exports, advances and documents i
       rows("at",["27-Maharashtra","","18","50000","0"]),
       rows("atadj",["27-Maharashtra","","18","20000",""]),
       rows("docs",["Invoices for outward supply","INV/1","INV/250","250","3"]),
+      rows("exemp",["Intra-State supplies to unregistered persons","1200","0","350.50"]),
     ];
     const files=xlsxEntries(gstr1Workbook(template,period,inventedGstin(),filled));
     for(const [section,text] of [["b2cl","INV/7"],["cdnur","CN/7"],["exp","EXP/1"],["docs","INV/250"]] as const)
       expect(files.get(`xl/worksheets/sheet${template.mappings.sheets![section]}.xml`)!().toString()).toContain(`>${text}<`);
     expect(files.get(`xl/worksheets/sheet${template.mappings.sheets!.at}.xml`)!().toString()).toContain("<v>50000</v>");
+    expect(files.get(`xl/worksheets/sheet${template.mappings.sheets!.exemp}.xml`)!().toString()).toContain("<v>350.50</v>");
   }
 },30_000);
 
@@ -105,6 +107,8 @@ it("refuses rows the official rules put elsewhere or leave out",()=>{
     ["docs",["Invoices",  "INV/1","INV/250","250","3"],"official choices"],
     ["docs",["Invoices for outward supply","INV/1","INV/250","2.5","0"],"whole number"],
     ["docs",["Invoices for outward supply","INV/1","INV/250","2","3"],"cancelled"],
+    ["exemp",["Supplies to registered persons","1","0","0"],"official choices"],
+    ["exemp",["Inter-State supplies to registered persons","1","0",""],"required"],
   ];
   for(const [section,values,message] of refused) expect(()=>gstr1Workbook(template,"2026-09",gstin,[rows(section,values)])).toThrow(message);
   // Before August 2024 the large B2C limit was Rs 2.5 lakh.
