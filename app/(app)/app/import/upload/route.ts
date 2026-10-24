@@ -7,10 +7,13 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 // Incoming, for the test drive only, which is on this server; a real drive takes the file
 // from the browser itself, through the drive's own one-time link.
 export async function POST(request: Request) {
+  const origin = new URL(process.env.APP_BASE_URL ?? request.url).origin;
+  if (request.headers.get("origin") !== origin) return new Response(null, { status: 403 });
   const { membership } = await currentWriter();
   if (membership?.role !== "owner" || Number(request.headers.get("content-length")) > 150 * 1024 * 1024) return new Response(null, { status: 403 });
   const relative = incomingPath(new URL(request.url).searchParams.get("path") ?? "");
   const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.length > 150 * 1024 * 1024) return new Response(null, { status: 403 });
   if (!relative) return new Response(null, { status: 204 });
   const { data: account } = await supabaseAdmin().from("connected_accounts").select("provider").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
   if (account?.provider !== "local") return new Response(null, { status: 404 });
