@@ -630,7 +630,7 @@ isOneToOne: false
                            },
 "closed_firms":
 { Args: Record<PropertyKey, never>; Returns: {
-              "firm_name": string,"hours": Json,"reason": string
+              "away": boolean,"firm_name": string,"hours": Json,"reason": string
             }[]
                            },
 "connect_drive":
@@ -748,7 +748,7 @@ isOneToOne: false
 { Args: { "at"?: string,"settings": Json }; Returns: string
                            },
 "office_control":
-{ Args: { "actor": string,"connection"?: Json,"decision": string,"deputies"?: (string)[],"request_id"?: string,"target_firm": string }; Returns: undefined
+{ Args: { "actor": string,"co_admin"?: string,"connection"?: Json,"decision": string,"deputies"?: (string)[],"request_id"?: string,"target_firm": string }; Returns: undefined
                            },
 "office_housekeeping":
 { Args: { "at"?: string,"target_firm": string }; Returns: undefined

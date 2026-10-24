@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { todayInIndia } from "./calendar";
 import { supabaseAdmin } from "./supabase";
 
@@ -30,6 +30,18 @@ export function seenAt(userId: string, value: string | undefined) {
   const expected = sign(userId, Number(at));
   return mac.length === expected.length && timingSafeEqual(Buffer.from(mac), Buffer.from(expected)) ? Number(at) : 0;
 }
+
+// The owner's recovery codes (PLAN.md 5.17.3, 5.17.4 #23): 10 codes of 10 letters and
+// digits. Only a short keyed digest of each is kept, in the person's app_metadata, which
+// only the server writes and which travels in their sign in token.
+const RECOVERY_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const newRecoveryCodes = () =>
+  Array.from({ length: 10 }, () => Array.from({ length: 10 }, () => RECOVERY_LETTERS[randomInt(RECOVERY_LETTERS.length)]).join(""));
+export const recoveryDigest = (userId: string, code: string) =>
+  createHmac("sha256", createHmac("sha256", process.env.SUPABASE_SECRET_KEY ?? "").update("recovery code").digest())
+    .update(`${userId}:${code.toUpperCase().replace(/[^A-Z0-9]/g, "")}`)
+    .digest("base64url")
+    .slice(0, 22);
 
 // The third time in a day one person does something worth a look (a screen capture, a sign
 // in that ends their other session) tells the owner and partners on Home, for that day.

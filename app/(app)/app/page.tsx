@@ -461,7 +461,7 @@ function SeeAll({ href, children }: { href: string; children: React.ReactNode })
 }
 
 // Someone signed in who is not in a firm yet: their invites, or the firm being closed.
-function NoFirm({ closed, invites, deviceStatus, connectionWaiting, pcKey }: { closed: { firm_name: string; hours: unknown; reason: string } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[]; deviceStatus: "waiting" | "refused" | null; connectionWaiting: boolean; pcKey: "needed" | "ready" | null }) {
+function NoFirm({ closed, invites, deviceStatus, connectionWaiting, pcKey }: { closed: { firm_name: string; hours: unknown; reason: string; away: boolean } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[]; deviceStatus: "waiting" | "refused" | null; connectionWaiting: boolean; pcKey: "needed" | "ready" | null }) {
   if (connectionWaiting)
     return (
       <>
@@ -483,10 +483,12 @@ function NoFirm({ closed, invites, deviceStatus, connectionWaiting, pcKey }: { c
           title="Use InboxCA from your office."
           sub={`${closed.firm_name} lets staff use InboxCA only in the office, on the office internet connection. If you are in the office now, ask the owner to confirm this connection.`}
         />
-        <form action={askAwayDevice} className="form-row">
-          <button className="b b-secondary">Ask to use this device away from the office</button>
-          <span className="hint">The owner may allow it for some days, to view only.</span>
-        </form>
+        {closed.away && (
+          <form action={askAwayDevice} className="form-row">
+            <button className="b b-secondary">Ask to use this device away from the office</button>
+            <span className="hint">The owner may allow it for some days, to view only.</span>
+          </form>
+        )}
       </>
     );
   return (

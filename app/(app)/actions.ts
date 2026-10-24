@@ -17,11 +17,12 @@ import { documentTypes, folderFor, periodChoices, periodName, placeUnderFreeName
 import { DELETED_FOLDER, folderOrders, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
-import { DAYS, laterBy, type Hours, type SpecialHours } from "@/src/lib/hours";
+import { DAYS, laterBy, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { activeClients, planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
-import { askAway, officeApprover, officePc, requestLine } from "@/src/lib/office";
+import { askAway, firmAdmin, officeApprover, officePc, requestLine, type Office } from "@/src/lib/office";
+import { presets, type Preset } from "@/src/lib/presets";
 import { CHALLENGE_COOKIE, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { may, mayDecide, rightWords, routeOf, switchable, type Permissions, type Right, type Scope as PermissionScope, type Standing } from "@/src/lib/rights";
@@ -131,8 +132,8 @@ export async function joinFirm(form: FormData) {
 
 // Settings → Office hours. The database logs every change to the firm's settings.
 export async function saveHours(form: FormData) {
-  const { supabase, membership } = await currentWriter();
-  if (membership?.role !== "owner") redirect("/app");
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const hours: Hours = {};
   for (const day of DAYS.keys()) {
     if (!form.get(`open-${day}`)) continue;
@@ -148,8 +149,8 @@ export async function saveHours(form: FormData) {
 }
 
 export async function changeHoliday(form: FormData) {
-  const { supabase, membership } = await currentWriter();
-  if (membership?.role !== "owner") redirect("/app");
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const date = String(form.get("date") ?? "");
   if (!/^\d{4}-\d\d-\d\d$/.test(date)) redirect("/app/settings");
   const current = (membership.settings.holidays as string[] | undefined) ?? [];
@@ -161,8 +162,8 @@ export async function changeHoliday(form: FormData) {
 
 // Settings → Signing in: the idle and session limits (0 is off).
 export async function saveLimits(form: FormData) {
-  const { supabase, membership } = await currentWriter();
-  if (membership?.role !== "owner") redirect("/app");
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const whole = (name: string, allowed: number[]) => {
     const value = Number(form.get(name));
     return allowed.includes(value) && value ? value : undefined;
@@ -174,6 +175,35 @@ export async function saveLimits(form: FormData) {
   };
   await supabase.from("firms").update({ settings: { ...membership.settings, access } }).eq("id", membership.firmId);
   redirect("/app/settings?saved=limits");
+}
+
+// Settings → Access preset (5.17): turns Office only on or off through the office checks,
+// then sets asking to work away, office hours only and the idle limit.
+export async function choosePreset(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
+  const key = String(form.get("preset") ?? "");
+  if (!Object.hasOwn(presets, key)) redirect("/app/settings#preset");
+  const preset = presets[key as Preset];
+  if (!!(membership.settings.office as Office | undefined)?.on !== preset.office) {
+    const line = requestLine(await headers(), todayInIndia());
+    const { error } = await supabaseAdmin().rpc("office_control", {
+      target_firm: membership.firmId, actor: userId, decision: preset.office ? "on" : "off",
+      ...(preset.office && form.get("here") === "yes" && line && { connection: line }),
+    });
+    if (error) throw new Error(`Office change failed: ${error.code}`);
+  }
+  const { data: firm } = await supabase.from("firms").select("settings").eq("id", membership.firmId).single();
+  const settings = (firm?.settings ?? {}) as Record<string, unknown>;
+  await supabase.from("firms").update({ settings: {
+    ...settings,
+    // Office hours only needs hours: the suggested ones until the owner sets them.
+    hours: (settings.hours ?? SUGGESTED_HOURS) as Hours,
+    office: { ...(settings.office as object), away: preset.away },
+    access: { ...(settings.access as object), hours_only: preset.hours_only, idle_minutes: preset.idle_minutes || undefined },
+  } }).eq("id", membership.firmId);
+  revalidatePath("/app", "layout");
+  redirect("/app/settings?saved=preset#preset");
 }
 
 // The idle timer calls this while the person is active, so the server knows too.
@@ -220,8 +250,8 @@ export async function askMoreTime(form: FormData) {
 
 // Settings → Special hours: a date range with its own times (a tax season, a late evening).
 export async function changeSpecialHours(form: FormData) {
-  const { supabase, membership } = await currentWriter();
-  if (membership?.role !== "owner") redirect("/app");
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const [from, to, open, close] = ["from", "to", "open", "close"].map((name) => String(form.get(name) ?? ""));
   const current = (membership.settings.special_hours as SpecialHours[] | undefined) ?? [];
   let special: SpecialHours[];
@@ -1268,12 +1298,14 @@ export async function setOfficeOnly(form: FormData) {
   if (!officeApprover(membership.role, userId, membership.settings)) await denyApproval(membership.firmId, userId, "office");
   const decision = String(form.get("intent") ?? "");
   const line = requestLine(await headers(), todayInIndia());
-  const deputies = form.getAll("deputy").map(String);
+  // The co-admin is always one of the deputies.
+  const coAdmin = String(form.get("co_admin") ?? "");
+  const deputies = [...new Set([...form.getAll("deputy").map(String), ...(coAdmin ? [coAdmin] : [])])];
   const request = String(form.get("request") ?? "");
   if (decision === "deputies" && deputies.length > 2) redirect("/app/settings?error=deputies#office");
   // The owner's provider gives no fixed connection: stop suggesting it (5.8).
   if (decision === "no_fixed") {
-    if (membership.role !== "owner") redirect("/app");
+    if (!firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
     const office = (membership.settings.office ?? {}) as Record<string, unknown>;
     await (await currentWriter()).supabase.from("firms").update({ settings: { ...membership.settings, office: { ...office, fixed_declined: true } } }).eq("id", membership.firmId);
     await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "office.no_fixed", entity_type: "firm", entity_id: membership.firmId });
@@ -1284,7 +1316,7 @@ export async function setOfficeOnly(form: FormData) {
     target_firm: membership.firmId, actor: userId, decision,
     ...(request && { request_id: request }),
     ...((decision === "here" || decision === "fixed" || decision === "on" && form.get("here") === "yes") && line && { connection: line }),
-    ...(decision === "deputies" && { deputies }),
+    ...(decision === "deputies" && { deputies, ...(coAdmin && { co_admin: coAdmin }) }),
   });
   if (error) throw new Error(`Office approval failed: ${error.code}`);
   revalidatePath("/app", "layout");
@@ -1397,7 +1429,7 @@ export async function decidePermission(form: FormData) {
 // for managers (partners follow managers), or back to the defaults.
 export async function savePermissions(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
-  if (membership?.role !== "owner") redirect("/app");
+  if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const permissions:Permissions={};
   try {if(form.get("intent")!=="reset") for(const column of ["employee","manager"] as const) permissions[column]={...Object.fromEntries(Object.keys(switchable).map(right=>[right,form.get(`${column}:${right}`)==="on"])),scope:await permissionScope(form,`${column}:`,membership.firmId)};}
   catch {redirect("/app/settings?error=permission_scope#permissions");}
@@ -1421,7 +1453,7 @@ async function permissionScope(form:FormData,prefix:string,firm:string) {
 
 export async function allowStanding(form:FormData) {
   const {userId,membership}=await currentWriter();
-  if(membership?.role!=="owner") redirect("/app");
+  if(!membership || !firmAdmin(membership.role,userId,membership.settings)) redirect("/app");
   const person=z.uuid().parse(form.get("person")),right=String(form.get("right") ?? "");
   if(!Object.hasOwn(switchable,right) || person===userId) redirect("/app/settings#permissions");
   const admin=supabaseAdmin(),{data:member}=await admin.from("firm_members").select("access,role").eq("firm_id",membership.firmId).eq("user_id",person).eq("status","active").maybeSingle();
@@ -1439,7 +1471,7 @@ export async function allowStanding(form:FormData) {
 // Settings → Permissions: the owner withdraws what one person was always allowed.
 export async function withdrawAlways(form: FormData) {
   const { userId, membership } = await currentWriter();
-  if (membership?.role !== "owner") redirect("/app");
+  if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const person = String(form.get("person") ?? "");
   const admin = supabaseAdmin();
   const { data: member } = await admin.from("firm_members").select("access").eq("firm_id", membership.firmId).eq("user_id", person).maybeSingle();

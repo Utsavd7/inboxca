@@ -1,12 +1,13 @@
 "use client";
 import { useActionState, useEffect, useState } from "react";
-import { startEnrollment, verifyTwoStep, type Enrollment, type StepState } from "../../actions";
+import { recoverTwoStep, startEnrollment, verifyTwoStep, type Enrollment, type StepState } from "../../actions";
 
 // With factorId: the person already has an authenticator app; ask for its code.
 // Without: show the QR code to scan once, then ask for the first code.
 export function TwoStepForm({ factorId }: { factorId?: string }) {
   const [setup, setSetup] = useState<Enrollment | null>(null);
   const [state, verify, verifying] = useActionState(verifyTwoStep, {} as StepState);
+  const [lost, recover, recovering] = useActionState(recoverTwoStep, {} as StepState);
 
   useEffect(() => {
     if (!factorId) startEnrollment().then(setSetup);
@@ -22,6 +23,7 @@ export function TwoStepForm({ factorId }: { factorId?: string }) {
   const id = factorId ?? (setup as Exclude<Enrollment, { error: string }>).factorId;
 
   return (
+    <>
     <form action={verify} className="auth-form" noValidate>
       {setup && !("error" in setup) ? (
         <>
@@ -60,5 +62,17 @@ export function TwoStepForm({ factorId }: { factorId?: string }) {
         {verifying ? "Checking" : "Continue"}
       </button>
     </form>
+    {factorId && (
+      <details className="auth-small" open={!!lost.error}>
+        <summary>Lost your phone? Use a recovery code</summary>
+        <form action={recover} className="auth-form">
+          <label htmlFor="recovery">Recovery code</label>
+          <input id="recovery" name="recovery" autoComplete="off" className="num" required aria-invalid={!!lost.error} aria-describedby={lost.error ? "recovery-error" : undefined} />
+          {lost.error && <p className="field-error" id="recovery-error" role="alert">{lost.error}</p>}
+          <button className="btn" type="submit" disabled={recovering}>{recovering ? "Checking" : "Use recovery code"}</button>
+        </form>
+      </details>
+    )}
+    </>
   );
 }

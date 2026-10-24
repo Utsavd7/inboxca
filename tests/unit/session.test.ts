@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { accessSetting, seenAt, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
+import { accessSetting, newRecoveryCodes, recoveryDigest, seenAt, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 
 const repeat = vi.hoisted(() => ({ count: 0, upsert: vi.fn() }));
 vi.mock("@/src/lib/supabase", () => ({
@@ -38,4 +38,14 @@ it("alerts on repeated sign ins, renames and captures, not the first two", async
     await tellOwnerOnRepeat("firm", "person", "ravi@firm.test", action, reason);
     expect(repeat.upsert).toHaveBeenCalledWith(expect.objectContaining({ firm_id: "firm", entity_id: "person", reason_code: reason, details: expect.objectContaining({ email: "ravi@firm.test", count: 3 }) }), { onConflict: "kind,entity_type,entity_id" });
   }
+});
+
+// #23: ten different codes, each checked only for its own person, however it is typed.
+it("makes ten recovery codes whose digests fit only their person", () => {
+  const codes = newRecoveryCodes();
+  expect(new Set(codes).size).toBe(10);
+  expect(codes.every((code) => /^[A-Z2-9]{10}$/.test(code))).toBe(true);
+  expect(recoveryDigest("owner", ` ${codes[0].toLowerCase()} `)).toBe(recoveryDigest("owner", codes[0]));
+  expect(recoveryDigest("other", codes[0])).not.toBe(recoveryDigest("owner", codes[0]));
+  expect(recoveryDigest("owner", codes[1])).not.toBe(recoveryDigest("owner", codes[0]));
 });
