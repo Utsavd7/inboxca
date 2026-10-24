@@ -40,7 +40,8 @@ test("services on a client's GSTIN give it its due dates", async () => {
   const gstin = owner.locator("section[aria-labelledby=services]").getByRole("listitem").filter({ hasText: "GSTIN" });
   await gstin.getByLabel("GSTR-1 (monthly)").check();
   await gstin.getByLabel("GSTR-3B (monthly)").check();
-  await gstin.getByRole("button", { name: "Save services" }).click();
+  // Wait for the save: it is what adds the due dates.
+  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), gstin.getByRole("button", { name: "Save services" }).click()]);
   await owner.getByRole("link", { name: /^Due dates/ }).click();
   const due = owner.locator("section[aria-labelledby=due] tbody tr");
   await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");

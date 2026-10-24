@@ -10,7 +10,7 @@ export async function savedSalesMappings(firm:string,client:string) {
   const {data}=await supabaseAdmin().from("clients").select("sales_mapping_enc").eq("firm_id",firm).eq("id",client).single();
   return data?.sales_mapping_enc ? z.array(mappingSchema).max(20).parse(JSON.parse(await serverCrypto().decrypt(firm,`clients/${client}/sales_mapping`,data.sales_mapping_enc))) : [];
 }
-export async function readSales(document:{id:string;firm_id:string;client_id:string;name:string;sha256:string;period_key:string},person:string|null,asked?:SalesMapping,permission:string|null=null) {
+export async function readSales(document:{id:string;firm_id:string;client_id:string;name:string;sha256:string;period_key:string},person:string|null,asked?:SalesMapping,permission:string|null=null,registration?:string) {
   const admin=supabaseAdmin();
   const {data:existing}=await admin.from("datasets").select("id").eq("firm_id",document.firm_id).eq("client_id",document.client_id).eq("id",document.id).maybeSingle();
   if(existing) return existing.id;
@@ -21,7 +21,7 @@ export async function readSales(document:{id:string;firm_id:string;client_id:str
   if(!mapping) return null;
   const values=extractSales(rows,mapping),lines=values.map((value)=>({...value,id:randomUUID(),source:{document:document.id,sha256:document.sha256,page:Math.ceil(value.row/40),sheet:1 as const,cell:`${String.fromCharCode(65+value.column)}${value.row}`}}));
   const checks:Draft["checks"]=lines.filter((line)=>line.total && /Value|Amount/.test(line.label)).map((total)=>({kind:"sum",parts:lines.filter((line)=>!line.total && line.field.split(".").at(-1)===total.field.split(".").at(-1)).map((line)=>line.id),total:total.id}));
-  const created=await createDraft({id:document.id,firm_id:document.firm_id,client_id:document.client_id,form_code:"GSTR1",period_key:document.period_key,lines,checks},person,permission);
+  const created=await createDraft({id:document.id,firm_id:document.firm_id,client_id:document.client_id,form_code:"GSTR1",period_key:document.period_key,lines,checks,registration},person,permission);
   if(!created) throw new Error("The draft changed or permission expired. Open it again.");
   if(asked) {
     for(let attempt=0;attempt<3;attempt++) {

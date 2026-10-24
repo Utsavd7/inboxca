@@ -82,6 +82,14 @@ test("prepared files keep versions and checked sources, then file with an acknow
     expect((await query(local.dbUrl,"select status from public.tasks where firm_id=$1 and code='GSTR1_M'",[firm.firmId]))[0].status).toBe("filed");
     expect((await query(local.dbUrl,"select count(*)::int n from public.activity_log where firm_id=$1 and action='form.downloaded'",[firm.firmId]))[0].n).toBe(1);
     const [filed]=await query(local.dbUrl,"select prepared from public.documents where id=$1",[external.id]);expect(filed.prepared.status).toBe("filed");expect(filed.prepared.acknowledgement).toBeTruthy();
+    // A second GST number: each register is given its number before its GSTR-1 is offered.
+    const otherGstin=inventedGstin("ZZZPZ0003Z");
+    await query(local.dbUrl,"insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values($1,$2,$3,'gstin',$4,$5)",[randomUUID(),firm.firmId,client,await crypto.encrypt(firm.firmId,`clients/${client}/gstin`,otherGstin),await crypto.blindIndex(firm.firmId,"gstin",otherGstin)]);
+    await page.goto(outputs);await expect(page.getByRole("heading",{name:"Which GST number is each register for?"})).toBeVisible();
+    const choice=page.locator("form").filter({has:page.locator(`a[href*="draft=${draft}"]`)}).filter({has:page.getByRole("combobox")});
+    await choice.getByRole("combobox").selectOption({label:inventedGstin()});await choice.getByRole("button",{name:"Save",exact:true}).click();
+    await expect(page.getByRole("heading",{name:`Prepare GSTR-1 for ${inventedGstin()}`})).toBeVisible();
+    expect((await query(local.dbUrl,"select data->>'registration' registration from public.datasets where id=$1",[draft]))[0].registration).toBe(registration);
   } finally {
     await managerContext.close().catch(()=>{});
     for(const file of (await query(local.dbUrl,"select drive_file_id from public.documents where firm_id=$1",[firm.firmId]))) if(file.drive_file_id) files.push(file.drive_file_id);

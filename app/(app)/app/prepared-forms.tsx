@@ -1,11 +1,13 @@
 import Link from "next/link";
+import {Fragment} from "react";
+import {serverCrypto} from "@/src/lib/crypto";
 import {currentMember} from "@/src/lib/member";
 import {preparedSchema,formName} from "@/src/lib/prepared";
 import {draftSchema} from "@/src/lib/datasets";
 import {periodName} from "@/src/lib/documents";
 import {grantFor} from "@/src/lib/permission-grants";
 import {askPermission} from "@/app/(app)/actions";
-import {addEditedForm,decideForm,markFormFiled,prepareForm} from "./form-actions";
+import {addEditedForm,decideForm,markFormFiled,prepareForm,setDraftRegistration} from "./form-actions";
 
 export async function PreparedForms({client,message}:{client?:string;message?:string}) {
   const {supabase,membership,userId}=await currentMember();
@@ -25,16 +27,17 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   }
   const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations}]=await Promise.all([
     supabase.from("datasets").select("id,form_code,period_key,data").eq("firm_id",membership.firmId).eq("client_id",client).in("form_code",["GSTR1","GSTR3B"]).order("period_key",{ascending:false}).limit(100),
-    supabase.from("client_registrations").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","gstin"),
+    supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","gstin"),
     supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",client).eq("document_type","Acknowledgement").eq("status","filed").limit(100),
     supabase.from("requests").select("entity_id,details").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","form_confirmation").eq("status","pending"),
   ]);
   const sourceIds=[...new Set(rows?.map(row=>draftSchema.parse(row.data).lines[0].source.document))];
   const {data:sourceNames}=sourceIds.length ? await supabase.from("documents").select("id,name").eq("firm_id",membership.firmId).eq("client_id",client).in("id",sourceIds) : {data:null};
   const canPrepare=!membership.viewOnlyUntil && (membership.may("edit_figures", client) || !!await grantFor(membership.firmId,userId,"edit_figures",client));
-  const periods=[...new Set(rows?.filter(row=>row.form_code==="GSTR1").map(row=>row.period_key))];
-  // GSTR-3B for any month with checked sales or credit, from April 2025 (the template's start).
-  const months=[...new Set(rows?.filter(row=>row.period_key>="2025-04").map(row=>row.period_key))];
+  // The client's GST numbers, shown to choose which one a register belongs to.
+  const gstins=await Promise.all((registrations ?? []).map(async reg=>({id:reg.id,number:await serverCrypto().decrypt(membership.firmId,`clients/${client}/gstin`,reg.number_enc)})));
+  const registrationOf=(row:{data:unknown})=>(row.data as {registration?:string}).registration ?? (gstins.length===1 ? gstins[0].id : undefined);
+  const unassigned=(rows ?? []).filter(row=>row.form_code==="GSTR1" && !registrationOf(row));
   const label=(row:{form_code:string;data:unknown})=>{const data=draftSchema.parse(row.data);return `${row.form_code==="GSTR3B" ? "GSTR-2B credit" : sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Source file"}, ${data.lines.length} figures${data.lines.every(line=>line.state==="confirmed") ? ", checked" : ", check these first"}`;};
   return <section className="panel" aria-labelledby="prepared-title"><h2 id="prepared-title">Prepared forms</h2>
     <p className="hint">Check every figure first. Your firm files the approved file on the portal with its own code or signature.</p>
@@ -71,10 +74,29 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         </form></details>}
       </div></li>;
     })}</ul>}
-    {!!months.length && canPrepare && registrations?.length===1 && <><h3>Prepare GSTR-3B</h3>{months.map(period=><form action={prepareForm} className="fields" key={`3b-${period}`}>
-      <input type="hidden" name="client" value={client}/><input type="hidden" name="registration" value={registrations[0].id}/><input type="hidden" name="period" value={period}/><input type="hidden" name="form" value="GSTR3B"/>
-      <fieldset><legend>{formName("GSTR3B")} {periodName(period)}</legend>{rows!.filter(row=>row.period_key===period).map(row=>{const ready=draftSchema.parse(row.data).lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{label(row)}</Link></label>;})}</fieldset>
-      <button className="b b-primary">Prepare GSTR-3B {periodName(period)}</button></form>)}</>}
-    {!!periods.length && <><h3>Prepare from checked figures</h3>{registrations?.length!==1 ? <p className="hint">A single GST number is needed before these registers can be used together.</p> : canPrepare ? periods.map(period=>{const previous=forms?.find(file=>file.period_key===period && latest.has(file.id)),preferred=previous ? new Set(preparedSchema.parse(previous.prepared).sources.map(source=>source.id)) : null;return <form action={prepareForm} className="fields" key={period}><input type="hidden" name="client" value={client}/><input type="hidden" name="registration" value={registrations[0].id}/><input type="hidden" name="period" value={period}/><fieldset><legend>{formName("GSTR1")} {periodName(period)}</legend>{(rows ?? []).filter(row=>row.period_key===period && row.form_code==="GSTR1").map(row=>{const data=draftSchema.parse(row.data),ready=data.lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready && (!preferred || preferred.has(row.id))} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Source file"}</Link>, {data.lines.length} figures{ready ? ", checked" : ", check these first"}</label>;})}</fieldset><details><summary>Choose a different official version</summary><label htmlFor={`version-${period}`}>Version, if your team needs another one</label><input id={`version-${period}`} name="version" maxLength={20}/><label htmlFor={`choice-${period}`}>Reason</label><select id={`choice-${period}`} name="reason"><option value="">Choose</option><option value="amendment">Earlier work being corrected</option><option value="software">Filing software needs the earlier version</option></select></details><button className="b b-primary">Prepare {periodName(period)}</button></form>;}) : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-secondary">Ask to prepare forms</button></form>}</>}
+    {!!rows?.length && (canPrepare ? <>
+      {!!unassigned.length && <><h3>Which GST number is each register for?</h3><p className="hint">This client has more than one GST number. Each register belongs to one of them.</p>{unassigned.map(row=><form action={setDraftRegistration} className="form-row" key={`reg-${row.id}`}>
+        <input type="hidden" name="client" value={client}/><input type="hidden" name="draft" value={row.id}/>
+        <span className="grow"><Link href={`?tab=extraction&draft=${row.id}`}>{label(row)}</Link>, {periodName(row.period_key)}</span>
+        <select name="registration" aria-label={`GST number for ${label(row)}`} required defaultValue=""><option value="" disabled>Choose</option>{gstins.map(reg=><option key={reg.id} value={reg.id}>{reg.number}</option>)}</select>
+        <button className="b b-secondary b-small">Save</button></form>)}</>}
+      {gstins.map(reg=>{
+        // A register named for this number, or any register when the client has only one;
+        // GSTR-2B credit drafts hold every number's figures apart, so they serve each one.
+        const own=(rows ?? []).filter(row=>row.form_code==="GSTR3B" || registrationOf(row)===reg.id),of=gstins.length>1 ? ` for ${reg.number}` : "";
+        const months1=[...new Set(own.filter(row=>row.form_code==="GSTR1").map(row=>row.period_key))],months3=[...new Set(own.filter(row=>row.period_key>="2025-04").map(row=>row.period_key))];
+        return <Fragment key={reg.id}>
+          {!!months1.length && <><h3>Prepare GSTR-1{of}</h3>{months1.map(period=>{
+            const previous=forms?.find(file=>file.period_key===period && latest.has(file.id) && preparedSchema.parse(file.prepared).form==="GSTR1" && preparedSchema.parse(file.prepared).registration===reg.id),preferred=previous ? new Set(preparedSchema.parse(previous.prepared).sources.map(source=>source.id)) : null;
+            return <form action={prepareForm} className="fields" key={`1-${reg.id}-${period}`}><input type="hidden" name="client" value={client}/><input type="hidden" name="registration" value={reg.id}/><input type="hidden" name="period" value={period}/>
+              <fieldset><legend>{formName("GSTR1")} {periodName(period)}</legend>{own.filter(row=>row.period_key===period && row.form_code==="GSTR1").map(row=>{const ready=draftSchema.parse(row.data).lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready && (!preferred || preferred.has(row.id))} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{label(row)}</Link></label>;})}</fieldset>
+              <details><summary>Choose a different official version</summary><label htmlFor={`version-${reg.id}-${period}`}>Version, if your team needs another one</label><input id={`version-${reg.id}-${period}`} name="version" maxLength={20}/><label htmlFor={`choice-${reg.id}-${period}`}>Reason</label><select id={`choice-${reg.id}-${period}`} name="reason"><option value="">Choose</option><option value="amendment">Earlier work being corrected</option><option value="software">Filing software needs the earlier version</option></select></details>
+              <button className="b b-primary">Prepare {periodName(period)}</button></form>;})}</>}
+          {!!months3.length && <><h3>Prepare GSTR-3B{of}</h3>{months3.map(period=><form action={prepareForm} className="fields" key={`3-${reg.id}-${period}`}>
+            <input type="hidden" name="client" value={client}/><input type="hidden" name="registration" value={reg.id}/><input type="hidden" name="period" value={period}/><input type="hidden" name="form" value="GSTR3B"/>
+            <fieldset><legend>{formName("GSTR3B")} {periodName(period)}</legend>{own.filter(row=>row.period_key===period).map(row=>{const ready=draftSchema.parse(row.data).lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{label(row)}</Link></label>;})}</fieldset>
+            <button className="b b-primary">Prepare GSTR-3B {periodName(period)}</button></form>)}</>}
+        </Fragment>;})}
+    </> : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-secondary">Ask to prepare forms</button></form>)}
   </section>;
 }
