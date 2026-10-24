@@ -243,8 +243,6 @@ html:has(.ui) {
 .ask-groups legend { margin-bottom: var(--s1); font-weight: 600; }
 .link-once { overflow-wrap: anywhere; user-select: all; }
 .asks { margin-top: var(--s3); }
-.toolbar.files-find { margin-top: var(--s4); }
-.files-find input { max-width: 420px; }
 .send-to { display: grid; justify-items: start; gap: var(--s2); margin-top: var(--s4); }
 .drop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s5); padding: var(--s3) var(--s4); border: 1px dashed var(--line-2); border-radius: var(--r3); }
 .drop > svg { flex: none; color: var(--ink-3); }
