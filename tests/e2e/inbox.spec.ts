@@ -165,3 +165,43 @@ test("an attachment shows where it was saved in the drive, and opens in the view
   await expect(file.getByRole("link", { name: "View" })).toHaveAttribute("href", `/app/files/${id}/view`);
   await expect(list().getByRole("listitem").filter({ hasText: "September purchase bills" })).toContainText("Filed");
 });
+
+test("the team writes a new email to a client, only to the client's known addresses, with a paper and a file", async () => {
+  // The Inbox's button opens the writing panel; the client is picked like the filter's.
+  await owner.goto("/app/inbox");
+  await owner.getByRole("link", { name: "Write to a client" }).click();
+  const panel = owner.getByRole("dialog", { name: "Write to a client" });
+  await panel.getByRole("link", { name: clientName }).click();
+  await expect(owner).toHaveURL(new RegExp(`compose=${clientId}`));
+  // The client's page opens the same panel with the client chosen.
+  await owner.goto(`/app/clients/${clientId}`);
+  await owner.getByRole("link", { name: "Write to client" }).click();
+  await expect(owner).toHaveURL(new RegExp(`/app/inbox\\?compose=${clientId}$`));
+  await expect(panel.getByRole("checkbox", { name: `${clientName}, ${clientEmail}` })).toBeChecked();
+  await expect(panel.getByRole("textbox", { name: "To" })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Write with AI" })).toBeDisabled();
+
+  await panel.getByLabel("Subject").fill(`Audit plan ${tag}`);
+  await panel.getByLabel("Your email").fill("Dear Meera,\n\nWe start the audit on Monday.");
+  await panel.getByLabel("Add a paper from the drive").selectOption({ label: `${clientName} - Purchase bills - Sep 2026.pdf` });
+  await panel.getByLabel("Upload a file").setInputFiles({ name: "audit_plan.txt", mimeType: "text/plain", buffer: Buffer.from("Invented audit plan") });
+  await expect(panel.getByText("audit_plan.txt")).toBeVisible();
+  await panel.getByRole("button", { name: "Send email" }).click();
+  const sent = owner.getByRole("status").filter({ hasText: "Email sent" });
+  await expect(sent).toBeVisible();
+  await expect(sent).not.toContainText("could not go");
+
+  const received = await mailbox(clientEmail, async (imap) => {
+    await imap.mailboxOpen("INBOX");
+    const all = [];
+    for await (const message of imap.fetch("1:*", { source: true })) all.push(await simpleParser(message.source ?? ""));
+    return all;
+  });
+  const written = received.find((message) => message.subject === `Audit plan ${tag}`);
+  expect(written?.text).toContain("We start the audit on Monday.");
+  expect(written?.attachments.map((file) => file.filename)).toEqual(["audit_plan.txt"]);
+  expect(received.find((message) => message.subject === `${clientName} - Purchase bills - Sep 2026.pdf`)?.text).toContain("/s/");
+  const [{ id: paper }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1", [firm.firmId]);
+  const [{ details }] = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'email.written' and entity_id = $2", [firm.firmId, clientId]);
+  expect(details).toEqual({ to: 1, files: 1, papers: [paper] });
+});

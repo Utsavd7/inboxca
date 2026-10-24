@@ -2,7 +2,7 @@
 // nothing is called and nothing is billed, and the buttons that need it say so.
 export const aiReady = () => !!process.env.OPENAI_API_KEY;
 
-export type AiReason = "reply_draft";
+export type AiReason = "reply_draft" | "email_draft";
 
 // The one place the app calls the AI provider. Every call names its reason, so M9's
 // guardrails (credits, limits, output checks) wrap this function alone. The provider keeps

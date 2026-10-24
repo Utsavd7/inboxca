@@ -81,17 +81,31 @@
 
 /* The reply stays at the foot of the conversation. */
 .ib-reply { position: sticky; bottom: 0; display: grid; gap: var(--s2); margin-top: auto; padding: var(--s3) 0 var(--s4); border-top: 1px solid var(--line); background: var(--white); }
-.ib .ib-reply textarea { width: 100%; min-height: 96px; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.5; resize: vertical; }
-.ib .ib-reply textarea:focus { border-color: var(--accent); outline: none; }
+.ib :is(.ib-reply, .ib-compose) textarea { width: 100%; min-height: 96px; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.5; resize: vertical; }
+.ib :is(.ib-reply, .ib-compose) textarea:focus { border-color: var(--accent); outline: none; }
 .ib-attach { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .ib-chip { display: inline-flex; align-items: center; gap: var(--s1); height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); background: transparent; color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 120ms var(--out); }
 .ib-chip:hover { background: var(--hover); }
 .ib-chip.on { border-color: var(--accent-soft); background: var(--accent-soft); color: var(--accent); cursor: default; }
 .ib-chip button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .ib .ib-attach select { width: auto; max-width: 280px; height: var(--control); font-size: 13px; }
-.ib .ib-attach input[type="file"] { max-width: 280px; font-size: 13px; }
+/* The file input hides behind its "Upload a file" label, which shows its focus. */
+.ib .ib-file { width: 1px; }
+.ib-file:focus-visible + label { border-color: var(--accent); box-shadow: var(--ring); }
+.ib-attach .ib-tag { max-width: 240px; }
+.ib-attach .ib-tag span { overflow: hidden; text-overflow: ellipsis; }
 .ib-reply-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s2); }
 .ib-reply-foot .ib-note { margin-right: auto; }
+
+/* Writing to a client, in the side panel: the client, who gets it, then the email. */
+.ib-write, .ib-compose { display: grid; gap: var(--s4); }
+.ib-field, .ib-to legend { display: grid; gap: var(--s1); color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.ib-field input { font-weight: 400; }
+.ib-field .ib-menu summary { display: flex; justify-content: space-between; color: var(--ink); font-size: 14px; }
+.ib-to { display: grid; gap: var(--s2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.ib-to legend { margin-bottom: var(--s2); padding: 0; }
+.ib-to .check { overflow-wrap: anywhere; }
+.ib-compose .ib-reply-foot { padding-top: var(--s3); border-top: 1px solid var(--line); }
 
 @keyframes ib-drop { from { opacity: 0; transform: translateY(calc(var(--s1) * -1)); } }
 @media (prefers-reduced-motion: reduce) { .ib-pop { animation: none; } .ib-row > a, .ib-pill, .ib-chip { transition: none; } }
