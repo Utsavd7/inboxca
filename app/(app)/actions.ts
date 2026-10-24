@@ -10,16 +10,16 @@ import { STAGES } from "@/src/lib/reminders";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
-import { checklists, kindChecklist, type DocumentRequest } from "@/src/lib/checklists";
+import { checklists, kindChecklist, receiveItem, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
-import { DELETED_FOLDER, folderOrders, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
+import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, laterBy, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
-import { activeClients, planImport, type Planned, type Scope } from "@/src/lib/first-import";
+import { activeClients, importSince, inScope, planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
 import { askAway, firmAdmin, officeApprover, officePc, requestLine, type Office } from "@/src/lib/office";
 import { presets, type Preset } from "@/src/lib/presets";
@@ -929,7 +929,8 @@ export async function dropPortalFiles(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const onClient = String(form.get("client") ?? "");
-  const back = onClient ? `/app/clients/${onClient}?tab=files&` : "/app?";
+  // Back where the box was opened: Today, Documents, or the client's Documents or Returns tab.
+  const back = onClient ? `/app/clients/${onClient}?tab=${form.get("back") === "returns" ? "returns" : "files"}&` : form.get("back") === "/app/documents" ? "/app/documents?" : "/app?";
   const opened = await firmDrive(membership.firmId);
   if (!opened) redirect(`${back}error=drive`);
   const crypto = serverCrypto();
@@ -946,8 +947,19 @@ export async function dropPortalFiles(form: FormData) {
       ? await supabase.from("client_registrations").select("id, client_id, clients(id, name)").eq("firm_id",membership.firmId).eq("kind", "gstin").eq("number_bidx", await crypto.blindIndex(membership.firmId, "gstin", portal.gstin)).maybeSingle()
       : { data: null };
     let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
-    if (portal && registration?.clients && membership.may("portal_files",registration.client_id)) saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: registration.id }, { name: file.name, bytes }, opened);
-    else if (!portal && onClient && membership.may("upload", onClient)) {
+    if (portal && registration?.clients && membership.may("portal_files",registration.client_id)) {
+      saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: registration.id }, { name: file.name, bytes }, opened);
+      // The "still missing" item asked for by this file's name closes; a request with every item in closes, and its reminders stop.
+      if (typeof saved === "object") {
+        const admin = supabaseAdmin();
+        const { data: asks } = await admin.from("requests").select("id, details").eq("client_id", registration.client_id).eq("kind", "documents").eq("status", "pending");
+        for (const ask of asks ?? []) {
+          const details = ask.details as unknown as DocumentRequest;
+          if (receiveItem(details, portal.type, portal.period, saved.id))
+            await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: details.items.every((entry) => entry.received.length) ? "done" : "pending" }).eq("id", ask.id);
+        }
+      }
+    } else if (!portal && onClient && membership.may("upload", onClient)) {
       const { data: client } = await supabase.from("clients").select("id, name").eq("firm_id",membership.firmId).eq("id", onClient).maybeSingle();
       if (client) saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, { name: file.name, bytes }, opened);
     }
@@ -1200,7 +1212,8 @@ export async function startImport(form: FormData) {
     [...form.entries()].flatMap(([key, value]) => (key.startsWith("map:") && known.has(String(value)) ? [[key.slice(4), String(value)]] : [])),
   );
   const listed = (await Promise.all(folders.map((folder) => opened.drive.files(folder)))).flat();
-  const files = planImport(listed, clients ?? [], scope, String(form.get("year") ?? ""), todayInIndia(), chosen)
+  const { data: firm } = await supabaseAdmin().from("firms").select("created_at").eq("id", membership.firmId).single();
+  const files = planImport(listed, clients ?? [], scope, String(form.get("year") ?? ""), todayInIndia(), chosen, importSince(firm?.created_at ?? "", todayInIndia()))
     .filter((file): file is Planned & { client: string } => !!file.client)
     .slice(0, 5000);
   if (!files.length) redirect("/app/import?error=none");
@@ -1224,6 +1237,52 @@ export async function undoFirstImport(form: FormData) {
     await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "import.undo_asked", entity_type: "request", entity_id: request.id });
   }
   redirect("/app/import?undoing=1");
+}
+
+// The uploader for files on a disk (PLAN.md 5.16), the owner's. First each file's kind, by
+// the same rules as the import (a final paper or not, its year), from its name and folders
+// only, leaving out what the first 14 days hold back; so each choice shows its size.
+export async function describeDiskFiles(paths: string[]) {
+  const { membership } = await currentMember();
+  if (membership?.role !== "owner") return [];
+  const today = todayInIndia();
+  const { data: firm } = await supabaseAdmin().from("firms").select("created_at").eq("id", membership.firmId).single();
+  const since = importSince(firm?.created_at ?? "", today);
+  return paths.slice(0, 1000).map((name) => {
+    const [file] = planImport([{ id: "", path: String(name), size: 0 }], [], "all", "", today, {}, since);
+    return file ? { final: inScope(file, "final", ""), year: file.year } : null;
+  });
+}
+
+// Then each file goes from the browser straight into the drive's Incoming folder, by a
+// one-time link. A file already there with the same checksum is done, so an upload broken
+// off picks up where it stopped; another file by that name is left as it is.
+export async function incomingLinks(files: { path: string; hash: string }[]) {
+  const { membership } = await currentWriter();
+  const opened = membership?.role === "owner" ? await firmDrive(membership.firmId) : null;
+  if (!opened) return [];
+  return Promise.all(
+    files.slice(0, 20).map(async (file) => {
+      const relative = incomingPath(String(file.path));
+      const there = await opened.drive.incomingFile(relative);
+      return there ? (there.hash === file.hash ? "done" : "taken") : opened.drive.incomingLink(relative);
+    }),
+  );
+}
+
+// After it is sent, the drive's checksum of each file must be the browser's; a file that
+// differs is removed so it can be sent again.
+export async function checkIncoming(files: { path: string; hash: string }[]) {
+  const { membership } = await currentWriter();
+  const opened = membership?.role === "owner" ? await firmDrive(membership.firmId) : null;
+  if (!opened) return [];
+  return Promise.all(
+    files.slice(0, 20).map(async (file) => {
+      const there = await opened.drive.incomingFile(incomingPath(String(file.path)));
+      if (there && there.hash !== file.hash) await opened.drive.trash(there.id);
+      return there?.hash === file.hash;
+    }),
+  );
 }
 
 // Inbox → Papers waiting for approval (PLAN.md 5.5.2): a private paper a client asked for

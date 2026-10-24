@@ -12,7 +12,8 @@ import { searchTokens, words } from "@/src/lib/search";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { AutoSelect } from "../auto-select";
 import { FileViewer } from "../files/[id]/view/file-viewer";
-import { Badge, Empty, PageHead } from "../ui";
+import { DroppedNotice, PortalDrop } from "../portal-drop";
+import { Badge, Empty, PageHead, SidePanel } from "../ui";
 
 const PAGE = 50;
 const columns = "id, client_id, name, document_type, work_type, period_key, status, email_event_id, received_at, form:prepared->>form, clients(name), email_events(contact_id, contacts(name_enc)), client_registrations(number_enc)";
@@ -20,7 +21,7 @@ const drives: Record<string, string> = { dropbox: "Dropbox", onedrive: "OneDrive
 
 // Every paper of the clients this person may see, in the firm's own drive: by financial
 // year and work, as the drive files them, 50 at a time. All choices live in the address.
-export default async function Documents({ searchParams }: { searchParams: Promise<{ year?: string; kind?: string; q?: string; page?: string; file?: string; upload?: string; for?: string }> }) {
+export default async function Documents({ searchParams }: { searchParams: Promise<{ year?: string; kind?: string; q?: string; page?: string; file?: string; upload?: string; for?: string; portal?: string; dropped?: string; error?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
@@ -34,7 +35,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const typed = words(q, 8);
   const tokens = typed.length ? await searchTokens(membership.firmId, typed) : null;
 
-  const state = { year: year === years[0] ? "" : year ? `${Number(year) - 1}-${year.slice(2)}` : "all", kind, q, page: page > 1 ? String(page) : "", file: "", upload: "" };
+  const state = { year: year === years[0] ? "" : year ? `${Number(year) - 1}-${year.slice(2)}` : "all", kind, q, page: page > 1 ? String(page) : "", file: "", upload: "", portal: "" };
   const link = (next: Partial<typeof state>) => {
     const search = new URLSearchParams(Object.entries({ ...state, ...next }).filter(([, value]) => value));
     return `/app/documents${search.size ? `?${search}` : ""}`;
@@ -102,6 +103,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "json", "txt"].includes(extension);
   const tag = (status: string) => (status === "to_check" ? <Badge tone="warn">To check</Badge> : status === "missing" ? <Badge tone="late">Missing in the drive</Badge> : null);
   const canUpload = !membership.viewOnlyUntil;
+  const portal = membership.may("portal_files");
   const filtered = !!(q || kind || year !== years[0]);
 
   // Upload papers: find the client, then their upload form opens with type, work and period.
@@ -114,14 +116,27 @@ export default async function Documents({ searchParams }: { searchParams: Promis
         title="Documents"
         sub="Every client paper, kept in your firm's own drive and filed by year, client and work."
         actions={
-          canUpload && (
-            <Link className="b b-primary" href={link({ ...here, upload: "1" })} scroll={false}>
-              <Upload size={16} aria-hidden />
-              Upload papers
-            </Link>
-          )
+          <>
+            {portal && (
+              <Link className="b b-secondary" href={link({ ...here, portal: "1" })} scroll={false}>
+                Add portal files
+              </Link>
+            )}
+            {canUpload && (
+              <Link className="b b-primary" href={link({ ...here, upload: "1" })} scroll={false}>
+                <Upload size={16} aria-hidden />
+                Upload papers
+              </Link>
+            )}
+          </>
         }
       />
+      <DroppedNotice value={params.dropped} />
+      {params.error === "drive" && (
+        <p className="alert" role="alert">
+          Connect the firm&apos;s drive in Settings first; portal files are saved there.
+        </p>
+      )}
       <div className="split">
         <nav className="pane docs-folders" aria-label="Folders">
           <form className="docs-year">
@@ -300,6 +315,11 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             </Link>
           </aside>
         </>
+      )}
+      {params.portal && portal && (
+        <SidePanel id="portal-panel"title="Files from the GST portal" close={link(here)}>
+          <PortalDrop back="/app/documents" />
+        </SidePanel>
       )}
     </div>
   );

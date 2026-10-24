@@ -36,3 +36,14 @@ export function workOfService(code: string): WorkType | null {
 
 export type RequestItem = { type: string; work: WorkType; received: string[]; checked?: boolean };
 export type DocumentRequest = { period: string; items: RequestItem[]; link_hash: string; link_enc?: string; followups?: string[]; registration?: string };
+
+// A portal file dropped in (PLAN.md 5.3.1) is received against the open item asked for by its
+// name, however it was spelled ("GSTR-2B", "gstr 2b"), when the request is for its month or
+// for no month. Returns whether an item was received.
+export function receiveItem(request: DocumentRequest, type: string, period: string, documentId: string) {
+  const plain = (name: string) => name.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const item = request.items.find((entry) => !entry.received.length && plain(entry.type) === plain(type));
+  if (!item || (request.period && request.period !== period)) return false;
+  item.received.push(documentId);
+  return true;
+}

@@ -1,0 +1,12 @@
+/* Add old files: the size beside each choice, and the side panel that picks a folder's client. */
+.import-choose .check .hint, .disk-choose .check .hint { font-size: 13px; white-space: nowrap; }
+.import-find { margin-block: 12px; }
+.import-more { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 13px; }
+.disk-pick, .disk-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+.disk-choose { display: grid; gap: 8px; max-width: 640px; margin-top: 16px; border: 0; }
+.disk-choose legend { margin-bottom: 4px; font-weight: 600; }
+.disk-choose > .b { justify-self: start; }
+.disk-progress progress { width: 240px; height: 8px; border: 0; border-radius: 999px; background: var(--line); appearance: none; overflow: hidden; }
+.disk-progress progress::-webkit-progress-bar { background: var(--line); }
+.disk-progress progress::-webkit-progress-value { background: var(--accent); }
+.disk-progress progress::-moz-progress-bar { background: var(--accent); }

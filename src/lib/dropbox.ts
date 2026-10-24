@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { Drive } from "./drive";
+import { INCOMING, type Drive } from "./drive";
 
 // Dropbox (PLAN.md 5.5.1): InboxCA's app has Full Dropbox access and signs in with PKCE,
 // so it holds no app secret. The owner's refresh token is kept encrypted; each use gets a
@@ -114,9 +114,28 @@ export function dropboxDrive(refreshToken: string): Drive {
       return files;
     },
     async folders() {
-      const top = await call(await accessToken(), "files/list_folder", { path: "", limit: 2000 });
+      const [top, incoming] = await Promise.all([
+        call(await accessToken(), "files/list_folder", { path: "", limit: 2000 }),
+        call(await accessToken(), "files/get_metadata", { path: `${ROOT}/${INCOMING}` }),
+      ]);
       if ("error" in top) throw new Error("dropbox_list");
-      return (top.entries as { ".tag": string; path_display: string }[]).filter((entry) => entry[".tag"] === "folder" && entry.path_display !== ROOT).map((entry) => entry.path_display);
+      const own = (top.entries as { ".tag": string; path_display: string }[]).filter((entry) => entry[".tag"] === "folder" && entry.path_display !== ROOT).map((entry) => entry.path_display);
+      return "error" in incoming ? own : [...own, String(incoming.path_display)];
+    },
+    // A one-time link, good for four hours and one file of up to 150 MB, that the browser
+    // posts the file to; the access token never leaves the server.
+    async incomingLink(relative) {
+      const link = await call(await accessToken(), "files/get_temporary_upload_link", { commit_info: { path: `${ROOT}/${INCOMING}/${relative}`, mode: "add", autorename: false, mute: true }, duration: 14400 });
+      if ("error" in link) throw new Error("dropbox_upload_link");
+      return String(link.link);
+    },
+    async incomingFile(relative) {
+      const file = await call(await accessToken(), "files/get_metadata", { path: `${ROOT}/${INCOMING}/${relative}` });
+      if ("error" in file) {
+        if (String(file.error).startsWith("path/not_found")) return null;
+        throw new Error("dropbox_metadata");
+      }
+      return { id: String(file.id), hash: String(file.content_hash ?? "") };
     },
     async check() {
       const token = await accessToken();

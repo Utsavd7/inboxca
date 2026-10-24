@@ -1,5 +1,6 @@
 import { link, mkdir, readdir, readFile, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { contentHash } from "./content-hash.ts";
 
 // The firm's own drive (PLAN.md 5.5.1, D36): one interface for every provider. Paths are
 // below InboxCA's own folder in the drive. Saving never overwrites: a name already taken
@@ -15,14 +16,26 @@ export interface Drive {
   // The daily check: every file in InboxCA's folder, whether the folder is shared with
   // anyone or has a link, and the free space (null when the drive does not say).
   check(): Promise<{ files: { id: string; path: string }[]; shared: boolean; freeBytes: number | null }>;
-  // For the first import: the drive's own top folders outside InboxCA's, and every file
-  // under one of them with its size.
+  // For the first import: the drive's own top folders outside InboxCA's (and InboxCA's
+  // Incoming folder, once it exists), and every file under one of them with its size.
   folders(): Promise<string[]>;
   files(folder: string): Promise<{ id: string; path: string; size: number }[]>;
+  // The uploader for files on a disk: where the browser sends one file straight into the
+  // Incoming folder (path below it), and that file's id and checksum once it is there.
+  incomingLink(path: string): Promise<string>;
+  incomingFile(path: string): Promise<{ id: string; hash: string } | null>;
 }
 
-// InboxCA's own folder in the drive, as on Dropbox.
+// InboxCA's own folder in the drive, as on Dropbox, and where the uploader puts files: each
+// below Incoming at the path it had on the disk, every part a name the drive accepts.
 const OWN = "InboxCA";
+export const INCOMING = "Incoming";
+export const incomingPath = (relative: string) =>
+  relative
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .map((part) => safeName(part))
+    .join("/");
 
 // Where a removed file waits 30 days before it goes to the drive's bin.
 export const DELETED_FOLDER = "Deleted and old versions";
@@ -81,7 +94,20 @@ export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? "", onRead?: (i
     },
     async folders() {
       const entries = await readdir(root, { withFileTypes: true });
-      return entries.filter((entry) => entry.isDirectory() && entry.name !== OWN).map((entry) => entry.name);
+      const incoming = path.join(OWN, INCOMING);
+      const uploaded = await stat(inside(incoming)).then(() => [incoming], () => []);
+      return [...entries.filter((entry) => entry.isDirectory() && entry.name !== OWN).map((entry) => entry.name), ...uploaded];
+    },
+    // The test drive is on the server, so the browser sends to InboxCA's own upload address.
+    incomingLink: async (relative) => `/app/import/upload?path=${encodeURIComponent(relative)}`,
+    async incomingFile(relative) {
+      const id = path.join(OWN, INCOMING, relative);
+      try {
+        return { id, hash: await contentHash(new Blob([new Uint8Array(await readFile(inside(id)))])) };
+      } catch (error) {
+        if ((error as { code?: string }).code === "ENOENT") return null;
+        throw error;
+      }
     },
     async files(folder) {
       const entries = await readdir(inside(folder), { recursive: true, withFileTypes: true });

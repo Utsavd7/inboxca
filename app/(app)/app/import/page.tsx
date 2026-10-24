@@ -1,16 +1,18 @@
+import "./import.css";
 import { FolderInput } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { startImport, undoFirstImport } from "@/app/(app)/actions";
 import { todayInIndia } from "@/src/lib/calendar";
-import { periodName } from "@/src/lib/documents";
-import { financialYear, workTypes, type WorkType } from "@/src/lib/drive";
+import { periodName, receivedLabel } from "@/src/lib/documents";
+import { financialYear, INCOMING, workTypes, type WorkType } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
-import { activeClients, planImport, type Scope } from "@/src/lib/first-import";
+import { activeClients, importSince, inScope, planImport, type Scope } from "@/src/lib/first-import";
 import type { ImportPlan } from "@/src/jobs/import-files";
 import { currentMember } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
-import { Badge, Empty, PageHead } from "../ui";
+import { Badge, Empty, PageHead, SidePanel } from "../ui";
+import { DiskUpload } from "./disk-upload";
 
 const scopes: Record<Scope, string> = {
   final: "Final papers only: filed returns, acknowledgements, certificates, audit reports, notices and orders (recommended)",
@@ -26,35 +28,56 @@ const size = (bytes: number) => (bytes < 1024 ** 3 ? `${Math.max(1, Math.round(b
 // Add old files (PLAN.md 5.16), the owner's: past files already in the firm's drive are
 // moved into their client folders in place, after a preview, and can be put back. Old
 // files are optional; InboxCA works on new files from the first day.
-export default async function FirstImport({ searchParams }: { searchParams: Promise<{ folder?: string | string[]; scope?: string; year?: string; error?: string; started?: string; undoing?: string }> }) {
+// The address keeps every choice: folder (several), scope, year, error, started, undoing,
+// map:<folder> (the client chosen for a folder), and pick, cq, cpage for the client picker.
+export default async function FirstImport({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { supabase, membership } = await currentMember();
   if (membership?.role !== "owner") redirect("/app");
   const params = await searchParams;
   const admin = supabaseAdmin();
-  const [{ data: account }, clients, { data: imports }] = await Promise.all([
+  const [{ data: account }, clients, { data: imports }, { data: firm }] = await Promise.all([
     admin.from("connected_accounts").select("id, provider, credentials_enc").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
     activeClients(supabase),
     admin.from("requests").select("id, status, details").eq("firm_id", membership.firmId).eq("kind", "import").order("id"),
+    admin.from("firms").select("created_at").eq("id", membership.firmId).single(),
   ]);
   const drive = account && (await openDrive(membership.firmId, account));
   const folders = drive ? await drive.folders() : [];
   const ticked = [params.folder ?? []].flat().filter((folder) => folders.includes(folder));
-  const scope = (params.scope && params.scope in scopes ? params.scope : "final") as Scope;
+  const scope = (typeof params.scope === "string" && params.scope in scopes ? params.scope : "final") as Scope;
   const today = todayInIndia();
   const years = Array.from({ length: 6 }, (_, back) => financialYear(`${Number(today.slice(0, 4)) - back}-${today.slice(5, 7)}`));
-  const year = params.year && years.includes(params.year) ? params.year : years[1];
+  const year = typeof params.year === "string" && years.includes(params.year) ? params.year : years[1];
+  const since = importSince(firm?.created_at ?? "", today);
+  const name = new Map(clients.map((client) => [client.id, client.name]));
+  const chosen = Object.fromEntries(Object.entries(params).flatMap(([key, value]) => (key.startsWith("map:") && typeof value === "string" && name.has(value) ? [[key.slice(4), value]] : [])));
   const listed = drive && ticked.length ? (await Promise.all(ticked.map((folder) => drive.files(folder)))).flat() : [];
-  const planned = planImport(listed, clients ?? [], scope, year, today);
-  const unmatched = [...new Set(planned.filter((file) => !file.client).map((file) => file.folder))];
-  const name = new Map(clients?.map((client) => [client.id, client.name]));
+  const everything = planImport(listed, clients, "all", year, today, chosen, since);
+  const planned = everything.filter((file) => inScope(file, scope, year));
+  const unmatched = [...new Set(planned.filter((file) => !file.client || chosen[file.folder]).map((file) => file.folder))];
   const total = planned.reduce((sum, file) => sum + file.size, 0);
+  // The picker for one folder's client: a search over the firm's clients, eight a page.
+  const address = (next: Record<string, string | undefined>) => {
+    const search = new URLSearchParams([...ticked.map((folder) => ["folder", folder]), ["scope", scope], ["year", year]]);
+    for (const [key, value] of Object.entries({ ...Object.fromEntries(Object.entries(chosen).map(([folder, id]) => [`map:${folder}`, id])), ...next })) if (value) search.set(key, value);
+    return `/app/import?${search}`;
+  };
+  const pick = typeof params.pick === "string" && unmatched.includes(params.pick) ? params.pick : "";
+  const cq = typeof params.cq === "string" ? params.cq.trim().slice(0, 80) : "";
+  const cpage = Math.min(Math.max(0, Number(params.cpage) || 0), 1250);
+  const found = pick ? clients.filter((client) => client.name.toLowerCase().includes(cq.toLowerCase())).slice(cpage * 8, cpage * 8 + 9) : [];
 
   return (
     <>
       <PageHead title="Add old files" sub="Optional. InboxCA works on new files from day one. Past files already in your drive can be sorted into their client folders here, in place." />
-      {params.error && errors[params.error] && (
+      {typeof params.error === "string" && errors[params.error] && (
         <p className="alert" role="alert">
           {errors[params.error]}
+        </p>
+      )}
+      {since && (
+        <p className="notice" role="status">
+          In your first 14 days only files from {periodName(since)} on are brought in. The rest can follow from {receivedLabel(new Date(Date.parse(firm?.created_at ?? "") + 14 * 86_400_000).toISOString())}.
         </p>
       )}
       {params.started && (
@@ -90,12 +113,16 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
               </fieldset>
               <fieldset>
                 <legend>Which files</legend>
-                {Object.entries(scopes).map(([value, label]) => (
-                  <label key={value} className="check">
-                    <input type="radio" name="scope" value={value} defaultChecked={scope === value} />
-                    {label}
-                  </label>
-                ))}
+                {Object.entries(scopes).map(([value, label]) => {
+                  const files = everything.filter((file) => inScope(file, value as Scope, year));
+                  return (
+                    <label key={value} className="check">
+                      <input type="radio" name="scope" value={value} defaultChecked={scope === value} />
+                      {label}
+                      {!!ticked.length && <span className="hint">{files.length ? `${files.length} files, ${size(files.reduce((sum, file) => sum + file.size, 0))}` : "No files"}</span>}
+                    </label>
+                  );
+                })}
                 <label htmlFor="import-year">The year, for one year in full</label>
                 <select id="import-year" name="year" defaultValue={year}>
                   {years.map((choice) => (
@@ -108,6 +135,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
               </button>
             </form>
           </section>
+          <DiskUpload incoming={folders.find((folder) => folder.endsWith(`InboxCA/${INCOMING}`))} />
 
           {!!ticked.length && (
             <section className="panel" aria-labelledby="preview">
@@ -123,21 +151,20 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
                 ))}
                 <input type="hidden" name="scope" value={scope} />
                 <input type="hidden" name="year" value={year} />
+                {Object.entries(chosen).map(([folder, id]) => (
+                  <input key={folder} type="hidden" name={`map:${folder}`} value={id} />
+                ))}
                 {!!unmatched.length && (
                   <div className="import-unmatched">
                     <h3 className="sub-head">Folders with no client found</h3>
                     {unmatched.map((folder) => (
-                      <label key={folder} className="import-map">
+                      <div key={folder} className="import-map">
                         <span className="num">{folder}</span>
-                        <select name={`map:${folder}`} defaultValue="">
-                          <option value="">Leave these files where they are</option>
-                          {clients?.map((client) => (
-                            <option key={client.id} value={client.id}>
-                              {client.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                        <span>{chosen[folder] ? name.get(chosen[folder]) : "Left where they are"}</span>
+                        <Link className="b b-secondary b-small" href={address({ pick: folder })} scroll={false} aria-label={`Choose the client for ${folder}`}>
+                          Choose client
+                        </Link>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -199,6 +226,32 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
             </section>
           )}
         </>
+      )}
+      {pick && (
+        <SidePanel id="pick-client" title="Choose the client" close={address({})}>
+          <p className="hint num">{pick}</p>
+          <form action="/app/import" role="search" className="import-find">
+            {[...new URLSearchParams(address({ pick }).split("?")[1]).entries()].map(([key, value], at) => (
+              <input key={at} type="hidden" name={key} value={value} />
+            ))}
+            <input type="search" name="cq" defaultValue={cq} placeholder="Find a client" aria-label="Find a client" autoFocus />
+          </form>
+          <ul className="rows">
+            {found.slice(0, 8).map((client) => (
+              <li key={client.id}>
+                <span className="grow name">{client.name}</span>
+                <Link className="b b-secondary b-small" href={address({ [`map:${pick}`]: client.id })} aria-label={`Choose ${client.name}`}>
+                  Choose
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {!found.length && <p className="hint">No client by that name. Try part of the name.</p>}
+          <p className="import-more">
+            {found.length > 8 && <Link href={address({ pick, cq: cq || undefined, cpage: String(cpage + 1) })}>More clients</Link>}
+            {chosen[pick] && <Link href={address({ [`map:${pick}`]: undefined })}>Leave these files where they are</Link>}
+          </p>
+        </SidePanel>
       )}
     </>
   );

@@ -55,6 +55,17 @@ export async function activeClients(supabase: SupabaseClient<Database>) {
   }
 }
 
+// Whether a file is in the owner's choice: final papers, one year, or everything.
+export const inScope = (file: { type: string; year: string }, scope: Scope, year: string) => (scope === "final" ? finalPapers.has(file.type) : scope === "year" ? file.year === year : true);
+
+// In the firm's first 14 days only the latest three months of past files are brought in
+// (D38): the first month allowed, or "" once the 14 days are over.
+export function importSince(createdAt: string, today: string) {
+  if (Date.parse(`${today}T00:00:00Z`) >= Date.parse(createdAt) + 14 * 86_400_000) return "";
+  const at = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 3, 1));
+  return `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 export function planImport(
   files: { id: string; path: string; size: number }[],
   clients: { id: string; name: string }[],
@@ -62,14 +73,16 @@ export function planImport(
   year: string,
   today: string,
   chosen: Record<string, string> = {},
+  since = "",
 ) {
   return files.flatMap((file): Planned[] => {
     const name = file.path.split(/[\\/]/).pop() ?? "";
     const folders = file.path.slice(0, -name.length).toLowerCase();
     const about = describeFile(name, folders, null, `${today}T00:00:00Z`);
     const work = about.work !== "other" ? about.work : (workWords.find(([pattern]) => pattern.test(folders))?.[1] ?? "other");
-    if (scope === "final" && !finalPapers.has(about.type)) return [];
-    if (scope === "year" && about.year !== year) return [];
+    if (!inScope(about, scope, year)) return [];
+    // A file with no month in its name cannot be shown to be recent, so it waits too.
+    if (since && !(about.period.length === 7 && about.period >= since)) return [];
     const parent = file.path.split(/[\\/]/).slice(0, -1).join("/");
     const match = matchClient(file.path, clients);
     const client = chosen[match?.folder ?? parent] ?? match?.id ?? null;

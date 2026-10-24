@@ -179,6 +179,10 @@ export default async function Client({ params, searchParams }: { params: Promise
   const receivers = contacts.filter((contact) => contact.can_receive_documents);
   const order = ((drive?.settings as { folder_order?: FolderOrder } | undefined)?.folder_order ?? "year_client_work") as FolderOrder;
   const rule = new Map(rules?.map((r) => [r.code, r]));
+  // The portal file each open monthly GSTR-3B is read from (PLAN.md 5.3.1): the month's GSTR-2B.
+  const months = sub === "returns" ? (tasks ?? []).flatMap((task) => (task.code === "GSTR3B_M" && task.status !== "filed" && task.period_key ? [task.period_key] : [])) : [];
+  const { data: statements } = months.length ? await supabase.from("documents").select("period_key").eq("client_id", id).eq("document_type", "GSTR-2B").neq("status", "deleted").in("period_key", months) : { data: [] };
+  const needs2b = new Set(months.filter((month) => !statements?.some((row) => row.period_key === month)));
   // Services sit on a number: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN.
   const servicesFor = (kind: string) => rules?.filter((r) => (r.due_rule as { for?: string }).for === kind) ?? [];
   const teams = groups?.filter((group) => group.kind === "team");
@@ -582,6 +586,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         )}
         {sub === "returns" && (
           <>
+            <DroppedNotice value={dropped} />
             <p className="client-tools hint">
               <span>{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "Dates marked * are not yet confirmed by a CA against the official notification." : ""}</span>
               <Link href={`?tab=returns${show==="filed" ? "" : "&show=filed"}`}>{show==="filed" ? "Show returns still to file" : "Show filed returns"}</Link>
@@ -598,7 +603,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                       <li key={task.id}>
                         <span className="grow">
                           <span className="name">{r?.name} {periodLabel(r?.frequency ?? null, task.period_key)}</span>
-                          <span className="sub">Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}</span>
+                          <span className="sub">Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}</span>
                         </span>
                         <Badge tone={task.status === "filed" ? "done" : overdue ? "late" : task.status === "in_progress" ? "blue" : ""}>
                           {overdue ? "Overdue" : taskStatuses[task.status as keyof typeof taskStatuses]}
@@ -617,6 +622,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <p className="hint client-empty">{show==="filed" ? "No filed returns on this page." : "No returns due. Add a number and choose its services on Overview."}</p>
               )}
             </section>
+            {!!needs2b.size && membership.may("portal_files", client.id) && <PortalDrop clientId={client.id} back="returns" />}
             {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns","returns")}
           </>
         )}
