@@ -3,7 +3,7 @@ import type { Json } from "@/src/db/types";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { serverCrypto } from "@/src/lib/crypto";
-import { describeFile, folderFor, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
+import { describeFile, folderFor, gstinFor, periodName, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
 import type { FolderOrder, Naming } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { firmMailer, mailHealth } from "@/src/lib/firm-mail";
@@ -17,9 +17,9 @@ import type { Handler } from "./runner";
 // Files a client email's attachments into the client's folder in the firm's drive
 // (PLAN.md 5.5.0, D24, D36): Financial year / Client / Work type, named Client - Type -
 // Period. A file goes under To check for a person to confirm when the rules could not tell
-// its type or period, or when the client already has the same file, or another of the same
-// type and period (the same document again: the team chooses). A retry skips files already
-// filed from this email, by checksum.
+// its type or period, or when the client already has the same file. One of the same type,
+// period and GSTIN as a filed one becomes current, the older kept as an earlier version. A
+// retry skips files already filed from this email, by checksum.
 export const fileMail: Handler = async (job) => {
   const admin = supabaseAdmin();
   const { data: event } = await admin
@@ -96,13 +96,15 @@ async function fileAttachments(
   const notice = notices?.[0]?.details as NoticeDetails | undefined;
   const { data: existing } = await admin.from("documents").select("id, email_event_id, sha256, document_type, period_key, status").eq("client_id", event.client_id);
   const known = existing ?? [];
+  const { data: gstins } = await admin.from("client_registrations").select("id").eq("client_id", event.client_id).eq("kind", "gstin");
   for (const file of read.files) {
     const sha256 = createHash("sha256").update(file.bytes).digest("hex");
     const previous=known.find((document)=>document.email_event_id===event.id && document.sha256===sha256);
     if (previous) {if(previous.status==="filed" && /\.(xlsx?|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,previous.id);if(error) throw new Error("sales_not_queued");}filed.push({type:previous.document_type,period:previous.period_key,toCheck:previous.status!=="filed"});continue;}
     const described = describeFile(file.name, read.subject, event.label, event.received_at);
     const about = notice ? { ...described, work: notice.authority, type: described.type === "Document" && /\.pdf$/i.test(file.name) ? "Notice" : described.type } : described;
-    const again = known.some((document) => document.sha256 === sha256 || (about.sure && document.document_type === about.type && document.period_key === about.period));
+    const again = known.some((document) => document.sha256 === sha256);
+    const registration = gstinFor(about.work, (gstins ?? []).map((row) => row.id));
     const toCheck = !about.sure || again;
     const folder = await drive.ensureFolder(folderFor(order, client, { ...about, receivedAt: event.received_at, toCheck }));
     const parts = { client, type: about.type, period: periodName(about.period), extension: path.extname(file.name) };
@@ -124,8 +126,10 @@ async function fileAttachments(
       size: file.bytes.length,
       sha256,
       received_at: event.received_at,
+      registration_id: registration,
     });
     if (error) throw new Error("document_not_saved");
+    if (!toCheck) await settleVersions(admin, { client_id: event.client_id, work_type: about.work, document_type: about.type, period_key: about.period, registration_id: registration });
     await queueRead(firm, id);
     if(about.work==="gst" && !toCheck && /\.(xlsx?|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,id);if(error) throw new Error("sales_not_queued");}
     filed.push({ type: about.type, period: about.period, toCheck });

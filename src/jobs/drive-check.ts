@@ -1,3 +1,4 @@
+import { settleVersions } from "@/src/lib/documents";
 import { openDrive } from "@/src/lib/drive-account";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Handler } from "./runner";
@@ -23,7 +24,7 @@ export const driveCheck: Handler = async (job) => {
     return { retry: "drive_unreachable" };
   }
   const byId = new Map(seen.files.map((file) => [file.id, file.path]));
-  const { data: documents } = await admin.from("documents").select("id, name, status, drive_file_id").eq("firm_id", firm).neq("status", "deleted");
+  const { data: documents } = await admin.from("documents").select("id, name, status, drive_file_id, client_id, work_type, document_type, period_key, registration_id").eq("firm_id", firm).neq("status", "deleted");
   let missing = 0;
   for (const document of documents ?? []) {
     const path = byId.get(document.drive_file_id);
@@ -40,6 +41,8 @@ export const driveCheck: Handler = async (job) => {
     if (name !== document.name || status !== document.status) {
       await admin.from("documents").update({ name, status }).eq("id", document.id);
       await admin.from("activity_log").insert({ firm_id: firm, action: "document.changed_outside", entity_type: "document", entity_id: document.id, details: { renamed: name !== document.name } });
+      // An earlier version found again goes back behind the current one.
+      if (status === "filed" && document.status === "missing") await settleVersions(admin, document);
     }
   }
 

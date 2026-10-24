@@ -15,7 +15,7 @@ import { FileViewer } from "../files/[id]/view/file-viewer";
 import { Badge, Empty, PageHead } from "../ui";
 
 const PAGE = 50;
-const columns = "id, client_id, name, document_type, work_type, period_key, status, email_event_id, received_at, form:prepared->>form, clients(name), email_events(contact_id, contacts(name_enc))";
+const columns = "id, client_id, name, document_type, work_type, period_key, status, email_event_id, received_at, form:prepared->>form, clients(name), email_events(contact_id, contacts(name_enc)), client_registrations(number_enc)";
 const drives: Record<string, string> = { dropbox: "Dropbox", onedrive: "OneDrive" };
 
 // Every paper of the clients this person may see, in the firm's own drive: by financial
@@ -46,10 +46,11 @@ export default async function Documents({ searchParams }: { searchParams: Promis
     return tokens ? query.contains("search_tokens", tokens) : query;
   };
   const count = (work?: WorkType) => {
-    const query = scoped(supabase.from("documents").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).neq("status", "deleted"));
+    const query = scoped(supabase.from("documents").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).not("status", "in", "(deleted,earlier)"));
     return work ? query.eq("work_type", work) : query;
   };
-  const listed = scoped(supabase.from("documents").select(columns).eq("firm_id", membership.firmId).neq("status", "deleted"));
+  // Earlier versions are listed only in their current paper's panel on the client's page.
+  const listed = scoped(supabase.from("documents").select(columns).eq("firm_id", membership.firmId).not("status", "in", "(deleted,earlier)"));
   const [{ data: papers, error }, all, ...byWork] = await Promise.all([
     (kind ? listed.eq("work_type", kind) : listed).order("received_at", { ascending: false }).order("id", { ascending: false }).range((page - 1) * PAGE, page * PAGE - 1),
     count(),
@@ -85,6 +86,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
       ),
     ),
   );
+  const paperGstin = paper?.client_registrations ? await crypto.decrypt(membership.firmId, `clients/${paper.client_id}/gstin`, paper.client_registrations.number_enc) : "";
   const cameFrom = (row: (typeof shown)[number]) => {
     if (row.email_event_id) return `Email from ${senders.get(row.email_events?.contact_id ?? "") || row.clients?.name || "the client"}`;
     if (row.form) return "Prepared in InboxCA";
@@ -245,6 +247,12 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               <span className="docs-label">Came from</span>
               {cameFrom(paper)}
             </p>
+            {paperGstin && (
+              <p>
+                <span className="docs-label">GSTIN</span>
+                <span className="num">{paperGstin}</span>
+              </p>
+            )}
             <div className="docs-actions">
               <Link className="b b-secondary" href={`/app/files/${paper.id}/view`}>
                 View

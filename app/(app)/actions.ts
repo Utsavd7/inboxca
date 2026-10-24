@@ -10,10 +10,10 @@ import { STAGES } from "@/src/lib/reminders";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
-import { checklists, type DocumentRequest } from "@/src/lib/checklists";
+import { checklists, kindChecklist, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { documentTypes, folderFor, periodChoices, periodName, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
+import { documentTypes, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
@@ -781,7 +781,7 @@ async function visibleDocument(form: FormData) {
   if (!membership || !visible) redirect("/app");
   const back = `/app/clients/${visible.client_id}?tab=files`;
   const [{ data: document }, opened] = await Promise.all([
-    supabaseAdmin().from("documents").select("work_type, document_type, share_policy, period_key, status, name, drive_file_id, received_at, clients(name)").eq("firm_id",membership.firmId).eq("id", id).single(),
+    supabaseAdmin().from("documents").select("work_type, document_type, share_policy, period_key, status, name, drive_file_id, received_at, registration_id, clients(name)").eq("firm_id",membership.firmId).eq("id", id).single(),
     firmDrive(membership.firmId),
   ]);
   if (!document?.clients || !opened) redirect(`${back}&error=drive`);
@@ -843,12 +843,13 @@ export async function manageDocument(form: FormData) {
 }
 
 // Saves a file a person brought into the client's folder in the drive and records it,
-// logged with who did it. Refuses a file the client already has.
+// logged with who did it. Refuses a file the client already has. A GST paper gets the
+// client's GSTIN, or the one chosen; a filed one may become the current version.
 async function saveForClient(
   membership: { firmId: string },
   userId: string | null,
   client: { id: string; name: string },
-  values: { work_type: WorkType; document_type: string; period_key: string; status: "filed" | "to_check" },
+  values: { work_type: WorkType; document_type: string; period_key: string; status: "filed" | "to_check"; registration_id?: string | null },
   file: { name: string; bytes: Uint8Array },
   opened: NonNullable<Awaited<ReturnType<typeof firmDrive>>>,
 ) {
@@ -866,11 +867,14 @@ async function saveForClient(
   );
   if (placed === "taken") return "drive" as const;
   const id = randomUUID();
+  const { data: gstins } = values.work_type === "gst" ? await admin.from("client_registrations").select("id").eq("client_id", client.id).eq("kind", "gstin") : { data: [] };
+  const registration_id = gstinFor(values.work_type, (gstins ?? []).map((row) => row.id), values.registration_id);
   await admin.from("documents").insert({
     id,
     firm_id: membership.firmId,
     client_id: client.id,
     ...values,
+    registration_id,
     drive_file_id: placed.id,
     name: placed.name,
     original_name_enc: await serverCrypto().encrypt(membership.firmId, `documents/${id}/original_name`, file.name),
@@ -879,6 +883,7 @@ async function saveForClient(
     received_at: now,
   });
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.uploaded", entity_type: "document", entity_id: id });
+  if (values.status === "filed") await settleVersions(admin, { client_id: client.id, ...values, registration_id });
   await queueRead(membership.firmId, id);
   return { id };
 }
@@ -900,9 +905,13 @@ export async function uploadDocument(form: FormData) {
   const values = documentValues(form);
   const file = form.get("file");
   if (!values || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD) redirect(`${back}&upload=1&error=upload`);
+  // A GST paper of a client with more than one GSTIN names its GSTIN.
+  const registration = String(form.get("registration") ?? "");
+  const { data: gstins } = values.work_type === "gst" ? await supabase.from("client_registrations").select("id").eq("firm_id", membership.firmId).eq("client_id", client.id).eq("kind", "gstin") : { data: [] };
+  if ((gstins?.length ?? 0) > 1 && !gstins?.some((row) => row.id === registration)) redirect(`${back}&upload=1&error=gstin`);
   const opened = await firmDrive(membership.firmId);
   if (!opened) redirect(`${back}&error=drive`);
-  const saved = await saveForClient(membership, userId, client, { ...values, status: "filed" }, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, opened);
+  const saved = await saveForClient(membership, userId, client, { ...values, status: "filed", registration_id: registration }, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, opened);
   if (saved === "twin") redirect(`${back}&upload=1&error=twin`);
   if (saved === "drive") redirect(`${back}&error=drive`);
   await spendGrant(grant);
@@ -934,10 +943,10 @@ export async function dropPortalFiles(form: FormData) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const portal = recognisePortalFile(bytes);
     const { data: registration } = portal
-      ? await supabase.from("client_registrations").select("client_id, clients(id, name)").eq("firm_id",membership.firmId).eq("kind", "gstin").eq("number_bidx", await crypto.blindIndex(membership.firmId, "gstin", portal.gstin)).maybeSingle()
+      ? await supabase.from("client_registrations").select("id, client_id, clients(id, name)").eq("firm_id",membership.firmId).eq("kind", "gstin").eq("number_bidx", await crypto.blindIndex(membership.firmId, "gstin", portal.gstin)).maybeSingle()
       : { data: null };
     let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
-    if (portal && registration?.clients && membership.may("portal_files",registration.client_id)) saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed" }, { name: file.name, bytes }, opened);
+    if (portal && registration?.clients && membership.may("portal_files",registration.client_id)) saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: registration.id }, { name: file.name, bytes }, opened);
     else if (!portal && onClient && membership.may("upload", onClient)) {
       const { data: client } = await supabase.from("clients").select("id, name").eq("firm_id",membership.firmId).eq("id", onClient).maybeSingle();
       if (client) saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, { name: file.name, bytes }, opened);
@@ -976,6 +985,8 @@ export async function removeDocument(form: FormData) {
       : await placeUnderFreeName({ client, type: document.document_type, period: periodName(document.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place, naming);
   if (placed === "taken") redirect(`${back}&error=drive`);
   await supabaseAdmin().rpc("remove_document", { target: id, actor: userId, new_status: status, new_name: placed.name, new_file: placed.id });
+  // Removing the current version brings back the latest earlier one; putting it back makes it current again.
+  await settleVersions(supabaseAdmin(), { client_id: clientId, ...document });
   await spendGrant(grant);
   revalidatePath("/app", "layout");
   redirect(restoring ? `${back}&saved=${id}` : `${back}&removed=${id}`);
@@ -987,7 +998,7 @@ export async function removeDocument(form: FormData) {
 // person sees it once to send it themselves otherwise.
 export async function askForDocuments(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
-  const { data: client } = await supabase.from("clients").select("id, name, email_enc").eq("id", String(form.get("client") ?? "")).maybeSingle();
+  const { data: client } = await supabase.from("clients").select("id, name, email_enc, kind").eq("id", String(form.get("client") ?? "")).maybeSingle();
   if (!membership || !client) redirect("/app");
   const back = `/app/clients/${client.id}?tab=files`;
   const period = String(form.get("period") ?? "");
@@ -996,14 +1007,19 @@ export async function askForDocuments(form: FormData) {
     .split(",")
     .map((name) => name.trim())
     .filter((name) => name && name.length <= 80);
+  const kindList = kindChecklist(membership.settings, client.kind);
   const items = [
     ...named.flatMap((value) => {
       const [work, type] = value.split(":");
+      if (work === "kind") return kindList.includes(type) ? [{ type, work: workOfType(type), received: [] as string[] }] : [];
       return work in workTypes && checklists[work as WorkType]?.includes(type) ? [{ type, work: work as WorkType, received: [] as string[] }] : [];
     }),
     ...others.map((type) => ({ type, work: "other" as WorkType, received: [] as string[] })),
-  ];
-  if (!items.length || items.length > 30 || (period && !periodChoices(todayInIndia()).includes(period))) redirect(`${back}&ask=1&error=ask`);
+  ].filter((item, at, all) => all.findIndex((other) => other.type === item.type) === at);
+  // Which GSTIN the GST papers are for, when the client has more than one.
+  const registration = String(form.get("registration") ?? "");
+  const { data: gstin } = registration ? await supabase.from("client_registrations").select("id").eq("firm_id", membership.firmId).eq("client_id", client.id).eq("kind", "gstin").eq("id", registration).maybeSingle() : { data: null };
+  if (!items.length || items.length > 30 || (period && !periodChoices(todayInIndia()).includes(period)) || (registration && !gstin)) redirect(`${back}&ask=1&error=ask`);
   const token = randomBytes(32).toString("base64url");
   const id = randomUUID();
   const admin = supabaseAdmin();
@@ -1016,7 +1032,7 @@ export async function askForDocuments(form: FormData) {
     entity_id: id,
     expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
     // The token itself is kept encrypted with the firm's key, only so follow-ups can send the same link.
-    details: { period, items, link_hash: createHash("sha256").update(token).digest("hex"), link_enc: await serverCrypto().encrypt(membership.firmId, `requests/${id}/link`, token) },
+    details: { period, items, link_hash: createHash("sha256").update(token).digest("hex"), link_enc: await serverCrypto().encrypt(membership.firmId, `requests/${id}/link`, token), ...(gstin && { registration: gstin.id }) },
   });
   if (error) redirect(`${back}&ask=1&error=ask`);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.created", entity_type: "request", entity_id: id });
@@ -1030,6 +1046,25 @@ export async function askForDocuments(form: FormData) {
   revalidatePath("/app", "layout");
   // The link is shown once, in the address, only when it could not be emailed.
   redirect(sent ? `${back}&asked=sent` : `${back}&asked=${encodeURIComponent(link)}`);
+}
+
+// The owner, a partner or a manager changes the firm's usual list for this kind of client,
+// one paper a line; an empty list goes back to the practice list (firms.settings.checklists).
+export async function saveChecklist(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const { data: client } = await supabase.from("clients").select("id, kind").eq("firm_id", membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
+  if (!client) redirect("/app");
+  const back = `/app/clients/${client.id}?tab=files&ask=1`;
+  if (!canManageClients(membership.role)) redirect(`${back}&error=needs`);
+  const items = [...new Set(String(form.get("items") ?? "").split("\n").map((line) => line.trim()).filter(Boolean))];
+  if (items.length > 30 || items.some((item) => item.length > 80 || item.includes(":"))) redirect(`${back}&error=list`);
+  const lists = { ...(membership.settings.checklists as Record<string, string[]> | undefined) };
+  if (items.length) lists[client.kind] = items;
+  else delete lists[client.kind];
+  await supabaseAdmin().from("firms").update({ settings: { ...membership.settings, checklists: lists } }).eq("id", membership.firmId);
+  revalidatePath("/app", "layout");
+  redirect(back);
 }
 
 // A file the client uploads through their private link, against one item asked for. The
@@ -1057,7 +1092,7 @@ export async function uploadToRequest(form: FormData) {
     { firmId: request.firm_id },
     null,
     request.clients,
-    { work_type: item.work, document_type: item.type, period_key: details.period, status: "filed" },
+    { work_type: item.work, document_type: item.type, period_key: details.period, status: "filed", registration_id: details.registration },
     { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) },
     opened,
   );
