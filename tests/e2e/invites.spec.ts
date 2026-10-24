@@ -1069,7 +1069,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(details.reminded).toHaveLength(1);
   await query(local.dbUrl, "update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-3 where client_id=$1 and code=$2", [clientId,code]);
   await owner.goto("/app");
-  const late = owner.locator("section[aria-labelledby=t-late] li").filter({ hasText: mailClient });
+  // Other test clients share the start of this name, so the row is found by its exact name.
+  const late = owner.locator("section[aria-labelledby=t-late] li").filter({ has: owner.getByText(mailClient, { exact: true }) });
   await expect(late).toBeVisible();
   // M5 acceptance: filing removes this return from the pending firm's reminder run.
   await query(local.dbUrl, "update public.tasks set status='filed',details=(details-'reminder') || jsonb_build_object('filed_on',current_date) where client_id=$1 and code=$2", [clientId,code]);
