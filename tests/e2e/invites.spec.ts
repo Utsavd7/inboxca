@@ -616,6 +616,10 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await expect(owner.getByRole("status")).toHaveText("Who sees clients saved.");
   await person.goto("/app/clients");
   await expect(person.locator(".page-head")).toContainText("0 clients.");
+  // Today's late returns are those of the clients the person can see: none yet.
+  await query(local.dbUrl, "insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR1_M','2026-01',current_date-30)", [firm.firmId, client.split("/").at(-1)]);
+  await person.goto("/app");
+  await expect(person.locator("section[aria-labelledby=t-late]")).toContainText("No return is late.");
 
   // A team: the person joins it, and the client is assigned to the whole team.
   await owner.goto("/app/people?panel=groups");
@@ -635,6 +639,8 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.getByRole("button", { name: "Assign" }).click();
   await expect(owner.getByRole("dialog", { name: "Looked after by" }).getByRole("listitem").filter({ hasText: "Team: GST team" })).toContainText("Staff");
   await person.reload();
+  await expect(person.locator("section[aria-labelledby=t-late] li").filter({ hasText: "Shared Client" })).toContainText("GSTR-1 (monthly) for Jan 2026");
+  await person.goto("/app/clients");
   await expect(person.getByRole("link", { name: "Shared Client" })).toBeVisible();
   await expect(person.locator(".page-head")).toContainText("1 client.");
 });

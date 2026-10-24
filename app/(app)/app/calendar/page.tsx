@@ -7,6 +7,7 @@ import { addDays, calendarViews, dueLabel, periodLabel, todayInIndia, type Calen
 import { currentMember } from "@/src/lib/member";
 import { AutoSelect } from "../auto-select";
 import { LinkTabs } from "../link-tabs";
+import { MarkFiled } from "../mark-filed";
 import { Badge, Empty, PageHead, SidePanel, Toast, type Tone } from "../ui";
 
 const columns = "id, client_id, code, period_key, due_on, status, details, clients!inner(name, archived_at)";
@@ -20,7 +21,6 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
-  const view: CalendarView = params.view && params.view in calendarViews ? (params.view as CalendarView) : "month";
   const today = todayInIndia();
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const pageSize = 100;
@@ -40,6 +40,10 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     if (window.from) query = query.gte("due_on", window.from);
     return code ? query.eq("code", code) : query;
   };
+  const counted = "id, clients!inner(archived_at)" as typeof columns;
+  // With no view asked for, it opens on the late returns when there are any.
+  const view: CalendarView =
+    params.view && params.view in calendarViews ? (params.view as CalendarView) : !day && (await returns("overdue", counted, true)).count ? "overdue" : "month";
   const href = (next: { view?: CalendarView; day?: string; page?: number; task?: string } = {}) => {
     const search = new URLSearchParams();
     const on = next.view ? null : (next.day ?? day);
@@ -59,7 +63,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     supabase.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", "").order("name"),
     strip ? supabase.rpc("calendar_days", { target_firm: membership.firmId, first_day: strip[0], last_day: strip.at(-1)!, only_code: code || undefined }) : Promise.resolve({ data: null }),
     picked.length ? supabase.from("tasks").select("id, code, period_key, due_on, clients(name)").eq("firm_id", membership.firmId).eq("kind", "compliance").neq("status", "filed").in("id", picked).order("due_on") : Promise.resolve({ data: null }),
-    ...views.map((shown) => returns(shown, "id, clients!inner(archived_at)" as typeof columns, true)),
+    ...views.map((shown) => returns(shown, counted, true)),
   ]);
   if (total && from >= total) redirect(href({ page: Math.ceil(total / pageSize) }));
   const rule = new Map(rules?.map((r) => [r.code, r]));
@@ -68,7 +72,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const most = Math.max(1, ...onDay.values());
 
   const status = (task: { status: string; due_on: string }): [Tone, string] =>
-    task.status === "filed" ? ["done", "Filed"] : task.due_on < today ? ["late", "Overdue"] : task.status === "in_progress" ? ["", "In progress"] : ["", "Upcoming"];
+    task.status === "filed" ? ["done", "Filed"] : task.due_on < today ? ["late", "Late"] : task.status === "in_progress" ? ["", "In progress"] : ["", "Upcoming"];
   const filedView = !day && view === "filed";
   const period = day ? `Due on ${dueLabel(day)}` : view === "overdue" ? "Due before today" : filedView ? `Filed since ${dueLabel(addDays(today, -30))}` : `${dueLabel(today)} to ${dueLabel(addDays(today, view === "week" ? 7 : 30))}`;
   const shownFrom = total ? from + 1 : 0;
@@ -135,9 +139,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 </option>
               ))}
             </AutoSelect>
-            <button className="sr-only" value="code">
-              Show
-            </button>
+            <noscript>
+              <button className="b b-secondary">Show</button>
+            </noscript>
           </form>
         </div>
         {tasks?.length ? (
@@ -213,7 +217,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
             </table>
           </div>
         ) : (
-          <Empty Icon={CalendarDays} title={view === "overdue" && !day ? "Nothing is overdue" : "No returns here"}>
+          <Empty Icon={CalendarDays} title={view === "overdue" && !day ? "Nothing is late" : "No returns here"}>
             <span>{view === "overdue" && !day ? "Every return that was due has been filed." : "Choose the services you file on a client's page, and their due dates appear here."}</span>
             {code ? (
               <Link className="b b-secondary" href={day ? `/app/calendar?day=${day}` : `/app/calendar?view=${view}`}>
@@ -265,35 +269,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
       {marking && !viewOnly && (
         <SidePanel id="mark-filed" title={marking.length > 1 ? `Mark ${marking.length} returns filed` : "Mark filed"} close={href({ page })}>
           {marking.length ? (
-            <form action={manageTasks}>
-              {state}
-              <p className="hint">Type the acknowledgement number from the portal if you have it. It is kept with the return.</p>
-              <ul className="cal-marking">
-                {marking.map((task) => {
-                  const [form, of] = name(task);
-                  return (
-                    <li key={task.id}>
-                      <input type="hidden" name="task" value={task.id} />
-                      <span>
-                        <strong>{task.clients?.name}</strong>
-                        <span className="sub">
-                          {form} {of}, due {dueLabel(task.due_on)}
-                        </span>
-                      </span>
-                      <input name={`ack-${task.id}`} maxLength={40} autoComplete="off" className="num" placeholder="Acknowledgement number" aria-label={`Acknowledgement for ${task.clients?.name} ${form}`} />
-                    </li>
-                  );
-                })}
-              </ul>
-              <div className="cal-mark-actions">
-                <button className="b b-primary" name="intent" value="filed">
-                  Mark filed
-                </button>
-                <button className="b b-secondary" name="intent" value="in_progress">
-                  Mark in progress
-                </button>
-              </div>
-            </form>
+            <MarkFiled state={state} rows={marking.map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${name(task).join(" ")}, due ${dueLabel(task.due_on)}` }))} />
           ) : (
             <p className="hint">These returns are already filed.</p>
           )}

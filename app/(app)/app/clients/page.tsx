@@ -1,5 +1,5 @@
 import { sendClientPapers } from "@/app/(app)/actions";
-import { dueLabel, todayInIndia } from "@/src/lib/calendar";
+import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { sendSkip, type BulkSend } from "@/src/lib/records";
 import { Search, UsersRound } from "lucide-react";
@@ -18,9 +18,11 @@ import "./clients.css";
 
 const pills = { all: "All", late: "Late", missing: "Missing papers", mine: "Assigned to me" } as const;
 type Pill = keyof typeof pills;
-const columns = "id, name, client_registrations(kind, number_enc), client_assignments(user_id, team_id, role), next:tasks(code, due_on), asks:requests(id)";
-// What each pill adds: a client counts when it has at least one such row.
-const pillJoin: Record<Pill, string> = { all: "", late: ", late:tasks!inner(id)", missing: ", missing:requests!inner(id)", mine: ", mine:client_assignments!inner(role)" };
+const columns = "id, name, client_registrations(kind, number_enc), client_assignments(user_id, team_id, role), next:tasks(code, period_key, due_on), asks:requests(id), late:tasks(id)";
+// What each pill adds: a client counts when it has at least one such row (late returns are
+// joined by every list, to count them, and by a count that asks for them).
+const pillJoin: Record<Pill, string> = { all: "", late: "", missing: ", missing:requests!inner(id)", mine: ", mine:client_assignments!inner(role)" };
+type Lateness = "late" | "on" | null;
 const lookAfter = ["partner_in_charge", "manager", "staff"];
 
 // The client register. Search finds a name, or a whole email, PAN or GSTIN through its
@@ -69,34 +71,53 @@ export default async function Clients({
   ]);
   const myTeam = people?.find((person) => person.user_id === userId)?.team_id;
   // The same search, group, branch and archive choice for the list and every pill's count.
-  const clientsIn = (pill: Pill, select: string, head = false) => {
-    let query = supabase.from("clients").select(`${select}${pillJoin[pill]}` as typeof columns, { count: "exact", head }).eq("firm_id", firm);
+  const clientsIn = (pill: Pill, select: string, head = false, only: Lateness = null) => {
+    const lateness = only ?? (pill === "late" ? "late" : null);
+    let query = supabase.from("clients").select(`${select}${pillJoin[pill]}${head && lateness ? ", late:tasks(id)" : ""}` as typeof columns, { count: "exact", head }).eq("firm_id", firm);
     if (params.group) query = query.eq("group_id", params.group);
     if (params.branch) query = query.eq("branch_id", params.branch);
     query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
     if (emailIndex) query = query.eq("email_bidx", emailIndex);
     else if (byNumber) query = query.in("id", byNumber.map((row) => row.client_id));
     else if (q) query = query.ilike("name", `%${q.replace(/[\\%_]/g, "\\$&")}%`);
-    if (pill === "late") query = query.eq("late.kind", "compliance").neq("late.status", "filed").lt("late.due_on", today).limit(1, { referencedTable: "late" });
+    if (!head || lateness) query = query.eq("late.kind", "compliance").neq("late.status", "filed").lt("late.due_on", today);
+    if (head && lateness) query = query.limit(1, { referencedTable: "late" });
+    if (lateness) query = lateness === "late" ? query.not("late", "is", null) : query.is("late", null);
     if (pill === "missing") query = query.eq("missing.kind", "documents").eq("missing.status", "pending").gt("missing.expires_at", now).limit(1, { referencedTable: "missing" });
     if (pill === "mine") query = query.or(`user_id.eq.${userId}${myTeam ? `,team_id.eq.${myTeam}` : ""}`, { referencedTable: "mine" });
     return query;
   };
-  const list = clientsIn(show, columns)
-    .eq("client_registrations.kind", "gstin")
-    .eq("next.kind", "compliance").neq("next.status", "filed").order("due_on", { referencedTable: "next" }).limit(1, { referencedTable: "next" })
-    .eq("asks.kind", "documents").eq("asks.status", "pending").gt("asks.expires_at", now).limit(1, { referencedTable: "asks" })
-    .order("name").order("id").range(from, from + pageSize - 1);
-  const [{ data: clients, count: total }, { data: rules }, ...counts] = await Promise.all([
-    list,
-    supabase.from("compliance_types").select("code, name").eq("period_key", ""),
+  const list = (lateness: Lateness, at: number, to: number) =>
+    clientsIn(show, columns, false, lateness)
+      .eq("client_registrations.kind", "gstin")
+      .eq("next.kind", "compliance").neq("next.status", "filed").order("due_on", { referencedTable: "next" }).limit(1, { referencedTable: "next" })
+      .eq("asks.kind", "documents").eq("asks.status", "pending").gt("asks.expires_at", now).limit(1, { referencedTable: "asks" })
+      .order("name").order("id").range(at, to);
+  // Late clients come first, then the rest, each by name; a page can hold some of both.
+  const lateFirst = show !== "late" && !archived;
+  const late = lateFirst ? ((await clientsIn(show, "id", true, "late")).count ?? 0) : 0;
+  const last = from + pageSize - 1;
+  const [lateClients, restClients, { data: rules }, ...counts] = await Promise.all([
+    lateFirst && from < late ? list("late", from, Math.min(last, late - 1)) : { data: [] },
+    !lateFirst ? list(null, from, last) : last >= late ? list("on", Math.max(0, from - late), last - late) : { data: [] },
+    supabase.from("compliance_types").select("code, name, frequency").eq("period_key", ""),
     ...(Object.keys(pills) as Pill[]).map((pill) => clientsIn(pill, "id", true)),
   ]);
-  if (total && from >= total) redirect(pageHref(Math.ceil(total / pageSize)));
+  const clients = [...(lateClients.data ?? []), ...(restClients.data ?? [])];
   const countOf = Object.fromEntries((Object.keys(pills) as Pill[]).map((pill, at) => [pill, counts[at].count ?? 0])) as Record<Pill, number>;
+  const total = countOf[show];
+  if (total && from >= total) redirect(pageHref(Math.ceil(total / pageSize)));
   const nameOf = new Map(groups?.map((group) => [group.id, group.name]));
   const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
-  const ruleName = new Map(rules?.map((rule) => [rule.code, rule.name]));
+  const ruleOf = new Map(rules?.map((rule) => [rule.code, rule]));
+  // "GSTR-1 (monthly), 11 Nov 2026", or for a late one "Late since 11 Oct: GSTR-1 (monthly) Sep 2026".
+  const returnLine = (task: { code: string | null; period_key: string | null; due_on: string }) => {
+    const rule = ruleOf.get(task.code ?? "");
+    const name = rule?.name ?? task.code;
+    if (task.due_on >= today) return `${name}, ${dueLabel(task.due_on)}`;
+    const since = task.due_on.slice(0, 4) === today.slice(0, 4) ? dueLabel(task.due_on).slice(0, -5) : dueLabel(task.due_on);
+    return `Late since ${since}: ${name} ${periodLabel(rule?.frequency ?? null, task.period_key)}`.trim();
+  };
   const branches = groups?.filter((group) => group.kind === "branch") ?? [];
   const filtered = params.group || params.branch;
   const groupName = filtered ? nameOf.get(filtered) : null;
@@ -112,7 +133,14 @@ export default async function Clients({
         gstin: gstin ? await crypto.decrypt(firm, `clients/${client.id}/gstin`, gstin.number_enc) : "",
         lead: lead ? (lead.team_id ? nameOf.get(lead.team_id) : personName(emailOf.get(lead.user_id ?? ""))) : "",
         next,
-        state: archived ? (["Archived", ""] as const) : next && next.due_on < today ? (["Late", "late"] as const) : client.asks.length ? (["Missing papers", "warn"] as const) : next ? (["On track", "done"] as const) : (["No returns", ""] as const),
+        // Late first, then missing papers; one tag when neither.
+        tags: archived
+          ? [["Archived", ""] as const]
+          : [
+              ...(client.late.length ? [[`Late: ${client.late.length} return${client.late.length === 1 ? "" : "s"}`, "late"] as const] : []),
+              ...(client.asks.length ? [["Missing papers", "warn"] as const] : []),
+              ...(client.late.length || client.asks.length ? [] : [next ? (["On track", "done"] as const) : (["No returns", ""] as const)]),
+            ],
       };
     }),
   );
@@ -222,9 +250,13 @@ export default async function Clients({
                   </td>
                   <td className="num">{client.gstin || <span className="hint">None</span>}</td>
                   <td>{client.lead || <span className="hint">Nobody yet</span>}</td>
-                  <td>{client.next ? `${ruleName.get(client.next.code ?? "") ?? client.next.code}, ${dueLabel(client.next.due_on)}` : <span className="hint">None due</span>}</td>
+                  <td>{client.next ? returnLine(client.next) : <span className="hint">None due</span>}</td>
                   <td>
-                    <Badge tone={client.state[1]}>{client.state[0]}</Badge>
+                    <span className="clients-tags">
+                      {client.tags.map(([word, tone]) => (
+                        <Badge key={word} tone={tone}>{word}</Badge>
+                      ))}
+                    </span>
                   </td>
                 </tr>
               ))}
