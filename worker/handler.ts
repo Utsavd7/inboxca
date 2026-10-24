@@ -11,6 +11,8 @@ import {templateSchema} from "../src/lib/templates.ts";
 import {z} from "zod";
 import {prepare} from "./prepare.ts";
 import {stampedPdf} from "./download.ts";
+import {listMail, readThread} from "../src/lib/mailbox.ts";
+import {verifyMail} from "../src/lib/mail-view.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
 const reads = new Map<string, number>();
@@ -52,6 +54,14 @@ export async function handle(request: Request): Promise<Response> {
       request.signal.throwIfAborted();const output=prepare(input);
       return new Response(new Uint8Array(output.bytes),{headers:{"Content-Type":output.type,"Cache-Control":"private, no-store"}});
     } catch {return new Response("The figures do not pass the official form's checks.",{status:422});}
+  }
+  // The Inbox's live mail reads: the answer goes back to the app and nothing is kept.
+  if(request.method==="POST" && url.pathname.startsWith("/mail/")) {
+    let mail;
+    try {mail=await verifyMail(await request.text(),request.headers.get("authorization") ?? "",secret,url.pathname.slice(6));}
+    catch {return new Response("Not allowed",{status:403});}
+    const read=mail.op==="list" ? await listMail(mail.address,mail.password,mail.server,mail.ask) : await readThread(mail.address,mail.password,mail.server,mail.ask);
+    return Response.json(read,{headers:{"Cache-Control":"private, no-store"}});
   }
   if (process.env.FILE_WORKER_TEST === "1" && request.method === "GET" && url.pathname === "/_reads" && secret && request.headers.get("authorization") === `Bearer ${secret}`)
     return Response.json({ reads: reads.get(url.searchParams.get("file") ?? "") ?? 0, peakRssKiB: process.resourceUsage().maxRSS });
