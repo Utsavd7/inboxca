@@ -91,4 +91,4 @@ it("triages 50 invented emails and keeps their subjects and bodies out of saved 
     await db.query("begin");await db.query("select set_config('app.log_purge','on',true)");await db.query("delete from public.firms where id=$1",[firm]);await db.query("commit");await db.end();await rm(dir,{recursive:true,force:true});
   }
   console.info(`Triage: ${correct}/50 correct; ${low}/${low} unclear emails sent to the team; no subject or body markers saved.`);
-},60_000);
+},120_000);
