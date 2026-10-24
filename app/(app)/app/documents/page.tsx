@@ -171,7 +171,8 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                         <td>
                           <span className="docs-name">
                             <Link href={link({ page: state.page, file: row.id })} scroll={false} title={row.name} aria-current={row.id === paper?.id ? "true" : undefined}>
-                              {row.name}
+                              {/* The Client column already names the client, so its name is not repeated here. */}
+                              {row.clients?.name && row.name.startsWith(`${row.clients.name} - `) ? row.name.slice(row.clients.name.length + 3) : row.name}
                             </Link>
                             {tag(row.status)}
                           </span>
