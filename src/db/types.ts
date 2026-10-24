@@ -388,6 +388,19 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"platform_settings": {
+                  Row: {
+                    "key": string,"value": NonNullable<Json>
+                  }
+                  Insert: {
+                    "key": string,"value"?: NonNullable<Json>
+                  }
+                  Update: {
+                    "key"?: string,"value"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"push_subscriptions": {
                   Row: {
                     "endpoint": string,"id": string,"keys": NonNullable<Json>,"user_id": string
