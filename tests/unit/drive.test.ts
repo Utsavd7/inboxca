@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { fileName, financialYear, folderPath, localDrive, safeName } from "@/src/lib/drive";
+import { contentHash } from "@/src/lib/content-hash";
+import { fileName, financialYear, folderPath, INCOMING, incomingPath, localDrive, safeName } from "@/src/lib/drive";
 
 describe("the firm's drive", () => {
   it("files by financial year, client and work, or in the firm's own order", () => {
@@ -30,6 +32,22 @@ describe("the firm's drive", () => {
     const checked = await drive.ensureFolder(["FY 2026-27", "Patel Textiles", "GST", "To check"]);
     expect(await drive.move(path.join(folder, "sales.pdf"), checked, "sales.pdf")).toEqual({ id: path.join(checked, "sales.pdf") });
     await expect(drive.ensureFolder(["..", "outside"])).rejects.toThrow("outside the test drive");
+  });
+  it("checks a file sent from a disk by the drive's own checksum, and keeps it inside Incoming", async () => {
+    const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest();
+    const small = new Uint8Array([1, 2, 3]);
+    expect(await contentHash(new Blob([small]))).toBe(createHash("sha256").update(sha(small)).digest("hex"));
+    // Dropbox's checksum works on 4 MB blocks.
+    const large = new Uint8Array(4 * 1024 * 1024 + 1).fill(7);
+    expect(await contentHash(new Blob([large]))).toBe(createHash("sha256").update(Buffer.concat([sha(large.subarray(0, 4 * 1024 * 1024)), sha(large.subarray(4 * 1024 * 1024))])).digest("hex"));
+
+    expect(incomingPath("../Old files//Patel: Sons/ITR-V.pdf")).toBe("Untitled/Old files/Patel Sons/ITR-V.pdf");
+    const drive = localDrive(await mkdtemp(path.join(tmpdir(), "drive-")));
+    expect(await drive.folders()).toEqual([]);
+    expect(await drive.incomingFile("Old files/ITR-V.pdf")).toBeNull();
+    await drive.save(await drive.ensureFolder([INCOMING, "Old files"]), "ITR-V.pdf", small);
+    expect(await drive.incomingFile("Old files/ITR-V.pdf")).toEqual({ id: path.join("InboxCA", "Incoming", "Old files", "ITR-V.pdf"), hash: await contentHash(new Blob([small])) });
+    expect(await drive.folders()).toEqual([path.join("InboxCA", "Incoming")]);
   });
 });
 

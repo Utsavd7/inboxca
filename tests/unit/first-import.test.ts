@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeClients, matchClient, planImport } from "@/src/lib/first-import";
+import { activeClients, importSince, matchClient, planImport } from "@/src/lib/first-import";
 
 // Folders as a firm keeps them before InboxCA, and where the first import would put each file.
 const clients = [
@@ -32,6 +32,14 @@ describe("the first import", () => {
     // The ITR-V is for AY 2025-26, so FY 2024-25.
     expect(planned.map((file) => file.id)).toEqual(["1", "2"]);
     expect(planImport(files, clients, "all", "", "2026-10-18", { "Clients/Unknown Traders": "desai" }).find((file) => file.id === "4")?.client).toBe("desai");
+  });
+  it("brings only the latest three months of files in the firm's first 14 days", () => {
+    expect(importSince("2026-10-15T10:00:00Z", "2026-10-18")).toBe("2026-08");
+    expect(importSince("2026-10-15T10:00:00Z", "2027-01-05")).toBe("");
+    expect(importSince("2026-12-30T10:00:00Z", "2027-01-05")).toBe("2026-11");
+    const recent = [...files, { id: "5", path: "Clients/Patel Textiles/GST/GSTR-3B Sep 2026.pdf", size: 50 }];
+    // A file with only a year, or no date at all, cannot be shown to be recent.
+    expect(planImport(recent, clients, "all", "", "2026-10-18", {}, "2026-08").map((file) => file.id)).toEqual(["5"]);
   });
   it("matches against every client, past the 1,000 rows one request returns", async () => {
     const firm = Array.from({ length: 2500 }, (_, at) => ({ id: String(at), name: `Client ${at}` }));

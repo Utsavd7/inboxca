@@ -3,10 +3,11 @@ import { dropPortalFiles } from "@/app/(app)/actions";
 
 // The box for files fetched from the government portals (PLAN.md 5.3.1): drop in one or
 // many, for one client or many; InboxCA reads the client and month from inside each.
-export function PortalDrop({ clientId }: { clientId?: string }) {
+export function PortalDrop({ clientId, back }: { clientId?: string; back?: string }) {
   return (
     <form action={dropPortalFiles} className="drop">
       {clientId && <input type="hidden" name="client" value={clientId} />}
+      {back && <input type="hidden" name="back" value={back} />}
       <FileUp size={18} aria-hidden />
       <p className="grow">
         <label htmlFor="portal-files">

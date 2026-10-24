@@ -1101,6 +1101,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await writeFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2025-26.pdf"), "%PDF-1.4 invented ITR-V");
   await writeFile(path.join(old, mailClient, "2025-26", "working notes.txt"), "invented notes");
   await writeFile(path.join(old, "Someone else", "notice.pdf"), "%PDF-1.4 invented notice");
+  // Past the first 14 days, when older files may come in too.
+  await query(local.dbUrl, "update public.firms set created_at = now() - interval '15 days' where id = $1", [firm.firmId]);
   await owner.goto("/app/import");
   await owner.getByLabel(`Old files ${tag}`).check();
   await owner.getByRole("button", { name: "Show what would move" }).click();
