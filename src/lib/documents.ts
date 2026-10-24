@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { fileName, financialYear, folderPath, type FolderOrder, type Naming, type WorkType } from "./drive";
+import type { supabaseAdmin } from "./supabase";
 import type { Label } from "./triage";
 
 // What an attachment is, read by rules from its name and the email's subject (PLAN.md
@@ -69,6 +70,38 @@ export function describeFile(fileName: string, subject: string, label: string | 
   const work = found && found[2] !== "other" ? found[2] : (labelWork[label as Label] ?? "other");
   const year = financialYear(period.length === 4 ? `${period}-03` : period || receivedAt.slice(0, 7));
   return { type: found?.[1] ?? "Document", work, period, year, sure: !!found && !!period };
+}
+
+// The work a paper's type belongs to, by the same rules; "other" when none says.
+export const workOfType = (type: string): WorkType => types.find(([pattern]) => pattern.test(type.toLowerCase()))?.[2] ?? "other";
+
+// The GSTIN a paper is for (decided 24 Oct 2026): only GST work has one. It is the client's
+// only GSTIN, or with more, the one a person chose, if any.
+export const gstinFor = (work: string, gstins: string[], chosen?: string | null) =>
+  work !== "gst" ? null : gstins.length === 1 ? gstins[0] : chosen && gstins.includes(chosen) ? chosen : null;
+
+// Papers a client often sends several of in one period, each its own paper, never versions.
+const manyAPeriod = new Set(["Acknowledgement", "Challan", "Notice", "Order", "Certificate", "Document"]);
+
+// Versions (decided 24 Oct 2026): of a client's filed papers of one type, period and GSTIN,
+// the latest to arrive is current and the others are kept as earlier versions, their files
+// left in the drive. Papers with no period, prepared forms, and GST papers of a client with
+// several GSTINs whose GSTIN is not known are left as they are.
+export async function settleVersions(
+  admin: ReturnType<typeof supabaseAdmin>,
+  paper: { client_id: string; work_type: string; document_type: string; period_key: string; registration_id: string | null },
+) {
+  if (!paper.period_key || manyAPeriod.has(paper.document_type)) return;
+  if (paper.work_type === "gst" && !paper.registration_id) {
+    const { count } = await admin.from("client_registrations").select("id", { count: "exact", head: true }).eq("client_id", paper.client_id).eq("kind", "gstin");
+    if ((count ?? 0) > 1) return;
+  }
+  const group = admin.from("documents").select("id, status").eq("client_id", paper.client_id).eq("document_type", paper.document_type).eq("period_key", paper.period_key).in("status", ["filed", "earlier"]).is("prepared", null);
+  const { data } = await (paper.registration_id ? group.eq("registration_id", paper.registration_id) : group.is("registration_id", null)).order("received_at", { ascending: false }).order("id", { ascending: false });
+  const [current, ...older] = data ?? [];
+  if (current?.status === "earlier") await admin.from("documents").update({ status: "filed" }).eq("id", current.id);
+  const earlier = older.filter((other) => other.status === "filed").map((other) => other.id);
+  if (earlier.length) await admin.from("documents").update({ status: "earlier" }).in("id", earlier);
 }
 
 // Every type a person can pick when confirming a file, in the order shown.

@@ -5,14 +5,14 @@ import { DatasetReview } from "./dataset-review";
 import { FileText } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, findDocuments, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, sendDocument, uploadDocument } from "@/app/(app)/actions";
+import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, findDocuments, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument, uploadDocument } from "@/app/(app)/actions";
 import { dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
-import { checklists, workOfService, type DocumentRequest } from "@/src/lib/checklists";
+import { checklists, kindChecklist, workOfService, type DocumentRequest } from "@/src/lib/checklists";
 import { skipReasons, type Skip } from "@/src/lib/reminders";
 import { type Right } from "@/src/lib/rights";
 import { serverCrypto } from "@/src/lib/crypto";
-import { documentTypes, folderFor, periodChoices, periodName, receivedLabel } from "@/src/lib/documents";
+import { documentTypes, folderFor, periodChoices, periodName, receivedLabel, workOfType } from "@/src/lib/documents";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { authorities, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
@@ -42,6 +42,8 @@ const errors: Record<string, string> = {
   drive: "The firm's drive is not connected or could not be reached. Try again in a minute.",
   upload: "Choose a file of up to 25 MB, and its type, work and period.",
   twin: "This client already has this file.",
+  gstin: "Choose the GSTIN this GST paper is for.",
+  list: "Put one paper on each line, up to 30, each up to 80 letters and without a colon.",
   owner: "Only the owner can remove a file.",
   needs: "This needs permission first. Ask, and the button appears here once it is allowed.",
   asked: "You already have several questions waiting. Wait for an answer first.",
@@ -107,7 +109,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
     supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact"}).eq("firm_id",membership.firmId).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
-    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at, prepared, email_event_id").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
+    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at, prepared, email_event_id, registration_id").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
     supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
     supabase.from("tasks").select("id,due_on,status,details",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
     supabase.from("tasks").select("id, code, due_on",{count:"exact"}).eq("firm_id",membership.firmId).eq("kind","compliance").eq("client_id",id).neq("status","filed").lt("due_on",today).order("due_on").limit(3),
@@ -125,7 +127,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const usualWork = new Set(client.client_registrations.flatMap((registration) => (registration.services ?? []).map(workOfService)));
   // A search keeps only the files whose words include every word typed.
   const matching = find?.trim() ? new Set((await findDocuments(find, id)).map((file) => file.id)) : null;
-  const documents = (files ?? []).filter((file) => file.status !== "deleted" && (!matching || matching.has(file.id)));
+  const documents = (files ?? []).filter((file) => file.status !== "deleted" && file.status !== "earlier" && (!matching || matching.has(file.id)));
   const removedFiles = (files ?? []).filter((file) => file.status === "deleted");
   const owner = membership.role === "owner";
   // Requests stay listed until every file the client sent has been checked.
@@ -171,6 +173,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   };
   // One paper's panel: correct it, send it, remove it. A send that failed comes back to it.
   const paper = documents.find((file) => file.id === (edit ?? send));
+  const earlier = (files ?? []).filter((file) => paper && file.status === "earlier" && file.document_type === paper.document_type && file.period_key === paper.period_key && file.registration_id === paper.registration_id);
   const noticeFile = (files ?? []).find((file) => file.id === (renamed ?? saved ?? removed));
   const sharedFile = documents.find((file) => file.id === shared);
   const receivers = contacts.filter((contact) => contact.can_receive_documents);
@@ -194,6 +197,19 @@ export default async function Client({ params, searchParams }: { params: Promise
   const lead = [...client.client_assignments].sort((a, b) => lookAfter.indexOf(a.role) - lookAfter.indexOf(b.role))[0];
   const leadName = lead ? (lead.team_id ? teams?.find((team) => team.id === lead.team_id)?.name : personName(people?.find((person) => person.user_id === lead.user_id)?.email)) : "";
   const gstin = numbers.find((registration) => registration.kind === "gstin")?.number;
+  // With more than one GSTIN, a GST paper and a request for papers name theirs.
+  const gstins = numbers.filter((registration) => registration.kind === "gstin");
+  const gstinChoice = gstins.length > 1 && (
+    <div>
+      <label htmlFor="gstin-for">GSTIN, for GST papers</label>
+      <select id="gstin-for" name="registration" defaultValue="" className="num">
+        <option value="">Choose</option>
+        {gstins.map((registration) => <option key={registration.id} value={registration.id}>{registration.number}</option>)}
+      </select>
+    </div>
+  );
+  // The firm's usual list for this kind of client, ahead of the lists by work.
+  const kindList = kindChecklist(membership.settings, client.kind);
   const openNotices = (notices ?? []).filter((notice) => ["upcoming", "in_progress"].includes(notice.status));
   const showExtraction = !!drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name));
   const showOutputs = !!draftForms?.some(row=>["GSTR1","GSTR3B"].includes(row.form_code)) || !!outputs;
@@ -897,7 +913,16 @@ export default async function Client({ params, searchParams }: { params: Promise
           <form action={askForDocuments}>
             <input type="hidden" name="client" value={client.id} />
             <div className="ask-groups">
-              {Object.entries(checklists).map(([work, list]) => (
+              <fieldset>
+                <legend>Usual for {clientKinds[client.kind as ClientKind]}</legend>
+                {kindList.map((type) => (
+                  <label key={type} className="check">
+                    <input type="checkbox" name="item" value={`kind:${type}`} defaultChecked={usualWork.has(workOfType(type))} />
+                    {type}
+                  </label>
+                ))}
+              </fieldset>
+              {Object.entries(checklists).map(([work, list]) => [work, list.filter((type) => !kindList.includes(type))] as const).filter(([, list]) => list.length).map(([work, list]) => (
                 <fieldset key={work}>
                   <legend>{workTypes[work as WorkType]}</legend>
                   {list.map((type) => (
@@ -921,9 +946,23 @@ export default async function Client({ params, searchParams }: { params: Promise
                   {periodChoices(today).map((choice) => <option key={choice} value={choice}>{periodName(choice)}</option>)}
                 </select>
               </div>
+              {gstinChoice}
               <button className="b b-primary" type="submit">Ask for papers</button>
             </div>
           </form>
+          {manage && (
+            <details className="reveal">
+              <summary>Change the usual list for {clientKinds[client.kind as ClientKind]}</summary>
+              <form action={saveChecklist} className="fields">
+                <input type="hidden" name="client" value={client.id} />
+                <div>
+                  <label htmlFor="ask-list">One paper on each line. It changes the list for every client of this kind; leave it empty to go back to the starting list.</label>
+                  <textarea id="ask-list" className="ask-list" name="items" rows={8} defaultValue={kindList.join("\n")} />
+                </div>
+                <button className="b b-secondary" type="submit">Save list</button>
+              </form>
+            </details>
+          )}
         </SidePanel>
       )}
       {upload && canUpload && !ask && (
@@ -937,6 +976,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               <input id="file-file" name="file" type="file" required />
             </div>
             <DocumentFields firmTypes={firmTypes} keep={manage} />
+            {gstinChoice}
             <button className="b b-primary" type="submit">Upload</button>
           </form>
           {membership.may("portal_files",client.id) && <><h3>Files from the GST portal</h3><PortalDrop clientId={client.id} /></>}
@@ -954,6 +994,20 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <DocumentFields type={paper.document_type} work={paper.work_type} period={paper.period_key} firmTypes={firmTypes} keep={manage} />
                 <button className="b b-primary" name="intent" value="save">Save</button>
               </form>
+            </>
+          )}
+          {!!earlier.length && (
+            <>
+              <h3>Earlier versions</h3>
+              <p className="hint">Kept in the drive under their own names. This paper replaced them.</p>
+              <ul className="client-rows" aria-label="Earlier versions">
+                {earlier.map((file) => (
+                  <li key={file.id}>
+                    <Link className="grow row-link" href={`/app/files/${file.id}/view`}>{file.name}</Link>
+                    <span className="hint">{receivedLabel(file.received_at)}</span>
+                  </li>
+                ))}
+              </ul>
             </>
           )}
           {paper.status === "filed" && paper.share_policy !== "internal" && (
