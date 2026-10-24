@@ -23,9 +23,14 @@ export async function signUp(_prev: SignUpState, form: FormData): Promise<SignUp
     return fail("Tick the box to accept the terms, privacy notice and DPA.");
 
   const admin = supabaseAdmin();
+  // A public form that makes sign ins and sends email: at most 30 new firms an hour in all.
+  const { count } = await admin.from("activity_log").select("at", { count: "exact", head: true })
+    .eq("action", "firm.signed_up").gte("at", new Date(Date.now() - 3_600_000).toISOString());
+  if ((count ?? 0) >= 30) return fail("Sign up is busy right now. Try again in an hour.");
   const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true });
-  if (error?.code === "email_exists")
-    return fail("This email already has an InboxCA account. Sign in instead.");
+  // An address that already has an account gets an ordinary sign in code, so this page never
+  // tells a visitor which addresses have accounts.
+  if (error?.code === "email_exists") return sendCode(email);
   if (error || !data.user) return fail("Sign up did not work. Try again in a minute.");
   const { error: firmError } = await admin.rpc("sign_up_firm", {
     firm_name: name,
@@ -39,6 +44,10 @@ export async function signUp(_prev: SignUpState, form: FormData): Promise<SignUp
     return fail("Sign up did not work. Try again in a minute.");
   }
 
+  return sendCode(email);
+}
+
+async function sendCode(email: string): Promise<SignUpState> {
   const origin = (await headers()).get("origin") ?? process.env.APP_BASE_URL ?? "";
   const supabase = await supabaseServer();
   await supabase.auth.signInWithOtp({

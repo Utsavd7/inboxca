@@ -50,7 +50,8 @@ test("a new firm signs up, signs in with the email code and reaches the app", as
   );
   expect(firm).toEqual({ status: "pending", state_code: "27", details: { accepted: { terms: "11 Oct 2026", privacy: "11 Oct 2026", dpa: "25 Oct 2026" } } });
 
-  // The same email can not make a second firm.
+  // The same email can not make a second firm, and the page does not say the address has an
+  // account: it moves on to the ordinary sign in code.
   await page.context().clearCookies();
   await page.goto("/sign-up");
   await page.getByLabel("Firm name").fill(`${firmName} again`);
@@ -58,5 +59,7 @@ test("a new firm signs up, signs in with the email code and reaches the app", as
   await page.getByLabel("State").selectOption({ label: "Gujarat" });
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Sign up" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "already has an InboxCA account" })).toBeVisible();
+  await expect(page.getByLabel("Code from the email")).toBeVisible();
+  const firms = await query(local.dbUrl, "select count(*)::int n from public.firms where name=$1", [`${firmName} again`]);
+  expect(firms[0].n).toBe(0);
 });
