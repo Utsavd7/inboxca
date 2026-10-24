@@ -194,7 +194,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     "contact_link.added": "Contact linked", "contact_link.changed": "Contact permissions changed", "contact_link.removed": "Contact removed",
     "task.changed": "Return or notice updated", "document.viewed": "Document viewed",
     "document.uploaded": "Document uploaded", "document.filed": "Document filed", "document.renamed": "Document renamed",
-    "document.deleted": "Document removed", "document.shared": "Document shared", "document.downloaded": "Document downloaded",
+    "document.deleted": "Document removed", "document.shared": "Document shared", "document.downloaded": "Document downloaded", "share.code_sent": "Code emailed for a private document",
     "reminder.sent": "Reminder sent", "email.changed": "Email label corrected",
     "email.acknowledged": "Files received reply sent", "request.changed": "Request updated",
   };

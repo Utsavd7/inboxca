@@ -932,6 +932,13 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await visitor.getByLabel("Code from the email").fill(oneTime);
   await visitor.getByRole("button", { name: "Open" }).click();
   await expect(visitor.getByRole("link", { name: "Download" })).toBeVisible();
+  // A link emails at most 5 codes a day, so its 5 tries a code cannot be repeated without end.
+  await query(local.dbUrl, "insert into public.activity_log(firm_id,action,entity_type,entity_id) select firm_id,'share.code_sent','share',id from public.shares, generate_series(1,4) where link_token_hash=encode(sha256(convert_to($1,'utf8')),'hex')", [shared.split("/s/")[1]]);
+  const stranger = await (await browser.newContext()).newPage();
+  await stranger.goto(shared);
+  await stranger.getByRole("button", { name: "Email me a code" }).click();
+  await expect(stranger.getByRole("status")).toContainText("Too many codes asked for today");
+  await stranger.close();
   for (let download = 0; download < 5; download++) expect(Buffer.from(await (await visitor.request.get(`${shared}/file`)).body())).toEqual(loanPdf);
   expect((await visitor.request.get(`${shared}/file`)).status()).toBe(410);
 

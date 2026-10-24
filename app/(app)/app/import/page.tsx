@@ -6,7 +6,7 @@ import { todayInIndia } from "@/src/lib/calendar";
 import { periodName } from "@/src/lib/documents";
 import { financialYear, workTypes, type WorkType } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
-import { planImport, type Scope } from "@/src/lib/first-import";
+import { activeClients, planImport, type Scope } from "@/src/lib/first-import";
 import type { ImportPlan } from "@/src/jobs/import-files";
 import { currentMember } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -31,9 +31,9 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
   if (membership?.role !== "owner") redirect("/app");
   const params = await searchParams;
   const admin = supabaseAdmin();
-  const [{ data: account }, { data: clients }, { data: imports }] = await Promise.all([
+  const [{ data: account }, clients, { data: imports }] = await Promise.all([
     admin.from("connected_accounts").select("id, provider, credentials_enc").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
-    supabase.from("clients").select("id, name").is("archived_at", null).order("name"),
+    activeClients(supabase),
     admin.from("requests").select("id, status, details").eq("firm_id", membership.firmId).eq("kind", "import").order("id"),
   ]);
   const drive = account && (await openDrive(membership.firmId, account));

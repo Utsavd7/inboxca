@@ -13,6 +13,7 @@ const codeNotes: Record<string, string> = {
   failed: "The code could not be emailed just now. Please try again in a few minutes.",
   wrong: "That code is not right. Check the latest email and try again.",
   again: "That code has expired or had too many tries. Ask for a new one.",
+  limit: "Too many codes asked for today. Try again tomorrow, or ask your CA's office.",
 };
 
 export const metadata: Metadata = { title: "A document for you", robots: { index: false, follow: false } };

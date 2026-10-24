@@ -25,7 +25,7 @@ export const importFiles: Handler = async (job) => {
   const plan = request.details as unknown as ImportPlan;
   const [{ data: account }, { data: clients }] = await Promise.all([
     admin.from("connected_accounts").select("id, provider, credentials_enc, settings").eq("firm_id", firm).eq("kind", "drive").maybeSingle(),
-    admin.from("clients").select("id, name").eq("firm_id", firm),
+    admin.from("clients").select("id, name").eq("firm_id", firm).in("id", plan.files.slice(plan.done, plan.done + BATCH).map((file) => file.client)),
   ]);
   if (!account) return { retry: "drive_unreachable", patient: true };
   const drive = await openDrive(firm, account);
