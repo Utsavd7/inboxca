@@ -67,9 +67,9 @@
   {
     "form_code": "GSTR3B",
     "version": "7.1",
-    "valid_from": null,
+    "valid_from": "2025-04-01",
     "valid_until": null,
-    "status": "draft",
+    "status": "active",
     "source": {
       "file": "gstn/gstr3b-v7.1-request-schema.json",
       "url": "https://developer.gst.gov.in/pages/apiportal/data/Returns/GSTR3B%20-%20Save%20GSTR3B%20data/v7.1/GSTR3B%20-%20Save%20GSTR3B%20data%20request_schema.json",
@@ -77,7 +77,10 @@
     },
     "mappings": {
       "format": "json",
-      "fields": {}
+      "validator": {
+        "file": "gstn/gstr3b-v7.1-request-schema.json",
+        "sha256": "043917ea6fcbe34e97e851fde6cfe9a472aaefb2be503e9438973b16e67480ae"
+      }
     }
   }
 ]

@@ -18,13 +18,14 @@ export async function checkedForm(input:{client:string;registration:string;form:
   const [{data:client},{data:registrations},{data:rows},{data:templates}]=await Promise.all([
     supabase.from("clients").select("id").eq("firm_id",membership.firmId).eq("id",input.client).maybeSingle(),
     supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",input.client).eq("kind","gstin"),
-    supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",input.client).eq("form_code",input.form).eq("period_key",input.period).in("id",input.drafts),
+    // GSTR-3B is built from the month's GSTR-1 figures and its GSTR-2B credit.
+    supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",input.client).in("form_code",input.form==="GSTR3B" ? ["GSTR1","GSTR3B"] : [input.form]).eq("period_key",input.period).in("id",input.drafts),
     supabase.from("templates").select("*").eq("form_code",input.form),
   ]);
   const registration=registrations?.find(row=>row.id===input.registration);
   if(!client || !registration || rows?.length!==input.drafts.length) throw new Error("The work could not be found.");
   // Existing registers have no registration choice. Never guess in a multi-number client.
-  if(input.form==="GSTR1" && registrations?.length!==1) throw new Error("This client's registers need a GST number choice before a form can be prepared.");
+  if((input.form==="GSTR1" || rows?.some(row=>row.form_code==="GSTR1")) && registrations?.length!==1) throw new Error("This client's registers need a GST number choice before a form can be prepared.");
   const template=chooseTemplate((templates ?? []).map(row=>templateSchema.parse(row)),input.form,input.period,input.version,input.reason);
   const gstin=await serverCrypto().decrypt(membership.firmId,`clients/${input.client}/gstin`,registration.number_enc);
   const drafts=[];
