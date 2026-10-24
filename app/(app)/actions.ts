@@ -139,20 +139,20 @@ export async function saveHours(form: FormData) {
     if (!form.get(`open-${day}`)) continue;
     const [from, to] = [form.get(`from-${day}`), form.get(`to-${day}`)].map(String);
     if (!/^\d\d:\d\d$/.test(from) || !/^\d\d:\d\d$/.test(to) || from >= to)
-      redirect(`/app/settings?error=${DAYS[day]}`);
+      redirect(`/app/settings?group=hours&error=${DAYS[day]}`);
     hours[day] = [from, to];
   }
   const { settings } = membership;
   const access = { ...(settings.access as object), hours_only: form.get("hours_only") === "on" };
   await supabase.from("firms").update({ settings: { ...settings, hours, access } }).eq("id", membership.firmId);
-  redirect("/app/settings?saved=hours");
+  redirect("/app/settings?group=hours&saved=hours");
 }
 
 export async function changeHoliday(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const date = String(form.get("date") ?? "");
-  if (!/^\d{4}-\d\d-\d\d$/.test(date)) redirect("/app/settings");
+  if (!/^\d{4}-\d\d-\d\d$/.test(date)) redirect("/app/settings?group=hours");
   const current = (membership.settings.holidays as string[] | undefined) ?? [];
   const holidays =
     form.get("intent") === "remove" ? current.filter((day) => day !== date) : [...new Set([...current, date])].sort();
@@ -174,7 +174,7 @@ export async function saveLimits(form: FormData) {
     session_hours: whole("session_hours", SESSION_CHOICES),
   };
   await supabase.from("firms").update({ settings: { ...membership.settings, access } }).eq("id", membership.firmId);
-  redirect("/app/settings?saved=limits");
+  redirect("/app/settings?group=access&saved=limits");
 }
 
 // Settings → Access preset (5.17): turns Office only on or off through the office checks,
@@ -183,7 +183,7 @@ export async function choosePreset(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const key = String(form.get("preset") ?? "");
-  if (!Object.hasOwn(presets, key)) redirect("/app/settings#preset");
+  if (!Object.hasOwn(presets, key)) redirect("/app/settings?group=access#preset");
   const preset = presets[key as Preset];
   if (!!(membership.settings.office as Office | undefined)?.on !== preset.office) {
     const line = requestLine(await headers(), todayInIndia());
@@ -203,7 +203,7 @@ export async function choosePreset(form: FormData) {
     access: { ...(settings.access as object), hours_only: preset.hours_only, idle_minutes: preset.idle_minutes || undefined },
   } }).eq("id", membership.firmId);
   revalidatePath("/app", "layout");
-  redirect("/app/settings?saved=preset#preset");
+  redirect("/app/settings?group=access&saved=preset#preset");
 }
 
 // The idle timer calls this while the person is active, so the server knows too.
@@ -260,7 +260,7 @@ export async function changeSpecialHours(form: FormData) {
     const day = /^\d{4}-\d\d-\d\d$/;
     const time = /^\d\d:\d\d$/;
     if (!day.test(from) || !day.test(to) || from > to || !time.test(open) || !time.test(close) || open >= close)
-      redirect("/app/settings?error=special");
+      redirect("/app/settings?group=hours&error=special");
     special = [...current, { from, to, open, close }].sort((a, b) => a.from.localeCompare(b.from));
   }
   await supabase.from("firms").update({ settings: { ...membership.settings, special_hours: special } }).eq("id", membership.firmId);
@@ -525,7 +525,7 @@ export async function saveReminders(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", acknowledge: form.get("acknowledge") === "on", reminder_stages: STAGES.filter((day) => form.getAll("stage").includes(String(day))) } }).eq("id", membership.firmId);
-  redirect("/app/settings?saved=reminders#reminders");
+  redirect("/app/settings?group=reminders&saved=reminders#reminders");
 }
 
 // A client's page → Details: pause or resume reminders for this client.
@@ -542,7 +542,7 @@ export async function saveVisibility(form: FormData) {
   if (membership?.role !== "owner") redirect("/app");
   const client_visibility = form.get("visibility") === "restricted" ? "restricted" : "open";
   await supabase.from("firms").update({ settings: { ...membership.settings, client_visibility } }).eq("id", membership.firmId);
-  redirect("/app/settings?saved=visibility");
+  redirect("/app/settings?group=people&saved=visibility");
 }
 
 // Calendar: mark the chosen returns in progress, filed (with each one's acknowledgement
@@ -677,7 +677,7 @@ export async function connectDrive(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const provider = String(form.get("provider") ?? "");
-  if (form.get("agree") !== "on") redirect("/app/settings?error=drive_terms#drive");
+  if (form.get("agree") !== "on") redirect("/app/settings?group=email&error=drive_terms#drive");
   if (provider === "dropbox" && process.env.DROPBOX_APP_KEY) {
     const { verifier, challenge } = pkce();
     const state = randomUUID();
@@ -692,9 +692,9 @@ export async function connectDrive(form: FormData) {
     });
     redirect(dropboxSignIn(state, challenge, `${origin}/api/drive/callback`));
   }
-  if (provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?error=drive_provider#drive");
+  if (provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?group=email&error=drive_provider#drive");
   const { error } = await saveDrive(supabase, membership.firmId, "local", "Test drive on this computer", "{}");
-  if (error) redirect(`/app/settings?error=${error}#drive`);
+  if (error) redirect(`/app/settings?group=email&error=${error}#drive`);
   revalidatePath("/app/settings");
 }
 
@@ -712,7 +712,7 @@ export async function closeFirm(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const { data } = await supabase.rpc("close_firm", { target_firm: membership.firmId, typed_name: String(form.get("name") ?? "") });
-  redirect(data ? "/app/settings" : "/app/settings?error=close_name#close");
+  redirect(data ? "/app/settings" : "/app/settings?group=data&error=close_name#close");
 }
 
 // The search palette: the firm's current clients whose name matches, as many as fit a list.
@@ -1172,7 +1172,7 @@ export async function setFolderOrder(form: FormData) {
   const { userId, membership } = await currentWriter();
   const order = String(form.get("order") ?? "");
   const naming = String(form.get("naming") ?? "client_type_period");
-  if (membership?.role !== "owner" || !(folderOrders as readonly string[]).includes(order) || !(naming in namings)) redirect("/app/settings");
+  if (membership?.role !== "owner" || !(folderOrders as readonly string[]).includes(order) || !(naming in namings)) redirect("/app/settings?group=email");
   const admin = supabaseAdmin();
   const { data: account } = await admin.from("connected_accounts").select("id, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
   if (account) {
@@ -1278,7 +1278,7 @@ export async function saveRecords(form: FormData) {
   if (membership?.role !== "owner") redirect("/app");
   const routine = form.getAll("routine").map(String).filter((type) => documentTypes.includes(type));
   await supabase.from("firms").update({ settings: { ...membership.settings, records: { routine, approve_all: form.get("approve_all") === "on" } } }).eq("id", membership.firmId);
-  redirect("/app/settings?saved=records#records");
+  redirect("/app/settings?group=reminders&saved=records#records");
 }
 
 // The notice tracker (PLAN.md 5.6): a person records a notice by hand, confirms its action
@@ -1344,14 +1344,14 @@ export async function setOfficeOnly(form: FormData) {
   const coAdmin = String(form.get("co_admin") ?? "");
   const deputies = [...new Set([...form.getAll("deputy").map(String), ...(coAdmin ? [coAdmin] : [])])];
   const request = String(form.get("request") ?? "");
-  if (decision === "deputies" && deputies.length > 2) redirect("/app/settings?error=deputies#office");
+  if (decision === "deputies" && deputies.length > 2) redirect("/app/settings?group=access&error=deputies#office");
   // The owner's provider gives no fixed connection: stop suggesting it (5.8).
   if (decision === "no_fixed") {
     if (!firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
     const office = (membership.settings.office ?? {}) as Record<string, unknown>;
     await (await currentWriter()).supabase.from("firms").update({ settings: { ...membership.settings, office: { ...office, fixed_declined: true } } }).eq("id", membership.firmId);
     await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "office.no_fixed", entity_type: "firm", entity_id: membership.firmId });
-    redirect("/app/settings#office");
+    redirect("/app/settings?group=access#office");
   }
   if (request && !z.uuid().safeParse(request).success || deputies.some((id) => !z.uuid().safeParse(id).success)) redirect("/app");
   const { error } = await supabaseAdmin().rpc("office_control", {
@@ -1362,7 +1362,7 @@ export async function setOfficeOnly(form: FormData) {
   });
   if (error) throw new Error(`Office approval failed: ${error.code}`);
   revalidatePath("/app", "layout");
-  redirect("/app/settings#office");
+  redirect("/app/settings?group=access#office");
 }
 
 // The owner decides whether a waiting PC stays in the office, travels, or is refused.
@@ -1373,7 +1373,7 @@ export async function reviewDevice(form: FormData) {
   const decision = String(form.get("decision") ?? "");
   const device = String(form.get("device") ?? "");
   const until = String(form.get("until") ?? "");
-  if (!["office", "laptop", "personal", "refuse", "withdraw"].includes(decision) || (device && !z.uuid().safeParse(device).success) || (decision === "personal" && !z.iso.date().safeParse(until).success)) redirect("/app/settings#office");
+  if (!["office", "laptop", "personal", "refuse", "withdraw"].includes(decision) || (device && !z.uuid().safeParse(device).success) || (decision === "personal" && !z.iso.date().safeParse(until).success)) redirect("/app/settings?group=access#office");
   const { error } = await supabaseAdmin().rpc("review_devices", {
     target_firm: membership.firmId,
     actor: userId,
@@ -1383,7 +1383,7 @@ export async function reviewDevice(form: FormData) {
   });
   if (error) throw new Error(`Device review failed: ${error.code}`);
   revalidatePath("/app");
-  redirect("/app/settings#office");
+  redirect("/app/settings?group=access#office");
 }
 
 // Permission requests (PLAN.md 5.17.2): asked by an employee or manager who may not do it
@@ -1474,11 +1474,11 @@ export async function savePermissions(form: FormData) {
   if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const permissions:Permissions={};
   try {if(form.get("intent")!=="reset") for(const column of ["employee","manager"] as const) permissions[column]={...Object.fromEntries(Object.keys(switchable).map(right=>[right,form.get(`${column}:${right}`)==="on"])),scope:await permissionScope(form,`${column}:`,membership.firmId)};}
-  catch {redirect("/app/settings?error=permission_scope#permissions");}
+  catch {redirect("/app/settings?group=people&error=permission_scope#permissions");}
   const hideInactive = form.get("intent") !== "reset" && form.get("hide_inactive") === "on";
   await supabase.from("firms").update({ settings: { ...membership.settings, permissions, second_form_approval:form.get("intent")!=="reset" && form.get("second_form_approval")==="on", viewer_hide_inactive: hideInactive } }).eq("id", membership.firmId);
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions } });
-  redirect("/app/settings?saved=permissions#permissions");
+  redirect("/app/settings?group=people&saved=permissions#permissions");
 }
 
 async function permissionScope(form:FormData,prefix:string,firm:string) {
@@ -1497,17 +1497,17 @@ export async function allowStanding(form:FormData) {
   const {userId,membership}=await currentWriter();
   if(!membership || !firmAdmin(membership.role,userId,membership.settings)) redirect("/app");
   const person=z.uuid().parse(form.get("person")),right=String(form.get("right") ?? "");
-  if(!Object.hasOwn(switchable,right) || person===userId) redirect("/app/settings#permissions");
+  if(!Object.hasOwn(switchable,right) || person===userId) redirect("/app/settings?group=people#permissions");
   const admin=supabaseAdmin(),{data:member}=await admin.from("firm_members").select("access,role").eq("firm_id",membership.firmId).eq("user_id",person).eq("status","active").maybeSingle();
-  if(!member || member.role==="owner" || right==="approve_requests" && member.role!=="manager" && member.role!=="partner") redirect("/app/settings#permissions");
+  if(!member || member.role==="owner" || right==="approve_requests" && member.role!=="manager" && member.role!=="partner") redirect("/app/settings?group=people#permissions");
   const access=(member.access ?? {}) as {always?:Standing[]};let scope:PermissionScope;
-  try {scope=await permissionScope(form,"",membership.firmId);} catch {redirect("/app/settings?error=permission_scope#permissions");}
+  try {scope=await permissionScope(form,"",membership.firmId);} catch {redirect("/app/settings?group=people&error=permission_scope#permissions");}
   const always=(access.always ?? []).filter(grant=>(typeof grant==="string" ? grant : grant.right)!==right);
   const {error}=await admin.from("firm_members").update({access:{...access,always:[...always,{right,...scope}]}}).eq("firm_id",membership.firmId).eq("user_id",person);
   if(error) throw new Error("The permission could not be saved.");
   await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"permission.always",entity_type:"user",entity_id:person,details:{right,for:person,...scope}});
   revalidatePath("/app","layout");
-  redirect("/app/settings?saved=permissions#permissions");
+  redirect("/app/settings?group=people&saved=permissions#permissions");
 }
 
 // Settings → Permissions: the owner withdraws what one person was always allowed.
@@ -1517,10 +1517,10 @@ export async function withdrawAlways(form: FormData) {
   const person = String(form.get("person") ?? "");
   const admin = supabaseAdmin();
   const { data: member } = await admin.from("firm_members").select("access").eq("firm_id", membership.firmId).eq("user_id", person).maybeSingle();
-  if (!member) redirect("/app/settings#permissions");
+  if (!member) redirect("/app/settings?group=people#permissions");
   await admin.from("firm_members").update({ access: { ...(member.access as object), always: [] } }).eq("firm_id", membership.firmId).eq("user_id", person);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.withdrawn", entity_type: "user", entity_id: person });
-  redirect("/app/settings?saved=permissions#permissions");
+  redirect("/app/settings?group=people&saved=permissions#permissions");
 }
 
 // A staff member away from the office asks to use this device there (5.17.4 #48).
@@ -1639,8 +1639,8 @@ export async function saveMailLimit(form:FormData) {
   const {supabase,membership}=await currentWriter();
   if (membership?.role!=="owner") redirect("/app");
   const limit=z.coerce.number().int().min(1).max(2000).safeParse(form.get("limit"));
-  if (!limit.success) redirect("/app/settings?error=mail_limit#mailbox");
+  if (!limit.success) redirect("/app/settings?group=email&error=mail_limit#mailbox");
   await supabase.from("firms").update({settings:{...membership.settings,mail_limit:limit.data}}).eq("id",membership.firmId);
   revalidatePath("/app/settings");
-  redirect("/app/settings?saved=mail_limit#mailbox");
+  redirect("/app/settings?group=email&saved=mail_limit#mailbox");
 }
