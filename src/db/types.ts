@@ -806,6 +806,9 @@ isOneToOne: false
 "session_live":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
+"sign_up_firm":
+{ Args: { "accepted": Json,"firm_name": string,"owner": string,"state": string }; Returns: string
+                           },
 "take_form_download":
 { Args: { "person": string,"ticket": string,"token_hash": string }; Returns: string
                            },

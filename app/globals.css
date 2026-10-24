@@ -522,10 +522,16 @@ li { text-wrap: pretty; }
 .auth-form { display: grid; gap: 12px; margin-top: 14px; }
 .auth-form label { margin-top: 8px; font-size: 15px; font-weight: 700; }
 /* The sign in form's fields. The signed in app has its own (app/(app)/app/app.css). */
-.auth-form input { height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }
+.auth-form input,
+.auth-form select { height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }
 .auth-form input,
 .auth-form select { width: 100%; }
-.auth-form input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
+.auth-form select { font-family: inherit; }
+.auth-form .auth-check { display: flex; gap: 10px; align-items: flex-start; font-weight: 500; }
+.auth-form .auth-check input { width: 18px; height: 18px; margin-top: 3px; flex: none; }
+.auth-check a, .auth-small a { color: var(--blue-deep); text-decoration: underline; text-underline-offset: 3px; }
+.auth-form input:focus,
+.auth-form select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
 .auth-form input[aria-invalid="true"] { border-color: var(--error); }
 .auth-form .btn { margin-top: 8px; }
 .auth-form .text-button { justify-self: start; font-size: 15px; font-weight: 700; color: var(--blue-deep); text-decoration: underline; text-underline-offset: 4px; }
