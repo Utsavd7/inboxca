@@ -52,7 +52,7 @@ test("services on a client's GSTIN give it its due dates", async () => {
 });
 
 test("a return is marked filed with its acknowledgement on the calendar", async () => {
-  await owner.getByRole("link", { name: "Calendar" }).click();
+  await owner.goto("/app/calendar");
   const row = owner.getByRole("row").filter({ hasText: "GSTR-3B (monthly)" }).first();
   await row.getByRole("checkbox").check();
   await row.getByLabel(/Acknowledgement for/).fill("AA240925123456X");
@@ -62,10 +62,10 @@ test("a return is marked filed with its acknowledgement on the calendar", async 
   await expect(owner.getByRole("row").filter({ hasText: "Patel Textiles" })).toContainText("AA240925123456X");
 });
 
-test("Home shows what needs the owner today and the next setup step", async () => {
+test("Today shows what needs the owner today and the next setup step", async () => {
   // Keep a filing day in this month even after its regular due dates have passed.
   await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date where id=(select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' limit 1)",[firm.firmId]);
-  await owner.getByRole("link", { name: "Home" }).click();
+  await owner.getByRole("link", { name: "Today" }).click();
   // The work board: the return filed above sits in the last column.
   await expect(owner.locator(".lane-filed")).toContainText("Patel Textiles");
   // This month's ribbon: a filing day opens that day in the Calendar.
@@ -74,7 +74,7 @@ test("Home shows what needs the owner today and the next setup step", async () =
   await day.click();
   await expect(owner).toHaveURL(/\/app\/calendar\?day=/,{timeout:15_000});
   await expect(owner.getByRole("heading", { name: /^Due on / })).toBeVisible();
-  await owner.getByRole("link", { name: "Home" }).click();
+  await owner.getByRole("link", { name: "Today" }).click();
   const start = owner.getByRole("region", { name: "Finish setting up" });
   await expect(start.getByRole("listitem").filter({ hasText: "Clients" }).getByLabel("Done")).toBeVisible();
   await expect(start.getByRole("link", { name: "Connect the firm's email" })).toHaveAttribute("href", "/app/settings#mailbox");

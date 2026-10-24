@@ -43,7 +43,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {membership && <Command pages={pagesFor(role)} />}
         {membership && (
           <nav className="rail-nav" aria-label="InboxCA">
-            <NavLinks role={role} waiting={waiting ?? 0} />
+            <NavLinks role={role} waiting={waiting ?? 0} place="main" />
+          </nav>
+        )}
+        {membership && (
+          <nav className="rail-nav rail-foot" aria-label="Firm">
+            <NavLinks role={role} waiting={0} place="foot" />
           </nav>
         )}
         <div className="rail-me">
