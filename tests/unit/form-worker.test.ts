@@ -19,11 +19,13 @@ it("binds the signed form request to the firm, figures, revision, registration, 
   const repeat=JSON.stringify({...request,drafts:[request.drafts[0],request.drafts[0]]});
   await expect(verifyForm(repeat,await signView(repeat,secret),secret,"GSTR1",1000)).rejects.toThrow();
 });
-it("keeps unpublished GSTR-3B files blocked instead of inventing a live version",()=>{
-  const request={...input(),template:templateSchema.parse(catalog[2])};
-  expect(()=>prepare(request)).toThrow("not ready");
-  request.template={...request.template,status:"active",valid_from:"2026-09-01"};
-  expect(()=>prepare(request)).toThrow("not ready");
+it("prepares GSTR-3B as the official utility's upload JSON, never from a draft version",()=>{
+  const request={...input(),template:templateSchema.parse(catalog.find(row=>row.form_code==="GSTR3B"))};
+  request.drafts[0].figures=["OE","24-Gujarat","","18","100","0"].flatMap((value,column)=>value ? [[`b2cs.r2.c${column}`,{label:"Invented field",value}] as [string,{label:string;value:string}]] : []);
+  const made=prepare(request);
+  expect(made.extension).toBe("json");
+  expect(JSON.parse(Buffer.from(made.bytes).toString()).sup_details.osup_det).toEqual({txval:100,iamt:0,camt:9,samt:9,csamt:0});
+  expect(()=>prepare({...request,template:{...request.template,status:"draft"}})).toThrow();
 });
 
 it("returns a filled workbook through the signed worker route and refuses another form",async()=>{

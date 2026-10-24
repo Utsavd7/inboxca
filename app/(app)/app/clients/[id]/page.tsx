@@ -166,7 +166,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     ["due", "Due dates", taskCount ?? 0],
     ["notices", "Notices", noticeCount ?? 0],
     ...(drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name)) ? [["extraction", "Extraction", drafts ?? undefined] as [string,string,number]] : []),
-    ...(draftForms?.some(row=>row.form_code==="GSTR1") || outputs ? [["outputs","Outputs",outputs ?? 0] as [string,string,number]] : []),
+    ...(draftForms?.some(row=>["GSTR1","GSTR3B"].includes(row.form_code)) || outputs ? [["outputs","Outputs",outputs ?? 0] as [string,string,number]] : []),
     ["activity", "Activity"],
     ["contacts", "Contacts", contacts.length],
     ["team", "Team", client.client_assignments.length],
