@@ -2,7 +2,7 @@ import "./calendar.css";
 import { CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { manageTasks } from "@/app/(app)/actions";
+import { manageTasks, markTasksInProgress, reopenTasks } from "@/app/(app)/actions";
 import { addDays, calendarViews, dueLabel, periodLabel, todayInIndia, type CalendarView } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
 import { AutoSelect } from "../auto-select";
@@ -254,12 +254,12 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
           {state}
           <span className="cal-chosen">chosen</span>
           {filedView ? (
-            <button className="b b-primary" formAction={manageTasks} name="intent" value="reopen">
+            <button className="b b-primary" formAction={reopenTasks}>
               Mark chosen as not filed
             </button>
           ) : (
             <>
-              <button className="b b-secondary" formAction={manageTasks} name="intent" value="in_progress">
+              <button className="b b-secondary" formAction={markTasksInProgress}>
                 Mark chosen as in progress
               </button>
               <button className="b b-primary">Mark chosen as filed</button>

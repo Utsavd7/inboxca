@@ -61,6 +61,18 @@ test("services on a client's GSTIN give it its due dates", async () => {
   await expect(due).toHaveCount(n);
 });
 
+// The bulk buttons each carry their own intent: "in progress" must not reopen the return.
+test("returns chosen on the calendar are marked in progress", async () => {
+  await owner.goto("/app/calendar");
+  const box = owner.getByRole("row").filter({ hasText: "GSTR-1 (monthly)" }).first().getByRole("checkbox");
+  const id = await box.getAttribute("value");
+  await box.check();
+  await owner.getByRole("button", { name: "Mark chosen as in progress" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "marked in progress" })).toBeVisible();
+  const [{ status }] = await query(local.dbUrl, "select status from public.tasks where id = $1", [id]);
+  expect(status).toBe("in_progress");
+});
+
 test("a return is marked filed with its acknowledgement on the calendar", async () => {
   await owner.goto("/app/calendar");
   await expect(owner.getByRole("navigation", { name: "Days" }).getByRole("link")).toHaveCount(31);
