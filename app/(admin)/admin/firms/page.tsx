@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge, PageHead } from "@/app/(app)/app/ui";
 import { currentAdmin, when } from "../admin";
 
@@ -20,7 +21,7 @@ export default async function AdminFirms() {
             <tbody>
               {firms.map((firm) => (
                 <tr key={firm.id}>
-                  <td><strong>{firm.name}</strong></td>
+                  <td><Link className="row-link" href={`/admin/firms/${firm.id}`}><strong>{firm.name}</strong></Link></td>
                   <td><Badge tone={firm.status === "active" ? "done" : firm.status === "closed" ? "" : "warn"}>{firm.status[0].toUpperCase() + firm.status.slice(1).replace("_", " ")}</Badge></td>
                   <td className="num">{when(firm.created_at)}</td>
                   <td className="num">{firm.members}</td>

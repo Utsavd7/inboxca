@@ -43,6 +43,12 @@ describe("the office connection", () => {
     expect(requestLine(new Headers({ "cf-connecting-ip": "240.1.2.3", "cf-connecting-ipv6": "2001:db8:a:b::1" }), "2026-10-19"))
       .toEqual({ ipv6: "2001:db8:a:b", confirmed_on: "2026-10-19" });
     expect(requestLine(new Headers({ "x-forwarded-for": "203.0.113.10", "x-real-ip": "203.0.113.10" }), "2026-10-19")).toBeNull();
+    // The provider the host names rides along for the admin view, and only with an address.
+    vi.stubEnv("OFFICE_PROVIDER_HEADER", "x-test-provider");
+    expect(requestLine(new Headers({ "cf-connecting-ip": "203.0.113.10", "x-test-provider": " AS64500 " }), "2026-10-19"))
+      .toEqual({ ipv4: "203.0.113.10", confirmed_on: "2026-10-19", provider: "AS64500" });
+    expect(requestLine(new Headers({ "x-test-provider": "AS64500" }), "2026-10-19")).toBeNull();
+    vi.stubEnv("OFFICE_PROVIDER_HEADER", "");
     expect(lineFor("999.1.2.3", "2026-10-19")).toBeNull();
     expect(lineFor("made:up", "2026-10-19")).toBeNull();
   });

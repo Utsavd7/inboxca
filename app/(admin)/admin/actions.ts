@@ -7,6 +7,7 @@ import { runJobsSoon } from "@/src/jobs/run-soon";
 import { officeProof } from "@/src/lib/office";
 import { CHALLENGE_COOKIE, checkAdminKey, checkAdminKeyUse, newChallenge } from "@/src/lib/pc-key";
 import { supabaseAdmin } from "@/src/lib/supabase";
+import { systemMailReady } from "@/src/lib/system-mail";
 import { currentAdmin, listedAdmin, PROOF_COOKIE } from "./admin";
 
 // Puts a failed job back in the queue and runs it now.
@@ -15,6 +16,79 @@ export async function retryJob(form: FormData) {
   const { data } = await supabase.rpc("admin_retry_job", { job_id: Number(form.get("job")) });
   if (data) runJobsSoon();
   revalidatePath("/admin/jobs");
+  revalidatePath("/admin/firms/[id]", "page");
+}
+
+const fail = (path: string, error: string) => redirect(`${path}?error=${error}`);
+const parts = z.array(z.enum(["app", "mail", "files", "reminders"])).min(1);
+
+// The status page's incidents (PLAN.md 5.17 #43): posted, noted and closed by an admin.
+export async function postIncident(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const asked = z.object({ title: z.string().trim().min(3).max(200), parts, level: z.enum(["slow", "down"]) })
+    .safeParse({ title: form.get("title"), parts: form.getAll("parts"), level: form.get("level") });
+  if (!asked.success) return fail("/admin/status", "incident");
+  const { error } = await supabase.rpc("admin_post_incident", { incident_title: asked.data.title, incident_parts: asked.data.parts, incident_level: asked.data.level });
+  if (error) throw new Error(`Posting the incident failed: ${error.code}`);
+  revalidatePath("/admin/status");
+}
+
+export async function updateIncident(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const note = String(form.get("note") ?? "").trim().slice(0, 1000);
+  const { error } = await supabase.rpc("admin_update_incident", { incident: String(form.get("incident")), note, finish: form.get("finish") === "yes" });
+  if (error) throw new Error(`Updating the incident failed: ${error.code}`);
+  revalidatePath("/admin/status");
+}
+
+// The outage email to the affected firms' owners, only once Orelu's system mail is set up.
+export async function emailIncident(form: FormData) {
+  const { supabase } = await currentAdmin();
+  if (!systemMailReady()) return fail("/admin/status", "mail_off");
+  const { data, error } = await supabase.rpc("admin_email_incident", { incident: String(form.get("incident")) });
+  if (error) throw new Error(`Emailing the firms failed: ${error.code}`);
+  if (data) runJobsSoon();
+  revalidatePath("/admin/status");
+}
+
+// A CA's check of a due date rule, or a government extension entered for a CA to check.
+export async function verifyRule(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const asked = z.object({ code: z.string().regex(/^[A-Z0-9_]{2,20}$/), period: z.string().regex(/^(|[0-9]{4}-[0-9]{2})$/), link: z.url({ protocol: /^https$/ }).max(500), by: z.string().trim().min(2).max(120) })
+    .safeParse({ code: form.get("code"), period: form.get("period") ?? "", link: form.get("link"), by: form.get("by") });
+  if (!asked.success) return fail("/admin/due-dates", "verify");
+  const { error } = await supabase.rpc("admin_verify_rule", { rule_code: asked.data.code, rule_period: asked.data.period, link: asked.data.link, checked_by: asked.data.by });
+  if (error) throw new Error(`Checking the rule failed: ${error.code}`);
+  revalidatePath("/admin", "layout");
+}
+
+export async function addExtension(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const asked = z.object({ code: z.string().regex(/^[A-Z0-9_]{2,20}$/), period: z.string().regex(/^[0-9]{4}-[0-9]{2}$/), on: z.iso.date(), link: z.url({ protocol: /^https$/ }).max(500) })
+    .safeParse({ code: form.get("code"), period: form.get("period"), on: form.get("on"), link: form.get("link") });
+  if (!asked.success) return fail("/admin/due-dates", "extension");
+  const { data, error } = await supabase.rpc("admin_add_extension", { rule_code: asked.data.code, rule_period: asked.data.period, new_date: asked.data.on, link: asked.data.link });
+  if (error || !data) return fail("/admin/due-dates", "extension");
+  revalidatePath("/admin", "layout");
+}
+
+// The fixed connection suggestion's thresholds (PLAN.md 5.8).
+export async function setOffice(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const asked = z.object({ taps: z.coerce.number().int().min(1).max(50), days: z.coerce.number().int().min(1).max(90) }).safeParse({ taps: form.get("taps"), days: form.get("days") });
+  if (!asked.success) return fail("/admin/office", "thresholds");
+  const { error } = await supabase.rpc("admin_set_office", { taps: asked.data.taps, days: asked.data.days });
+  if (error) throw new Error(`Saving the thresholds failed: ${error.code}`);
+  revalidatePath("/admin/office");
+}
+
+// Asks a firm's owner for an hour's support session (PLAN.md 8.5).
+export async function askSupport(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const firm = z.uuid().parse(form.get("firm"));
+  const { error } = await supabase.rpc("admin_ask_support", { target: firm });
+  if (error) throw new Error(`Asking for support access failed: ${error.code}`);
+  revalidatePath(`/admin/firms/${firm}`);
 }
 
 // Marks a change from the daily forms check as reviewed.

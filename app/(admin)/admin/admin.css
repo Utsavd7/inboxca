@@ -4,7 +4,7 @@
 .admin .rail-me form { margin-left: auto; }
 .admin .rail-nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
 .admin .rail-nav a[aria-current="page"] svg { color: var(--accent); }
-.admin .stage-body { padding: var(--s5) var(--s6) var(--s7); }
+.admin .stage-body { width: 100%; padding: var(--s5) var(--s6) var(--s7); }
 .admin .page-head p { font-size: 14px; }
 .admin .t th { height: var(--row); font-size: 12px; background: var(--side); }
 .admin .t th:first-child, .admin .t td:first-child { padding-left: var(--s4); }
@@ -24,6 +24,15 @@
 .admin-row a:hover { color: var(--ink); }
 .admin-empty { padding: var(--s7) var(--s4); border-top: 1px solid var(--line); color: var(--ink-3); text-align: center; }
 .admin-empty strong { display: block; color: var(--ink); font-size: 14px; font-weight: 600; }
+.admin-note { padding: var(--s3) var(--s4); border-top: 1px solid var(--line); color: var(--ink-2); font-size: 13px; }
+.admin .alert { margin: var(--s4) 0 0; }
+
+/* A row's few fields and its one button, on one line where they fit. */
+.admin-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s2) var(--s3); }
+.admin-form label:not(.check) { display: grid; gap: var(--s1); min-width: 160px; }
+.admin-form fieldset { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); padding: 0; border: 0; }
+.admin-form legend { width: 100%; margin-bottom: var(--s1); color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.admin-incident form { align-items: flex-end; }
 
 /* The console's own menu, drawn like the app's light sidebar. */
 .admin .stage { overflow-y: auto; }

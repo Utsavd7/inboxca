@@ -36,18 +36,33 @@ export function ipv6Prefix(address: string) {
 export const lineFor = (address: string, today: string): OfficeLine | null =>
   isIP(address) === 4 ? { ipv4: address, confirmed_on: today } : ipv6Prefix(address) ? { ipv6: ipv6Prefix(address), confirmed_on: today } : null;
 
+// The host may also name the internet provider (OFFICE_PROVIDER_HEADER): kept on the line only
+// for the admin console's view of office changes by provider (5.8), never to make an office.
+function withProvider(line: OfficeLine | null, request: Headers) {
+  const provider = process.env.OFFICE_PROVIDER_HEADER && request.get(process.env.OFFICE_PROVIDER_HEADER)?.trim().slice(0, 80);
+  return line && provider ? { ...line, provider } : line;
+}
+
 // Only host supplied addresses can teach a line. A browser cannot supply the other half.
 export function requestLine(request: Headers, today: string) {
   const line = lineFor(requestAddress(request), today);
   // Cloudflare's generated IPv4 is not the connection's real IPv4.
   if (!process.env.OFFICE_IP_HEADER && line?.ipv4 && Number(line.ipv4.split(".")[0]) >= 240) {
-    return lineFor(request.get("cf-connecting-ipv6") ?? "", today);
+    return withProvider(lineFor(request.get("cf-connecting-ipv6") ?? "", today), request);
   }
   // This optional second header must be overwritten by the trusted host, like the first.
   const secondHeader = process.env.OFFICE_SECOND_IP_HEADER;
   const second = secondHeader ? lineFor(request.get(secondHeader)?.trim() ?? "", today) : null;
-  if (line?.ipv4 && second?.ipv6 || line?.ipv6 && second?.ipv4) return { ...line, ...second };
-  return line;
+  if (line?.ipv4 && second?.ipv6 || line?.ipv6 && second?.ipv4) return withProvider({ ...line, ...second }, request);
+  return withProvider(line, request);
+}
+
+// The fixed connection suggestion's thresholds (5.8), set in the admin console: after this
+// many office confirmations in this many days. 3 in 14 until an admin changes them.
+export async function fixedSuggestion() {
+  const { data } = await supabaseAdmin().from("platform_settings").select("value").eq("key", "office").maybeSingle();
+  const value = (data?.value ?? {}) as { fixed_taps?: number; fixed_days?: number };
+  return { taps: value.fixed_taps ?? 3, days: value.fixed_days ?? 14 };
 }
 
 export function connectionRule(line: OfficeLine, office: Office, kind: string, now = Date.now()) {

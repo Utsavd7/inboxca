@@ -7,13 +7,14 @@ import type { Handler } from "./runner";
 // source is fingerprinted; a change is recorded with the old and new fingerprints (and, for a
 // downloads page, the links added and removed) as a draft for Orelu's admin, and a source that
 // cannot be read two days running raises an alert. Nothing goes live here: a new version is
-// added to the template library, with its mapping tested, before outputs use it.
-export type Source = { key: string; name: string; url: string; kind: "file" | "page"; body?: string; known?: string };
+// added to the template library, with its mapping tested, before outputs use it. Each source
+// names the calendar's returns its forms are for, so the admin sees the firms a change touches.
+export type Source = { key: string; name: string; url: string; kind: "file" | "page"; body?: string; known?: string; codes?: string[] };
 export const sources: Source[] = [
-  { key: "gst_offline_tool", name: "GST returns offline tool (GSTR-1 workbooks)", url: "https://tutorial.gst.gov.in/offlineutilities/returns/gst_offline_tool.zip", kind: "file", known: "f0a7d6f66bf71b30e9ecd045a664dda428c8fac239f51127d656e6faac60e312" },
-  { key: "gstr3b_utility", name: "GSTR-3B offline utility", url: "https://tutorial.gst.gov.in/offlineutilities/returns_gstr3b/GSTR3B_Excel_Utility.zip", kind: "file", known: "54e7a39b0d1db41cd726b93e14fce616695a2651cca633ed26124e8cc9211f03" },
-  { key: "gstr3b_api_versions", name: "GSTN GSTR-3B schema versions", url: "https://developer.gst.gov.in/apiportal/getAPIVersion", kind: "file", body: '{"apiId":2269}', known: "e41b250dc9cd4e29552f902dab9a3c42f872450ca3026671fe9f73ad903eb570" },
-  { key: "itr_downloads", name: "Income tax return schemas and utilities", url: "https://www.incometax.gov.in/iec/foportal/downloads/income-tax-returns", kind: "page" },
+  { key: "gst_offline_tool", name: "GST returns offline tool (GSTR-1 workbooks)", url: "https://tutorial.gst.gov.in/offlineutilities/returns/gst_offline_tool.zip", kind: "file", known: "f0a7d6f66bf71b30e9ecd045a664dda428c8fac239f51127d656e6faac60e312", codes: ["GSTR1_M", "GSTR1_Q"] },
+  { key: "gstr3b_utility", name: "GSTR-3B offline utility", url: "https://tutorial.gst.gov.in/offlineutilities/returns_gstr3b/GSTR3B_Excel_Utility.zip", kind: "file", known: "54e7a39b0d1db41cd726b93e14fce616695a2651cca633ed26124e8cc9211f03", codes: ["GSTR3B_M", "GSTR3B_Q"] },
+  { key: "gstr3b_api_versions", name: "GSTN GSTR-3B schema versions", url: "https://developer.gst.gov.in/apiportal/getAPIVersion", kind: "file", body: '{"apiId":2269}', known: "e41b250dc9cd4e29552f902dab9a3c42f872450ca3026671fe9f73ad903eb570", codes: ["GSTR3B_M", "GSTR3B_Q"] },
+  { key: "itr_downloads", name: "Income tax return schemas and utilities", url: "https://www.incometax.gov.in/iec/foportal/downloads/income-tax-returns", kind: "page", codes: ["ITR_NA", "ITR_AUDIT"] },
 ];
 
 type Seen = { hash?: string; links?: string[]; failures?: number; checked?: string };
