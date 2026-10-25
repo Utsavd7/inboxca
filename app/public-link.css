@@ -1,0 +1,167 @@
+/* A client's pages, reached from a private link (upload and share): phone first, 44px tap
+   targets, in the InboxCA brand with the firm's name up front. The firm's band sits on top on
+   a phone and beside the page on a laptop. Every tap answers with motion (press, progress
+   fill, tick draw, screen change), all of it off under reduced motion. */
+
+html:has(.ui-public) { background: #f4f6fb; }
+.ui-public {
+  --pub-navy: #0b1f3a;
+  --pub-navy-hi: #17386a;
+  --pub-blue: #1a4bb0;
+  --pub-blue-hover: #163f95;
+  --pub-hi: #3b6fe0;
+  --pub-soft: #eef3ff;
+  --pub-soft-2: #f7f9ff;
+  --pub-dash: #b4c5ee;
+  --pub-canvas: #f4f6fb;
+  --pub-white: #fff;
+  --pub-ink: #101828;
+  --pub-ink-2: #475467;
+  --pub-ink-3: #667085;
+  --pub-line: #eaecf0;
+  --pub-field: #d0d5dd;
+  --pub-done: #067647;
+  --pub-done-bg: #ecfdf3;
+  --pub-late: #d92d20;
+  --pub-late-bg: #fef3f2;
+  --pub-muted: #f2f4f7;
+  --pub-sky: #0086c9;
+  --pub-sky-bg: #f0f9ff;
+  --pub-on-navy: rgba(255, 255, 255, 0.72);
+  --pub-on-navy-2: rgba(255, 255, 255, 0.56);
+  --pub-edge: rgba(11, 31, 58, 0.07);
+  --pub-shadow: 0 1px 2px rgba(11, 31, 58, 0.04), 0 6px 24px -12px rgba(11, 31, 58, 0.1);
+  --pub-shadow-up: 0 1px 2px rgba(11, 31, 58, 0.06), 0 12px 32px -14px rgba(11, 31, 58, 0.22);
+  --pub-ring: 0 0 0 2px #fff, 0 0 0 4px rgba(26, 75, 176, 0.55);
+  --pub-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ui.ui-public { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; height: auto; min-height: 100dvh; overflow: visible; background: var(--pub-canvas); color: var(--pub-ink); font-size: 15px; }
+.ui-public :focus-visible { box-shadow: var(--pub-ring); border-radius: 10px; }
+
+/* The firm's band */
+.public-band { display: flex; flex-direction: column; padding: 24px 20px 72px; background: radial-gradient(120% 100% at 0% 0%, var(--pub-navy-hi) 0%, var(--pub-navy) 60%); color: var(--pub-white); }
+.public-firm { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.public-firm strong { overflow: hidden; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
+.public-tile { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, var(--pub-blue), var(--pub-hi)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 16px -6px rgba(0, 0, 0, 0.5); font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+.public-band h1 { margin-top: 24px; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; text-wrap: pretty; }
+.public-band h1.public-doc { font-size: 22px; overflow-wrap: anywhere; }
+.public-band > h1:first-child { margin-top: 8px; }
+.public-for { margin-top: 8px; color: var(--pub-on-navy); font-size: 15px; }
+.public-private { display: flex; align-items: center; gap: 6px; margin-top: 16px; color: var(--pub-on-navy-2); font-size: 13px; }
+
+/* The page itself: cards on the canvas, the first one over the band's foot on a phone */
+.public-body { display: grid; align-content: start; gap: 12px; width: 100%; max-width: 600px; margin: -48px auto 0; padding: 0 16px 40px; }
+.public-card { padding: 20px; border: 1px solid var(--pub-edge); border-radius: 14px; background: var(--pub-white); box-shadow: var(--pub-shadow); }
+.public-card.hint { color: var(--pub-ink-2); font-size: 15px; }
+.public-card .hint { color: var(--pub-ink-3); font-size: 14px; }
+
+/* Progress: how many of the papers asked for have arrived */
+.public-progress p:first-child { color: var(--pub-ink-2); font-size: 15px; font-weight: 600; }
+.public-progress strong.num { margin-right: 2px; color: var(--pub-ink); font-family: inherit; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+.public-bar { display: block; height: 8px; margin: 12px 0; overflow: hidden; border-radius: 999px; background: var(--pub-soft); }
+.public-bar > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--pub-blue), var(--pub-hi)); transform: scaleX(var(--got)); transform-origin: left; transition: transform 320ms var(--pub-out); }
+@starting-style { .public-bar > span { transform: scaleX(0); } }
+
+/* The checklist: one card a paper, its mark, its state and one large button */
+.public-items { display: grid; gap: 10px; }
+.public-item { display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 4px 12px; padding: 16px; border: 1px solid var(--pub-edge); border-radius: 14px; background: var(--pub-white); box-shadow: var(--pub-shadow); }
+.public-what { display: grid; min-width: 0; }
+.public-what strong { font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+.public-what .sub { color: var(--pub-ink-3); font-size: 14px; }
+.public-what .sub:empty { display: none; }
+.public-item.done .public-what .sub { color: var(--pub-done); font-weight: 600; }
+.public-what .sub.bad,
+.public-item.done .public-what .sub.bad { color: var(--pub-late); font-weight: 500; }
+.public-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: var(--pub-muted); color: var(--pub-ink-2); font-size: 14px; font-weight: 700; }
+.public-item.done .public-mark { background: var(--pub-done-bg); color: var(--pub-done); animation: public-pop 240ms var(--pub-out) both; }
+.public-mark svg,
+.public-big-tick svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.public-mark path,
+.public-big-tick path { stroke-dasharray: 1; animation: public-draw 320ms var(--pub-out) 80ms both; }
+
+.ui.ui-public .public-add { position: relative; display: flex; grid-column: 1 / -1; align-items: center; gap: 12px; min-height: 64px; margin-top: 10px; padding: 12px 14px; border: 1.5px dashed var(--pub-dash); border-radius: 12px; background: var(--pub-soft-2); color: var(--pub-blue); font-size: 15px; font-weight: 700; line-height: 1.3; cursor: pointer; transition: transform 120ms var(--pub-out), background-color 160ms, border-color 160ms; }
+.public-add-icon { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--pub-blue); color: var(--pub-white); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 6px 14px -6px rgba(26, 75, 176, 0.6); }
+.public-add-words { display: grid; }
+.public-add-words small { color: var(--pub-ink-3); font-size: 13px; font-weight: 500; }
+.ui.ui-public .public-more { position: relative; display: inline-flex; grid-column: 1 / -1; justify-self: start; align-items: center; gap: 4px; min-height: 44px; margin-top: 8px; padding: 0 14px 0 8px; border: 1px solid var(--pub-line); border-radius: 10px; background: var(--pub-white); color: var(--pub-ink); font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 120ms var(--pub-out), background-color 160ms; }
+.public-more .public-add-icon { width: 28px; height: 28px; background: none; box-shadow: none; color: var(--pub-blue); }
+.ui-public .public-add:focus-within,
+.ui-public .public-more:focus-within { box-shadow: var(--pub-ring); }
+.ui-public .public-add:active,
+.ui-public .public-more:active { transform: scale(0.98); }
+.ui-public .public-add[aria-busy="true"],
+.ui-public .public-more[aria-busy="true"] { cursor: progress; }
+.ui-public .public-add[aria-busy="true"] { border-style: solid; background: var(--pub-soft); }
+.public-spin { animation: public-spin 800ms linear infinite; }
+@media (hover: hover) and (pointer: fine) {
+  .ui-public .public-add:hover { border-color: var(--pub-blue); background: var(--pub-soft); }
+  .ui-public .public-more:hover { background: var(--pub-canvas); }
+}
+
+/* After the last paper: thanks */
+.public-thanks { display: grid; justify-items: center; gap: 6px; padding: 28px 20px; text-align: center; animation: public-rise 320ms var(--pub-out) both; }
+.public-big-tick { display: grid; place-items: center; width: 64px; height: 64px; margin-bottom: 8px; border-radius: 999px; background: var(--pub-done-bg); color: var(--pub-done); animation: public-pop 280ms var(--pub-out) both; }
+.public-big-tick svg { width: 32px; height: 32px; stroke-width: 2.4; }
+.public-big-tick path { animation-duration: 420ms; animation-delay: 140ms; }
+.public-thanks h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.public-thanks p { color: var(--pub-ink-2); font-size: 15px; }
+
+/* The shared paper: what it is, how long the link lasts, its download or its code step */
+.public-file-head { display: flex; align-items: center; gap: 12px; }
+.public-file-head > span:last-child { display: grid; }
+.public-file-head strong { font-size: 16px; font-weight: 700; }
+.public-file-head .sub { color: var(--pub-ink-3); font-size: 13px; }
+.public-file-icon { display: grid; flex: none; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--pub-sky-bg); color: var(--pub-sky); }
+.public-facts { display: grid; gap: 8px; margin: 16px 0; }
+.public-facts li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--pub-canvas); color: var(--pub-ink-2); font-size: 14px; }
+.public-facts svg { color: var(--pub-ink-3); }
+.public-step { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--pub-line); animation: public-rise 320ms var(--pub-out) both; }
+.public-code { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.ui.ui-public .public-code label { grid-column: 1 / -1; color: var(--pub-ink-2); font-size: 14px; font-weight: 600; }
+.ui-public .public-code input { min-width: 0; height: 52px; padding: 0 14px; border: 1px solid var(--pub-field); border-radius: 10px; background: var(--pub-white); color: var(--pub-ink); font-size: 22px; letter-spacing: 0.4em; transition: border-color 160ms, box-shadow 160ms; }
+.ui-public .public-code input:focus-visible { border-color: var(--pub-blue); }
+.ui-public .public-code .b { min-height: 52px; padding: 0 24px; }
+.public-again { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.ui-public .notice,
+.ui-public .alert { margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 14px; animation: public-rise 220ms var(--pub-out) both; }
+.ui-public .notice { background: var(--pub-done-bg); color: var(--pub-done); }
+.ui-public .alert { background: var(--pub-late-bg); color: var(--pub-late); }
+
+/* Buttons: 44px, a firm press */
+.ui-public .b { height: auto; min-height: 44px; padding: 8px 18px; border-radius: 10px; font-size: 15px; font-weight: 700; line-height: 1.3; white-space: normal; text-align: center; transition: transform 120ms var(--pub-out), background-color 160ms, box-shadow 160ms; }
+.ui-public .b:active:not(:disabled) { transform: scale(0.97); }
+.ui-public .b-primary { background: var(--pub-blue); color: var(--pub-white); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 8px 20px -10px rgba(26, 75, 176, 0.7); }
+.ui-public .b-primary:hover:not(:disabled) { background: var(--pub-blue-hover); }
+.ui-public .b-ghost { padding-inline: 10px; color: var(--pub-blue); }
+.ui-public .b-ghost:hover:not(:disabled) { background: var(--pub-soft); }
+.ui-public .public-download { width: 100%; min-height: 52px; gap: 10px; font-size: 16px; }
+.public-card .hint + .public-download { margin-top: 16px; }
+
+/* The foot: the firm and how to reach it */
+.public-foot { display: flex; align-items: flex-start; gap: 12px; margin-top: 8px; padding: 16px 4px 0; color: var(--pub-ink-3); font-size: 14px; }
+.public-foot > svg { margin-top: 2px; color: var(--pub-ink-3); }
+.public-foot > span { display: grid; gap: 2px; min-width: 0; }
+.public-foot strong { color: var(--pub-ink-2); font-weight: 700; }
+.public-foot a { color: var(--pub-blue); font-weight: 600; overflow-wrap: anywhere; }
+
+@keyframes public-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes public-pop { from { opacity: 0; transform: scale(0.85); } }
+@keyframes public-rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes public-spin { to { transform: rotate(360deg); } }
+
+/* On a laptop the band stands beside the page, the firm's name always in view. */
+@media (min-width: 960px) {
+  .ui.ui-public { grid-template-columns: minmax(380px, 440px) minmax(0, 1fr); }
+  .public-band { position: sticky; top: 0; height: 100dvh; padding: 48px 40px; }
+  .public-band h1 { margin-top: 40px; font-size: 32px; }
+  .public-band h1.public-doc { font-size: 26px; }
+  .public-private { margin-top: auto; }
+  .public-body { margin: 0 auto; padding: 72px 48px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-public *,
+  .ui-public *::before,
+  .ui-public *::after { animation: none !important; transition: none !important; }
+}

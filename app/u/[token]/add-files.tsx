@@ -1,5 +1,5 @@
 "use client";
-import { Check, FileUp } from "lucide-react";
+import { Camera, LoaderCircle, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { uploadToRequest } from "@/app/(app)/actions";
@@ -17,8 +17,8 @@ const problems = {
 let queue: Promise<unknown> = Promise.resolve();
 let waiting = 0;
 
-// One item asked for on a client's upload link: its name, what has arrived, and one button
-// that opens the phone's camera, photos or files and sends what is chosen at once.
+// One item asked for on a client's upload link: its name, what has arrived, and one large
+// button that opens the phone's camera, photos or files and sends what is chosen at once.
 export function AddFiles({ token, item, type, received, open }: { token: string; item: number; type: string; received: number; open: boolean }) {
   const router = useRouter();
   const [sending, setSending] = useState<[number, number] | null>(null);
@@ -52,16 +52,24 @@ export function AddFiles({ token, item, type, received, open }: { token: string;
   }
 
   return (
-    <>
-      <span className={`public-tick${received ? " done" : ""}`}>{received ? <Check size={14} aria-label="Received" /> : item + 1}</span>
-      <span className="grow">
+    <li className={`public-item${received ? " done" : ""}`}>
+      <span className="public-mark">
+        {received ? (
+          <svg viewBox="0 0 24 24" role="img" aria-label="Received">
+            <path d="M5 12.5l4.5 4.5L19 7.5" pathLength={1} />
+          </svg>
+        ) : (
+          item + 1
+        )}
+      </span>
+      <span className="public-what">
         <strong>{type}</strong>
         <span className={problem ? "sub bad" : "sub"} role="status">
           {sending ? `Sending ${sending[0]} of ${sending[1]}` : problem || (received ? `Received: ${received === 1 ? "1 file" : `${received} files`}` : "")}
         </span>
       </span>
       {open && (
-        <label className={`b b-secondary public-pick${sending ? " busy" : ""}`}>
+        <label className={received ? "public-more" : "public-add"} aria-busy={!!sending}>
           <input
             className="sr-only"
             type="file"
@@ -74,10 +82,26 @@ export function AddFiles({ token, item, type, received, open }: { token: string;
               if (files.length) void send(files);
             }}
           />
-          <FileUp size={16} aria-hidden />
-          {sending ? "Sending" : `Add ${type} (photo or PDF)`}
+          <span className="public-add-icon" aria-hidden>
+            {sending ? <LoaderCircle size={18} className="public-spin" /> : received ? <Plus size={18} /> : <Camera size={20} />}
+          </span>
+          {received ? (
+            <span>
+              {sending ? "Sending" : "Add more"}
+              <span className="sr-only"> for {type}</span>
+            </span>
+          ) : (
+            <span className="public-add-words">
+              <span>
+                {sending ? "Sending" : "Add"}
+                <span className="sr-only"> {type}</span>
+                {!sending && " from camera or files"}
+              </span>
+              <small>{sending ? "Keep this page open" : "Photo or PDF, up to 25 MB each"}</small>
+            </span>
+          )}
         </label>
       )}
-    </>
+    </li>
   );
 }

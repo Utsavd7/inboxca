@@ -977,24 +977,31 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const link = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/u\/[\w-]+/)![0];
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(link);
-  await expect(visitor.getByRole("heading", { name: `Documents for ${mailClient}` })).toBeVisible();
+  // The firm's name leads: what it needs, by when, and how much has arrived.
+  await expect(visitor.getByRole("heading", { level: 1 })).toHaveText(/ needs 2 papers by \d{1,2} \w{3} \d{4}$/);
+  await expect(visitor.getByText(`Papers for ${mailClient}`)).toBeVisible();
+  await expect(visitor.getByRole("region", { name: "Progress" })).toContainText("0 of 2 papers received");
   await expect(visitor.getByText(`Questions? Email ${mailboxEmail}`)).toBeVisible();
   // One button an item: choosing files sends them at once, with no second step.
   const loan = visitor.getByRole("listitem").filter({ hasText: "Loan statement" });
   const loanPdf = Buffer.from(pdf("Invented loan account 99231"));
-  await expect(loan.getByLabel("Add Loan statement (photo or PDF)")).toHaveAttribute("accept", "image/*,application/pdf");
-  await loan.getByLabel("Add Loan statement (photo or PDF)").setInputFiles({ name: "IMG_77.pdf", mimeType: "application/pdf", buffer: loanPdf });
+  await expect(loan.getByLabel("Add Loan statement from camera or files")).toHaveAttribute("accept", "image/*,application/pdf");
+  await loan.getByLabel("Add Loan statement from camera or files").setInputFiles({ name: "IMG_77.pdf", mimeType: "application/pdf", buffer: loanPdf });
   await expect(loan.getByRole("status")).toHaveText("Received: 1 file");
+  await expect(loan.getByRole("img", { name: "Received" })).toBeVisible();
+  await expect(visitor.getByRole("region", { name: "Progress" })).toContainText("1 of 2 papers received");
   await owner.reload();
   await expect(owner.getByRole("list", { name: "Files asked for" })).toContainText("1 of 2 received");
   await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Filed");
   // The team checks what arrived. Ask again clears an item, so the client's link asks for it once more.
   // Several files chosen together all arrive before the request closes.
   const sales = visitor.getByRole("listitem").filter({ hasText: "Sales bills" });
-  await sales.getByLabel("Add Sales bills (photo or PDF)").setInputFiles([
+  await sales.getByLabel("Add Sales bills from camera or files").setInputFiles([
     { name: "IMG_78.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf("Invented sales bills")) },
     { name: "IMG_79.jpg", mimeType: "image/jpeg", buffer: Buffer.from("invented photo of a sales bill") },
   ]);
+  // After the last paper the page thanks them.
+  await expect(visitor.getByRole("heading", { name: "All 2 papers received" })).toBeVisible();
   await expect(visitor.getByText("Everything asked for has arrived.")).toBeVisible();
   await expect(sales.getByRole("status")).toHaveText("Received: 2 files");
   await expect(visitor.getByLabel(/^Add /)).toHaveCount(0);
@@ -1040,6 +1047,11 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await visitor.getByLabel("Code from the email").fill(oneTime);
   await visitor.getByRole("button", { name: "Open" }).click();
   await expect(visitor.getByRole("link", { name: "Download" })).toBeVisible();
+  // The page says what the paper is, how big, until when the link works and how many downloads are left.
+  const paper = visitor.getByRole("region", { name: "The paper" });
+  await expect(paper).toContainText(`PDF file${Math.ceil(loanPdf.length / 1024)} KB`);
+  await expect(paper).toContainText(/Link works until \d{1,2} \w{3} \d{4}/);
+  await expect(paper).toContainText("5 downloads left");
   // A link emails at most 5 codes a day, so its 5 tries a code cannot be repeated without end.
   await query(local.dbUrl, "insert into public.activity_log(firm_id,action,entity_type,entity_id) select firm_id,'share.code_sent','share',id from public.shares, generate_series(1,4) where link_token_hash=encode(sha256(convert_to($1,'utf8')),'hex')", [shared.split("/s/")[1]]);
   const stranger = await (await browser.newContext()).newPage();
@@ -1215,6 +1227,47 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(await readFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2024-25.pdf"), "utf8")).toBe("%PDF-1.4 invented ITR-V");
   expect(await readFile(path.join(old, "Someone else", "notice.pdf"), "utf8")).toBe("%PDF-1.4 invented notice");
 
+});
+
+test("a client who uploads gets one emailed receipt a sitting, from the firm's mailbox", async ({ request, browser }) => {
+  const client = `client-${tag}@patel.test`;
+  const jobs = () => request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  const [{ id: clientId }] = await query(local.dbUrl, "select id from public.clients where firm_id = $1 and name = $2", [firm.firmId, mailClient]);
+  await owner.goto(`/app/clients/${clientId}?tab=files&ask=1`);
+  await owner.getByRole("group", { name: "Papers" }).getByRole("checkbox", { name: "Bank statement" }).check();
+  await owner.getByLabel("Anything else, by name").fill("Rent receipts");
+  await owner.getByRole("button", { name: "Ask for papers" }).click();
+  await expect(owner.getByRole("status")).toContainText("emailed a private upload link");
+  const link = (await lastMail(client)).match(/http\S+\/u\/[\w-]+/)![0];
+  const [{ id: asked }] = await query(local.dbUrl, "select id from public.requests where details->>'link_hash' = encode(sha256(convert_to($1, 'utf8')), 'hex')", [link.split("/u/")[1]]);
+  const visitor = await (await browser.newContext()).newPage();
+  await visitor.goto(link);
+  const bank = visitor.getByRole("listitem").filter({ hasText: "Bank statement" });
+  await bank.getByLabel("Add Bank statement from camera or files").setInputFiles({ name: "bank.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf("Invented bank statement")) });
+  await expect(bank.getByRole("status")).toHaveText("Received: 1 file");
+  // The receipt waits 10 minutes for more files from the same sitting.
+  await jobs();
+  expect(await lastMail(client)).not.toContain("We have received these papers");
+  // Then it goes from the firm's mailbox, naming what arrived and what is still needed.
+  await query(local.dbUrl, "update public.jobs set run_at = now() where kind = 'upload_receipt' and entity_id = $1 and state = 'pending'", [asked]);
+  await jobs();
+  const first = await lastMail(client);
+  expect(first).toContain(`Dear ${mailClient},`);
+  expect(first).toContain("- Bank statement: 1 file\n\nStill needed:\n- Rent receipts");
+  // The last paper sends its receipt at once: two photos picked together make one receipt.
+  const rent = visitor.getByRole("listitem").filter({ hasText: "Rent receipts" });
+  await rent.getByLabel("Add Rent receipts from camera or files").setInputFiles([
+    { name: "rent-1.jpg", mimeType: "image/jpeg", buffer: Buffer.from("invented photo of a rent receipt") },
+    { name: "rent-2.jpg", mimeType: "image/jpeg", buffer: Buffer.from("invented photo of another rent receipt") },
+  ]);
+  await expect(visitor.getByRole("heading", { name: "All 2 papers received" })).toBeVisible();
+  await expect(visitor.getByText("A receipt listing what you sent is on its way to your email.")).toBeVisible();
+  await jobs();
+  await expect.poll(() => lastMail(client)).toContain("- Bank statement: 1 file\n- Rent receipts: 2 files\n\nThat is everything we asked for.");
+  expect(await lastMail(client)).not.toMatch(/InboxCA/);
+  // Three files in two sittings: two receipts, each in the client's activity.
+  expect(await query(local.dbUrl, "select 1 from public.activity_log where entity_id = $1 and action = 'request.receipt_sent'", [asked])).toHaveLength(2);
+  await visitor.close();
 });
 
 test("bulk papers go as links, private papers wait, missing papers and addresses are skipped", async ({ request, browser }) => {

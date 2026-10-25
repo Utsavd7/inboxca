@@ -14,6 +14,7 @@ import { noticeFromMail } from "./notice-from-mail";
 import { readDocument } from "./read-document";
 import { recordsReply } from "./records-reply";
 import { sendReminders } from "./reminders";
+import { uploadReceipt } from "./upload-receipt";
 import { formsWatch } from "./forms-watch";
 import { mailPoll } from "./mail-poll";
 import { approvalNudge, approvalSummary, noticeAlert, returnAlert, mailboxReconnect, notifyDevices, notifyRequest } from "./notify";
@@ -21,4 +22,4 @@ import type { Handler } from "./runner";
 
 // Every kind of job and the code that runs it. Each kind is added by the step that
 // builds it; a job of a kind not listed here fails with "no_handler".
-export const handlers: Record<string, Handler> = { regenerate_form:regenerateForm, form_ack:formAck, read_portal:readPortalFile, read_sales:readSalesRegister, mailbox_reconnect:mailboxReconnect, bulk_send: bulkSend, return_alert: returnAlert, notice_alert: noticeAlert, office_housekeeping: officeHousekeeping, calendar_top_up: calendarTopUp, mail_poll: mailPoll, file_mail: fileMail, drive_purge: drivePurge, drive_check: driveCheck, read_document: readDocument, import_files: importFiles, undo_import: undoImport, reminders: sendReminders, records_reply: recordsReply, notice_from_mail: noticeFromMail, notify_request: notifyRequest, notify_devices: notifyDevices, approval_nudge: approvalNudge, approval_summary: approvalSummary, forms_watch: formsWatch, delete_firm: deleteFirm };
+export const handlers: Record<string, Handler> = { regenerate_form:regenerateForm, form_ack:formAck, read_portal:readPortalFile, read_sales:readSalesRegister, mailbox_reconnect:mailboxReconnect, bulk_send: bulkSend, return_alert: returnAlert, notice_alert: noticeAlert, office_housekeeping: officeHousekeeping, calendar_top_up: calendarTopUp, mail_poll: mailPoll, file_mail: fileMail, drive_purge: drivePurge, drive_check: driveCheck, read_document: readDocument, import_files: importFiles, undo_import: undoImport, reminders: sendReminders, records_reply: recordsReply, notice_from_mail: noticeFromMail, notify_request: notifyRequest, notify_devices: notifyDevices, approval_nudge: approvalNudge, approval_summary: approvalSummary, forms_watch: formsWatch, delete_firm: deleteFirm, upload_receipt: uploadReceipt };
