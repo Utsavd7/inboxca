@@ -535,13 +535,13 @@ isOneToOne: false
                   ]
                 },"usage_ledger": {
                   Row: {
-                    "code": string | null,"due_on": string,"firm_id": string,"period_key": string | null,"registration_id": string | null
+                    "bytes": number | null,"code": string | null,"due_on": string,"firm_id": string,"period_key": string | null,"ref": string | null,"registration_id": string | null
                   }
                   Insert: {
-                    "code"?: string | null,"due_on": string,"firm_id": string,"period_key"?: string | null,"registration_id"?: string | null
+                    "bytes"?: number | null,"code"?: string | null,"due_on": string,"firm_id": string,"period_key"?: string | null,"ref"?: string | null,"registration_id"?: string | null
                   }
                   Update: {
-                    "code"?: string | null,"due_on"?: string,"firm_id"?: string,"period_key"?: string | null,"registration_id"?: string | null
+                    "bytes"?: number | null,"code"?: string | null,"due_on"?: string,"firm_id"?: string,"period_key"?: string | null,"ref"?: string | null,"registration_id"?: string | null
                   }
                   Relationships: [
                     {

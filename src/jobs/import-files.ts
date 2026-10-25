@@ -43,6 +43,8 @@ export const importFiles: Handler = async (job) => {
       const placed = await placeUnderFreeName({ client, type: file.type, period: periodName(file.period), extension: path.extname(file.from) }, receivedLabel(now), (name) => drive.move(file.id, folder, name), naming);
       if (placed === "taken") continue;
       const id = randomUUID();
+      // The first import stays outside InboxCA storage (PLAN.md 5.14): entered at 0 bytes first.
+      await admin.from("usage_ledger").insert({ firm_id: firm, due_on: now.slice(0, 10), bytes: 0, ref: id });
       await admin.from("documents").insert({
         id,
         firm_id: firm,

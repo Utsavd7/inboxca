@@ -100,10 +100,28 @@ describe("the owner's meters", () => {
       await seed();
       const before = await usage();
       const imported = "00000000-0000-4000-8000-000000000e76";
-      await db.query("insert into public.requests (id, firm_id, kind, entity_type, entity_id, details) values ($1, $2, 'import', 'import', $1, $3)", [imported, FIRM, { files: [], done: 1, moved: [{ document: imported, from: "old/sales.pdf" }] }]);
+      // As the import job does: the paper is entered at 0 bytes before it arrives.
+      await db.query("insert into public.usage_ledger (firm_id, due_on, bytes, ref) values ($1, $2, 0, $3)", [FIRM, DAY, imported]);
       await paper(imported, "2026-10-20");
       expect(await usage()).toEqual(before);
       await paper("00000000-0000-4000-8000-000000000e77", "2026-10-20");
       expect(Number((await usage()).workspace_bytes)).toBeGreaterThan(Number(before.workspace_bytes));
+    }));
+
+  it("keep papers and email records counted in InboxCA storage after they are deleted", () =>
+    rollback(db, async () => {
+      await seed();
+      const before = await usage();
+      await paper("00000000-0000-4000-8000-000000000e78", "2026-10-20");
+      const account = (await db.query("insert into public.connected_accounts (firm_id, kind, provider, address_enc, credentials_enc) values ($1, 'mail', 'imap', 'sealed', 'sealed') returning id", [FIRM])).rows[0].id;
+      await db.query("insert into public.email_events (firm_id, account_id, provider_message_id, sender_bidx, received_at) values ($1, $2, 'm1', 'x', $3)", [FIRM, account, "2026-10-20"]);
+      const added = await usage();
+      expect(Number(added.workspace_bytes)).toBeGreaterThan(Number(before.workspace_bytes));
+      await db.query("delete from public.documents where firm_id = $1", [FIRM]);
+      await db.query("delete from public.email_events where firm_id = $1", [FIRM]);
+      expect(await usage()).toEqual(added);
+      // A paper from last year is not this year's.
+      await paper("00000000-0000-4000-8000-000000000e79", "2026-03-20");
+      expect(await usage()).toEqual(added);
     }));
 });
