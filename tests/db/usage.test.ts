@@ -33,6 +33,9 @@ const usage = async (day = DAY) => {
 const task = (due: string, kind = "compliance", code = "GSTR1_M") =>
   db.query("insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) values ($1, $2, $3, $4, $5, $6)", [FIRM, CLIENT, kind, code, due, due]);
 
+const paper = (id: string, at: string) =>
+  db.query("insert into public.documents (id, firm_id, client_id, work_type, document_type, name, size, sha256, drive_file_id, received_at) values ($1, $2, $3, 'gst', 'Sales', 'sales.pdf', 1, 'x', 'drive', $4)", [id, FIRM, CLIENT, at]);
+
 describe("the owner's meters", () => {
   it("count the returns due April to March, and those due so far", () =>
     rollback(db, async () => {
@@ -64,8 +67,6 @@ describe("the owner's meters", () => {
       const before = await usage();
       await db.query("insert into public.activity_log (firm_id, action) select $1, 'client.changed' from generate_series(1, 50)", [FIRM]);
       expect(await usage()).toEqual(before);
-      const paper = (id: string, at: string) =>
-        db.query("insert into public.documents (id, firm_id, client_id, work_type, document_type, name, size, sha256, drive_file_id, received_at) values ($1, $2, $3, 'gst', 'Sales', 'sales.pdf', 1, 'x', 'drive', $4)", [id, FIRM, CLIENT, at]);
       await paper("00000000-0000-4000-8000-000000000e74", "2026-07-01");
       const old = await usage();
       expect(Number(old.workspace_bytes)).toBeGreaterThan(Number(before.workspace_bytes));
@@ -75,5 +76,34 @@ describe("the owner's meters", () => {
       const now = await usage();
       // 157 days from 25 October to 31 March, at this paper's size every 30 days.
       expect(Number(now.workspace_by_march) - Number(now.workspace_bytes)).toBe(Math.floor((size * 157) / 30));
+    }));
+
+  it("keep returns already counted when a service is removed or the client deleted, and add a new one", () =>
+    rollback(db, async () => {
+      await seed();
+      await db.query("insert into public.client_registrations (firm_id, client_id, kind, number_enc, number_bidx, state_code) values ($1, $2, 'gstin', 'sealed', 'later', '24')", [FIRM, LATER]);
+      await db.query("update public.client_registrations set services = '{GSTR3B_M}' where client_id = $1", [LATER]);
+      await db.query("delete from public.tasks where firm_id = $1", [FIRM]);
+      await db.query("select public.calendar_top_up($1, $2)", [FIRM, DAY]);
+      expect(await usage()).toMatchObject({ returns_this_year: 5 });
+      await db.query("update public.client_registrations set services = '{}' where client_id = $1", [LATER]);
+      expect((await db.query("select count(*)::int as n from public.tasks where client_id = $1", [LATER])).rows[0].n).toBe(0);
+      expect(await usage()).toMatchObject({ returns_this_year: 5 });
+      await db.query("delete from public.clients where id = $1", [LATER]);
+      expect(await usage()).toMatchObject({ returns_this_year: 5 });
+      await task("2026-11-20");
+      expect(await usage()).toMatchObject({ returns_this_year: 6 });
+    }));
+
+  it("leave the first import's papers out of InboxCA storage", () =>
+    rollback(db, async () => {
+      await seed();
+      const before = await usage();
+      const imported = "00000000-0000-4000-8000-000000000e76";
+      await db.query("insert into public.requests (id, firm_id, kind, entity_type, entity_id, details) values ($1, $2, 'import', 'import', $1, $3)", [imported, FIRM, { files: [], done: 1, moved: [{ document: imported, from: "old/sales.pdf" }] }]);
+      await paper(imported, "2026-10-20");
+      expect(await usage()).toEqual(before);
+      await paper("00000000-0000-4000-8000-000000000e77", "2026-10-20");
+      expect(Number((await usage()).workspace_bytes)).toBeGreaterThan(Number(before.workspace_bytes));
     }));
 });
