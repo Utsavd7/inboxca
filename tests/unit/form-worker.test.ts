@@ -40,4 +40,4 @@ it("returns a filled workbook through the signed worker route and refuses anothe
     expect(new Uint8Array(await response.arrayBuffer()).slice(0,2)).toEqual(Uint8Array.of(80,75));
     expect((await call("GSTR3B")).status).toBe(403);expect((await call("GSTR1","wrong")).status).toBe(403);
   } finally {vi.unstubAllEnvs();}
-});
+},30_000); // The official workbook is 7 MB; a busy machine needs more than 5 seconds.

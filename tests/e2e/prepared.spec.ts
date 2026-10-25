@@ -1,9 +1,9 @@
 import {createHash,randomBytes,randomUUID} from "node:crypto";
 import {readFile} from "node:fs/promises";
-import {tmpdir} from "node:os";
 import {createClient} from "@supabase/supabase-js";
 import {loadEnvConfig} from "@next/env";
 import {test,expect} from "@playwright/test";
+import {TEST_DRIVE} from "../../playwright.config";
 import {serverCrypto} from "@/src/lib/crypto";
 import {localDrive} from "@/src/lib/drive";
 import {place,type Draft} from "@/src/lib/datasets";
@@ -21,7 +21,7 @@ test("prepared files keep versions and checked sources, then file with an acknow
   const key=()=>Array.from(randomBytes(16),byte=>"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte%32]).join("");
   const email=`prepared-${randomUUID()}@invented.test`,secret=key(),managerEmail=`prepared-manager-${randomUUID()}@invented.test`,managerKey=key();
   const firm=await seedFirm("Prepared Browser Firm",email,secret),client=randomUUID(),registration=randomUUID(),source=randomUUID(),draft=randomUUID(),account=randomUUID();
-  const crypto=serverCrypto(),drive=localDrive(`${tmpdir()}/inboxca-test-drive`),files:string[]=[];
+  const crypto=serverCrypto(),drive=localDrive(TEST_DRIVE),files:string[]=[];
   const managerContext=await browser.newContext();
   try {
     const admin=createClient(local.url,local.secretKey,{auth:{persistSession:false}}),{data,error}=await admin.auth.admin.createUser({email:managerEmail,email_confirm:true});

@@ -1,7 +1,6 @@
 import { createDecipheriv, createECDH, hkdfSync, randomBytes, randomUUID, type ECDH } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { ImapFlow } from "imapflow";
@@ -10,7 +9,7 @@ import nodemailer from "nodemailer";
 import { createClient } from "@supabase/supabase-js";
 import { loadEnvConfig } from "@next/env";
 import { serverCrypto } from "@/src/lib/crypto";
-import { TEST_WORKER_SECRET } from "../../playwright.config";
+import { TEST_DRIVE, TEST_WORKER_SECRET } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
 import { laterBy } from "@/src/lib/hours";
 import { pdf } from "@/tests/fixtures/pdf";
@@ -35,7 +34,8 @@ const newEmail = `new-${tag}@example.test`;
 const deputyEmail = `deputy-${tag}@example.test`;
 const emailOnly = `email-only-${tag}@example.test`;
 const laptopEmail = `laptop-${tag}@example.test`;
-const mailboxEmail = "office@firm.test";
+// GreenMail makes a mailbox for every address it receives mail for, its password the address.
+const mailboxEmail = `office-${tag}@firm.test`;
 const mailClient = `Mail Client ${tag}`;
 const pcUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36";
 
@@ -79,8 +79,13 @@ test.beforeAll(async ({ browser }) => {
   firm = await seedFirm("Invite Test Firm", ownerEmail, ownerKey);
   owner = await (await browser.newContext()).newPage();
   person = await (await browser.newContext({ userAgent: pcUserAgent })).newPage();
+  await nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true }).sendMail({ from: "setup@invented.test", to: mailboxEmail, subject: "Invented test setup", text: "Makes the test mailbox" });
 });
-test.afterAll(() => firm.remove(newEmail, emailOnly, deputyEmail, laptopEmail, mailboxEmail));
+test.afterAll(async () => {
+  await firm.remove(newEmail, emailOnly, deputyEmail, laptopEmail, mailboxEmail);
+  // Also the invented return types, even when a test stopped before removing its own.
+  await query(local.dbUrl, "delete from public.compliance_types where code = any($1)", [[`HR${tag.toUpperCase()}`, `TR${tag.toUpperCase()}`]]);
+});
 
 test("the owner invites a new person, who appears as invited", async () => {
   await emailStep(owner, ownerEmail);
@@ -716,7 +721,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await card.getByLabel("Outgoing port").fill("3025");
   await card.getByRole("button", { name: "Connect email" }).click();
   await expect(card.getByRole("alert")).toContainText("could not sign in");
-  await card.getByLabel("Its password").fill("secret");
+  await card.getByLabel("Its password").fill(mailboxEmail);
   await card.getByRole("button", { name: "Connect email" }).click();
   await expect(card.getByRole("status")).toHaveText(`Connected: ${mailboxEmail}`);
 
@@ -751,7 +756,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   expect(await mailCount(`stranger-${tag}@else.test`)).toBe(1);
 
   // A second email the rules cannot place waits for the team, and a person corrects a label.
-  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Hello", text: "Can we meet next week?" });
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "Hello", text: "Can we meet next week?" });
   await query(local.dbUrl, "select private.queue_mail_polls()");
   await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   await owner.getByRole("link", { name: "Inbox" }).click();
@@ -812,7 +817,7 @@ test("repeated mailbox failures ask the owner to reconnect, then pending mail re
   await owner.goto("/app/settings");
   const card=owner.locator("section#mailbox");
   await expect(card.getByLabel("The firm's email address")).toHaveValue(mailboxEmail);
-  await card.getByLabel("Its password").fill("secret"); // ggignore: GreenMail's public local test password.
+  await card.getByLabel("Its password").fill(mailboxEmail);
   await card.getByRole("button",{name:"Reconnect email"}).click();
   await expect(card.getByRole("status")).toHaveText(`Connected: ${mailboxEmail}`);
   for(let n=0;n<2;n++) await sweep();
@@ -845,7 +850,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
   await smtp.sendMail({
     from: `client-${tag}@patel.test`,
-    to: "office@firm.test",
+    to: mailboxEmail,
     subject: "GST data",
     text: "Please find the bills attached.",
     attachments: [
@@ -857,7 +862,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   // The first sweep reads the mail; the second files its attachments.
   for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   // Bills for September 2026 belong to FY 2026-27; the scan names no period, so it goes in the year it arrived.
-  const drive = path.join(tmpdir(), "inboxca-test-drive", "InboxCA");
+  const drive = path.join(TEST_DRIVE, "InboxCA");
   expect(await readFile(path.join(drive, "FY 2026-27", mailClient, "GST", `${mailClient} - Purchase bills - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented purchase bills");
   const thisYear = financialYear(new Date().toISOString().slice(0, 7));
   expect(await readFile(path.join(drive, thisYear, mailClient, "GST", "To check", `${mailClient} - Document.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
@@ -917,7 +922,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
 
   // M5 acceptance: a duplicate attachment is flagged. The same bills sent again wait under To check beside the first copy, for the team to choose.
-  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Bills again", text: "Sending again.", attachments: [{ filename: "purchase_bills_sep_2026.pdf", content: "%PDF-1.4 invented purchase bills" }] });
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "Bills again", text: "Sending again.", attachments: [{ filename: "purchase_bills_sep_2026.pdf", content: "%PDF-1.4 invented purchase bills" }] });
   await query(local.dbUrl, "select private.queue_mail_polls()");
   for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   await owner.reload();
@@ -1071,7 +1076,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
     await expect(owner.getByRole("status")).toContainText("Saved as");
   }
   const ask = async (subject: string, text: string) => {
-    await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject, text });
+    await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject, text });
     await query(local.dbUrl, "select private.queue_mail_polls()");
     for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   };
@@ -1093,7 +1098,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   // A notice a client emails is recorded with what the rules found; its date is only a
   // suggestion until a person confirms it.
-  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "Income tax notice", text: "Notice under section 148 of the Income-tax Act. DIN: ITBA/AST/F/148/2026-27/1050012345(1). Please respond on or before 24/12/2026.", attachments: [{ filename: "notice.pdf", content: Buffer.from(pdf("Invented notice under section 148")) }, { filename: "purchase_bills_jan_2025.csv", content: "Supplier,Amount\nInvented Supplier,1200" }] });
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "Income tax notice", text: "Notice under section 148 of the Income-tax Act. DIN: ITBA/AST/F/148/2026-27/1050012345(1). Please respond on or before 24/12/2026.", attachments: [{ filename: "notice.pdf", content: Buffer.from(pdf("Invented notice under section 148")) }, { filename: "purchase_bills_jan_2025.csv", content: "Supplier,Amount\nInvented Supplier,1200" }] });
   await query(local.dbUrl, "select private.queue_mail_polls()");
   for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   const [noticeFile] = await query(local.dbUrl, "select work_type,drive_file_id from public.documents where firm_id=$1 and document_type='Notice'", [firm.firmId]);
@@ -1134,7 +1139,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(owner.getByLabel("1 day before", { exact: true })).not.toBeChecked();
   await expect(owner.getByLabel("Reply to clients when their files arrive, saying what was received")).toBeChecked();
   // Files that arrive now get a short reply saying what was received.
-  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: "office@firm.test", subject: "August sales", text: "Attached.", attachments: [{ filename: "sales_bills_aug_2026.pdf", content: "%PDF-1.4 invented sales" }] });
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "August sales", text: "Attached.", attachments: [{ filename: "sales_bills_aug_2026.pdf", content: "%PDF-1.4 invented sales" }] });
   await query(local.dbUrl, "select private.queue_mail_polls()");
   for (let sweep = 0; sweep < 2; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
   const thanks = await lastMail(`client-${tag}@patel.test`);
@@ -1170,7 +1175,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   // Old files already in the drive: final papers are sorted into the client's folder in
   // place after a preview, and can be put back. This ITR-V is for another year than the one uploaded above.
-  const old = path.join(tmpdir(), "inboxca-test-drive", `Old files ${tag}`);
+  const old = path.join(TEST_DRIVE, `Old files ${tag}`);
   await mkdir(path.join(old, mailClient, "2025-26"), { recursive: true });
   await mkdir(path.join(old, "Someone else"), { recursive: true });
   await writeFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2024-25.pdf"), "%PDF-1.4 invented ITR-V");
@@ -1281,7 +1286,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   expect(n).toBe(0);
   // M5 acceptance: an internal paper cannot leave through a records request either.
   const smtp=nodemailer.createTransport({host:"127.0.0.1",port:3025,secure:false,ignoreTLS:true});
-  await smtp.sendMail({from:`client-${tag}@patel.test`,to:"office@firm.test",subject:"ITR copy",text:"Please send my ITR for AY 2025-26."});
+  await smtp.sendMail({from:`client-${tag}@patel.test`,to:mailboxEmail,subject:"ITR copy",text:"Please send my ITR for AY 2025-26."});
   await query(local.dbUrl,"select private.queue_mail_polls()");
   await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
   await owner.goto("/app/inbox?show=reply");

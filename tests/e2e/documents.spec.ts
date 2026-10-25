@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { test, expect } from "@playwright/test";
+import { TEST_DRIVE } from "../../playwright.config";
 import { pdf } from "../fixtures/pdf";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
@@ -31,8 +31,8 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     const [mehta] = await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, $2, 'individual') returning id", [firm.firmId, `Mehta Traders ${tag}`]);
     // A PDF in the test drive, uploaded by the owner; a paper from the first import with no file.
     const file = `InboxCA/documents-${tag}.pdf`;
-    await mkdir(`${tmpdir()}/inboxca-test-drive/InboxCA`, { recursive: true });
-    await writeFile(`${tmpdir()}/inboxca-test-drive/${file}`, Buffer.from(pdf("Invented purchase bills")));
+    await mkdir(`${TEST_DRIVE}/InboxCA`, { recursive: true });
+    await writeFile(`${TEST_DRIVE}/${file}`, Buffer.from(pdf("Invented purchase bills")));
     const insert = "insert into public.documents (firm_id, client_id, work_type, document_type, drive_file_id, name, size, sha256) values ($1, $2, $3, $4, $5, $6, 1, $7) returning id";
     await query(local.dbUrl, insert, [firm.firmId, mehta.id, "income_tax", "Form 16", "nowhere", `Mehta Traders ${tag} - Form 16.pdf`, randomUUID()]);
     const [bills] = await query(local.dbUrl, insert, [firm.firmId, patel.id, "gst", "Purchase bills", file, `Patel Textiles ${tag} - Purchase bills.pdf`, randomUUID()]);

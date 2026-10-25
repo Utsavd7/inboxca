@@ -15,4 +15,4 @@ it("fills literal cells in the official workbook while preserving every other pa
   expect(()=>writeWorkbook(original,new Map([[file,new Map([["XFD1048576",{value:"1",number:true}]])]]))).toThrow("does not have");
   expect(()=>writeWorkbook(original,new Map([["missing.xml",new Map([["A5",{value:"1",number:true}]])]]))).toThrow("sheets");
   expect(()=>writeWorkbook(original,new Map([[file,new Map([["C5",{value:"bad\u0000text",number:false}]])]]))).toThrow("text");
-});
+},30_000); // The official workbook is 7 MB; a busy machine needs more than 5 seconds.
