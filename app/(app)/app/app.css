@@ -99,7 +99,7 @@ html:has(.ui) {
    page title stays at the top of the stage. */
 .stage { min-width: 0; height: 100dvh; overflow: hidden; }
 .stage-panel { height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.stage-body { max-width: 1120px; margin-inline: auto; padding: 0 var(--s7) var(--s7); }
+.stage-body { max-width: 1440px; margin-inline: auto; padding: 0 var(--s6) var(--s7); }
 .stage-body > .notice:first-child { margin-top: var(--s5); }
 .page-in, .pane-in { animation: page-in var(--base) var(--out); }
 @keyframes page-in { from { opacity: 0; transform: translateY(4px); } }
@@ -109,7 +109,7 @@ html:has(.ui) {
 /* Full height pages (Inbox, Documents, a client's tabs): the page root has .fill, and each
    .pane inside a .split scrolls on its own. */
 .stage-panel:has(.fill) { overflow: hidden; }
-.stage-body:has(.fill) { display: flex; flex-direction: column; height: 100%; max-width: 1440px; padding: 0 var(--s6) var(--s5); }
+.stage-body:has(.fill) { display: flex; flex-direction: column; height: 100%; padding-bottom: var(--s5); }
 .stage-body:has(.fill) > .page-in { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .fill { display: flex; flex: 1; flex-direction: column; gap: var(--s5); min-height: 0; }
 .split { display: flex; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r3); background: var(--white); }
@@ -148,7 +148,7 @@ html:has(.ui) {
 .b-secondary:hover:not(:disabled) { background: var(--hover); }
 .b-ghost { color: var(--ink-2); }
 .b-ghost:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
-.b-small { height: 28px; padding: 0 var(--s2); font-size: 13px; }
+.b-small { height: var(--control); padding: 0 var(--s2); font-size: 13px; }
 .b-icon { width: var(--control); padding: 0; }
 
 /* Fields */
@@ -176,6 +176,11 @@ html:has(.ui) {
 .subhead { margin: var(--s5) 0 var(--s1); font-size: 14px; font-weight: 600; }
 .points { display: grid; gap: var(--s1); padding-left: var(--s4); list-style: disc; color: var(--ink-2); }
 .alert { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s4); padding: var(--s2) var(--s3); border-radius: var(--r2); background: var(--red-bg); color: var(--red-fg); font-size: 13px; }
+/* A field's own error, under it, with the field marked. */
+.field-error { color: var(--red-fg); font-size: 13px; }
+.ui :is(input, select)[aria-invalid="true"] { border-color: var(--red-fg); }
+/* Shown beside a required date field until a date is picked. */
+:has(> input:valid) > .need-date { display: none; }
 .alert.closing { margin: 0 0 var(--s3); flex-wrap: wrap; }
 .alert.closing > span { flex: 1; }
 .connection { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s3); padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
@@ -195,9 +200,9 @@ html:has(.ui) {
 .t tbody tr:hover { background: var(--side); }
 .t tbody tr:has(input[type="checkbox"]:checked) { background: var(--accent-soft); }
 .t .shrink { width: 1%; white-space: nowrap; }
-.t input:not([type="checkbox"]) { height: 28px; }
+.t input:not([type="checkbox"]) { height: var(--control); }
 /* A select in a table cell looks like the cell's text until pointed at, as in Attio. */
-.ui .cell-select { width: auto; min-width: 140px; height: 28px; padding-left: var(--s2); border-color: transparent; background-color: transparent; }
+.ui .cell-select { width: auto; min-width: 140px; height: var(--control); padding-left: var(--s2); border-color: transparent; background-color: transparent; }
 .ui .cell-select:hover { border-color: var(--line-2); background-color: var(--white); }
 .ui .cell-input:not(:hover, :focus) { border-color: transparent; background: transparent; }
 .cell-form { display: flex; align-items: center; gap: var(--s2); }
@@ -215,7 +220,7 @@ html:has(.ui) {
 .rows .name { font-weight: 600; overflow-wrap: anywhere; text-decoration: none; }
 .rows a.name:hover { text-decoration: underline; text-decoration-color: var(--line-2); }
 .rows .end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-left: auto; color: var(--ink-3); }
-.rows .end :is(select, input:not([type="checkbox"])) { width: auto; min-width: 170px; height: 28px; }
+.rows .end :is(select, input:not([type="checkbox"])) { width: auto; min-width: 170px; height: var(--control); }
 
 /* Tags and avatars */
 .badge { display: inline-flex; align-items: center; height: 20px; padding: 0 var(--s2); border-radius: var(--r1); background: var(--gray-bg); color: var(--gray-fg); font-size: 12px; font-weight: 600; white-space: nowrap; }
@@ -224,15 +229,7 @@ html:has(.ui) {
 .badge.late, .badge.tag-deactivated { background: var(--red-bg); color: var(--red-fg); }
 .badge.warn { background: var(--amber-bg); color: var(--amber-fg); }
 .badge.purple { background: var(--purple-bg); color: var(--purple-fg); }
-.avatar { display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--blue-bg); color: var(--blue-fg); font-size: 12px; font-weight: 600; }
-.avatar.tone-blue { background: var(--blue-bg); color: var(--blue-fg); }
-.avatar.tone-green { background: var(--green-bg); color: var(--green-fg); }
-.avatar.tone-amber { background: var(--amber-bg); color: var(--amber-fg); }
-.avatar.tone-purple { background: var(--purple-bg); color: var(--purple-fg); }
-.avatar.tone-teal { background: var(--teal-bg); color: var(--teal-fg); }
-.avatar.tone-pink { background: var(--pink-bg); color: var(--pink-fg); }
-.avatar.tone-red { background: var(--red-bg); color: var(--red-fg); }
-.avatar.tone-gray { background: var(--gray-bg); color: var(--gray-fg); }
+.avatar { display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--press); color: var(--ink-2); font-size: 12px; font-weight: 600; }
 .avatar.square { border-radius: var(--r1); }
 .avatar.big { width: 48px; height: 48px; border-radius: var(--r3); font-size: 16px; }
 .who { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
@@ -301,6 +298,7 @@ html:has(.ui) {
 .empty { display: grid; justify-items: center; gap: var(--s1); padding: var(--s6) var(--s4); border: 1px dashed var(--line-2); border-radius: var(--r3); color: var(--ink-3); text-align: center; }
 .empty svg { margin-bottom: var(--s1); color: var(--ink-3); }
 .empty strong { color: var(--ink); font-weight: 600; }
+.empty > .b { margin-top: var(--s2); }
 
 .needs > li > svg { flex: none; color: var(--ink-3); }
 .needs > li.is-late > svg,

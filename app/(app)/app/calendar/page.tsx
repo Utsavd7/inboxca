@@ -9,6 +9,7 @@ import { AutoSelect } from "../auto-select";
 import { LinkTabs } from "../link-tabs";
 import { MarkFiled } from "../mark-filed";
 import { Badge, Empty, PageHead, SidePanel, Toast, type Tone } from "../ui";
+import { RowKeys } from "../row-keys";
 
 const columns = "id, client_id, code, period_key, due_on, status, details, clients!inner(name, archived_at)";
 const uuid = /^[0-9a-f-]{36}$/;
@@ -215,6 +216,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 })}
               </tbody>
             </table>
+            <RowKeys />
           </div>
         ) : (
           <Empty Icon={CalendarDays} title={view === "overdue" && !day ? "Nothing is late" : "No returns here"}>

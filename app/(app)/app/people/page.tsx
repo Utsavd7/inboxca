@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { changeGroup, manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
-import { Avatar, Badge, PageHead, SidePanel } from "../ui";
+import { Avatar, Badge, NotForYou, PageHead, SidePanel } from "../ui";
 import { Pending } from "../pending";
 import { invitableRoles, roleLabel } from "@/src/lib/roles";
 import { InviteForm } from "./invite-form";
@@ -20,6 +20,7 @@ const kinds = [
 export default async function People({ searchParams }: { searchParams: Promise<{ panel?: string; person?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
+  if (!["owner", "partner", "manager"].includes(membership.role)) return <NotForYou title="People" who="the owner, partners and managers" />;
   const [{ data: people }, { data: groups }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "branch"]).order("name"),

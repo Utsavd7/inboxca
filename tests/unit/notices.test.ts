@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readNotice, reviewBy } from "@/src/lib/notices";
+import { confirmers, readNotice, reviewBy } from "@/src/lib/notices";
 
 // Invented notice texts; the rules find what a CA looks for first.
 describe("the notice tracker", () => {
@@ -17,5 +17,14 @@ describe("the notice tracker", () => {
     expect(reviewBy("2026-10-17")).toBe("2026-10-19");
     expect(reviewBy("2026-10-16", 1, ["2026-10-17"])).toBe("2026-10-19");
     expect(reviewBy("2026-10-14", 2)).toBe("2026-10-16");
+  });
+
+  it("names who confirmed a date: the confirmation, else whoever added the notice with it", () => {
+    const by = confirmers([
+      { entity_id: "a", action: "notice.added", actor_id: "staff" },
+      { entity_id: "a", action: "notice.date_confirmed", actor_id: "manager" },
+      { entity_id: "b", action: "notice.added", actor_id: "owner" },
+    ]);
+    expect(Object.fromEntries(by)).toEqual({ a: "manager", b: "owner" });
   });
 });

@@ -17,7 +17,7 @@ import { roleNames } from "@/src/lib/roles";
 import { OfficePanel } from "./office-panel";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { replyReasons } from "@/src/lib/triage";
-import { Badge, PageHead, storage } from "./ui";
+import { Badge, PageHead, storage, Toast } from "./ui";
 import "./today.css";
 
 const DAY = 86_400_000;
@@ -233,11 +233,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           </form>
         </div>
       )}
-      {asked === "time" && (
-        <p className="notice" role="status">
-          The owner is asked for more time today. You can keep working until closing.
-        </p>
-      )}
+      {asked === "time" && <Toast>The owner is asked for more time today. You can keep working until closing.</Toast>}
       <DroppedNotice value={dropped} />
       {error === "view_only" && (
         <p className="alert" role="alert">

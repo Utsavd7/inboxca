@@ -2,14 +2,18 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { CornerDownLeft, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { findClients, findDocuments } from "@/app/(app)/actions";
 import { clientKinds, type ClientKind } from "@/src/lib/clients";
 
 type Page = { href: string; name: string };
 type Hit = { href: string; name: string; note: string };
 
-// Find a client or a page from anywhere: the search box in the rail, or Ctrl K / ⌘K.
+// True in the browser when a field has the keyboard, so a typed letter is not a shortcut.
+export const typing = (target: EventTarget | null) => target instanceof HTMLElement && !!target.closest("input, textarea, select, [contenteditable]");
+const nothing = () => () => {};
+
+// Find a client or a page from anywhere: the search box in the rail, / or Ctrl K (⌘K on a Mac).
 export function Command({ pages }: { pages: Page[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -17,12 +21,16 @@ export function Command({ pages }: { pages: Page[] }) {
   const [clients, setClients] = useState<Hit[]>([]);
   const [active, setActive] = useState(0);
   const [, startTransition] = useTransition();
+  const mac = useSyncExternalStore(nothing, () => /Mac|iPhone|iPad/.test(navigator.platform), () => false);
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setOpen((now) => !now);
+      } else if (event.key === "/" && !event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.altKey && !typing(event.target)) {
+        event.preventDefault();
+        setOpen(true);
       }
     };
     window.addEventListener("keydown", key);
@@ -57,10 +65,10 @@ export function Command({ pages }: { pages: Page[] }) {
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger className="rail-search">
+      <Dialog.Trigger className="rail-search" title={`Search (/ or ${mac ? "⌘K" : "Ctrl K"})`}>
         <Search size={15} aria-hidden />
         Search
-        <kbd>⌘K</kbd>
+        <kbd>{mac ? "⌘K" : "Ctrl K"}</kbd>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="cmd-backdrop" />

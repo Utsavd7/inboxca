@@ -11,7 +11,7 @@ import { activeClients, importSince, inScope, planImport, type Scope } from "@/s
 import type { ImportPlan } from "@/src/jobs/import-files";
 import { currentMember } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
-import { Badge, Empty, PageHead, SidePanel } from "../ui";
+import { Badge, Empty, PageHead, SidePanel, Toast } from "../ui";
 import { DiskUpload } from "./disk-upload";
 
 const scopes: Record<Scope, string> = {
@@ -80,16 +80,8 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
           In your first 14 days only files from {periodName(since)} on are brought in. The rest can follow from {receivedLabel(new Date(Date.parse(firm?.created_at ?? "") + 14 * 86_400_000).toISOString())}.
         </p>
       )}
-      {params.started && (
-        <p className="notice" role="status">
-          Moving your files now. Each lands in its client&apos;s folder; this page shows the progress.
-        </p>
-      )}
-      {params.undoing && (
-        <p className="notice" role="status">
-          Putting the files back where they were.
-        </p>
-      )}
+      {params.started && <Toast>Moving your files now. Each lands in its client&apos;s folder; this page shows the progress.</Toast>}
+      {params.undoing && <Toast>Putting the files back where they were.</Toast>}
       {!drive ? (
         <Empty Icon={FolderInput} title="No drive connected">
           <span>

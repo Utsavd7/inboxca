@@ -85,6 +85,7 @@
 .clients-page .page-head .client-back { margin-bottom: var(--s4); }
 .service-form { display: grid; gap: var(--s2); }
 .service-form .b { justify-self: start; }
+.service-save { margin-top: var(--s4); }
 .contact-form { flex-wrap: wrap; margin-top: var(--s2); }
 .client-empty { padding: var(--s4); }
 .side-panel .client-rows { margin-top: var(--s3); border-bottom: 1px solid var(--line); }

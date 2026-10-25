@@ -2,7 +2,7 @@
 import { useActionState } from "react";
 import { inviteMember, type InviteState } from "@/app/(app)/actions";
 import { invitableRoles, roleLabel } from "@/src/lib/roles";
-import { SidePanel } from "../ui";
+import { SidePanel, Toast } from "../ui";
 
 export function InviteForm() {
   const [state, invite, inviting] = useActionState(inviteMember, {} as InviteState);
@@ -42,11 +42,7 @@ export function InviteForm() {
           {state.error}
         </p>
       )}
-      {state.done && (
-        <p className="ok" role="status">
-          {state.done}
-        </p>
-      )}
+      {state.done && <Toast>{state.done}</Toast>}
     </SidePanel>
   );
 }

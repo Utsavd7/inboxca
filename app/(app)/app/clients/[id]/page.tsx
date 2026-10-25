@@ -14,7 +14,7 @@ import { type Right } from "@/src/lib/rights";
 import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, folderFor, periodChoices, periodName, receivedLabel, workOfType } from "@/src/lib/documents";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
-import { authorities, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
+import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { mailLive } from "@/src/lib/mail-live";
 import { currentMember } from "@/src/lib/member";
@@ -121,6 +121,10 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("email_events").select("id, contact_id, received_at, label, delivery, provider_message_id, contacts(name_enc)",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).order("received_at",{ascending:false}).order("id").range(mailRange, mailRange + (tab === "emails" ? 49 : 2)),
     tab === "documents" ? supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",membership.firmId).eq("kind","drive").maybeSingle() : Promise.resolve({ data: null }),
   ]);
+  // Who confirmed each dated notice, from the firm's activity.
+  const dated = tab === "notices" ? (notices ?? []).filter((notice) => (notice.details as unknown as NoticeDetails).action_date).map((notice) => notice.id) : [];
+  const { data: confirms } = dated.length ? await supabaseAdmin().from("activity_log").select("entity_id, action, actor_id").eq("firm_id", membership.firmId).in("entity_id", dated).in("action", confirmAction) : { data: [] };
+  const confirmedBy = new Map([...confirmers(confirms ?? [])].map(([notice, by]) => [notice, personName(people?.find((person) => person.user_id === by)?.email)]));
   const {count:outputs}=await supabase.from("documents").select("id",{count:"exact",head:true}).eq("firm_id",membership.firmId).eq("client_id",id).not("prepared","is",null).neq("status","deleted");
   const {data:draftForms,count:drafts}=await supabase.from("datasets").select("form_code",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id);
   const activity = panel==="activity" ? await supabase.rpc("client_activity",{target_client:id}) : null;
@@ -481,33 +485,32 @@ export default async function Client({ params, searchParams }: { params: Promise
               </span>
             </div>
             <DroppedNotice value={dropped} />
-            {askedRight && (
+            {askedRight && <Toast>Asked. Your manager or the owner answers in their Inbox; the button appears here once it is allowed, for one use within an hour.</Toast>}
+            {sharedFile && <Toast>Sent {sharedFile.name}. The link works for 7 days and 5 downloads.</Toast>}
+            {askedFor === "sent" && <Toast>The client was emailed a private upload link. What they upload is saved here.</Toast>}
+            {askedFor && askedFor !== "sent" && (
               <p className="notice" role="status">
-                Asked. Your manager or the owner answers in their Inbox; the button appears here once it is allowed, for one use within an hour.
-              </p>
-            )}
-            {sharedFile && <p className="notice" role="status">Sent {sharedFile.name}. The link works for 7 days and 5 downloads.</p>}
-            {askedFor && (
-              <p className="notice" role="status">
-                {askedFor === "sent" ? (
-                  "The client was emailed a private upload link. What they upload is saved here."
-                ) : (
-                  <span>
-                    Send the client this private upload link; it is shown only now and works for 30 days: <span className="num link-once">{askedFor}</span>
-                  </span>
-                )}
+                <span>
+                  Send the client this private upload link; it is shown only now and works for 30 days: <span className="num link-once">{askedFor}</span>
+                </span>
               </p>
             )}
             {noticeFile && (
-              <form action={removed ? removeDocument : manageDocument} className="notice" role="status">
-                <input type="hidden" name="document" value={noticeFile.id} />
-                <span>{removed ? `Removed ${noticeFile.name}. It waits 30 days in the drive's Deleted and old versions folder.` : `Saved as ${noticeFile.name}.`}</span>
-                {(removed ? owner : canRename) && (renamed || removed) && (
-                  <button className="b b-ghost" name="intent" value={removed ? "restore" : "undo"}>
-                    {removed ? "Put back" : "Undo"}
-                  </button>
-                )}
-              </form>
+              <Toast
+                undo={
+                  (removed ? owner : canRename) &&
+                  (renamed || removed) && (
+                    <form action={removed ? removeDocument : manageDocument}>
+                      <input type="hidden" name="document" value={noticeFile.id} />
+                      <button className="b" name="intent" value={removed ? "restore" : "undo"}>
+                        {removed ? "Put back" : "Undo"}
+                      </button>
+                    </form>
+                  )
+                }
+              >
+                {removed ? `Removed ${noticeFile.name}. It waits 30 days in the drive's Deleted and old versions folder.` : `Saved as ${noticeFile.name}.`}
+              </Toast>
             )}
             {!!asking.length && (
               <ul className="client-card client-rows asks" aria-label="Files asked for">
@@ -698,20 +701,21 @@ export default async function Client({ params, searchParams }: { params: Promise
                           <td>{details.notice_type}<span className="sub">{[authorities[details.authority], details.reference].filter(Boolean).join(", ")}</span></td>
                           <td>{dueLabel(details.received_on)}</td>
                           <td>
-                            {details.action_date ? dueLabel(details.action_date) : (
+                            {details.action_date ? <>{dueLabel(details.action_date)}{confirmedBy.get(notice.id) && <span className="sub">Confirmed by {confirmedBy.get(notice.id)}</span>}</> : (
                               <form action={manageNotice} className="cell-form">
                                 <input type="hidden" name="notice" value={notice.id} />
                                 <input type="hidden" name="back" value="client" />
                                 <Badge tone="warn">Review by {dueLabel(notice.due_on)}</Badge>
-                                {!viewOnly && <>
-                                  <input type="date" name="date" defaultValue={details.suggested_date} aria-label={`Action date for ${details.notice_type}`} className="cell-input" />
+                                {!viewOnly && manage && <>
+                                  <input type="date" name="date" defaultValue={details.suggested_date} aria-label={`Action date for ${details.notice_type}`} className="cell-input" required />
+                                  <span className="hint need-date">Pick the date from the notice first</span>
                                   <button className="b b-secondary" name="intent" value="confirm">Confirm date</button>
                                 </>}
                               </form>
                             )}
                           </td>
                           <td>
-                            {viewOnly ? noticeStatuses[notice.status as keyof typeof noticeStatuses] : (
+                            {viewOnly || !manage ? noticeStatuses[notice.status as keyof typeof noticeStatuses] : (
                               <form action={manageNotice}>
                                 <input type="hidden" name="notice" value={notice.id} />
                                 <input type="hidden" name="back" value="client" />
@@ -773,23 +777,25 @@ export default async function Client({ params, searchParams }: { params: Promise
         <SidePanel id="services" title="Services" close={base}>
           {alert}
           <p className="hint">What your firm files for this client. InboxCA makes the due dates for the next 12 months.</p>
-          <ul className="client-rows">
-            {numbers.filter((registration) => servicesFor(registration.kind).length).map((registration) => (
-              <li key={registration.id}>
-                <form key={registration.services.join()} action={manageClient} className="grow service-form">
-                  {hidden("services")}
-                  <input type="hidden" name="registration" value={registration.id} />
-                  <span className="name">{numberKinds[registration.kind as NumberKind].name} <span className="num">{registration.number}</span></span>
-                  {servicesFor(registration.kind).map((service) => (
-                    <label key={service.code} className="check">
-                      <input type="checkbox" name="service" value={service.code} defaultChecked={registration.services.includes(service.code)} /> {service.name}
-                    </label>
-                  ))}
-                  <button className="b b-primary" name="intent" value="services">Save services</button>
-                </form>
-              </li>
-            ))}
-          </ul>
+          <form key={numbers.map((registration) => registration.services.join()).join()} action={manageClient}>
+            {hidden("services")}
+            <ul className="client-rows">
+              {numbers.filter((registration) => servicesFor(registration.kind).length).map((registration) => (
+                <li key={registration.id}>
+                  <div className="grow service-form">
+                    <input type="hidden" name="registration" value={registration.id} />
+                    <span className="name">{numberKinds[registration.kind as NumberKind].name} <span className="num">{registration.number}</span></span>
+                    {servicesFor(registration.kind).map((service) => (
+                      <label key={service.code} className="check">
+                        <input type="checkbox" name={`service-${registration.id}`} value={service.code} defaultChecked={registration.services.includes(service.code)} /> {service.name}
+                      </label>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <button className="b b-primary service-save" name="intent" value="services">Save services</button>
+          </form>
         </SidePanel>
       )}
       {panel === "contacts" && (

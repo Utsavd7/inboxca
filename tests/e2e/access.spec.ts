@@ -80,6 +80,39 @@ test("the owner names a co-admin, who changes the access settings but not the ow
   expect((await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and actor_id = $2 and action = 'office.on'", [firm.firmId, partnerId]))[0].n).toBe(1);
 });
 
+test("staff are told People and Settings are not theirs, and only see a notice's date", async () => {
+  // Office only, left on by the co-admin's preset, would keep staff out of this test PC.
+  await query(local.dbUrl, "update public.firms set settings = jsonb_set(settings, '{office,on}', 'false') where id = $1", [firm.firmId]);
+  await query(local.dbUrl, "update public.firm_members set role = 'staff' where firm_id = $1 and user_id = $2", [firm.firmId, partnerId]);
+  try {
+    await partner.goto("/app/settings");
+    await expect(partner).toHaveURL(/\/app\/settings$/);
+    await expect(partner.getByText("This page is for the owner", { exact: true })).toBeVisible();
+    await partner.goto("/app/people");
+    await expect(partner.getByText("This page is for the owner, partners and managers")).toBeVisible();
+    await expect(partner.getByText(ownerEmail)).toHaveCount(0);
+    await partner.getByRole("link", { name: "Go to Today" }).click();
+    await expect(partner).toHaveURL(/\/app$/);
+
+    const [{ id: client }] = await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, 'Notice Client', 'individual') returning id", [firm.firmId]);
+    const [{ id: notice }] = await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, due_on, details) values ($1, $2, 'notice', '2026-10-22', '{"authority":"income_tax","notice_type":"Invented notice","reference":"","received_on":"2026-10-20"}') returning id`, [firm.firmId, client]);
+    await partner.goto(`/app/notices?notice=${notice}`);
+    const panel = partner.getByRole("dialog", { name: "Invented notice" });
+    await expect(panel).toContainText("The owner, a partner or a manager confirms the date");
+    await expect(panel.getByRole("button", { name: "Confirm date" })).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: "Mark replied" })).toHaveCount(0);
+
+    // The owner sees the date field ask for the date while it is empty.
+    await owner.goto(`/app/notices?notice=${notice}`);
+    const owners = owner.getByRole("dialog", { name: "Invented notice" });
+    await expect(owners.getByText("Pick the date from the notice first")).toBeVisible();
+    await owners.getByLabel("Action date, as the notice states it").fill("2026-12-24");
+    await expect(owners.getByText("Pick the date from the notice first")).toBeHidden();
+  } finally {
+    await query(local.dbUrl, "update public.firm_members set role = 'partner' where firm_id = $1 and user_id = $2", [firm.firmId, partnerId]);
+  }
+});
+
 test("on a shared PC, the next person's sign in signs the previous one out", async () => {
   const sessions = async () => (await query(local.dbUrl, "select count(*)::int as n from auth.sessions where user_id = $1", [partnerId]))[0].n;
   expect(await sessions()).toBe(1);

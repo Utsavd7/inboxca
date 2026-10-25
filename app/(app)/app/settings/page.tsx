@@ -14,7 +14,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
-import { Badge, PageHead, storage, Toast } from "../ui";
+import { Badge, NotForYou, PageHead, storage, Toast } from "../ui";
 import { Pending } from "../pending";
 import { STAGES, stageNames, reminderStages } from "@/src/lib/reminders";
 import { MailboxForm } from "./mailbox-form";
@@ -66,7 +66,8 @@ export default async function Settings({
   searchParams: Promise<{ saved?: string; error?: string; group?: string }>;
 }) {
   const { supabase, userId, membership } = await currentMember();
-  if (!membership || !officeApprover(membership.role, userId, membership.settings)) redirect("/app");
+  if (!membership) redirect("/app");
+  if (!officeApprover(membership.role, userId, membership.settings)) return <NotForYou title="Settings" who="the owner" />;
   if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel /></>;
   const owner = membership.role === "owner";
   // A closed firm keeps only its download until InboxCA deletes it, 30 days on.
@@ -266,8 +267,8 @@ export default async function Settings({
                 {!preset && <p className="hint">Your rules no longer match a preset.</p>}
               </div>
             </form>
+            <OfficePanel error={error === "deputies"} inPreset />
           </Card>
-          <OfficePanel error={error === "deputies"} />
           <Card id="limits" title="Signing in" line="For everyone in the firm, you included.">
             <form action={saveLimits} className="set-fields">
               <div>

@@ -56,3 +56,12 @@ export function reviewBy(receivedOn: string, days = 1, holidays: string[] = []) 
 }
 
 export type NoticeDetails = { authority: Authority; notice_type: string; reference: string; received_on: string; action_date?: string; suggested_date?: string; email_event_id?: string };
+
+// Who confirmed each notice's action date, from its activity lines: the confirmation, or else
+// the person who added the notice with its date.
+export const confirmAction = ["notice.date_confirmed", "notice.added"];
+export function confirmers(lines: { entity_id: string | null; action: string; actor_id: string | null }[]) {
+  const by = new Map<string, string>();
+  for (const line of lines) if (line.entity_id && line.actor_id && (line.action === "notice.date_confirmed" || !by.has(line.entity_id))) by.set(line.entity_id, line.actor_id);
+  return by;
+}

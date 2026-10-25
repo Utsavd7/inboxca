@@ -5,10 +5,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageNotice } from "@/app/(app)/actions";
 import { dueLabel, todayInIndia } from "@/src/lib/calendar";
+import { canManageClients } from "@/src/lib/clients";
 import { currentMember } from "@/src/lib/member";
-import { authorities, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
+import { personName } from "@/src/lib/roles";
+import { supabaseAdmin } from "@/src/lib/supabase";
+import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
 import { LinkTabs } from "../link-tabs";
 import { Badge, Empty, PageHead, SidePanel, Toast, type Tone } from "../ui";
+import { RowKeys } from "../row-keys";
 
 const catalog = ["Intimation u/s 143(1)", "Notice u/s 143(2)", "Notice u/s 142(1)", "Notice u/s 148", "Demand notice u/s 156", "DRC-01", "ASMT-10", "Registration notice", "Show cause notice", "Summons"];
 const pills = { open: "Open", confirm: "Date to confirm", done: "Replied or closed", all: "All" } as const;
@@ -33,6 +37,8 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
   const today = todayInIndia();
   const viewOnly = !!membership.viewOnlyUntil;
   const add = !!params.add && !viewOnly;
+  // Confirming a date and moving a notice on are for the owner, partners and managers.
+  const decides = !viewOnly && canManageClients(membership.role);
   const find = params.for?.trim().slice(0, 100) ?? "";
   const at = /^\d{1,6}$/.test(params.at ?? "") ? Number(params.at) : 0;
 
@@ -98,6 +104,13 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
     all: ["No notices yet", "A notice a client emails is recorded here by itself. Add one by hand if it came another way."],
   }[show];
   const openDetails = opened?.details as NoticeDetails | undefined;
+  // Who confirmed the open notice's date, from the firm's activity.
+  const { data: confirms } = openDetails?.action_date
+    ? await supabaseAdmin().from("activity_log").select("entity_id, action, actor_id").eq("firm_id", firm).eq("entity_id", opened!.id).in("action", confirmAction)
+    : { data: null };
+  const confirmer = confirmers(confirms ?? []).get(opened?.id ?? "");
+  const { data: people } = confirmer ? await supabase.rpc("firm_people", { target_firm: firm }) : { data: null };
+  const confirmedBy = confirmer && personName(people?.find((person) => person.user_id === confirmer)?.email);
 
   return (
     <div className="fill notices">
@@ -151,8 +164,8 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                         <Badge tone={tone}>{word}</Badge>
                       </td>
                       <td className="cal-act">
-                        <Link className="b b-secondary" href={href({ notice: notice.id })} scroll={false} aria-label={`Update the notice for ${notice.clients?.name}`}>
-                          {viewOnly ? "Open" : "Update"}
+                        <Link className="b b-secondary" href={href({ notice: notice.id })} scroll={false} aria-label={`${decides ? "Update" : "Open"} the notice for ${notice.clients?.name}`}>
+                          {decides ? "Update" : "Open"}
                         </Link>
                       </td>
                     </tr>
@@ -160,6 +173,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 })}
               </tbody>
             </table>
+            <RowKeys />
           </div>
         ) : (
           <Empty Icon={FileWarning} title={empty[0]}>
@@ -217,6 +231,12 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
               <dt>Action date</dt>
               <dd>{actionDate(opened)}</dd>
             </div>
+            {confirmedBy && (
+              <div>
+                <dt>Confirmed by</dt>
+                <dd>{confirmedBy}</dd>
+              </div>
+            )}
             <div>
               <dt>Status</dt>
               <dd>
@@ -224,7 +244,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
               </dd>
             </div>
           </dl>
-          {!viewOnly && !openDetails.action_date && (
+          {decides && !openDetails.action_date && (
             <form action={manageNotice} className="fields">
               {state}
               <input type="hidden" name="notice" value={opened.id} />
@@ -232,13 +252,15 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
               <div>
                 <label htmlFor="notice-confirm">Action date, as the notice states it</label>
                 <input id="notice-confirm" name="date" type="date" defaultValue={openDetails.suggested_date} required />
+                <span className="hint need-date">Pick the date from the notice first</span>
               </div>
               <button className="b b-primary" name="intent" value="confirm">
                 Confirm date
               </button>
             </form>
           )}
-          {!viewOnly && (
+          {!viewOnly && !decides && <p className="hint">The owner, a partner or a manager confirms the date and moves the notice on.</p>}
+          {decides && (
             <>
               <h3>Move it on</h3>
               <form action={manageNotice} className="notices-moves">
