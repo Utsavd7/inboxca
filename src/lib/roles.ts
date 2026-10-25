@@ -12,7 +12,7 @@ export const invitableRoles = ["partner", "manager", "staff", "front_desk"] as c
 export const roleLabel = (role: string) => roleNames[role][0].toUpperCase() + roleNames[role].slice(1);
 
 // The pages each role uses. The sidebar shows the four daily places, then a small Workspace
-// group with Calendar, Notices, People and Settings.
+// group with Calendar, Notices, Leads, People and Settings.
 export const pagesFor = (role: string) => [
   { href: "/app", name: "Today", place: "main" },
   { href: "/app/inbox", name: "Inbox", place: "main" },
@@ -20,6 +20,7 @@ export const pagesFor = (role: string) => [
   { href: "/app/documents", name: "Documents", place: "main" },
   { href: "/app/calendar", name: "Calendar", place: "workspace" },
   { href: "/app/notices", name: "Notices", place: "workspace" },
+  ...(["owner", "partner", "front_desk"].includes(role) ? [{ href: "/app/leads", name: "Leads", place: "workspace" }] : []),
   ...(["owner", "partner", "manager"].includes(role) ? [{ href: "/app/people", name: "People", place: "workspace" }] : []),
   ...(role === "owner" ? [{ href: "/app/settings", name: "Settings", place: "workspace" }] : []),
 ];

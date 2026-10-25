@@ -24,6 +24,9 @@ export const emailTemplates={
     const got=items.filter((item)=>item.received.length).map((item)=>`- ${item.type}: ${item.received.length===1 ? "1 file" : `${item.received.length} files`}`);
     return {subject:`We have received your papers${when}`,text:[`Dear ${client},`,"",`Thank you. We have received these papers${when}:`,...got,"",...(missing.length ? ["Still needed:",...missing,"","Please add them with the upload link we sent you."] : ["That is everything we asked for."]),"",firm].join("\n")};
   },
+  followUp(lead:string,firm:string,service:string) {
+    return {subject:`Your enquiry with ${firm}`,text:[`Dear ${lead},`,"",`Thank you for contacting ${firm}${service ? ` about ${service}` : ""}. We would be glad to help.`,"","Please reply to this email with a good time to talk, or with any questions you have.","",firm].join("\n")};
+  },
   code(code:string,firm:string) {
     return {subject:"Your code to open the document",text:[`Your code is ${code}.`,"",`It works for ${CODE_MINUTES} minutes. If you did not ask for it, you can ignore this email.`,"",firm].join("\n")};
   },

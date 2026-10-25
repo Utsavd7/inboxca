@@ -14,4 +14,6 @@ export const activityNames: Record<string, string> = {
   "email.acknowledged": "Files received reply sent", "request.changed": "Request updated", "request.receipt_sent": "Receipt emailed for uploaded papers",
   "email.replied": "Reply sent", "email.written": "Email written to the client",
   "document.added": "Filing record added", "request.created": "Papers asked for", "notice.added": "Notice added",
+  "lead.added": "Enquiry received", "lead.moved": "Lead moved", "lead.lost": "Lead marked lost", "lead.won": "Lead turned into a client",
+  "lead.follow_up_set": "Follow up day set", "lead.followed_up": "Follow up email sent", "lead.noted": "Lead notes changed",
 };

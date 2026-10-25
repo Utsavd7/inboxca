@@ -244,6 +244,7 @@ async function readItems(imap: ImapFlow, box: MailItem["box"], uids: number[], f
       box,
       messageId: message.envelope?.messageId ?? "",
       from: emails(message.envelope?.from)[0] ?? "",
+      fromName: message.envelope?.from?.[0]?.name ?? "",
       to: emails([...(message.envelope?.to ?? []), ...(message.envelope?.cc ?? [])]),
       date: new Date(message.envelope?.date ?? message.internalDate ?? 0).toISOString(),
       subject: message.envelope?.subject ?? "",
@@ -296,7 +297,7 @@ export async function listMail(address: string, password: string, server: Server
       }
     }
     await imap.logout();
-    return { inbox: inbox.map(({ box, messageId, from, to, date, subject, snippet }) => ({ box, messageId, from, to, date, subject, snippet })), sent: sent?.map(({ box, messageId, from, to, date, subject, snippet }) => ({ box, messageId, from, to, date, subject, snippet })) ?? null };
+    return { inbox: inbox.map(({ box, messageId, from, fromName, to, date, subject, snippet }) => ({ box, messageId, from, fromName, to, date, subject, snippet })), sent: sent?.map(({ box, messageId, from, to, date, subject, snippet }) => ({ box, messageId, from, to, date, subject, snippet })) ?? null };
   } catch (error) {
     imap.close();
     return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };
