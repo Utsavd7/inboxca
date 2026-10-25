@@ -1,6 +1,4 @@
-import { mailHealth } from "@/src/lib/firm-mail";
-import { serverCrypto } from "@/src/lib/crypto";
-import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
+import { mailHealth, openMail } from "@/src/lib/firm-mail";
 import { readNotice, reviewBy, type NoticeDetails } from "@/src/lib/notices";
 import { readText } from "@/src/lib/search";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -13,7 +11,7 @@ export const noticeFromMail: Handler = async (job) => {
   const admin = supabaseAdmin();
   const { data: event } = await admin
     .from("email_events")
-    .select("id, firm_id, client_id, label, received_at, provider_message_id, connected_accounts(id, address_enc, credentials_enc, settings, status), firms(settings)")
+    .select("id, firm_id, client_id, label, received_at, provider_message_id, connected_accounts(id, provider, address_enc, credentials_enc, settings, status), firms(settings)")
     .eq("id", job.entity_id ?? "")
     .maybeSingle();
   const mailbox = event?.connected_accounts;
@@ -23,10 +21,7 @@ export const noticeFromMail: Handler = async (job) => {
   const queueFiles = () => admin.from("jobs").upsert({ firm_id: event.firm_id, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
   if (known?.length) { await queueFiles(); return { done: true }; }
   const firm = event.firm_id;
-  const crypto = serverCrypto();
-  const address = await crypto.decrypt(firm, `accounts/${mailbox.id}/address`, mailbox.address_enc);
-  const { password } = JSON.parse(await crypto.decrypt(firm, `accounts/${mailbox.id}/credentials`, mailbox.credentials_enc));
-  const read = await readAttachments(address, password, (mailbox.settings as MailSettings).imap, event.provider_message_id);
+  const read = await (await openMail(firm, mailbox)).readAttachments(event.provider_message_id);
   if ("error" in read) {
     if (read.error==="sign_in") await mailHealth(mailbox.id,"read",true,mailbox.credentials_enc);
     return {retry:"mail_unreachable",at:new Date(Date.now()+3600_000)};

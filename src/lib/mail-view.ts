@@ -10,7 +10,14 @@ export type MailMessage = MailItem & { inReplyTo: string; references: string[]; 
 // sent ones that match. thread: one message and the conversation it belongs to.
 export type ListAsk = { inbox: string[]; q?: string; sent: { limit: number; to?: string[]; since?: string; before?: string; reminders?: boolean } | null };
 export type ThreadAsk = { box: "inbox" | "sent"; messageId: string };
-export type MailRequest = { firm: string; expires: number; address: string; password: string; server: Server } & ({ op: "list"; ask: ListAsk } | { op: "thread"; ask: ThreadAsk });
+// Mailboxes connected with the provider's own sign in instead of a password (PLAN.md 5.13).
+export const mailApis = ["gmail", "outlook", "zoho"] as const;
+export type MailApi = (typeof mailApis)[number];
+// Zoho's data centre and the firm's account and folder ids there; empty for the others.
+export type ApiSettings = { server?: string; domain?: string; account?: string; inbox?: string; sent?: string };
+export type MailRequest = { firm: string; expires: number; address: string } &
+  ({ provider?: undefined; password: string; server: Server } | { provider: MailApi; token: string; api: ApiSettings }) &
+  ({ op: "list"; ask: ListAsk } | { op: "thread"; ask: ThreadAsk });
 
 export const mailLimits = { body: 65_536, ids: 500, sent: 50, thread: 20, text: 50_000 };
 
@@ -22,7 +29,10 @@ export async function verifyMail(body: string, signature: string, secret: string
   const value = JSON.parse(body) as MailRequest;
   const text = (item: unknown, max: number) => typeof item === "string" && item.length <= max;
   const ok = value && value.op === op && text(value.firm, 64) && !!value.firm && Number.isInteger(value.expires) && value.expires > now && value.expires <= now + 75 &&
-    text(value.address, 320) && text(value.password, 1000) && text(value.server?.host, 255) && Number.isInteger(value.server?.port) &&
+    text(value.address, 320) &&
+    (value.provider === undefined
+      ? text(value.password, 1000) && text(value.server?.host, 255) && Number.isInteger(value.server?.port)
+      : mailApis.includes(value.provider) && !!value.token && text(value.token, 8192) && Object.values(value.api ?? {}).every((part) => text(part, 255))) &&
     (value.op === "list"
       ? Array.isArray(value.ask.inbox) && value.ask.inbox.length <= mailLimits.ids && value.ask.inbox.every((id) => text(id, 998)) && (value.ask.q === undefined || text(value.ask.q, 200)) &&
         (value.ask.sent === null || (Number.isInteger(value.ask.sent.limit) && value.ask.sent.limit >= 1 && value.ask.sent.limit <= mailLimits.sent && (value.ask.sent.to ?? []).length <= 20))

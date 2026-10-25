@@ -32,7 +32,8 @@ test("the owner connects the firm's mailbox with only its address and password",
     await expect(card.getByText("Found Gmail. Gmail needs an app password: Google Account, Security, App passwords.")).toBeVisible();
     await address.fill("shah.associates@outlook.com");
     await address.blur();
-    await expect(card.getByText("InboxCA cannot use Microsoft sign in yet")).toBeVisible();
+    // The test server has Microsoft sign in set up (the fake in tests/fake-mail.ts).
+    await expect(card.getByText("This address is on Outlook or Microsoft 365. Use Connect with Microsoft above.")).toBeVisible();
 
     await address.fill(office);
     await address.blur();

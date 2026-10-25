@@ -12,6 +12,7 @@ import {z} from "zod";
 import {prepare} from "./prepare.ts";
 import {stampedPdf} from "./download.ts";
 import {listMail, readThread} from "../src/lib/mailbox.ts";
+import * as mailApi from "../src/lib/mail-api.ts";
 import {verifyMail} from "../src/lib/mail-view.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
@@ -60,7 +61,10 @@ export async function handle(request: Request): Promise<Response> {
     let mail;
     try {mail=await verifyMail(await request.text(),request.headers.get("authorization") ?? "",secret,url.pathname.slice(6));}
     catch {return new Response("Not allowed",{status:403});}
-    const read=mail.op==="list" ? await listMail(mail.address,mail.password,mail.server,mail.ask) : await readThread(mail.address,mail.password,mail.server,mail.ask);
+    // A mailbox connected with sign in is read over its provider's API with the access token.
+    const read=mail.provider
+      ? (mail.op==="list" ? await mailApi.listMail({provider:mail.provider,token:mail.token,settings:mail.api},mail.ask) : await mailApi.readThread({provider:mail.provider,token:mail.token,settings:mail.api},mail.ask))
+      : mail.op==="list" ? await listMail(mail.address,mail.password,mail.server,mail.ask) : await readThread(mail.address,mail.password,mail.server,mail.ask);
     return Response.json(read,{headers:{"Cache-Control":"private, no-store"}});
   }
   if (process.env.FILE_WORKER_TEST === "1" && request.method === "GET" && url.pathname === "/_reads" && secret && request.headers.get("authorization") === `Bearer ${secret}`)

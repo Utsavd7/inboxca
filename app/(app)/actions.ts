@@ -32,7 +32,8 @@ import { queueRead } from "@/src/jobs/read-document";
 import { runJobsSoon } from "@/src/jobs/run-soon";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
-import { firmMailer } from "@/src/lib/firm-mail";
+import { firmMailer, forgetMailToken } from "@/src/lib/firm-mail";
+import { adminConsent, isMailApi, MAIL_COOKIE, mailSignIn, mailSignInReady } from "@/src/lib/mail-oauth";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { paperPolicy, type BulkSend, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
@@ -630,6 +631,7 @@ const mailboxErrors = {
   sign_in: "InboxCA could not sign in with that address and password.",
   server: "InboxCA could not reach the mail server. Check the server settings above.",
 };
+const microsoftLine = () => (mailSignInReady("outlook") ? "This address is on Outlook or Microsoft 365. Use Connect with Microsoft above." : mailboxErrors.microsoft);
 
 // Settings → Firm email: the owner connects the firm's mailbox. Both sign ins are checked
 // first; the address and password are saved encrypted with the firm's key.
@@ -644,7 +646,7 @@ export async function connectMailbox(_prev: MailboxState, form: FormData): Promi
   const settings = typed
     ? { imap: { host: values.imap_host, port: Number(values.imap_port) || 993 }, smtp: { host: values.smtp_host, port: Number(values.smtp_port) || 465 } }
     : await detectSettings(address);
-  if (settings === "microsoft") return { error: mailboxErrors.microsoft, values };
+  if (settings === "microsoft") return { error: microsoftLine(), values };
   const checked = await checkMailbox(address, password, settings);
   if ("error" in checked) return { error: checked.error === "sign_in" ? `${mailboxErrors.sign_in} ${providerFor(settings.imap.host)?.help ?? "Check the password, or use an app password."}` : mailboxErrors.server, values: { ...values, ...serverValues(settings) } };
 
@@ -677,7 +679,7 @@ export async function findMailServer(address: string) {
   const { membership } = await currentMember();
   if (membership?.role !== "owner" || !z.email().safeParse(address.trim()).success) return "";
   const found = await detectSettings(address.trim().toLowerCase());
-  if (found === "microsoft") return mailboxErrors.microsoft;
+  if (found === "microsoft") return microsoftLine();
   const help = providerFor(found.imap.host)?.help;
   return found.name ? `Found ${found.name}.${help ? ` ${help}` : ""}` : "InboxCA did not find this provider, so it will try the usual server names.";
 }
@@ -688,10 +690,36 @@ const serverValues = ({ imap, smtp }: { imap: { host: string; port: number }; sm
   smtp_port: String(smtp.port),
 });
 
-// Disconnecting deletes the saved password at once, so nothing more is read or sent.
-export async function disconnectMailbox() {
-  const { supabase, membership } = await currentWriter();
+// Settings → Firm email: Connect with Google, Microsoft or Zoho, shown only once its app's
+// keys are set. The owner signs in on the provider's own page and /api/oauth/<provider>/
+// callback finishes; the PKCE verifier and state wait in a short cookie for it. A firm on
+// Microsoft 365 whose admin must allow apps asks the admin to allow InboxCA once first.
+export async function connectMailSignIn(form: FormData) {
+  const { membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
+  const provider = String(form.get("provider") ?? "");
+  if (!isMailApi(provider) || !mailSignInReady(provider)) redirect("/app/settings?group=email&error=mail_failed#mailbox");
+  const { verifier, challenge } = pkce();
+  const state = randomUUID();
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+  (await cookies()).set(MAIL_COOKIE, Buffer.from(JSON.stringify({ state, verifier, provider })).toString("base64url"), {
+    httpOnly: true,
+    secure: origin.startsWith("https"),
+    sameSite: "lax",
+    maxAge: 600,
+    path: "/api/oauth",
+  });
+  const back = `${origin}/api/oauth/${provider}/callback`;
+  redirect(provider === "outlook" && form.get("admin") === "1" ? adminConsent(state, back) : mailSignIn(provider, state, challenge, back));
+}
+
+// Disconnecting deletes the saved password or token at once, so nothing more is read or
+// sent; a sign in token is first taken back at its provider where the provider allows it.
+export async function disconnectMailbox() {
+  const { supabase, membership, userId } = await currentWriter();
+  if (membership?.role !== "owner") redirect("/app");
+  await forgetMailToken(membership.firmId, userId).catch(() => log.warn("mail_token_not_revoked", {}));
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "mail");
   revalidatePath("/app/settings");
 }

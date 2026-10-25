@@ -2,7 +2,7 @@ import { BellRing, CalendarClock, CalendarOff, Clock, Database, Download, Eye, F
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
-import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
+import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
 import { firmAdmin, officeApprover, type Office } from "@/src/lib/office";
 import { presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
@@ -19,6 +19,8 @@ import { Badge, IconTile, NotForYou, PageHead, storage, Toast, type Kind } from 
 import { Item, List } from "../motion";
 import { Pending } from "../pending";
 import { STAGES, stageNames, reminderStages } from "@/src/lib/reminders";
+import { isMailApi, mailSignInReady, signInNames, signInNotReady } from "@/src/lib/mail-oauth";
+import { mailApis, type MailApi } from "@/src/lib/mail-view";
 import { MailboxForm } from "./mailbox-form";
 import { GroupAnchor } from "./group-anchor";
 import "./settings.css";
@@ -28,6 +30,10 @@ const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dro
 const problems: Record<string, [string, string]> = {
   permission_scope: ["permissions", "Check the end date and client names. Use the full names shown in Clients, one per line, with no repeated names."],
   mail_limit: ["mailbox", "Choose a whole number from 1 to 2,000 for the email limit."],
+  mail_denied: ["mailbox", "The sign in was not allowed, so nothing was connected."],
+  mail_failed: ["mailbox", "The email did not finish connecting. Try again."],
+  mail_taken: ["mailbox", "A mailbox is already connected. Disconnect it first to use another address."],
+  mail_admin: ["mailbox", "Microsoft did not allow it. If your firm uses Microsoft 365, its admin may need to allow InboxCA once for the whole firm."],
   drive_terms: ["drive", "Tick the box to agree to the Drive access terms first."],
   drive_provider: ["drive", "Choose a drive."],
   drive_taken: ["drive", "A drive is already connected. Disconnect it first."],
@@ -37,7 +43,7 @@ const problems: Record<string, [string, string]> = {
   special: ["special", "The dates must run forward and the closing time must be after the opening time."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { preset: "Preset saved.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Papers saved.", permissions: "Permissions saved.", mail_limit: "Email limit saved." };
+const savedNames: Record<string, string> = { preset: "Preset saved.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Papers saved.", permissions: "Permissions saved.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft." };
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "drive"]],
@@ -145,6 +151,23 @@ export default async function Settings({
   const preset = presetOf(settings);
   const others = people?.filter((person) => person.role !== "owner" && person.status === "active") ?? [];
   const problem = (section: string) => error && problems[error]?.[0] === section && <p className="alert" role="alert">{problems[error][1]}</p>;
+  // Connect with Google, Microsoft or Zoho, each shown only once its app's keys are set.
+  const signIn = (again?: MailApi) => {
+    const button = (provider: MailApi, admin = false) => (
+      <form key={`${provider}-${admin}`} action={connectMailSignIn}>
+        <input type="hidden" name="provider" value={provider} />
+        {admin && <input type="hidden" name="admin" value="1" />}
+        <Pending className={`b ${again ? "b-primary" : "b-secondary"}`}>{admin ? "Allow for the whole firm" : `Connect ${again ? "again " : ""}with ${signInNames[provider]}`}</Pending>
+      </form>
+    );
+    const shown = again ? [again] : mailApis.filter(mailSignInReady);
+    return <>
+      {!!shown.length && <div className="set-foot">{shown.map((provider) => button(provider))}</div>}
+      {!again && problem("mailbox")}
+      {error === "mail_admin" && shown.includes("outlook") && <div className="set-foot">{button("outlook", true)}<p className="hint">Sign in as your firm&apos;s Microsoft 365 admin.</p></div>}
+      {!again && <p className="hint">{signInNotReady() ?? "Or connect with the address and its password."}</p>}
+    </>;
+  };
   return (
     <div className="set-page">
       <PageHead title="Settings" sub={owner ? "How your firm uses InboxCA. Only you, the owner, see this page." : "How your firm keeps client data safe. As co-admin you change these with the owner."} />
@@ -177,11 +200,14 @@ export default async function Settings({
                 </Pending>
               </form>
             ) : (
-              <MailboxForm />
+              <>
+                {signIn()}
+                <MailboxForm />
+              </>
             )}
             {mailbox?.status==="needs_reconnect" && <>
               <p className="alert" role="alert">Connect your firm&apos;s email again. Replies will wait until it is connected.</p>
-              <MailboxForm reconnecting initial={{address:mailAddress ?? "",...Object.fromEntries(Object.entries((mailServers?.settings ?? {}) as Record<string,unknown>).filter(([key])=>["imap","smtp"].includes(key)).flatMap(([key,value])=>Object.entries(value as Record<string,string|number>).map(([part,value])=>[`${key}_${part}`,String(value)])))}} />
+              {isMailApi(mailbox.provider) && mailSignInReady(mailbox.provider) ? signIn(mailbox.provider) : <MailboxForm reconnecting initial={{address:mailAddress ?? "",...Object.fromEntries(Object.entries((mailServers?.settings ?? {}) as Record<string,unknown>).filter(([key])=>["imap","smtp"].includes(key)).flatMap(([key,value])=>Object.entries(value as Record<string,string|number>).map(([part,value])=>[`${key}_${part}`,String(value)])))}} />}
             </>}
             {mailbox && <form action={saveMailLimit} className="set-fields">
               <div><label htmlFor="mail-limit">Emails in 24 hours</label><input id="mail-limit" name="limit" type="number" min="1" max="2000" step="1" className="num" defaultValue={Number(settings.mail_limit) || 500} /></div>
