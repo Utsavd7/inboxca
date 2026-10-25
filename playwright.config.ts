@@ -18,6 +18,8 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
+  // Mail, sign in and filing steps can pass 5 seconds when other runs load the machine.
+  expect: { timeout: 10_000 },
   reporter: "list",
   use: { baseURL: origin, trace: "on-first-retry" },
   webServer: [{
