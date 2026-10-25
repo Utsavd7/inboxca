@@ -24,6 +24,7 @@ import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { labels, type Label } from "@/src/lib/triage";
+import { workspaceStore } from "@/src/lib/workspace";
 import { AutoSelect } from "../../auto-select";
 import { LinkTabs } from "../../link-tabs";
 import { DroppedNotice, PortalDrop } from "../../portal-drop";
@@ -55,6 +56,7 @@ const errors: Record<string, string> = {
   gstin: "Choose the GSTIN this GST paper is for.",
   list: "Put one paper on each line, up to 30, each up to 80 letters and without a colon.",
   owner: "Only the owner can remove a file.",
+  copy: "InboxCA could not keep its safety copy, so the file was not removed. Try again in a minute.",
   needs: "This needs permission first. Ask, and the button appears here once it is allowed.",
   asked: "You already have several questions waiting. Wait for an answer first.",
   ask: "Tick at least one document, or name one, to ask for.",
@@ -1205,7 +1207,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           {canRemove(paper.id) ? (
             <form action={removeDocument} className="form-row">
               <input type="hidden" name="document" value={paper.id} />
-              <p className="hint">It waits 30 days in the drive&apos;s Deleted and old versions folder and can be put back.</p>
+              <p className="hint">It waits 30 days in the drive&apos;s Deleted and old versions folder and can be put back. {workspaceStore() ? "InboxCA also keeps its own locked copy for 30 days." : "InboxCA's own safety copy is not set up yet."}</p>
               <Pending className="b b-secondary" name="intent" value="remove" aria-label={`Remove ${paper.name}`}>Remove</Pending>
             </form>
           ) : (

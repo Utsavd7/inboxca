@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/src/db/types";
+import { awsCredentials, awsFetch, type AwsCredentials } from "./aws";
 import { supabaseAdmin } from "./supabase";
 
 // Per-firm envelope encryption (PLAN.md 8.4). Each firm has a key set: one key for blind
@@ -48,16 +49,65 @@ export function localKek(key: Buffer): Kek {
   };
 }
 
+// AWS KMS as the outer key (8.4, D28). Each wrap asks KMS for a fresh data key bound to the
+// firm by its encryption context, and seals the key set with it here, so a key set of any
+// size fits: stored is the data key as KMS wrapped it, then the sealed set. Only KMS can
+// unwrap the data key, and only for the same firm. Errors carry KMS's error name, no data.
+export function kmsKek({ keyId, region, credentials, endpoint = `https://kms.${region}.amazonaws.com/` }: { keyId: string; region: string; credentials: AwsCredentials; endpoint?: string }): Kek {
+  const call = async (action: string, firmId: string, body: object) => {
+    const headers = { "content-type": "application/x-amz-json-1.1", "x-amz-target": `TrentService.${action}` };
+    const response = await awsFetch("POST", endpoint, headers, JSON.stringify({ KeyId: keyId, EncryptionContext: { firm_id: firmId }, ...body }), { service: "kms", region, credentials });
+    const answer = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(`KMS ${action} failed: ${String(answer.__type ?? response.status).split("#").pop()}`);
+    return { key: Buffer.from(answer.Plaintext, "base64"), wrapped: Buffer.from(answer.CiphertextBlob ?? "", "base64") };
+  };
+  return {
+    async wrap(data, firmId) {
+      const { key, wrapped } = await call("GenerateDataKey", firmId, { KeySpec: "AES_256" });
+      const size = Buffer.alloc(2);
+      size.writeUInt16BE(wrapped.length);
+      return Buffer.concat([size, wrapped, seal(key, data, `kek:${firmId}`)]);
+    },
+    async unwrap(data, firmId) {
+      const size = data.readUInt16BE(0);
+      const { key } = await call("Decrypt", firmId, { CiphertextBlob: data.subarray(2, 2 + size).toString("base64") });
+      return open(key, data.subarray(2 + size), `kek:${firmId}`);
+    },
+  };
+}
+
+// This server's outer key: AWS KMS once KMS_KEY_ID (the key's ARN, which names its region)
+// and KMS_CREDENTIALS ("key id:secret" of a user that may only use this key; on AWS Lambda
+// the function's role instead) are set; otherwise LOCAL_KEK, in development and tests.
+export function serverKek(): Kek {
+  const keyId = process.env.KMS_KEY_ID;
+  if (keyId) {
+    const credentials = awsCredentials(process.env.KMS_CREDENTIALS);
+    if (!credentials) throw new Error("KMS_CREDENTIALS is not set");
+    return kmsKek({ keyId, region: keyId.startsWith("arn:") ? keyId.split(":")[3] : "ap-south-1", credentials });
+  }
+  if (!process.env.LOCAL_KEK) throw new Error("Firm encryption is not set up on this server");
+  return localKek(Buffer.from(process.env.LOCAL_KEK, "base64"));
+}
+
 // Same text, same index; different text, firm or field, different index.
 const normalise = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 
 export function firmCrypto(kek: Kek, store: KeyStore, now = () => Date.now()) {
   const cache = new Map<string, { index: Buffer; keys: Buffer[]; until: number }>();
+  const loading = new Map<string, ReturnType<typeof load>>();
 
-  // fresh skips the cache: a value made after another server rotated the key.
-  async function keySet(firmId: string, fresh = false) {
+  // fresh skips the cache: a value made after another server rotated the key. Values opened
+  // at the same moment share one unwrap, so a page of them asks KMS once.
+  function keySet(firmId: string, fresh = false) {
     const cached = cache.get(firmId);
-    if (cached && cached.until > now() && !fresh) return cached;
+    if (cached && cached.until > now() && !fresh) return Promise.resolve(cached);
+    if (!fresh && loading.has(firmId)) return loading.get(firmId)!;
+    const pending = load(firmId).finally(() => loading.delete(firmId));
+    loading.set(firmId, pending);
+    return pending;
+  }
+  async function load(firmId: string) {
     let wrapped = await store.read(firmId);
     if (!wrapped) {
       await store.write(firmId, await kek.wrap(randomBytes(KEY * 2), firmId), null);
@@ -182,11 +232,9 @@ export function supabaseKeyStore(supabase: SupabaseClient<Database>): KeyStore {
 }
 
 // This server's firm encryption, one per server so the 5 minute key cache is shared. The
-// outer key is local in development and tests (LOCAL_KEK, written by `npm run db:env`);
-// production uses AWS KMS, which is not set up yet, so nothing is encrypted there until it is.
+// outer key is local in development and tests (LOCAL_KEK, written by `npm run db:env`) and
+// AWS KMS in production (serverKek); with neither, nothing is encrypted.
 let server: ReturnType<typeof firmCrypto> | undefined;
 export function serverCrypto() {
-  const key = process.env.LOCAL_KEK;
-  if (!key || process.env.KMS_KEY_ID) throw new Error("Firm encryption is not set up on this server");
-  return (server ??= firmCrypto(localKek(Buffer.from(key, "base64")), supabaseKeyStore(supabaseAdmin())));
+  return (server ??= firmCrypto(serverKek(), supabaseKeyStore(supabaseAdmin())));
 }

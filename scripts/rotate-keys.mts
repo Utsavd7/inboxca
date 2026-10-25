@@ -3,14 +3,17 @@
 // use the new key. Prints counts per table, never a value. Older values keep their own key
 // until they are re-encrypted. Prints what it would do; `--yes` rotates. `--firm <id>`
 // limits it to one firm. Run with `npx --yes tsx scripts/rotate-keys.mts [--yes] [--firm <id>]`.
+// The outer key is the server's own (serverKek): LOCAL_KEK from .env.local, or AWS KMS when
+// KMS_KEY_ID and KMS_CREDENTIALS are set in the shell, which may then name another database
+// in DATABASE_URL (production keys never live in .env.local).
 import { allOpened, checkValues, localEnv, pgKeyStore, printCounts } from "./encrypted-values.mts";
 
-const url = localEnv();
+const url = process.env.KMS_KEY_ID && process.env.DATABASE_URL ? process.env.DATABASE_URL : localEnv();
 const { default: pg } = await import("pg");
-const { firmCrypto, localKek } = await import("../src/lib/crypto.ts");
+const { firmCrypto, serverKek } = await import("../src/lib/crypto.ts");
 const db = new pg.Client({ connectionString: url });
 await db.connect();
-const kek = localKek(Buffer.from(process.env.LOCAL_KEK!, "base64"));
+const kek = serverKek();
 const only = process.argv.includes("--firm") ? [process.argv[process.argv.indexOf("--firm") + 1]] : undefined;
 
 // Each firm's number of encryption keys, or null when its key set does not open with this outer key.

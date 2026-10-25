@@ -20,6 +20,7 @@ brag-output/composition/snapshots/
 playwright-report/
 test-results/
 .test-drive/
+.test-workspace/
 
 # Browser review exports stay outside the source tree.
 reports/

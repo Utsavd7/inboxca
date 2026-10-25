@@ -1,6 +1,7 @@
-import { randomBytes } from "node:crypto";
-import { describe, expect, it } from "vitest";
-import { firmCrypto, localKek, type KeyStore } from "@/src/lib/crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { firmCrypto, kmsKek, localKek, serverKek, type KeyStore } from "@/src/lib/crypto";
+import { fakeAws, testCredentials } from "@/tests/fixtures/aws";
 
 const FIRM = "firm-a";
 const OTHER = "firm-b";
@@ -153,5 +154,114 @@ describe("the unwrapped key in memory", () => {
     time += 2 * 60 * 1000;
     await crypto.encrypt(FIRM, PLACE, "x");
     expect(unwraps).toBe(2);
+  });
+});
+
+// AWS KMS as the outer key, against a fake KMS that checks every signature and keeps its own
+// key: a data key comes back wrapped for one encryption context and opens only with it.
+describe("AWS KMS as the outer key", () => {
+  const KEY_ID = "arn:aws:kms:ap-south-1:111122223333:key/invented";
+  const master = randomBytes(32);
+  const calls: string[] = [];
+  let kms: Awaited<ReturnType<typeof fakeAws>>;
+  beforeAll(async () => {
+    kms = await fakeAws("kms", "ap-south-1", ({ headers, body }) => {
+      const action = headers["x-amz-target"].replace("TrentService.", "");
+      const asked = JSON.parse(body.toString());
+      calls.push(action);
+      if (asked.KeyId !== KEY_ID) return { status: 400, json: { __type: "NotFoundException" } };
+      const context = Buffer.from(JSON.stringify(asked.EncryptionContext));
+      if (action === "GenerateDataKey") {
+        const key = randomBytes(32);
+        const iv = randomBytes(12);
+        const cipher = createCipheriv("aes-256-gcm", master, iv).setAAD(context);
+        const blob = Buffer.concat([iv, cipher.update(key), cipher.final(), cipher.getAuthTag()]);
+        return { json: { KeyId: KEY_ID, Plaintext: key.toString("base64"), CiphertextBlob: blob.toString("base64") } };
+      }
+      try {
+        const blob = Buffer.from(asked.CiphertextBlob, "base64");
+        const decipher = createDecipheriv("aes-256-gcm", master, blob.subarray(0, 12)).setAAD(context);
+        decipher.setAuthTag(blob.subarray(blob.length - 16));
+        return { json: { KeyId: KEY_ID, Plaintext: Buffer.concat([decipher.update(blob.subarray(12, blob.length - 16)), decipher.final()]).toString("base64") } };
+      } catch {
+        return { status: 400, json: { __type: "com.amazonaws.kms#InvalidCiphertextException", message: "invented" } };
+      }
+    });
+  });
+  afterAll(() => kms.close());
+  afterEach(() => vi.unstubAllEnvs());
+  const kek = (credentials = testCredentials) => kmsKek({ keyId: KEY_ID, region: "ap-south-1", credentials, endpoint: `${kms.url}/` });
+
+  it("seals and opens values, with a fresh data key for each wrap", async () => {
+    const store = memoryStore();
+    const crypto = firmCrypto(kek(), store);
+    const sealed = await crypto.encrypt(FIRM, PLACE, "ABCDE1234F");
+    expect(await crypto.decrypt(FIRM, PLACE, sealed)).toBe("ABCDE1234F");
+    // A second server, with nothing cached, opens it through KMS too.
+    expect(await firmCrypto(kek(), store).decrypt(FIRM, PLACE, sealed)).toBe("ABCDE1234F");
+    const data = randomBytes(64);
+    const [one, two] = [await kek().wrap(data, FIRM), await kek().wrap(data, FIRM)];
+    expect(one.equals(two)).toBe(false);
+    expect(one.includes(data)).toBe(false);
+  });
+
+  it("refuses a key set wrapped for another firm, or changed", async () => {
+    const wrapped = await kek().wrap(randomBytes(64), FIRM);
+    await expect(kek().unwrap(wrapped, OTHER)).rejects.toThrow("KMS Decrypt failed: InvalidCiphertextException");
+    const blob = Buffer.from(wrapped);
+    blob[4] ^= 1;
+    await fails(kek().unwrap(blob, FIRM));
+    const sealed = Buffer.from(wrapped);
+    sealed[sealed.length - 1] ^= 1;
+    await fails(kek().unwrap(sealed, FIRM));
+  });
+
+  it("names only KMS's error, never a key or a value", async () => {
+    const error = await kek({ ...testCredentials, secretAccessKey: "wrong" }).wrap(Buffer.from("key set"), FIRM).catch((caught: Error) => caught);
+    expect((error as Error).message).toBe("KMS GenerateDataKey failed: InvalidSignatureException");
+  });
+
+  it("rotates: old values open, new ones use the new key, blind indexes stay", async () => {
+    const store = memoryStore();
+    const crypto = firmCrypto(kek(), store);
+    const before = await crypto.encrypt(FIRM, PLACE, "old");
+    const index = await crypto.blindIndex(FIRM, "pan", "ABCDE1234F");
+    await crypto.rotate(FIRM);
+    const after = await crypto.encrypt(FIRM, PLACE, "new");
+    expect(Buffer.from(after, "base64url")[1]).toBe(1);
+    const fresh = firmCrypto(kek(), store);
+    expect(await fresh.decrypt(FIRM, PLACE, before)).toBe("old");
+    expect(await fresh.decrypt(FIRM, PLACE, after)).toBe("new");
+    expect(await fresh.blindIndex(FIRM, "pan", "abcde1234f")).toBe(index);
+  });
+
+  it("asks KMS once for many values opened together", async () => {
+    const store = memoryStore();
+    const values = await Promise.all(["a", "b", "c"].map((text) => firmCrypto(kek(), store).encrypt(FIRM, PLACE, text)));
+    calls.length = 0;
+    const crypto = firmCrypto(kek(), store);
+    expect(await Promise.all([...values, ...values].map((value) => crypto.decrypt(FIRM, PLACE, value)))).toEqual(["a", "b", "c", "a", "b", "c"]);
+    expect(calls).toEqual(["Decrypt"]);
+  });
+
+  it("is the server's outer key once KMS_KEY_ID and KMS_CREDENTIALS are set", async () => {
+    vi.stubEnv("LOCAL_KEK", randomBytes(32).toString("base64"));
+    vi.stubEnv("KMS_KEY_ID", "");
+    const local = serverKek();
+    expect(await local.unwrap(await local.wrap(Buffer.from("x"), FIRM), FIRM)).toEqual(Buffer.from("x"));
+    vi.stubEnv("KMS_KEY_ID", KEY_ID);
+    expect(() => serverKek()).toThrow("KMS_CREDENTIALS is not set");
+    vi.stubEnv("KMS_CREDENTIALS", `${testCredentials.accessKeyId}:${testCredentials.secretAccessKey}`);
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      asked.push(`${url} ${(init.headers as Record<string, string>).authorization.split(",")[0]}`);
+      return Response.json({ Plaintext: randomBytes(32).toString("base64"), CiphertextBlob: "AAAA" });
+    });
+    await serverKek().wrap(Buffer.from("x"), FIRM);
+    vi.unstubAllGlobals();
+    expect(asked).toEqual([`https://kms.ap-south-1.amazonaws.com/ AWS4-HMAC-SHA256 Credential=${testCredentials.accessKeyId}/${new Date().toISOString().slice(0, 10).replace(/-/g, "")}/ap-south-1/kms/aws4_request`]);
+    vi.stubEnv("KMS_KEY_ID", "");
+    vi.stubEnv("LOCAL_KEK", "");
+    expect(() => serverKek()).toThrow("Firm encryption is not set up on this server");
   });
 });

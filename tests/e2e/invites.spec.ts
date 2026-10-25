@@ -9,7 +9,7 @@ import nodemailer from "nodemailer";
 import { createClient } from "@supabase/supabase-js";
 import { loadEnvConfig } from "@next/env";
 import { serverCrypto } from "@/src/lib/crypto";
-import { TEST_DRIVE, TEST_WORKER_SECRET } from "../../playwright.config";
+import { TEST_DRIVE, TEST_WORKER_SECRET, TEST_WORKSPACE } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
 import { laterBy } from "@/src/lib/hours";
 import { pdf } from "@/tests/fixtures/pdf";
@@ -116,6 +116,9 @@ test("the owner invites a new person, who appears as invited", async () => {
   const row = owner.getByRole("row").filter({ hasText: newEmail });
   await expect(row).toContainText("Manager");
   await expect(row).toContainText("Invited");
+  // Orelu's system email names the firm; the sign in code comes separately.
+  await expect.poll(() => lastMail(newEmail), { timeout: 15_000 }).toContain("has added you to its team.");
+  expect(await lastMail(newEmail)).toMatch(/Sign in at http\S+\/sign-in with this email address/);
 
   await owner.getByLabel("Their work email").fill(newEmail);
   await owner.getByRole("button", { name: "Send invite" }).click();
@@ -467,6 +470,9 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   expect(String(pushes[0].headers.authorization)).toMatch(/^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=/);
   const message = JSON.parse(openPush(pushes[0].body, browserKey, auth));
   expect(message).toEqual({ title: "A question for you", body: "New asks to upload a file.", url: "/app/inbox" });
+  // #20, #57: an email copy too, whose link only opens the Inbox.
+  await expect.poll(() => lastMail(ownerEmail), { timeout: 15_000 }).toContain("New asks to upload a file.");
+  expect(await lastMail(ownerEmail)).toMatch(/Open InboxCA to see it: http\S+\/app\/inbox\n\nThis link only opens InboxCA\. Nothing changes until you sign in and choose\./);
   pushService.close();
   await query(local.dbUrl, "delete from public.push_subscriptions where user_id = $1", [ownerId]);
   await expect(person.getByText("Asked", { exact: true })).toBeVisible();
@@ -948,13 +954,23 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   // The owner removes the second copy: it waits in the drive's Deleted and old versions folder and can be put back.
   await rows.filter({ hasText: "Same file as" }).getByRole("link", { name: /^Check/ }).click();
+  await expect(owner.getByRole("dialog")).toContainText("InboxCA also keeps its own locked copy for 30 days.");
   await owner.getByRole("dialog").getByRole("button", { name: /^Remove/ }).click();
   await expect(owner.getByRole("status")).toContainText("waits 30 days");
-  expect(await readFile(path.join(drive, "Deleted and old versions", `${mailClient} - Purchase bills - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented purchase bills");
+  const removedFile = path.join(drive, "Deleted and old versions", `${mailClient} - Purchase bills - Sep 2026.pdf`);
+  expect(await readFile(removedFile, "utf8")).toBe("%PDF-1.4 invented purchase bills");
   await expect(rows).toHaveCount(2);
+  // InboxCA's own safety copy is sealed with the firm's key. With the Deleted folder emptied
+  // in the drive, Put back brings the file back from that copy.
+  const [{ id: removedId }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1 and status = 'deleted' and name = $2", [firm.firmId, path.basename(removedFile)]);
+  expect((await readFile(path.join(TEST_WORKSPACE, "safety", firm.firmId, removedId))).includes("invented purchase bills")).toBe(false);
+  await unlink(removedFile);
   await owner.getByRole("button", { name: "Put back" }).first().click();
   await expect(rows).toHaveCount(3);
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
+  const [putBack] = await query(local.dbUrl, "select drive_file_id from public.documents where id = $1", [removedId]);
+  expect(await readFile(path.join(TEST_DRIVE, putBack.drive_file_id), "utf8")).toBe("%PDF-1.4 invented purchase bills");
+  expect((await query(local.dbUrl, "select action from public.activity_log where entity_id = $1 and action like 'document.safety%' order by at", [removedId])).map((line) => line.action)).toEqual(["document.safety_copy", "document.safety_restored"]);
 
   // A manager or the owner uploads a file and types it; it is saved under its name in the client's folder.
   await owner.getByRole("link", { name: "Upload papers" }).click();

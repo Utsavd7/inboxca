@@ -1,6 +1,8 @@
 import { createHmac } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { ImapFlow } from "imapflow";
+import { simpleParser } from "mailparser";
 import { Client } from "pg";
 import { localSupabase } from "../local-env";
 
@@ -135,4 +137,20 @@ export async function workerReads(file: string) {
   const response = await fetch(`${FILE_WORKER_URL}/_reads?file=${encodeURIComponent(file)}`, { headers: { Authorization: `Bearer ${FILE_WORKER_SECRET}` } });
   if (!response.ok) throw new Error("Cannot read test count");
   return (await response.json()).reads as number;
+}
+
+// The newest email to an address on the local test mail server (GreenMail), where the test
+// server sends Orelu's system email, as text; empty until one arrives.
+export async function systemMail(address: string) {
+  const imap = new ImapFlow({ host: "127.0.0.1", port: 3143, secure: false, auth: { user: address, pass: address }, logger: false });
+  try {
+    await imap.connect();
+    await imap.mailboxOpen("INBOX");
+    const message = await imap.fetchOne("*", { source: true });
+    return message && message.source ? ((await simpleParser(message.source)).text ?? "") : "";
+  } catch {
+    return "";
+  } finally {
+    await imap.logout().catch(() => {});
+  }
 }

@@ -10,6 +10,7 @@ export const activityNames: Record<string, string> = {
   "task.changed": "Return or notice updated", "document.viewed": "Document viewed",
   "document.uploaded": "Document uploaded", "document.filed": "Document filed", "document.renamed": "Document renamed",
   "document.deleted": "Document removed", "document.shared": "Document shared", "document.downloaded": "Document downloaded", "share.code_sent": "Code emailed for a private document",
+  "document.safety_copy": "Safety copy kept for 30 days", "document.safety_restored": "Put back from the safety copy",
   "reminder.sent": "Reminder sent", "email.changed": "Email label corrected",
   "email.acknowledged": "Files received reply sent", "request.changed": "Request updated", "request.receipt_sent": "Receipt emailed for uploaded papers",
   "email.replied": "Reply sent", "email.written": "Email written to the client",
