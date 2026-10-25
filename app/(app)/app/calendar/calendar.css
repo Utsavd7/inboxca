@@ -64,7 +64,7 @@
 .cal-list > .empty .b { margin-top: var(--s2); }
 :is(.cal, .notices) .cal-table { flex: 1; overflow: auto; }
 .cal-table .t { min-width: 760px; }
-.cal-month-split .cal-table .t { min-width: 600px; }
+.cal-month-split .cal-table .t { min-width: 0; }
 .cal-table .t th { position: sticky; top: 0; z-index: 1; height: 40px; padding: 0 var(--s3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(8px); color: var(--ink-3); font-size: 12px; font-weight: 600; }
 .cal-table .t td { height: 48px; padding: 0 var(--s3); font-size: 14px; white-space: nowrap; }
 .cal-table .t td .sub { font-size: 12px; }

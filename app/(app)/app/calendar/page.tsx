@@ -219,9 +219,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                     </td>
                     <td className="cal-act">
                       {reminds && task.status !== "filed" && soon(task.due_on) && (
-                        <Link className="b b-ghost" href={href({ page, remind: task.client_id })} scroll={false} aria-label={`Remind ${task.clients.name}`}>
+                        <Link className={`b b-ghost${compact ? " b-icon" : ""}`} href={href({ page, remind: task.client_id })} scroll={false} aria-label={`Remind ${task.clients.name}`} title="Remind client">
                           <BellRing size={14} aria-hidden />
-                          Remind client
+                          {!compact && "Remind client"}
                         </Link>
                       )}
                       {viewOnly ? null : task.status !== "filed" ? (

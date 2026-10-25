@@ -93,6 +93,8 @@
 
 /* On a smaller laptop the period stays in the paper's name and on the right. */
 @media (max-width: 1360px) {
+  .docs-folders { flex-basis: 176px; }
+  .docs-detail { flex-basis: 264px; }
   .docs-table table { min-width: 480px; }
   .docs-table :is(th, td):nth-child(3 of :not(.docs-pick)) { display: none; }
 }
