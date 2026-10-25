@@ -101,8 +101,10 @@ export default async function Settings({
   const hoursOnly = access.hours_only ?? false;
   const records = (settings.records ?? {}) as RecordsSettings;
   const permissions = (settings.permissions ?? {}) as Permissions;
+  // The usage meters are only on Your data; at 10,000 clients they cost about 100 ms.
+  const onData = asked === "data" || ["use", "data", "close"].includes(problems[error ?? ""]?.[0] ?? "");
   const [{ data: used }, { data: people }] = await Promise.all([
-    supabase.rpc("firm_usage", { target_firm: membership.firmId }),
+    onData ? supabase.rpc("firm_usage", { target_firm: membership.firmId }) : Promise.resolve({ data: null }),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
   ]);
   // People the owner or a deputy always allowed something, from a question in the Inbox.
