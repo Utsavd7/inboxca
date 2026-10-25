@@ -139,12 +139,25 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
           )}
         </div>
         <Keys />
+        <NoSideways />
         <HelpSheet open={panel === "help"} close={() => setPanel(null)} />
         <NewsSheet open={panel === "news"} close={() => setPanel(null)} />
         <KeysOverlay open={panel === "keys"} close={() => setPanel(null)} />
       </ShellContext>
     </MotionRoot>
   );
+}
+
+// The header's backdrop reaches past the page on both sides, so the content pane is wider
+// than it looks and a focused field could scroll it sideways; it only ever scrolls down.
+function NoSideways() {
+  useEffect(() => {
+    const pane = document.querySelector<HTMLElement>(".stage-panel");
+    const back = () => { if (pane && pane.scrollLeft) pane.scrollLeft = 0; };
+    pane?.addEventListener("scroll", back, { passive: true });
+    return () => pane?.removeEventListener("scroll", back);
+  }, []);
+  return null;
 }
 
 // Keys that work on every page, unless a field has the keyboard: ? lists them all, C starts
