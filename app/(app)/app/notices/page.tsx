@@ -72,7 +72,9 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
   };
   const chosenId = add && uuid.test(params.client ?? "") ? params.client! : "";
   const openId = uuid.test(params.notice ?? "") ? params.notice! : "";
-  const [{ data: rows, count: total }, picker, { data: chosen }, { data: opened }, ...counts] = await Promise.all([
+  // All at once: the list, the panels and each pill's count; for the open notice, who
+  // confirmed its date, from the firm's activity.
+  const [{ data: rows, count: total }, picker, { data: chosen }, { data: opened }, { data: confirms }, { data: people }, ...counts] = await Promise.all([
     notices(show, columns)
       .order("due_on", { ascending: show === "open" || show === "confirm" })
       .order("id")
@@ -80,6 +82,8 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
     add && !chosenId ? findClients() : Promise.resolve(null),
     chosenId ? supabase.from("clients").select("id, name").eq("firm_id", firm).eq("id", chosenId).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
     openId ? supabase.from("tasks").select(columns).eq("firm_id", firm).eq("kind", "notice").eq("id", openId).maybeSingle() : Promise.resolve({ data: null }),
+    openId ? supabaseAdmin().from("activity_log").select("entity_id, action, actor_id").eq("firm_id", firm).eq("entity_id", openId).in("action", confirmAction) : Promise.resolve({ data: null }),
+    openId ? supabase.rpc("firm_people", { target_firm: firm }) : Promise.resolve({ data: null }),
     ...(Object.keys(pills) as Pill[]).map((pill) => notices(pill, "id" as typeof columns, true)),
   ]);
   if (total && (page - 1) * PAGE >= total) redirect(href({ page: Math.ceil(total / PAGE) }));
@@ -107,12 +111,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
     all: ["No notices yet", "A notice a client emails is recorded here by itself. Add one by hand if it came another way."],
   }[show];
   const openDetails = opened?.details as NoticeDetails | undefined;
-  // Who confirmed the open notice's date, from the firm's activity.
-  const { data: confirms } = openDetails?.action_date
-    ? await supabaseAdmin().from("activity_log").select("entity_id, action, actor_id").eq("firm_id", firm).eq("entity_id", opened!.id).in("action", confirmAction)
-    : { data: null };
-  const confirmer = confirmers(confirms ?? []).get(opened?.id ?? "");
-  const { data: people } = confirmer ? await supabase.rpc("firm_people", { target_firm: firm }) : { data: null };
+  const confirmer = openDetails?.action_date ? confirmers(confirms ?? []).get(opened?.id ?? "") : undefined;
   const confirmedBy = confirmer && personName(people?.find((person) => person.user_id === confirmer)?.email);
 
   return (

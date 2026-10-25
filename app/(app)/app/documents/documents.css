@@ -9,6 +9,8 @@
 .docs-folder[aria-current] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--edge), var(--shadow-button); }
 .docs-folder[aria-current] svg { color: var(--k-docs); }
 .docs-n { margin-left: auto; color: var(--ink-3); font: 500 12px var(--font-plex), ui-monospace, monospace; }
+/* A count still on its way: a small shimmer in its place. */
+.docs-wait { display: inline-block; width: 18px; height: 10px; border-radius: var(--round); background: var(--sheen) 100% 0 / 300% 100%; vertical-align: middle; animation: shimmer 1.4s linear infinite; }
 
 /* A paper's kind (file-tile.tsx): PDF, sheet, image, JSON; anything else stays grey. */
 .icon-tile.f-pdf { background: var(--pink-bg); color: var(--pink-fg); }

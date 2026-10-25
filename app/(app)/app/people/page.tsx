@@ -127,7 +127,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
             <span>Invite your partners and staff. Each gets their own sign in, and you choose what their role may do.</span>
             {isOwner && (
               <Link className="b b-primary" href="/app/people?panel=invite" scroll={false}>
-                Invite person
+                Invite your team
               </Link>
             )}
           </Empty>

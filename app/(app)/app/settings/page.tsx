@@ -1,5 +1,6 @@
 import { BellRing, CalendarClock, CalendarOff, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, KeyRound, LifeBuoy, LogIn, Mail, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import Link from "next/link";
 import { changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
 import { firmAdmin, officeApprover, type Office } from "@/src/lib/office";
@@ -85,8 +86,23 @@ export default async function Settings({
   if (!officeApprover(membership.role, userId, membership.settings)) return <NotForYou title="Settings" who="the owner" />;
   if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel branch={(await searchParams).branch} /></>;
   const owner = membership.role === "owner";
-  // A closed firm keeps only its download until InboxCA deletes it, 30 days on.
-  const { data: closed } = await supabase.from("activity_log").select("at").eq("entity_id", membership.firmId).eq("firm_id", membership.firmId).eq("action", "firm.closed").maybeSingle();
+  const { saved, error, group: asked, branch } = await searchParams;
+  // The co-admin sees only the groups about keeping client data safe.
+  const shown = groups.map(([id, name, sections]) => [id, name, sections.filter((section) => owner || !ownerOnly.includes(section))] as const).filter(([, , sections]) => sections.length);
+  const groupOf = Object.fromEntries(shown.flatMap(([id, , sections]) => sections.map((section) => [section, id])));
+  const group = shown.find(([id]) => id === asked)?.[0] ?? groupOf[problems[error ?? ""]?.[0]] ?? shown[0][0];
+  // Only the open group's data is read, all at once. The usage meters (about 100 ms at 10,000
+  // clients) come in after the page, in their own card.
+  const admin = supabaseAdmin();
+  const usage = group === "data" ? Promise.resolve(supabase.rpc("firm_usage", { target_firm: membership.firmId })).then(({ data }) => data?.[0]) : null;
+  const [{ data: closed }, { data: accounts }, { data: people }, { data: standing }] = await Promise.all([
+    // A closed firm keeps only its download until InboxCA deletes it, 30 days on.
+    supabase.from("activity_log").select("at").eq("entity_id", membership.firmId).eq("firm_id", membership.firmId).eq("action", "firm.closed").maybeSingle(),
+    group === "email" ? supabase.from("connected_accounts").select("id, kind, provider, address_enc, status") : Promise.resolve({ data: null }),
+    group === "people" ? supabase.rpc("firm_people", { target_firm: membership.firmId }) : Promise.resolve({ data: null }),
+    // People the owner or a deputy always allowed something, from a question in the Inbox.
+    group === "people" ? admin.from("firm_members").select("user_id, access").eq("firm_id", membership.firmId).not("access->always", "is", null) : Promise.resolve({ data: null }),
+  ]);
   if (closed) return (
     <div className="set-page">
       <PageHead title="Settings" sub="Only you, the owner, see this page." />
@@ -97,18 +113,26 @@ export default async function Settings({
       </div>
     </div>
   );
-  const { data: accounts } = await supabase.from("connected_accounts").select("id, kind, provider, address_enc, status");
   const mailbox = accounts?.find((account) => account.kind === "mail");
   const drive = accounts?.find((account) => account.kind === "drive");
+  const crypto = serverCrypto();
+  const permissions = (membership.settings.permissions ?? {}) as Permissions;
+  const always = (standing ?? []).flatMap((member) => {
+    const rights = ((member.access as { always?: Standing[] }).always ?? []).map(grant=>typeof grant==="string" ? {right:grant} : grant).filter(grant=>Object.hasOwn(switchable,grant.right));
+    return rights.length ? [{ id: member.user_id, email: people?.find((person) => person.user_id === member.user_id)?.email ?? "", rights }] : [];
+  });
+  const scopeIds=group === "people" ? [...new Set([...Object.values(permissions).flatMap(column=>column?.scope?.clients ?? []),...always.flatMap(person=>person.rights.flatMap(grant=>"clients" in grant ? grant.clients ?? [] : []))])] : [];
   // Only the server reads a drive's settings; this page is the owner's.
-  const { data: driveSettings } = drive ? await supabaseAdmin().from("connected_accounts").select("settings").eq("id", drive.id).single() : { data: null };
-  const {data:mailServers}=mailbox?.status==="needs_reconnect" ? await supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",membership.firmId).eq("id",mailbox.id).single() : {data:null};
+  const [{ data: driveSettings }, { data: mailServers }, driveAddress, mailAddress, { data: scopeClients }] = await Promise.all([
+    drive ? admin.from("connected_accounts").select("settings").eq("id", drive.id).single() : Promise.resolve({ data: null }),
+    mailbox?.status === "needs_reconnect" ? admin.from("connected_accounts").select("settings").eq("firm_id", membership.firmId).eq("id", mailbox.id).single() : Promise.resolve({ data: null }),
+    drive && crypto.decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc),
+    mailbox && crypto.decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc),
+    scopeIds.length ? supabase.from("clients").select("id,name").eq("firm_id", membership.firmId).in("id", scopeIds) : Promise.resolve({ data: [] }),
+  ]);
   const folderOrder = (driveSettings?.settings as { folder_order?: string } | undefined)?.folder_order ?? "year_client_work";
   const naming = (driveSettings?.settings as { naming?: string } | undefined)?.naming ?? "client_type_period";
-  const driveAddress = drive && (await serverCrypto().decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc));
   const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
-  const mailAddress = mailbox && (await serverCrypto().decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc));
-  const { saved, error, group: asked, branch } = await searchParams;
   const settings = membership.settings;
   const hours = (settings.hours as Hours | undefined) ?? SUGGESTED_HOURS;
   const holidays = (settings.holidays as string[] | undefined) ?? [];
@@ -116,29 +140,9 @@ export default async function Settings({
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number; india_only?: boolean };
   const hoursOnly = access.hours_only ?? false;
   const records = (settings.records ?? {}) as RecordsSettings;
-  const permissions = (settings.permissions ?? {}) as Permissions;
-  // The usage meters are only on Your data; at 10,000 clients they cost about 100 ms.
-  const onData = asked === "data" || ["use", "data", "close"].includes(problems[error ?? ""]?.[0] ?? "");
-  const [{ data: used }, { data: people }] = await Promise.all([
-    onData ? supabase.rpc("firm_usage", { target_firm: membership.firmId }) : Promise.resolve({ data: null }),
-    supabase.rpc("firm_people", { target_firm: membership.firmId }),
-  ]);
-  // People the owner or a deputy always allowed something, from a question in the Inbox.
-  const { data: standing } = await supabaseAdmin().from("firm_members").select("user_id, access").eq("firm_id", membership.firmId).not("access->always", "is", null);
-  const always = (standing ?? []).flatMap((member) => {
-    const rights = ((member.access as { always?: Standing[] }).always ?? []).map(grant=>typeof grant==="string" ? {right:grant} : grant).filter(grant=>Object.hasOwn(switchable,grant.right));
-    return rights.length ? [{ id: member.user_id, email: people?.find((person) => person.user_id === member.user_id)?.email ?? "", rights }] : [];
-  });
-  const scopeIds=[...new Set([...Object.values(permissions).flatMap(column=>column?.scope?.clients ?? []),...always.flatMap(person=>person.rights.flatMap(grant=>"clients" in grant ? grant.clients ?? [] : []))])];
-  const {data:scopeClients}=scopeIds.length ? await supabase.from("clients").select("id,name").eq("firm_id",membership.firmId).in("id",scopeIds) : {data:[]};
   const namesOf=(ids?:string[])=>ids?.map(id=>scopeClients?.find(client=>client.id===id)?.name ?? "Client no longer available").join("\n") ?? "";
-  const usage = used?.[0];
   const preset = presetOf(settings);
   const others = people?.filter((person) => person.role !== "owner" && person.status === "active") ?? [];
-  // The co-admin sees only the groups about keeping client data safe.
-  const shown = groups.map(([id, name, sections]) => [id, name, sections.filter((section) => owner || !ownerOnly.includes(section))] as const).filter(([, , sections]) => sections.length);
-  const groupOf = Object.fromEntries(shown.flatMap(([id, , sections]) => sections.map((section) => [section, id])));
-  const group = shown.find(([id]) => id === asked)?.[0] ?? groupOf[problems[error ?? ""]?.[0]] ?? shown[0][0];
   const problem = (section: string) => error && problems[error]?.[0] === section && <p className="alert" role="alert">{problems[error][1]}</p>;
   return (
     <div className="set-page">
@@ -541,20 +545,11 @@ export default async function Settings({
 
           {group === "data" && <>
           <Card id="use" title="InboxCA use" line="What sizes a plan. Your files stay in your own drive; InboxCA storage holds the client list, records and what InboxCA reads from files.">
-            {usage && <dl className="set-meters">
-              <div>
-                <dt>Returns this year</dt>
-                <dd>{usage.returns_so_far.toLocaleString("en-IN")} due so far</dd>
-                <dd className="set-bar"><span style={{ width: `${Math.round((100 * usage.returns_so_far) / Math.max(usage.returns_this_year, 1))}%` }} /></dd>
-                <dd className="set-meter-note">About {usage.returns_this_year.toLocaleString("en-IN")} by March, from your calendar</dd>
-              </div>
-              <div>
-                <dt>InboxCA storage used</dt>
-                <dd>{storage(usage.workspace_bytes)}</dd>
-                <dd className="set-bar"><span style={{ width: `${Math.round((100 * usage.workspace_bytes) / Math.max(usage.workspace_by_march, 1))}%` }} /></dd>
-                <dd className="set-meter-note">At this pace about {storage(usage.workspace_by_march)} by March</dd>
-              </div>
-            </dl>}
+            {usage && (
+              <Suspense fallback={<div className="set-meters" aria-busy="true"><span className="skel" /><span className="skel" /></div>}>
+                <Meters usage={usage} />
+              </Suspense>
+            )}
             <p className="hint set-after">Shown for your information. Plans and their limits come later; nothing is limited or charged by these figures yet.</p>
           </Card>
           <Card id="data" title="Your data" line="Your client list, returns and notices, the list of papers and the activity log, as spreadsheet files in one ZIP. The papers themselves are already in your firm's drive.">
@@ -575,5 +570,27 @@ export default async function Settings({
       </div>
       {saved && savedNames[saved] && <Toast>{savedNames[saved]}</Toast>}
     </div>
+  );
+}
+
+// The usage meters, once firm_usage answers.
+async function Meters({ usage: asked }: { usage: Promise<{ returns_so_far: number; returns_this_year: number; workspace_bytes: number; workspace_by_march: number } | undefined> }) {
+  const usage = await asked;
+  if (!usage) return null;
+  return (
+    <dl className="set-meters">
+      <div>
+        <dt>Returns this year</dt>
+        <dd>{usage.returns_so_far.toLocaleString("en-IN")} due so far</dd>
+        <dd className="set-bar"><span style={{ width: `${Math.round((100 * usage.returns_so_far) / Math.max(usage.returns_this_year, 1))}%` }} /></dd>
+        <dd className="set-meter-note">About {usage.returns_this_year.toLocaleString("en-IN")} by March, from your calendar</dd>
+      </div>
+      <div>
+        <dt>InboxCA storage used</dt>
+        <dd>{storage(usage.workspace_bytes)}</dd>
+        <dd className="set-bar"><span style={{ width: `${Math.round((100 * usage.workspace_bytes) / Math.max(usage.workspace_by_march, 1))}%` }} /></dd>
+        <dd className="set-meter-note">At this pace about {storage(usage.workspace_by_march)} by March</dd>
+      </div>
+    </dl>
   );
 }

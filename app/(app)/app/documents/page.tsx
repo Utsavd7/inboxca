@@ -4,6 +4,7 @@ import { Download, FolderOpen, Search, Send, Upload } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { sendPapers } from "@/app/(app)/actions";
 import { todayInIndia } from "@/src/lib/calendar";
 import { canManageClients } from "@/src/lib/clients";
@@ -65,23 +66,36 @@ export default async function Documents({ searchParams }: { searchParams: Promis
     if (within) query = query.or(within);
     return tokens ? query.contains("search_tokens", tokens) : query;
   };
+  // The folders' counts come in after the list, so the papers show without waiting for them.
   const count = (work?: WorkType) => {
     const query = scoped(supabase.from("documents").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).filter("status", live[0], live[1]));
-    return work ? query.eq("work_type", work) : query;
+    return Promise.resolve(work ? query.eq("work_type", work) : query).then(({ count }) => count ?? 0);
   };
-  // Earlier versions are listed only in their current paper's panel on the client's page.
+  const counts = new Map<WorkType | "", Promise<number>>([["", count()], ...(Object.keys(workTypes) as WorkType[]).map((work) => [work, count(work)] as const)]);
+  const canUpload = !membership.viewOnlyUntil;
+  // Upload papers: find the client, then their upload form opens here with type, work and period.
+  const find = params.upload ? params.for?.trim().slice(0, 100) ?? "" : "";
+  const askedClient = params.upload && uuid.test(params.client ?? "") ? params.client! : "";
+  const picked = [params.pick ?? []].flat().filter((id) => uuid.test(id));
+  const sendPreview = !!params.send && !!picked.length && !membership.viewOnlyUntil;
+  const admin = supabaseAdmin();
+  // Earlier versions are listed only in their current paper's panel on the client's page. One
+  // more than a page is read, to know whether there is a next page.
   const listed = scoped(supabase.from("documents").select(columns).eq("firm_id", membership.firmId).filter("status", live[0], live[1]));
-  const [{ data: papers, error }, all, ...byWork] = await Promise.all([
-    (kind ? listed.eq("work_type", kind) : listed).order("received_at", { ascending: false }).order("id", { ascending: false }).range((page - 1) * PAGE, page * PAGE - 1),
-    count(),
-    ...(Object.keys(workTypes) as WorkType[]).map((work) => count(work)),
+  const [{ data: read, error }, { data: chosen }, { data: drive }, { data: people }, { data: matches }, { data: uploadClient }, { data: toSend }, { data: mailbox }] = await Promise.all([
+    (kind ? listed.eq("work_type", kind) : listed).order("received_at", { ascending: false }).order("id", { ascending: false }).range((page - 1) * PAGE, page * PAGE),
+    // The paper shown on the right: the one chosen, else the first in the list.
+    params.file && uuid.test(params.file) ? supabase.from("documents").select(columns).eq("firm_id", membership.firmId).eq("id", params.file).neq("status", "deleted").maybeSingle() : Promise.resolve({ data: null }),
+    admin.from("connected_accounts").select("provider, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
+    supabase.rpc("firm_people", { target_firm: membership.firmId }),
+    find ? supabase.from("clients").select("id, name").eq("firm_id", membership.firmId).is("archived_at", null).ilike("name", `%${find.replace(/[\\%_]/g, "\\$&")}%`).order("name").limit(8) : Promise.resolve({ data: null }),
+    askedClient && canUpload ? supabase.from("clients").select("id, name, client_registrations(id, kind, number_enc)").eq("firm_id", membership.firmId).eq("id", askedClient).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
+    sendPreview ? supabase.from("documents").select("id, client_id, name, status, share_policy, document_type, clients(name, email_enc)").eq("firm_id", membership.firmId).in("id", picked.slice(0, SEND)) : Promise.resolve({ data: null }),
+    sendPreview ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : Promise.resolve({ data: null }),
   ]);
   if (error) throw new Error("Documents could not be read");
-  const counts = new Map((Object.keys(workTypes) as WorkType[]).map((work, at) => [work, byWork[at].count ?? 0]));
-  const total = (kind ? counts.get(kind) : all.count) ?? 0;
-
-  // The paper shown on the right: the one chosen, else the first in the list.
-  const chosen = params.file && /^[0-9a-f-]{36}$/.test(params.file) ? (await supabase.from("documents").select(columns).eq("firm_id", membership.firmId).eq("id", params.file).neq("status", "deleted").maybeSingle()).data : null;
+  const papers = read?.slice(0, PAGE);
+  const more = (read?.length ?? 0) > PAGE;
   const paper = chosen ?? papers?.[0];
   const shown = [...(papers ?? []), ...(chosen ? [chosen] : [])];
   // This same view, with the chosen paper; the upload panel opens and closes over it.
@@ -89,24 +103,22 @@ export default async function Documents({ searchParams }: { searchParams: Promis
 
   // Where each paper came from. Uploads are known from the activity log, which every person
   // who may see the client already sees on its page; only these papers' lines are read.
-  const admin = supabaseAdmin();
   const unsent = shown.filter((row) => !row.email_event_id && !row.form).map((row) => row.id);
-  const [{ data: added }, { data: drive }] = await Promise.all([
-    unsent.length ? admin.from("activity_log").select("entity_id, actor_id").eq("firm_id", membership.firmId).in("action", ["document.uploaded", "document.added"]).in("entity_id", unsent) : Promise.resolve({ data: [] }),
-    paper ? admin.from("connected_accounts").select("provider, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle() : Promise.resolve({ data: null }),
-  ]);
-  const adder = new Map((added ?? []).map((line) => [line.entity_id, line.actor_id]));
-  const { data: people } = [...adder.values()].some(Boolean) ? await supabase.rpc("firm_people", { target_firm: membership.firmId }) : { data: [] };
-  const emails = new Map((people ?? []).map((person) => [person.user_id, person.email]));
   const crypto = serverCrypto();
-  const senders = new Map(
-    await Promise.all(
+  const [{ data: added }, sent_by, paperGstin, gstins] = await Promise.all([
+    unsent.length ? admin.from("activity_log").select("entity_id, actor_id").eq("firm_id", membership.firmId).in("action", ["document.uploaded", "document.added"]).in("entity_id", unsent) : Promise.resolve({ data: [] }),
+    Promise.all(
       [...new Map(shown.flatMap((row) => (row.email_events?.contacts && row.email_events.contact_id ? [[row.email_events.contact_id, row.email_events.contacts.name_enc] as const] : []))).entries()].map(
         async ([id, name]) => [id, await crypto.decrypt(membership.firmId, `contacts/${id}/name`, name)] as const,
       ),
     ),
-  );
-  const paperGstin = paper?.client_registrations ? await crypto.decrypt(membership.firmId, `clients/${paper.client_id}/gstin`, paper.client_registrations.number_enc) : "";
+    paper?.client_registrations ? crypto.decrypt(membership.firmId, `clients/${paper.client_id}/gstin`, paper.client_registrations.number_enc) : "",
+    // GST papers of a client with more than one GSTIN name their GSTIN, as on the client's page.
+    Promise.all((uploadClient?.client_registrations ?? []).filter((registration) => registration.kind === "gstin").map(async (registration) => ({ id: registration.id, number: await crypto.decrypt(membership.firmId, `clients/${uploadClient!.id}/gstin`, registration.number_enc) }))),
+  ]);
+  const adder = new Map((added ?? []).map((line) => [line.entity_id, line.actor_id]));
+  const emails = new Map((people ?? []).map((person) => [person.user_id, person.email]));
+  const senders = new Map(sent_by);
   const cameFrom = (row: (typeof shown)[number]) => {
     if (row.email_event_id) return `Email from ${senders.get(row.email_events?.contact_id ?? "") || row.clients?.name || "the client"}`;
     if (row.form) return "Prepared in InboxCA";
@@ -121,19 +133,9 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const extension = paper?.name.split(".").pop()?.toLowerCase() ?? "";
   const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "json", "txt"].includes(extension);
   const tag = (status: string) => (status === "to_check" ? <Badge tone="warn">To check</Badge> : status === "missing" ? <Badge tone="late">Missing in the drive</Badge> : null);
-  const canUpload = !membership.viewOnlyUntil;
   const portal = membership.may("portal_files");
   const filtered = !!(q || kind || year !== years[0] || missing);
 
-  // Upload papers: find the client, then their upload form opens here with type, work and period.
-  const find = params.upload ? params.for?.trim().slice(0, 100) ?? "" : "";
-  const askedClient = params.upload && uuid.test(params.client ?? "") ? params.client! : "";
-  const [{ data: matches }, { data: uploadClient }] = await Promise.all([
-    find ? supabase.from("clients").select("id, name").eq("firm_id", membership.firmId).is("archived_at", null).ilike("name", `%${find.replace(/[\\%_]/g, "\\$&")}%`).order("name").limit(8) : Promise.resolve({ data: null }),
-    askedClient && canUpload ? supabase.from("clients").select("id, name, client_registrations(id, kind, number_enc)").eq("firm_id", membership.firmId).eq("id", askedClient).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
-  ]);
-  // GST papers of a client with more than one GSTIN name their GSTIN, as on the client's page.
-  const gstins = await Promise.all((uploadClient?.client_registrations ?? []).filter((registration) => registration.kind === "gstin").map(async (registration) => ({ id: registration.id, number: await crypto.decrypt(membership.firmId, `clients/${uploadClient!.id}/gstin`, registration.number_enc) })));
   // Files dropped on the page go to the client being uploaded for, else the open paper's.
   const dropFor = uploadClient ?? (chosen?.clients ? { id: chosen.client_id, name: chosen.clients.name } : null);
 
@@ -142,14 +144,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const mayPick = (row: { client_id: string }) => !membership.viewOnlyUntil && (owner || membership.may("send", row.client_id));
   const picking = (papers ?? []).some(mayPick);
   const sendsAny = picking && (papers ?? []).some((row) => membership.may("send", row.client_id));
-  const picked = [params.pick ?? []].flat().filter((id) => uuid.test(id));
   const records = (membership.settings.records ?? {}) as RecordsSettings;
-  const [{ data: toSend }, { data: mailbox }] = params.send && picked.length && !membership.viewOnlyUntil
-    ? await Promise.all([
-        supabase.from("documents").select("id, client_id, name, status, share_policy, document_type, clients(name, email_enc)").eq("firm_id", membership.firmId).in("id", picked.slice(0, SEND)),
-        supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle(),
-      ])
-    : [{ data: null }, { data: null }];
   const preview = toSend?.map((row) => ({
     ...row,
     skip: !membership.may("send", row.client_id) ? "Ask the owner to send this" : row.status !== "filed" ? "Not filed yet" : paperPolicy(row, records) === "internal" ? "Kept inside the firm" : !row.clients?.email_enc ? "No email address" : null,
@@ -204,11 +199,15 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               Show
             </button>
           </form>
-          {([["", "All papers", all.count ?? 0], ...[...counts].map(([work, n]) => [work, workTypes[work], n])] as [string, string, number][]).map(([work, name, n]) => (
-            <Link key={work} className="docs-folder" href={link({ kind: work as WorkType | "", page: "" })} aria-current={kind === work ? "page" : undefined}>
+          {[...counts].map(([work, n]) => (
+            <Link key={work} className="docs-folder" href={link({ kind: work, page: "" })} aria-current={kind === work ? "page" : undefined}>
               <FolderOpen size={16} aria-hidden />
-              <span>{name}</span>
-              <span className="docs-n">{n.toLocaleString("en-IN")}</span>
+              <span>{work ? workTypes[work] : "All papers"}</span>
+              <span className="docs-n">
+                <Suspense fallback={<span className="docs-wait" aria-label="Counting" />}>
+                  <Count of={n} />
+                </Suspense>
+              </span>
             </Link>
           ))}
         </nav>
@@ -284,14 +283,17 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               </div>
               <div className="docs-pages">
                 <span>
-                  {((page - 1) * PAGE + 1).toLocaleString("en-IN")} to {((page - 1) * PAGE + papers.length).toLocaleString("en-IN")} of {total.toLocaleString("en-IN")}
+                  {((page - 1) * PAGE + 1).toLocaleString("en-IN")} to {((page - 1) * PAGE + papers.length).toLocaleString("en-IN")} of{" "}
+                  <Suspense fallback={<span className="docs-wait" aria-label="Counting" />}>
+                    <Count of={counts.get(kind)!} />
+                  </Suspense>
                 </span>
                 {page > 1 && (
                   <Link className="b b-secondary" href={link({ page: String(page - 1) })}>
                     Previous
                   </Link>
                 )}
-                {page * PAGE < total && (
+                {more && (
                   <Link className="b b-secondary" href={link({ page: String(page + 1) })}>
                     Next
                   </Link>
@@ -519,4 +521,9 @@ export default async function Documents({ searchParams }: { searchParams: Promis
       )}
     </div>
   );
+}
+
+// A count that arrives after the page.
+async function Count({ of }: { of: Promise<number> }) {
+  return <>{(await of).toLocaleString("en-IN")}</>;
 }

@@ -56,9 +56,26 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     return code ? query.eq("code", code) : query;
   };
   const counted = "id, clients!inner(archived_at)" as typeof columns;
-  // With no view asked for, it opens on the late returns when there are any.
-  const view: CalendarView =
-    params.view && params.view in calendarViews ? (params.view as CalendarView) : !day && (await returns("overdue", counted, true)).count ? "overdue" : "month";
+  const pageOf = (shown: CalendarView | null) => Promise.resolve(returns(shown, columns).order("due_on").order("id").range(from, from + pageSize - 1));
+  const picked = [params.task ?? []].flat().filter((id) => uuid.test(id)).slice(0, 100);
+  const remindId = reminds && uuid.test(params.remind ?? "") ? params.remind! : "";
+  const views = Object.keys(calendarViews) as CalendarView[];
+  // Everything that does not hang on the view starts at once: the rules, the panels, the counts.
+  const rest = Promise.all([
+    supabase.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", "").order("name"),
+    picked.length ? supabase.from("tasks").select("id, code, period_key, due_on, clients(name)").eq("firm_id", membership.firmId).eq("kind", "compliance").neq("status", "filed").in("id", picked).order("due_on") : Promise.resolve({ data: null }),
+    // Remind client: the client, its returns due within 7 days, and whether the email can go.
+    remindId ? supabase.from("clients").select("id, name, email_enc, reminders_paused").eq("firm_id", membership.firmId).eq("id", remindId).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
+    remindId ? supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", membership.firmId).eq("kind", "compliance").eq("client_id", remindId).neq("status", "filed").gte("due_on", today).lte("due_on", addDays(today, 7)).order("due_on") : Promise.resolve({ data: null }),
+    remindId ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : Promise.resolve({ data: null }),
+    remindId ? supabaseAdmin().from("activity_log").select("at", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("entity_id", remindId).eq("action", "reminder.sent").gte("at", `${today}T00:00:00+05:30`) : Promise.resolve({ count: 0 }),
+    Promise.all(views.map((shown) => returns(shown, counted, true))),
+  ]);
+  // With no view asked for, it opens on the late returns when there are any: their page is read
+  // straight away, and the next 30 days only when nothing is late.
+  const asked = params.view && params.view in calendarViews ? (params.view as CalendarView) : null;
+  const late = !asked && !day ? pageOf("overdue") : null;
+  const view: CalendarView = asked ?? (late && (await late).count ? "overdue" : "month");
   const href = (next: { view?: CalendarView; day?: string; page?: number; task?: string; month?: string | null; remind?: string } = {}) => {
     const search = new URLSearchParams();
     const on = next.view ? null : (next.day ?? day);
@@ -78,16 +95,10 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const lead = month ? (new Date(`${month}-01T00:00:00Z`).getUTCDay() + 6) % 7 : 0;
   const cells = month ? Array.from({ length: Math.ceil((lead + new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate()) / 7) * 7 }, (_, at) => addDays(`${month}-01`, at - lead)) : null;
   const span = strip ?? cells;
-  const picked = [params.task ?? []].flat().filter((id) => uuid.test(id)).slice(0, 100);
-  const remindId = reminds && uuid.test(params.remind ?? "") ? params.remind! : "";
-  const views = Object.keys(calendarViews) as CalendarView[];
-  const [{ data: tasks, count: total }, { data: rules }, { data: perDay }, { data: marking }, { data: reminding }, ...counts] = await Promise.all([
-    returns(day ? null : view, columns).order("due_on").order("id").range(from, from + pageSize - 1),
-    supabase.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", "").order("name"),
+  const [{ data: tasks, count: total }, { data: perDay }, [{ data: rules }, { data: marking }, { data: reminding }, { data: remindTasks }, { data: mailbox }, { count: remindedToday }, counts]] = await Promise.all([
+    late && view === "overdue" ? late : pageOf(day ? null : view),
     span ? supabase.rpc("calendar_days", { target_firm: membership.firmId, first_day: span[0], last_day: span.at(-1)!, only_code: code || undefined }) : Promise.resolve({ data: null }),
-    picked.length ? supabase.from("tasks").select("id, code, period_key, due_on, clients(name)").eq("firm_id", membership.firmId).eq("kind", "compliance").neq("status", "filed").in("id", picked).order("due_on") : Promise.resolve({ data: null }),
-    remindId ? supabase.from("clients").select("id, name, email_enc, reminders_paused").eq("firm_id", membership.firmId).eq("id", remindId).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
-    ...views.map((shown) => returns(shown, counted, true)),
+    rest,
   ]);
   if (total && from >= total) redirect(href({ page: Math.ceil(total / pageSize) }));
   const rule = new Map(rules?.map((r) => [r.code, r]));
@@ -95,15 +106,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const onDay = new Map(perDay?.map((row) => [row.due_on, row]));
   const most = Math.max(1, ...[...onDay.values()].map((row) => row.returns));
 
-  // Remind client: the client's returns due within 7 days, and anything that stops the email.
+  // Remind client: anything that stops the email.
   const soon = (due: string) => due >= today && due <= addDays(today, 7);
-  const [{ data: remindTasks }, { data: mailbox }, { count: remindedToday }] = reminding
-    ? await Promise.all([
-        supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", membership.firmId).eq("kind", "compliance").eq("client_id", reminding.id).neq("status", "filed").gte("due_on", today).lte("due_on", addDays(today, 7)).order("due_on"),
-        supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle(),
-        supabaseAdmin().from("activity_log").select("at", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("entity_id", reminding.id).eq("action", "reminder.sent").gte("at", `${today}T00:00:00+05:30`),
-      ])
-    : [{ data: null }, { data: null }, { count: 0 }];
   const remindable = remindTasks?.filter((task) => rule.get(task.code ?? "")?.verified_on) ?? [];
   const stops = reminding && [
     mailbox?.status !== "connected" && "Connect the firm's email in Settings first. Reminders go from the firm's own address.",
