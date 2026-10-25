@@ -48,7 +48,8 @@ test("first sign in: email code, then setting up the 2 step code", async ({ page
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.locator(".rail-firm")).toContainText("Test Firm");
   await expect(page.locator(".rail-me")).toContainText("Owner");
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.locator(".rail-me").click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
   await page.goto("/app");
   await expect(page).toHaveURL(/\/sign-in$/);

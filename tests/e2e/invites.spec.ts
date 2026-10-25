@@ -240,12 +240,14 @@ test("under Office only, staff need the office connection and an approved PC", a
   const { data: emailOnlyUser, error: emailOnlyError } = await admin.auth.admin.createUser({ email: emailOnly, email_confirm: true });
   expect(emailOnlyError).toBeNull();
   await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'staff', 'active')", [firm.firmId, emailOnlyUser.user!.id]);
-  await person.getByRole("button", { name: "Sign out" }).click();
+  await person.locator(".rail-me").click();
+  await person.getByRole("menuitem", { name: "Sign out" }).click();
   await emailStep(person, emailOnly);
   await expect(person).toHaveURL(/\/app$/);
   await person.getByRole("link", { name: "Clients", exact: true }).click();
   await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
-  await person.getByRole("button", { name: "Sign out" }).click();
+  await person.locator(".rail-me").click();
+  await person.getByRole("menuitem", { name: "Sign out" }).click();
   await emailStep(person, newEmail);
   await expect(person).toHaveURL(/\/app$/);
 
@@ -268,7 +270,8 @@ test("under Office only, staff need the office connection and an approved PC", a
   await waitingContext.close();
 
   // The owner still needs the phone code from the office.
-  await owner.getByRole("button", { name: "Sign out" }).click();
+  await owner.locator(".rail-me").click();
+  await owner.getByRole("menuitem", { name: "Sign out" }).click();
   await emailStep(owner, ownerEmail);
   await expect(owner).toHaveURL(/\/sign-in\/two-step$/);
   await owner.getByLabel("6 digit code from the app").fill(totp(ownerKey));

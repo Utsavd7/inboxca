@@ -24,3 +24,16 @@
 .admin-row a:hover { color: var(--ink); }
 .admin-empty { padding: var(--s7) var(--s4); border-top: 1px solid var(--line); color: var(--ink-3); text-align: center; }
 .admin-empty strong { display: block; color: var(--ink); font-size: 14px; font-weight: 600; }
+
+/* The console's own menu, drawn like the app's light sidebar. */
+.admin .stage { overflow-y: auto; }
+.admin .rail { display: flex; flex-direction: column; gap: var(--s2); height: 100dvh; overflow-y: auto; padding: var(--s3); border-right: 1px solid var(--line); background: var(--side); }
+.admin .rail-firm { display: flex; align-items: center; gap: var(--s2); padding: var(--s1) var(--s1) var(--s2); font-weight: 600; }
+.admin .rail-firm .avatar { border-radius: var(--r2); background: var(--firm-tile); color: var(--on-accent); }
+.admin .rail-nav { display: grid; gap: 2px; }
+.admin .rail-nav a { display: flex; align-items: center; gap: var(--s2); height: var(--control); padding: 0 var(--s2); border-radius: var(--r2); color: var(--ink-2); text-decoration: none; transition: background var(--fast) var(--out), color var(--fast) var(--out); }
+.admin .rail-nav a:hover { background: var(--hover); color: var(--ink); }
+.admin .rail-me { display: flex; align-items: center; gap: var(--s2); margin-top: auto; padding: var(--s2) var(--s1); }
+.admin .rail-me > span { display: grid; min-width: 0; line-height: 1.3; }
+.admin .rail-me strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.admin .rail-me small { color: var(--ink-3); font-size: 12px; }

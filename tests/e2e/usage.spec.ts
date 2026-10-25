@@ -30,8 +30,7 @@ test("the owner sees returns and InboxCA storage used, staff do not", async ({ p
       await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, 'GSTR1_M', $3, $4)", [firm.firmId, client, `p${due}`, due]);
 
     await signIn(page, ownerEmail, key);
-    await expect(page.getByText(/2 returns this year are due so far\. InboxCA storage used: \d/)).toBeVisible();
-    await page.getByRole("link", { name: "See InboxCA use" }).click();
+    await page.getByRole("link", { name: /^Returns this year: 2, [12] due so far$/ }).click();
     const use = page.getByRole("region", { name: "InboxCA use" });
     await expect(use.getByText("Returns this year")).toBeVisible();
     await expect(use.getByText(/due so far$/)).toBeVisible();
@@ -41,7 +40,7 @@ test("the owner sees returns and InboxCA storage used, staff do not", async ({ p
 
     await signIn(person, staffEmail, key);
     await expect(person.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(person.getByRole("link", { name: "See InboxCA use" })).toHaveCount(0);
+    await expect(person.getByRole("link", { name: /^Returns this year/ })).toHaveCount(0);
     await person.goto("/app/settings?group=data#use");
     await expect(person.getByText("This page is for the owner", { exact: true })).toBeVisible();
     await expect(person.getByRole("region", { name: "InboxCA use" })).toHaveCount(0);

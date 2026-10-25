@@ -2,7 +2,7 @@ import {PreparedForms} from "../../prepared-forms";
 import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
 import { DatasetReview } from "./dataset-review";
-import { AlarmClock, ArrowLeft, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
+import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -28,7 +28,7 @@ import { AutoSelect } from "../../auto-select";
 import { LinkTabs } from "../../link-tabs";
 import { DroppedNotice, PortalDrop } from "../../portal-drop";
 import { MarkFiled } from "../../mark-filed";
-import { Avatar, Badge, Card, Empty, IconTile, Row, SidePanel, Toast, type Kind } from "../../ui";
+import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Kind } from "../../ui";
 import { CopyButton } from "../../ui-client";
 import { UploadForm } from "./upload-form";
 import "../clients.css";
@@ -327,18 +327,17 @@ export default async function Client({ params, searchParams }: { params: Promise
 
   return (
     <div className="fill clients-page client-record">
-      {/* The record's own header, in the page: big avatar, name, numbers, who looks after it,
-          what is due next, then the quick actions. */}
-      <header className="page-head client-head">
-        <div>
-          <Link className="crumb" href="/app/clients">
-            <ArrowLeft size={14} aria-hidden />
-            All clients
-          </Link>
+      {/* The header: Clients / the client's name, and the quick actions. Under it the record:
+          big avatar, name, numbers, who looks after it and what is due next. */}
+      <PageHead
+        crumbs={[["/app/clients", "Clients"]]}
+        title={client.name}
+        sub={
+        <div className="client-head">
           <div className="client-who">
             <Avatar name={client.name} square big />
             <div>
-              <h1>{client.name}</h1>
+              <p className="client-name">{client.name}</p>
               <div className="client-meta">
                 <Badge plain>{clientKinds[client.kind as ClientKind]}</Badge>
                 {client.archived_at && <Badge>Archived</Badge>}
@@ -387,7 +386,9 @@ export default async function Client({ params, searchParams }: { params: Promise
             </div>
           </div>
         </div>
-        <div className="page-actions">
+        }
+        actions={
+        <>
           {!viewOnly && (
             <Link className="b b-secondary" href={`${here}${here.includes("?") ? "&" : "?"}ask=1`} scroll={false}>
               <FilePlus2 size={15} aria-hidden />
@@ -418,8 +419,9 @@ export default async function Client({ params, searchParams }: { params: Promise
               Write to client
             </Link>
           )}
-        </div>
-      </header>
+        </>
+        }
+      />
       <LinkTabs label="Client" items={(Object.keys(mains) as Main[]).map((key) => ({ href: `${base}${key === "overview" ? "" : `?tab=${key}`}`, label: mains[key], count: counts[key], current: tab === key }))} />
 
       <ViewTransition key={sub} enter="tab-in" exit="tab-out" default="none">

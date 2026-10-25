@@ -1,14 +1,12 @@
 "use client";
 import { Menu } from "@base-ui/react/menu";
-import { Popover } from "@base-ui/react/popover";
-import { Bell as BellIcon, Check, Copy, FilePlus2, FileUp, Mail, Plus, Scale, UserPlus, type LucideIcon } from "lucide-react";
+import { Check, Copy, FilePlus2, FileUp, Mail, Plus, Scale, UserPlus, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { bellItems } from "@/app/(app)/actions";
-import { Avatar } from "./ui";
+import { ToastMotion } from "./motion";
 
-// The quick things to start from anywhere: the New menu in the rail and the search palette
+// The quick things to start from anywhere: the New menu in the sidebar and the search palette
 // both list these (each only for those whose role does it).
 export type QuickAction = { key: string; label: string; href?: string; Icon: LucideIcon; kind: string };
 export const quickActions = ({ manage, write }: { manage: boolean; write: boolean }): QuickAction[] => [
@@ -20,16 +18,27 @@ export const quickActions = ({ manage, write }: { manage: boolean; write: boolea
 ];
 // Ask for papers needs a client first: it opens the search palette to choose one.
 export const ASK_EVENT = "inboxca:ask";
+// The C key opens the New menu (shell.tsx Keys).
+export const NEW_EVENT = "inboxca:new";
 
-// The New button at the top of the rail.
+// The New button at the top of the sidebar.
 export function NewMenu({ manage, write }: { manage: boolean; write: boolean }) {
   const actions = quickActions({ manage, write });
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener(NEW_EVENT, show);
+    return () => window.removeEventListener(NEW_EVENT, show);
+  }, []);
   if (!actions.length) return null;
   return (
-    <Menu.Root>
-      <Menu.Trigger className="b b-primary rail-new">
+    <Menu.Root open={open} onOpenChange={setOpen}>
+      <Menu.Trigger className="b b-primary rail-new" data-tip="New (C)">
         <Plus size={16} aria-hidden />
-        New
+        <span className="side-text">New</span>
+        <kbd className="side-kbd" aria-hidden>
+          C
+        </kbd>
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="start" sideOffset={6} className="menu-layer">
@@ -60,59 +69,6 @@ export function NewMenu({ manage, write }: { manage: boolean; write: boolean }) 
   );
 }
 
-type Item = Awaited<ReturnType<typeof bellItems>>[number];
-const when = (iso: string) => new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-
-// The bell at the foot of the rail: questions for this person and what others did on their
-// clients, read when opened. The dot shows when something came since the last look.
-export function Bell({ fresh }: { fresh: boolean }) {
-  const [items, setItems] = useState<Item[] | null>(null);
-  const [seen, setSeen] = useState(false);
-  const [, start] = useTransition();
-  return (
-    <Popover.Root
-      onOpenChange={(open) => {
-        if (!open) return;
-        setSeen(true);
-        start(async () => setItems(await bellItems()));
-      }}
-    >
-      <Popover.Trigger className="b b-ghost b-icon rail-bell" aria-label={fresh && !seen ? "Updates, something new" : "Updates"} title="Updates" data-new={(fresh && !seen) || undefined}>
-        <BellIcon size={16} aria-hidden />
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Positioner side="right" align="end" sideOffset={12} className="menu-layer">
-          <Popover.Popup className="menu-pop bell-pop">
-            <Popover.Title className="menu-head">Updates for you</Popover.Title>
-            {!items ? (
-              <div className="bell-list" aria-busy="true">
-                {[0, 1, 2].map((row) => <span key={row} className="skel" />)}
-              </div>
-            ) : items.length ? (
-              <div className="bell-list">
-                {items.map((item) => (
-                  <Link key={item.key} href={item.href}>
-                    <Avatar name={item.who} />
-                    <span className="grow">
-                      <strong>{item.what}</strong>
-                      <small>
-                        {item.who}
-                        {item.at && `, ${when(item.at)}`}
-                      </small>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <p className="bell-none">Nothing new. Questions for you and changes to your clients show here.</p>
-            )}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
-  );
-}
-
 // One click copies a number or a path; a short note says it worked.
 export function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(0);
@@ -134,9 +90,9 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
       </button>
       {!!copied &&
         createPortal(
-          <div key={copied} className="toast" role="status">
+          <ToastMotion key={copied}>
             <span>{label} copied</span>
-          </div>,
+          </ToastMotion>,
           document.body,
         )}
     </>

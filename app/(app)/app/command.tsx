@@ -14,7 +14,7 @@ type Hit = { href: string; name: string; note: string; action?: QuickAction };
 export const typing = (target: EventTarget | null) => target instanceof HTMLElement && !!target.closest("input, textarea, select, [contenteditable]");
 const nothing = () => () => {};
 
-// Find a client or a page, or start something, from anywhere: the search box in the rail, / or
+// Find a client or a page, or start something, from anywhere: the search box in the sidebar, / or
 // Ctrl K (⌘K on a Mac). Ask for papers first asks which client, then opens its Ask panel.
 export function Command({ pages, manage = false, write = false }: { pages: Page[]; manage?: boolean; write?: boolean }) {
   const router = useRouter();
@@ -95,9 +95,9 @@ export function Command({ pages, manage = false, write = false }: { pages: Page[
         if (!now) setAsking(false);
       }}
     >
-      <Dialog.Trigger className="rail-search" title={`Search (/ or ${mac ? "⌘K" : "Ctrl K"})`}>
-        <Search size={15} aria-hidden />
-        Search
+      <Dialog.Trigger className="rail-search" data-tip={`Search (/ or ${mac ? "⌘K" : "Ctrl K"})`}>
+        <Search size={16} aria-hidden />
+        <span className="side-text">Search or jump to</span>
         <kbd>{mac ? "⌘K" : "Ctrl K"}</kbd>
       </Dialog.Trigger>
       <Dialog.Portal>

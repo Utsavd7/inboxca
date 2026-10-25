@@ -1925,18 +1925,24 @@ export async function stopSend(form: FormData) {
   redirect(data?.length ? "/app?stopped=1" : "/app?error=started");
 }
 
-// The bell: the questions this person answers, then what others did on their clients in the
-// last 14 days, newest first. Opening it marks everything seen.
+// The notifications: the questions this person answers, then what others did on their
+// clients in the last 14 days, newest first. Fresh: a question, or anything since the person
+// last marked all read.
 export async function bellItems() {
   const { supabase, membership } = await currentMember();
   if (!membership) return [];
+  const seen = Date.parse((await cookies()).get("bell_seen")?.value ?? "") || 0;
   const [questions, { data: lines }] = await Promise.all([
     myQuestions(),
     supabase.rpc("activity_feed", { target_firm: membership.firmId, since: new Date(Date.now() - 14 * 86_400_000).toISOString(), mine: true }),
   ]);
-  (await cookies()).set("bell_seen", new Date().toISOString(), { path: "/app", maxAge: 31_536_000, httpOnly: true, sameSite: "lax" });
   return [
-    ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}`, who: ask.clients?.name ?? "Your team", at: null as string | null })),
-    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: activityNames[line.action] ?? "Client record changed", who: line.client_name, at: line.at as string | null })),
+    ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}`, who: ask.clients?.name ?? "Your team", at: null as string | null, fresh: true })),
+    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: activityNames[line.action] ?? "Client record changed", who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
   ].slice(0, 20);
+}
+
+// Mark all read: the count starts again from now.
+export async function markBellRead() {
+  (await cookies()).set("bell_seen", new Date().toISOString(), { path: "/app", maxAge: 31_536_000, httpOnly: true, sameSite: "lax" });
 }

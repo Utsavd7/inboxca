@@ -218,7 +218,7 @@ test("a notice that asks something waits for a reply; No reply needed clears it,
   await readMail();
   // Today says why it waits, in plain words, and when it came.
   await owner.goto("/app");
-  await expect(owner.locator("section[aria-labelledby=t-reply] li").filter({ hasText: clientName })).toContainText(/Sent a notice and asks what to do\. Emailed /);
+  await expect(owner.locator("section[aria-labelledby=t-now] li").filter({ has: owner.getByRole("link", { name: `Reply to ${clientName}` }) })).toContainText(/Sent a notice and asks what to do\. Emailed /);
 
   await owner.goto("/app/inbox?show=reply");
   const row = list().getByRole("listitem").filter({ hasText: `GST notice ${tag}` });
