@@ -56,6 +56,9 @@ describe("smart reminders", () => {
     expect(followUpDue(request([]), "2026-10-12")).toBeNull();
     expect(followUpDue(request([]), "2026-10-13")).toEqual(["Bank statement"]);
     expect(followUpDue(request(["2026-10-13"]), "2026-10-15")).toBeNull();
+    // Chase missing papers on Today asks again at once, still at most four times.
+    expect(followUpDue(request(["2026-10-13"]), "2026-10-15", true)).toEqual(["Bank statement"]);
+    expect(followUpDue(request(["2026-10-13", "2026-10-16", "2026-10-19", "2026-10-22"]), "2026-10-23", true)).toBeNull();
     expect(followUpDue(request(["2026-10-13", "2026-10-16", "2026-10-19", "2026-10-22"]), "2026-10-30")).toBeNull();
     const { subject, text } = reminderEmail("Patel Textiles", "Demo CA Firm", [], today, [
       { requestId: "r", client_id: "patel", period: "2026-09", missing: ["Bank statement"], link: "https://inboxca.test/u/abc", count: 1 },

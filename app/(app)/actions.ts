@@ -37,7 +37,8 @@ import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { paperPolicy, type BulkSend, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings, providerFor } from "@/src/lib/mailbox";
-import { currentMember, currentWriter } from "@/src/lib/member";
+import { currentMember, currentWriter, myQuestions } from "@/src/lib/member";
+import { activityNames } from "@/src/lib/activity";
 import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
@@ -402,6 +403,8 @@ export async function manageClient(form: FormData) {
   const id = String(form.get("client") ?? "");
   const tab = String(form.get("tab") ?? "").replace(/[^a-z]/g, "");
   const back = (error?: string) => {
+    // Assign to me on Today goes back to Today.
+    if (form.get("from") === "today") return redirect(error ? "/app?error=assign" : "/app?assigned=1");
     // The details panel closes once its change is saved; other panels stay open for the next one.
     const query = new URLSearchParams({ ...(tab && tab !== "overview" && (error || tab !== "details") && { tab }), ...(error && { error }) }).toString();
     return redirect(`/app/clients/${id}${query ? `?${query}` : ""}`);
@@ -583,6 +586,8 @@ export async function manageTasks(form: FormData) {
     const back = new URLSearchParams([...["view", "day", "code", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["saved", String(intent)], ["t", ids.join(".")]].filter(([, value]) => value));
     redirect(`/app/calendar?${back}`);
   }
+  // From Today's late returns: back to Today, the same way.
+  if (form.get("from") === "today") redirect(`/app?marked=${intent}&t=${ids.join(".")}`);
   // From a client's Returns tab: back to it, the same way.
   const client = String(form.get("client") ?? "");
   if (z.uuid().safeParse(client).success) {
@@ -1794,4 +1799,42 @@ export async function saveMailLimit(form:FormData) {
   await supabase.from("firms").update({settings:{...membership.settings,mail_limit:limit.data}}).eq("id",membership.firmId);
   revalidatePath("/app/settings");
   redirect("/app/settings?group=email&saved=mail_limit#mailbox");
+}
+
+// Today: "Remind all late clients" or "Chase missing papers", after their preview. The daily
+// reminder job sends them, from the firm's mailbox, at most one email a client a day; it waits
+// 20 seconds so Undo can stop it. Owners and partners only, as they see every client.
+export async function sendNow(form: FormData) {
+  const { userId, membership } = await currentWriter();
+  if (!membership || !["owner", "partner"].includes(membership.role)) redirect("/app");
+  const what = form.get("what") === "papers" ? "papers" : "late";
+  const admin = supabaseAdmin();
+  const { data: job, error } = await admin.from("jobs").insert({ firm_id: membership.firmId, kind: "reminders", entity_type: what, entity_id: membership.firmId, idempotency_key: `reminders:${what}:${membership.firmId}:${randomUUID()}`, run_at: new Date(Date.now() + 20_000).toISOString() }).select("id").single();
+  if (error) redirect("/app?error=send");
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: `reminders.asked`, entity_type: "firm", entity_id: membership.firmId, details: { what } });
+  redirect(`/app?sending=${what}&job=${job.id}`);
+}
+
+// Undo on the toast: the send stops if it has not started yet.
+export async function stopSend(form: FormData) {
+  const { membership } = await currentWriter();
+  if (!membership || !["owner", "partner"].includes(membership.role)) redirect("/app");
+  const { data } = await supabaseAdmin().from("jobs").update({ state: "cancelled" }).eq("firm_id", membership.firmId).eq("kind", "reminders").eq("state", "pending").eq("id", Number(form.get("job"))).select("id");
+  redirect(data?.length ? "/app?stopped=1" : "/app?error=started");
+}
+
+// The bell: the questions this person answers, then what others did on their clients in the
+// last 14 days, newest first. Opening it marks everything seen.
+export async function bellItems() {
+  const { supabase, membership } = await currentMember();
+  if (!membership) return [];
+  const [questions, { data: lines }] = await Promise.all([
+    myQuestions(),
+    supabase.rpc("activity_feed", { target_firm: membership.firmId, since: new Date(Date.now() - 14 * 86_400_000).toISOString(), mine: true }),
+  ]);
+  (await cookies()).set("bell_seen", new Date().toISOString(), { path: "/app", maxAge: 31_536_000, httpOnly: true, sameSite: "lax" });
+  return [
+    ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}`, who: ask.clients?.name ?? "Your team", at: null as string | null })),
+    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: activityNames[line.action] ?? "Client record changed", who: line.client_name, at: line.at as string | null })),
+  ].slice(0, 20);
 }

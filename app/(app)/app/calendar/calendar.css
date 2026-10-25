@@ -52,8 +52,8 @@
 .cal:has(input[name="task"]:checked) .cal-bulk { visibility: visible; opacity: 1; transform: translate(-50%, 0); }
 .cal-chosen { margin-right: 8px; }
 .cal-chosen::before { content: counter(chosen) " "; }
-.cal-bulk .b-secondary { border-color: transparent; background: rgba(255, 255, 255, 0.1); color: var(--white); }
-.cal-bulk .b-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); }
+.cal-bulk .b-secondary { border-color: transparent; background: var(--on-dark); color: var(--white); }
+.cal-bulk .b-secondary:hover:not(:disabled) { background: var(--on-dark-hover); }
 .cal-bulk .b-primary { background: var(--white); color: var(--ink); }
 .cal-bulk .b-primary:hover:not(:disabled) { background: var(--press); }
 

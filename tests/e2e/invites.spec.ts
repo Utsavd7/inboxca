@@ -232,7 +232,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   // The approved office PC replaces the phone code for staff.
   await emailStep(person, newEmail);
   await expect(person).toHaveURL(/\/app$/);
-  await person.getByRole("link", { name: "Clients" }).click();
+  await person.getByRole("link", { name: "Clients", exact: true }).click();
   await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
 
   // A staff member without an authenticator app also uses an already approved office PC.
@@ -243,7 +243,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   await person.getByRole("button", { name: "Sign out" }).click();
   await emailStep(person, emailOnly);
   await expect(person).toHaveURL(/\/app$/);
-  await person.getByRole("link", { name: "Clients" }).click();
+  await person.getByRole("link", { name: "Clients", exact: true }).click();
   await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
   await person.getByRole("button", { name: "Sign out" }).click();
   await emailStep(person, newEmail);
@@ -282,7 +282,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   await expect(owner.getByText("are you in the office now?")).toBeAttached();
   await person.getByLabel("6 digit code from the app").fill(totp(personKey));
   await person.getByRole("button", { name: "Continue" }).click();
-  await person.getByRole("link", { name: "Clients" }).click();
+  await person.getByRole("link", { name: "Clients", exact: true }).click();
   await expect(person.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
   await owner.setExtraHTTPHeaders({});
   await person.setExtraHTTPHeaders({});

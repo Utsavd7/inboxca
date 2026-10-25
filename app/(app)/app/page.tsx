@@ -1,8 +1,8 @@
-import { Check, X } from "lucide-react";
+import { AlarmClock, CalendarDays, Check, FileCheck2, FileClock, MessageSquareText, Rocket, Sparkles, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { askAwayDevice, joinFirm } from "@/app/(app)/actions";
+import { askAwayDevice, joinFirm, manageClient, manageTasks, sendNow, stopSend } from "@/app/(app)/actions";
 import { PcKey } from "./pc-key";
 import { PushSwitch } from "./push-switch";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -17,7 +17,11 @@ import { roleNames } from "@/src/lib/roles";
 import { OfficePanel } from "./office-panel";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { replyReasons } from "@/src/lib/triage";
-import { Badge, PageHead, storage, Toast } from "./ui";
+import { activityNames } from "@/src/lib/activity";
+import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
+import { MarkFiled } from "./mark-filed";
+import { Pending } from "./pending";
+import { Avatar, Badge, Card, CountUp, PageHead, ProgressRing, Row, SidePanel, storage, Toast } from "./ui";
 import "./today.css";
 
 const DAY = 86_400_000;
@@ -44,8 +48,8 @@ async function hidePush() {
 // to approve and papers still missing on the left; late returns, one row a client, and what
 // falls due this week on the right. Each row has one button. Everything is limited to what
 // this person's role and the database's row rules let them see.
-export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string; asked?: string; panel?: string }> }) {
-  const { dropped, error, asked, panel } = await searchParams;
+export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string; asked?: string; panel?: string; client?: string; confirm?: string; sending?: string; job?: string; stopped?: string; assigned?: string; marked?: string; t?: string }> }) {
+  const { dropped, error, asked, panel, client: panelClient, confirm, sending, job, stopped, assigned, marked, t } = await searchParams;
   const { supabase, userId, membership, deviceStatus, connectionWaiting, pcKey } = await currentMember();
   const { data: invites } = await supabase.rpc("my_invites");
   const closed = membership ? null : (await supabase.rpc("closed_firms")).data?.[0];
@@ -99,7 +103,39 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     owner ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : null,
     owner ? supabase.rpc("firm_usage", { target_firm: membership.firmId }).then((result) => result.data?.[0]) : null,
   ]);
-  // The emails behind the replies, for the time and a link straight to the mail.
+  // The month's returns for the ring, who looks after each late client, and what InboxCA did
+  // by itself today (papers filed from email come from the papers themselves).
+  const dayStart = new Date(`${today}T00:00:00+05:30`).toISOString();
+  const monthStart = `${today.slice(0, 8)}01`;
+  const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const monthTasks = () => supabase.from("tasks").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("kind", "compliance").gte("due_on", monthStart).lte("due_on", monthEnd);
+  const lateIds = late.data?.map((row) => row.client_id) ?? [];
+  const [monthDue, monthFiled, { data: looked }, { data: done }, { data: filedToday }] = await Promise.all([
+    count(monthTasks()),
+    count(monthTasks().eq("status", "filed")),
+    lateIds.length ? supabase.from("client_assignments").select("client_id").in("client_id", lateIds) : Promise.resolve({ data: [] }),
+    supabase.rpc("activity_feed", { target_firm: membership.firmId, since: dayStart }),
+    supabase.from("documents").select("client_id, received_at, clients(name)").eq("firm_id", membership.firmId).not("email_event_id", "is", null).eq("status", "filed").gte("received_at", dayStart).order("received_at", { ascending: false }).limit(100),
+  ]);
+  const assignedIds = new Set(looked?.map((row) => row.client_id));
+  const papersBy = new Map<string, { at: string; name: string; papers: number }>();
+  for (const paper of filedToday ?? []) {
+    const seenClient = papersBy.get(paper.client_id);
+    papersBy.set(paper.client_id, { at: seenClient?.at ?? paper.received_at, name: paper.clients?.name ?? "", papers: (seenClient?.papers ?? 0) + 1 });
+  }
+  const feed = [
+    ...[...papersBy.entries()].map(([id, item]) => ({ key: `papers-${id}`, at: item.at, client: item.name, what: `${plural(item.papers, "paper", "papers")} filed from email` })),
+    ...(done ?? []).map((line, at) => ({ key: `${line.at}-${at}`, at: line.at, client: line.client_name, what: activityNames[line.action] ?? "Client record changed" })),
+  ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6);
+  const sends = lead && !membership.viewOnlyUntil;
+  const assignAs = membership.role === "manager" ? "manager" : "partner_in_charge";
+  // The panels this page opens: Mark filed for a late client, and the preview before a send.
+  const [{ data: marking }, preview] = await Promise.all([
+    panel === "filed" && panelClient && /^[0-9a-f-]{36}$/.test(panelClient)
+      ? supabase.from("tasks").select("id, code, period_key, due_on, clients(name)").eq("client_id", panelClient).eq("kind", "compliance").neq("status", "filed").lt("due_on", today).order("due_on").limit(100)
+      : Promise.resolve({ data: null }),
+    sends && (confirm === "late" || confirm === "papers") ? sendPreview(supabase, membership.firmId, confirm) : null,
+  ]);
   const replyIds = replies.data?.map((request) => request.entity_id) ?? [];
   const { data: events } = replyIds.length ? await supabase.from("email_events").select("id, received_at").in("id", replyIds) : { data: [] };
   const eventById = new Map(events?.map((event) => [event.id, event]));
@@ -171,6 +207,17 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
   const things = (replies.count ?? 0) + toApprove.length + lateCount + looks.length;
   const portal = membership.may("portal_files");
 
+  const replyCount = replies.count ?? 0;
+  const close = "/app";
+  const markedCount = t?.split(".").filter(Boolean).length ?? 0;
+  const stats = [
+    { key: "late", label: lateCount === 1 ? "Client late" : "Clients late", value: lateCount, href: "/app/clients?show=late", tone: "late" },
+    { key: "reply", label: replyCount === 1 ? "Reply waiting" : "Replies waiting", value: replyCount, href: "/app/inbox?status=reply", tone: "reply" },
+    approver
+      ? { key: "approve", label: "For your approval", value: toApprove.length, href: "#t-approve", tone: "approve" }
+      : { key: "papers", label: "Papers missing", value: papers.count ?? papers.data?.length ?? 0, href: "#t-missing", tone: "papers" },
+  ];
+
   return (
     <div className="today">
       <PageHead
@@ -198,7 +245,10 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       />
 
       {next && steps && (
-        <section className="today-setup" aria-labelledby="setup-title">
+        <section className="app-card today-setup" aria-labelledby="setup-title">
+          <span className="icon-tile k-approve" aria-hidden>
+            <Rocket size={16} />
+          </span>
           <h2 id="setup-title">Finish setting up</h2>
           <ol aria-label="Setup steps">
             {steps.map((step) => (
@@ -214,14 +264,34 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </section>
       )}
 
-      {!!usage?.returns_this_year && (
-        <div className="today-line">
-          <span className="grow">
-            {usage.returns_so_far.toLocaleString("en-IN")} of {usage.returns_this_year.toLocaleString("en-IN")} returns this year are due so far. InboxCA storage used: {storage(usage.workspace_bytes)}.
+      <section className="app-card today-stats" aria-label="This month">
+        <div className="today-ring">
+          <ProgressRing done={monthFiled} total={monthDue} label="returns due this month filed" />
+          <span>
+            <strong>Returns filed this month</strong>
+            <span className="sub">{monthDue ? `${monthFiled.toLocaleString("en-IN")} of ${monthDue.toLocaleString("en-IN")} due by ${dueLabel(monthEnd).slice(0, -5)}` : "No returns fall due this month."}</span>
           </span>
-          <Link href="/app/settings?group=data#use">See InboxCA use</Link>
         </div>
-      )}
+        <ul className="today-chips">
+          {stats.map((stat) => (
+            <li key={stat.key}>
+              <Link className={`stat-chip k-${stat.tone}${stat.value ? "" : " is-zero"}`} href={stat.href}>
+                <strong>
+                  <CountUp value={stat.value} />
+                </strong>
+                <span>{stat.label}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        {!!usage?.returns_this_year && (
+          <p className="today-use">
+            {usage.returns_so_far.toLocaleString("en-IN")} of {usage.returns_this_year.toLocaleString("en-IN")} returns this year are due so far. InboxCA storage used: {storage(usage.workspace_bytes)}.{" "}
+            <Link href="/app/settings?group=data#use">See InboxCA use</Link>
+          </p>
+        )}
+      </section>
+
       {askPush && (
         <div className="today-line">
           <span className="grow">Get questions and approvals on your phone too.</span>
@@ -234,15 +304,39 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </div>
       )}
       {asked === "time" && <Toast>The owner is asked for more time today. You can keep working until closing.</Toast>}
-      <DroppedNotice value={dropped} />
-      {error === "view_only" && (
-        <p className="alert" role="alert">
-          This device can only view. Make changes from the office.
-        </p>
+      {assigned && <Toast>Assigned to you. The client is now on your list.</Toast>}
+      {stopped && <Toast>Stopped. Nothing was sent.</Toast>}
+      {sending && job && (
+        <Toast
+          undo={
+            <form action={stopSend}>
+              <input type="hidden" name="job" value={job} />
+              <Pending className="b" busy="Stopping">Undo</Pending>
+            </form>
+          }
+        >
+          {sending === "papers" ? "Follow ups go out in a minute" : "Reminders go out in a minute"} from your firm&apos;s email.
+        </Toast>
       )}
-      {error === "drive" && (
+      {marked && markedCount > 0 && (
+        <Toast
+          undo={
+            marked === "filed" && (
+              <form action={manageTasks}>
+                <input type="hidden" name="from" value="today" />
+                {t!.split(".").map((id) => <input key={id} type="hidden" name="task" value={id} />)}
+                <Pending className="b" name="intent" value="reopen" busy="Undoing">Undo</Pending>
+              </form>
+            )
+          }
+        >
+          {plural(markedCount, "return", "returns")} marked {marked === "filed" ? "filed" : marked === "in_progress" ? "in progress" : "not filed"}.
+        </Toast>
+      )}
+      <DroppedNotice value={dropped} />
+      {error && todayErrors[error] && (
         <p className="alert" role="alert">
-          Connect the firm&apos;s drive in Settings first; portal files are saved there.
+          {todayErrors[error]}
         </p>
       )}
       <OfficePanel compact />
@@ -250,14 +344,10 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       <div className="today-grid">
         <div className="today-col">
           {!!looks.length && (
-            <section className="today-card" aria-labelledby="t-look">
-              <div className="today-head">
-                <h2 id="t-look">Needs a look</h2>
-                <Badge tone="late">{looks.length}</Badge>
-              </div>
-              <ul>
+            <Card id="t-look" title="Needs a look" Icon={TriangleAlert} kind="notice" count={looks.length} countTone="late">
+              <ul className="app-rows stagger">
                 {looks.map((look) => (
-                  <li key={look.key}>
+                  <li key={look.key} className="app-row">
                     <span className="grow" role="alert">
                       {look.text}
                     </span>
@@ -269,171 +359,204 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
                   </li>
                 ))}
               </ul>
-            </section>
+            </Card>
           )}
 
-          <section className="today-card" aria-labelledby="t-reply">
-            <div className="today-head">
-              <h2 id="t-reply">Clients waiting for a reply</h2>
-              {!!replies.count && <Badge tone="warn">{replies.count}</Badge>}
-            </div>
+          <Card id="t-reply" title="Clients waiting for a reply" Icon={MessageSquareText} kind="reply" count={replyCount} countTone="warn">
             {replies.data?.length ? (
-              <ul>
+              <ul className="app-rows stagger">
                 {replies.data.map((request) => {
                   const event = eventById.get(request.entity_id);
                   const client = request.clients?.name ?? "A contact";
                   return (
-                    <li key={request.id}>
-                      <span className="grow">
-                        <strong>{client}</strong>
-                        <span className="sub">{replyReasons[request.reason_code ?? ""] ?? "Needs your team"}{event && `. Emailed ${at(event.received_at)}`}</span>
-                      </span>
-                      <Link className="b b-secondary" href={event ? `/app/inbox?mail=${event.id}` : request.client_id ? `/app/clients/${request.client_id}` : "/app/inbox"} aria-label={`Reply to ${client}`}>
-                        Reply
-                      </Link>
-                    </li>
+                    <Row
+                      key={request.id}
+                      lead={<Avatar name={client} />}
+                      title={client}
+                      meta={`${replyReasons[request.reason_code ?? ""] ?? "Needs your team"}${event ? `. Emailed ${at(event.received_at)}` : ""}`}
+                      action={
+                        <Link className="b b-secondary" href={event ? `/app/inbox?mail=${event.id}` : request.client_id ? `/app/clients/${request.client_id}` : "/app/inbox"} aria-label={`Reply to ${client}`}>
+                          Reply
+                        </Link>
+                      }
+                    />
                   );
                 })}
               </ul>
             ) : (
-              <p className="today-empty">No client is waiting for a reply.</p>
+              <p className="app-card-none">No client is waiting for a reply.</p>
             )}
-            {(replies.count ?? 0) > 5 && <SeeAll href="/app/inbox">See all {replies.count}</SeeAll>}
-          </section>
+            {replyCount > 5 && <SeeAll href="/app/inbox">See all {replyCount}</SeeAll>}
+          </Card>
 
           {(approver || !!toApprove.length) && (
-            <section className="today-card" aria-labelledby="t-approve">
-              <div className="today-head">
-                <h2 id="t-approve">Returns ready for your approval</h2>
-                {!!toApprove.length && <Badge tone="blue">{toApprove.length}</Badge>}
-              </div>
+            <Card id="t-approve" title="Returns ready for your approval" Icon={FileCheck2} kind="approve" count={toApprove.length} countTone="blue">
               {toApprove.length ? (
-                <ul>
+                <ul className="app-rows stagger">
                   {toApprove.slice(0, 5).map((file) => (
-                    <li key={file.id}>
-                      <span className="grow">
-                        <strong>{file.clients?.name}</strong>
-                        <span className="sub">
-                          {formName(file.meta.form)} for {periodName(file.period_key)}
-                          {file.meta.status !== "draft" && ", acknowledgement arrived"}
-                        </span>
-                      </span>
-                      <Link className="b b-secondary" href={`/app/clients/${file.client_id}?tab=outputs`}>
-                        {file.meta.status === "draft" ? "Review and approve" : "Confirm filing"}
-                      </Link>
-                    </li>
+                    <Row
+                      key={file.id}
+                      lead={<Avatar name={file.clients?.name ?? ""} />}
+                      title={file.clients?.name}
+                      meta={`${formName(file.meta.form)} for ${periodName(file.period_key)}${file.meta.status !== "draft" ? ", acknowledgement arrived" : ""}`}
+                      action={
+                        <Link className="b b-secondary" href={`/app/clients/${file.client_id}?tab=outputs`}>
+                          {file.meta.status === "draft" ? "Review and approve" : "Confirm filing"}
+                        </Link>
+                      }
+                    />
                   ))}
                 </ul>
               ) : (
-                <p className="today-empty">Nothing waits for your approval.</p>
+                <p className="app-card-none">Nothing waits for your approval.</p>
               )}
-            </section>
+            </Card>
           )}
 
-          <section className="today-card" aria-labelledby="t-missing">
-            <div className="today-head">
-              <h2 id="t-missing">Papers still missing</h2>
-              {!!papers.data?.length && <span className="today-time">InboxCA is reminding them</span>}
-            </div>
+          <Card
+            id="t-missing"
+            title="Papers still missing"
+            Icon={FileClock}
+            kind="papers"
+            end={
+              papers.data?.length ? (
+                sends ? (
+                  <Link className="b b-secondary" href="/app?confirm=papers" scroll={false}>
+                    Chase missing papers
+                  </Link>
+                ) : (
+                  <span className="today-time">InboxCA is reminding them</span>
+                )
+              ) : null
+            }
+          >
             {papers.data?.length ? (
-              <ul>
+              <ul className="app-rows stagger">
                 {papers.data.map((request) => {
                   const details = request.details as unknown as DocumentRequest;
                   const missing = (details.items ?? []).filter((item) => !item.received.length).map((item) => item.type);
                   const reminded = details.followups?.at(-1);
                   return (
-                    <li key={request.id}>
-                      <span className="grow">
-                        <strong>{request.clients?.name}</strong>
-                        <span className="sub">
-                          {(missing.length ? missing : (details.items ?? []).map((item) => item.type)).join(", ")}
-                          {details.period && ` for ${periodName(details.period)}`}
-                        </span>
-                      </span>
-                      <span className="today-time">{reminded ? `Reminded ${short(reminded)}` : "Not reminded yet"}</span>
-                      {request.client_id && (
-                        <Link className="b b-secondary" href={`/app/clients/${request.client_id}`}>
-                          Open client
-                        </Link>
-                      )}
-                    </li>
+                    <Row
+                      key={request.id}
+                      lead={<Avatar name={request.clients?.name ?? ""} />}
+                      title={request.clients?.name}
+                      meta={`${(missing.length ? missing : (details.items ?? []).map((item) => item.type)).join(", ")}${details.period ? ` for ${periodName(details.period)}` : ""}`}
+                      status={<Badge plain>{reminded ? `Reminded ${short(reminded)}` : "Not reminded yet"}</Badge>}
+                      action={
+                        request.client_id && (
+                          <Link className="b b-secondary" href={`/app/clients/${request.client_id}`}>
+                            Open client
+                          </Link>
+                        )
+                      }
+                    />
                   );
                 })}
               </ul>
             ) : (
-              <p className="today-empty">
+              <p className="app-card-none">
                 No papers are missing.{" "}
                 <Link className="b b-secondary" href="/app/clients">
                   Ask a client for papers
                 </Link>
               </p>
             )}
-          </section>
+          </Card>
         </div>
 
         <div className="today-col">
-          <section className="today-card" aria-labelledby="t-late">
-            <div className="today-head">
-              <h2 id="t-late">Late returns</h2>
-              {!!lateCount && <Badge tone="late">{plural(lateCount, "client", "clients")}</Badge>}
-            </div>
+          <Card
+            id="t-late"
+            title="Late returns"
+            Icon={AlarmClock}
+            kind="late"
+            count={lateCount ? plural(lateCount, "client", "clients") : null}
+            countTone="late"
+            end={
+              sends &&
+              !!lateCount && (
+                <Link className="b b-secondary" href="/app?confirm=late" scroll={false}>
+                  Remind all late clients
+                </Link>
+              )
+            }
+          >
             {late.data?.length ? (
               <>
-                <ul>
+                <ul className="app-rows stagger">
                   {late.data.map((row) => {
                     const days = Math.round((Date.parse(today) - Date.parse(row.due_on)) / DAY);
                     return (
-                      <li key={row.client_id}>
-                        <span className="grow">
-                          <strong>{row.client_name}</strong>
-                          <span className="sub">
-                            {returnName(row.code, row.period_key)}
-                            {row.returns > 1 && ` and ${row.returns - 1} more`}
-                          </span>
-                        </span>
-                        <Badge tone="late">{plural(days, "day", "days")}</Badge>
-                        <Link className="b b-secondary" href={`/app/clients/${row.client_id}?tab=due`} aria-label={`See returns for ${row.client_name}`}>
-                          See returns
-                        </Link>
-                      </li>
+                      <Row
+                        key={row.client_id}
+                        lead={<Avatar name={row.client_name} />}
+                        title={row.client_name}
+                        meta={`${returnName(row.code, row.period_key)}${row.returns > 1 ? ` and ${row.returns - 1} more` : ""}`}
+                        status={<Badge tone="late">{plural(days, "day", "days")} late</Badge>}
+                        more={
+                          <>
+                            {!membership.viewOnlyUntil && membership.may("mark_filed", row.client_id) && (
+                              <Link className="b b-ghost" href={`/app?panel=filed&client=${row.client_id}`} scroll={false} aria-label={`Mark filed for ${row.client_name}`}>
+                                Mark filed
+                              </Link>
+                            )}
+                            {!membership.viewOnlyUntil && canManageClients(membership.role) && !assignedIds.has(row.client_id) && (
+                              <form action={manageClient}>
+                                <input type="hidden" name="from" value="today" />
+                                <input type="hidden" name="client" value={row.client_id} />
+                                <input type="hidden" name="intent" value="assign" />
+                                <input type="hidden" name="role" value={assignAs} />
+                                <input type="hidden" name="who" value={`person:${userId}`} />
+                                <Pending className="b b-ghost" busy="Assigning" aria-label={`Assign ${row.client_name} to me`}>
+                                  Assign to me
+                                </Pending>
+                              </form>
+                            )}
+                          </>
+                        }
+                        action={
+                          <Link className="b b-secondary" href={`/app/clients/${row.client_id}?tab=due`} aria-label={`See returns for ${row.client_name}`}>
+                            See returns
+                          </Link>
+                        }
+                      />
                     );
                   })}
                 </ul>
                 {lateCount > late.data.length && <SeeAll href="/app/calendar?view=overdue">See all {lateCount} clients</SeeAll>}
               </>
             ) : late.error ? (
-              <p className="today-empty">Late returns could not load. Refresh the page.</p>
+              <p className="app-card-none">Late returns could not load. Refresh the page.</p>
             ) : (
-              <p className="today-empty">No return is late.</p>
+              <p className="app-card-none">No return is late.</p>
             )}
-          </section>
+          </Card>
 
-          <section className="today-card" aria-labelledby="t-week">
-            <div className="today-head">
-              <h2 id="t-week">Due in the next 7 days</h2>
-            </div>
+          <Card id="t-week" title="Due in the next 7 days" Icon={CalendarDays} kind="week">
             {week.data?.length ? (
-              <ul>
+              <ul className="app-rows stagger">
                 {week.data.slice(0, 5).map((row) => {
                   const [day, month] = dueLabel(row.due_on).split(" ");
                   const left = row.clients - row.filed;
                   return (
-                    <li key={`${row.due_on}-${row.code}`}>
-                      <span className="today-date" aria-label={dueLabel(row.due_on)}>
-                        <span>{month}</span>
-                        <strong>{day}</strong>
-                      </span>
-                      <span className="grow">
-                        <strong>{rule.get(row.code)?.name ?? row.code}</strong>
-                        <span className="sub">{plural(row.clients, "client", "clients")}</span>
-                      </span>
-                      {left ? <Badge>{left} to file</Badge> : <Badge tone="done">Filed</Badge>}
-                    </li>
+                    <Row
+                      key={`${row.due_on}-${row.code}`}
+                      lead={
+                        <span className="today-date" aria-label={dueLabel(row.due_on)}>
+                          <span>{month}</span>
+                          <strong>{day}</strong>
+                        </span>
+                      }
+                      title={rule.get(row.code)?.name ?? row.code}
+                      meta={plural(row.clients, "client", "clients")}
+                      status={left ? <Badge tone="warn">{left} to file</Badge> : <Badge tone="done">Filed</Badge>}
+                    />
                   );
                 })}
               </ul>
             ) : (
-              <p className="today-empty">
+              <p className="app-card-none">
                 Nothing is due in the next 7 days.{" "}
                 <Link className="b b-secondary" href="/app/calendar">
                   Open calendar
@@ -441,28 +564,120 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
               </p>
             )}
             {(week.data?.length ?? 0) > 5 && <SeeAll href="/app/calendar?view=week">See all</SeeAll>}
-          </section>
+          </Card>
+
+          <Card id="t-done" title="What InboxCA did today" Icon={Sparkles} kind="docs">
+            {feed.length ? (
+              <ol className="today-feed">
+                {feed.map((item) => (
+                  <li key={item.key}>
+                    <span className="today-feed-dot" aria-hidden />
+                    <span className="grow">
+                      {item.what} <span className="sub-inline">{item.client}</span>
+                    </span>
+                    <time className="today-time" dateTime={item.at}>
+                      {at(item.at)}
+                    </time>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="app-card-none">Nothing yet today. Papers filed from email and reminders sent show here.</p>
+            )}
+          </Card>
         </div>
       </div>
 
       {portal && panel === "portal" && (
-        <aside className="today-panel panel-in" aria-labelledby="portal-title">
-          <div className="today-head">
-            <h2 id="portal-title">Files from the GST portal</h2>
-            <Link className="b b-ghost b-icon" href="/app" scroll={false} aria-label="Close">
-              <X size={16} aria-hidden />
-            </Link>
-          </div>
+        <SidePanel id="portal-title" title="Files from the GST portal" close={close}>
           <PortalDrop />
-        </aside>
+        </SidePanel>
+      )}
+      {marking && !membership.viewOnlyUntil && (
+        <SidePanel id="mark-filed" title={marking.length > 1 ? `Mark ${marking.length} returns filed` : "Mark filed"} close={close}>
+          {marking.length ? (
+            <MarkFiled state={<input type="hidden" name="from" value="today" />} rows={marking.map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${returnName(task.code, task.period_key)}, due ${dueLabel(task.due_on)}` }))} />
+          ) : (
+            <p className="hint">This client has no late return now.</p>
+          )}
+        </SidePanel>
+      )}
+      {preview && (
+        <SidePanel id="send-title" title={preview.title} close={close}>
+          <p className="hint">{preview.hint}</p>
+          {!preview.mailbox && (
+            <p className="alert" role="alert">
+              Connect the firm&apos;s email in Settings first. Reminders go from the firm&apos;s own address.
+            </p>
+          )}
+          <ul className="app-rows today-preview">
+            {preview.rows.map((row) => (
+              <Row key={row.key} lead={<Avatar name={row.name} />} title={row.name} meta={row.what} status={row.skip ? <Badge plain>{row.skip}</Badge> : <Badge tone="blue">Will be emailed</Badge>} />
+            ))}
+          </ul>
+          <form action={sendNow} className="mark-filed-actions today-send">
+            <input type="hidden" name="what" value={confirm} />
+            <Pending className="b b-primary" busy="Sending" disabled={!preview.mailbox || !preview.count}>
+              {preview.button}
+            </Pending>
+            <Link className="b b-secondary" href={close} scroll={false}>
+              Cancel
+            </Link>
+          </form>
+        </SidePanel>
       )}
     </div>
   );
 }
 
+const todayErrors: Record<string, string> = {
+  view_only: "This device can only view. Make changes from the office.",
+  drive: "Connect the firm's drive in Settings first; portal files are saved there.",
+  assign: "That client could not be assigned to you. Try again from the client's page.",
+  send: "The send could not start. Try again.",
+  started: "The send had already started, so it could not be stopped.",
+};
+
+// Who gets what when the late clients are reminded or missing papers chased at once, for the
+// preview before Send. The job decides the rest the same way (see src/jobs/reminders.ts).
+async function sendPreview(supabase: Awaited<ReturnType<typeof currentMember>>["supabase"], firm: string, what: "late" | "papers") {
+  const skipFor = (client: { email_enc: string | null; reminders_paused: boolean } | null) => (!client ? "Not emailed" : client.reminders_paused ? "Reminders paused" : !client.email_enc ? "No email address" : null);
+  const [{ data: mailbox }, list] = await Promise.all([
+    supabase.from("connected_accounts").select("status").eq("firm_id", firm).eq("kind", "mail").maybeSingle(),
+    what === "late"
+      ? supabase.rpc("late_clients", { target_firm: firm }).limit(200).then(async ({ data: late }) => {
+          const ids = late?.map((row) => row.client_id) ?? [];
+          const { data: people } = ids.length ? await supabase.from("clients").select("id, email_enc, reminders_paused").in("id", ids) : { data: [] };
+          const byId = new Map(people?.map((person) => [person.id, person]));
+          return (late ?? []).map((row) => ({ key: row.client_id, name: row.client_name, what: `${plural(row.returns, "late return", "late returns")}, the oldest due ${dueLabel(row.due_on)}`, skip: skipFor(byId.get(row.client_id) ?? null) }));
+        })
+      : supabase.from("requests").select("id, details, clients(name, email_enc, reminders_paused)").eq("kind", "documents").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(200).then(({ data: asks }) =>
+          (asks ?? []).flatMap((ask) => {
+            const details = ask.details as unknown as DocumentRequest;
+            const missing = (details.items ?? []).filter((item) => !item.received.length).map((item) => item.type);
+            if (!missing.length) return [];
+            const asked = details.followups?.length ?? 0;
+            return [{ key: ask.id, name: ask.clients?.name ?? "", what: missing.join(", "), skip: asked >= MAX_FOLLOW_UPS ? `Reminded ${asked} times` : skipFor(ask.clients) }];
+          }),
+        ),
+  ]);
+  const count = list.filter((row) => !row.skip).length;
+  return {
+    rows: list,
+    count,
+    mailbox: mailbox?.status === "connected",
+    title: what === "late" ? `Remind ${plural(list.length, "late client", "late clients")}` : "Chase missing papers",
+    hint:
+      what === "late"
+        ? "Each client gets one email from your firm's address listing their late returns. Anyone already reminded today, who already sent papers for that period, or whose email your team is answering is skipped."
+        : "Each client gets one email from your firm's address listing the papers still missing, with their upload link. Anyone already reminded today is skipped.",
+    button: what === "late" ? `Send ${plural(count, "reminder", "reminders")}` : `Send ${plural(count, "follow up", "follow ups")}`,
+  };
+}
+
 function SeeAll({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <div className="today-foot">
+    <div className="app-card-foot">
       <Link className="b b-secondary" href={href}>
         {children}
       </Link>
