@@ -2,9 +2,11 @@ import {PreparedForms} from "../../prepared-forms";
 import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
 import { DatasetReview } from "./dataset-review";
-import { FileText } from "lucide-react";
+import { AlarmClock, ArrowLeft, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { Suspense, ViewTransition } from "react";
 import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, findDocuments, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
 import { addDays, dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
@@ -26,9 +28,11 @@ import { AutoSelect } from "../../auto-select";
 import { LinkTabs } from "../../link-tabs";
 import { DroppedNotice, PortalDrop } from "../../portal-drop";
 import { MarkFiled } from "../../mark-filed";
-import { Badge, Empty, PageHead, SidePanel, Toast } from "../../ui";
+import { Avatar, Badge, Card, Empty, IconTile, Row, SidePanel, Toast, type Kind } from "../../ui";
+import { CopyButton } from "../../ui-client";
 import { UploadForm } from "./upload-form";
 import "../clients.css";
+import "../../today.css";
 
 const errors: Record<string, string> = {
   details: "Enter a name, choose a kind, and check the email address.",
@@ -62,6 +66,16 @@ const reminderNote = (details: { reminded?: string[]; skipped?: { reason: string
   details.reminded?.length ? `Reminded ${dueLabel(details.reminded.at(-1)!)}` : details.skipped ? skipReasons[details.skipped.reason as Skip] : "";
 // "24 Oct, 10:05" in India time, for an email.
 const mailTime = (at: string) => new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+// A paper's icon, by what kind of file it is.
+const fileIcon = (name: string) =>
+  /\.(xlsx?|csv)$/i.test(name) ? FileSpreadsheet : /\.(jpe?g|png|webp|heic|gif)$/i.test(name) ? FileImage : /\.(json|xml)$/i.test(name) ? FileCode2 : /\.zip$/i.test(name) ? FileArchive : FileText;
+// Each kind of change in the Activity timeline has its own icon and tint.
+const activityIcons: Record<string, [LucideIcon, Kind]> = {
+  client: [UserRound, "approve"], registration: [Hash, "approve"], contact_link: [Contact, "approve"], assignment: [UserPlus, "papers"],
+  document: [FileText, "docs"], share: [FileText, "docs"], form: [CalendarCheck, "done"], dataset: [ListChecks, "week"], task: [CalendarCheck, "week"],
+  request: [FilePlus2, "papers"], reminder: [BellRing, "notice"], email: [Mail, "reply"], notice: [Scale, "notice"],
+};
+const DAY = 86_400_000;
 
 // The five tabs. Older addresses (and each save) still arrive with the tab they had before:
 // files, due dates, figures and forms open their tab; the rest open Overview with their panel.
@@ -84,93 +98,94 @@ export default async function Client({ params, searchParams }: { params: Promise
   const page = /^\d{1,6}$/.test(askedPage ?? "") ? Math.max(1,Number(askedPage)) : 1;
   const start = (page-1)*50;
   const today = todayInIndia();
-  const { data: client } = await supabase
-    .from("clients")
-    .select(
-      "id, name, kind, archived_at, email_enc, group_id, branch_id, reminders_paused, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))",
-    )
-    .eq("id", id)
-    .eq("firm_id",membership.firmId)
-    .maybeSingle();
-  if (!client) notFound();
-  const crypto = serverCrypto();
-  const numbers = await Promise.all(
-    client.client_registrations.map(async (registration) => ({
-      ...registration,
-      number: await crypto.decrypt(membership.firmId, `clients/${client.id}/${registration.kind}`, registration.number_enc),
-    })),
-  );
-  const email = client.email_enc ? await crypto.decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc) : "";
-  const contacts = await Promise.all(
-    client.contact_clients.map(async (link) => ({
-      ...link,
-      name: link.contacts ? await crypto.decrypt(membership.firmId, `contacts/${link.contact_id}/name`, link.contacts.name_enc) : "",
-      email: link.contacts ? await crypto.decrypt(membership.firmId, `contacts/${link.contact_id}/email`, link.contacts.email_enc) : "",
-    })),
-  );
-  const manage = canManageClients(membership.role);
+  const firm = membership.firmId;
+  // A personal device allowed away from the office only views.
+  const viewOnly = !!membership.viewOnlyUntil;
+  const canFile = !viewOnly && membership.may("mark_filed", id);
+  const doneIds = markedIds?.split(".").filter((taskId) => uuid.test(taskId)).slice(0, 100) ?? [];
+  // Everything the page reads goes at once. Lists that only one tab shows are read in full on
+  // that tab and only counted on the others; the live email subjects and the activity stream in
+  // below (Suspense), so the page shows without waiting for them.
+  const needFiles = tab === "documents" || tab === "returns" || panel === "activity";
+  const listsMail = tab === "overview" || tab === "emails";
   const mailRange = tab === "emails" ? start : 0;
-  const [{ data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: files }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }] = await Promise.all([
-    supabase.rpc("firm_people", { target_firm: membership.firmId }),
+  const fileQuery = supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at, prepared, email_event_id, registration_id", { count: "exact", head: !needFiles }).eq("client_id", id);
+  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: allFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, found] = await Promise.all([
+    supabase
+      .from("clients")
+      .select(
+        "id, name, kind, archived_at, email_enc, group_id, branch_id, reminders_paused, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))",
+      )
+      .eq("id", id)
+      .eq("firm_id", firm)
+      .maybeSingle(),
+    supabase.rpc("firm_people", { target_firm: firm }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on, client_kinds").eq("period_key", "").order("code"),
-    supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact"}).eq("firm_id",membership.firmId).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
-    supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at, prepared, email_event_id, registration_id").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
-    supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
-    supabase.from("tasks").select("id,due_on,status,details",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
-    supabase.from("tasks").select("id, code, due_on",{count:"exact"}).eq("firm_id",membership.firmId).eq("kind","compliance").eq("client_id",id).neq("status","filed").lt("due_on",today).order("due_on").limit(3),
-    supabase.from("email_events").select("id, contact_id, received_at, label, delivery, provider_message_id, contacts(name_enc)",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).order("received_at",{ascending:false}).order("id").range(mailRange, mailRange + (tab === "emails" ? 49 : 2)),
-    tab === "documents" ? supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",membership.firmId).eq("kind","drive").maybeSingle() : Promise.resolve({ data: null }),
+    supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact", head: sub !== "returns"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
+    needFiles ? fileQuery.order("received_at", { ascending: false }).limit(500) : fileQuery.not("status", "in", "(deleted,earlier)"),
+    supabase.from("requests").select("id, status, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
+    supabase.from("tasks").select("id,due_on,status,details",{count:"exact", head: tab !== "overview" && tab !== "notices"}).eq("firm_id",firm).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
+    supabase.from("tasks").select("id, code, due_on",{count:"exact"}).eq("firm_id",firm).eq("kind","compliance").eq("client_id",id).neq("status","filed").lt("due_on",today).order("due_on").limit(3),
+    supabase.from("email_events").select("id, contact_id, received_at, label, delivery, provider_message_id, contacts(name_enc)",{count:"exact", head: !listsMail}).eq("firm_id",firm).eq("client_id",id).order("received_at",{ascending:false}).order("id").range(mailRange, mailRange + (tab === "emails" ? 49 : 2)),
+    tab === "documents" ? supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",firm).eq("kind","drive").maybeSingle() : Promise.resolve({ data: null }),
+    // The next return still to file from today on, for the header's countdown.
+    supabase.from("tasks").select("code, period_key, due_on").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(1).maybeSingle(),
+    // Whether Returns offers Figures and Prepared forms.
+    tab === "returns" ? supabase.from("documents").select("id",{count:"exact",head:true}).eq("firm_id",firm).eq("client_id",id).not("prepared","is",null).neq("status","deleted") : Promise.resolve({ count: 0 }),
+    tab === "returns" ? supabase.from("datasets").select("form_code",{count:"exact"}).eq("firm_id",firm).eq("client_id",id) : Promise.resolve({ data: [], count: 0 }),
+    // What this person may do here, with any grant or request of theirs still open (5.17.2).
+    supabase.from("requests").select("reason_code, status, details").eq("kind", "permission").eq("client_id", id).eq("details->>by", userId).in("status", ["pending", "approved"]).gt("expires_at", new Date().toISOString()),
+    // Returns tab: the return being marked filed in the side panel, and the ones just changed.
+    tab === "returns" && canFile && uuid.test(marking ?? "") ? supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).eq("id", marking!).neq("status", "filed").maybeSingle() : Promise.resolve({ data: null }),
+    tab === "returns" && taskChanges[marked ?? ""] && doneIds.length ? supabase.from("tasks").select("id, code, period_key").eq("firm_id", firm).eq("client_id", id).in("id", doneIds) : Promise.resolve({ data: null }),
+    // Asking is for the month of the next return due for this client, else last month.
+    ask ? supabase.from("tasks").select("period_key").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(12) : Promise.resolve({ data: [] }),
+    // A search keeps only the files whose words include every word typed.
+    tab === "documents" && find?.trim() ? findDocuments(find, id) : Promise.resolve(null),
   ]);
+  if (!client) notFound();
+  const crypto = serverCrypto();
   // Who confirmed each dated notice, from the firm's activity.
   const dated = tab === "notices" ? (notices ?? []).filter((notice) => (notice.details as unknown as NoticeDetails).action_date).map((notice) => notice.id) : [];
-  const { data: confirms } = dated.length ? await supabaseAdmin().from("activity_log").select("entity_id, action, actor_id").eq("firm_id", membership.firmId).in("entity_id", dated).in("action", confirmAction) : { data: [] };
+  // The portal file each open monthly GSTR-3B is read from (PLAN.md 5.3.1): the month's GSTR-2B.
+  const months = sub === "returns" ? (tasks ?? []).flatMap((task) => (task.code === "GSTR3B_M" && task.status !== "filed" && task.period_key ? [task.period_key] : [])) : [];
+  // The latest open request's upload link, opened with the firm's key for those who may ask,
+  // to copy and send by hand.
+  const openAsk = viewOnly ? undefined : (asks ?? []).filter((request) => request.status === "pending" && (request.details as unknown as DocumentRequest).link_enc).sort((a, b) => (b.expires_at ?? "").localeCompare(a.expires_at ?? ""))[0];
+  // The second and last round: the client's own numbers and contacts opened with the firm's key,
+  // and what the shown lists need from them.
+  const [numbers, email, contacts, { data: confirms }, { data: statements }, uploadLink] = await Promise.all([
+    Promise.all(client.client_registrations.map(async (registration) => ({ ...registration, number: await crypto.decrypt(firm, `clients/${client.id}/${registration.kind}`, registration.number_enc) }))),
+    client.email_enc ? crypto.decrypt(firm, `clients/${client.id}/email`, client.email_enc) : "",
+    Promise.all(
+      client.contact_clients.map(async (link) => ({
+        ...link,
+        name: link.contacts ? await crypto.decrypt(firm, `contacts/${link.contact_id}/name`, link.contacts.name_enc) : "",
+        email: link.contacts ? await crypto.decrypt(firm, `contacts/${link.contact_id}/email`, link.contacts.email_enc) : "",
+      })),
+    ),
+    dated.length ? supabaseAdmin().from("activity_log").select("entity_id, action, actor_id").eq("firm_id", firm).in("entity_id", dated).in("action", confirmAction) : Promise.resolve({ data: [] }),
+    months.length ? supabase.from("documents").select("period_key").eq("client_id", id).eq("document_type", "GSTR-2B").neq("status", "deleted").in("period_key", months) : Promise.resolve({ data: [] }),
+    openAsk && (async () => `${process.env.APP_BASE_URL ?? `${(await headers()).get("x-forwarded-proto") ?? "http"}://${(await headers()).get("host")}`}/u/${await crypto.decrypt(firm, `requests/${openAsk.id}/link`, (openAsk.details as unknown as DocumentRequest).link_enc!)}`)(),
+  ]);
+  const manage = canManageClients(membership.role);
   const confirmedBy = new Map([...confirmers(confirms ?? [])].map(([notice, by]) => [notice, personName(people?.find((person) => person.user_id === by)?.email)]));
-  const {count:outputs}=await supabase.from("documents").select("id",{count:"exact",head:true}).eq("firm_id",membership.firmId).eq("client_id",id).not("prepared","is",null).neq("status","deleted");
-  const {data:draftForms,count:drafts}=await supabase.from("datasets").select("form_code",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id);
-  const activity = panel==="activity" ? await supabase.rpc("client_activity",{target_client:id}) : null;
-  if (activity?.error) throw new Error("Client activity could not be read");
-  const { data: replies } = mails?.length ? await supabase.from("requests").select("entity_id").eq("kind","team_reply").eq("status","pending").in("entity_id",mails.map((mail)=>mail.id)) : { data: [] };
-  const waitingReply = new Set(replies?.map((request) => request.entity_id));
-  const senders = new Map(await Promise.all((mails ?? []).map(async (mail) => [mail.id, mail.contacts ? await crypto.decrypt(membership.firmId, `contacts/${mail.contact_id}/name`, mail.contacts.name_enc) : client.name] as const)));
-  // The subjects of the emails shown, read live in one call as the Inbox does; the label stands
-  // in when the mailbox cannot be read.
-  const live = mails?.length && (tab === "overview" || tab === "emails") ? await mailLive(membership.firmId, "list", { inbox: mails.map((mail) => mail.provider_message_id), sent: null }) : null;
-  const subjects = new Map(live && !("error" in live) ? live.inbox.map((item) => [item.messageId, item.subject]) : []);
   // The lists for the work this client's services need are ticked when asking for files.
   const usualWork = new Set(client.client_registrations.flatMap((registration) => (registration.services ?? []).map(workOfService)));
-  // A search keeps only the files whose words include every word typed.
-  const matching = find?.trim() ? new Set((await findDocuments(find, id)).map((file) => file.id)) : null;
-  const documents = (files ?? []).filter((file) => file.status !== "deleted" && file.status !== "earlier" && (!matching || matching.has(file.id)));
-  const removedFiles = (files ?? []).filter((file) => file.status === "deleted");
+  const matching = found ? new Set(found.map((file) => file.id)) : null;
+  const documents = (allFiles ?? []).filter((file) => file.status !== "deleted" && file.status !== "earlier" && (!matching || matching.has(file.id)));
+  const removedFiles = (allFiles ?? []).filter((file) => file.status === "deleted");
   const owner = membership.role === "owner";
   // Requests stay listed until every file the client sent has been checked.
   const asking = (asks ?? []).filter((request) => ((request.details as unknown as DocumentRequest).items ?? []).some((item) => !item.checked));
   const firmTypes = (membership.settings.document_types ?? []) as string[];
-  // What this person may do here, with any grant or request of theirs still open (5.17.2).
-  const { data: mine } = await supabase
-    .from("requests")
-    .select("reason_code, status, details")
-    .eq("kind", "permission")
-    .eq("client_id", id)
-    .eq("details->>by", userId)
-    .in("status", ["pending", "approved"])
-    .gt("expires_at", new Date().toISOString());
   const open = (right: Right, status: string, documentId?: string) =>
     (mine ?? []).some((request) => request.reason_code === right && request.status === status && (!documentId || (request.details as { document_id?: string }).document_id === documentId));
-  // A personal device allowed away from the office only views.
-  const viewOnly = !!membership.viewOnlyUntil;
   const canRename = !viewOnly && membership.may("rename", id);
   const canUpload = !viewOnly && (membership.may("upload", id) || open("upload", "approved"));
   const canSend = (documentId: string) => !viewOnly && (membership.may("send", id) || open("send", "approved", documentId));
   const canRemove = (documentId: string) => !viewOnly && (owner || open("remove", "approved", documentId));
-  const canFile = !viewOnly && membership.may("mark_filed", id);
-  // Returns tab: the return being marked filed in the side panel, and the ones just changed.
-  const doneIds = markedIds?.split(".").filter((taskId) => uuid.test(taskId)).slice(0, 100) ?? [];
-  const [{ data: filing }, { data: done }] = await Promise.all([
-    tab === "returns" && canFile && uuid.test(marking ?? "") ? supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", membership.firmId).eq("kind", "compliance").eq("client_id", id).eq("id", marking!).neq("status", "filed").maybeSingle() : Promise.resolve({ data: null }),
-    tab === "returns" && taskChanges[marked ?? ""] && doneIds.length ? supabase.from("tasks").select("id, code, period_key").eq("firm_id", membership.firmId).eq("client_id", id).in("id", doneIds) : Promise.resolve({ data: null }),
-  ]);
   const askButton = (right: Right, label: string, documentId?: string) =>
     viewOnly ? null : open(right, "pending", documentId) ? (
       <span className="hint">Asked</span>
@@ -193,8 +208,8 @@ export default async function Client({ params, searchParams }: { params: Promise
   };
   // One paper's panel: correct it, send it, remove it. A send that failed comes back to it.
   const paper = documents.find((file) => file.id === (edit ?? send));
-  const earlier = (files ?? []).filter((file) => paper && file.status === "earlier" && file.document_type === paper.document_type && file.period_key === paper.period_key && file.registration_id === paper.registration_id);
-  const noticeFile = (files ?? []).find((file) => file.id === (renamed ?? saved ?? removed));
+  const earlier = (allFiles ?? []).filter((file) => paper && file.status === "earlier" && file.document_type === paper.document_type && file.period_key === paper.period_key && file.registration_id === paper.registration_id);
+  const noticeFile = (allFiles ?? []).find((file) => file.id === (renamed ?? saved ?? removed));
   const sharedFile = documents.find((file) => file.id === shared);
   const receivers = contacts.filter((contact) => contact.can_receive_documents);
   // Who a filed paper can go to. Sending is its own step that names the paper and the address.
@@ -203,9 +218,6 @@ export default async function Client({ params, searchParams }: { params: Promise
   const confirmSend = !!paper && paper.id === send && sendable && !viewOnly && !ask && canSend(paper.id) && !!recipients.length;
   const order = ((drive?.settings as { folder_order?: FolderOrder } | undefined)?.folder_order ?? "year_client_work") as FolderOrder;
   const rule = new Map(rules?.map((r) => [r.code, r]));
-  // The portal file each open monthly GSTR-3B is read from (PLAN.md 5.3.1): the month's GSTR-2B.
-  const months = sub === "returns" ? (tasks ?? []).flatMap((task) => (task.code === "GSTR3B_M" && task.status !== "filed" && task.period_key ? [task.period_key] : [])) : [];
-  const { data: statements } = months.length ? await supabase.from("documents").select("period_key").eq("client_id", id).eq("document_type", "GSTR-2B").neq("status", "deleted").in("period_key", months) : { data: [] };
   const needs2b = new Set(months.filter((month) => !statements?.some((row) => row.period_key === month)));
   // Services sit on a number: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN.
   // Only those for this kind of client, and any already chosen, are offered.
@@ -224,9 +236,14 @@ export default async function Client({ params, searchParams }: { params: Promise
   const assigned = client.client_assignments.map((a) => ({ ...a, value: a.team_id ? `team:${a.team_id}` : `person:${a.user_id}` }));
   const labelOf = new Map(choices.map((choice) => [choice.value, choice.label]));
   const unassigned = choices.filter((choice) => !assigned.some((a) => a.value === choice.value));
-  const lead = [...client.client_assignments].sort((a, b) => lookAfter.indexOf(a.role) - lookAfter.indexOf(b.role))[0];
-  const leadName = lead ? (lead.team_id ? teams?.find((team) => team.id === lead.team_id)?.name : personName(people?.find((person) => person.user_id === lead.user_id)?.email)) : "";
+  // A team or a person looking after the client, by name.
+  const who = (assignment: { team_id: string | null; user_id: string | null }) =>
+    (assignment.team_id ? teams?.find((team) => team.id === assignment.team_id)?.name : personName(people?.find((person) => person.user_id === assignment.user_id)?.email)) ?? "";
+  const lookers = [...assigned].sort((a, b) => lookAfter.indexOf(a.role) - lookAfter.indexOf(b.role));
   const gstin = numbers.find((registration) => registration.kind === "gstin")?.number;
+  const pan = numbers.find((registration) => registration.kind === "pan")?.number;
+  // "Due in 5 days" for the next return, today counted as 0.
+  const dueIn = nextDue ? Math.round((Date.parse(nextDue.due_on) - Date.parse(today)) / DAY) : 0;
   // With more than one GSTIN, a GST paper and a request for papers name theirs.
   const gstins = numbers.filter((registration) => registration.kind === "gstin");
   const gstinChoice = gstins.length > 1 && (
@@ -250,13 +267,11 @@ export default async function Client({ params, searchParams }: { params: Promise
       {item[0]}
     </label>
   );
-  // Asking is for the month of the next return due for this client, else last month.
-  const { data: due } = ask ? await supabase.from("tasks").select("period_key").eq("firm_id", membership.firmId).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(12) : { data: [] };
   const askPeriod = due?.map((task) => task.period_key).find((key) => periodChoices(today).includes(key ?? "")) ?? periodChoices(today)[1];
   const openNotices = (notices ?? []).filter((notice) => ["upcoming", "in_progress"].includes(notice.status));
   const showExtraction = !!drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name));
   const showOutputs = !!draftForms?.some(row=>["GSTR1","GSTR3B"].includes(row.form_code)) || !!outputs;
-  const counts: Record<Main, number | undefined> = { overview: undefined, emails: mailCount ?? 0, documents: documents.length, returns: show === "filed" ? undefined : taskCount ?? 0, notices: noticeCount ?? 0 };
+  const counts: Record<Main, number | undefined> = { overview: undefined, emails: mailCount ?? 0, documents: needFiles ? documents.length : fileCount ?? 0, returns: show === "filed" ? undefined : taskCount ?? 0, notices: noticeCount ?? 0 };
   const base = `/app/clients/${client.id}`;
   const here = `${base}${tab === "overview" ? "" : `?tab=${tab}`}`;
   // The Returns tab as it is, for the filing panel and each filing form to come back to.
@@ -268,12 +283,14 @@ export default async function Client({ params, searchParams }: { params: Promise
       {page > 1 && <input type="hidden" name="page" value={page} />}
     </>
   );
+  // A page of 50 at a time keeps a busy client's page quick; paging keeps the view's filter.
+  const keep = `${show === "filed" ? "&show=filed" : ""}${find ? `&find=${encodeURIComponent(find)}` : ""}`;
   const pager = (total: number, rows: number, label: string, key: string) => (
     <nav className="pager" aria-label={`${label} pages`}>
       <p>Showing {rows ? (start + 1).toLocaleString("en-IN") : 0} to {rows ? (start + rows).toLocaleString("en-IN") : 0} of {total.toLocaleString("en-IN")} {label.toLowerCase()}</p>
       <span>
-        {page > 1 && <Link className="b b-secondary" href={`?tab=${key}&page=${page - 1}${show === "filed" ? "&show=filed" : ""}`}>Previous</Link>}
-        {start + rows < total && <Link className="b b-secondary" href={`?tab=${key}&page=${page + 1}${show === "filed" ? "&show=filed" : ""}`}>Next</Link>}
+        {page > 1 && <Link className="b b-secondary" href={`?tab=${key}&page=${page - 1}${keep}`}>Previous</Link>}
+        {start + rows < total && <Link className="b b-secondary" href={`?tab=${key}&page=${page + 1}${keep}`}>Next</Link>}
       </span>
     </nav>
   );
@@ -290,188 +307,275 @@ export default async function Client({ params, searchParams }: { params: Promise
       {errors[error]}
     </p>
   );
-  const mailState = (mail: NonNullable<typeof mails>[number]) =>
-    waitingReply.has(mail.id) ? <Badge tone="warn">Needs a reply</Badge> : (mail.delivery as { ack?: string }).ack === "sent" ? <Badge tone="done">Replied</Badge> : null;
-  const mailRow = (mail: NonNullable<typeof mails>[number]) => (
-    <li key={mail.id}>
-      <span className="dir">In</span>
-      <Link className="grow" href={`/app/inbox?mail=${mail.id}`}>
-        <span className="name">{subjects.get(mail.provider_message_id) || (labels[mail.label as Label] ?? "Email")}</span>
-        <span className="sub">From {senders.get(mail.id)}, {mailTime(mail.received_at)}</span>
-      </Link>
-      {mailState(mail)}
-    </li>
+  // The emails stream in once the mailbox has given their subjects; their outline shows first.
+  const mailList = (className: string) =>
+    mails?.length ? (
+      <Suspense fallback={<SkeletonRows rows={mails.length} />}>
+        <MailRows firm={firm} clientName={client.name} mails={mails} className={className} />
+      </Suspense>
+    ) : null;
+  // A number with its own Copy button, as the header and the Registrations card show it.
+  const idNumber = (kind: string, number: string) => (
+    <span className="client-id">
+      <span className="num">{number}</span>
+      <CopyButton text={number} label={kind} />
+    </span>
   );
+  const lateTotal = lateCount ?? 0;
+  const undated = openNotices.filter((notice) => !(notice.details as unknown as NoticeDetails).action_date);
+  const attention = Math.min(lateTotal, 3) + (lateTotal > 3 ? 1 : 0) + asking.length + undated.length;
 
   return (
-    <div className="fill clients-page">
-      <PageHead
-        crumb={
-          <Link className="b b-secondary client-back" href="/app/clients">
+    <div className="fill clients-page client-record">
+      {/* The record's own header, in the page: big avatar, name, numbers, who looks after it,
+          what is due next, then the quick actions. */}
+      <header className="page-head client-head">
+        <div>
+          <Link className="crumb" href="/app/clients">
+            <ArrowLeft size={14} aria-hidden />
             All clients
           </Link>
-        }
-        title={
-          <>
-            {client.name} {client.archived_at && <Badge>Archived</Badge>}
-          </>
-        }
-        sub={
-          <span className="client-meta">
-            {[gstin && <span key="gstin" className="num">{gstin}</span>, leadName && `looked after by ${leadName}`, (contacts[0]?.name || email) && `contact ${contacts[0]?.name || email}`]
-              .filter(Boolean)
-              .flatMap((part, at) => (at ? [", ", part] : [part]))}
-            {!gstin && !leadName && !contacts.length && !email && clientKinds[client.kind as ClientKind]}
-          </span>
-        }
-        actions={
-          <>
-            {!viewOnly && (
-              <Link className="b b-secondary" href={`${here}${here.includes("?") ? "&" : "?"}ask=1`} scroll={false}>
-                Ask for papers
-              </Link>
-            )}
-            {(email || contacts.length > 0) && !client.archived_at && (
-              <Link className="b b-primary" href={`/app/inbox?compose=${client.id}`}>
-                Write to client
-              </Link>
-            )}
-          </>
-        }
-      />
+          <div className="client-who">
+            <Avatar name={client.name} square big />
+            <div>
+              <h1>{client.name}</h1>
+              <div className="client-meta">
+                <Badge plain>{clientKinds[client.kind as ClientKind]}</Badge>
+                {client.archived_at && <Badge>Archived</Badge>}
+                {gstin && (
+                  <span className="client-id">
+                    <span className="client-id-kind">GSTIN</span>
+                    {idNumber("GSTIN", gstin)}
+                    {gstins.length > 1 && <span className="hint">and {gstins.length - 1} more</span>}
+                  </span>
+                )}
+                {pan && (
+                  <span className="client-id">
+                    <span className="client-id-kind">PAN</span>
+                    {idNumber("PAN", pan)}
+                  </span>
+                )}
+                <span className="client-team">
+                  {lookers.length ? (
+                    <>
+                      <span className="avatar-stack">
+                        {lookers.slice(0, 3).map((assignment) => <Avatar key={assignment.value} name={who(assignment)} square={!!assignment.team_id} />)}
+                      </span>
+                      Looked after by {who(lookers[0])}
+                      {lookers.length > 1 && ` and ${lookers.length - 1} more`}
+                    </>
+                  ) : (
+                    "Nobody looks after this client yet"
+                  )}
+                </span>
+              </div>
+              {(!!lateTotal || nextDue) && !client.archived_at && (
+                <div className="client-due">
+                  {!!lateTotal && (
+                    <Link className="badge late" href={`${base}?tab=returns`}>
+                      {lateTotal} {lateTotal === 1 ? "return" : "returns"} late
+                    </Link>
+                  )}
+                  {nextDue && (
+                    <Link className={`badge plain ${dueIn <= 3 ? "warn" : "blue"}`} href={`${base}?tab=returns`}>
+                      <CalendarClock size={13} aria-hidden />
+                      Next due: {rule.get(nextDue.code ?? "")?.name ?? nextDue.code} {periodLabel(rule.get(nextDue.code ?? "")?.frequency ?? null, nextDue.period_key)}, {dueIn === 0 ? "today" : dueIn === 1 ? "tomorrow" : `in ${dueIn} days`}
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="page-actions">
+          {!viewOnly && (
+            <Link className="b b-secondary" href={`${here}${here.includes("?") ? "&" : "?"}ask=1`} scroll={false}>
+              <FilePlus2 size={15} aria-hidden />
+              Ask for papers
+            </Link>
+          )}
+          {canUpload && (
+            <Link className="b b-secondary" href={`${base}?tab=documents&upload=1`} scroll={false}>
+              <FileUp size={15} aria-hidden />
+              Upload papers
+            </Link>
+          )}
+          {/* The shared Copy button, given its words by clients.css. */}
+          {uploadLink && (
+            <span className="copy-words">
+              <CopyButton text={uploadLink} label="Upload link" />
+            </span>
+          )}
+          {!viewOnly && (
+            <Link className="b b-secondary" href={`${base}?tab=notice`} scroll={false}>
+              <Scale size={15} aria-hidden />
+              Add a notice
+            </Link>
+          )}
+          {(email || contacts.length > 0) && !client.archived_at && (
+            <Link className="b b-primary" href={`/app/inbox?compose=${client.id}`}>
+              <Mail size={15} aria-hidden />
+              Write to client
+            </Link>
+          )}
+        </div>
+      </header>
       <LinkTabs label="Client" items={(Object.keys(mains) as Main[]).map((key) => ({ href: `${base}${key === "overview" ? "" : `?tab=${key}`}`, label: mains[key], count: counts[key], current: tab === key }))} />
 
-      <div key={sub} className="pane pane-in client-pane">
+      <ViewTransition key={sub} enter="tab-in" exit="tab-out" default="none">
+      <div className="pane client-pane">
         {!panel && !docPanel && alert}
 
         {tab === "overview" && (
           <div className="client-grid">
             <div className="client-col">
-            <section className="client-card" aria-labelledby="attention">
-              <div className="client-card-head"><h2 id="attention">Needs attention</h2></div>
-              <ul className="client-rows">
-                {late?.map((task) => (
-                  <li key={task.id}>
-                    <span className="grow"><span className="name">{rule.get(task.code ?? "")?.name ?? task.code} is late</span><span className="sub">Was due {dueLabel(task.due_on)}</span></span>
-                    <Badge tone="late">Late</Badge>
-                  </li>
-                ))}
-                {(lateCount ?? 0) > 3 && <li><Link className="grow" href={`${base}?tab=returns`}><span className="name">{(lateCount ?? 0) - 3} more late returns</span></Link></li>}
-                {asking.map((request) => {
-                  const details = request.details as unknown as DocumentRequest;
-                  return (
-                    <li key={request.id}>
-                      <span className="grow"><span className="name">{details.items.map((item) => item.type).join(", ")}</span><span className="sub">{details.items.filter((item) => item.received.length).length} of {details.items.length} received</span></span>
-                      <Badge tone="warn">Asked</Badge>
-                    </li>
-                  );
-                })}
-                {openNotices.filter((notice) => !(notice.details as unknown as NoticeDetails).action_date).map((notice) => (
-                  <li key={notice.id}>
-                    <span className="grow"><span className="name">{(notice.details as unknown as NoticeDetails).notice_type}</span><span className="sub">Check the action date by {dueLabel(notice.due_on)}</span></span>
-                    <Badge tone="warn">Notice</Badge>
-                  </li>
-                ))}
-              </ul>
-              {!late?.length && !asking.length && !openNotices.some((notice) => !(notice.details as unknown as NoticeDetails).action_date) && <p className="hint">Nothing needs you for this client today.</p>}
-            </section>
-            <section className="client-card" aria-labelledby="latest-mail">
-              <div className="client-card-head"><h2 id="latest-mail">Latest emails</h2>{!!mails?.length && <Link className="b b-ghost" href={`${base}?tab=emails`}>All emails</Link>}</div>
-              <ul className="client-rows">{mails?.map((mail) => mailRow(mail))}</ul>
-              {!mails?.length && <p className="hint">No email from this client yet. Emails from the client&apos;s address and its contacts show here.</p>}
-            </section>
-            {numbers.some((registration) => servicesFor(registration).length) && (
-              <section className="client-card" aria-labelledby="services-card">
-                <div className="client-card-head"><h2 id="services-card">Services</h2>{manage && <Link className="b b-ghost" href={`${base}?tab=services`} scroll={false}>Change services</Link>}</div>
-                <ul className="client-rows">
-                  {numbers.filter((registration) => servicesFor(registration).length).map((registration) => (
-                    <li key={registration.id}>
-                      <span className="grow"><span className="name">{numberKinds[registration.kind as NumberKind].name}</span><span className="sub">{registration.services.map((code) => rule.get(code)?.name ?? code).join(", ") || "None chosen yet"}</span></span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
+              <Card id="attention" title="Needs attention" Icon={TriangleAlert} kind="notice" count={attention} countTone="late">
+                {attention ? (
+                  <ul className="app-rows stagger">
+                    {late?.map((task) => (
+                      <Row
+                        key={task.id}
+                        lead={<IconTile Icon={AlarmClock} kind="late" />}
+                        title={`${rule.get(task.code ?? "")?.name ?? task.code} is late`}
+                        meta={`Was due ${dueLabel(task.due_on)}`}
+                        status={<Badge tone="late">Late</Badge>}
+                        action={
+                          canFile && (
+                            <Link className="b b-secondary" href={`${base}?tab=returns&task=${task.id}`} scroll={false}>
+                              Mark filed
+                            </Link>
+                          )
+                        }
+                      />
+                    ))}
+                    {lateTotal > 3 && (
+                      <Row
+                        lead={<IconTile Icon={AlarmClock} kind="late" />}
+                        title={`${lateTotal - 3} more late returns`}
+                        action={
+                          <Link className="b b-ghost" href={`${base}?tab=returns`}>
+                            See returns
+                          </Link>
+                        }
+                      />
+                    )}
+                    {asking.map((request) => {
+                      const details = request.details as unknown as DocumentRequest;
+                      return (
+                        <Row
+                          key={request.id}
+                          lead={<IconTile Icon={FileClock} kind="papers" />}
+                          title={details.items.map((item) => item.type).join(", ")}
+                          meta={`${details.items.filter((item) => item.received.length).length} of ${details.items.length} received`}
+                          status={<Badge tone="warn">Asked</Badge>}
+                        />
+                      );
+                    })}
+                    {undated.map((notice) => (
+                      <Row
+                        key={notice.id}
+                        lead={<IconTile Icon={Scale} kind="notice" />}
+                        title={(notice.details as unknown as NoticeDetails).notice_type}
+                        meta={`Check the action date by ${dueLabel(notice.due_on)}`}
+                        status={<Badge tone="warn">Notice</Badge>}
+                        action={
+                          <Link className="b b-ghost" href={`${base}?tab=notices`}>
+                            Open
+                          </Link>
+                        }
+                      />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="app-card-none">Nothing needs you for this client today.</p>
+                )}
+              </Card>
+              <Card id="latest-mail" title="Latest emails" Icon={Mail} kind="reply" end={!!mails?.length && <Link className="b b-ghost" href={`${base}?tab=emails`}>All emails</Link>}>
+                {mailList("app-rows client-mails") ?? <p className="app-card-none">No email from this client yet. Emails from the client&apos;s address and its contacts show here.</p>}
+              </Card>
+              {numbers.some((registration) => servicesFor(registration).length) && (
+                <Card id="services-card" title="Services" Icon={ListChecks} kind="week" end={manage && <Link className="b b-ghost" href={`${base}?tab=services`} scroll={false}>Change services</Link>}>
+                  <ul className="app-rows">
+                    {numbers.filter((registration) => servicesFor(registration).length).map((registration) => (
+                      <Row key={registration.id} title={numberKinds[registration.kind as NumberKind].name} meta={registration.services.map((code) => rule.get(code)?.name ?? code).join(", ") || "None chosen yet"} />
+                    ))}
+                  </ul>
+                </Card>
+              )}
             </div>
             <div className="client-col">
-            <section className="client-card" aria-labelledby="numbers">
-              <div className="client-card-head"><h2 id="numbers">Registrations</h2>{manage && <Link className="b b-ghost" href={`${base}?tab=numbers`} scroll={false}>Change numbers</Link>}</div>
-              <ul className="client-rows">
-                {numbers.map((registration) => (
-                  <li key={registration.id}>
-                    <span className="grow name">{numberKinds[registration.kind as NumberKind].name}</span>
-                    <span className="num">{registration.number}</span>
-                  </li>
-                ))}
-              </ul>
-              {!numbers.length && <p className="hint">No numbers yet. A PAN or GSTIN helps InboxCA recognise the client&apos;s papers.</p>}
-            </section>
-            <section className="client-card" aria-labelledby="contacts-card">
-              <div className="client-card-head"><h2 id="contacts-card">Contacts</h2>{manage && <Link className="b b-ghost" href={`${base}?tab=contacts`} scroll={false}>Change contacts</Link>}</div>
-              <ul className="client-rows">
-                {contacts.map((contact) => (
-                  <li key={contact.contact_id}>
-                    <span className="grow"><span className="name">{contact.name}</span><span className="sub">{[contact.email, contact.relation].filter(Boolean).join(", ")}</span></span>
-                  </li>
-                ))}
-              </ul>
-              {!contacts.length && <p className="hint">No contact people yet.</p>}
-            </section>
-            <section className="client-card" aria-labelledby="team-card">
-              <div className="client-card-head"><h2 id="team-card">Looked after by</h2>{manage && <Link className="b b-ghost" href={`${base}?tab=team`} scroll={false}>Change people</Link>}</div>
-              <ul className="client-rows">
-                {assigned.map((assignment) => (
-                  <li key={assignment.value}>
-                    <span className="grow name">{labelOf.get(assignment.value)}</span>
-                    <span className="hint">{assignmentRoles[assignment.role as keyof typeof assignmentRoles]}</span>
-                  </li>
-                ))}
-              </ul>
-              {!assigned.length && <p className="hint">Nobody is assigned yet.</p>}
-            </section>
-            <section className="client-card" aria-labelledby="details-card">
-              <div className="client-card-head"><h2 id="details-card">Details</h2>{manage && <Link className="b b-ghost" href={`${base}?tab=details`} scroll={false}>Edit details</Link>}</div>
-              <ul className="client-rows">
-                <li><span className="grow hint">Kind</span>{clientKinds[client.kind as ClientKind]}</li>
-                <li><span className="grow hint">Email</span>{email || <span className="hint">None yet</span>}</li>
-                <li><span className="grow hint">Group</span>{groupName ? <Link href={`/app/clients?group=${client.group_id}`}>{groupName}</Link> : <span className="hint">None</span>}</li>
-                {!!branches.length && <li><span className="grow hint">Branch</span>{branchName ? <Link href={`/app/clients?branch=${client.branch_id}`}>{branchName}</Link> : <span className="hint">None</span>}</li>}
-                <li><span className="grow hint">Reminders</span>{client.reminders_paused ? "Paused" : "On"}</li>
-                <li><span className="grow hint">Changes</span><Link href={`${base}?tab=activity`} scroll={false}>Activity</Link></li>
-              </ul>
-            </section>
+              <Card id="details-card" title="Details" Icon={Info} end={manage && <Link className="b b-ghost" href={`${base}?tab=details`} scroll={false}>Edit details</Link>}>
+                <dl className="props client-props">
+                  <div><dt>Kind</dt><dd>{clientKinds[client.kind as ClientKind]}</dd></div>
+                  <div><dt>Email</dt><dd>{email || <span className="hint">None yet</span>}</dd></div>
+                  <div><dt>Group</dt><dd>{groupName ? <Link href={`/app/clients?group=${client.group_id}`}>{groupName}</Link> : <span className="hint">None</span>}</dd></div>
+                  {!!branches.length && <div><dt>Branch</dt><dd>{branchName ? <Link href={`/app/clients?branch=${client.branch_id}`}>{branchName}</Link> : <span className="hint">None</span>}</dd></div>}
+                  <div><dt>Reminders</dt><dd>{client.reminders_paused ? <Badge tone="warn">Paused</Badge> : <Badge tone="done">On</Badge>}</dd></div>
+                  <div><dt>Changes</dt><dd><Link href={`${base}?tab=activity`} scroll={false}>Activity</Link></dd></div>
+                </dl>
+              </Card>
+              <Card id="numbers" title="Registrations" Icon={Hash} kind="docs" end={manage && <Link className="b b-ghost" href={`${base}?tab=numbers`} scroll={false}>Change numbers</Link>}>
+                {numbers.length ? (
+                  <ul className="app-rows">
+                    {numbers.map((registration) => {
+                      const name = numberKinds[registration.kind as NumberKind].name;
+                      return <Row key={registration.id} title={name} status={idNumber(name, registration.number)} />;
+                    })}
+                  </ul>
+                ) : (
+                  <p className="app-card-none">No numbers yet. A PAN or GSTIN helps InboxCA recognise the client&apos;s papers.</p>
+                )}
+              </Card>
+              <Card id="contacts-card" title="Contacts" Icon={Contact} kind="approve" end={manage && <Link className="b b-ghost" href={`${base}?tab=contacts`} scroll={false}>Change contacts</Link>}>
+                {contacts.length ? (
+                  <ul className="app-rows">
+                    {contacts.map((contact) => (
+                      <Row key={contact.contact_id} lead={<Avatar name={contact.name} />} title={contact.name} meta={[contact.email, contact.relation].filter(Boolean).join(", ")} />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="app-card-none">No contact people yet.</p>
+                )}
+              </Card>
+              <Card id="team-card" title="Looked after by" Icon={UsersRound} kind="papers" end={manage && <Link className="b b-ghost" href={`${base}?tab=team`} scroll={false}>Change people</Link>}>
+                {lookers.length ? (
+                  <ul className="app-rows">
+                    {lookers.map((assignment) => (
+                      <Row key={assignment.value} lead={<Avatar name={who(assignment)} square={!!assignment.team_id} />} title={who(assignment)} meta={assignmentRoles[assignment.role as keyof typeof assignmentRoles]} />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="app-card-none">Nobody is assigned yet.</p>
+                )}
+              </Card>
             </div>
           </div>
         )}
 
         {tab === "emails" && (
-          <section className="client-card" aria-labelledby="client-mail">
-            <h2 id="client-mail" className="sr-only">Emails</h2>
-            {mails?.length ? <ul className="client-rows client-mails">{mails.map((mail) => mailRow(mail))}</ul> : (
-              <Empty Icon={FileText} title="No email from this client yet">
+          <Card id="client-mail" title="Emails" Icon={Mail} kind="reply" count={mailCount ?? 0}>
+            {mailList("app-rows client-mails stagger") ?? (
+              <Empty Icon={Mail} kind="reply" title="No email from this client yet">
                 <span>Emails from the client&apos;s address and its contact people show here once the firm&apos;s email is connected.</span>
               </Empty>
             )}
-            {(mailCount ?? 0) > 50 && pager(mailCount ?? 0, mails?.length ?? 0, "Emails", "emails")}
-          </section>
+            {(mailCount ?? 0) > 50 && <div className="app-card-foot">{pager(mailCount ?? 0, mails?.length ?? 0, "Emails", "emails")}</div>}
+          </Card>
         )}
 
         {tab === "documents" && (
           <>
             <div className="client-tools">
-              <form role="search">
+              <form role="search" className="clients-find">
                 <input type="hidden" name="tab" value="documents" />
-                <input name="find" defaultValue={find} placeholder="Find a paper by a word in it or its name" aria-label="Find a file" />
+                <span className="search">
+                  <Search size={16} aria-hidden />
+                  <input name="find" type="search" defaultValue={find} placeholder="Find a paper by a word in it or its name" aria-label="Find a file" />
+                </span>
                 <button className="b b-secondary" type="submit">Find</button>
                 {find && <Link className="b b-ghost" href={`${base}?tab=documents`}>Show all</Link>}
               </form>
-              <span className="page-actions">
-                {canUpload ? (
-                  <Link className="b b-secondary" href={`${base}?tab=documents&upload=1`} scroll={false}>Upload papers</Link>
-                ) : (
-                  askButton("upload", "Ask to upload")
-                )}
-              </span>
+              {!canUpload && <span className="page-actions">{askButton("upload", "Ask to upload")}</span>}
             </div>
             <DroppedNotice value={dropped} />
             {askedRight && <Toast>Asked. Your manager or the owner answers in their Inbox; the button appears here once it is allowed, for one use within an hour.</Toast>}
@@ -502,44 +606,43 @@ export default async function Client({ params, searchParams }: { params: Promise
               </Toast>
             )}
             {!!asking.length && (
-              <ul className="client-card client-rows asks" aria-label="Files asked for">
-                {asking.map((request) => {
-                  const details = request.details as unknown as DocumentRequest;
-                  const got = details.items.filter((item) => item.received.length).length;
-                  return (
-                    <li key={request.id}>
-                      <span className="grow">
-                        <span className="name">
-                          Asked for {details.items.map((item) => item.type).join(", ")}
-                          {details.period && ` for ${periodName(details.period)}`}
-                        </span>
-                        <span className="sub">
-                          {got} of {details.items.length} received. The link works until {dueLabel(request.expires_at!.slice(0, 10))}.
-                        </span>
-                      </span>
-                      {!viewOnly && (
-                        <span className="cell-form">
-                          {details.items.map((item, at) =>
-                            item.received.length && !item.checked ? (
-                              <form key={at} action={checkRequestItem} className="cell-form">
-                                <input type="hidden" name="request" value={request.id} />
-                                <input type="hidden" name="item" value={at} />
-                                <span className="hint">{item.type}</span>
-                                <button className="b b-secondary" name="intent" value="checked" aria-label={`${item.type} is right`}>
-                                  Checked
-                                </button>
-                                <button className="b b-ghost" name="intent" value="again" aria-label={`Ask again for ${item.type}`}>
-                                  Ask again
-                                </button>
-                              </form>
-                            ) : null,
-                          )}
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+              <Card id="asks" title="Papers asked for" Icon={FileClock} kind="papers" count={asking.length} countTone="warn">
+                <ul className="app-rows" aria-label="Files asked for">
+                  {asking.map((request) => {
+                    const details = request.details as unknown as DocumentRequest;
+                    const got = details.items.filter((item) => item.received.length).length;
+                    return (
+                      <Row
+                        key={request.id}
+                        title={`Asked for ${details.items.map((item) => item.type).join(", ")}${details.period ? ` for ${periodName(details.period)}` : ""}`}
+                        meta={`${got} of ${details.items.length} received. The link works until ${dueLabel(request.expires_at!.slice(0, 10))}.`}
+                        status={<Badge tone={got === details.items.length ? "done" : "warn"}>{got} of {details.items.length}</Badge>}
+                        action={
+                          !viewOnly && (
+                            <span className="cell-form">
+                              {details.items.map((item, at) =>
+                                item.received.length && !item.checked ? (
+                                  <form key={at} action={checkRequestItem} className="cell-form">
+                                    <input type="hidden" name="request" value={request.id} />
+                                    <input type="hidden" name="item" value={at} />
+                                    <span className="hint">{item.type}</span>
+                                    <button className="b b-secondary" name="intent" value="checked" aria-label={`${item.type} is right`}>
+                                      Checked
+                                    </button>
+                                    <button className="b b-ghost" name="intent" value="again" aria-label={`Ask again for ${item.type}`}>
+                                      Ask again
+                                    </button>
+                                  </form>
+                                ) : null,
+                              )}
+                            </span>
+                          )
+                        }
+                      />
+                    );
+                  })}
+                </ul>
+              </Card>
             )}
             <section className="client-docs" aria-labelledby="files">
               <h2 id="files" className="sr-only">Papers</h2>
@@ -556,59 +659,77 @@ export default async function Client({ params, searchParams }: { params: Promise
                         <th scope="col" className="shrink"><span className="sr-only">Actions</span></th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {documents.map((document) => (
-                        <tr key={document.id}>
-                          <td>
-                            <Link className="row-link" href={`/app/files/${document.id}/view`}>
-                              {document.name}
-                            </Link>
-                            <span className="sub num">
-                              {document.status === "to_check" && sameAs(document) ? sameAs(document) : folderFor(order, client.name, { work: document.work_type as WorkType, period: document.period_key, receivedAt: document.received_at, toCheck: document.status === "to_check" }).join(" / ")}
-                            </span>
-                          </td>
-                          <td>{document.document_type}</td>
-                          <td>{periodName(document.period_key) || <span className="hint">None</span>}</td>
-                          <td className="hint">{document.prepared ? "Prepared here" : document.email_event_id ? "Email" : "Added"}, {receivedLabel(document.received_at)}</td>
-                          <td>
-                            <Badge tone={document.status === "to_check" ? "warn" : document.status === "missing" ? "late" : "done"}>
-                              {document.status === "to_check" ? "To check" : document.status === "missing" ? "Missing in the drive" : "Filed"}
-                            </Badge>
-                          </td>
-                          <td className="shrink">
-                            {!viewOnly && (
-                              <Link className="b b-secondary" href={`${base}?tab=documents&edit=${document.id}`} scroll={false} aria-label={`${document.status === "to_check" ? "Check" : "Open"} ${document.name}`}>
-                                {document.status === "to_check" ? "Check" : "Open"}
-                              </Link>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                    <tbody className="stagger">
+                      {documents.slice(start, start + 50).map((document) => {
+                        const twin = document.status === "to_check" && sameAs(document);
+                        const path = folderFor(order, client.name, { work: document.work_type as WorkType, period: document.period_key, receivedAt: document.received_at, toCheck: document.status === "to_check" }).join(" / ");
+                        return (
+                          <tr key={document.id}>
+                            <td>
+                              <span className="who">
+                                <IconTile Icon={fileIcon(document.name)} kind="docs" />
+                                <span className="client-paper">
+                                  <Link className="row-link" href={`/app/files/${document.id}/view`}>
+                                    {document.name}
+                                  </Link>
+                                  <span className="sub num">
+                                    {twin || (
+                                      <>
+                                        {path}
+                                        <CopyButton text={path} label="Drive folder" />
+                                      </>
+                                    )}
+                                  </span>
+                                </span>
+                              </span>
+                            </td>
+                            <td>{document.document_type}</td>
+                            <td>{periodName(document.period_key) || <span className="hint">None</span>}</td>
+                            <td className="hint">{document.prepared ? "Prepared here" : document.email_event_id ? "Email" : "Added"}, {receivedLabel(document.received_at)}</td>
+                            <td>
+                              <Badge tone={document.status === "to_check" ? "warn" : document.status === "missing" ? "late" : "done"}>
+                                {document.status === "to_check" ? "To check" : document.status === "missing" ? "Missing in the drive" : "Filed"}
+                              </Badge>
+                            </td>
+                            <td className="shrink">
+                              {!viewOnly && (
+                                <Link className="b b-secondary" href={`${base}?tab=documents&edit=${document.id}`} scroll={false} aria-label={`${document.status === "to_check" ? "Check" : "Open"} ${document.name}`}>
+                                  {document.status === "to_check" ? "Check" : "Open"}
+                                </Link>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <Empty Icon={FileText} title="No papers yet">
-                  <span>Attachments this client emails are saved here, in your firm&apos;s drive. You can also ask the client for them.</span>
-                  {!viewOnly && <Link className="b b-primary" href={`${base}?tab=documents&ask=1`} scroll={false}>Ask for papers</Link>}
+                <Empty Icon={FileText} kind="docs" title={find ? "No paper matches" : "No papers yet"}>
+                  <span>{find ? "Try another word, or show all papers." : "Attachments this client emails are saved here, in your firm's drive. You can also ask the client for them."}</span>
+                  {!find && !viewOnly && <Link className="b b-primary" href={`${base}?tab=documents&ask=1`} scroll={false}>Ask for papers</Link>}
                 </Empty>
               )}
             </section>
+            {documents.length > 50 && pager(documents.length, documents.slice(start, start + 50).length, "Papers", "documents")}
             {owner && !!removedFiles.length && (
-              <section className="client-card removed-files" aria-labelledby="removed">
-                <div className="client-card-head"><h2 id="removed">Removed in the last 30 days</h2></div>
-                <ul className="client-rows">
+              <Card id="removed" title="Removed in the last 30 days" Icon={Trash2} count={removedFiles.length}>
+                <ul className="app-rows">
                   {removedFiles.map((document) => (
-                    <li key={document.id}>
-                      <span className="grow name">{document.name}</span>
-                      <form action={removeDocument}>
-                        <input type="hidden" name="document" value={document.id} />
-                        <button className="b b-secondary" name="intent" value="restore">Put back</button>
-                      </form>
-                    </li>
+                    <Row
+                      key={document.id}
+                      lead={<IconTile Icon={fileIcon(document.name)} />}
+                      title={document.name}
+                      action={
+                        <form action={removeDocument}>
+                          <input type="hidden" name="document" value={document.id} />
+                          <button className="b b-secondary" name="intent" value="restore">Put back</button>
+                        </form>
+                      }
+                    />
                   ))}
                 </ul>
-              </section>
+              </Card>
             )}
           </>
         )}
@@ -619,51 +740,65 @@ export default async function Client({ params, searchParams }: { params: Promise
         {sub === "returns" && (
           <>
             <DroppedNotice value={dropped} />
-            <p className="client-tools hint">
-              <span>{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "Dates marked * are not yet confirmed by a CA against the official notification." : ""}</span>
-              <Link href={`?tab=returns${show==="filed" ? "" : "&show=filed"}`}>{show==="filed" ? "Show returns still to file" : "Show filed returns"}</Link>
-            </p>
-            <section className="client-card" aria-labelledby="due">
-              <h2 id="due" className="sr-only">Returns</h2>
+            <Card
+              id="due"
+              title={show === "filed" ? "Filed returns" : "Returns to file"}
+              Icon={CalendarDays}
+              kind="week"
+              count={taskCount ?? 0}
+              end={<Link className="b b-ghost" href={`?tab=returns${show==="filed" ? "" : "&show=filed"}`}>{show==="filed" ? "Show returns still to file" : "Show filed returns"}</Link>}
+            >
               {tasks?.length ? (
-                <ul className="client-rows">
+                <ul className="app-rows stagger">
                   {tasks.map((task) => {
                     const r = rule.get(task.code ?? "");
                     const overdue = task.status !== "filed" && task.due_on < today;
                     const note = reminderNote(task.details as { reminded?: string[]; skipped?: { reason: string } });
                     const filed = task.details as { filed_on?: string; by?: string; ack?: string };
                     const title = `${r?.name} ${periodLabel(r?.frequency ?? null, task.period_key)}`;
+                    const [day, month] = dueLabel(task.due_on).split(" ");
                     return (
-                      <li key={task.id}>
-                        <span className="grow">
-                          <span className="name">{title}</span>
-                          <span className="sub">
-                            {task.status === "filed"
-                              ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span></>}</>
-                              : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}</>}
+                      <Row
+                        key={task.id}
+                        lead={
+                          <span className={`today-date${overdue ? " is-late" : ""}`} aria-hidden>
+                            <span>{month}</span>
+                            <strong>{day}</strong>
                           </span>
-                        </span>
-                        <Badge tone={task.status === "filed" ? "done" : overdue ? "late" : task.status === "in_progress" ? "blue" : ""}>
-                          {overdue ? "Late" : taskStatuses[task.status as keyof typeof taskStatuses]}
-                        </Badge>
-                        {canFile && task.status !== "filed" && task.due_on <= addDays(today, 30) && (
-                          <Link className="b b-secondary" href={`${returnsHref}&task=${task.id}`} scroll={false} aria-label={`Mark ${title} filed`}>Mark filed</Link>
-                        )}
-                        {canFile && task.status === "filed" && (
-                          <form action={manageTasks}>
-                            {returnsState}
-                            <input type="hidden" name="task" value={task.id} />
-                            <button className="b b-secondary" name="intent" value="reopen" aria-label={`${title} was not filed after all`}>Not filed after all</button>
-                          </form>
-                        )}
-                      </li>
+                        }
+                        title={title}
+                        meta={
+                          task.status === "filed"
+                            ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}</>
+                            : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}</>
+                        }
+                        status={
+                          <Badge tone={task.status === "filed" ? "done" : overdue ? "late" : task.status === "in_progress" ? "blue" : ""}>
+                            {overdue ? "Late" : taskStatuses[task.status as keyof typeof taskStatuses]}
+                          </Badge>
+                        }
+                        action={
+                          canFile && task.status !== "filed" ? (
+                            task.due_on <= addDays(today, 30) && <Link className="b b-secondary" href={`${returnsHref}&task=${task.id}`} scroll={false} aria-label={`Mark ${title} filed`}>Mark filed</Link>
+                          ) : (
+                            canFile && (
+                              <form action={manageTasks}>
+                                {returnsState}
+                                <input type="hidden" name="task" value={task.id} />
+                                <button className="b b-secondary" name="intent" value="reopen" aria-label={`${title} was not filed after all`}>Not filed after all</button>
+                              </form>
+                            )
+                          )
+                        }
+                      />
                     );
                   })}
                 </ul>
               ) : (
-                <p className="hint client-empty">{show==="filed" ? "No filed returns on this page." : "No returns due. Add a number and choose its services on Overview."}</p>
+                <p className="app-card-none">{show==="filed" ? "No filed returns on this page." : "No returns due. Add a number and choose its services on Overview."}</p>
               )}
-            </section>
+              {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="app-card-foot hint">Dates marked * are not yet confirmed by a CA against the official notification.</p>}
+            </Card>
             {!!needs2b.size && membership.may("portal_files", client.id) && <PortalDrop clientId={client.id} back="returns" />}
             {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns","returns")}
           </>
@@ -673,21 +808,27 @@ export default async function Client({ params, searchParams }: { params: Promise
 
         {tab === "notices" && (
           <>
-            <div className="client-tools">
-              <p className="hint">Check a suggested date against the notice before confirming it. <Link href="/app/notices">All notices</Link></p>
-              {!viewOnly && <Link className="b b-secondary" href={`${base}?tab=notice`} scroll={false}>Add a notice</Link>}
-            </div>
+            <p className="client-tools hint">
+              <span>Check a suggested date against the notice before confirming it.</span>
+              <Link href="/app/notices">All notices</Link>
+            </p>
             <section aria-labelledby="client-notices">
               <h2 id="client-notices" className="sr-only">Notices</h2>
               {notices?.length ? (
                 <div className="clients-table">
                   <table className="t">
                     <thead><tr><th scope="col">Notice</th><th scope="col">Received</th><th scope="col">Action date</th><th scope="col">Status</th></tr></thead>
-                    <tbody>{notices.map((notice) => {
+                    <tbody className="stagger">{notices.map((notice) => {
                       const details = notice.details as unknown as NoticeDetails;
+                      const tone = ({ upcoming: "warn", in_progress: "blue", replied: "done", closed: "" } as const)[notice.status as keyof typeof noticeStatuses] ?? "";
                       return (
                         <tr key={notice.id}>
-                          <td>{details.notice_type}<span className="sub">{[authorities[details.authority], details.reference].filter(Boolean).join(", ")}</span></td>
+                          <td>
+                            <span className="who">
+                              <IconTile Icon={Scale} kind="notice" />
+                              <span>{details.notice_type}<span className="sub">{[authorities[details.authority], details.reference].filter(Boolean).join(", ")}</span></span>
+                            </span>
+                          </td>
                           <td>{dueLabel(details.received_on)}</td>
                           <td>
                             {details.action_date ? <>{dueLabel(details.action_date)}{confirmedBy.get(notice.id) && <span className="sub">Confirmed by {confirmedBy.get(notice.id)}</span>}</> : (
@@ -704,8 +845,8 @@ export default async function Client({ params, searchParams }: { params: Promise
                             )}
                           </td>
                           <td>
-                            {viewOnly || !manage ? noticeStatuses[notice.status as keyof typeof noticeStatuses] : (
-                              <form action={manageNotice}>
+                            {viewOnly || !manage ? <Badge tone={tone}>{noticeStatuses[notice.status as keyof typeof noticeStatuses]}</Badge> : (
+                              <form action={manageNotice} className={`pill-select badge ${tone}`}>
                                 <input type="hidden" name="notice" value={notice.id} />
                                 <input type="hidden" name="back" value="client" />
                                 <AutoSelect save="status" name="intent" defaultValue={notice.status} aria-label={`Status of ${details.notice_type}`}>
@@ -721,8 +862,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                   </table>
                 </div>
               ) : (
-                <Empty Icon={FileText} title="No notices">
+                <Empty Icon={Scale} kind="notice" title="No notices">
                   <span>A notice that comes by email is filed here and shown on Today. Add one by hand if it came another way.</span>
+                  {!viewOnly && <Link className="b b-primary" href={`${base}?tab=notice`} scroll={false}>Add a notice</Link>}
                 </Empty>
               )}
             </section>
@@ -730,6 +872,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           </>
         )}
       </div>
+      </ViewTransition>
 
       {panel === "numbers" && manage && (
         <SidePanel id="numbers-panel" title="Registrations" close={base}>
@@ -914,26 +1057,9 @@ export default async function Client({ params, searchParams }: { params: Promise
       {panel === "activity" && (
         <SidePanel id="client-activity" title="Activity" close={base}>
           <p className="hint">The latest 50 changes for this client.</p>
-          {activity?.data?.length ? (
-            <ul className="client-rows">
-              {activity.data.map((entry, index) => (
-                <li key={index}>
-                  <span className="grow">
-                    <span className="name">{activityNames[entry.action] ?? "Client record changed"}</span>
-                    {entry.renamed_from && <span className="sub">{entry.renamed_to ? `${entry.renamed_from} to ${entry.renamed_to}` : `Was ${entry.renamed_from}`}</span>}
-                    <span className="sub">{entry.actor_id ? people?.find((person) => person.user_id === entry.actor_id)?.email ?? "Former team member" : "InboxCA"}, <span className="num">{mailTime(entry.at)}</span></span>
-                  </span>
-                  {/* A manager or the owner puts back the latest rename of a file in one click (5.17.2). */}
-                  {manage && !viewOnly && activity.data.findIndex((other) => other.document_id === entry.document_id) === index && documents.some((file) => file.id === entry.document_id && !file.prepared) && (
-                    <form action={manageDocument}>
-                      <input type="hidden" name="document" value={entry.document_id} />
-                      <button className="b b-ghost" name="intent" value="undo" aria-label={`Undo rename of ${entry.renamed_to ?? entry.renamed_from}`}>Undo</button>
-                    </form>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : <p className="hint">No changes recorded yet.</p>}
+          <Suspense fallback={<SkeletonRows rows={6} />}>
+            <Activity client={id} people={people ?? []} undoable={manage && !viewOnly ? documents.filter((file) => !file.prepared).map((file) => file.id) : []} />
+          </Suspense>
         </SidePanel>
       )}
       {panel === "notice" && !viewOnly && (
@@ -1191,5 +1317,84 @@ function DocumentFields({ type = "", work = "other", period = "", firmTypes = []
         </select>
       </div>
     </>
+  );
+}
+
+// The outline of rows still loading, in the rows' own shape.
+function SkeletonRows({ rows }: { rows: number }) {
+  return (
+    <ul className="app-rows client-skel" aria-busy="true" aria-label="Loading">
+      {Array.from({ length: Math.min(rows, 8) }, (_, row) => (
+        <li key={row} className="app-row">
+          <span className="skel" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+type Mail = { id: string; contact_id: string | null; received_at: string; label: string | null; delivery: unknown; provider_message_id: string; contacts: { name_enc: string } | null };
+// A client's emails: who sent each, its subject read live in one call as the Inbox does (the
+// label stands in when the mailbox cannot be read), and whether it waits for a reply. The whole
+// row opens it. It streams in after the page, as the mailbox can be slow.
+async function MailRows({ firm, clientName, mails, className }: { firm: string; clientName: string; mails: Mail[]; className: string }) {
+  const { supabase } = await currentMember();
+  const crypto = serverCrypto();
+  const [{ data: replies }, live, senders] = await Promise.all([
+    supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "pending").in("entity_id", mails.map((mail) => mail.id)),
+    mailLive(firm, "list", { inbox: mails.map((mail) => mail.provider_message_id), sent: null }),
+    Promise.all(mails.map((mail) => (mail.contacts ? crypto.decrypt(firm, `contacts/${mail.contact_id}/name`, mail.contacts.name_enc) : clientName))),
+  ]);
+  const waiting = new Set(replies?.map((request) => request.entity_id));
+  const subjects = new Map(!("error" in live) ? live.inbox.map((item) => [item.messageId, item.subject]) : []);
+  return (
+    <ul className={className}>
+      {mails.map((mail, at) => (
+        <Row
+          key={mail.id}
+          lead={<Avatar name={senders[at]} />}
+          title={
+            <Link className="row-link" href={`/app/inbox?mail=${mail.id}`}>
+              {subjects.get(mail.provider_message_id) || (labels[mail.label as Label] ?? "Email")}
+            </Link>
+          }
+          meta={`From ${senders[at]}, ${mailTime(mail.received_at)}`}
+          status={waiting.has(mail.id) ? <Badge tone="warn">Needs a reply</Badge> : (mail.delivery as { ack?: string }).ack === "sent" ? <Badge tone="done">Replied</Badge> : null}
+        />
+      ))}
+    </ul>
+  );
+}
+
+// A client's latest 50 changes as a timeline, each kind with its own icon. It streams in after
+// the panel opens.
+async function Activity({ client, people, undoable }: { client: string; people: { user_id: string; email: string }[]; undoable: string[] }) {
+  const { supabase } = await currentMember();
+  const activity = await supabase.rpc("client_activity", { target_client: client });
+  if (activity.error) throw new Error("Client activity could not be read");
+  if (!activity.data.length) return <p className="hint">No changes recorded yet.</p>;
+  return (
+    <ol className="timeline stagger">
+      {activity.data.map((entry, index) => {
+        const [Icon, kind] = activityIcons[entry.action.split(".")[0]] ?? [UserRound, ""];
+        return (
+          <li key={index}>
+            <IconTile Icon={Icon} kind={kind} />
+            <span className="grow">
+              <span className="name">{activityNames[entry.action] ?? "Client record changed"}</span>
+              {entry.renamed_from && <span className="sub">{entry.renamed_to ? `${entry.renamed_from} to ${entry.renamed_to}` : `Was ${entry.renamed_from}`}</span>}
+              <span className="sub">{entry.actor_id ? people.find((person) => person.user_id === entry.actor_id)?.email ?? "Former team member" : "InboxCA"}, <time className="num" dateTime={entry.at}>{mailTime(entry.at)}</time></span>
+            </span>
+            {/* A manager or the owner puts back the latest rename of a file in one click (5.17.2). */}
+            {activity.data.findIndex((other) => other.document_id === entry.document_id) === index && undoable.includes(entry.document_id) && (
+              <form action={manageDocument}>
+                <input type="hidden" name="document" value={entry.document_id} />
+                <button className="b b-ghost" name="intent" value="undo" aria-label={`Undo rename of ${entry.renamed_to ?? entry.renamed_from}`}>Undo</button>
+              </form>
+            )}
+          </li>
+        );
+      })}
+    </ol>
   );
 }

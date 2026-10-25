@@ -258,7 +258,8 @@ test("a notice that asks something waits for a reply; No reply needed clears it,
 
   // The client's page lists its emails by subject, read live, with who sent it and when.
   await owner.goto(`/app/clients/${clientId}?tab=emails`);
-  await expect(owner.getByRole("link", { name: new RegExp(`GST notice ${tag}.*From ${clientName}, `) })).toBeVisible();
+  const mailRow = owner.locator("section[aria-labelledby=client-mail] li").filter({ has: owner.getByRole("link", { name: new RegExp(`GST notice ${tag}`) }) });
+  await expect(mailRow).toContainText(`From ${clientName}, `);
 });
 
 test("an email that needs a reply is given to a teammate, snoozed to a day, marked done with the rest, and unmatched mail is filed to a client", async () => {
