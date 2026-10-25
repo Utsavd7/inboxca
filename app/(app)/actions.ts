@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { STAGES } from "@/src/lib/reminders";
 import { emailTemplates } from "@/src/lib/email-templates";
-import { addDays, todayInIndia } from "@/src/lib/calendar";
+import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveItem, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
@@ -43,6 +43,8 @@ import { activityNames } from "@/src/lib/activity";
 import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
+import { sendSystemMail } from "@/src/lib/system-mail";
+import { keepSafetyCopy, openSafetyCopy } from "@/src/lib/workspace";
 
 export type InviteState = { error?: string; done?: string; values?: Record<string, string> };
 
@@ -85,6 +87,12 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
     options: { shouldCreateUser: false, emailRedirectTo: `${origin}/auth/confirm` },
   });
   if (error) log.warn("invite.email_failed", { status: error.status });
+  // Orelu's system email names the firm, once it is set up (PLAN.md M0 step 8).
+  await sendSystemMail(email, `${membership.firmName} added you on InboxCA`, [
+    `${membership.firmName} uses InboxCA for its clients' papers and returns, and has added you to its team.`,
+    `Sign in at ${origin}/sign-in with this email address. A sign in code comes in a separate email; there is no password.`,
+    "If you did not expect this, you can ignore this email.",
+  ].join("\n\n")).catch(() => log.warn("invite.system_mail_failed"));
   revalidatePath("/app/people");
   return { done: `Invited ${email}. They have an email with a sign in code.` };
 }
@@ -833,6 +841,12 @@ export async function closeFirm(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const { data } = await supabase.rpc("close_firm", { target_firm: membership.firmId, typed_name: String(form.get("name") ?? "") });
+  // The notice before deletion, by Orelu's system email once it is set up.
+  if (data) await sendSystemMail(membership.email, `${membership.firmName} is closed on InboxCA`, [
+    `You closed ${membership.firmName} on InboxCA. Your team can no longer sign in.`,
+    `On ${dueLabel(addDays(todayInIndia(), 30))} InboxCA deletes your firm's data. Until then you can sign in and download it from Settings, Your data.`,
+    "Files in your own drive are not touched.",
+  ].join("\n\n")).catch(() => log.warn("close.system_mail_failed"));
   redirect(data ? "/app/settings" : "/app/settings?group=data&error=close_name#close");
 }
 
@@ -1135,12 +1149,28 @@ export async function removeDocument(form: FormData) {
   if (restoring !== (document.status === "deleted")) redirect(back);
   const from = restoring ? await placeBefore(membership.firmId, id, "document.removed") : undefined;
   const status = restoring ? (from?.status ?? "filed") : "deleted";
+  // InboxCA's own locked copy is taken before the file is touched (5.5.1), once the store is set up.
+  if (!restoring) {
+    const kept = await keepSafetyCopy(membership.firmId, id, () => drive.read(document.drive_file_id)).catch(() => null);
+    if (kept === null) redirect(`${back}&error=copy`);
+    if (kept) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.safety_copy", entity_type: "document", entity_id: id });
+  }
   const folder = await drive.ensureFolder(
     restoring
       ? folderFor(order, client, { work: document.work_type as WorkType, period: document.period_key, receivedAt: document.received_at, toCheck: status === "to_check" })
       : [DELETED_FOLDER],
   );
-  const place = (name: string) => drive.move(document.drive_file_id, folder, name);
+  // A file gone from the drive's Deleted folder (emptied in the drive) comes back from the safety copy.
+  let copy: Promise<Uint8Array | null> | undefined;
+  const place = async (name: string) => {
+    try {
+      return await drive.move(document.drive_file_id, folder, name);
+    } catch (error) {
+      const bytes = restoring ? await (copy ??= openSafetyCopy(membership.firmId, id)) : null;
+      if (!bytes) throw error;
+      return drive.save(folder, name, bytes);
+    }
+  };
   const wanted = restoring ? (from?.name ?? document.name) : document.name;
   const first = await place(wanted);
   const placed =
@@ -1149,6 +1179,7 @@ export async function removeDocument(form: FormData) {
       : await placeUnderFreeName({ client, type: document.document_type, period: periodName(document.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place, naming);
   if (placed === "taken") redirect(`${back}&error=drive`);
   await supabaseAdmin().rpc("remove_document", { target: id, actor: userId, new_status: status, new_name: placed.name, new_file: placed.id });
+  if (copy && (await copy)) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.safety_restored", entity_type: "document", entity_id: id });
   // Removing the current version brings back the latest earlier one; putting it back makes it current again.
   await settleVersions(supabaseAdmin(), { client_id: clientId, ...document });
   await spendGrant(grant);

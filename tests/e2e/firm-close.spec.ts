@@ -4,7 +4,7 @@ import {loadEnvConfig} from "@next/env";
 import {test,expect} from "@playwright/test";
 import {serverCrypto} from "@/src/lib/crypto";
 import {readCsv,xlsxEntries} from "@/src/lib/sheet";
-import {emailStep,localSupabase,query,seedFirm,totp} from "./local-supabase";
+import {emailStep,localSupabase,query,seedFirm,systemMail,totp} from "./local-supabase";
 const local=localSupabase();
 test.skip(!local.url || !local.mailUrl,"Needs local Supabase");
 
@@ -40,6 +40,8 @@ test("the owner downloads the firm's data and closes the firm, and staff are ref
     await expect(page.getByRole("heading",{name:"Your firm is closing"})).toBeVisible();
     await expect(page.getByRole("button",{name:"Download your data"})).toBeVisible();
     expect((await query(local.dbUrl,"select status from public.firms where id=$1",[firm.firmId]))[0].status).toBe("closed");
+    // The notice before deletion comes by Orelu's system email, with the day.
+    await expect.poll(()=>systemMail(ownerEmail),{timeout:15_000}).toMatch(new RegExp(`You closed ${name} on InboxCA[\\s\\S]*On \\d{1,2} \\w{3} \\d{4} InboxCA deletes your firm's data`));
     await person.goto("/app/clients");await expect(person.getByText("Invented Close Client")).toHaveCount(0);
   } finally {
     await context.close().catch(()=>{});

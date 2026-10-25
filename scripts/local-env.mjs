@@ -23,6 +23,8 @@ const values = {
   LOCAL_KEK: existing.match(/^LOCAL_KEK=(.+)$/m)?.[1] ?? randomBytes(32).toString("base64"),
   // A test drive in a folder of this checkout (kept out of git), until a real one is linked.
   DRIVE_LOCAL_DIR: `${process.cwd()}/.test-drive`,
+  // Orelu's workspace store (safety copies) in a folder of this checkout, until Backblaze B2 is set up.
+  WORKSPACE_LOCAL_DIR: `${process.cwd()}/.test-workspace`,
 };
 for (const [key, value] of Object.entries(values))
   if (!value) throw new Error(`supabase status did not report ${key}; is it running?`);

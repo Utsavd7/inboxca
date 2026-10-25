@@ -11,6 +11,7 @@ export const FILE_WORKER_URL = `http://127.0.0.1:${Number(process.env.PORT || 30
 // Runs on one machine share the database and mail server: each port gets its own drive
 // folder, and its server runs only the jobs of firms its own tests made (seedFirm marks them).
 export const TEST_DRIVE = `${tmpdir()}/inboxca-test-drive-${process.env.PORT || 3000}`;
+export const TEST_WORKSPACE = `${tmpdir()}/inboxca-test-workspace-${process.env.PORT || 3000}`;
 export const TEST_RUN = `port-${process.env.PORT || 3000}`;
 // The fake Google, Microsoft and Zoho (tests/fake-mail.ts) that mail sign in uses in tests,
 // with invented keys for them; mail-sign-in.spec.ts starts it on this port.
@@ -35,6 +36,6 @@ export default defineConfig({
     command: "npm run start",
     url: origin,
     reuseExistingServer: !process.env.CI,
-    env: { FILE_WORKER_SECRET, FILE_WORKER_URL, JOB_WORKER_SECRET: TEST_WORKER_SECRET, MAIL_ALLOW_LOCAL: "1", REMINDERS_ANY_HOUR: "1", APP_BASE_URL: origin, OFFICE_IP_HEADER: "x-test-ip", COUNTRY_HEADER: "x-test-country", DRIVE_LOCAL_DIR: TEST_DRIVE, JOB_FIRMS_TEST: TEST_RUN, VAPID_PUBLIC_KEY: pushPublic, VAPID_PRIVATE_KEY: push.d!, SYSTEM_MAIL_URL: "smtp://127.0.0.1:3025/?ignoreTLS=true", EMAIL_FROM_DOMAIN: "invented.test", MAIL_API_TEST_URL: MAIL_API_URL, ...fakeKeyValues, ...ITR },
+    env: { FILE_WORKER_SECRET, FILE_WORKER_URL, JOB_WORKER_SECRET: TEST_WORKER_SECRET, MAIL_ALLOW_LOCAL: "1", REMINDERS_ANY_HOUR: "1", APP_BASE_URL: origin, OFFICE_IP_HEADER: "x-test-ip", COUNTRY_HEADER: "x-test-country", DRIVE_LOCAL_DIR: TEST_DRIVE, WORKSPACE_LOCAL_DIR: TEST_WORKSPACE, JOB_FIRMS_TEST: TEST_RUN, VAPID_PUBLIC_KEY: pushPublic, VAPID_PRIVATE_KEY: push.d!, SYSTEM_MAIL_URL: "smtp://127.0.0.1:3025/?ignoreTLS=true", EMAIL_FROM_DOMAIN: "invented.test", MAIL_API_TEST_URL: MAIL_API_URL, ...fakeKeyValues, ...ITR },
   }],
 });

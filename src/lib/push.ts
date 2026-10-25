@@ -1,5 +1,6 @@
 import { createCipheriv, createECDH, createPrivateKey, hkdfSync, randomBytes, sign } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
+import { mailCopy } from "./system-mail";
 
 // Phone notifications from the website (Web Push, RFC 8291 and 8292), with Node's own crypto.
 // The message is encrypted for the one browser, so the push service carries it unread. Off
@@ -45,8 +46,12 @@ function vapid(endpoint: string) {
 }
 
 // Sends one message to every browser these people turned notifications on in; a browser
-// that no longer exists is forgotten. Message text never names a client.
+// that no longer exists is forgotten. Message text never names a client. Each person also
+// gets an email copy once Orelu's system email is set up, sent alongside so the phone is not kept waiting.
 export async function notify(userIds: string[], message: Message) {
+  return (await Promise.all([pushTo(userIds, message), mailCopy(userIds, message)]))[0];
+}
+async function pushTo(userIds: string[], message: Message) {
   if (!pushReady() || !userIds.length) return 0;
   const admin = supabaseAdmin();
   const { data: subscriptions } = await admin.from("push_subscriptions").select("id, endpoint, keys").in("user_id", userIds);

@@ -16,10 +16,11 @@ const schema = z
     SUPABASE_PUBLISHABLE_KEY: secret,
     SUPABASE_SECRET_KEY: secret, // job workers and admin only
 
-    KMS_KEY_ID: secret,
-    KMS_CREDENTIALS: secret,
+    KMS_KEY_ID: secret, // the key's ARN, which names its region (ap-south-1)
+    KMS_CREDENTIALS: secret, // "access key id:secret" of a user that may only use that key
     LOCAL_KEK: secret, // development and tests only; production uses KMS
 
+    // Orelu's workspace store on Backblaze B2's S3 API (safety copies); all four, or it is off.
     B2_ENDPOINT: url,
     B2_KEY_ID: secret,
     B2_APPLICATION_KEY: secret,
