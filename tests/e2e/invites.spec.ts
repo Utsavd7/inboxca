@@ -17,9 +17,22 @@ import { actionFields, askForCode, emailStep, latestEmail, localSupabase, query,
 
 // The Office only switch sits under Change details in Settings' Access preset card.
 const officeSwitch = async (page: Page) => {
-  // An old #office link first opens the right group of Settings.
+  // An old #office link first opens the right group of Settings; a save just before may
+  // still redraw the page, which closes the details again, so wait and retry until it stays open.
+  await page.waitForLoadState("networkidle");
   await page.locator("#office details.office-switch > summary").waitFor();
-  if (!(await page.locator("#office details.office-switch[open]").count())) await page.locator("#office details.office-switch > summary").click();
+  await expect(async () => {
+    if (!(await page.locator("#office details.office-switch[open]").count())) await page.locator("#office details.office-switch > summary").click();
+    await expect(page.locator("#office details.office-switch[open]")).toHaveCount(1, { timeout: 1000 });
+  }).toPass();
+};
+
+// Turn on, retried until the click lands: the page may still be redrawing after a save.
+const turnOn = async (page: Page) => {
+  await expect(async () => {
+    await officeSwitch(page);
+    await page.getByRole("button", { name: "Turn on", exact: true }).click({ timeout: 2000 });
+  }).toPass({ timeout: 30_000 });
 };
 
 // The owner invites a new person, who signs in from the invite email, sets up a 2 step
@@ -170,7 +183,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   await expect(owner.getByText("Are you in your office right now?")).toHaveCount(0);
   await owner.getByLabel("Yes, I am in the office now").check();
   await officeSwitch(owner);
-  await owner.getByRole("button", { name: "Turn on" }).click();
+  await turnOn(owner);
   await expect(owner.getByRole("status").filter({ hasText: "On." })).toContainText("You are on your office internet connection now.");
   // No PC stays in the office yet, so the owner is told how to get a fixed connection, once.
   await expect(owner.getByText("ask your internet provider for a fixed address")).toBeVisible();
@@ -295,7 +308,7 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save deputies" }).click()]);
   await expect(owner.getByLabel(deputyEmail, { exact: true })).toBeChecked();
   await officeSwitch(owner);
-  await owner.getByRole("button", { name: "Turn on" }).click();
+  await turnOn(owner);
 
   const deputy = await browser.newPage();
   await emailStep(deputy, deputyEmail);
@@ -368,7 +381,7 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await owner.goto("/app/settings#office");
   await owner.reload();
   await officeSwitch(owner);
-  await owner.getByRole("button", { name: "Turn on" }).click();
+  await turnOn(owner);
   await expect(owner.getByRole("button", { name: "Turn off", exact: true, includeHidden: true })).toBeAttached();
 
   // Browsers make keys only for a named site, so this PC uses localhost; its key is Chrome's
@@ -548,7 +561,7 @@ test("away from the office, the owner allows a staff member's own device to view
   await officeSwitch(owner);
   await owner.getByLabel("Yes, I am in the office now").check();
   await officeSwitch(owner);
-  await owner.getByRole("button", { name: "Turn on" }).click();
+  await turnOn(owner);
 
   const homeContext = await browser.newContext({ userAgent: pcUserAgent });
   const home = await homeContext.newPage();
@@ -1323,7 +1336,7 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await officeSwitch(boss);
     await boss.getByLabel("Yes, I am in the office now").check();
     await officeSwitch(boss);
-    await boss.getByRole("button", { name: "Turn on", exact: true }).click();
+    await turnOn(boss);
     await expect(boss.getByRole("button", { name: "Turn off", exact: true, includeHidden: true })).toBeAttached();
     await expect(boss.getByRole("heading", { name: "Doors InboxCA cannot close for you" })).toBeVisible();
     const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
