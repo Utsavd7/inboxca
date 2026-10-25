@@ -274,7 +274,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                           </span>
                         </td>
                         <td>{periodName(row.period_key) || <span className="docs-faint">No period</span>}</td>
-                        <td className="docs-faint">{cameFrom(row)}</td>
+                        <td className="docs-faint docs-from" title={cameFrom(row)}>{cameFrom(row)}</td>
                       </tr>
                     ))}
                   </tbody>

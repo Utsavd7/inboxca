@@ -10,9 +10,11 @@ export async function GET(request: Request) {
   const { supabase, userId, membership } = await currentMember();
   const ids = [...new Set(new URL(request.url).searchParams.getAll("pick"))].filter((id) => /^[0-9a-f-]{36}$/.test(id));
   if (!membership || membership.role !== "owner" || !ids.length || ids.length > 50) return new Response("Not found", { status: 404 });
-  const { data: visible } = await supabase.from("documents").select("id, name, prepared").eq("firm_id", membership.firmId).in("id", ids).neq("status", "deleted");
+  const { data: visible } = await supabase.from("documents").select("id, name, prepared, size").eq("firm_id", membership.firmId).in("id", ids).neq("status", "deleted");
   const papers = visible?.filter((paper) => !paper.prepared) ?? [];
   if (!papers.length) return new Response("Not found", { status: 404 });
+  // The ZIP is built in the server's memory, so one holds at most 200 MB of papers.
+  if (papers.reduce((sum, paper) => sum + (paper.size ?? 0), 0) > 200 * 1024 * 1024) return new Response("Choose fewer papers: one ZIP holds up to 200 MB.", { status: 413 });
   const admin = supabaseAdmin();
   const [{ data: files }, { data: account }] = await Promise.all([
     admin.from("documents").select("id, drive_file_id").in("id", papers.map((paper) => paper.id)),
