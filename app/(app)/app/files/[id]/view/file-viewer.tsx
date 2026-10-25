@@ -46,7 +46,8 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
     const urls: string[] = [];
     (async () => {
       const response = await fetch(`/app/files/${id}/stream${thumb ? "?thumb=1" : sheet===1 ? "" : `?sheet=${sheet}`}`, { signal: controller.signal });
-      if (!response.ok || !response.body) throw new Error("file");
+      // A refusal's body is let go at once, or the browser keeps the request open.
+      if (!response.ok || !response.body) { await response.body?.cancel(); throw new Error("file"); }
       let header: ViewHeader | undefined, number = 0;
       for await (const frame of readFrames(response.body)) {
         if (controller.signal.aborted) return;
