@@ -71,13 +71,21 @@ export async function openMail(firm: string, account: MailRow): Promise<Reader> 
 // Disconnecting: a mailbox connected with sign in has its token taken back at the provider
 // where it can be, and logged, before the row is deleted.
 export async function forgetMailToken(firm: string, actor: string) {
+  await (await mailTokenForget(firm, actor))?.();
+}
+
+// The same in two steps, for when the row goes before the token can be taken back (closing the
+// firm deletes it): the token is read now, and taken back by calling what this returns.
+export async function mailTokenForget(firm: string, actor: string) {
   const { data: account } = await supabaseAdmin().from("connected_accounts").select("id, provider, credentials_enc, settings").eq("firm_id", firm).eq("kind", "mail").maybeSingle();
-  if (!account || !isMailApi(account.provider)) return;
+  if (!account || !isMailApi(account.provider)) return null;
   const provider = account.provider;
   await logToken(firm, account.id, "mailbox.token_read", { provider, why: "revoke" }, actor);
   const { refreshToken } = JSON.parse(await serverCrypto().decrypt(firm, `accounts/${account.id}/credentials`, account.credentials_enc));
-  const revoked = await revokeMailToken(provider, refreshToken, (account.settings as { api?: ApiSettings }).api);
-  await logToken(firm, account.id, "mailbox.token_deleted", { provider, revoked }, actor);
+  return async () => {
+    const revoked = await revokeMailToken(provider, refreshToken, (account.settings as { api?: ApiSettings }).api);
+    await logToken(firm, account.id, "mailbox.token_deleted", { provider, revoked }, actor);
+  };
 }
 
 // The firm's own mailbox, opened to send plain messages, or null when none is connected

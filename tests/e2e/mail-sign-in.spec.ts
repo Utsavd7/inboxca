@@ -126,3 +126,36 @@ for (const provider of ["gmail", "outlook", "zoho"] as const) {
     }
   });
 }
+
+test("closing the firm takes the mailbox sign in back at the provider too", async ({ browser }) => {
+  const tag = randomUUID().slice(0, 8);
+  const ownerEmail = `signin-close-${tag}@example.test`;
+  const office = `signin-close-office-${tag}@firm.test`;
+  const name = `Sign In Close Firm ${tag}`;
+  const ownerKey = Array.from({ length: 16 }, () => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[Math.floor(Math.random() * 32)]).join("");
+  fake.reset(office);
+  const firm = await seedFirm(name, ownerEmail, ownerKey);
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  try {
+    await emailStep(page, ownerEmail);
+    await page.getByLabel("6 digit code from the app").fill(totp(ownerKey));
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/app$/);
+    await page.goto("/app/settings?group=email");
+    const card = page.locator("section#mailbox");
+    await card.getByRole("button", { name: "Connect with Google" }).click();
+    await expect(card.getByRole("status")).toHaveText(`Connected: ${office}`);
+
+    await page.goto("/app/settings?group=data");
+    await page.getByText("Close the firm", { exact: true }).last().click();
+    await page.getByLabel(`Type ${name} to confirm`).fill(name);
+    await page.getByRole("button", { name: "Close the firm for good" }).click();
+    await expect.poll(() => fake.mailbox.revoked.length).toBe(1);
+    const logged = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'mailbox.token_deleted'", [firm.firmId]);
+    expect(logged.map((line) => line.details)).toEqual([{ provider: "gmail", revoked: true }]);
+  } finally {
+    await context.close();
+    await firm.remove();
+  }
+});
