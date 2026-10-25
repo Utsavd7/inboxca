@@ -533,6 +533,25 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"usage_ledger": {
+                  Row: {
+                    "code": string | null,"due_on": string,"firm_id": string,"period_key": string | null,"registration_id": string | null
+                  }
+                  Insert: {
+                    "code"?: string | null,"due_on": string,"firm_id": string,"period_key"?: string | null,"registration_id"?: string | null
+                  }
+                  Update: {
+                    "code"?: string | null,"due_on"?: string,"firm_id"?: string,"period_key"?: string | null,"registration_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "usage_ledger_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
