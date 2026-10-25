@@ -112,7 +112,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const [{ data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: files }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
-    supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on").eq("period_key", "").order("code"),
+    supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on, client_kinds").eq("period_key", "").order("code"),
     supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact"}).eq("firm_id",membership.firmId).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
     supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at, prepared, email_event_id, registration_id").eq("client_id", id).order("received_at", { ascending: false }).limit(500),
     supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
@@ -144,7 +144,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const removedFiles = (files ?? []).filter((file) => file.status === "deleted");
   const owner = membership.role === "owner";
   // Requests stay listed until every file the client sent has been checked.
-  const asking = (asks ?? []).filter((request) => (request.details as unknown as DocumentRequest).items.some((item) => !item.checked));
+  const asking = (asks ?? []).filter((request) => ((request.details as unknown as DocumentRequest).items ?? []).some((item) => !item.checked));
   const firmTypes = (membership.settings.document_types ?? []) as string[];
   // What this person may do here, with any grant or request of theirs still open (5.17.2).
   const { data: mine } = await supabase
@@ -207,7 +207,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   const { data: statements } = months.length ? await supabase.from("documents").select("period_key").eq("client_id", id).eq("document_type", "GSTR-2B").neq("status", "deleted").in("period_key", months) : { data: [] };
   const needs2b = new Set(months.filter((month) => !statements?.some((row) => row.period_key === month)));
   // Services sit on a number: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN.
-  const servicesFor = (kind: string) => rules?.filter((r) => (r.due_rule as { for?: string }).for === kind) ?? [];
+  // Only those for this kind of client, and any already chosen, are offered.
+  const servicesFor = ({ kind, services }: { kind: string; services: string[] }) =>
+    rules?.filter((r) => (r.due_rule as { for?: string }).for === kind && (!r.client_kinds || r.client_kinds.includes(client.kind) || services.includes(r.code))) ?? [];
   const teams = groups?.filter((group) => group.kind === "team");
   const clientGroups = groups?.filter((group) => group.kind === "client_group") ?? [];
   const branches = groups?.filter((group) => group.kind === "branch") ?? [];
@@ -391,11 +393,11 @@ export default async function Client({ params, searchParams }: { params: Promise
               <ul className="client-rows">{mails?.map((mail) => mailRow(mail))}</ul>
               {!mails?.length && <p className="hint">No email from this client yet. Emails from the client&apos;s address and its contacts show here.</p>}
             </section>
-            {numbers.some((registration) => servicesFor(registration.kind).length) && (
+            {numbers.some((registration) => servicesFor(registration).length) && (
               <section className="client-card" aria-labelledby="services-card">
                 <div className="client-card-head"><h2 id="services-card">Services</h2>{manage && <Link className="b b-ghost" href={`${base}?tab=services`} scroll={false}>Change services</Link>}</div>
                 <ul className="client-rows">
-                  {numbers.filter((registration) => servicesFor(registration.kind).length).map((registration) => (
+                  {numbers.filter((registration) => servicesFor(registration).length).map((registration) => (
                     <li key={registration.id}>
                       <span className="grow"><span className="name">{numberKinds[registration.kind as NumberKind].name}</span><span className="sub">{registration.services.map((code) => rule.get(code)?.name ?? code).join(", ") || "None chosen yet"}</span></span>
                     </li>
@@ -780,12 +782,12 @@ export default async function Client({ params, searchParams }: { params: Promise
           <form key={numbers.map((registration) => registration.services.join()).join()} action={manageClient}>
             {hidden("services")}
             <ul className="client-rows">
-              {numbers.filter((registration) => servicesFor(registration.kind).length).map((registration) => (
+              {numbers.filter((registration) => servicesFor(registration).length).map((registration) => (
                 <li key={registration.id}>
                   <div className="grow service-form">
                     <input type="hidden" name="registration" value={registration.id} />
                     <span className="name">{numberKinds[registration.kind as NumberKind].name} <span className="num">{registration.number}</span></span>
-                    {servicesFor(registration.kind).map((service) => (
+                    {servicesFor(registration).map((service) => (
                       <label key={service.code} className="check">
                         <input type="checkbox" name={`service-${registration.id}`} value={service.code} defaultChecked={registration.services.includes(service.code)} /> {service.name}
                       </label>

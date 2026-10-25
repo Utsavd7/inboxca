@@ -107,13 +107,13 @@ isOneToOne: false
                   ]
                 },"compliance_types": {
                   Row: {
-                    "approved_by": string | null,"code": string,"due_rule": NonNullable<Json>,"effective_from": string | null,"effective_to": string | null,"frequency": string | null,"name": string | null,"period_key": string,"source_url": string | null,"verified_on": string | null
+                    "approved_by": string | null,"client_kinds": (string)[] | null,"code": string,"due_rule": NonNullable<Json>,"effective_from": string | null,"effective_to": string | null,"frequency": string | null,"name": string | null,"period_key": string,"source_url": string | null,"verified_on": string | null
                   }
                   Insert: {
-                    "approved_by"?: string | null,"code": string,"due_rule": NonNullable<Json>,"effective_from"?: string | null,"effective_to"?: string | null,"frequency"?: string | null,"name"?: string | null,"period_key"?: string,"source_url"?: string | null,"verified_on"?: string | null
+                    "approved_by"?: string | null,"client_kinds"?: (string)[] | null,"code": string,"due_rule": NonNullable<Json>,"effective_from"?: string | null,"effective_to"?: string | null,"frequency"?: string | null,"name"?: string | null,"period_key"?: string,"source_url"?: string | null,"verified_on"?: string | null
                   }
                   Update: {
-                    "approved_by"?: string | null,"code"?: string,"due_rule"?: NonNullable<Json>,"effective_from"?: string | null,"effective_to"?: string | null,"frequency"?: string | null,"name"?: string | null,"period_key"?: string,"source_url"?: string | null,"verified_on"?: string | null
+                    "approved_by"?: string | null,"client_kinds"?: (string)[] | null,"code"?: string,"due_rule"?: NonNullable<Json>,"effective_from"?: string | null,"effective_to"?: string | null,"frequency"?: string | null,"name"?: string | null,"period_key"?: string,"source_url"?: string | null,"verified_on"?: string | null
                   }
                   Relationships: [
                     

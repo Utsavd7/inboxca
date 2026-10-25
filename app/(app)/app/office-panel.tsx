@@ -13,7 +13,9 @@ const FIXED_SUGGESTION_TAPS = 3;
 const FIXED_SUGGESTION_DAYS = 14;
 
 // inPreset draws it inside Settings' Access preset card, the one office control there: the
-// Office only switch waits under Change details, the rest shows as usual.
+// Office only switch waits under Change details, the rest shows as usual. Its Turn on sends
+// the preset form, so the preset's "are you in the office now?" answer is the one used (a
+// button with its own action sends no name and value, so intent rides in a hidden field).
 export async function OfficePanel({ compact = false, error = false, inPreset = false }: { compact?: boolean; error?: boolean; inPreset?: boolean }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) return null;
@@ -45,7 +47,8 @@ export async function OfficePanel({ compact = false, error = false, inPreset = f
   const line = <p className="hint">Staff, managers and front desk use approved PCs on your office internet connection. You and partners can use InboxCA anywhere.</p>;
   const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">
     <button className="b b-ghost" name="intent" value="forget">Forget office connections</button><button className="b b-secondary" name="intent" value="off">Turn off</button>
-  </form> : isAdmin && <form action={setOfficeOnly}>
+  </form> : isAdmin && inPreset ? <><input type="hidden" form="preset-form" name="intent" value="on" /><button className="b b-primary" form="preset-form" formAction={setOfficeOnly} formNoValidate>Turn on</button></>
+    : isAdmin && <form action={setOfficeOnly}>
     <fieldset className="fieldset"><legend>Are you in your office right now?</legend>
       <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, this is my office</label>
       <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it from the office</label>

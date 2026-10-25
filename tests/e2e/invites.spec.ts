@@ -166,7 +166,9 @@ test("under Office only, staff need the office connection and an approved PC", a
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await owner.goto("/app/settings#office");
   await officeSwitch(owner);
-  await owner.getByLabel("Yes, this is my office").check();
+  // The switch asks nothing itself: Turn on sends the preset's answer.
+  await expect(owner.getByText("Are you in your office right now?")).toHaveCount(0);
+  await owner.getByLabel("Yes, I am in the office now").check();
   await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn on" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "On." })).toContainText("You are on your office internet connection now.");
@@ -264,7 +266,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   await owner.goto("/app/settings#office");
   await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn off" }).click();
-  await expect(owner.getByText("Are you in your office right now?")).toBeAttached();
+  await expect(owner.getByText("are you in the office now?")).toBeAttached();
   await person.getByLabel("6 digit code from the app").fill(totp(personKey));
   await person.getByRole("button", { name: "Continue" }).click();
   await person.getByRole("link", { name: "Clients" }).click();
@@ -409,7 +411,7 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await owner.goto("/app/settings#office");
   await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn off", exact: true }).click();
-  await expect(owner.getByText("Are you in your office right now?")).toBeAttached();
+  await expect(owner.getByText("are you in the office now?")).toBeAttached();
   await owner.setExtraHTTPHeaders({});
   await context.close();
 });
@@ -544,7 +546,7 @@ test("away from the office, the owner allows a staff member's own device to view
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await owner.goto("/app/settings#office");
   await officeSwitch(owner);
-  await owner.getByLabel("Yes, this is my office").check();
+  await owner.getByLabel("Yes, I am in the office now").check();
   await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn on" }).click();
 
@@ -578,7 +580,7 @@ test("away from the office, the owner allows a staff member's own device to view
   await expect(home.getByRole("heading", { name: "Your firm refused this PC." })).toBeVisible();
   await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn off", exact: true }).click();
-  await expect(owner.getByText("Are you in your office right now?")).toBeAttached();
+  await expect(owner.getByText("are you in the office now?")).toBeAttached();
   await owner.setExtraHTTPHeaders({});
   await homeContext.close();
 });

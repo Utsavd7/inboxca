@@ -121,6 +121,28 @@ describe("the compliance calendar", () => {
       expect((await due("GSTR3B_M"))[0]).toEqual({ period_key: "2026-09", due_on: "2026-10-25" });
     }));
 
+  it("plans a service only for its kinds of client and keeps tasks already made", () =>
+    rollback(db, async () => {
+      await seed();
+      // Each kind list is in 20261028300000_services_by_kind.sql with the rule behind it.
+      const kinds = await db.query("select code, client_kinds from public.compliance_types where period_key = '' and client_kinds is not null order by code");
+      expect(kinds.rows).toEqual([
+        { code: "DIR3KYC", client_kinds: ["individual", "business", "tax_audit"] },
+        { code: "ITR_NA", client_kinds: ["individual", "business", "llp", "trust"] },
+        { code: "LLP11", client_kinds: ["llp"] },
+        { code: "LLP8", client_kinds: ["llp"] },
+        { code: "TAX_AUDIT", client_kinds: ["individual", "tax_audit", "company", "llp", "trust"] },
+      ]);
+      expect((await setServices("pan", ["ITR_NA", "ADV_TAX"])).ok).toBe(true);
+      await planAsOf("2026-04-01");
+      await db.query("update public.clients set kind = 'company' where id = $1", [CLIENT]);
+      await db.query("select private.plan_tasks(null, '2026-04-01')");
+      expect(await due("ITR_NA")).toEqual([{ period_key: "2026-03", due_on: "2026-07-31" }]);
+      await planAsOf("2026-04-01");
+      expect(await due("ITR_NA")).toEqual([]);
+      expect((await due("ADV_TAX")).length).toBe(4);
+    }));
+
   it("tops up one firm without touching another firm's tasks", () =>
     rollback(db, async () => {
       await seed();

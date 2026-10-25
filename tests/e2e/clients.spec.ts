@@ -43,6 +43,10 @@ test("a client added with only a GSTIN gets its PAN too, and opens with both", a
 
 test("services on a client's GSTIN give it its due dates", async () => {
   await owner.getByRole("link", { name: "Change services" }).click();
+  // A plain business is offered a non-audit ITR on its PAN, not a tax audit.
+  const pan = owner.getByRole("dialog", { name: "Services" }).getByRole("listitem").filter({ hasText: "PAN" });
+  await expect(pan.getByLabel("ITR (non-audit)")).toBeVisible();
+  await expect(pan.getByLabel("Tax audit report")).toHaveCount(0);
   const gstin = owner.getByRole("dialog", { name: "Services" }).getByRole("listitem").filter({ hasText: "GSTIN" });
   await gstin.getByLabel("GSTR-1 (monthly)").check();
   await gstin.getByLabel("GSTR-3B (monthly)").check();
@@ -112,6 +116,11 @@ test("late clients lead the list, and a client's return is marked filed from its
   await expect(rows.first().locator(".badge")).toHaveText([`Late: ${n} returns`, "Missing papers"]);
   await expect(rows.first()).toContainText(/Late since \d{1,2} \w{3}( \d{4})?: GSTR-1 \(monthly\) \w{3} \d{4}/);
   await expect(rows.nth(1)).toContainText("Anand Dairy");
+  // That request has no items list: Today and the client page still open.
+  await owner.goto("/app");
+  await expect(owner.locator("section[aria-labelledby=t-missing]").getByRole("listitem")).toContainText("Patel Textiles");
+  await owner.goto(`/app/clients/${patel}`);
+  await expect(owner.locator(".page-head")).toContainText("Patel Textiles");
   await query(local.dbUrl, "delete from public.clients where id=$1", [other]);
   await query(local.dbUrl, "delete from public.requests where client_id=$1 and kind='documents'", [patel]);
 
