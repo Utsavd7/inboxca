@@ -2,10 +2,14 @@ import type {Figure} from "../src/lib/datasets.ts";
 import {isGstin} from "../src/lib/identifiers.ts";
 import {chooseTemplate,type Template} from "../src/lib/templates.ts";
 import {officialSchema} from "./schema.ts";
+import {amends} from "../src/lib/gstr1-fields.ts";
 
 // GSTR-3B from confirmed figures only, as the GST portal's GSTR-3B FAQ maps them
 // (tutorial.gst.gov.in/userguide/returns/GSTR3B.htm): 3.1(a), (b), (c), (e) and 3.2 from the
-// GSTIN's GSTR-1 tables, 4(A)(1), (3), (4), (5) and 4(D)(2) from its GSTR-2B. The layout is the
+// GSTIN's GSTR-1 tables (4A, 5 and 7 with or without an e-commerce operator), 3.1.1(ii) from table
+// 14(b), 4(A)(1), (3), (4), (5) and 4(D)(2) from its GSTR-2B. Table 14(a) feeds no GSTR-3B table.
+// Amendments count by their difference from the original, which this month's figures do not hold,
+// and table 15 is the operator's own; both go to the portal. The layout is the
 // JSON the official GSTR-3B offline utility writes for "Prepare Offline" upload, checked against
 // GSTN's save schema. Anything the FAQ maps from elsewhere, or that needs a person's judgement,
 // stops here so it is prepared on the portal instead.
@@ -17,7 +21,7 @@ export function gstr3bJson(template:Template,period:string,gstin:string,registra
   chooseTemplate([template],"GSTR3B",period);
   if(!isGstin(gstin) || !template.mappings.validator) throw new Error("Check the client's GST number and official form");
   const {validate}=officialSchema(template.mappings.validator.file,template.mappings.validator.sha256);
-  const home=gstin.slice(0,2),taxable=empty(),zero=empty(),nil=empty(),nonGst=empty(),unregistered=new Map<string,{txval:number;iamt:number}>();
+  const home=gstin.slice(0,2),taxable=empty(),zero=empty(),nil=empty(),nonGst=empty(),registered={txval:0},unregistered=new Map<string,{txval:number;iamt:number}>();
   // Advances stopped flowing into 3.2 from the October 2025 tax period (GSTR-3B FAQ).
   const advancesIn32=period<"2025-10";
   const add=(into:Tax,txval:number,rate:number,pos:string,share:number,cess:number,sign:number,igstOnly=false)=>{
@@ -53,8 +57,11 @@ export function gstr3bJson(template:Template,period:string,gstin:string,registra
       const section=id.split(".")[0],get=(column:number)=>row.get(column) ?? "",num=(column:number)=>Number(get(column) || 0);
       const pos=(column:number)=>get(column).slice(0,2),share=(column:number)=>get(column) ? Number(get(column))/100 : 1;
       if(["b2b","cdnr"].includes(section) && get(6)==="Y") throw new Error("Reverse charge sales are in this month. Prepare GSTR-3B on the portal.");
-      if((section==="b2b" && get(9)) || (section==="b2cl" && get(8)) || (section==="b2cs" && (get(0)==="E" || get(6)))) throw new Error("Sales through an e-commerce operator are in this month. Prepare GSTR-3B on the portal.");
-      if(section==="b2b" || section==="cdnr") {
+      if(Object.hasOwn(amends,section)) throw new Error("Amendments of earlier months are in this month. Prepare GSTR-3B on the portal.");
+      if(/^eco.+/.test(section)) throw new Error("Supplies an e-commerce operator reports in table 15 are in this month. Prepare GSTR-3B on the portal.");
+      if(section==="eco") {
+        if(get(0)==="Liable to pay tax u/s 9(5)") registered.txval=money(registered.txval+num(3));
+      } else if(section==="b2b" || section==="cdnr") {
         const note=section==="cdnr",type=get(note ? 7 : 8),sign=note && get(4)==="C" ? -1 : 1,place=pos(5),rate=num(10);
         const value=num(11),cess=num(12),applicable=share(note ? 9 : 7);
         if(type.startsWith("SEZ")) add(zero,value,type==="SEZ supplies with payment" ? rate : 0,place,applicable,cess,sign,true);
@@ -79,7 +86,7 @@ export function gstr3bJson(template:Template,period:string,gstin:string,registra
     }
   }
   // The FAQ reports positive values; a month whose notes exceed its sales goes to the portal.
-  if([taxable,zero].some((part)=>part.txval<0 || part.iamt<0 || part.camt<0 || part.samt<0) || [...unregistered.values()].some((entry)=>entry.txval<0))
+  if([taxable,zero].some((part)=>part.txval<0 || part.iamt<0 || part.camt<0 || part.samt<0) || registered.txval<0 || [...unregistered.values()].some((entry)=>entry.txval<0))
     throw new Error("Credit notes or adjustments exceed this month's sales. Prepare GSTR-3B on the portal.");
   const taxes=(part:Tax)=>({iamt:part.iamt,camt:part.camt,samt:part.samt,csamt:part.csamt});
   const available=(["IMPG","IMPS","ISRC","ISD","OTH"] as const).map((ty)=>({ty,...taxes(ty==="IMPS" ? empty() : credit[ty])}));
@@ -88,7 +95,7 @@ export function gstr3bJson(template:Template,period:string,gstin:string,registra
   const data={
     gstin,ret_period:period.slice(5)+period.slice(0,4),
     sup_details:{osup_det:taxable,osup_zero:{txval:zero.txval,iamt:zero.iamt,csamt:zero.csamt},osup_nil_exmp:{txval:nil.txval},isup_rev:empty(),osup_nongst:{txval:nonGst.txval}},
-    eco_dtls:{eco_sup:empty(),eco_reg_sup:{txval:0}},
+    eco_dtls:{eco_sup:empty(),eco_reg_sup:registered},
     inter_sup:{unreg_details:[...unregistered].filter(([,entry])=>entry.txval).map(([pos,entry])=>({pos,...entry})),comp_details:[],uin_details:[]},
     itc_elg:{itc_avl:available,itc_rev:[{ty:"RUL",...zeroes},{ty:"OTH",...zeroes}],itc_net:net,itc_inelg:[{ty:"RUL",...zeroes},{ty:"OTH",...taxes(ineligible)}]},
     inward_sup:{isup_details:[{ty:"GST",inter:0,intra:0},{ty:"NONGST",inter:0,intra:0}]},

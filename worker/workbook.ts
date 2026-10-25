@@ -36,6 +36,13 @@ export function writeWorkbook(original:Buffer,cells:Map<string,Map<string,{value
         }
         return `<row${attrs}>${body}</row>`;
       });
+      // A data row (5 to 1,004) below the sheet's last used row may be absent too. Add it in its place.
+      const rowOf=(address:string)=>Number(address.replace(/^[A-Z]+/,""));
+      for(const number of [...new Set([...remaining].filter(address=>/^[A-Z][1-9]\d{0,3}$/.test(address) && rowOf(address)>=5 && rowOf(address)<=1004).map(rowOf))].sort((a,b)=>a-b)) {
+        const row=`<row r="${number}">${[...remaining].filter(address=>/^[A-Z]\d+$/.test(address) && rowOf(address)===number).sort((a,b)=>column(a.replace(/\d+$/,""))-column(b.replace(/\d+$/,""))).map(address=>{remaining.delete(address);return render(` r="${address}"`,updates.get(address)!);}).join("")}</row>`;
+        const after=[...xml.matchAll(/<row\b[^>]*\br="(\d+)"/g)].find(match=>Number(match[1])>number);
+        xml=after ? xml.slice(0,after.index)+row+xml.slice(after.index) : xml.replace("<sheetData/>","<sheetData></sheetData>").replace("</sheetData>",`${row}</sheetData>`);
+      }
       if(remaining.size) throw new Error("The official workbook does not have these cells");
       bytes=Buffer.from(xml.replace(/<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g,cell=>/<f(?:\s|>)/.test(cell) ? cell.replace(/<v(?:\s[^>]*)?>[\s\S]*?<\/v>/g,"") : cell));
     }

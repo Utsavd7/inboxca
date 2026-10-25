@@ -13,7 +13,7 @@ const figures=(rows:[string,string[]][],credit:[string,string][]=[])=>new Map<st
   ...credit.map(([path,value])=>[path,{label:"Invented credit",value}] as [string,Figure]),
 ]);
 const day="2026-09-10",gstin=inventedGstin();
-const buyer=inventedGstin("ZZZPZ0002Z");
+const buyer=inventedGstin("ZZZPZ0002Z"),operator=inventedGstin("ZZZPZ0003Z");
 
 it("places checked GSTR-1 sales and this GSTIN's GSTR-2B credit in the official GSTR-3B tables",()=>{
   const key=registration.replaceAll("-",""),elsewhere=other.replaceAll("-","");
@@ -44,10 +44,27 @@ it("places checked GSTR-1 sales and this GSTIN's GSTR-2B credit in the official 
   expect(json.itc_elg.itc_inelg[1]).toEqual({ty:"OTH",iamt:0,camt:90,samt:0,csamt:0});
 });
 
+// GSTR-3B FAQ: 4A, 5 and 7 go to 3.1(a) whether or not an operator is named; 14(b) to 3.1.1(ii).
+it("places sales through e-commerce operators in 3.1 and table 14(b) in 3.1.1(ii)",()=>{
+  const draft=figures([
+    ["b2b",[buyer,"Invented Buyer","INV/1",day,"118000","24-Gujarat","N","","Regular B2B",operator,"18","100000",""]],
+    ["b2cs",["E","27-Maharashtra","","18","10000","",operator]],
+    ["eco",["Liable to pay tax u/s 9(5)",operator,"Invented Operator","25000","0","0","0",""]],
+    ["eco",["Liable to collect tax u/s 52(TCS)",operator,"Invented Operator","110000","1800","9000","9000",""]],
+  ]);
+  const json=JSON.parse(gstr3bJson(template,"2026-09",gstin,registration,[draft]).toString());
+  expect(json.sup_details.osup_det).toEqual({txval:110000,iamt:1800,camt:9000,samt:9000,csamt:0});
+  expect(json.eco_dtls).toEqual({eco_sup:{txval:0,iamt:0,camt:0,samt:0,csamt:0},eco_reg_sup:{txval:25000}});
+  expect(json.inter_sup.unreg_details).toEqual([{pos:"27",txval:10000,iamt:1800}]);
+});
+
 it("sends months it cannot fill faithfully to the portal",()=>{
   const sale=(changes:Record<number,string>)=>{const row=[buyer,"Invented Buyer","INV/1",day,"118000","24-Gujarat","N","","Regular B2B","","18","100000",""];for(const [at,value] of Object.entries(changes)) row[Number(at)]=value;return figures([["b2b",row]]);};
   expect(()=>gstr3bJson(template,"2026-09",gstin,registration,[sale({6:"Y"})])).toThrow("Reverse charge");
-  expect(()=>gstr3bJson(template,"2026-09",gstin,registration,[sale({9:inventedGstin("ZZZPZ0003Z")})])).toThrow("e-commerce");
+  expect(()=>gstr3bJson(template,"2026-09",gstin,registration,[figures([["b2csa",["2025-26","MARCH","27-Maharashtra","OE","","18","10000","",""]]])])).toThrow("Amendments");
+  expect(()=>gstr3bJson(template,"2026-09",gstin,registration,[figures([["ecoa",["Liable to pay tax u/s 9(5)","2025-26","MARCH",operator,operator,"","1000","0","0","0",""]]])])).toThrow("Amendments");
+  expect(()=>gstr3bJson(template,"2026-09",gstin,registration,[figures([["ecourp2c",["24-Gujarat","1000","5",""]]])])).toThrow("table 15");
+  expect(()=>gstr3bJson(template,"2026-09",gstin,registration,[figures([["eco",["Liable to pay tax u/s 9(5)",operator,"","-500","0","0","0",""]]])])).toThrow("exceed");
   expect(()=>gstr3bJson(template,"2026-09",gstin,registration,[figures([["cdnr",[buyer,"Invented Buyer","CN/1",day,"C","24-Gujarat","N","Regular B2B","11800","","18","10000",""]]])])).toThrow("exceed");
   expect(()=>gstr3bJson(template,"2026-09",gstin,registration,[figures([],[[`gstr2b.${registration.replaceAll("-","")}.data.itcsumm.itcrev.nonrevsup.igst`,"10"]])])).toThrow("portal");
   expect(()=>gstr3bJson(template,"2025-03",gstin,registration,[sale({})])).toThrow();

@@ -117,3 +117,61 @@ it("refuses rows the official rules put elsewhere or leave out",()=>{
   expect(gstr1Workbook(template,"2026-09",gstin,[rows("exp",["WOPAY","EXP/2",day,"100000","","","2026-10-02","0","100000",""])]).length).toBeGreaterThan(1000);
   expect(()=>gstr1Workbook(template,"2026-09",gstin,[rows("exp",["WOPAY","EXP/2","2026-10-02","100000","","","","0","100000",""])])).toThrow("after");
 },30_000);
+
+// Amendments of earlier months and supplies through e-commerce operators (tables 14, 14A, 15, 15A).
+it("fills the amendment sheets of both workbooks and the e-commerce sheets of v2.2, each row passing the official schema",async()=>{
+  const {editedForm}=await import("../../worker/edited-form");
+  for(const template of templates) {
+    const v2=template.version==="2.0";
+    const period=template.version==="2.0" ? "2024-09" : "2026-09",day=`${period}-10`,before="2024-04-10";
+    const [fy,month]=template.version==="2.0" ? ["2024-25","APRIL"] : ["2025-26","MARCH"];
+    const buyer=inventedGstin("ZZZPZ0002Z"),operator=inventedGstin("ZZZPZ0003Z"),supplier=inventedGstin("ZZZPZ0004Z");
+    const filled:[string,string[],string][]=[
+      ["b2ba",[buyer,"Invented Recipient","INV/1",before,"INV/1A",day,"118","24-Gujarat","N","","Regular B2B","","18","100","0"],">INV/1A<"],
+      ["b2cla",["INV/7",before,"27-Maharashtra","INV/7A",day,"236000","","18","200000","0",""],">INV/7A<"],
+      ["b2csa",[fy,month,"27-Maharashtra","OE","","18","10000","0",""],"<v>10000</v>"],
+      ["cdnra",[buyer,"Invented Recipient","CN/1",before,"CN/1A",day,"C","24-Gujarat","N","Regular B2B","118","","18","100","0"],">CN/1A<"],
+      ["cdnura",["B2CL","CN/7",before,"CN/7A",day,"C","27-Maharashtra","11800","","18","10000","0"],">CN/7A<"],
+      ["expa",["WPAY","EXP/1",before,"EXP/1A",day,"118000","INNSA1","1234567",day,"18","100000","0"],">EXP/1A<"],
+      ["ata",[fy,month,"27-Maharashtra","","18","50000","0"],"<v>50000</v>"],
+      ["atadja",[fy,month,"27-Maharashtra","","18","20000",""],"<v>20000</v>"],
+      ["eco",["Liable to collect tax u/s 52(TCS)",operator,"Invented Operator","10000","0","900","900","0"],">Invented Operator<"],
+      ["ecoa",["Liable to pay tax u/s 9(5)",fy,month,operator,operator,"Invented Operator","12000","0","1080","1080",""],"<v>12000</v>"],
+      ["ecob2b",[supplier,"Invented Supplier",buyer,"Invented Recipient","DOC/1",day,"118","24-Gujarat","Regular","18","100","0"],">DOC/1<"],
+      ["ecourp2b",[buyer,"Invented Recipient","DOC/2",day,"118","27-Maharashtra","Deemed Exp","18","100",""],">DOC/2<"],
+      ["ecob2c",[supplier,"Invented Supplier","27-Maharashtra","1000","18",""],">Invented Supplier<"],
+      ["ecourp2c",["24-Gujarat","1000","5",""],"<v>1000</v>"],
+      ["ecoab2b",[supplier,"Invented Supplier",buyer,"Invented Recipient","DOC/1",before,"DOC/1A",day,"118","24-Gujarat","SEZ supplies with payment","18","100","0"],">DOC/1A<"],
+      ["ecoab2c",[fy,month,supplier,"Invented Supplier","27-Maharashtra","18","1000",""],">Invented Supplier<"],
+      ["ecoaurp2b",[buyer,"Invented Recipient","DOC/2",before,"DOC/2A",day,"118","Regular","27-Maharashtra","18","100",""],">DOC/2A<"],
+      ["ecoaurp2c",[fy,month,"24-Gujarat","5","1000",""],"<v>1000</v>"],
+    ];
+    // The v2.0 workbook ships GSTN's sample rows in its e-commerce sheets, so those stay out of it.
+    const used=filled.filter(([section])=>!v2 || !section.startsWith("eco"));
+    if(v2) expect(()=>gstr1Workbook(template,period,inventedGstin(),[rows(...filled[8].slice(0,2) as [string,string[]])])).toThrow("month");
+    const bytes=gstr1Workbook(template,period,inventedGstin(),used.map(([section,values])=>rows(section,values))),files=xlsxEntries(bytes);
+    for(const [section,,text] of used) expect(files.get(`xl/worksheets/sheet${template.mappings.sheets![section]}.xml`)!().toString()).toContain(text);
+    // The filled workbook reads back, as an edited one does, into the same rows.
+    expect(editedForm(bytes,{template,period,gstin:inventedGstin()}).lines.find(line=>line.field===(v2 ? "b2ba.r5.c4" : "ecoab2b.r5.c6"))?.value).toBe(v2 ? "INV/1A" : "DOC/1A");
+  }
+},30_000);
+
+it("refuses amendments of this month, choices outside the workbook's lists and an operator from another State",()=>{
+  const template=templates[1],day="2026-09-10",gstin=inventedGstin(),buyer=inventedGstin("ZZZPZ0002Z");
+  const refused:[string,string[],string][]=[
+    ["b2csa",["2026-27","APRIL","27-Maharashtra","OE","","18","10000","",""],"official choices"],
+    ["b2csa",["2025-26","Sept","27-Maharashtra","OE","","18","10000","",""],"official choices"],
+    ["ata",["2025-26","","27-Maharashtra","","18","50000",""],"required"],
+    ["b2ba",[buyer,"Invented Recipient","","2024-04-10","INV/1A",day,"118","24-Gujarat","N","","Regular B2B","","18","100",""],"required"],
+    ["b2cla",["INV/7","2024-04-10","24-Gujarat","INV/7A",day,"236000","","18","200000","",""],"inter-State"],
+    ["eco",["Liable to collect tax",inventedGstin("ZZZPZ0003Z"),"","10000","0","900","900",""],"official choices"],
+    ["eco",["Liable to pay tax u/s 9(5)","27ZZZPZ0003Z1C5","","10000","0","900","900",""],"State"],
+    ["ecourp2b",[buyer,"","DOC/2",day,"118","27-Maharashtra","Regular B2B","18","100",""],"official choices"],
+    // The GSTN schema wants a shipping bill number of 3 to 7 digits.
+    ["expa",["WPAY","EXP/1","2024-04-10","EXP/1A",day,"118000","","12","","18","100000",""],"official form's checks"],
+  ];
+  for(const [section,values,message] of refused) expect(()=>gstr1Workbook(template,"2026-09",gstin,[rows(section,values)])).toThrow(message);
+  // An amendment must be of an earlier month: 2025-26 SEPTEMBER is September 2025.
+  expect(()=>gstr1Workbook(template,"2025-09",gstin,[rows("b2csa",["2025-26","SEPTEMBER","27-Maharashtra","OE","","18","10000","",""])])).toThrow("earlier month");
+  expect(gstr1Workbook(template,"2026-09",gstin,[rows("b2csa",["2025-26","SEPTEMBER","27-Maharashtra","OE","","18","10000","",""])]).length).toBeGreaterThan(1000);
+},30_000);
