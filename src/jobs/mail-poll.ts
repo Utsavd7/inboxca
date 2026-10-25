@@ -28,6 +28,8 @@ export const mailPoll: Handler = async (job) => {
   // Senders are matched by blind index, so no address is compared or kept in plain text.
   type Sender = { index: string; contact_id: string | null; client_id: string | null; enquiry?: boolean };
   const enquiries = !!(account.settings as { capture_enquiries?: boolean }).capture_enquiries;
+  // The firm's own address, so its own mail is never offered as an enquiry.
+  const address = enquiries ? await crypto.decrypt(firm, `accounts/${account.id}/address`, account.address_enc) : "";
   const senders = new Map<string, Sender>();
   const keep = async (mail: NewMail[]) => {
     const indexes = new Map(await Promise.all([...new Set(mail.map((m) => m.from))].map(async (from) => [from, await crypto.blindIndex(firm, "email", from)] as const)));
