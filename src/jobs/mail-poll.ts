@@ -91,9 +91,10 @@ export const mailPoll: Handler = async (job) => {
       .map((event) => ({ firm_id: firm, kind: "notice_from_mail", entity_type: "email", entity_id: event.id, idempotency_key: `notice_from_mail:${event.id}` }));
     const queued = [...filing, ...asking, ...notices];
     if (queued.length) await admin.from("jobs").upsert(queued, { onConflict: "idempotency_key", ignoreDuplicates: true });
-    // Unclear mail, or mail whose client is not known yet, waits for the team.
+    // Unclear mail, a notice that asks something, or mail whose client is not known yet,
+    // waits for the team.
     const replies = (saved ?? [])
-      .filter((event) => event.label === "other" || !event.client_id)
+      .filter((event) => event.label === "other" || event.reason_code === "notice_question" || !event.client_id)
       .map((event) => ({ firm_id: firm, kind: "team_reply", client_id: event.client_id, entity_type: "email", entity_id: event.id, reason_code: event.client_id ? event.reason_code : "client_unclear" }));
     if (replies.length) await admin.from("requests").upsert(replies, { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true });
   }

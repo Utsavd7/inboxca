@@ -16,6 +16,7 @@ import { documentTypes, folderFor, periodChoices, periodName, receivedLabel, wor
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { authorities, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
+import { mailLive } from "@/src/lib/mail-live";
 import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -117,7 +118,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("requests").select("id, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
     supabase.from("tasks").select("id,due_on,status,details",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
     supabase.from("tasks").select("id, code, due_on",{count:"exact"}).eq("firm_id",membership.firmId).eq("kind","compliance").eq("client_id",id).neq("status","filed").lt("due_on",today).order("due_on").limit(3),
-    supabase.from("email_events").select("id, contact_id, received_at, label, delivery, contacts(name_enc)",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).order("received_at",{ascending:false}).order("id").range(mailRange, mailRange + (tab === "emails" ? 49 : 2)),
+    supabase.from("email_events").select("id, contact_id, received_at, label, delivery, provider_message_id, contacts(name_enc)",{count:"exact"}).eq("firm_id",membership.firmId).eq("client_id",id).order("received_at",{ascending:false}).order("id").range(mailRange, mailRange + (tab === "emails" ? 49 : 2)),
     tab === "documents" ? supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",membership.firmId).eq("kind","drive").maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const {count:outputs}=await supabase.from("documents").select("id",{count:"exact",head:true}).eq("firm_id",membership.firmId).eq("client_id",id).not("prepared","is",null).neq("status","deleted");
@@ -127,6 +128,10 @@ export default async function Client({ params, searchParams }: { params: Promise
   const { data: replies } = mails?.length ? await supabase.from("requests").select("entity_id").eq("kind","team_reply").eq("status","pending").in("entity_id",mails.map((mail)=>mail.id)) : { data: [] };
   const waitingReply = new Set(replies?.map((request) => request.entity_id));
   const senders = new Map(await Promise.all((mails ?? []).map(async (mail) => [mail.id, mail.contacts ? await crypto.decrypt(membership.firmId, `contacts/${mail.contact_id}/name`, mail.contacts.name_enc) : client.name] as const)));
+  // The subjects of the emails shown, read live in one call as the Inbox does; the label stands
+  // in when the mailbox cannot be read.
+  const live = mails?.length && (tab === "overview" || tab === "emails") ? await mailLive(membership.firmId, "list", { inbox: mails.map((mail) => mail.provider_message_id), sent: null }) : null;
+  const subjects = new Map(live && !("error" in live) ? live.inbox.map((item) => [item.messageId, item.subject]) : []);
   // The lists for the work this client's services need are ticked when asking for files.
   const usualWork = new Set(client.client_registrations.flatMap((registration) => (registration.services ?? []).map(workOfService)));
   // A search keeps only the files whose words include every word typed.
@@ -294,15 +299,14 @@ export default async function Client({ params, searchParams }: { params: Promise
   );
   const mailState = (mail: NonNullable<typeof mails>[number]) =>
     waitingReply.has(mail.id) ? <Badge tone="warn">Needs a reply</Badge> : (mail.delivery as { ack?: string }).ack === "sent" ? <Badge tone="done">Replied</Badge> : null;
-  const mailRow = (mail: NonNullable<typeof mails>[number], full: boolean) => (
+  const mailRow = (mail: NonNullable<typeof mails>[number]) => (
     <li key={mail.id}>
       <span className="dir">In</span>
       <Link className="grow" href={`/app/inbox?mail=${mail.id}`}>
-        <span className="name">{labels[mail.label as Label] ?? "Email"}</span>
-        {full && <span className="sub">From {senders.get(mail.id)}</span>}
+        <span className="name">{subjects.get(mail.provider_message_id) || (labels[mail.label as Label] ?? "Email")}</span>
+        <span className="sub">From {senders.get(mail.id)}, {mailTime(mail.received_at)}</span>
       </Link>
       {mailState(mail)}
-      <span className="when-at">{mailTime(mail.received_at)}</span>
     </li>
   );
 
@@ -380,7 +384,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             </section>
             <section className="client-card" aria-labelledby="latest-mail">
               <div className="client-card-head"><h2 id="latest-mail">Latest emails</h2>{!!mails?.length && <Link className="b b-ghost" href={`${base}?tab=emails`}>All emails</Link>}</div>
-              <ul className="client-rows">{mails?.map((mail) => mailRow(mail, false))}</ul>
+              <ul className="client-rows">{mails?.map((mail) => mailRow(mail))}</ul>
               {!mails?.length && <p className="hint">No email from this client yet. Emails from the client&apos;s address and its contacts show here.</p>}
             </section>
             {numbers.some((registration) => servicesFor(registration.kind).length) && (
@@ -450,7 +454,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         {tab === "emails" && (
           <section className="client-card" aria-labelledby="client-mail">
             <h2 id="client-mail" className="sr-only">Emails</h2>
-            {mails?.length ? <ul className="client-rows client-mails">{mails.map((mail) => mailRow(mail, true))}</ul> : (
+            {mails?.length ? <ul className="client-rows client-mails">{mails.map((mail) => mailRow(mail))}</ul> : (
               <Empty Icon={FileText} title="No email from this client yet">
                 <span>Emails from the client&apos;s address and its contact people show here once the firm&apos;s email is connected.</span>
               </Empty>

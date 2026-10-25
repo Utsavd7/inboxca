@@ -13,6 +13,12 @@
 .ib-wait li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); min-height: var(--row); }
 .ib-wait .grow { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); flex: 1; min-width: 0; }
 .ib-wait strong { font-weight: 600; overflow-wrap: anywhere; }
+/* A question is one line and its Answer button; on a phone the words shorten, never wrap. */
+.ib-wait section[aria-labelledby=questions] li { flex-wrap: nowrap; }
+.ib-wait section[aria-labelledby=questions] .grow { flex-wrap: nowrap; overflow: hidden; }
+.ib-wait section[aria-labelledby=questions] :is(strong, .ib-note) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ib-wait section[aria-labelledby=questions] .ib-note { min-width: 0; }
+.ib-wait section[aria-labelledby=questions] .b { flex: none; }
 .ib-wait form { display: flex; flex-wrap: wrap; gap: var(--s2); }
 
 /* Filters */
@@ -25,9 +31,9 @@
 .ib-menu summary { list-style: none; }
 .ib-menu summary::-webkit-details-marker { display: none; }
 .ib-pop { position: absolute; z-index: 20; top: calc(100% + var(--s1)); left: 0; display: grid; gap: var(--s1); width: 264px; max-height: 336px; overflow: auto; padding: var(--s2); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--white); box-shadow: var(--shadow-float); animation: ib-drop 160ms var(--out); }
-.ib-pop a { display: flex; align-items: center; min-height: var(--control); padding: 0 var(--s2); border-radius: var(--r1); font-size: 14px; text-decoration: none; overflow-wrap: anywhere; }
-.ib-pop a:hover { background: var(--hover); }
-.ib-pop a[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.ib-pop :is(a, button) { display: flex; align-items: center; min-height: var(--control); padding: 0 var(--s2); border: 0; border-radius: var(--r1); background: transparent; color: inherit; font: inherit; font-size: 14px; text-align: left; text-decoration: none; overflow-wrap: anywhere; cursor: pointer; }
+.ib-pop :is(a, button):hover { background: var(--hover); }
+.ib-pop :is(a, button)[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .ib-pop .ib-note { padding: 0 var(--s2); }
 .ib .ib-pop input { height: var(--control); font-size: 14px; }
 .ib-search { display: flex; align-items: center; gap: var(--s2); flex: 0 1 288px; min-width: 0; height: var(--control); margin-left: auto; padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); color: var(--ink-3); }
@@ -66,6 +72,20 @@
 .ib-head .ib-note { margin-top: var(--s1); }
 .ib-actions, .ib-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .ib .ib-inline select { width: auto; max-width: 240px; height: var(--control); font-size: 13px; }
+/* The email's label as a tag, with a small menu to change it. */
+.ib-label { gap: var(--s1); }
+.ib-label .ib-menu summary { height: 24px; padding: 0 var(--s2); border-color: transparent; color: var(--accent); }
+.ib-label .ib-pop { right: 0; left: auto; }
+
+/* While an email opens, its pane shows an outline and the list stays as it is. */
+.ib-skeleton { display: none; }
+.split[data-opening] .ib-open > :not(.ib-skeleton) { display: none; }
+.split[data-opening] .ib-skeleton { display: grid; padding: var(--s5); }
+.ib-skeleton span:not(.skeleton-title) { height: var(--s4); }
+
+/* Answering a question, in the side panel. */
+.ib-answer { display: grid; gap: var(--s4); }
+.ib-answer strong { font-weight: 600; overflow-wrap: anywhere; }
 .ib-thread { display: grid; gap: var(--s4); }
 .ib-thread > li { display: grid; gap: var(--s2); padding-top: var(--s4); border-top: 1px solid var(--line); }
 .ib-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); font-size: 13px; }
