@@ -150,9 +150,10 @@ export async function askAway(userId: string) {
 
 // The proof the server sends with a staff member's requests from an office line: good for
 // 5 minutes, for this person and session only. The database checks it (office_allows).
+// An Orelu admin's passkey proof is the same for "admin:<id>", good for an hour (is_orelu_admin).
 let key: Promise<string> | null = null;
-export async function officeProof(userId: string, sessionId: string) {
+export async function officeProof(userId: string, sessionId: string, seconds = 300) {
   key ??= Promise.resolve(supabaseAdmin().rpc("office_proof_key")).then(({ data }) => String(data ?? ""));
-  const until = Math.floor(Date.now() / 1000) + 300;
+  const until = Math.floor(Date.now() / 1000) + seconds;
   return `${until}.${createHmac("sha256", await key).update(`${userId}:${sessionId}:${until}`).digest("hex")}`;
 }

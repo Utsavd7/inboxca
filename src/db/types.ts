@@ -7,13 +7,13 @@ export type Database = {
           Tables: {
             "activity_log": {
                   Row: {
-                    "action": string,"actor_id": string | null,"at": string,"details": NonNullable<Json>,"entity_id": string | null,"entity_type": string | null,"firm_id": string
+                    "action": string,"actor_id": string | null,"at": string,"details": NonNullable<Json>,"entity_id": string | null,"entity_type": string | null,"firm_id": string | null
                   }
                   Insert: {
-                    "action": string,"actor_id"?: string | null,"at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type"?: string | null,"firm_id": string
+                    "action": string,"actor_id"?: string | null,"at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type"?: string | null,"firm_id"?: string | null
                   }
                   Update: {
-                    "action"?: string,"actor_id"?: string | null,"at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type"?: string | null,"firm_id"?: string
+                    "action"?: string,"actor_id"?: string | null,"at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type"?: string | null,"firm_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -22,6 +22,25 @@ export type Database = {
 isOneToOne: false
       referencedRelation: "firms"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"admin_passkeys": {
+                  Row: {
+                    "counter": number,"id": string,"public_key": string,"user_id": string
+                  }
+                  Insert: {
+                    "counter"?: number,"id": string,"public_key": string,"user_id": string
+                  }
+                  Update: {
+                    "counter"?: number,"id"?: string,"public_key"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "admin_passkeys_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "orelu_admins"
+      referencedColumns: ["user_id"]
     }
                   ]
                 },"client_assignments": {
@@ -584,6 +603,14 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "created_at": string,"drive": boolean,"id": string,"last_active": string,"mailbox": boolean,"members": number,"name": string,"status": string
             }[]
+                           },
+"admin_people":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "email": string,"passkeys": number,"user_id": string
+            }[]
+                           },
+"admin_remove_passkeys":
+{ Args: { "person": string }; Returns: number
                            },
 "admin_retry_job":
 { Args: { "job_id": number }; Returns: boolean

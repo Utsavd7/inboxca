@@ -1,5 +1,5 @@
 "use client";
-import { CalendarCheck, Building2, Mail, RotateCcw, ScanSearch } from "lucide-react";
+import { CalendarCheck, Building2, KeyRound, Mail, RotateCcw, ScanSearch } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useFormStatus } from "react-dom";
@@ -10,6 +10,7 @@ const pages = [
   { href: "/admin/mailboxes", name: "Mailboxes", Icon: Mail },
   { href: "/admin/jobs", name: "Failed jobs", Icon: RotateCcw },
   { href: "/admin/due-dates", name: "Due dates", Icon: CalendarCheck },
+  { href: "/admin/admins", name: "Admins", Icon: KeyRound },
 ];
 
 export function AdminNav() {

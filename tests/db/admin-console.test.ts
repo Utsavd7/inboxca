@@ -1,12 +1,26 @@
+import { createHmac } from "node:crypto";
 import type { Client } from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { actAs, asOwner, attempt, connect, rollback } from "./db";
 
-// Orelu's admin console (M11): only a listed admin past the 2 step code reads it, and what it
-// reads is firm health, never a client's name, email, documents or figures.
+// Orelu's admin console (M11): only a listed admin past the 2 step code and a passkey check in
+// this session reads it, and what it reads is firm health, never a client's name, email,
+// documents or figures.
 let db: Client;
 const firm = "00000000-0000-4000-8000-000000000ad0", owner = "00000000-0000-4000-8000-000000000ad1", admin = "00000000-0000-4000-8000-000000000ad2";
-const calls = ["admin_firms()", "admin_accounts()", "admin_failed_jobs()", "admin_watch()", "admin_retry_job(0)", "admin_review_change('gstr1', 'x')"];
+const other = "00000000-0000-4000-8000-000000000ad3";
+const session = (id: string) => `${id.slice(0, -3)}c${id.slice(-2)}`;
+const calls = ["admin_firms()", "admin_accounts()", "admin_failed_jobs()", "admin_watch()", "admin_retry_job(0)", "admin_review_change('gstr1', 'x')", "admin_people()", `admin_remove_passkeys('${other}')`];
+
+// Acts as a person in their session, with the passkey proof the server sends after a check.
+async function asAdmin(person: string, { seconds = 3600, key = "", forSession = session(person) } = {}) {
+  await asOwner(db);
+  key ||= (await db.query("select public.office_proof_key() as key")).rows[0].key;
+  const until = Math.floor(Date.now() / 1000) + seconds;
+  await actAs(db, person, "aal2", session(person));
+  const proof = `${until}.${createHmac("sha256", key).update(`admin:${person}:${forSession}:${until}`).digest("hex")}`;
+  await db.query("select set_config('request.headers', $1, true)", [JSON.stringify({ "x-orelu-admin": proof })]);
+}
 beforeAll(async () => {
   db = await connect();
 });
@@ -16,8 +30,10 @@ afterAll(async () => {
 
 async function seed() {
   await asOwner(db);
-  await db.query("insert into auth.users(id,email) values ($1,'owner@admin-console.test'),($2,'admin@admin-console.test')", [owner, admin]);
-  await db.query("insert into public.orelu_admins(user_id) values ($1)", [admin]);
+  await db.query("insert into auth.users(id,email) values ($1,'owner@admin-console.test'),($2,'admin@admin-console.test'),($3,'other@admin-console.test')", [owner, admin, other]);
+  await db.query("insert into auth.sessions(id,user_id) values ($1,$2),($3,$4),($5,$6)", [session(owner), owner, session(admin), admin, session(other), other]);
+  await db.query("insert into public.orelu_admins(user_id) values ($1),($2)", [admin, other]);
+  await db.query("insert into public.admin_passkeys(id,user_id,public_key) values ('a-key',$1,'a-public'),('o-key-1',$2,'o-public'),('o-key-2',$2,'o-public')", [admin, other]);
   await db.query("insert into public.firms(id,name,state_code,status) values ($1,'Admin Console Test Firm','24','active')", [firm]);
   await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active')", [firm, owner]);
   const client = (await db.query("insert into public.clients(firm_id,name,kind,email_enc) values ($1,'Invented Secret Client','individual','secret@client.test') returning id", [firm])).rows[0].id;
@@ -31,20 +47,57 @@ async function seed() {
   return { job, account };
 }
 
-it("refuses a firm owner and an admin who has not passed the 2 step code", () =>
+it("refuses a firm owner, an admin before the 2 step code, and an admin without a current passkey proof for this session", () =>
   rollback(db, async () => {
     await seed();
-    for (const [person, aal] of [[owner, "aal2"], [admin, "aal1"]] as const) {
-      await actAs(db, person, aal);
+    const refused = async () => {
       for (const call of calls) expect((await attempt(db, `select * from public.${call}`)).error).toBe("Orelu admins only");
       expect((await db.query("select public.is_orelu_admin() ok")).rows[0].ok).toBe(false);
+    };
+    for (const [person, aal] of [[owner, "aal2"], [admin, "aal1"], [admin, "aal2"]] as const) {
+      await actAs(db, person, aal, session(person));
+      await refused();
     }
+    await asAdmin(owner);
+    await refused();
+    await asAdmin(admin, { seconds: -10 });
+    await refused();
+    await asAdmin(admin, { key: "0".repeat(64) });
+    await refused();
+    await asAdmin(admin, { forSession: session(other) });
+    await refused();
+    // A signed out session's proof opens nothing.
+    await asOwner(db);
+    await db.query("delete from auth.sessions where id = $1", [session(admin)]);
+    await asAdmin(admin);
+    await refused();
+  }));
+
+it("lets an admin remove another admin's passkeys, which signs them out and is logged, but not their own", () =>
+  rollback(db, async () => {
+    await seed();
+    await asAdmin(admin);
+    expect((await db.query("select * from public.admin_people() where email like '%@admin-console.test'")).rows).toEqual([
+      { user_id: admin, email: "admin@admin-console.test", passkeys: 1 },
+      { user_id: other, email: "other@admin-console.test", passkeys: 2 },
+    ]);
+    expect((await attempt(db, "select public.admin_remove_passkeys($1)", [admin])).error).toBe("Another admin removes your passkeys");
+    expect((await db.query("select public.admin_remove_passkeys($1) n", [other])).rows[0].n).toBe(2);
+    expect((await attempt(db, "select * from public.admin_passkeys")).error).toContain("permission denied");
+    await asOwner(db);
+    expect((await db.query("select count(*)::int n from public.admin_passkeys where user_id = $1", [other])).rows[0].n).toBe(0);
+    expect((await db.query("select count(*)::int n from auth.sessions where user_id = $1", [other])).rows[0].n).toBe(0);
+    expect((await db.query("select firm_id, actor_id, action, details from public.activity_log where entity_id = $1", [other])).rows).toEqual([
+      { firm_id: null, actor_id: admin, action: "admin.passkeys_removed", details: { removed: 2 } },
+    ]);
+    await asAdmin(other);
+    expect((await db.query("select public.is_orelu_admin() ok")).rows[0].ok).toBe(false);
   }));
 
 it("shows an admin each firm's health and no client data, and lets them retry a job and review a change", () =>
   rollback(db, async () => {
     const { job } = await seed();
-    await actAs(db, admin);
+    await asAdmin(admin);
     const firms = (await db.query("select * from public.admin_firms()")).rows;
     expect(firms.find((row) => row.id === firm)).toMatchObject({ name: "Admin Console Test Firm", members: 1, mailbox: true, drive: false });
     const accounts = (await db.query("select * from public.admin_accounts() where firm = 'Admin Console Test Firm'")).rows;

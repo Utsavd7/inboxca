@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { confirmWithPcKey, pcKeyChallenge, savePcKey } from "@/app/(app)/actions";
 
-const bytes = (text: string) => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0));
-const text = (buffer: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+export const bytes = (text: string) => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0));
+export const text = (buffer: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 // An office PC's own key (PLAN.md 5.17.4 #32): set it up once, or use it to confirm a changed
 // office connection. The PC asks for its PIN or fingerprint; the key never leaves it.
