@@ -13,6 +13,7 @@ import { AddClientForm } from "./add-client-form";
 import { BulkSendBar } from "./bulk-send";
 import { ImportForm } from "./import-form";
 import { LinkTabs } from "../link-tabs";
+import { Item, List, Presence } from "../motion";
 import { Avatar, Badge, Card, Empty, PageHead } from "../ui";
 import { RowKeys } from "../row-keys";
 import "./clients.css";
@@ -195,8 +196,10 @@ export default async function Clients({
           )
         }
       />
-      {panel === "add" && <AddClientForm />}
-      {panel === "import" && <ImportForm />}
+      <Presence>
+        {panel === "add" && <AddClientForm key="add" />}
+        {panel === "import" && <ImportForm key="import" />}
+      </Presence>
 
       <div className="clients-bar">
         <LinkTabs kind="pills" label="Show" items={(Object.keys(pills) as Pill[]).map((pill) => ({ href: href({ show: pill }), label: pills[pill], count: countOf[pill], current: show === pill }))} />
@@ -267,11 +270,11 @@ export default async function Clients({
                 <th scope="col">Status</th>
               </tr>
             </thead>
-            <tbody className="stagger">
+            <List key={pageHref(page)} as="tbody">
               {rows.map((client) => {
                 const [next, when] = client.next ? returnLine(client.next) : [];
                 return (
-                  <tr key={client.id}>
+                  <Item as="tr" key={client.id}>
                     {canSend && <td className="shrink"><input type="checkbox" form="bulk-send" name="client" value={client.id} data-name={client.name} aria-label={`Choose ${client.name}`} /></td>}
                     <td>
                       <span className="who">
@@ -314,10 +317,10 @@ export default async function Clients({
                         )}
                       </span>
                     </td>
-                  </tr>
+                  </Item>
                 );
               })}
-            </tbody>
+            </List>
           </table>
           <RowKeys />
         </div>

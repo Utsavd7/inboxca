@@ -1,7 +1,7 @@
 import { Lock, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { ViewTransition } from "react";
-import { Draw, Item, PanelMotion, ToastMotion } from "./motion";
+import { Count, Draw, Item, PanelMotion, ToastMotion } from "./motion";
 import { PanelEscape } from "./panel-escape";
 import { HeadTools, MenuButton } from "./shell";
 import "./side-panel.css";
@@ -84,7 +84,7 @@ export function Card({ id, title, Icon, kind, count, countTone, countLabel, end,
       <header className="app-card-head">
         {Icon && <IconTile Icon={Icon} kind={kind} />}
         <h2 id={id}>{title}</h2>
-        {!!count && <CountPill tone={countTone} label={countLabel}>{count}</CountPill>}
+        {!!count && <CountPill tone={countTone} label={countLabel}>{typeof count === "number" ? <Count id={id} value={count} /> : count}</CountPill>}
         {end && <div className="head-end">{end}</div>}
       </header>
       {children}

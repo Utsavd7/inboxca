@@ -7,6 +7,7 @@ import {draftSchema} from "@/src/lib/datasets";
 import {periodName} from "@/src/lib/documents";
 import {grantFor} from "@/src/lib/permission-grants";
 import {askPermission} from "@/app/(app)/actions";
+import {Pending} from "./pending";
 import {addEditedForm,decideForm,markFormFiled,prepareForm,setDraftRegistration} from "./form-actions";
 
 export async function PreparedForms({client,message}:{client?:string;message?:string}) {
@@ -51,13 +52,13 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         {meta.form==="GSTR1" && meta.template==="2.0" && <p className="hint">This older official workbook comes with sample rows in its e-commerce sheets, so this file does not include supplies through e-commerce operators (tables 14 and 15). Add them in the offline tool or on the portal before filing.</p>}
         <div className="form-row">{meta.sources.map((source,n)=><Link key={source.id} href={`?tab=extraction&draft=${source.id}`}>Check source figures{meta.sources.length>1 ? ` ${n+1}` : ""}</Link>)}
           {active && ["approved","filed"].includes(meta.status) && <form action={`/app/files/${file.id}/filing`} method="post"><button className="b b-secondary b-small">Download for filing</button></form>}
-          {active && meta.status==="draft" && ["owner","partner","manager"].includes(membership.role) && <form action={decideForm}><input type="hidden" name="document" value={file.id}/><button className="b b-secondary b-small" name="decision" value="approved">Give second approval</button></form>}
+          {active && meta.status==="draft" && ["owner","partner","manager"].includes(membership.role) && <form action={decideForm}><input type="hidden" name="document" value={file.id}/><Pending className="b b-secondary b-small" name="decision" value="approved">Give second approval</Pending></form>}
         </div>
         {active && meta.status==="draft" && ["owner","partner","manager"].includes(membership.role) && <details><summary>Reject this version</summary><form action={decideForm} className="fields">
           <input type="hidden" name="document" value={file.id}/>
           <div><label htmlFor={`reason-${file.id}`}>Reason</label><select id={`reason-${file.id}`} name="reason"><option value="figures">Figures need checking</option><option value="source">Source needs checking</option><option value="other">Other reason</option></select></div>
           <div><label htmlFor={`why-${file.id}`}>What needs to change</label><input id={`why-${file.id}`} name="explanation" minLength={3} maxLength={300} required/></div>
-          <button className="b b-ghost b-small" name="decision" value="rejected">Reject with reason</button>
+          <Pending className="b b-ghost b-small" name="decision" value="rejected">Reject with reason</Pending>
         </form></details>}
         {active && meta.status==="approved" && membership.may("mark_filed",client) && <details><summary>Record filing</summary><form action={markFormFiled} className="fields">
           <input type="hidden" name="document" value={file.id}/>
@@ -66,11 +67,11 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
           <div><label htmlFor={`ack-${file.id}`}>Acknowledgement number, if known</label><input id={`ack-${file.id}`} name="ack" maxLength={80}/></div>
           <div><label htmlFor={`upload-${file.id}`}>Or upload the portal acknowledgement</label><input id={`upload-${file.id}`} name="ack_file" type="file" accept=".pdf,.png,.jpg,.jpeg"/></div>
           <p className="hint">With only a number, your client gets a filing record from your firm. This does not replace the portal acknowledgement. Private papers wait for approval in the Inbox.</p>
-          <button className="b b-secondary b-small">Mark filed</button>
+          <Pending className="b b-secondary b-small">Mark filed</Pending>
         </form></details>}
         {active && canPrepare && <details><summary>File corrected outside InboxCA</summary><form action={addEditedForm} className="fields">
           <input type="hidden" name="document" value={file.id}/><div><label htmlFor={`edited-${file.id}`}>Filled official workbook</label><input id={`edited-${file.id}`} name="edited_file" type="file" accept=".xlsx" required/></div>
-          <p className="hint">Prefer correcting the source figures. An uploaded correction is a new version, checked against the official form. Its figures must be checked again.</p><button className="b b-secondary b-small">Add corrected version</button>
+          <p className="hint">Prefer correcting the source figures. An uploaded correction is a new version, checked against the official form. Its figures must be checked again.</p><Pending className="b b-secondary b-small">Add corrected version</Pending>
         </form></details>}
       </div></li>;
     })}</ul>}
@@ -79,7 +80,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         <input type="hidden" name="client" value={client}/><input type="hidden" name="draft" value={row.id}/>
         <span className="grow"><Link href={`?tab=extraction&draft=${row.id}`}>{label(row)}</Link>, {periodName(row.period_key)}</span>
         <select name="registration" aria-label={`GST number for ${label(row)}`} required defaultValue=""><option value="" disabled>Choose</option>{gstins.map(reg=><option key={reg.id} value={reg.id}>{reg.number}</option>)}</select>
-        <button className="b b-secondary b-small">Save</button></form>)}</>}
+        <Pending className="b b-secondary b-small">Save</Pending></form>)}</>}
       {gstins.map(reg=>{
         // A register named for this number, or any register when the client has only one;
         // GSTR-2B credit drafts hold every number's figures apart, so they serve each one.
@@ -91,12 +92,12 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
             return <form action={prepareForm} className="fields" key={`1-${reg.id}-${period}`}><input type="hidden" name="client" value={client}/><input type="hidden" name="registration" value={reg.id}/><input type="hidden" name="period" value={period}/>
               <fieldset><legend>{formName("GSTR1")} {periodName(period)}</legend>{own.filter(row=>row.period_key===period && row.form_code==="GSTR1").map(row=>{const ready=draftSchema.parse(row.data).lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready && (!preferred || preferred.has(row.id))} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{label(row)}</Link></label>;})}</fieldset>
               <details><summary>Choose a different official version</summary><label htmlFor={`version-${reg.id}-${period}`}>Version, if your team needs another one</label><input id={`version-${reg.id}-${period}`} name="version" maxLength={20}/><label htmlFor={`choice-${reg.id}-${period}`}>Reason</label><select id={`choice-${reg.id}-${period}`} name="reason"><option value="">Choose</option><option value="amendment">Earlier work being corrected</option><option value="software">Filing software needs the earlier version</option></select></details>
-              <button className="b b-primary">Prepare {periodName(period)}</button></form>;})}</>}
+              <Pending className="b b-primary">Prepare {periodName(period)}</Pending></form>;})}</>}
           {!!months3.length && <><h3>Prepare GSTR-3B{of}</h3>{months3.map(period=><form action={prepareForm} className="fields" key={`3-${reg.id}-${period}`}>
             <input type="hidden" name="client" value={client}/><input type="hidden" name="registration" value={reg.id}/><input type="hidden" name="period" value={period}/><input type="hidden" name="form" value="GSTR3B"/>
             <fieldset><legend>{formName("GSTR3B")} {periodName(period)}</legend>{own.filter(row=>row.period_key===period).map(row=>{const ready=draftSchema.parse(row.data).lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{label(row)}</Link></label>;})}</fieldset>
-            <button className="b b-primary">Prepare GSTR-3B {periodName(period)}</button></form>)}</>}
+            <Pending className="b b-primary">Prepare GSTR-3B {periodName(period)}</Pending></form>)}</>}
         </Fragment>;})}
-    </> : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-secondary">Ask to prepare forms</button></form>)}
+    </> : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-secondary">Ask to prepare forms</Pending></form>)}
   </section>;
 }

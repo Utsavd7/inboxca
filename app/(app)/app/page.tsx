@@ -400,9 +400,9 @@ async function PushLine({ data }: { data: Data }) {
       <span className="grow">Get questions and approvals on your phone too.</span>
       <PushSwitch publicKey={data.pushKey} />
       <form action={hidePush}>
-        <button className="b b-ghost b-icon" aria-label="Close">
+        <Pending className="b b-ghost b-icon" aria-label="Close">
           <X size={16} aria-hidden />
-        </button>
+        </Pending>
       </form>
     </div>
   );
@@ -422,7 +422,7 @@ async function Kpis({ data }: { data: Data }) {
         <span className="kpi-text">
           <span className="kpi-label">Returns filed this month</span>
           <span className="kpi-big">
-            <Count value={month.filed} /> <small>of {month.due.toLocaleString("en-IN")}</small>
+            <Count id="filed" value={month.filed} /> <small>of {month.due.toLocaleString("en-IN")}</small>
           </span>
           <span className="kpi-sub">{month.due ? `Due by ${short(month.end)}` : "No returns fall due this month"}</span>
         </span>
@@ -433,7 +433,7 @@ async function Kpis({ data }: { data: Data }) {
           {lateCount === 1 ? "Client late" : "Clients late"}
         </span>
         <span className="kpi-big">
-          <Count value={lateCount} />
+          <Count id="late" value={lateCount} />
         </span>
         {trend ? <Sparkline points={trend} /> : <span className="kpi-sub">Open the list</span>}
         {trend && <span className="kpi-sub">Last 14 days</span>}
@@ -444,7 +444,7 @@ async function Kpis({ data }: { data: Data }) {
           {replyCount === 1 ? "Reply waiting" : "Replies waiting"}
         </span>
         <span className="kpi-big">
-          <Count value={replyCount} />
+          <Count id="reply" value={replyCount} />
         </span>
         <span className="kpi-sub">{averageWait !== null ? `Waiting ${waitFor(averageWait)} on average` : replyCount ? "Open the Inbox" : "No client is waiting"}</span>
       </Press>
@@ -454,7 +454,7 @@ async function Kpis({ data }: { data: Data }) {
           Papers this week
         </span>
         <span className="kpi-big">
-          <Count value={papersWeek.total} />
+          <Count id="papers" value={papersWeek.total} />
         </span>
         {papersWeek.days && (
           <span className="kpi-bars" aria-hidden>
@@ -496,7 +496,7 @@ async function NeedsNow({ data }: { data: Data }) {
   return (
     <Card id="t-now" title="Needs you now" Icon={Inbox} kind="reply" count={total} countTone={looks.some((look) => look.urgent) ? "late" : "warn"} className="today-now">
       {total ? (
-        <List className="app-rows">
+        <List name="now" className="app-rows">
           {looks.map((look) => (
             <Row
               key={look.key}
@@ -576,7 +576,7 @@ async function LateReturns({ data }: { data: Data }) {
     >
       {late.data?.length ? (
         <>
-          <List className="app-rows">
+          <List name="late" className="app-rows">
             {late.data.map((row) => {
               const days = Math.round((Date.parse(data.today) - Date.parse(row.due_on)) / DAY);
               return (
@@ -704,7 +704,7 @@ async function ThisWeek({ data }: { data: Data }) {
         })}
       </ol>
       {rows.length ? (
-        <List className="app-rows">
+        <List name="week" className="app-rows">
           {rows.slice(0, 4).map((row) => {
             const left = row.clients - row.filed;
             return (
@@ -746,7 +746,7 @@ async function Missing({ data }: { data: Data }) {
       }
     >
       {papers.data?.length ? (
-        <List className="app-rows">
+        <List name="done" className="app-rows">
           {papers.data.map((request) => {
             const details = request.details as unknown as DocumentRequest;
             const missing = (details.items ?? []).filter((item) => !item.received.length).map((item) => item.type);
@@ -976,7 +976,7 @@ function NoFirm({ closed, invites, deviceStatus, connectionWaiting, pcKey }: { c
         />
         {closed.away && (
           <form action={askAwayDevice} className="form-row">
-            <button className="b b-secondary">Ask to use this device away from the office</button>
+            <Pending className="b b-secondary">Ask to use this device away from the office</Pending>
             <span className="hint">The owner may allow it for some days, to view only.</span>
           </form>
         )}
@@ -1007,9 +1007,9 @@ function NoFirm({ closed, invites, deviceStatus, connectionWaiting, pcKey }: { c
                 </span>
                 <form action={joinFirm}>
                   <input type="hidden" name="firm" value={invite.firm_id} />
-                  <button className="b b-primary" type="submit">
+                  <Pending className="b b-primary" type="submit">
                     Join {invite.firm_name}
-                  </button>
+                  </Pending>
                 </form>
               </li>
             ))}

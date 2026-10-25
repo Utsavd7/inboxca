@@ -13,6 +13,7 @@ import { ClosingWatch } from "./closing-watch";
 import { Command } from "./command";
 import { IdleWatch } from "./idle-watch";
 import { NavLinks } from "./nav-links";
+import { NavProgress } from "./nav-progress";
 import { PageIn } from "./page-in";
 import { PcKey } from "./pc-key";
 import { AccountMenu, ShellFrame, SideFoot, WorkspaceMenu, type Theme } from "./shell";
@@ -90,6 +91,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       sidebar={sidebar}
     >
       <main className="stage">
+        <Suspense fallback={null}>
+          <NavProgress />
+        </Suspense>
         <div className="stage-notes">
           {membership && pcKey === "needed" && (
             <div className="notice">

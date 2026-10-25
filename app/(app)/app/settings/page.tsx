@@ -16,6 +16,7 @@ import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
 import { Badge, IconTile, NotForYou, PageHead, storage, Toast, type Kind } from "../ui";
+import { Item, List } from "../motion";
 import { Pending } from "../pending";
 import { STAGES, stageNames, reminderStages } from "@/src/lib/reminders";
 import { MailboxForm } from "./mailbox-form";
@@ -171,9 +172,9 @@ export default async function Settings({
                   <span className="sr-only">: </span>
                   <strong>{mailAddress}</strong>
                 </p>
-                <button className="b b-secondary" type="submit">
+                <Pending className="b b-secondary" type="submit">
                   Disconnect
-                </button>
+                </Pending>
               </form>
             ) : (
               <MailboxForm />
@@ -186,7 +187,7 @@ export default async function Settings({
               <div><label htmlFor="mail-limit">Emails in 24 hours</label><input id="mail-limit" name="limit" type="number" min="1" max="2000" step="1" className="num" defaultValue={Number(settings.mail_limit) || 500} /></div>
               <p className="hint set-wide">Every reply and bulk send shares this limit. Lower it if your email provider allows fewer.</p>
               {problem("mailbox")}
-              <div className="set-foot"><Pending className={`b ${mailbox.status === "connected" ? "b-primary" : "b-secondary"}`}>Save email limit</Pending></div>
+              <div className="set-foot"><Pending busy="Saving" className={`b ${mailbox.status === "connected" ? "b-primary" : "b-secondary"}`}>Save email limit</Pending></div>
             </form>}
           </Card>
 
@@ -199,9 +200,9 @@ export default async function Settings({
                   <span className="sr-only">: </span>
                   <strong>{driveAddress}</strong>
                 </p>
-                <button className="b b-secondary" type="submit">
+                <Pending className="b b-secondary" type="submit">
                   Disconnect
-                </button>
+                </Pending>
               </form>
             )}
             {drive && (
@@ -229,7 +230,7 @@ export default async function Settings({
                     ))}
                   </select>
                 </div>
-                <div className="set-foot"><Pending className="b b-primary" type="submit">Save</Pending></div>
+                <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save</Pending></div>
               </form>
             )}
             {!drive && (
@@ -286,7 +287,7 @@ export default async function Settings({
                 <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it there later</label>
               </fieldset>}
               <div className="set-foot">
-                <Pending className="b b-primary" type="submit">Use this preset</Pending>
+                <Pending busy="Saving" className="b b-primary" type="submit">Use this preset</Pending>
                 {!preset && <p className="hint">Your rules no longer match a preset.</p>}
               </div>
             </form>
@@ -318,7 +319,7 @@ export default async function Settings({
                 <input className="toggle" type="checkbox" name="india_only" defaultChecked={!!access.india_only} />
                 Everyone except you can use InboxCA only from India
               </label>
-              <div className="set-foot"><Pending className="b b-primary" type="submit">Save signing in limits</Pending></div>
+              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save signing in limits</Pending></div>
             </form>
           </Card>
           {owner && <Card id="recovery" title="Recovery codes" line="If you lose the phone with your 2 step code, one of these codes lets you set it up again after the email code. Each code works once, and new codes stop the old ones. Keep them away from your phone.">
@@ -353,27 +354,27 @@ export default async function Settings({
                 Everyone except you can use InboxCA only during office hours, and not on holidays
               </label>
               {problem("hours")}
-              <div className="set-foot"><Pending className="b b-primary" type="submit">Save office hours</Pending></div>
+              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save office hours</Pending></div>
             </form>
           </Card>
 
           <Card id="special" title="Special hours" line="A tax season or a late evening: these times replace the office hours on every day in the dates. Holidays stay closed.">
-            {!!special.length && <ul className="set-rows">
+            {!!special.length && <List className="set-rows" rise={false}>
               {special.map((range) => (
-                <li key={range.from + range.to}>
+                <Item key={range.from + range.to}>
                   <span className="grow">
                     {range.from === range.to ? longDate(range.from) : `${longDate(range.from)} to ${longDate(range.to)}`}: {range.open} to {range.close}
                   </span>
                   <form action={changeSpecialHours}>
                     <input type="hidden" name="from" value={range.from} />
                     <input type="hidden" name="to" value={range.to} />
-                    <button className="b b-ghost" name="intent" value="remove">
+                    <Pending className="b b-ghost" name="intent" value="remove">
                       Remove
-                    </button>
+                    </Pending>
                   </form>
-                </li>
+                </Item>
               ))}
-            </ul>}
+            </List>}
             <form action={changeSpecialHours} className="set-fields set-four">
               {[
                 ["from", "From", "date"],
@@ -392,21 +393,21 @@ export default async function Settings({
           </Card>
 
           <Card id="holidays" title="Holidays" line="Days your office is closed.">
-            {!!holidays.length && <ul className="set-rows">
+            {!!holidays.length && <List className="set-rows" rise={false}>
               {holidays.map((date) => (
-                <li key={date}>
+                <Item key={date}>
                   <span className="grow">
                     {new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { weekday: "long" })}, {longDate(date)}
                   </span>
                   <form action={changeHoliday}>
                     <input type="hidden" name="date" value={date} />
-                    <button className="b b-ghost" name="intent" value="remove">
+                    <Pending className="b b-ghost" name="intent" value="remove">
                       Remove
-                    </button>
+                    </Pending>
                   </form>
-                </li>
+                </Item>
               ))}
-            </ul>}
+            </List>}
             <form action={changeHoliday} className="set-fields">
               <div>
                 <label htmlFor="holiday">Add a holiday</label>
@@ -452,7 +453,7 @@ export default async function Settings({
               <label className="check"><input className="toggle" type="checkbox" name="second_form_approval" defaultChecked={settings.second_form_approval===true}/>Second approval before filing. Another person must approve after the figures are checked.</label>
               {problem("permissions")}
               <div className="set-foot">
-                <Pending className="b b-primary" name="intent" value="save">
+                <Pending busy="Saving" className="b b-primary" name="intent" value="save">
                   Save permissions
                 </Pending>
                 <Pending className="b b-ghost" name="intent" value="reset" busy="Resetting">
@@ -463,23 +464,23 @@ export default async function Settings({
           </Card>
 
           {(!!others.length || !!always.length) && <Card id="always" title="Allow one person without asking" line="Let one person do one thing without asking, for some clients or until a date, on top of their role.">
-            {!!others.length && <form action={allowStanding} className="set-fields"><div><label htmlFor="standing-person">Person</label><select id="standing-person" name="person" required>{others.map(person=><option key={person.user_id} value={person.user_id}>{person.email}</option>)}</select></div><div><label htmlFor="standing-right">What they may do</label><select id="standing-right" name="right">{Object.entries(switchable).map(([right,label])=><option key={right} value={right}>{label}</option>)}</select></div><div><label htmlFor="standing-clients">Client names, one per line. Blank means every client.</label><textarea id="standing-clients" name="clients" rows={3}/></div><div><label htmlFor="standing-until">Last day, if needed</label><input id="standing-until" name="until" type="date"/></div><div className="set-foot"><Pending className="b b-primary">Allow this person</Pending></div></form>}
+            {!!others.length && <form action={allowStanding} className="set-fields"><div><label htmlFor="standing-person">Person</label><select id="standing-person" name="person" required>{others.map(person=><option key={person.user_id} value={person.user_id}>{person.email}</option>)}</select></div><div><label htmlFor="standing-right">What they may do</label><select id="standing-right" name="right">{Object.entries(switchable).map(([right,label])=><option key={right} value={right}>{label}</option>)}</select></div><div><label htmlFor="standing-clients">Client names, one per line. Blank means every client.</label><textarea id="standing-clients" name="clients" rows={3}/></div><div><label htmlFor="standing-until">Last day, if needed</label><input id="standing-until" name="until" type="date"/></div><div className="set-foot"><Pending busy="Saving" className="b b-primary">Allow this person</Pending></div></form>}
             {!!always.length && (
               <>
                 <h3 className="set-sub">Always allowed</h3>
-                <ul className="set-rows">
+                <List className="set-rows" rise={false}>
                   {always.map((person) => (
-                    <li key={person.id}>
+                    <Item key={person.id}>
                       <span className="grow">
                         <strong>{person.email}</strong> may {person.rights.map(grant=>`${switchable[grant.right as keyof typeof switchable].toLowerCase()}${"clients" in grant && grant.clients ? ` for ${namesOf(grant.clients).replaceAll("\n",", ")}` : " for every client"}${"until" in grant && grant.until ? ` until ${longDate(grant.until)}` : ""}`).join("; ")} without asking
                       </span>
                       <form action={withdrawAlways}>
                         <input type="hidden" name="person" value={person.id} />
-                        <button className="b b-ghost">Withdraw</button>
+                        <Pending className="b b-ghost">Withdraw</Pending>
                       </form>
-                    </li>
+                    </Item>
                   ))}
-                </ul>
+                </List>
               </>
             )}
           </Card>}
@@ -498,7 +499,7 @@ export default async function Settings({
                   </label>
                 ))}
               </fieldset>
-              <div className="set-foot"><Pending className="b b-primary" type="submit">Save who sees clients</Pending></div>
+              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save who sees clients</Pending></div>
             </form>
           </Card>}
           </>}
@@ -519,7 +520,7 @@ export default async function Settings({
                 Reply to clients when their files arrive, saying what was received
               </label>
               <p className="hint">A reminder is skipped when the return is filed, the client already sent files for it, or your team is replying to them.</p>
-              <div className="set-foot"><Pending className="b b-primary" type="submit">Save reminders</Pending></div>
+              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save reminders</Pending></div>
             </form>
           </Card>
 
@@ -538,7 +539,7 @@ export default async function Settings({
                 <input className="toggle" type="checkbox" name="approve_all" defaultChecked={records.approve_all === true} />
                 Wait for approval for every paper
               </label>
-              <div className="set-foot"><Pending className="b b-primary" type="submit">Save papers</Pending></div>
+              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save papers</Pending></div>
             </form>
           </Card>
           </>}

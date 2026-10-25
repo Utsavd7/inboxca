@@ -120,7 +120,7 @@ export function UploadForm({ clientId, types, typeWork, works, periods, keep, ch
 function Upload({ count, disabled }: { count: number; disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button className="b b-primary" type="submit" disabled={disabled || pending}>
+    <button className="b b-primary" type="submit" disabled={disabled || pending} aria-busy={pending || undefined}>
       {pending ? "Uploading" : count > 1 ? `Upload ${count} files` : "Upload"}
     </button>
   );

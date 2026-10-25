@@ -19,7 +19,7 @@ export function MailboxForm({initial={},reconnecting=false}:{initial?:Record<str
           <label htmlFor="mail-password">Its password</label>
           <input id="mail-password" name="password" type="password" autoComplete="new-password" required />
         </div>
-        <button className="b b-primary" type="submit" disabled={connecting}>
+        <button className="b b-primary" type="submit" disabled={connecting} aria-busy={connecting || undefined}>
           {connecting ? "Connecting" : reconnecting ? "Reconnect email" : "Connect email"}
         </button>
       </div>

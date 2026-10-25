@@ -1,6 +1,7 @@
 import "./mark-filed.css";
 import { manageTasks } from "@/app/(app)/actions";
 import { todayInIndia } from "@/src/lib/calendar";
+import { Pending } from "./pending";
 
 // Marking returns filed, from the Calendar or a client's Returns tab, in a side panel: the day
 // they were filed and each one's acknowledgement number (ARN), both kept with the return.
@@ -30,12 +31,12 @@ export function MarkFiled({ rows, state }: { rows: { id: string; name: string; s
         ))}
       </ul>
       <div className="mark-filed-actions">
-        <button className="b b-primary" name="intent" value="filed">
+        <Pending className="b b-primary" name="intent" value="filed">
           Mark filed
-        </button>
-        <button className="b b-secondary" name="intent" value="in_progress">
+        </Pending>
+        <Pending className="b b-secondary" name="intent" value="in_progress">
           Mark in progress
-        </button>
+        </Pending>
       </div>
     </form>
   );

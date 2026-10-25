@@ -6,6 +6,7 @@ import {grantFor} from "@/src/lib/permission-grants";
 import { periodName } from "@/src/lib/documents";
 import { currentMember } from "@/src/lib/member";
 import { Badge, PageHead } from "../../../ui";
+import { Pending } from "../../../pending";
 import {preparedSchema} from "@/src/lib/prepared";
 import {templateSchema} from "@/src/lib/templates";
 import { FileViewer } from "./file-viewer";
@@ -47,7 +48,7 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
         }
 
       />
-      {membership.role!=="owner" && !membership.viewOnlyUntil && !meta && viewable && <div className="form-row">{canCopy ? <form method="post" action={`/app/files/${id}/stream${extension==="xlsx" ? `?sheet=${sheet}` : ""}`}><button className="b b-secondary b-small">Download these pages</button><p className="hint">A PDF with your name and the time on each page. Up to 30 pages, from this sheet for a spreadsheet.</p></form> : <form action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><button className="b b-ghost b-small">Ask to download</button></form>}</div>}
+      {membership.role!=="owner" && !membership.viewOnlyUntil && !meta && viewable && <div className="form-row">{canCopy ? <form method="post" action={`/app/files/${id}/stream${extension==="xlsx" ? `?sheet=${sheet}` : ""}`}><button className="b b-secondary b-small">Download these pages</button><p className="hint">A PDF with your name and the time on each page. Up to 30 pages, from this sheet for a spreadsheet.</p></form> : <form action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><Pending className="b b-ghost b-small">Ask to download</Pending></form>}</div>}
       {!!sheets.length && <nav className="pills" aria-label="Form sheets">{sheets.map(([name,number])=><Link key={number} href={`?sheet=${number}`} aria-current={sheet===number ? "page" : undefined}>{name.toUpperCase().replaceAll("_"," ")}</Link>)}</nav>}
       {viewable && (!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) ? <p className="hint viewer-none">Documents cannot be shown yet.</p> : viewable ? (
         <FileViewer key={`${file.id}-${sheet}`} id={file.id} sheet={sheet} hideInactive={membership.settings.viewer_hide_inactive === true} />

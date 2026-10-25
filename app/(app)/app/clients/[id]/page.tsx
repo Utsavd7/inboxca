@@ -28,6 +28,8 @@ import { AutoSelect } from "../../auto-select";
 import { LinkTabs } from "../../link-tabs";
 import { DroppedNotice, PortalDrop } from "../../portal-drop";
 import { MarkFiled } from "../../mark-filed";
+import { Presence } from "../../motion";
+import { Pending } from "../../pending";
 import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Kind } from "../../ui";
 import { CopyButton } from "../../ui-client";
 import { UploadForm } from "./upload-form";
@@ -194,9 +196,9 @@ export default async function Client({ params, searchParams }: { params: Promise
         <input type="hidden" name="client" value={client.id} />
         <input type="hidden" name="right" value={right} />
         {documentId && <input type="hidden" name="document" value={documentId} />}
-        <button className="b b-secondary" aria-label={documentId ? `${label}: ${documents.find((file) => file.id === documentId)?.name}` : label}>
+        <Pending className="b b-secondary" aria-label={documentId ? `${label}: ${documents.find((file) => file.id === documentId)?.name}` : label}>
           {label}
-        </button>
+        </Pending>
       </form>
     );
   // A file waiting to be checked because the client already has it, or one like it.
@@ -597,9 +599,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                   (renamed || removed) && (
                     <form action={removed ? removeDocument : manageDocument}>
                       <input type="hidden" name="document" value={noticeFile.id} />
-                      <button className="b" name="intent" value={removed ? "restore" : "undo"}>
+                      <Pending className="b" name="intent" value={removed ? "restore" : "undo"}>
                         {removed ? "Put back" : "Undo"}
-                      </button>
+                      </Pending>
                     </form>
                   )
                 }
@@ -628,12 +630,12 @@ export default async function Client({ params, searchParams }: { params: Promise
                                     <input type="hidden" name="request" value={request.id} />
                                     <input type="hidden" name="item" value={at} />
                                     <span className="hint">{item.type}</span>
-                                    <button className="b b-secondary" name="intent" value="checked" aria-label={`${item.type} is right`}>
+                                    <Pending className="b b-secondary" name="intent" value="checked" aria-label={`${item.type} is right`}>
                                       Checked
-                                    </button>
-                                    <button className="b b-ghost" name="intent" value="again" aria-label={`Ask again for ${item.type}`}>
+                                    </Pending>
+                                    <Pending className="b b-ghost" name="intent" value="again" aria-label={`Ask again for ${item.type}`}>
                                       Ask again
-                                    </button>
+                                    </Pending>
                                   </form>
                                 ) : null,
                               )}
@@ -725,7 +727,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                       action={
                         <form action={removeDocument}>
                           <input type="hidden" name="document" value={document.id} />
-                          <button className="b b-secondary" name="intent" value="restore">Put back</button>
+                          <Pending className="b b-secondary" name="intent" value="restore">Put back</Pending>
                         </form>
                       }
                     />
@@ -787,7 +789,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                               <form action={manageTasks}>
                                 {returnsState}
                                 <input type="hidden" name="task" value={task.id} />
-                                <button className="b b-secondary" name="intent" value="reopen" aria-label={`${title} was not filed after all`}>Not filed after all</button>
+                                <Pending className="b b-secondary" name="intent" value="reopen" aria-label={`${title} was not filed after all`}>Not filed after all</Pending>
                               </form>
                             )
                           )
@@ -841,7 +843,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                                 {!viewOnly && manage && <>
                                   <input type="date" name="date" defaultValue={details.suggested_date} aria-label={`Action date for ${details.notice_type}`} className="cell-input" required />
                                   <span className="hint need-date">Pick the date from the notice first</span>
-                                  <button className="b b-secondary" name="intent" value="confirm">Confirm date</button>
+                                  <Pending className="b b-secondary" name="intent" value="confirm">Confirm date</Pending>
                                 </>}
                               </form>
                             )}
@@ -876,8 +878,9 @@ export default async function Client({ params, searchParams }: { params: Promise
       </div>
       </ViewTransition>
 
+      <Presence>
       {panel === "numbers" && manage && (
-        <SidePanel id="numbers-panel" title="Registrations" close={base}>
+        <SidePanel key="numbers-panel" id="numbers-panel" title="Registrations" close={base}>
           {alert}
           <ul className="client-rows">
             {numbers.map((registration) => (
@@ -886,7 +889,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <form action={manageClient}>
                   {hidden("numbers")}
                   <input type="hidden" name="registration" value={registration.id} />
-                  <button className="b b-ghost" name="intent" value="remove-number" aria-label={`Remove ${registration.number}`}>Remove</button>
+                  <Pending className="b b-ghost" name="intent" value="remove-number" aria-label={`Remove ${registration.number}`}>Remove</Pending>
                 </form>
               </li>
             ))}
@@ -903,12 +906,12 @@ export default async function Client({ params, searchParams }: { params: Promise
               <label htmlFor="number-value">Value</label>
               <input id="number-value" name="number" required autoComplete="off" className="num" />
             </div>
-            <button className="b b-primary" name="intent" value="add-number">Add number</button>
+            <Pending className="b b-primary" name="intent" value="add-number">Add number</Pending>
           </form>
         </SidePanel>
       )}
       {panel === "services" && manage && (
-        <SidePanel id="services" title="Services" close={base}>
+        <SidePanel key="services" id="services" title="Services" close={base}>
           {alert}
           <p className="hint">What your firm files for this client. InboxCA makes the due dates for the next 12 months.</p>
           <form key={numbers.map((registration) => registration.services.join()).join()} action={manageClient}>
@@ -928,12 +931,12 @@ export default async function Client({ params, searchParams }: { params: Promise
                 </li>
               ))}
             </ul>
-            <button className="b b-primary service-save" name="intent" value="services">Save services</button>
+            <Pending className="b b-primary service-save" name="intent" value="services">Save services</Pending>
           </form>
         </SidePanel>
       )}
       {panel === "contacts" && (
-        <SidePanel id="contacts" title="Contact people" close={base}>
+        <SidePanel key="contacts" id="contacts" title="Contact people" close={base}>
           {alert}
           <p className="hint">People who write for this client. InboxCA recognises their emails, and sends documents only to those allowed.</p>
           <ul className="client-rows">
@@ -948,8 +951,8 @@ export default async function Client({ params, searchParams }: { params: Promise
                       <input type="hidden" name="contact" value={contact.contact_id} />
                       <label className="check"><input type="checkbox" name="can_view_status" defaultChecked={contact.can_view_status} /> Sees work status</label>
                       <label className="check"><input type="checkbox" name="can_receive_documents" defaultChecked={contact.can_receive_documents} /> Receives documents</label>
-                      <button className="b b-secondary" name="intent" value="contact-rights">Save</button>
-                      <button className="b b-ghost" name="intent" value="unlink-contact">Remove</button>
+                      <Pending className="b b-secondary" name="intent" value="contact-rights">Save</Pending>
+                      <Pending className="b b-ghost" name="intent" value="unlink-contact">Remove</Pending>
                     </form>
                   ) : (
                     <span className="sub">{[contact.can_view_status && "Sees work status", contact.can_receive_documents && "Receives documents"].filter(Boolean).join(", ")}</span>
@@ -967,13 +970,13 @@ export default async function Client({ params, searchParams }: { params: Promise
               <div><label htmlFor="contact-relation">Who they are, if known</label><input id="contact-relation" name="relation" maxLength={60} /></div>
               <label className="check"><input type="checkbox" name="can_view_status" /> Sees work status</label>
               <label className="check"><input type="checkbox" name="can_receive_documents" /> Receives documents</label>
-              <button className="b b-primary" name="intent" value="add-contact">Add contact</button>
+              <Pending className="b b-primary" name="intent" value="add-contact">Add contact</Pending>
             </form>
           )}
         </SidePanel>
       )}
       {panel === "team" && (
-        <SidePanel id="assigned" title="Looked after by" close={base}>
+        <SidePanel key="assigned" id="assigned" title="Looked after by" close={base}>
           {alert}
           <ul className="client-rows">
             {assigned.map((assignment) => (
@@ -983,7 +986,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                   <form action={manageClient}>
                     {hidden("team")}
                     <input type="hidden" name="who" value={assignment.value} />
-                    <button className="b b-ghost" name="intent" value="unassign">Unassign</button>
+                    <Pending className="b b-ghost" name="intent" value="unassign">Unassign</Pending>
                   </form>
                 )}
               </li>
@@ -1005,13 +1008,13 @@ export default async function Client({ params, searchParams }: { params: Promise
                   {Object.entries(assignmentRoles).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </div>
-              <button className="b b-primary" name="intent" value="assign">Assign</button>
+              <Pending className="b b-primary" name="intent" value="assign">Assign</Pending>
             </form>
           )}
         </SidePanel>
       )}
       {panel === "details" && manage && (
-        <SidePanel id="details" title="Details" close={base}>
+        <SidePanel key="details" id="details" title="Details" close={base}>
           {alert}
           <form action={manageClient} className="fields">
             {hidden("details")}
@@ -1040,24 +1043,24 @@ export default async function Client({ params, searchParams }: { params: Promise
                 </select>
               </div>
             )}
-            <button className="b b-primary" name="intent" value="details">Save details</button>
+            <Pending className="b b-primary" name="intent" value="details">Save details</Pending>
           </form>
           <h3>Reminders</h3>
           <form action={pauseReminders} className="form-row">
             <input type="hidden" name="client" value={client.id} />
             <label className="check"><input type="checkbox" name="paused" defaultChecked={client.reminders_paused} /> Pause reminders for this client</label>
-            <button className="b b-secondary" type="submit">Save</button>
+            <Pending className="b b-secondary" type="submit">Save</Pending>
           </form>
           <h3>{client.archived_at ? "Archived" : "Archive"}</h3>
           <form action={manageClient} className="form-row">
             {hidden("details")}
             <p className="hint">{client.archived_at ? "Archived clients are hidden from the list. Nothing was deleted." : "Archiving hides the client from the list. Nothing is deleted, and you can restore it."}</p>
-            <button className="b b-secondary" name="intent" value={client.archived_at ? "restore" : "archive"}>{client.archived_at ? "Restore client" : "Archive client"}</button>
+            <Pending className="b b-secondary" name="intent" value={client.archived_at ? "restore" : "archive"}>{client.archived_at ? "Restore client" : "Archive client"}</Pending>
           </form>
         </SidePanel>
       )}
       {panel === "activity" && (
-        <SidePanel id="client-activity" title="Activity" close={base}>
+        <SidePanel key="client-activity" id="client-activity" title="Activity" close={base}>
           <p className="hint">The latest 50 changes for this client.</p>
           <Suspense fallback={<SkeletonRows rows={6} />}>
             <Activity client={id} people={people ?? []} undoable={manage && !viewOnly ? documents.filter((file) => !file.prepared).map((file) => file.id) : []} />
@@ -1065,7 +1068,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         </SidePanel>
       )}
       {panel === "notice" && !viewOnly && (
-        <SidePanel id="add-notice" title="Add a notice" close={`${base}?tab=notices`}>
+        <SidePanel key="add-notice" id="add-notice" title="Add a notice" close={`${base}?tab=notices`}>
           {alert}
           <form action={manageNotice} className="fields">
             <input type="hidden" name="client" value={client.id} />
@@ -1080,13 +1083,13 @@ export default async function Client({ params, searchParams }: { params: Promise
             <div><label htmlFor="notice-reference">Reference or DIN</label><input id="notice-reference" name="reference" maxLength={60} className="num" /></div>
             <div><label htmlFor="notice-received">Received on</label><input id="notice-received" name="received" type="date" defaultValue={today} required /></div>
             <div><label htmlFor="notice-date">Action date, as the notice states it</label><input id="notice-date" name="date" type="date" /></div>
-            <button className="b b-primary" name="intent" value="add">Add notice</button>
+            <Pending className="b b-primary" name="intent" value="add">Add notice</Pending>
           </form>
         </SidePanel>
       )}
 
       {ask && !viewOnly && (
-        <SidePanel id="ask-files" title={`Ask ${client.name} for papers`} close={here}>
+        <SidePanel key="ask-files" id="ask-files" title={`Ask ${client.name} for papers`} close={here}>
           {alert}
           <p className="hint">The client gets a private link to upload them, no sign in needed. It works for 30 days.</p>
           <form action={askForDocuments}>
@@ -1114,7 +1117,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 </select>
               </div>
               {gstinChoice}
-              <button className="b b-primary" type="submit">Ask for papers</button>
+              <Pending className="b b-primary" type="submit">Ask for papers</Pending>
             </div>
           </form>
           {manage && (
@@ -1126,14 +1129,14 @@ export default async function Client({ params, searchParams }: { params: Promise
                   <label htmlFor="ask-list">One paper on each line. It changes the list for every client of this kind; leave it empty to go back to the starting list.</label>
                   <textarea id="ask-list" className="ask-list" name="items" rows={8} defaultValue={kindList.join("\n")} />
                 </div>
-                <button className="b b-secondary" type="submit">Save list</button>
+                <Pending className="b b-secondary" type="submit">Save list</Pending>
               </form>
             </details>
           )}
         </SidePanel>
       )}
       {upload && canUpload && !ask && (
-        <SidePanel id="upload-file" title="Upload papers" close={`${base}?tab=documents`}>
+        <SidePanel key="upload-file" id="upload-file" title="Upload papers" close={`${base}?tab=documents`}>
           {alert}
           <p className="hint">Each file is saved in the client&apos;s folder in your firm&apos;s drive, named by the type and period you choose.</p>
           <UploadForm
@@ -1154,7 +1157,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         </SidePanel>
       )}
       {paper && !viewOnly && !ask && !confirmSend && (
-        <SidePanel id="edit-file" title={paper.name} close={`${base}?tab=documents`}>
+        <SidePanel key="edit-file" id="edit-file" title={paper.name} close={`${base}?tab=documents`}>
           {alert}
           {paper.status === "to_check" && sameAs(paper) && <p className="hint">{sameAs(paper)}.</p>}
           {canRename && !paper.prepared && (
@@ -1163,7 +1166,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               <form action={manageDocument} className="fields">
                 <input type="hidden" name="document" value={paper.id} />
                 <DocumentFields type={paper.document_type} work={paper.work_type} period={paper.period_key} firmTypes={firmTypes} keep={manage} />
-                <button className="b b-primary" name="intent" value="save">Save</button>
+                <Pending className="b b-primary" name="intent" value="save">Save</Pending>
               </form>
             </>
           )}
@@ -1202,7 +1205,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             <form action={removeDocument} className="form-row">
               <input type="hidden" name="document" value={paper.id} />
               <p className="hint">It waits 30 days in the drive&apos;s Deleted and old versions folder and can be put back.</p>
-              <button className="b b-secondary" name="intent" value="remove" aria-label={`Remove ${paper.name}`}>Remove</button>
+              <Pending className="b b-secondary" name="intent" value="remove" aria-label={`Remove ${paper.name}`}>Remove</Pending>
             </form>
           ) : (
             askButton("remove", "Ask to remove", paper.id)
@@ -1213,14 +1216,14 @@ export default async function Client({ params, searchParams }: { params: Promise
               <form key={paper.share_policy ?? "firm"} action={setPaperSharing} className="form-row">
                 <input type="hidden" name="document" value={paper.id} />
                 <div><label htmlFor="paper-sharing">Sending this paper</label><select id="paper-sharing" name="policy" defaultValue={paper.share_policy ?? ""}><option value="">Use the firm&apos;s choice</option><option value="auto">Routine paper</option><option value="approval">Ask before sending</option><option value="internal">Keep inside the firm</option></select></div>
-                <button className="b b-secondary">Save sending choice</button>
+                <Pending className="b b-secondary">Save sending choice</Pending>
               </form>
             </details>
           )}
         </SidePanel>
       )}
       {paper && confirmSend && (
-        <SidePanel id="send-file" title="Send to the client" close={`${base}?tab=documents&edit=${paper.id}`}>
+        <SidePanel key="send-file" id="send-file" title="Send to the client" close={`${base}?tab=documents&edit=${paper.id}`}>
           {alert}
           <form action={sendDocument} className="send-to">
             <input type="hidden" name="document" value={paper.id} />
@@ -1242,17 +1245,18 @@ export default async function Client({ params, searchParams }: { params: Promise
             )}
             <p className="hint">{paper.name} goes from your firm&apos;s address as a secure link that works for 7 days and 5 downloads.</p>
             <span className="form-row">
-              <button className="b b-primary" type="submit">Send</button>
+              <Pending className="b b-primary" type="submit">Send</Pending>
               <Link className="b b-secondary" href={`${base}?tab=documents&edit=${paper.id}`} scroll={false}>Back</Link>
             </span>
           </form>
         </SidePanel>
       )}
       {filing && (
-        <SidePanel id="mark-filed" title="Mark filed" close={returnsHref}>
+        <SidePanel key="mark-filed" id="mark-filed" title="Mark filed" close={returnsHref}>
           <MarkFiled state={returnsState} rows={[{ id: filing.id, name: `${rule.get(filing.code ?? "")?.name ?? filing.code} ${periodLabel(rule.get(filing.code ?? "")?.frequency ?? null, filing.period_key)}`, sub: `Due ${dueLabel(filing.due_on)}` }]} />
         </SidePanel>
       )}
+      </Presence>
       {!!done?.length && (
         <Toast
           undo={
@@ -1260,7 +1264,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               <form action={manageTasks}>
                 {returnsState}
                 {done.map((task) => <input key={task.id} type="hidden" name="task" value={task.id} />)}
-                <button className="b" name="intent" value="reopen">Undo</button>
+                <Pending className="b" name="intent" value="reopen">Undo</Pending>
               </form>
             )
           }
@@ -1391,7 +1395,7 @@ async function Activity({ client, people, undoable }: { client: string; people: 
             {activity.data.findIndex((other) => other.document_id === entry.document_id) === index && undoable.includes(entry.document_id) && (
               <form action={manageDocument}>
                 <input type="hidden" name="document" value={entry.document_id} />
-                <button className="b b-ghost" name="intent" value="undo" aria-label={`Undo rename of ${entry.renamed_to ?? entry.renamed_from}`}>Undo</button>
+                <Pending className="b b-ghost" name="intent" value="undo" aria-label={`Undo rename of ${entry.renamed_to ?? entry.renamed_from}`}>Undo</Pending>
               </form>
             )}
           </li>

@@ -19,6 +19,7 @@ import { opensInMailbox } from "@/src/lib/mailbox";
 import { askedPaper } from "@/src/lib/records";
 import { awake, labels, replyReasons } from "@/src/lib/triage";
 import { LinkTabs } from "../link-tabs";
+import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { Avatar, Badge, Empty, PageHead, Row as ListRow, SidePanel, Toast } from "../ui";
 import { clientsOf, contactName, conversation } from "./conversation";
@@ -301,9 +302,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   // The list: rows from InboxCA's records first, their subject and first line as an outline
   // until the mailbox answers (live false), then the whole list with sent mail in its place.
   const listView = (list: Row[], live: boolean, older?: string | null) => (
-    <ul aria-label="Emails" className={live ? undefined : "stagger"}>
+    <List label="Emails" rise={!live}>
       {list.map((row) => (
-        <li key={row.key} className="ib-row" aria-current={row.key === openKey ? "true" : undefined} data-waits={row.tags[0]?.text === "Needs reply" || undefined}>
+        <Item key={row.key} className="ib-row" aria-current={row.key === openKey ? "true" : undefined} data-waits={row.tags[0]?.text === "Needs reply" || undefined}>
           <Link href={row.href} scroll={false}>
             <Avatar name={row.client} />
             <span className="ib-row-main">
@@ -334,10 +335,10 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             )}
             {row.clientId && <Link className="b b-secondary" href={`/app/clients/${row.clientId}`}>Open client</Link>}
           </span>
-        </li>
+        </Item>
       ))}
-      {older && <li className="ib-more"><Link href={older}>Older emails</Link></li>}
-    </ul>
+      {older && <li key="older" className="ib-more"><Link href={older}>Older emails</Link></li>}
+    </List>
   );
   const filtered = Object.values(filters).some(Boolean) || !!before;
   const listed_ = listed.then(({ list, older, failed }) => (
@@ -428,15 +429,15 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                     <input type="hidden" name="request" value={request.id} />
                     <input type="hidden" name="back" value={here} />
                     <input type="hidden" name="intent" value="snooze" />
-                    <button name="until" value={addDays(today, 1)}>Tomorrow<small>{dayName(addDays(today, 1))}</small></button>
-                    <button name="until" value={addDays(today, 7)}>Next week<small>{dayName(addDays(today, 7))}</small></button>
+                    <Pending name="until" value={addDays(today, 1)}>Tomorrow<small>{dayName(addDays(today, 1))}</small></Pending>
+                    <Pending name="until" value={addDays(today, 7)}>Next week<small>{dayName(addDays(today, 7))}</small></Pending>
                   </form>
                   <form action={manageEmail} className="ib-day">
                     <input type="hidden" name="request" value={request.id} />
                     <input type="hidden" name="back" value={here} />
                     <input type="hidden" name="intent" value="snooze" />
                     <input type="date" name="until" min={addDays(today, 1)} max={addDays(today, 365)} required aria-label="Snooze until a date" />
-                    <button className="b b-secondary">Snooze</button>
+                    <Pending className="b b-secondary">Snooze</Pending>
                   </form>
                 </div>
               </details>
@@ -452,12 +453,12 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                   <input type="hidden" name="back" value={here} />
                   <input type="hidden" name="intent" value="assign" />
                   {team.map((person) => (
-                    <button key={person.user_id} name="who" value={person.user_id} aria-current={person.user_id === openAsk.assignee ? "true" : undefined}>
+                    <Pending key={person.user_id} name="who" value={person.user_id} aria-current={person.user_id === openAsk.assignee ? "true" : undefined}>
                       <Avatar name={personName(person.email)} />
                       <span className="grow">{personName(person.email)}{person.user_id === userId && " (you)"}<small>{person.email}</small></span>
-                    </button>
+                    </Pending>
                   ))}
-                  {openAsk.assignee && <button name="who" value="">Nobody</button>}
+                  {openAsk.assignee && <Pending name="who" value="">Nobody</Pending>}
                 </form>
               </details>
             )}
@@ -469,7 +470,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                 <select name="client" aria-label={`Which client the email from ${sender} is for`}>
                   {links.map((link) => <option key={link.client_id} value={link.client_id}>{link.clients?.name}</option>)}
                 </select>
-                <button className="b b-secondary" name="intent" value="client">It is for this client</button>
+                <Pending className="b b-secondary" name="intent" value="client">It is for this client</Pending>
               </form>
             )}
             {event && !event.client_id && clientPicker(links?.length ? "Another client" : "File to a client", { ...filters, mail: event.id, file: "pick" }, (id) => href({ mail: event.id, file: id }), undefined, sp.file === "pick" && (!!cq || !!sp.cpage))}
@@ -483,7 +484,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                     <input type="hidden" name="email" value={event.id} />
                     <input type="hidden" name="intent" value="label" />
                     {Object.entries(labels).map(([value, label]) => (
-                      <button key={value} name="label" value={value} aria-current={value === (event.label ?? "other") ? "true" : undefined}>{label}</button>
+                      <Pending key={value} name="label" value={value} aria-current={value === (event.label ?? "other") ? "true" : undefined}>{label}</Pending>
                     ))}
                   </form>
                 </details>
@@ -593,8 +594,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                     {approver && (
                       <form action={decideShare}>
                         <input type="hidden" name="share" value={share.id} />
-                        <button className="b b-ghost" name="intent" value="refuse">Don&apos;t send</button>
-                        <button className="b b-secondary" name="intent" value="approve">Approve and send</button>
+                        <Pending className="b b-ghost" name="intent" value="refuse">Don&apos;t send</Pending>
+                        <Pending className="b b-secondary" name="intent" value="approve">Approve and send</Pending>
                       </form>
                     )}
                   </li>
@@ -715,8 +716,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           )}
         </article>
       </Reading>
+      <Presence>
       {composing && (
-        <SidePanel id="compose-title" title="Write to a client" close={href()}>
+        <SidePanel key="compose" id="compose-title" title="Write to a client" close={href()}>
           {sp.error && errors[sp.error] && <p className="alert" role="alert">{errors[sp.error]}</p>}
           <div className="ib-write">
             <div className="ib-field">
@@ -734,25 +736,28 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           </div>
         </SidePanel>
       )}
+      </Presence>
+      <Presence>
       {answering && (() => {
         const { name, what } = asking(answering);
         const time = answering.reason_code === "time";
         const file = (answering.details as { document_name?: string }).document_name;
         return (
-          <SidePanel id="answer-title" title={`${name} asks to ${what}${answering.clients?.name ? ` for ${answering.clients.name}` : ""}`} close={here}>
+          <SidePanel key="answer" id="answer-title" title={`${name} asks to ${what}${answering.clients?.name ? ` for ${answering.clients.name}` : ""}`} close={here}>
             <div className="ib-answer">
               {file && <p>The file: <strong>{file}</strong></p>}
               <p className="ib-note">{time ? "Allow today lets them keep working until then, today only." : "Allow once lets them do it one time, within an hour. Always allow lets them do it from now on, until you withdraw it in Settings."}</p>
               <form action={decidePermission} className="ib-inline">
                 <input type="hidden" name="request" value={answering.id} />
-                <button className="b b-primary" name="intent" value="allow">{time ? "Allow today" : "Allow once"}</button>
-                {owner && !!answering.reason_code && answering.reason_code in switchable && <button className="b b-secondary" name="intent" value="always">Always allow {name}</button>}
-                <button className="b b-ghost" name="intent" value="refuse">Refuse</button>
+                <Pending className="b b-primary" name="intent" value="allow">{time ? "Allow today" : "Allow once"}</Pending>
+                {owner && !!answering.reason_code && answering.reason_code in switchable && <Pending className="b b-secondary" name="intent" value="always">Always allow {name}</Pending>}
+                <Pending className="b b-ghost" name="intent" value="refuse">Refuse</Pending>
               </form>
             </div>
           </SidePanel>
         );
       })()}
+      </Presence>
       {decided && decided.status !== "pending" && (() => {
         const { name, what } = asking(decided);
         const always = decided.status === "used" && decided.reason_code !== "time";
@@ -761,7 +766,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             undo={decided.reason_code !== "time" && (
               <form action={undoPermission}>
                 <input type="hidden" name="request" value={decided.id} />
-                <button className="b">Undo</button>
+                <Pending className="b">Undo</Pending>
               </form>
             )}
           >
@@ -769,8 +774,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           </Toast>
         );
       })()}
+      <Presence>
       {sp.confirm === "done" && !!clearable.length && (
-        <SidePanel id="done-title" title={`Mark ${clearable.length === 1 ? "1 email" : `${clearable.length} emails`} as done?`} close={here}>
+        <SidePanel key="done" id="done-title" title={`Mark ${clearable.length === 1 ? "1 email" : `${clearable.length} emails`} as done?`} close={here}>
           <p className="hint">They leave Needs reply. Nobody is emailed, and Undo brings them back.</p>
           <ul className="app-rows ib-preview">
             {/* Each email by its client and status at once, its subject once the mailbox answers. */}
@@ -792,6 +798,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           </form>
         </SidePanel>
       )}
+      </Presence>
       {!!cleared.length && (
         <Toast
           undo={

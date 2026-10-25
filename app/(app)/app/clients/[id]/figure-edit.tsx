@@ -1,6 +1,7 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from "react";
 import {reviewFigure,saveFigureEdit} from "./dataset-actions";
+import {Pending} from "../../pending";
 
 // Kept drafts are separate from checked figures and never change a prepared form.
 export function FigureEdit({client,draft,line,revision,value,reason="",kind,kept=false}:{client:string;draft:string;line:string;revision:number;value:string;reason?:string;kind?:string;kept?:boolean}) {
@@ -29,6 +30,6 @@ export function FigureEdit({client,draft,line,revision,value,reason="",kind,kept
     {Object.entries({client,draft,line,revision:String(revision),intent:"edit"}).map(([name,value])=><input key={name} type="hidden" name={name} value={value}/>)}
     <div><label htmlFor="figure-value">Correct figure</label><input id="figure-value" name="value" type={kind==="date" ? "date" : "text"} inputMode={!kind || kind==="number" ? "decimal" : "text"} value={fields.value} maxLength={2000} onChange={event=>change("value",event.target.value)} onBlur={flush}/></div>
     <div><label htmlFor="figure-reason">Why it changed</label><input id="figure-reason" name="reason" maxLength={300} value={fields.reason} onChange={event=>change("reason",event.target.value)} onBlur={flush}/></div>
-    <p className="hint" aria-live="polite">{message}</p><button className="b b-secondary">Save correction</button>
+    <p className="hint" aria-live="polite">{message}</p><Pending className="b b-secondary">Save correction</Pending>
   </form>;
 }

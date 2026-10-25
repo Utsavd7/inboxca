@@ -11,6 +11,8 @@ import { activeClients, importSince, inScope, planImport, type Scope } from "@/s
 import type { ImportPlan } from "@/src/jobs/import-files";
 import { currentMember } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
+import { Presence } from "../motion";
+import { Pending } from "../pending";
 import { Badge, Empty, PageHead, SidePanel, Toast } from "../ui";
 import { DiskUpload } from "./disk-upload";
 
@@ -184,9 +186,9 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
                   </table>
                 </div>
                 {planned.length > 200 && <p className="hint">And {planned.length - 200} more.</p>}
-                <button className="b b-primary import-go" type="submit" disabled={!planned.length}>
+                <Pending className="b b-primary import-go" type="submit" disabled={!planned.length}>
                   Move these files
-                </button>
+                </Pending>
               </form>
             </section>
           )}
@@ -208,7 +210,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
                       {!!plan.moved.length && (
                         <form action={undoFirstImport}>
                           <input type="hidden" name="import" value={request.id} />
-                          <button className="b b-ghost b-small">Put them back</button>
+                          <Pending className="b b-ghost b-small">Put them back</Pending>
                         </form>
                       )}
                     </li>
@@ -219,8 +221,9 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
           )}
         </>
       )}
+      <Presence>
       {pick && (
-        <SidePanel id="pick-client" title="Choose the client" close={address({})}>
+        <SidePanel key="pick" id="pick-client" title="Choose the client" close={address({})}>
           <p className="hint num">{pick}</p>
           <form action="/app/import" role="search" className="import-find">
             {[...new URLSearchParams(address({ pick }).split("?")[1]).entries()].map(([key, value], at) => (
@@ -245,6 +248,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
           </p>
         </SidePanel>
       )}
+      </Presence>
     </>
   );
 }

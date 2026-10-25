@@ -10,6 +10,7 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { AutoSelect } from "../auto-select";
 import { LinkTabs } from "../link-tabs";
 import { MarkFiled } from "../mark-filed";
+import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Tone } from "../ui";
 import { RowKeys } from "../row-keys";
@@ -137,6 +138,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   // Beside the month the list is narrower: the period goes under the return, and a chosen
   // day's returns need no due date.
   const compact = !!month;
+  // Ticks clear once any return shown changes, as after marking the chosen ones.
+  const ticks = tasks?.map((task) => task.id + task.status).join();
   const thisMonth = today.slice(0, 7);
 
   const list = (
@@ -161,7 +164,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
         </form>
       </div>
       {tasks?.length ? (
-        <div key={tasks.map((task) => task.id + task.status).join()} className="pane cal-table">
+        <div key={close} className={`pane cal-table${compact ? " pane-in" : ""}`}>
           <table className="t">
             <thead>
               <tr>
@@ -180,16 +183,16 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 </th>
               </tr>
             </thead>
-            <tbody className="stagger">
+            <List as="tbody">
               {tasks.map((task) => {
                 const [form, of] = name(task);
                 const ack = (task.details as { ack?: string }).ack;
                 const [tone, word] = status(task);
                 return (
-                  <tr key={task.id}>
+                  <Item as="tr" key={task.id}>
                     {!viewOnly && (
                       <td className="shrink">
-                        <input className="pick" type="checkbox" form="cal-pick" name="task" value={task.id} aria-label={`Choose ${task.clients.name} ${form}`} />
+                        <input key={ticks} className="pick" type="checkbox" form="cal-pick" name="task" value={task.id} aria-label={`Choose ${task.clients.name} ${form}`} />
                       </td>
                     )}
                     <td>
@@ -234,16 +237,16 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                         <form action={manageTasks}>
                           {state}
                           <input type="hidden" name="task" value={task.id} />
-                          <button className="b b-secondary" name="intent" value="reopen" aria-label={`Mark ${task.clients.name} ${form} not filed`}>
+                          <Pending className="b b-secondary" name="intent" value="reopen" aria-label={`Mark ${task.clients.name} ${form} not filed`}>
                             Mark not filed
-                          </button>
+                          </Pending>
                         </form>
                       )}
                     </td>
-                  </tr>
+                  </Item>
                 );
               })}
-            </tbody>
+            </List>
           </table>
           <RowKeys />
         </div>
@@ -414,22 +417,23 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
           {state}
           <span className="bulk-count">chosen</span>
           {filedView ? (
-            <button className="b b-primary" formAction={reopenTasks}>
+            <Pending className="b b-primary" formAction={reopenTasks}>
               Mark chosen as not filed
-            </button>
+            </Pending>
           ) : (
             <>
-              <button className="b b-secondary" formAction={markTasksInProgress}>
+              <Pending className="b b-secondary" formAction={markTasksInProgress}>
                 Mark chosen as in progress
-              </button>
-              <button className="b b-primary">Mark chosen as filed</button>
+              </Pending>
+              <Pending className="b b-primary">Mark chosen as filed</Pending>
             </>
           )}
         </form>
       )}
 
+      <Presence>
       {marking && !viewOnly && (
-        <SidePanel id="mark-filed" title={marking.length > 1 ? `Mark ${marking.length} returns filed` : "Mark filed"} close={close}>
+        <SidePanel key="filed" id="mark-filed" title={marking.length > 1 ? `Mark ${marking.length} returns filed` : "Mark filed"} close={close}>
           {marking.length ? (
             <MarkFiled state={state} rows={marking.map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${name(task).join(" ")}, due ${dueLabel(task.due_on)}` }))} />
           ) : (
@@ -439,7 +443,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
       )}
 
       {reminding && stops && (
-        <SidePanel id="remind-title" title={`Remind ${reminding.name}`} close={close}>
+        <SidePanel key="remind" id="remind-title" title={`Remind ${reminding.name}`} close={close}>
           <p className="hint">One email from your firm&apos;s address listing these returns and their due dates, the same as the daily reminders. Returns whose papers already arrived are left out.</p>
           {stops.map((stop) => (
             <p key={stop} className="alert" role="alert">
@@ -468,6 +472,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
           </form>
         </SidePanel>
       )}
+      </Presence>
 
       {saved[params.saved ?? ""] && done.length > 0 && (
         <Toast
@@ -478,9 +483,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 {done.map((id) => (
                   <input key={id} type="hidden" name="task" value={id} />
                 ))}
-                <button className="b" name="intent" value="reopen">
+                <Pending className="b" name="intent" value="reopen">
                   Undo
-                </button>
+                </Pending>
               </form>
             )
           }

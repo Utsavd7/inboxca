@@ -2,6 +2,7 @@ import {redirect} from "next/navigation";
 import {z} from "zod";
 import {currentMember,currentWriter} from "@/src/lib/member";
 import {readPortalDraft} from "@/src/lib/portal-draft";
+import {Pending} from "../../pending";
 
 async function readStatement(form:FormData) {
   "use server";
@@ -23,6 +24,6 @@ export async function PortalInput({clientId,message}:{clientId:string;message?:s
   if(!files?.length) return null;
   return <section className="section"><h2>Read a GSTR 2B or 2A statement</h2><p className="hint">Figures from a supported GSTR 2B join the month&apos;s draft for GSTR 3B. A GSTR 2A is for information only: its B2B invoices get a draft of their own and never feed GSTR 3B. Every figure still needs your check. Other portal file layouts are waiting for their official samples.</p>
     {message && <p className="alert" role="alert">{message==="layout" ? "This layout could not be read, or the month already has this statement. No figures were replaced." : "Check the file's month, the client's GSTIN and the drive connection."}</p>}
-    {!membership.viewOnlyUntil && files.filter((file)=>/\.json$/i.test(file.name)).map((file)=><form action={readStatement} className="form-row" key={file.id}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="source" value={file.id}/><span>{file.name}</span><button className="b b-secondary b-small">Read statement</button></form>)}
+    {!membership.viewOnlyUntil && files.filter((file)=>/\.json$/i.test(file.name)).map((file)=><form action={readStatement} className="form-row" key={file.id}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="source" value={file.id}/><span>{file.name}</span><Pending className="b b-secondary b-small">Read statement</Pending></form>)}
   </section>;
 }
