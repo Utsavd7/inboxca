@@ -122,7 +122,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const cameFrom = (row: (typeof shown)[number]) => {
     if (row.email_event_id) return `Email from ${senders.get(row.email_events?.contact_id ?? "") || row.clients?.name || "the client"}`;
     if (row.form) return "Prepared in InboxCA";
-    if (!adder.has(row.id)) return "Brought in from the drive";
+    if (!adder.has(row.id)) return "From the drive";
     const by = adder.get(row.id);
     if (!by) return "Client upload link";
     return `${row.work_type === "gst" && /^GSTR-2[AB]$/.test(row.document_type) && /\.json$/i.test(row.name) ? "Portal file, added" : "Uploaded"} by ${personName(emails.get(by))}`;

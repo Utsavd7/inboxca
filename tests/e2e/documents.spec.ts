@@ -42,7 +42,7 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     await expect(page.getByRole("heading", { name: "Documents", level: 1 })).toBeVisible();
     const papers = page.getByRole("region", { name: "Papers" });
     await expect(papers.getByRole("row")).toHaveCount(3);
-    await expect(papers.getByRole("row", { name: /Form 16/ })).toContainText("Brought in from the drive");
+    await expect(papers.getByRole("row", { name: /Form 16/ })).toContainText("From the drive");
     // The paper's whole name shows, with its work on a second line.
     await expect(papers.getByRole("link", { name: "Purchase bills.pdf", exact: true })).toBeVisible();
     // The first paper shows its first page at once, logged as a thumbnail, not as an opened view.

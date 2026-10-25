@@ -92,7 +92,7 @@ test("the drive's folders as the drive shows them: a hand placed file is filed i
     // A filed paper previews its first page, with where it came from and what can be done.
     await main.getByRole("row", { name: new RegExp(filedName) }).getByRole("button").click();
     await expect(details.getByRole("img", { name: "Page 1" })).toBeVisible();
-    await expect(details).toContainText("Brought in from the drive");
+    await expect(details).toContainText("From the drive");
     await expect(details.getByRole("link", { name: "Download" })).toBeVisible();
     await expect(details.getByRole("link", { name: "Open client" })).toHaveAttribute("href", `/app/clients/${mine.id}`);
 

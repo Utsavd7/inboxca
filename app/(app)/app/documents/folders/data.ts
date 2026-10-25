@@ -198,7 +198,7 @@ export async function cameFrom(ctx: Context, id: string) {
   }
   if (paper.prepared) return "Prepared in InboxCA";
   const { data: line } = await ctx.admin.from("activity_log").select("action, actor_id").eq("firm_id", ctx.membership.firmId).eq("entity_id", id).in("action", ["document.uploaded", "document.added", "document.filed"]).order("at").limit(1).maybeSingle();
-  if (!line) return "Brought in from the drive";
+  if (!line) return "From the drive";
   if (!line.actor_id) return "Client upload link";
   const { data: people } = await ctx.supabase.rpc("firm_people", { target_firm: ctx.membership.firmId });
   const who = personName(people?.find((person) => person.user_id === line.actor_id)?.email);

@@ -49,7 +49,7 @@
 .docs-table td a::after { content: ""; position: absolute; inset: 0; }
 .docs-table .pick { position: relative; z-index: 1; }
 .docs-faint { color: var(--ink-3); }
-.docs-from { max-width: 11rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.docs-table td.docs-from { max-width: 11rem; white-space: nowrap; text-overflow: ellipsis; }
 .docs-pages { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3) var(--s2) var(--s4); border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
 .docs-pages span { margin-right: auto; }
 .docs-list > .empty { margin: var(--s4); }
