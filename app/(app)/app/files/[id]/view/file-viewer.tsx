@@ -8,7 +8,7 @@ import { logCapture } from "@/app/(app)/actions";
 export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 1, thumb = false }: { id: string; hideInactive?: boolean; page?: number; sheet?: number; thumb?: boolean }) {
   const [pages, setPages] = useState<{ url: string; width: number; height: number }[]>([]);
   const [limited, setLimited] = useState(false);
-  const [state, setState] = useState<"loading" | "shown" | "failed">("loading");
+  const [state, setState] = useState<"loading" | "shown" | "failed" | "nodrive" | "large">("loading");
   const [blank, setBlank] = useState(false);
 
   // Capture deterrents (5.17.2): a screenshot key blanks the pages for a few seconds, tries to
@@ -47,7 +47,12 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
     (async () => {
       const response = await fetch(`/app/files/${id}/stream${thumb ? "?thumb=1" : sheet===1 ? "" : `?sheet=${sheet}`}`, { signal: controller.signal });
       // A refusal's body is let go at once, or the browser keeps the request open.
-      if (!response.ok || !response.body) { await response.body?.cancel(); throw new Error("file"); }
+      if (!response.ok || !response.body) {
+        await response.body?.cancel();
+        // The stream route says why: no drive linked (409) or a file too large to show (413).
+        if (response.status === 409 || response.status === 413) return setState(response.status === 409 ? "nodrive" : "large");
+        throw new Error("file");
+      }
       let header: ViewHeader | undefined, number = 0;
       for await (const frame of readFrames(response.body)) {
         if (controller.signal.aborted) return;
@@ -81,6 +86,8 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
           The file could not be opened. It may have been moved or removed in the drive.
         </p>
       )}
+      {state === "nodrive" && <p className="hint">The firm&apos;s drive is not linked yet, so papers cannot be shown. The owner links it in Settings, Email and drive.</p>}
+      {state === "large" && <p className="hint">This file is too large to show here.</p>}
       {blank && <p className="hint viewer-blank">The document is hidden for a moment.</p>}
       {limited && !thumb && <p className="hint">Only the first 30 pages, or the first 1,000 rows and 26 columns of the selected sheet, are shown here.</p>}
       <div className={`viewer-pages${blank ? " is-blank" : ""}`} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} onCopy={(event) => event.preventDefault()}>
