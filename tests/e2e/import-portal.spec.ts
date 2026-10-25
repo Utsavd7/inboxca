@@ -5,6 +5,7 @@ import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { TEST_DRIVE, TEST_WORKER_SECRET } from "../../playwright.config";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
+import { gstr2a, inventedGstin } from "../fixtures/portal";
 
 // Portal files dropped in from Documents and from a client's Returns, and old files sent from
 // a disk into the drive's Incoming folder, then sorted. Skipped when local Supabase is not running.
@@ -61,6 +62,32 @@ test("a GSTR-2B added on Documents comes back to Documents and closes what was a
   const [request] = await query(local.dbUrl, "select status, details from public.requests where id = $1", [ask]);
   expect(request.status).toBe("done");
   expect(request.details.items[0].received).toHaveLength(1);
+});
+
+test("a GSTR-2A added on Documents closes the GSTR-2A asked for", async () => {
+  const name = `Mehta Agencies ${tag}`;
+  await owner.goto("/app/clients?panel=add");
+  await owner.getByLabel("Name", { exact: true }).fill(name);
+  await owner.getByLabel("Kind", { exact: true }).selectOption("business");
+  await owner.getByLabel("GSTIN", { exact: true }).fill(inventedGstin());
+  await owner.getByRole("button", { name: "Add client" }).click();
+  await expect(owner.locator(".page-head")).toContainText(name);
+  const [{ id: client }] = await query(local.dbUrl, "select id from public.clients where firm_id = $1 and name = $2", [firm.firmId, name]);
+  const [{ id: ask }] = await query(
+    local.dbUrl,
+    `insert into public.requests (firm_id, kind, client_id, entity_type, entity_id, expires_at, details)
+     values ($1, 'documents', $2, 'checklist', gen_random_uuid(), now() + interval '30 days', '{"period": "2026-09", "items": [{"type": "GSTR 2A", "work": "other", "received": []}], "link_hash": "invented-2a"}') returning id`,
+    [firm.firmId, client],
+  );
+  await owner.goto("/app/documents");
+  await owner.getByRole("link", { name: "Add portal files" }).click();
+  await owner.getByLabel("Add portal files").setInputFiles({ name: "download.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(gstr2a())) });
+  await owner.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(owner).toHaveURL(/\/app\/documents\?dropped=1-0-0$/);
+  const [request] = await query(local.dbUrl, "select status from public.requests where id = $1", [ask]);
+  expect(request.status).toBe("done");
+  const [document] = await query(local.dbUrl, "select document_type, period_key from public.documents where client_id = $1", [client]);
+  expect(document).toEqual({ document_type: "GSTR-2A", period_key: "2026-09" });
 });
 
 test("each open monthly GSTR-3B says whether its GSTR-2B is in, with the box beside it", async () => {

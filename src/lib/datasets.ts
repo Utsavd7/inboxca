@@ -3,7 +3,7 @@ import type { Json } from "@/src/db/types";
 import { serverCrypto } from "./crypto";
 import { supabaseAdmin } from "./supabase";
 
-const source = z.object({document:z.uuid(),sha256:z.string().regex(/^[a-f0-9]{64}$/),page:z.number().int().min(1).max(30),sheet:z.number().int().min(1).max(100).optional(),cell:z.string().regex(/^[A-Z]([1-9][0-9]{0,2}|100[0-4])$/).optional(),path:z.string().startsWith("/").max(256).optional(),reader:z.string().regex(/^gstr2b-v4\.[45]$/).optional()}).refine((s)=>!!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-Z]/,""))/40)));
+const source = z.object({document:z.uuid(),sha256:z.string().regex(/^[a-f0-9]{64}$/),page:z.number().int().min(1).max(30),sheet:z.number().int().min(1).max(100).optional(),cell:z.string().regex(/^[A-Z]([1-9][0-9]{0,2}|100[0-4])$/).optional(),path:z.string().startsWith("/").max(256).optional(),reader:z.string().regex(/^gstr2(b-v4\.[45]|a-v2\.3)$/).optional()}).refine((s)=>!!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-Z]/,""))/40)));
 export const draftSchema = z.object({
   lines:z.array(z.object({id:z.uuid(),field:z.string().regex(/^[a-z][a-z0-9_.]{0,99}$/),value_enc:z.string().min(20).max(20000),source,state:z.enum(["pending","confirmed","rejected"]),by:z.uuid().optional(),at:z.iso.datetime().optional()}).refine((line)=>line.state==="pending" || !!line.by && !!line.at)).min(1).max(10000),
   checks:z.array(z.discriminatedUnion("kind",[

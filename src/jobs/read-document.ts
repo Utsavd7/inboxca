@@ -25,7 +25,7 @@ export const readDocument: Handler = async (job) => {
   const text = [document.name, document.document_type, original, await readText(document.name, bytes)].join("\n");
   await admin.from("documents").update({ search_tokens: await searchTokens(firm, words(text)) }).eq("id", document.id);
   if(document.status==="filed" && document.work_type==="gst" && /\.(xlsx?|csv)$/i.test(document.name)) {const {error}=await queueSales(firm,document.id);if(error) throw new Error("sales_not_queued");}
-  if(document.status==="filed" && document.document_type==="GSTR-2B" && /\.json$/i.test(document.name)) {const {error}=await queuePortal(firm,document.id);if(error) throw new Error("portal_not_queued");}
+  if(document.status==="filed" && ["GSTR-2B","GSTR-2A"].includes(document.document_type) && /\.json$/i.test(document.name)) {const {error}=await queuePortal(firm,document.id);if(error) throw new Error("portal_not_queued");}
   return { done: true };
 };
 
