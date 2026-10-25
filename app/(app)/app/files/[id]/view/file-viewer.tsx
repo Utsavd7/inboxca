@@ -1,15 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
 import { readFrames, viewLimits, type ViewHeader } from "@/src/lib/file-worker";
-import { logCapture } from "@/app/(app)/actions";
+import { logCapture, savePassword } from "@/app/(app)/actions";
 
 // The file worker sends only stamped pages. Each appears as soon as its frame arrives. A
 // thumbnail asks for the first page only, which is not logged as a view.
 export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 1, thumb = false }: { id: string; hideInactive?: boolean; page?: number; sheet?: number; thumb?: boolean }) {
   const [pages, setPages] = useState<{ url: string; width: number; height: number }[]>([]);
   const [limited, setLimited] = useState(false);
-  const [state, setState] = useState<"loading" | "shown" | "failed" | "nodrive" | "large">("loading");
+  const [state, setState] = useState<"loading" | "shown" | "failed" | "nodrive" | "large" | "locked" | "wrong">("loading");
   const [blank, setBlank] = useState(false);
+  const [opening, setOpening] = useState(0);
 
   // Capture deterrents (5.17.2): a screenshot key blanks the pages for a few seconds, tries to
   // clear the clipboard and is logged; with the firm's setting, pages hide while InboxCA is
@@ -46,6 +47,8 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
     const urls: string[] = [];
     (async () => {
       const response = await fetch(`/app/files/${id}/stream${thumb ? "?thumb=1" : sheet===1 ? "" : `?sheet=${sheet}`}`, { signal: controller.signal });
+      // A PDF with a password: ask for it, or say the saved one did not open it.
+      if (response.status === 423) { const said = await response.text(); if (!controller.signal.aborted) setState(said === "wrong" ? "wrong" : "locked"); return; }
       // A refusal's body is let go at once, or the browser keeps the request open.
       if (!response.ok || !response.body) {
         await response.body?.cancel();
@@ -76,7 +79,7 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
       controller.abort();
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [id, sheet, thumb]);
+  }, [id, sheet, thumb, opening]);
 
   return (
     <div className="viewer">
@@ -88,6 +91,17 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
       )}
       {state === "nodrive" && <p className="hint">The firm&apos;s drive is not linked yet, so papers cannot be shown. The owner links it in Settings, Email and drive.</p>}
       {state === "large" && <p className="hint">This file is too large to show here.</p>}
+      {(state === "locked" || state === "wrong") && (thumb ? <p className="hint">This PDF has a password.</p> : (
+        <form className="form-row" action={async (form) => { if (await savePassword(form) === "saved") { setState("loading"); setOpening((n) => n + 1); } }}>
+          <input type="hidden" name="document" value={id} />
+          <div>
+            <label htmlFor="viewer-password">{state === "wrong" ? "That password did not open it. Type it again." : "This PDF has a password. Type it to open the file."}</label>
+            <input id="viewer-password" name="password" type="password" autoComplete="off" required maxLength={200} />
+          </div>
+          <button className="b b-primary">Open</button>
+          <p className="hint">InboxCA keeps it encrypted, so your team can open this file too.</p>
+        </form>
+      ))}
       {blank && <p className="hint viewer-blank">The document is hidden for a moment.</p>}
       {limited && !thumb && <p className="hint">Only the first 30 pages, or the first 1,000 rows and 26 columns of the selected sheet, are shown here.</p>}
       <div className={`viewer-pages${blank ? " is-blank" : ""}`} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} onCopy={(event) => event.preventDefault()}>

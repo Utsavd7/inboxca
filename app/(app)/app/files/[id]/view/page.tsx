@@ -16,7 +16,7 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
   const { supabase, membership, userId } = await currentMember();
   if (!membership) redirect("/app");
   const { id } = await params;
-  const { data: file } = await supabase.from("documents").select("id, client_id, name, document_type, period_key, status, prepared, clients(name)").eq("firm_id",membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle();
+  const { data: file } = await supabase.from("documents").select("id, client_id, name, document_type, period_key, status, prepared, scanned_at, clients(name)").eq("firm_id",membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle();
   if (!file) notFound();
   const meta=file.prepared ? preparedSchema.parse(file.prepared) : null;
   const {data:template}=meta ? await supabase.from("templates").select("*").eq("form_code",meta.form).eq("version",meta.template).maybeSingle() : {data:null};
@@ -26,7 +26,7 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
   const sheet=sheets.find(([,number])=>String(number)===asked)?.[1] ?? sheets[0]?.[1] ?? 1;
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
   const canCopy=!membership.viewOnlyUntil && (membership.may("download",file.client_id) || !!await grantFor(membership.firmId,userId,"download",file.client_id,id));
-  const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "json", "txt"].includes(extension);
+  const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "ods", "json", "txt", "docx", "odt"].includes(extension);
 
 
   return (
@@ -44,6 +44,8 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
             <span>{[file.document_type, periodName(file.period_key)].filter(Boolean).join(", ")}</span>
             {file.status === "to_check" && <Badge tone="warn">To check</Badge>}
             <span className="hint">View only. Your email and the time are shown across every page.</span>
+            {/* A file InboxCA made itself needs no virus check; any other says when it had none. */}
+            {!file.scanned_at && !meta && file.document_type !== "Filing record" && <span className="hint">Not checked for viruses yet.</span>}
           </span>
         }
 

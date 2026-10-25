@@ -4,9 +4,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { uploadToRequest } from "@/app/(app)/actions";
 
-const MAX_UPLOAD = 25 * 1024 * 1024;
+const MAX_UPLOAD = 50 * 1024 * 1024;
 const problems = {
-  file: "could not be sent. Choose a photo or PDF of up to 25 MB.",
+  file: "could not be sent. Choose a photo or PDF of up to 50 MB.",
+  unsafe: "could not be sent. It did not pass the virus and safety check. Please send the paper as a PDF or photo.",
   full: "could not be sent. This link has taken 100 files, the most it can. Ask your CA's office for a new link.",
   later: "could not be saved just now. Please try again in a few minutes.",
   closed: "could not be sent. This link has ended.",
@@ -97,7 +98,7 @@ export function AddFiles({ token, item, type, received, open }: { token: string;
                 <span className="sr-only"> {type}</span>
                 {!sending && " from camera or files"}
               </span>
-              <small>{sending ? "Keep this page open" : "Photo or PDF, up to 25 MB each"}</small>
+              <small>{sending ? "Keep this page open" : "Photo or PDF, up to 50 MB each"}</small>
             </span>
           )}
         </label>

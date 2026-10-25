@@ -1,4 +1,4 @@
-import { DELETED_FOLDER, INCOMING, safeName, workTypes, type FolderOrder, type WorkType } from "./drive";
+import { DELETED_FOLDER, INCOMING, VIRUS_FOLDER, safeName, workTypes, type FolderOrder, type WorkType } from "./drive";
 
 // The Documents folder view: the firm's drive below InboxCA's own folder, one folder at a
 // time, as Dropbox shows it, with only what the person's clients allow (PLAN.md 5.5.0, D18).
@@ -27,11 +27,11 @@ export function placeOf(parts: string[], order: FolderOrder) {
   };
 }
 
-// Files sent from a disk for the first import, and removed files: the owner's alone.
-const ownerOnly = new Set([INCOMING, DELETED_FOLDER]);
+// Files sent from a disk for the first import, removed files and files with a virus: the owner's alone.
+const ownerOnly = new Set([INCOMING, DELETED_FOLDER, VIRUS_FOLDER]);
 
 // Whether a person sees the folder or file at a path. Someone who sees every client sees it
-// all but the owner's two folders. Anyone else sees only what is inside one of their clients'
+// all but the owner's own folders. Anyone else sees only what is inside one of their clients'
 // folders (clients: folder names), and a year or work folder above them only when it holds
 // one: "probe" asks the caller to look inside.
 export function access(parts: string[], who: { owner: boolean; clients: { has(name: string): boolean } | null }, order: FolderOrder, folder: boolean): "yes" | "no" | "probe" {
@@ -62,4 +62,4 @@ export function kindOf(name: string) {
 }
 
 // Files the viewer shows as pages.
-export const viewable = (name: string) => /\.(pdf|png|jpe?g|gif|webp|xlsx?|csv|json|txt)$/i.test(name);
+export const viewable = (name: string) => /\.(pdf|png|jpe?g|gif|webp|xlsx?|csv|ods|json|txt|docx|odt)$/i.test(name);

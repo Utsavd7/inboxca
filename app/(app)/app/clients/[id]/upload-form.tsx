@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 import { guessPapers, uploadDocument } from "@/app/(app)/actions";
 
 type Row = { name: string; type: string; custom: string; work: string; period: string };
-const MAX = 25 * 1024 * 1024;
+const MAX = 50 * 1024 * 1024;
 
 // One drop zone for one or many files. Each file's type, work and period start from what its
 // name says, by the rules that file mail; the person checks them, and none is left at Other.
@@ -49,12 +49,12 @@ export function UploadForm({ clientId, types, typeWork, works, periods, keep, ch
       >
         <FileUp size={18} aria-hidden />
         <strong>{rows?.length ? `${rows.length} ${rows.length === 1 ? "file" : "files"} chosen` : "Drop files here, or click to choose"}</strong>
-        <span className="hint">Up to 20 files and 25 MB together.</span>
+        <span className="hint">Up to 20 files and 50 MB together. A ZIP is unpacked.</span>
         <input ref={input} className="sr-only" name="file" type="file" multiple aria-label="Files" onChange={() => void pick()} />
       </label>
       {tooBig && (
         <p className="alert" role="alert">
-          Choose up to 20 files of 25 MB or less together.
+          Choose up to 20 files of 50 MB or less together.
         </p>
       )}
       {reading && <p className="hint">Reading the file names.</p>}

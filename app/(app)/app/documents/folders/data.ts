@@ -209,6 +209,7 @@ export async function cameFrom(ctx: Context, id: string) {
 // Files one paper for a client, like an upload: refused when the client already has the same
 // file, else placed in the client's folder under InboxCA's name (never over another file),
 // recorded, logged with who did it, made the current version when filed, and read for search.
+// Scanned says the file worker's virus check passed it (src/lib/intake.ts).
 export async function fileForClient(
   ctx: Context,
   client: { id: string; name: string },
@@ -216,6 +217,7 @@ export async function fileForClient(
   file: { name: string; bytes: Uint8Array },
   place: (folder: string, name: string) => Promise<{ id: string } | "taken">,
   action: "document.uploaded" | "document.filed",
+  scanned: boolean,
 ) {
   const { admin, membership } = ctx;
   const sha256 = createHash("sha256").update(file.bytes).digest("hex");
@@ -246,6 +248,7 @@ export async function fileForClient(
     size: file.bytes.length,
     sha256,
     received_at: now,
+    scanned_at: scanned ? now : null,
   });
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: ctx.userId, action, entity_type: "document", entity_id: id, ...(action === "document.filed" && { details: { from: "drive" } }) });
   if (values.status === "filed") await settleVersions(admin, { client_id: client.id, ...values, registration_id });

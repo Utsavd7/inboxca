@@ -15,6 +15,7 @@ import {listMail, readThread} from "../src/lib/mailbox.ts";
 import * as mailApi from "../src/lib/mail-api.ts";
 import {verifyMail} from "../src/lib/mail-view.ts";
 import {editedItr} from "./itr.ts";
+import {intake} from "./intake.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
 const reads = new Map<string, number>();
@@ -48,6 +49,7 @@ export async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
   if (request.method === "GET" && url.pathname === "/health") return new Response("Ready");
   const secret = process.env.FILE_WORKER_SECRET ?? "";
+  if (request.method === "POST" && url.pathname === "/intake") return intake(request, secret);
   if(request.method==="POST" && url.pathname.startsWith("/prepare/")) {
     let input;
     try {input=await verifyForm(await request.text(),request.headers.get("authorization") ?? "",secret,url.pathname.slice(9));}
@@ -110,7 +112,7 @@ export async function handle(request: Request): Promise<Response> {
       if(rows.length>viewLimits.rows || rows.some((row)=>row.length>viewLimits.columns || row.some((cell)=>cell.length>2000)) || JSON.stringify(rows).length>3_000_000) throw new Error("Split this register into smaller files");
       return Response.json({rows,sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
     }
-    const opened = await openView(Buffer.from(data.buffer, data.byteOffset, data.byteLength), view.name, view.label, view.limit, request.signal, view.sheet);
+    const opened = await openView(Buffer.from(data.buffer, data.byteOffset, data.byteLength), view.name, view.label, view.limit, request.signal, view.sheet, view.password);
     let disposed = false;
     const dispose = async () => { if (!disposed) { disposed = true; await opened.dispose(); } };
     async function* frames() {
@@ -133,5 +135,9 @@ export async function handle(request: Request): Promise<Response> {
       },
       async cancel() { await iterator.return(undefined); await dispose(); },
     }, { highWaterMark: 0 }), { headers: { "Content-Type": copy ? "application/pdf" : "application/x-inboxca-pages", "Cache-Control": "private, no-store" } });
-  } catch { return new Response("This file could not be opened.", { status: 422 }); }
+  } catch (error) {
+    // A PDF with a password says whether one is needed or the one saved did not open it.
+    if ((error as Error)?.name === "PasswordException") return new Response(view.password ? "wrong" : "password", { status: 423, headers: { "Cache-Control": "private, no-store" } });
+    return new Response("This file could not be opened.", { status: 422 });
+  }
 }

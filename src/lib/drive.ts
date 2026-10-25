@@ -43,6 +43,8 @@ export const incomingPath = (relative: string) =>
 
 // Where a removed file waits 30 days before it goes to the drive's bin.
 export const DELETED_FOLDER = "Deleted and old versions";
+// Where a file the virus check stopped is kept, for the owner only, never shown in InboxCA.
+export const VIRUS_FOLDER = "Files with a virus";
 
 // A test drive in a folder on this computer, for development and the tests only
 // (DRIVE_LOCAL_DIR). No deployment sets it.

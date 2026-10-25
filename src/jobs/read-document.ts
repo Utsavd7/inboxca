@@ -10,7 +10,7 @@ import type { Handler } from "./runner";
 // its name, type and the name it came with (PLAN.md 5.5.0, D29). Runs again after a rename.
 export const readDocument: Handler = async (job) => {
   const admin = supabaseAdmin();
-  const { data: document } = await admin.from("documents").select("id, firm_id, name, document_type, original_name_enc, drive_file_id, status, work_type").eq("id", job.entity_id ?? "").maybeSingle();
+  const { data: document } = await admin.from("documents").select("id, firm_id, name, document_type, original_name_enc, password_enc, drive_file_id, status, work_type").eq("id", job.entity_id ?? "").maybeSingle();
   if (!document || document.status === "deleted") return { done: true };
   const firm = document.firm_id;
   const { data: account } = await admin.from("connected_accounts").select("id, provider, credentials_enc").eq("firm_id", firm).eq("kind", "drive").maybeSingle();
@@ -22,7 +22,8 @@ export const readDocument: Handler = async (job) => {
     return { retry: "drive_unreachable", patient: true };
   }
   const original = document.original_name_enc ? await serverCrypto().decrypt(firm, `documents/${document.id}/original_name`, document.original_name_enc) : "";
-  const text = [document.name, document.document_type, original, await readText(document.name, bytes)].join("\n");
+  const password = document.password_enc ? await serverCrypto().decrypt(firm, `documents/${document.id}/password`, document.password_enc) : undefined;
+  const text = [document.name, document.document_type, original, await readText(document.name, bytes, password)].join("\n");
   await admin.from("documents").update({ search_tokens: await searchTokens(firm, words(text)) }).eq("id", document.id);
   if(document.status==="filed" && document.work_type==="gst" && /\.(xlsx?|csv)$/i.test(document.name)) {const {error}=await queueSales(firm,document.id);if(error) throw new Error("sales_not_queued");}
   if(document.status==="filed" && ["GSTR-2B","GSTR-2A"].includes(document.document_type) && /\.json$/i.test(document.name)) {const {error}=await queuePortal(firm,document.id);if(error) throw new Error("portal_not_queued");}

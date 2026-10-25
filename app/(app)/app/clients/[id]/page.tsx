@@ -34,6 +34,7 @@ import { Pending } from "../../pending";
 import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Kind } from "../../ui";
 import { CopyButton } from "../../ui-client";
 import { UploadForm } from "./upload-form";
+import { unsafeText } from "@/src/lib/intake";
 import "../clients.css";
 import "../../today.css";
 
@@ -51,7 +52,9 @@ const errors: Record<string, string> = {
   role: "Only the owner, a partner or a manager can change clients.",
   document: "Choose the file's type, work and period. A type of your own needs a name.",
   drive: "The firm's drive is not connected or could not be reached. Try again in a minute.",
-  upload: "Choose a file of up to 25 MB, and its type, work and period.",
+  upload: "Choose a file of up to 50 MB, and its type, work and period.",
+  ...unsafeText,
+  scan: "The file could not be checked for viruses just now. Try again in a minute.",
   twin: "This client already has this file.",
   gstin: "Choose the GSTIN this GST paper is for.",
   list: "Put one paper on each line, up to 30, each up to 80 letters and without a colon.",

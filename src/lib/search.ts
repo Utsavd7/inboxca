@@ -21,14 +21,14 @@ export const searchTokens = (firmId: string, list: string[]) => {
 
 // The text inside a file, read by rules, never by AI: PDF text (up to 200 pages),
 // spreadsheets and CSV, and plain text, JSON and XML. A scan or a picture gives no text
-// until OCR is added; a password-protected or damaged file gives none.
-export async function readText(name: string, bytes: Uint8Array) {
+// until OCR is added; a damaged file, or a password-protected one without its saved password, gives none.
+export async function readText(name: string, bytes: Uint8Array, password?: string) {
   const extension = name.split(".").pop()?.toLowerCase() ?? "";
   try {
     if (extension === "pdf") {
       // The existing Node text job stays outside the web bundle too.
       const pdfjs = await import(/* webpackIgnore: true */ "pdfjs-dist/legacy/build/pdf.mjs");
-      const pdf = await pdfjs.getDocument({ data: new Uint8Array(bytes) }).promise;
+      const pdf = await pdfjs.getDocument({ data: new Uint8Array(bytes), password }).promise;
       const pages: string[] = [];
       for (let number = 1; number <= Math.min(pdf.numPages, 200); number++) {
         const content = await (await pdf.getPage(number)).getTextContent();
