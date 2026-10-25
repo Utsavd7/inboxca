@@ -118,8 +118,11 @@ test("the team replies in the conversation from the firm's mailbox, threaded, an
   await owner.goto(`/app/inbox?mail=${mail}`);
   // Without AI set up there is no AI button at all.
   await expect(pane().getByRole("button", { name: "Write a reply with AI" })).toHaveCount(0);
-  await owner.keyboard.press("r");
-  await expect(owner.getByLabel("Your reply")).toBeFocused();
+  // The keys work once the page has loaded its script; a press before that is simply not heard.
+  await expect(async () => {
+    await owner.keyboard.press("r");
+    await expect(owner.getByLabel("Your reply")).toBeFocused({ timeout: 1000 });
+  }).toPass();
   await owner.getByLabel("Your reply").fill("Yes, Tuesday at 11 works for us.");
   await owner.getByRole("button", { name: "Send reply" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Reply sent" })).toBeVisible();

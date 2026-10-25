@@ -438,8 +438,11 @@ test("keys: / opens search, j and k move through a table, and Esc keeps a panel 
   await expect(owner.getByRole("dialog", { name: "Search" })).toHaveCount(0);
   await expect(owner.locator(".rail-search")).toBeFocused();
   const links = owner.locator(".stage-body table tbody tr").locator("a.row-link");
-  await owner.keyboard.press("j");
-  await expect(links.first()).toBeFocused();
+  // The keys work once the page has loaded its script; a press before that is simply not heard.
+  await expect(async () => {
+    await owner.keyboard.press("j");
+    await expect(links.first()).toBeFocused({ timeout: 1000 });
+  }).toPass();
   await owner.keyboard.press("j");
   await expect(links.nth(1)).toBeFocused();
   await owner.keyboard.press("k");
