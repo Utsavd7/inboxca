@@ -16,7 +16,17 @@ const FIXED_SUGGESTION_DAYS = 14;
 // Office only switch waits under Change details, the rest shows as usual. Its Turn on sends
 // the preset form, so the preset's "are you in the office now?" answer is the one used (a
 // button with its own action sends no name and value, so intent rides in a hidden field).
-export async function OfficePanel({ compact = false, error = false, inPreset = false, branch = "" }: { compact?: boolean; error?: boolean; inPreset?: boolean; branch?: string }) {
+// Why the last office change was refused, from setOfficeOnly's redirect.
+const refusedNotes: Record<string, string> = {
+  deputies: "Choose up to 2 active partners as deputies, with the co-admin one of them.",
+  no_line: "InboxCA could not see this connection's address. Try again from the office's own network.",
+  closed: "The office has closed for today, so it cannot be opened now.",
+  pc: "That PC is no longer approved.",
+  self: "Ask another approver to decide on your own request.",
+  office: "That change could not be saved. Try again.",
+};
+
+export async function OfficePanel({ compact = false, error = "", inPreset = false, branch = "" }: { compact?: boolean; error?: string; inPreset?: boolean; branch?: string }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) return null;
   const firmOffice = (membership.settings.office ?? {}) as Office;
@@ -64,7 +74,7 @@ export async function OfficePanel({ compact = false, error = false, inPreset = f
   return (
     <Box className={inPreset ? "office-in-preset" : "panel"} aria-labelledby={inPreset ? undefined : compact ? "office-alerts" : "office-title"} id={compact ? undefined : "office"}>
       {!inPreset && <h2 id={compact ? "office-alerts" : "office-title"}>{compact ? "Your office today" : "Staff can use InboxCA only in the office"}</h2>}
-      {error && <p className="alert" role="alert">Choose up to 2 active partners as deputies.</p>}
+      {refusedNotes[error] && <p className="alert" role="alert">{refusedNotes[error]}</p>}
       {!compact && !inPreset && line}
       {!compact && !!branches?.length && <form method="get" action="/app/settings#office">
         <input type="hidden" name="group" value="access" />

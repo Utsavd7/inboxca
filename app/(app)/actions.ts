@@ -1542,6 +1542,16 @@ async function denyApproval(firmId: string, userId: string, kind: string): Promi
   redirect("/app");
 }
 
+// What office_control's refusals mean for the panel's note (office-panel.tsx).
+const officeRefusals: Record<string, string> = {
+  "No connection to confirm": "no_line",
+  "The firm is closed for today": "closed",
+  "Choose up to two active partners": "deputies",
+  "The co-admin must be a deputy": "deputies",
+  "PC is not approved": "pc",
+  "Ask another approver": "self",
+};
+
 // Office changes are checked and logged together in the database.
 export async function setOfficeOnly(form: FormData) {
   const { userId, membership } = await currentWriter();
@@ -1572,9 +1582,11 @@ export async function setOfficeOnly(form: FormData) {
     ...((decision === "here" || decision === "fixed" || decision === "on" && form.get("here") === "yes") && line && { connection: line }),
     ...(decision === "deputies" && { deputies, ...(coAdmin && { co_admin: coAdmin }) }),
   });
-  if (error) throw new Error(`Office approval failed: ${error.code}`);
-  revalidatePath("/app", "layout");
-  redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}#office`);
+  // A choice the database refuses (no address seen, the office already closed, a deputy who
+  // is not an active partner) comes back as a note on the panel, not a broken page.
+  const refused = error && (Object.entries(officeRefusals).find(([text]) => error.message.includes(text))?.[1] ?? "office");
+  if (!refused) revalidatePath("/app", "layout");
+  redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}${refused ? `&error=${refused}` : ""}#office`);
 }
 
 // The owner decides whether a waiting PC stays in the office, travels, or is refused.

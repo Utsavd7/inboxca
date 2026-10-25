@@ -84,7 +84,7 @@ export default async function Settings({
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   if (!officeApprover(membership.role, userId, membership.settings)) return <NotForYou title="Settings" who="the owner" />;
-  if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel branch={(await searchParams).branch} /></>;
+  if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel branch={(await searchParams).branch} error={(await searchParams).error} /></>;
   const owner = membership.role === "owner";
   const { saved, error, group: asked, branch } = await searchParams;
   // The co-admin sees only the groups about keeping client data safe.
@@ -290,7 +290,7 @@ export default async function Settings({
                 {!preset && <p className="hint">Your rules no longer match a preset.</p>}
               </div>
             </form>
-            <OfficePanel error={error === "deputies"} inPreset branch={branch} />
+            <OfficePanel error={error} inPreset branch={branch} />
           </Card>
           <Card id="limits" title="Signing in" line="For everyone in the firm, you included.">
             <form action={saveLimits} className="set-fields">

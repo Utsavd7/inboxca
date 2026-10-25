@@ -78,6 +78,13 @@ test("the owner names a co-admin, who changes the access settings but not the ow
   await preset.getByRole("button", { name: "Use this preset" }).click();
   await expect.poll(async () => (await settings()).office).toMatchObject({ on: true, away: false, co_admin: partnerId });
   expect((await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and actor_id = $2 and action = 'office.on'", [firm.firmId, partnerId]))[0].n).toBe(1);
+
+  // A connection InboxCA cannot see (this browser sends no address) is refused with a note.
+  const lines = (await settings()).office.lines;
+  await partner.goto("/app/settings?group=access#office");
+  await partner.getByRole("button", { name: "This is my office" }).click();
+  await expect(partner.getByRole("alert").filter({ hasText: "could not see this connection's address" })).toBeVisible();
+  expect((await settings()).office.lines).toEqual(lines);
 });
 
 test("staff are told People and Settings are not theirs, and only see a notice's date", async () => {
