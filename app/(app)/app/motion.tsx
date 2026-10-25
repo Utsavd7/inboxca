@@ -24,7 +24,8 @@ import { Children, Fragment, cloneElement, createContext, isValidElement, useCon
 //   <List>, <Item> a list whose rows glide when one moves or leaves, and whose new rows fade in.
 //                  Give each row a key. Row in ui.tsx is already an Item. In a table:
 //                  <List as="tbody"> with <Item as="tr">; a leaving row fades in place first.
-//                  Two lists on one page with the same keys need different names.
+//                  Two lists on one page with the same keys need different names. An Item
+//                  with a layoutId glides from one List to another (a lead between columns).
 //   <Count>        a number: counts up once (CSS, before any script), then springs to new values;
 //                  with an id, it does not count up again when a save redraws the page.
 //   <Draw>         an SVG path or circle that draws itself once (rings, sparklines).
@@ -136,7 +137,7 @@ export function List({ as: Tag = "ul", name, className = "", label, rise = true,
     </Tag>
   );
 }
-type ItemProps = { as?: "li" | "tr"; row?: string; className?: string; title?: string; children: React.ReactNode } & React.AriaAttributes & { [data: `data-${string}`]: string | boolean | undefined };
+type ItemProps = { as?: "li" | "tr"; row?: string; className?: string; title?: string; layoutId?: string; children: React.ReactNode } & React.AriaAttributes & { [data: `data-${string}`]: string | boolean | undefined };
 export function Item({ as = "li", row, className, children, ...rest }: ItemProps) {
   const scope = useContext(InList);
   const id = scope && row ? `${scope}|${row}` : "";

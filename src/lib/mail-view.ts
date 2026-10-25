@@ -4,7 +4,7 @@
 import { signView, validSignature } from "./file-worker.ts";
 import type { Server } from "./mailbox.ts";
 
-export type MailItem = { box: "inbox" | "sent"; messageId: string; from: string; to: string[]; date: string; subject: string; snippet: string };
+export type MailItem = { box: "inbox" | "sent"; messageId: string; from: string; fromName?: string; to: string[]; date: string; subject: string; snippet: string };
 export type MailMessage = MailItem & { inReplyTo: string; references: string[]; text: string; attachments: string[] };
 // list: the inbox messages named by id (or, with q, those of them that match), and the newest
 // sent ones that match. thread: one message and the conversation it belongs to.

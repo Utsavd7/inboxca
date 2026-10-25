@@ -6,7 +6,8 @@ import "./public-link.css";
 
 // A client's private link page: the firm's band (its initials, its name, what the page is
 // for), then the page's own content. On a phone the band sits on top; on a laptop, beside.
-export function PublicPage({ firm, band, children }: { firm?: string; band: React.ReactNode; children: React.ReactNode }) {
+// The firm's enquiry form is shared openly, so it does not say the link is private.
+export function PublicPage({ firm, band, shared = false, children }: { firm?: string; band: React.ReactNode; shared?: boolean; children: React.ReactNode }) {
   return (
     <main className="ui ui-public">
       <header className="public-band">
@@ -19,7 +20,7 @@ export function PublicPage({ firm, band, children }: { firm?: string; band: Reac
           </p>
         )}
         {band}
-        {firm && (
+        {firm && !shared && (
           <p className="public-private">
             <Lock size={13} aria-hidden />
             Private link, only for you

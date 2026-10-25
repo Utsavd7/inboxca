@@ -89,7 +89,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
     params.file && uuid.test(params.file) ? supabase.from("documents").select(columns).eq("firm_id", membership.firmId).eq("id", params.file).neq("status", "deleted").maybeSingle() : Promise.resolve({ data: null }),
     admin.from("connected_accounts").select("provider, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
-    find ? supabase.from("clients").select("id, name").eq("firm_id", membership.firmId).is("archived_at", null).ilike("name", `%${find.replace(/[\\%_]/g, "\\$&")}%`).order("name").limit(8) : Promise.resolve({ data: null }),
+    find ? supabase.from("clients").select("id, name").eq("firm_id", membership.firmId).eq("stage", "client").is("archived_at", null).ilike("name", `%${find.replace(/[\\%_]/g, "\\$&")}%`).order("name").limit(8) : Promise.resolve({ data: null }),
     askedClient && canUpload ? supabase.from("clients").select("id, name, client_registrations(id, kind, number_enc)").eq("firm_id", membership.firmId).eq("id", askedClient).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
     sendPreview ? supabase.from("documents").select("id, client_id, name, status, share_policy, document_type, clients(name, email_enc)").eq("firm_id", membership.firmId).in("id", picked.slice(0, SEND)) : Promise.resolve({ data: null }),
     sendPreview ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : Promise.resolve({ data: null }),

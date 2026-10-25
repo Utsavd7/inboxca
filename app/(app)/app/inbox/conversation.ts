@@ -15,7 +15,7 @@ export async function clientsOf(firm: string, addresses: string[]) {
   if (!values.length) return new Map<string, string[]>();
   const admin = supabaseAdmin();
   const [{ data: clients }, { data: contacts }] = await Promise.all([
-    admin.from("clients").select("id, email_bidx").eq("firm_id", firm).is("archived_at", null).in("email_bidx", values),
+    admin.from("clients").select("id, email_bidx").eq("firm_id", firm).eq("stage", "client").is("archived_at", null).in("email_bidx", values),
     admin.from("contacts").select("email_bidx, contact_clients(client_id)").eq("firm_id", firm).in("email_bidx", values),
   ]);
   return new Map(

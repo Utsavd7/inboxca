@@ -95,13 +95,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"reminders_paused": boolean,"sales_mapping_enc": string | null
+                    "archived_at": string | null,"branch_id": string | null,"details": NonNullable<Json>,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"notes_enc": string | null,"reminders_paused": boolean,"sales_mapping_enc": string | null,"stage": string
                   }
                   Insert: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
+                    "archived_at"?: string | null,"branch_id"?: string | null,"details"?: NonNullable<Json>,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"notes_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null,"stage"?: string
                   }
                   Update: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
+                    "archived_at"?: string | null,"branch_id"?: string | null,"details"?: NonNullable<Json>,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"notes_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null,"stage"?: string
                   }
                   Relationships: [
                     {
@@ -607,6 +607,12 @@ isOneToOne: false
 "add_edited_form":
 { Args: { "draft": string,"person": string,"prefix": string,"registration": string,"target": string,"template": string }; Returns: Json
                            },
+"add_form_lead":
+{ Args: { "ip": string,"lead": string,"lead_details": Json,"lead_email_bidx": string,"lead_email_enc": string,"lead_kind": string,"lead_name": string,"lead_notes_enc": string,"target_firm": string }; Returns: undefined
+                           },
+"add_lead":
+{ Args: { "enquiry"?: string,"lead": string,"lead_details": Json,"lead_email_bidx": string,"lead_email_enc": string,"lead_kind": string,"lead_name": string,"lead_notes_enc": string,"target_firm": string }; Returns: boolean
+                           },
 "admin_accounts":
 { Args: Record<PropertyKey, never>; Returns: {
               "failures": number,"firm": string,"kind": string,"last_error": string,"last_run": string,"provider": string,"status": string
@@ -707,6 +713,9 @@ isOneToOne: false
 "cancel_jobs":
 { Args: { "below_version"?: number,"p_entity_id": string,"p_entity_type": string }; Returns: number
                            },
+"change_lead":
+{ Args: { "change": string,"lead": string,"target_firm": string,"val"?: string }; Returns: boolean
+                           },
 "change_role":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
                            },
@@ -765,6 +774,9 @@ isOneToOne: false
 "delete_firm":
 { Args: { "target_firm": string }; Returns: boolean
                            },
+"dismiss_enquiry":
+{ Args: { "enquiry": string,"target_firm": string }; Returns: boolean
+                           },
 "due_soon":
 { Args: { "target_firm": string }; Returns: {
               "clients": number,"code": string,"due_on": string,"filed": number
@@ -822,6 +834,9 @@ isOneToOne: false
 { Args: { "target_firm": string }; Returns: {
               "client_name": string,"due_on": string,"id": string
             }[]
+                           },
+"lead_firms":
+{ Args: Record<PropertyKey, never>; Returns: string[]
                            },
 "mail_health":
 { Args: { "account_id": string,"expected": string,"failed": boolean,"phase": string }; Returns: number
@@ -945,6 +960,11 @@ isOneToOne: false
                            },
 "user_id_for_email":
 { Args: { "address": string }; Returns: string
+                           },
+"won_leads":
+{ Args: { "target_firm": string }; Returns: {
+              "at": string,"id": string,"name": string
+            }[]
                            }
           }
           Enums: {

@@ -49,7 +49,7 @@ export function matchClient(path: string, clients: { id: string; name: string }[
 export async function activeClients(supabase: SupabaseClient<Database>) {
   const all: { id: string; name: string }[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data } = await supabase.from("clients").select("id, name").is("archived_at", null).order("name").order("id").range(from, from + 999);
+    const { data } = await supabase.from("clients").select("id, name").eq("stage", "client").is("archived_at", null).order("name").order("id").range(from, from + 999);
     all.push(...(data ?? []));
     if (!data || data.length < 1000) return all;
   }

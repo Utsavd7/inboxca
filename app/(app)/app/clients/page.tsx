@@ -77,7 +77,7 @@ export default async function Clients({
   // The same search, group, branch and archive choice for the list and every pill's count.
   const clientsIn = (pill: Pill, select: string, head = false, only: Lateness = null) => {
     const lateness = only ?? (pill === "late" ? "late" : null);
-    let query = supabase.from("clients").select(`${select}${pillJoin[pill]}${head && lateness ? ", late:tasks(id)" : ""}` as typeof columns, { count: "exact", head }).eq("firm_id", firm);
+    let query = supabase.from("clients").select(`${select}${pillJoin[pill]}${head && lateness ? ", late:tasks(id)" : ""}` as typeof columns, { count: "exact", head }).eq("firm_id", firm).eq("stage", "client");
     if (params.group) query = query.eq("group_id", params.group);
     if (params.branch) query = query.eq("branch_id", params.branch);
     query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
