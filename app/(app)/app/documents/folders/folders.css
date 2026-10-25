@@ -1,0 +1,161 @@
+/* Documents as folders: the drive's tree, the open folder and the chosen file side by side,
+   each scrolling on its own, as Dropbox shows them. */
+.fb-switch { display: inline-flex; align-self: flex-start; gap: 2px; margin-top: calc(var(--s3) * -1); padding: 3px; border-radius: var(--r2); background: var(--press); }
+.fb-switch a { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 var(--s3); border-radius: var(--r1); color: var(--ink-2); font-size: 13px; font-weight: 600; text-decoration: none; transition: background-color var(--base) var(--out), color var(--base) var(--out), box-shadow var(--base) var(--out); }
+.fb-switch a:hover { color: var(--ink); }
+.fb-switch a[aria-current] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-button), 0 0 0 1px var(--edge); }
+.fb-switch a[aria-current] svg { color: var(--accent); }
+
+.fb-split { position: relative; display: grid; grid-template-columns: 248px minmax(0, 1fr) 304px; }
+
+/* The tree: folders open with a smooth height and a turning chevron; the open one is tinted. */
+.fb-tree { padding: var(--s2); border-right: 1px solid var(--line); background: var(--side); }
+.fb-tree ul { margin: 0; padding: 0; list-style: none; }
+.fb-node { display: flex; align-items: center; gap: 2px; height: 32px; padding-left: calc(var(--depth) * 14px); border-radius: var(--r1); transition: background-color var(--base) var(--out), box-shadow var(--base) var(--out); }
+.fb-node:hover { background: var(--press); }
+.fb-node.is-on { background: var(--accent-soft); }
+.fb-node.is-drop { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.fb-node a { display: flex; flex: 1; align-items: center; gap: var(--s2); min-width: 0; height: 100%; padding-right: var(--s2); border-radius: var(--r1); color: var(--ink-2); font-size: 14px; font-weight: 500; text-decoration: none; transition: color var(--base) var(--out); }
+.fb-node a svg { color: var(--ink-3); transition: color var(--base) var(--out); }
+.fb-node a:hover { color: var(--ink); }
+.fb-node.is-on a { color: var(--accent); font-weight: 600; }
+.fb-node.is-on a svg { color: var(--accent); }
+.fb-node.is-path { color: var(--ink-2); font-size: 14px; }
+.fb-node.is-path svg { margin-right: var(--s2); color: var(--ink-3); }
+.fb-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-chev { display: grid; flex: none; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--r1); background: none; color: var(--ink-3); }
+button.fb-chev { cursor: pointer; transition: background-color var(--fast) var(--out), color var(--fast) var(--out); }
+button.fb-chev:hover { background: var(--line); color: var(--ink); }
+.fb-chev svg { transition: transform var(--slow) var(--out); }
+.fb-chev[aria-expanded="true"] svg { transform: rotate(90deg); }
+.fb-kids { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--slow) var(--out); }
+.fb-kids[data-open] { grid-template-rows: 1fr; }
+.fb-kids > ul { min-height: 0; overflow: hidden; }
+.fb-tree .fb-skel { height: 16px; margin: var(--s2) var(--s2) var(--s2) var(--s7); }
+
+/* The open folder: its path and tools, then its folders and files. */
+.fb-main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.fb-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line); }
+.fb-crumbs { min-width: 0; }
+.fb-crumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.fb-crumbs li { display: flex; align-items: center; gap: 2px; min-width: 0; color: var(--ink-3); }
+.fb-crumbs :is(a, [aria-current]) { padding: 2px 6px; border-radius: var(--r1); }
+.fb-crumbs a { color: var(--ink-2); font-weight: 500; text-decoration: none; transition: background-color var(--fast) var(--out), color var(--fast) var(--out); }
+.fb-crumbs a:hover { background: var(--press); color: var(--ink); }
+.fb-crumbs [aria-current] { color: var(--ink); font-weight: 650; }
+.fb-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.fb-search { position: relative; display: flex; align-items: center; }
+.fb-search svg { position: absolute; left: 10px; color: var(--ink-3); pointer-events: none; }
+.ui .fb-search input { width: 200px; padding-left: 32px; }
+.ui .fb-sort { width: auto; }
+.fb-seg { display: inline-flex; padding: 2px; border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); }
+.fb-seg button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border: 0; border-radius: var(--r1); background: none; color: var(--ink-3); cursor: pointer; transition: background-color var(--base) var(--out), color var(--base) var(--out); }
+.fb-seg button:hover { color: var(--ink); }
+.fb-seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+
+.fb-body { flex: 1; }
+.fb-view { animation: fb-in var(--slow) var(--out); }
+@keyframes fb-in { from { opacity: 0; transform: translateY(6px); } }
+.fb-skel-row { height: 36px; margin: var(--s3) var(--s4); }
+.fb-view > .empty { margin: var(--s6) var(--s4); }
+.fb-more { margin: var(--s3) var(--s4); }
+
+.fb-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.fb-table th { position: sticky; top: 0; z-index: 1; height: 36px; padding: 0 var(--s4); border-bottom: 1px solid var(--line); background: var(--surface); color: var(--ink-3); font-size: 12px; font-weight: 600; text-align: left; }
+.fb-table th:nth-child(2) { width: 132px; }
+.fb-table th:nth-child(3) { width: 92px; }
+.fb-table td { height: 48px; padding: 0 var(--s4); border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 13px; white-space: nowrap; }
+.fb-table tbody tr { position: relative; transition: background-color var(--base) var(--out), box-shadow var(--base) var(--out); }
+.fb-table tbody tr:hover { background: var(--hover); }
+.fb-table tbody tr.on { background: var(--accent-soft); }
+.fb-table tr.is-drop { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.fb-table tr:has(.fb-name:focus-visible) { box-shadow: inset 0 0 0 2px var(--accent); }
+.ui .fb-table .fb-num { text-align: right; font-variant-numeric: tabular-nums; }
+.fb-name { display: flex; align-items: center; gap: var(--s3); width: 100%; min-width: 0; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 14px; font-weight: 500; text-align: left; text-decoration: none; cursor: pointer; }
+.fb-name:focus-visible { outline: none; }
+/* The whole row opens the folder or chooses the file. */
+.fb-name::after { content: ""; position: absolute; inset: 0; }
+.fb-text { display: grid; gap: 2px; min-width: 0; }
+.fb-text, .fb-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; color: var(--ink-3); font-size: 12px; font-weight: 500; }
+
+/* Each kind of file has its own soft tile. */
+.fb-icon { display: inline-grid; flex: none; place-items: center; width: 28px; height: 28px; border-radius: var(--r1); background: var(--gray-bg); color: var(--gray-fg); }
+.fb-icon.k-folder { background: var(--blue-bg); color: var(--blue-fg); }
+.fb-icon.k-pdf { background: var(--pink-bg); color: var(--pink-fg); }
+.fb-icon.k-sheet { background: var(--teal-bg); color: var(--teal-fg); }
+.fb-icon.k-image { background: var(--purple-bg); color: var(--purple-fg); }
+.fb-icon.k-json { background: var(--amber-bg); color: var(--amber-fg); }
+
+.fb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--s3); margin: 0; padding: var(--s4); list-style: none; }
+.fb-card { position: relative; display: grid; align-content: start; gap: var(--s1); padding: var(--s2); border: 1px solid var(--line); border-radius: var(--r3); background: var(--surface); transition: border-color var(--base) var(--out), box-shadow var(--base) var(--out), background-color var(--base) var(--out), transform var(--base) var(--out); }
+.fb-card:hover { border-color: var(--line-2); box-shadow: var(--shadow-2); transform: translateY(-1px); }
+.fb-card.on { border-color: var(--accent); background: var(--accent-soft); }
+.fb-card.is-drop { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-glow); }
+.fb-card:has(.fb-card-name:focus-visible) { box-shadow: 0 0 0 2px var(--accent); }
+.fb-thumb { display: grid; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; margin-bottom: var(--s1); border-radius: var(--r2); background: var(--side); }
+.fb-thumb .fb-icon { width: 48px; height: 48px; border-radius: var(--r2); }
+.fb-thumb-in { display: block; align-self: start; width: 100%; }
+.fb-thumb .viewer, .fb-preview .viewer { align-self: start; width: 100%; margin: 0; }
+.fb-thumb .viewer > :is(.hint, .alert) { display: none; }
+.fb-thumb .viewer-pages { padding: 0; border-radius: 0; background: none; }
+.fb-thumb .viewer-pages img { width: 100%; border-radius: 0; box-shadow: none; }
+.fb-card-name { overflow: hidden; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; text-align: left; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.fb-card-name:focus-visible { outline: none; }
+.fb-card-name::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+
+/* Files dragged from the computer: the folder they would go to says so. */
+.fb-drop { position: absolute; inset: var(--s2); z-index: 2; display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: var(--r3); background: color-mix(in srgb, var(--surface) 84%, transparent); pointer-events: none; animation: fb-drop-in var(--base) var(--out); }
+.fb-drop > span { display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s4); border-radius: var(--r2); background: var(--surface); color: var(--accent); font-size: 14px; box-shadow: var(--shadow-float); animation: fb-drop-card var(--spring-time) var(--spring); }
+.fb-drop.is-refused { border-color: var(--line-3); }
+.fb-drop.is-refused > span { color: var(--ink-2); }
+@keyframes fb-drop-in { from { opacity: 0; } }
+@keyframes fb-drop-card { from { transform: scale(0.94); } }
+
+/* The chosen file: its first page, what it is, where it is and what can be done with it. */
+.fb-detail { border-left: 1px solid var(--line); }
+.fb-detail-in { display: flex; flex-direction: column; gap: var(--s3); padding: var(--s4); animation: fb-in var(--slow) var(--out); }
+.fb-detail h2 { font-size: 15px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.fb-preview { display: grid; flex: none; place-items: center; align-content: center; gap: var(--s2); min-height: 168px; max-height: 300px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r2); background: var(--side); color: var(--ink-3); font-size: 13px; text-align: center; }
+.fb-preview .viewer > :is(.hint, .alert) { margin: var(--s4); }
+.fb-preview .viewer-pages { padding: var(--s2); border-radius: 0; }
+.fb-facts { display: grid; gap: var(--s2); margin: 0; font-size: 13px; }
+.fb-facts > div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: var(--s2); }
+.fb-facts dt { color: var(--ink-3); }
+.fb-facts dd { min-width: 0; margin: 0; color: var(--ink); }
+.fb-path { display: flex; align-items: flex-start; gap: var(--s1); color: var(--ink-2); font: 500 12px var(--font-plex), ui-monospace, monospace; }
+.fb-path > span { min-width: 0; overflow-wrap: anywhere; }
+.fb-path .copy { flex: none; margin: -4px 0 0; }
+.fb-skel-line { width: 120px; height: 14px; }
+.fb-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.fb-summary { align-items: flex-start; }
+.fb-detail-in > .fb-icon { width: 48px; height: 48px; border-radius: var(--r2); }
+
+.fb-file { display: grid; gap: var(--s2); padding: var(--s3); border: 1px solid var(--line); border-radius: var(--r3); background: var(--side); }
+.fb-file h3 { font-size: 14px; font-weight: 600; }
+.fb-file label:not(.check) { display: grid; gap: var(--s1); }
+.fb-file .alert { margin: 0; }
+.fb-file > .b { justify-self: start; margin-top: var(--s1); }
+.fb-for { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.fb-pick { display: grid; gap: var(--s2); margin: 0; padding: 0; border: 0; }
+.fb-pick legend { margin-bottom: var(--s1); color: var(--ink-2); font-size: 13px; }
+
+@media (max-width: 1200px) {
+  .fb-split { grid-template-columns: 216px minmax(0, 1fr) 272px; }
+  .fb-table th:nth-child(2) { width: 112px; }
+}
+@media (max-width: 960px) {
+  .fb-split { grid-template-columns: minmax(0, 1fr) 260px; }
+  .fb-tree { display: none; }
+}
+@media (max-width: 720px) {
+  .fb-split { display: flex; }
+  .fb-detail { border-top: 1px solid var(--line); border-left: 0; }
+  .fb-search { flex: 1 1 100%; }
+  .ui .fb-search input { width: 100%; }
+  .fb-table :is(th, td):nth-child(2) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fb-view, .fb-detail-in, .fb-drop, .fb-drop > span { animation: none; }
+  .fb-kids, .fb-chev svg, .fb-card { transition: none; }
+}

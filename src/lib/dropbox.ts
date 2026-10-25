@@ -113,6 +113,19 @@ export function dropboxDrive(refreshToken: string): Drive {
       }
       return files;
     },
+    async list(folder, cursor, limit = 200) {
+      const page = cursor
+        ? await call(await accessToken(), "files/list_folder/continue", { cursor })
+        : await call(await accessToken(), "files/list_folder", { path: folder ? `${ROOT}/${folder}` : ROOT, limit });
+      if ("error" in page) {
+        if (!cursor && String(page.error).startsWith("path/not_found")) return { entries: [], cursor: null };
+        throw new Error("dropbox_list");
+      }
+      const entries = (page.entries as { ".tag": string; id: string; name: string; path_display: string; size?: number; server_modified?: string }[])
+        .filter((entry) => entry[".tag"] !== "deleted")
+        .map((entry) => ({ id: entry.id, name: entry.name, path: entry.path_display.slice(ROOT.length + 1), folder: entry[".tag"] === "folder", size: entry.size ?? 0, modified: entry.server_modified ?? "" }));
+      return { entries, cursor: page.has_more ? String(page.cursor) : null };
+    },
     async folders() {
       const [top, incoming] = await Promise.all([
         call(await accessToken(), "files/list_folder", { path: "", limit: 2000 }),

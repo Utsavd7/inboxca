@@ -15,6 +15,7 @@ import { FileViewer } from "../files/[id]/view/file-viewer";
 import { DroppedNotice, PortalDrop } from "../portal-drop";
 import { Badge, Empty, PageHead, SidePanel } from "../ui";
 import { RowKeys } from "../row-keys";
+import { FoldersView, ViewSwitch } from "./folders/view";
 
 const PAGE = 50;
 const columns = "id, client_id, name, document_type, work_type, period_key, status, email_event_id, received_at, form:prepared->>form, clients(name), email_events(contact_id, contacts(name_enc)), client_registrations(number_enc)";
@@ -22,10 +23,11 @@ const drives: Record<string, string> = { dropbox: "Dropbox", onedrive: "OneDrive
 
 // Every paper of the clients this person may see, in the firm's own drive: by financial
 // year and work, as the drive files them, 50 at a time. All choices live in the address.
-export default async function Documents({ searchParams }: { searchParams: Promise<{ year?: string; kind?: string; q?: string; page?: string; file?: string; upload?: string; for?: string; portal?: string; dropped?: string; error?: string; show?: string }> }) {
+export default async function Documents({ searchParams }: { searchParams: Promise<{ year?: string; kind?: string; q?: string; page?: string; file?: string; upload?: string; for?: string; portal?: string; dropped?: string; error?: string; show?: string; view?: string; path?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
+  if (params.view === "folders") return <FoldersView path={params.path} />;
   // Financial years by the key of their last month's year: "2027" is FY 2026-27.
   const years = periodChoices(todayInIndia()).filter((key) => key.length === 4);
   const asked = /^(20\d\d)-(\d\d)$/.exec(params.year ?? "");
@@ -135,6 +137,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           </>
         }
       />
+      <ViewSwitch folders={false} />
       <DroppedNotice value={params.dropped} />
       {params.error === "drive" && (
         <p className="alert" role="alert">
