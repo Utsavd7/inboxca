@@ -23,7 +23,15 @@
         "at": 14,
         "atadj": 16,
         "docs": 20,
-        "exemp": 18
+        "exemp": 18,
+        "b2ba": 3,
+        "b2cla": 5,
+        "b2csa": 7,
+        "cdnra": 9,
+        "cdnura": 11,
+        "expa": 13,
+        "ata": 15,
+        "atadja": 17
       },
       "validator": {
         "file": "gstn/gstr1-v4.0-request-schema.json",
@@ -56,7 +64,25 @@
         "at": 14,
         "atadj": 16,
         "docs": 21,
-        "exemp": 18
+        "exemp": 18,
+        "b2ba": 3,
+        "b2cla": 5,
+        "b2csa": 7,
+        "cdnra": 9,
+        "cdnura": 11,
+        "expa": 13,
+        "ata": 15,
+        "atadja": 17,
+        "eco": 22,
+        "ecoa": 23,
+        "ecob2b": 24,
+        "ecourp2b": 25,
+        "ecob2c": 26,
+        "ecourp2c": 27,
+        "ecoab2b": 28,
+        "ecoab2c": 29,
+        "ecoaurp2b": 30,
+        "ecoaurp2c": 31
       },
       "validator": {
         "file": "gstn/gstr1-v5.0-request-schema.json",
