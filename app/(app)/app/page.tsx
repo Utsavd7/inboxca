@@ -16,7 +16,7 @@ import { formName, preparedSchema } from "@/src/lib/prepared";
 import { roleNames } from "@/src/lib/roles";
 import { OfficePanel } from "./office-panel";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
-import { replyReasons } from "@/src/lib/triage";
+import { awake, replyReasons } from "@/src/lib/triage";
 import { activityNames } from "@/src/lib/activity";
 import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
 import { MarkFiled } from "./mark-filed";
@@ -77,7 +77,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       )
     : 0;
   const [replies, papers, forms, confirming, late, week, rules, setup, alerts, noticeAlerts, asks, mailboxNotice, usage] = await Promise.all([
-    supabase.from("requests").select("id, entity_id, client_id, reason_code, clients(name)", { count: "exact" }).eq("kind", "team_reply").eq("status", "pending").limit(5),
+    supabase.from("requests").select("id, entity_id, client_id, reason_code, clients(name)", { count: "exact" }).eq("kind", "team_reply").eq("status", "pending").or(awake(today)).limit(5),
     supabase.from("requests").select("id, client_id, details, clients(name)", { count: "exact" }).eq("kind", "documents").eq("status", "pending").gt("expires_at", new Date().toISOString()).order("expires_at", { ascending: false }).limit(5),
     approver || membership.may("mark_filed")
       ? supabase.from("documents").select("id, client_id, period_key, status, prepared, clients(name)").eq("firm_id", membership.firmId).not("prepared", "is", null).order("received_at", { ascending: false }).limit(100)

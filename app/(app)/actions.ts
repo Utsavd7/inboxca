@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { STAGES } from "@/src/lib/reminders";
 import { emailTemplates } from "@/src/lib/email-templates";
-import { todayInIndia } from "@/src/lib/calendar";
+import { addDays, todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveItem, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
@@ -669,8 +669,9 @@ export async function disconnectMailbox() {
   revalidatePath("/app/settings");
 }
 
-// Inbox: correct an email's label (a person's choice wins over the rules and is logged), or
-// take an email out of Needs reply when it needs none (and undo that from the toast).
+// Inbox: correct an email's label (a person's choice wins over the rules and is logged),
+// take an email out of Needs reply when it needs none (and undo that from the toast), snooze
+// it, give it to a teammate, or file mail InboxCA could not match to a client.
 export async function manageEmail(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (!membership) redirect("/app");
@@ -680,25 +681,55 @@ export async function manageEmail(form: FormData) {
   if (form.get("intent") === "label" && label in labels)
     await supabase.from("email_events").update({ label, decision_source: "staff" }).eq("id", String(form.get("email") ?? ""));
   else if (form.get("intent") === "done" || form.get("intent") === "undo") {
+    // One email, or every email of a list at once (Mark all as done), and Undo for either.
     const undo = form.get("intent") === "undo";
-    await supabase.from("requests").update({ status: undo ? "pending" : "done" }).eq("id", request).eq("kind", "team_reply").eq("status", undo ? "done" : "pending");
+    const requests = form.getAll("request").map(String).slice(0, 100);
+    await supabase.from("requests").update({ status: undo ? "pending" : "done" }).in("id", requests).eq("kind", "team_reply").eq("status", undo ? "done" : "pending");
     if (back.startsWith("/app/inbox")) {
       revalidatePath("/app", "layout");
-      redirect(undo ? back : `${back}${back.includes("?") ? "&" : "?"}cleared=${encodeURIComponent(request)}`);
+      redirect(undo ? back : `${back}${back.includes("?") ? "&" : "?"}cleared=${requests.join(".")}`);
     }
-  } else if (form.get("intent") === "client") {
+  } else if (["snooze", "wake", "assign"].includes(String(form.get("intent")))) {
+    // Snooze until a day, and who answers, live in the request's details. The person's own
+    // reading of the request decides (row level security); the server then writes them.
+    const intent = form.get("intent");
+    const today = todayInIndia();
+    const until = String(form.get("until") ?? "");
+    const who = String(form.get("who") ?? "");
+    const { data: ask } = await supabase.from("requests").select("id, details").eq("id", request).eq("kind", "team_reply").eq("status", "pending").maybeSingle();
+    const { data: person } = intent === "assign" && who ? await supabaseAdmin().from("firm_members").select("user_id").eq("firm_id", membership.firmId).eq("user_id", who).eq("status", "active").maybeSingle() : { data: null };
+    const fine = intent === "snooze" ? /^\d{4}-\d{2}-\d{2}$/.test(until) && until > today && until <= addDays(today, 366) : intent === "wake" || !who || !!person;
+    if (ask && fine) {
+      const details = { ...(ask.details as Record<string, Json>) };
+      if (intent === "snooze") details.snooze = until;
+      else if (intent === "wake") delete details.snooze;
+      else if (who) details.assignee = who;
+      else delete details.assignee;
+      await supabaseAdmin().from("requests").update({ details }).eq("id", ask.id);
+      if (back.startsWith("/app/inbox")) {
+        revalidatePath("/app", "layout");
+        redirect(intent === "wake" ? back : `${back}${back.includes("?") ? "&" : "?"}${intent === "snooze" ? "snoozed" : "assigned"}=${ask.id}`);
+      }
+    }
+  } else if (form.get("intent") === "client" || form.get("intent") === "file") {
     // Mail from a contact who writes for several clients: a person says which client it is
     // for, among the contact's own clients they may see; its attachments are then filed.
+    // File to a client: mail InboxCA could not match goes to any client the person may see.
+    const filing = form.get("intent") === "file";
     const email = String(form.get("email") ?? "");
     const { data: client } = await supabase.from("clients").select("id").eq("firm_id",membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
     const admin = supabaseAdmin();
     const { data: event } = await admin.from("email_events").select("id, contact_id, label").eq("id", email).eq("firm_id", membership.firmId).is("client_id", null).maybeSingle();
-    const { data: link } = await admin.from("contact_clients").select("client_id").eq("contact_id", event?.contact_id ?? "").eq("client_id", client?.id ?? "").maybeSingle();
+    const { data: link } = filing ? { data: client && { client_id: client.id } } : await admin.from("contact_clients").select("client_id").eq("contact_id", event?.contact_id ?? "").eq("client_id", client?.id ?? "").maybeSingle();
     if (event && link) {
       await admin.from("email_events").update({ client_id: link.client_id }).eq("id", event.id);
       await admin.from("requests").update({ status: "done" }).eq("kind", "team_reply").eq("entity_id", event.id);
       const kind = event.label === "notice_received" ? "notice_from_mail" : "file_mail";
       await admin.from("jobs").upsert({ firm_id: membership.firmId, kind, entity_type: "email", entity_id: event.id, idempotency_key: `${kind}:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+      if (filing && back.startsWith("/app/inbox")) {
+        revalidatePath("/app", "layout");
+        redirect(`${back}${back.includes("?") ? "&" : "?"}filed=1`);
+      }
     }
   }
   // The sidebar's Inbox count is in the layout.
