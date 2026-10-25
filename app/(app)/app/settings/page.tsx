@@ -248,7 +248,7 @@ export default async function Settings({
 
           {group === "access" && <>
           <Card id="preset" title="Access preset" line="One choice sets Office only, office hours and signing out. You can change each of them after.">
-            <form action={choosePreset} className="set-stack">
+            <form id="preset-form" action={choosePreset} className="set-stack">
               <fieldset className="set-choices">
                 <legend className="sr-only">Preset</legend>
                 {Object.entries(presets).map(([key, { name, line }]) => (

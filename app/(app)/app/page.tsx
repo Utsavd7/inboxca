@@ -339,14 +339,14 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
               <ul>
                 {papers.data.map((request) => {
                   const details = request.details as unknown as DocumentRequest;
-                  const missing = details.items.filter((item) => !item.received.length).map((item) => item.type);
+                  const missing = (details.items ?? []).filter((item) => !item.received.length).map((item) => item.type);
                   const reminded = details.followups?.at(-1);
                   return (
                     <li key={request.id}>
                       <span className="grow">
                         <strong>{request.clients?.name}</strong>
                         <span className="sub">
-                          {(missing.length ? missing : details.items.map((item) => item.type)).join(", ")}
+                          {(missing.length ? missing : (details.items ?? []).map((item) => item.type)).join(", ")}
                           {details.period && ` for ${periodName(details.period)}`}
                         </span>
                       </span>

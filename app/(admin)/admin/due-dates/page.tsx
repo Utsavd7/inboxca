@@ -1,5 +1,6 @@
 import { Badge, PageHead } from "@/app/(app)/app/ui";
 import { dueLabel } from "@/src/lib/calendar";
+import { type ClientKind, clientKinds } from "@/src/lib/clients";
 import { currentAdmin } from "../admin";
 
 // The due date rules and the government's extensions, those a CA has not yet checked first.
@@ -7,7 +8,7 @@ import { currentAdmin } from "../admin";
 export default async function AdminDueDates() {
   const { supabase } = await currentAdmin();
   const { data: rules, error } = await supabase.from("compliance_types")
-    .select("code, period_key, name, source_url, verified_on, approved_by")
+    .select("code, period_key, name, source_url, verified_on, approved_by, client_kinds")
     .order("verified_on", { nullsFirst: true }).order("code").order("period_key");
   if (error) throw new Error(`Admin due dates failed: ${error.code}`);
   const waiting = rules.filter((rule) => !rule.verified_on).length;
@@ -24,7 +25,7 @@ export default async function AdminDueDates() {
               {rules.map((rule) => (
                 <tr key={`${rule.code}${rule.period_key}`}>
                   <td><strong>{rule.name ?? rule.code}</strong> <span className="sub-inline num">{rule.code}</span></td>
-                  <td>{rule.period_key ? <>Extension for <span className="num">{rule.period_key}</span></> : "Every period"}</td>
+                  <td>{rule.period_key ? <>Extension for <span className="num">{rule.period_key}</span></> : `Every period${rule.client_kinds ? `, for ${rule.client_kinds.map((kind) => clientKinds[kind as ClientKind]).join(", ")}` : ""}`}</td>
                   <td>{rule.verified_on ? <Badge tone="done">Checked {dueLabel(rule.verified_on)}</Badge> : <Badge tone="warn">Not checked</Badge>}</td>
                   <td>{rule.approved_by ?? "Nobody yet"}</td>
                   <td>{rule.source_url ? <a href={rule.source_url} target="_blank" rel="noreferrer">Open the notification</a> : "None yet"}</td>
