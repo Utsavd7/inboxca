@@ -1,6 +1,6 @@
-import { mailHealth } from "@/src/lib/firm-mail";
+import { mailHealth, openMail } from "@/src/lib/firm-mail";
 import { serverCrypto } from "@/src/lib/crypto";
-import { readNewMail, type MailSettings, type NewMail } from "@/src/lib/mailbox";
+import type { NewMail } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { classify } from "@/src/lib/triage";
 import { todayInIndia } from "@/src/lib/calendar";
@@ -15,14 +15,12 @@ export const mailPoll: Handler = async (job) => {
   const admin = supabaseAdmin();
   const { data: account } = await admin
     .from("connected_accounts")
-    .select("id, firm_id, address_enc, credentials_enc, sync_cursor, settings, status")
+    .select("id, firm_id, provider, address_enc, credentials_enc, sync_cursor, settings, status")
     .eq("id", job.entity_id ?? "")
     .maybeSingle();
   if (account?.status !== "connected") return { done: true };
   const firm = account.firm_id;
   const crypto = serverCrypto();
-  const address = await crypto.decrypt(firm, `accounts/${account.id}/address`, account.address_enc);
-  const { password } = JSON.parse(await crypto.decrypt(firm, `accounts/${account.id}/credentials`, account.credentials_enc));
 
   // Senders are matched by blind index, so no address is compared or kept in plain text.
   type Sender = { index: string; contact_id: string | null; client_id: string | null };
@@ -43,7 +41,7 @@ export const mailPoll: Handler = async (job) => {
     }
     return mail.filter((m) => senders.has(m.from));
   };
-  const read = await readNewMail(address, password, (account.settings as MailSettings).imap, account.sync_cursor, keep);
+  const read = await (await openMail(firm, account)).readNewMail(account.sync_cursor, keep);
   if ("error" in read) {
     if (read.error === "server") return { retry: "mail_unreachable" };
     const failed=await mailHealth(account.id,"read",true,account.credentials_enc);

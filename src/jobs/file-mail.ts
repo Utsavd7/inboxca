@@ -6,8 +6,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { describeFile, folderFor, gstinFor, periodName, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
 import type { FolderOrder, Naming } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
-import { firmMailer, mailHealth } from "@/src/lib/firm-mail";
-import { readAttachments, type MailSettings } from "@/src/lib/mailbox";
+import { firmMailer, mailHealth, openMail } from "@/src/lib/firm-mail";
 import type { NoticeDetails } from "@/src/lib/notices";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { queueRead } from "./read-document";
@@ -24,7 +23,7 @@ export const fileMail: Handler = async (job) => {
   const admin = supabaseAdmin();
   const { data: event } = await admin
     .from("email_events")
-    .select("id, firm_id, client_id, contact_id, provider_message_id, received_at, label, delivery, clients(name, email_enc), connected_accounts(id, address_enc, credentials_enc, settings, status), firms(name, settings)")
+    .select("id, firm_id, client_id, contact_id, provider_message_id, received_at, label, delivery, clients(name, email_enc), connected_accounts(id, provider, address_enc, credentials_enc, settings, status), firms(name, settings)")
     .eq("id", job.entity_id ?? "")
     .maybeSingle();
   const mailbox = event?.connected_accounts;
@@ -35,9 +34,7 @@ export const fileMail: Handler = async (job) => {
   if (!driveAccount) return { done: true };
 
   const crypto = serverCrypto();
-  const address = await crypto.decrypt(firm, `accounts/${mailbox.id}/address`, mailbox.address_enc);
-  const { password } = JSON.parse(await crypto.decrypt(firm, `accounts/${mailbox.id}/credentials`, mailbox.credentials_enc));
-  const read = await readAttachments(address, password, (mailbox.settings as MailSettings).imap, event.provider_message_id);
+  const read = await (await openMail(firm, mailbox)).readAttachments(event.provider_message_id);
   if ("error" in read) {
     if (read.error==="sign_in") await mailHealth(mailbox.id,"read",true,mailbox.credentials_enc);
     return {retry:"mail_unreachable",at:new Date(Date.now()+3600_000)};

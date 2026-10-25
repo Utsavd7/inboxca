@@ -123,7 +123,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     // Questions this person may answer (5.17.2), the same ones Today counts.
     myQuestions(),
     supabase.rpc("firm_people", { target_firm: firm }),
-    supabaseAdmin().from("connected_accounts").select("kind, status, settings").eq("firm_id", firm),
+    supabaseAdmin().from("connected_accounts").select("kind, provider, status, settings").eq("firm_id", firm),
     sp.decided && uuid.test(sp.decided) ? supabase.from("requests").select("id, status, reason_code, details").eq("kind", "permission").eq("id", sp.decided).maybeSingle() : Promise.resolve({ data: null }),
     // The owner's week of approvals (5.17.3, #51): who approved what, newest first.
     owner
@@ -247,7 +247,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const openKey = sp.mail ?? sp.sent ?? "";
   // Where an action on this page comes back to: the same list, with the same email open.
   const here = href(sp.mail ? { mail: sp.mail } : sp.sent ? { sent: sp.sent } : {});
-  const gmail = opensInMailbox(((mailbox?.settings ?? {}) as { imap?: { host?: string } }).imap?.host ?? "");
+  const gmail = mailbox?.provider === "gmail" || opensInMailbox(((mailbox?.settings ?? {}) as { imap?: { host?: string } }).imap?.host ?? "");
   const errors: Record<string, string> = {
     mailbox: "The email could not be sent. Check the firm's email in Settings, then try again.",
     reply: "Write the reply first.",
