@@ -63,12 +63,12 @@ function Card({ id, title, line, danger, children }: { id: string; title: string
 export default async function Settings({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string; group?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; group?: string; branch?: string }>;
 }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   if (!officeApprover(membership.role, userId, membership.settings)) return <NotForYou title="Settings" who="the owner" />;
-  if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel /></>;
+  if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel branch={(await searchParams).branch} /></>;
   const owner = membership.role === "owner";
   // A closed firm keeps only its download until InboxCA deletes it, 30 days on.
   const { data: closed } = await supabase.from("activity_log").select("at").eq("entity_id", membership.firmId).eq("firm_id", membership.firmId).eq("action", "firm.closed").maybeSingle();
@@ -93,12 +93,12 @@ export default async function Settings({
   const driveAddress = drive && (await serverCrypto().decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc));
   const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
   const mailAddress = mailbox && (await serverCrypto().decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc));
-  const { saved, error, group: asked } = await searchParams;
+  const { saved, error, group: asked, branch } = await searchParams;
   const settings = membership.settings;
   const hours = (settings.hours as Hours | undefined) ?? SUGGESTED_HOURS;
   const holidays = (settings.holidays as string[] | undefined) ?? [];
   const special = (settings.special_hours as SpecialHours[] | undefined) ?? [];
-  const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number };
+  const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number; india_only?: boolean };
   const hoursOnly = access.hours_only ?? false;
   const records = (settings.records ?? {}) as RecordsSettings;
   const permissions = (settings.permissions ?? {}) as Permissions;
@@ -267,7 +267,7 @@ export default async function Settings({
                 {!preset && <p className="hint">Your rules no longer match a preset.</p>}
               </div>
             </form>
-            <OfficePanel error={error === "deputies"} inPreset />
+            <OfficePanel error={error === "deputies"} inPreset branch={branch} />
           </Card>
           <Card id="limits" title="Signing in" line="For everyone in the firm, you included.">
             <form action={saveLimits} className="set-fields">
@@ -291,6 +291,10 @@ export default async function Settings({
                   ))}
                 </select>
               </div>
+              <label className="check">
+                <input type="checkbox" name="india_only" defaultChecked={!!access.india_only} />
+                Everyone except you can use InboxCA only from India
+              </label>
               <div className="set-foot"><Pending className="b b-primary" type="submit">Save signing in limits</Pending></div>
             </form>
           </Card>

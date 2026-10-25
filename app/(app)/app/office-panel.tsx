@@ -4,7 +4,7 @@ import { reviewDevice, setOfficeOnly } from "@/app/(app)/actions";
 import { addDays, todayInIndia, dueLabel } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
-import { firmAdmin, officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
+import { firmAdmin, memberOffice, officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { supabaseAdmin } from "@/src/lib/supabase";
 
 // Only office approvers read these requests and the activity behind them.
@@ -16,20 +16,26 @@ const FIXED_SUGGESTION_DAYS = 14;
 // Office only switch waits under Change details, the rest shows as usual. Its Turn on sends
 // the preset form, so the preset's "are you in the office now?" answer is the one used (a
 // button with its own action sends no name and value, so intent rides in a hidden field).
-export async function OfficePanel({ compact = false, error = false, inPreset = false }: { compact?: boolean; error?: boolean; inPreset?: boolean }) {
+export async function OfficePanel({ compact = false, error = false, inPreset = false, branch = "" }: { compact?: boolean; error?: boolean; inPreset?: boolean; branch?: string }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) return null;
-  const office = (membership.settings.office ?? {}) as Office;
+  const firmOffice = (membership.settings.office ?? {}) as Office;
   const owner = membership.role === "owner";
   const isAdmin = firmAdmin(membership.role, userId, membership.settings);
   const admin = supabaseAdmin();
   const today = todayInIndia();
-  const [{ data: pcs }, { data: activity }, { data: people }, { data: requests }] = await Promise.all([
+  const [{ data: pcs }, { data: activity }, { data: people }, { data: requests }, { data: branches }] = await Promise.all([
     admin.from("devices").select("id, name, status, kind, person_id, ends_on, key_id").eq("firm_id", membership.firmId),
     admin.from("activity_log").select("entity_id, actor_id, action, at, details").eq("firm_id", membership.firmId).in("action", ["device.first_seen", "office.refused", "office.here", "office.confirm", "office.today"]),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     admin.from("requests").select("id, entity_id, reason_code, details").eq("firm_id", membership.firmId).eq("entity_type", "office_connection").eq("status", "pending"),
+    admin.from("groups").select("id, name, kind, settings").eq("firm_id", membership.firmId).eq("kind", "branch").order("name"),
   ]);
+  // The office shown and changed below: the main one, or the picked branch's own (5.17.4 #13).
+  const picked = branches?.find((row) => row.id === branch);
+  const office = memberOffice(firmOffice, picked) ?? {};
+  const anyOn = firmOffice.on || branches?.some((row) => memberOffice(firmOffice, row)?.on);
+  const where = picked && <input type="hidden" name="branch" value={picked.id} />;
   const emails = new Map(people?.map((person) => [person.user_id, person.email]));
   const first = new Map(activity?.filter((entry) => entry.action === "device.first_seen").map((entry) => [entry.entity_id, entry]));
   const waiting = (pcs ?? []).filter((pc) => pc.status === "waiting");
@@ -45,10 +51,10 @@ export async function OfficePanel({ compact = false, error = false, inPreset = f
     isAdmin && office.on && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= FIXED_SUGGESTION_TAPS || !trustedPc);
   if (compact && !requests?.length && !refusals.length && (owner || !waiting.length)) return null;
   const line = <p className="hint">Staff, managers and front desk use approved PCs on your office internet connection. You and partners can use InboxCA anywhere.</p>;
-  const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">
+  const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">{where}
     <button className="b b-ghost" name="intent" value="forget">Forget office connections</button><button className="b b-secondary" name="intent" value="off">Turn off</button>
-  </form> : isAdmin && inPreset ? <><input type="hidden" form="preset-form" name="intent" value="on" /><button className="b b-primary" form="preset-form" formAction={setOfficeOnly} formNoValidate>Turn on</button></>
-    : isAdmin && <form action={setOfficeOnly}>
+  </form> : isAdmin && inPreset ? <><input type="hidden" form="preset-form" name="intent" value="on" />{picked && <input type="hidden" form="preset-form" name="branch" value={picked.id} />}<button className="b b-primary" form="preset-form" formAction={setOfficeOnly} formNoValidate>Turn on</button></>
+    : isAdmin && <form action={setOfficeOnly}>{where}
     <fieldset className="fieldset"><legend>Are you in your office right now?</legend>
       <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, this is my office</label>
       <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it from the office</label>
@@ -60,8 +66,19 @@ export async function OfficePanel({ compact = false, error = false, inPreset = f
       {!inPreset && <h2 id={compact ? "office-alerts" : "office-title"}>{compact ? "Your office today" : "Staff can use InboxCA only in the office"}</h2>}
       {error && <p className="alert" role="alert">Choose up to 2 active partners as deputies.</p>}
       {!compact && !inPreset && line}
+      {!compact && !!branches?.length && <form method="get" action="/app/settings#office">
+        <input type="hidden" name="group" value="access" />
+        <div className="form-row"><div>
+          <label htmlFor="office-branch">Office</label>
+          <select id="office-branch" name="branch" defaultValue={picked?.id ?? ""}>
+            <option value="">Main office</option>
+            {branches.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+          </select>
+        </div><button className="b b-secondary">Show</button></div>
+        {picked && !(picked.settings as { office?: Office }).office && <p className="hint">{picked.name} follows the main office until you turn Office only on or off for it here.</p>}
+      </form>}
       {office.on && !compact && <p className={here ? "notice" : "alert"} role="status">{here ? "On. You are on your office internet connection now." : "On. Waiting for your firm to confirm the office internet connection."}</p>}
-      {office.on && requests?.map((request) => {
+      {anyOn && requests?.map((request) => {
         const details = request.details as { person?: string; day?: string };
         const pc = pcs?.find((pc) => pc.id === request.entity_id);
         if (!pc || pc.status !== "approved") return null;
@@ -83,7 +100,7 @@ export async function OfficePanel({ compact = false, error = false, inPreset = f
       {refusals.map((entry) => <p className="alert" key={entry.actor_id}>{personName(emails.get(entry.actor_id ?? ""))} tried to use InboxCA from outside the office today.</p>)}
       {compact && !owner && !!waiting.length && <p>{waiting.length} PCs are waiting for approval. <Link href="/app/settings#office">Approve PCs</Link></p>}
       {!compact && <>
-        {office.on && !!waiting.length && <div className="device-list">
+        {anyOn && !!waiting.length && <div className="device-list">
           <h3 className="sub-head">PCs waiting for approval</h3>
           <ul className="rows">{waiting.map((pc) => {
             const seen = first.get(pc.id);
@@ -117,11 +134,11 @@ export async function OfficePanel({ compact = false, error = false, inPreset = f
             </form>
           </li>)}</ul>
         </div>}
-        {office.on && !here && <form action={setOfficeOnly} className="form-row">
+        {office.on && !here && <form action={setOfficeOnly} className="form-row">{where}
           <button className="b b-primary" name="intent" value="here">This is my office</button>
         </form>}
         {inPreset && toggle ? <details className="reveal office-switch"><summary>Change details</summary><h3 className="sub-head">Office only {office.on ? "is on" : "is off"}</h3>{line}{toggle}</details> : toggle}
-        {suggestFixed && <form action={setOfficeOnly} className="fixed-suggestion">
+        {suggestFixed && <form action={setOfficeOnly} className="fixed-suggestion">{where}
           <p><strong>To stop these confirmations, ask your internet provider for a fixed address.</strong> Here is what to say:</p>
           <blockquote>&ldquo;Please add a fixed internet address to our broadband connection, account number ___. We need it for office software access.&rdquo;</blockquote>
           <p className="hint">When it is done, press Done from a PC in the office.</p>
@@ -131,7 +148,7 @@ export async function OfficePanel({ compact = false, error = false, inPreset = f
           </span>
         </form>}
         {isAdmin && office.on && !suggestFixed && (office as { fixed_declined?: boolean }).fixed_declined && !trustedPc && <p className="hint">Without a fixed connection, mark one desktop in the office as Stays in the office and name a deputy, so a changed connection is confirmed without you.</p>}
-        {isAdmin && office.on && !suggestFixed && <form action={setOfficeOnly}>
+        {isAdmin && office.on && !suggestFixed && <form action={setOfficeOnly}>{where}
           <p className="hint">If your internet provider gave your office a fixed connection, confirm it here from the office.</p>
           <button className="b b-secondary" name="intent" value="fixed">Done</button>
         </form>}

@@ -172,6 +172,7 @@ export async function saveLimits(form: FormData) {
     ...(membership.settings.access as object),
     idle_minutes: whole("idle_minutes", IDLE_CHOICES),
     session_hours: whole("session_hours", SESSION_CHOICES),
+    india_only: form.get("india_only") === "on" || undefined,
   };
   await supabase.from("firms").update({ settings: { ...membership.settings, access } }).eq("id", membership.firmId);
   redirect("/app/settings?group=access&saved=limits");
@@ -200,7 +201,7 @@ export async function choosePreset(form: FormData) {
     // Office hours only needs hours: the suggested ones until the owner sets them.
     hours: (settings.hours ?? SUGGESTED_HOURS) as Hours,
     office: { ...(settings.office as object), away: preset.away },
-    access: { ...(settings.access as object), hours_only: preset.hours_only, idle_minutes: preset.idle_minutes || undefined },
+    access: { ...(settings.access as object), hours_only: preset.hours_only, idle_minutes: preset.idle_minutes || undefined, india_only: preset.india_only || undefined },
   } }).eq("id", membership.firmId);
   revalidatePath("/app", "layout");
   redirect("/app/settings?group=access&saved=preset#preset");
@@ -1468,16 +1469,19 @@ export async function setOfficeOnly(form: FormData) {
     await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "office.no_fixed", entity_type: "firm", entity_id: membership.firmId });
     redirect("/app/settings?group=access#office");
   }
-  if (request && !z.uuid().safeParse(request).success || deputies.some((id) => !z.uuid().safeParse(id).success)) redirect("/app");
+  // A branch's own office, when the firm has branches (5.17.4 #13).
+  const branch = String(form.get("branch") ?? "");
+  if (request && !z.uuid().safeParse(request).success || branch && !z.uuid().safeParse(branch).success || deputies.some((id) => !z.uuid().safeParse(id).success)) redirect("/app");
   const { error } = await supabaseAdmin().rpc("office_control", {
     target_firm: membership.firmId, actor: userId, decision,
     ...(request && { request_id: request }),
+    ...(branch && { branch }),
     ...((decision === "here" || decision === "fixed" || decision === "on" && form.get("here") === "yes") && line && { connection: line }),
     ...(decision === "deputies" && { deputies, ...(coAdmin && { co_admin: coAdmin }) }),
   });
   if (error) throw new Error(`Office approval failed: ${error.code}`);
   revalidatePath("/app", "layout");
-  redirect("/app/settings?group=access#office");
+  redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}#office`);
 }
 
 // The owner decides whether a waiting PC stays in the office, travels, or is refused.
