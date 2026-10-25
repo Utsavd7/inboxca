@@ -33,7 +33,7 @@ import { queueRead } from "@/src/jobs/read-document";
 import { runJobsSoon } from "@/src/jobs/run-soon";
 import { labels } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
-import { firmMailer, forgetMailToken } from "@/src/lib/firm-mail";
+import { firmMailer, forgetMailToken, mailTokenForget } from "@/src/lib/firm-mail";
 import { adminConsent, isMailApi, MAIL_COOKIE, mailSignIn, mailSignInReady } from "@/src/lib/mail-oauth";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { paperPolicy, type BulkSend, type RecordsSettings } from "@/src/lib/records";
@@ -839,9 +839,13 @@ export async function disconnectDrive() {
 // Closing the firm (PLAN.md 5.5.1): the owner types the firm's name, which the database
 // checks again. Its data is deleted 30 days later and its log a year after that.
 export async function closeFirm(form: FormData) {
-  const { supabase, membership } = await currentWriter();
+  const { supabase, userId, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
+  // Closing deletes the firm's connections, so a mailbox sign in is read first and taken back
+  // at Google or Zoho once the firm is closed.
+  const forget = await mailTokenForget(membership.firmId, userId).catch(() => null);
   const { data } = await supabase.rpc("close_firm", { target_firm: membership.firmId, typed_name: String(form.get("name") ?? "") });
+  if (data) await forget?.().catch(() => log.warn("mail_token_not_revoked", {}));
   // The notice before deletion, by Orelu's system email once it is set up.
   if (data) await sendSystemMail(membership.email, `${membership.firmName} is closed on InboxCA`, [
     `You closed ${membership.firmName} on InboxCA. Your team can no longer sign in.`,
