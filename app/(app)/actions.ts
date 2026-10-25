@@ -593,10 +593,7 @@ export async function manageTasks(form: FormData) {
   );
   revalidatePath("/app", "layout");
   // From the Calendar: back to the same view, with a note of what changed and an Undo.
-  if (form.has("view")) {
-    const back = new URLSearchParams([...["view", "day", "code", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["saved", String(intent)], ["t", ids.join(".")]].filter(([, value]) => value));
-    redirect(`/app/calendar?${back}`);
-  }
+  if (form.has("view")) redirect(calendarBack(form, ["saved", String(intent)], ["t", ids.join(".")]));
   // From Today's late returns: back to Today, the same way.
   if (form.get("from") === "today") redirect(`/app?marked=${intent}&t=${ids.join(".")}`);
   // From a client's Returns tab: back to it, the same way.
@@ -605,6 +602,25 @@ export async function manageTasks(form: FormData) {
     const back = new URLSearchParams([["tab", "returns"], ...["show", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["marked", String(intent)], ["t", ids.join(".")]].filter(([, value]) => value));
     redirect(`/app/clients/${client}?${back}`);
   }
+}
+
+// The Calendar view a form came from (its view, day, return, page and month), with a note.
+const calendarBack = (form: FormData, ...notes: [string, string][]) =>
+  `/app/calendar?${new URLSearchParams([...["view", "day", "code", "page", "month"].map((key) => [key, String(form.get(key) ?? "")]), ...notes].filter(([, value]) => value))}`;
+
+// Calendar: Remind client, after its preview. The reminder job emails the client once, from
+// the firm's mailbox, about its returns due within 7 days, the same email as the daily
+// reminders; it waits 20 seconds so Undo can stop it. For those who manage clients.
+export async function remindClient(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership || !canManageClients(membership.role)) redirect("/app/calendar");
+  const { data: client } = await supabase.from("clients").select("id").eq("firm_id", membership.firmId).eq("id", String(form.get("client") ?? "")).is("archived_at", null).maybeSingle();
+  if (!client) redirect(calendarBack(form));
+  const admin = supabaseAdmin();
+  const { data: job, error } = await admin.from("jobs").insert({ firm_id: membership.firmId, kind: "reminders", entity_type: "client", entity_id: client.id, idempotency_key: `reminders:client:${client.id}:${randomUUID()}`, run_at: new Date(Date.now() + 20_000).toISOString() }).select("id").single();
+  if (error) redirect(calendarBack(form, ["error", "send"]));
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "reminders.asked", entity_type: "client", entity_id: client.id, details: { what: "soon" } });
+  redirect(calendarBack(form, ["reminding", client.id], ["job", String(job.id)]));
 }
 
 export type MailboxState = { error?: string; values?: Record<string, string> };
@@ -1282,6 +1298,30 @@ export async function sendDocument(form: FormData) {
   redirect(`${back}&shared=${id}`);
 }
 
+// Documents: the papers chosen there, each sent to its own client's email as a secure link,
+// after the preview of who gets what. As one at a time, the papers must be filed and not kept
+// inside the firm, and the person must be allowed to send for the client; others are skipped.
+export async function sendPapers(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const asked = String(form.get("back") ?? "");
+  const back = asked.startsWith("/app/documents") ? asked : "/app/documents";
+  const ids = [...new Set(form.getAll("pick").map(String))];
+  if (!ids.length || ids.length > 20 || ids.some((id) => !z.uuid().safeParse(id).success)) redirect(back);
+  const { data: papers } = await supabase.from("documents").select("id, client_id, name, status, share_policy, document_type, clients(name, email_enc)").eq("firm_id", membership.firmId).in("id", ids);
+  const records = (membership.settings.records ?? {}) as RecordsSettings;
+  const crypto = serverCrypto();
+  let sent = 0;
+  for (const paper of papers ?? []) {
+    const policy = paperPolicy(paper, records);
+    if (!membership.may("send", paper.client_id) || paper.status !== "filed" || policy === "internal" || !paper.clients?.email_enc) continue;
+    const to = await crypto.decrypt(membership.firmId, `clients/${paper.client_id}/email`, paper.clients.email_enc);
+    if (await sendShare({ firmId: membership.firmId, firmName: membership.firmName, documentId: paper.id, documentName: paper.name, clientName: paper.clients.name, contactId: null, to, needsCode: policy === "approval" })) sent++;
+  }
+  revalidatePath("/app", "layout");
+  redirect(`${back}${back.includes("?") ? "&" : "?"}sent=${sent}-${ids.length - sent}`);
+}
+
 // Settings → Firm drive: the order of the folders new files go into (§5.5.0). Files already
 // filed stay where they are. The owner's choice.
 export async function setFolderOrder(form: FormData) {
@@ -1857,11 +1897,19 @@ export async function sendNow(form: FormData) {
   redirect(`/app?sending=${what}&job=${job.id}`);
 }
 
-// Undo on the toast: the send stops if it has not started yet.
+// Undo on the toast: the send stops if it has not started yet. From the Calendar it is one
+// client's reminder, which those who manage that client may stop.
 export async function stopSend(form: FormData) {
-  const { membership } = await currentWriter();
-  if (!membership || !["owner", "partner"].includes(membership.role)) redirect("/app");
-  const { data } = await supabaseAdmin().from("jobs").update({ state: "cancelled" }).eq("firm_id", membership.firmId).eq("kind", "reminders").eq("state", "pending").eq("id", Number(form.get("job"))).select("id");
+  const { supabase, membership } = await currentWriter();
+  const calendar = form.has("view");
+  if (!membership || !(["owner", "partner"].includes(membership.role) || (calendar && canManageClients(membership.role)))) redirect("/app");
+  let jobs = supabaseAdmin().from("jobs").update({ state: "cancelled" }).eq("firm_id", membership.firmId).eq("kind", "reminders").eq("state", "pending").eq("id", Number(form.get("job")));
+  if (calendar) {
+    const { data: client } = await supabase.from("clients").select("id").eq("firm_id", membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
+    jobs = jobs.eq("entity_type", "client").eq("entity_id", client?.id ?? "00000000-0000-0000-0000-000000000000");
+  }
+  const { data } = await jobs.select("id");
+  if (calendar) redirect(calendarBack(form, data?.length ? ["stopped", "1"] : ["error", "started"]));
   redirect(data?.length ? "/app?stopped=1" : "/app?error=started");
 }
 

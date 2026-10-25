@@ -42,7 +42,7 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     await expect(page.getByRole("heading", { name: "Documents", level: 1 })).toBeVisible();
     const papers = page.getByRole("region", { name: "Papers" });
     await expect(papers.getByRole("row")).toHaveCount(3);
-    await expect(papers.getByRole("row", { name: /Form 16/ })).toContainText("Brought in from the drive");
+    await expect(papers.getByRole("row", { name: /Form 16/ })).toContainText("From the drive");
     // The paper's whole name shows, with its work on a second line.
     await expect(papers.getByRole("link", { name: "Purchase bills.pdf", exact: true })).toBeVisible();
     // The first paper shows its first page at once, logged as a thumbnail, not as an opened view.
@@ -68,13 +68,16 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     await expect.poll(views).toBe(1);
     await expect(detail.getByRole("link", { name: "Download" })).toHaveAttribute("href", `/app/files/${bills.id}`);
 
-    // Upload papers finds the client and opens their upload form.
+    // Upload papers finds the client and opens their upload form, here beside the list.
     await page.getByRole("link", { name: "Upload papers" }).click();
-    const sheet = page.getByRole("complementary", { name: "Upload papers" });
+    const sheet = page.getByRole("dialog", { name: "Upload papers" });
     await sheet.getByLabel("Client name").fill("Mehta");
     await sheet.getByLabel("Client name").press("Enter");
-    await expect(sheet.getByRole("link", { name: "Choose" })).toHaveAttribute("href", `/app/clients/${mehta.id}?tab=files&upload=1`);
-    await sheet.getByRole("link", { name: "Close" }).click();
+    await sheet.getByRole("link", { name: `Choose Mehta Traders ${tag}` }).click();
+    const form = page.getByRole("dialog", { name: `Upload papers for Mehta Traders ${tag}` });
+    await expect(form.getByLabel("Files", { exact: true })).toBeAttached();
+    await form.getByRole("link", { name: "Close" }).click();
+    await expect(form).toHaveCount(0);
 
     await detail.getByRole("link", { name: "Open client" }).click();
     await expect(page).toHaveURL(new RegExp(`/app/clients/${patel.id}$`));

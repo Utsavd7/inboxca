@@ -634,7 +634,7 @@ isOneToOne: false
                            },
 "calendar_days":
 { Args: { "first_day": string,"last_day": string,"only_code"?: string,"target_firm": string }; Returns: {
-              "due_on": string,"returns": number
+              "due_on": string,"filed": number,"returns": number,"working": number
             }[]
                            },
 "calendar_top_up":

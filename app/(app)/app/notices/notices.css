@@ -1,19 +1,29 @@
-/* Notices: the list card comes from calendar.css; these are the notice panels. */
+/* Notices: the list card comes from calendar.css; these are the notice rows and panels. */
 .notices > .pills { align-self: flex-start; }
-.notices .cal-table .t td { height: 56px; }
-.notices-late { color: var(--red-fg); font-weight: 600; }
-.notices .props { margin-bottom: 8px; }
-.notices-moves { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.notices .fields > .notices-chosen { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 8px 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.notices .cal-table .t td { height: 60px; }
+.notices .cal-table .who .avatar { width: 24px; height: 24px; font-size: 11px; }
+.notices-what { display: flex; align-items: center; gap: var(--s3); }
+.notices-what .icon-tile { width: 28px; height: 28px; border-radius: var(--r1); }
+.notices-late { color: var(--late-fg); font-weight: 600; }
+
+/* The open notice: who sent it and where it stands, its facts, then what to do next. */
+.notices-head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); padding: var(--s3); border-radius: var(--r2); background: var(--k-notice-bg); }
+.notices-head .grow { display: grid; flex: 1; min-width: 0; }
+.notices-head strong { font-weight: 600; }
+.notices-head .icon-tile { background: var(--surface); box-shadow: var(--shadow-button); }
+.notices .props { margin-bottom: var(--s2); }
+.notices .props .avatar { width: 22px; height: 22px; font-size: 10px; }
+.notices-confirm { margin-top: var(--s4); padding: var(--s4); border: 1px solid var(--edge); border-radius: var(--r2); background: var(--hover); }
+.notices-confirm .hint { margin: 0; }
+.notices-moves { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
+.notices .fields > .notices-chosen { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s2) var(--s2) var(--s3); border: 1px solid var(--edge); border-radius: var(--r2); background: var(--hover); }
+.notices-chosen .grow { display: grid; flex: 1; min-width: 0; }
 .notices-chosen strong { font-weight: 600; }
 
 /* Finding the client: a search, then a page of matches, one Choose button a row. */
-.notices-find { display: flex; gap: 8px; margin-top: 12px; }
+.notices-find { display: flex; gap: var(--s2); margin-top: var(--s3); }
 .notices-find .search { position: relative; flex: 1; }
-.notices-find .search svg { position: absolute; top: 8px; left: 12px; color: var(--ink-3); pointer-events: none; }
-.notices .notices-find input[name="for"] { padding-left: 32px; }
-.notices-clients { display: flex; flex-direction: column; margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; }
-.notices-clients li { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; border-top: 1px solid var(--line); font-weight: 600; }
-.notices-clients li:first-child { border-top: 0; }
-.notices-clients span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.notices-pick-pages { padding: 8px 0; border-top: 0; }
+.notices-find .search svg { position: absolute; top: var(--s2); left: var(--s3); color: var(--ink-3); pointer-events: none; }
+.notices .notices-find input[name="for"] { padding-left: var(--s6); }
+.notices-clients { margin: var(--s3) calc(var(--s4) * -1) 0; }
+.notices-pick-pages { padding: var(--s2) 0; border-top: 0; }

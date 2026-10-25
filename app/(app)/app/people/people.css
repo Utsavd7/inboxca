@@ -1,15 +1,17 @@
-/* People: one table of the firm's people; inviting, changing and teams open in a side panel.
-   Sizes, weights and colours from the design rules. */
-.people-table { margin-top: 24px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+/* People: one table of the firm's people; inviting, changing and teams open in a side panel. */
+.people-table { margin-top: var(--s5); overflow: auto; border: 1px solid var(--edge); border-radius: var(--r3); }
 .people-page .t { min-width: 640px; }
-.people-page .t th { position: sticky; top: 0; z-index: 1; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--side); color: var(--ink-3); font-size: 12px; font-weight: 600; }
-.people-page .t td { height: 40px; padding: 0 12px; font-size: 14px; white-space: nowrap; }
-.people-page .t :is(th, td):first-child { padding-left: 16px; }
-.people-page .t :is(th, td):last-child { padding-right: 16px; }
-.people-page .t tbody tr { transition: background var(--fast) var(--out); }
-.people-page .t tbody tr:hover { background: var(--hover); }
+.people-page .t th { position: sticky; top: 0; z-index: 1; height: 40px; padding: 0 var(--s3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(8px); color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.people-page .t td { height: 60px; padding: 0 var(--s3); font-size: 14px; white-space: nowrap; }
+.people-page .t :is(th, td):first-child { padding-left: var(--s4); }
+.people-page .t :is(th, td):last-child { padding-right: var(--s4); }
 .people-page .t tbody tr.on { background: var(--accent-soft); }
-.people-who { display: flex; align-items: center; gap: 12px; font-weight: 600; }
+.people-page .t tr.is-off .avatar { opacity: 0.6; }
+.people-who { display: flex; align-items: center; gap: var(--s3); }
+.people-who .grow { display: grid; min-width: 0; line-height: 1.35; }
+.people-who strong { font-weight: 600; }
+.people-who .sub-inline { margin-left: var(--s2); padding: 1px 6px; border-radius: var(--round); background: var(--press); color: var(--ink-2); font-size: 11px; font-weight: 600; }
+.people-page > .panel { margin-top: var(--s4); }
 
 /* Each row's one button shows on hover, and always for keyboard and touch. */
 @media (hover: hover) {
@@ -17,12 +19,24 @@
 }
 .people-page .t td .b { transition: opacity var(--fast) var(--out); }
 
-.side-panel .people-leave { display: grid; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+/* The panels: who the person is on top, their role and groups, then leaving set apart. */
+.people-card { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s2); padding: var(--s3); border-radius: var(--r2); background: var(--hover); }
+.people-card .grow { display: grid; flex: 1; min-width: 0; }
+.people-card strong { font-size: 15px; font-weight: 600; }
+.people-card .sub { overflow: hidden; text-overflow: ellipsis; }
+.people-intro { display: flex; align-items: flex-start; gap: var(--s3); padding: var(--s3); border-radius: var(--r2); background: var(--k-reply-bg); }
+.people-intro .icon-tile { background: var(--surface); box-shadow: var(--shadow-button); }
+.people-intro .hint { margin: 0; color: var(--ink-2); }
+.side-panel .people-leave { display: grid; gap: var(--s2); margin-top: var(--s5); padding: var(--s4); border: 1px solid var(--late-bg); border-radius: var(--r2); }
 .side-panel .people-leave .b { justify-self: start; }
-.side-panel section + section { margin-top: 24px; }
-.side-panel section h3 { margin: 16px 0 0; }
-.people-groups { margin-top: 8px; border-block: 1px solid var(--line); }
-.people-groups li { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 4px 0; border-top: 1px solid var(--line); }
+.side-panel .people-leave .b-secondary { color: var(--late-fg); }
+.side-panel .people-leave .b-secondary:hover:not(:disabled) { background: var(--late-bg); }
+.side-panel section + section { margin-top: var(--s5); }
+.side-panel section h3 { margin: var(--s4) 0 0; }
+.people-group-head { display: flex; align-items: center; gap: var(--s2); }
+.people-group-head .icon-tile { width: 28px; height: 28px; border-radius: var(--r1); }
+.people-groups { margin-top: var(--s2); border-block: 1px solid var(--line); }
+.people-groups li { display: flex; align-items: center; gap: var(--s3); min-height: 40px; padding: var(--s1) 0; border-top: 1px solid var(--line); }
 .people-groups li:first-child { border-top: 0; }
 .people-groups .grow { flex: 1; min-width: 0; font-weight: 600; }
-.side-panel section .form-row { margin-top: 12px; }
+.side-panel section .form-row { margin-top: var(--s3); }

@@ -1,18 +1,22 @@
+import { Building2, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { changeGroup, manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
-import { Avatar, Badge, NotForYou, PageHead, SidePanel } from "../ui";
+import { Avatar, Badge, Empty, IconTile, NotForYou, PageHead, SidePanel, type Tone } from "../ui";
 import { Pending } from "../pending";
-import { invitableRoles, roleLabel } from "@/src/lib/roles";
+import { invitableRoles, personName, roleLabel } from "@/src/lib/roles";
 import { InviteForm } from "./invite-form";
 import "./people.css";
 
 const statusNames: Record<string, string> = { active: "Active", invited: "Invited", deactivated: "Removed" };
+const statusTones: Record<string, Tone> = { active: "done", invited: "warn" };
+// Each role keeps one colour on its pill; the colour names the role, the word says it.
+const roleTones: Record<string, Tone> = { owner: "purple", partner: "blue", manager: "blue" };
 // A person is in at most one team and works at most at one branch.
 const kinds = [
-  { kind: "team", column: "team_id", title: "Teams", one: "Team" },
-  { kind: "branch", column: "branch_id", title: "Branches", one: "Branch" },
+  { kind: "team", column: "team_id", title: "Teams", one: "Team", Icon: Users },
+  { kind: "branch", column: "branch_id", title: "Branches", one: "Branch", Icon: Building2 },
 ] as const;
 
 // The firm's people. Everyone who opens People sees the list; only the owner invites,
@@ -51,6 +55,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
             )}
             {isOwner && (
               <Link className="b b-primary" href="/app/people?panel=invite" scroll={false}>
+                <UserPlus size={16} aria-hidden />
                 Invite person
               </Link>
             )}
@@ -76,22 +81,32 @@ export default async function People({ searchParams }: { searchParams: Promise<{
               )}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="stagger">
             {people?.map((one) => (
               <tr key={one.user_id} className={`${one.status === "deactivated" ? "is-off" : ""}${one.user_id === person?.user_id ? " on" : ""}`}>
                 <td>
                   <span className="people-who">
                     <Avatar name={one.email} />
-                    <span>{one.email}</span>
+                    <span className="grow">
+                      <strong>
+                        {personName(one.email)}
+                        {one.user_id === userId && <span className="sub-inline">You</span>}
+                      </strong>
+                      <span className="sub">{one.email}</span>
+                    </span>
                   </span>
                 </td>
                 <td>
-                  <Badge>{roleLabel(one.role)}</Badge>
+                  <Badge tone={roleTones[one.role]} plain>
+                    {roleLabel(one.role)}
+                  </Badge>
                 </td>
                 {shownKinds.map(({ kind, column, one: label }) => (
                   <td key={kind}>{groupName.get(one[column] ?? "") ?? <span className="hint">No {label.toLowerCase()}</span>}</td>
                 ))}
-                <td>{one.status === "invited" ? <Badge tone="warn">Invited</Badge> : <span className={one.status === "active" ? undefined : "hint"}>{statusNames[one.status]}</span>}</td>
+                <td>
+                  <Badge tone={statusTones[one.status]}>{statusNames[one.status]}</Badge>
+                </td>
                 {isOwner && (
                   <td className="shrink">
                     {one.user_id !== userId && (
@@ -106,11 +121,31 @@ export default async function People({ searchParams }: { searchParams: Promise<{
           </tbody>
         </table>
       </div>
+      {count <= 1 && (
+        <div className="panel">
+          <Empty Icon={UserPlus} kind="reply" title="Just you so far">
+            <span>Invite your partners and staff. Each gets their own sign in, and you choose what their role may do.</span>
+            {isOwner && (
+              <Link className="b b-primary" href="/app/people?panel=invite" scroll={false}>
+                Invite your team
+              </Link>
+            )}
+          </Empty>
+        </div>
+      )}
 
       {isOwner && panel === "invite" && <InviteForm />}
 
       {person && (
         <SidePanel id="person" title={person.email} close="/app/people">
+          <div className="people-card">
+            <Avatar name={person.email} big />
+            <span className="grow">
+              <strong>{personName(person.email)}</strong>
+              <span className="sub">{person.email}</span>
+            </span>
+            <Badge tone={statusTones[person.status]}>{statusNames[person.status]}</Badge>
+          </div>
           {/* Keyed on the saved values, so the form shows them after each change. */}
           <form key={person.role + person.status + person.team_id + person.branch_id} action={manageMember} className="fields">
             <input type="hidden" name="person" value={person.user_id} />
@@ -169,9 +204,12 @@ export default async function People({ searchParams }: { searchParams: Promise<{
       {panel === "groups" && (isOwner || !!groups?.length) && (
         <SidePanel id="groups" title="Teams and branches" close="/app/people">
           <p className="hint">Group people into teams, and say which branch each works at. Clients can then be given to a whole team.</p>
-          {kinds.map(({ kind, column, title, one }) => (
+          {kinds.map(({ kind, column, title, one, Icon }) => (
             <section key={kind} aria-labelledby={title.toLowerCase()}>
-              <h3 id={title.toLowerCase()}>{title}</h3>
+              <h3 id={title.toLowerCase()} className="people-group-head">
+                <IconTile Icon={Icon} kind={kind === "team" ? "reply" : "week"} />
+                {title}
+              </h3>
               {groupsOf(kind).length ? (
                 <ul className="people-groups">
                   {groupsOf(kind).map((group) => (
