@@ -6,6 +6,10 @@ it("renders the checked English wording from named facts only",()=>{
   expect(emailTemplates.received("Invented Client","Test Firm",[{type:"Sales bills",period:"2026-09",toCheck:false}]).text).toContain("- Sales bills, Sep 2026");
   expect(emailTemplates.paper("Invented Client","Test Firm","ITR-V","https://example.test/s/invented",true,false).text).toContain("one-time code");
   expect(emailTemplates.request("Invented Client","Test Firm","2026-09",[{type:"Bank statement"}],"https://example.test/u/invented").text).toContain("- Bank statement");
+  const receipt=emailTemplates.receipt("Invented Client","Test Firm","2026-09",[{type:"Sales bills",received:["a","b"]},{type:"Bank statement",received:[]}]);
+  expect(receipt.text).toContain("We have received these papers for Sep 2026:\n- Sales bills: 2 files\n\nStill needed:\n- Bank statement");
+  expect(receipt.text).not.toMatch(/InboxCA|http/);
+  expect(emailTemplates.receipt("Invented Client","Test Firm","",[{type:"Sales bills",received:["a"]}]).text).toContain("- Sales bills: 1 file\n\nThat is everything we asked for.");
   expect(emailTemplates.code("123456","Test Firm").text).toContain("Your code is 123456."); // ggignore: an invented one-time code for this test.
 });
 it("opens Gmail by Message-ID and never builds an arbitrary provider URL",()=>{

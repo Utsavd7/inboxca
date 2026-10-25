@@ -287,7 +287,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     "document.uploaded": "Document uploaded", "document.filed": "Document filed", "document.renamed": "Document renamed",
     "document.deleted": "Document removed", "document.shared": "Document shared", "document.downloaded": "Document downloaded", "share.code_sent": "Code emailed for a private document",
     "reminder.sent": "Reminder sent", "email.changed": "Email label corrected",
-    "email.acknowledged": "Files received reply sent", "request.changed": "Request updated",
+    "email.acknowledged": "Files received reply sent", "request.changed": "Request updated", "request.receipt_sent": "Receipt emailed for uploaded papers",
     "email.replied": "Reply sent", "email.written": "Email written to the client",
   };
   // Each save returns to the panel it came from.

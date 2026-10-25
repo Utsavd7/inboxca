@@ -18,6 +18,12 @@ export const emailTemplates={
     const when=period ? ` for ${periodName(period)}` : "";
     return {subject:`Documents needed${when}`,text:[`Dear ${client},`,"",`Please upload these documents${when}:`,...items.map((item)=>`- ${item.type}`),"",`Upload them here, no sign in needed: ${link}`,"The link works for 30 days.","",firm].join("\n")};
   },
+  receipt(client:string,firm:string,period:string,items:{type:string;received:string[]}[]) {
+    const when=period ? ` for ${periodName(period)}` : "";
+    const missing=items.filter((item)=>!item.received.length).map((item)=>`- ${item.type}`);
+    const got=items.filter((item)=>item.received.length).map((item)=>`- ${item.type}: ${item.received.length===1 ? "1 file" : `${item.received.length} files`}`);
+    return {subject:`We have received your papers${when}`,text:[`Dear ${client},`,"",`Thank you. We have received these papers${when}:`,...got,"",...(missing.length ? ["Still needed:",...missing,"","Please add them with the upload link we sent you."] : ["That is everything we asked for."]),"",firm].join("\n")};
+  },
   code(code:string,firm:string) {
     return {subject:"Your code to open the document",text:[`Your code is ${code}.`,"",`It works for ${CODE_MINUTES} minutes. If you did not ask for it, you can ignore this email.`,"",firm].join("\n")};
   },

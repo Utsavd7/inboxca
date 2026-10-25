@@ -1163,6 +1163,12 @@ export async function uploadToRequest(form: FormData): Promise<"got" | "file" | 
   if (saved !== "twin") item.received.push(saved.id);
   const done = !form.get("more") && details.items.every((entry) => entry.received.length > 0);
   await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: done ? "done" : "pending" }).eq("id", request.id);
+  // One emailed receipt a sitting: each file moves the waiting receipt 10 minutes on, and the
+  // last paper asked for sends it at once.
+  const at = new Date(Date.now() + (done ? 0 : 600_000)).toISOString();
+  const { data: moved } = await admin.from("jobs").update({ run_at: at }).eq("kind", "upload_receipt").eq("entity_type", "request").eq("entity_id", request.id).eq("state", "pending").select("id");
+  if (!moved?.length) await admin.from("jobs").insert({ firm_id: request.firm_id, kind: "upload_receipt", entity_type: "request", entity_id: request.id, run_at: at, idempotency_key: `upload_receipt:${request.id}:${randomUUID()}` });
+  if (done) runJobsSoon();
   return "got";
 }
 

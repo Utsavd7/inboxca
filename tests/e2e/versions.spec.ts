@@ -99,7 +99,8 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     await visitor.goto(link);
     for (const [content, received] of [["Invented sales bills", "Received: 1 file"], ["Invented sales bills, corrected", "Received: 2 files"]]) {
       const sales = visitor.getByRole("listitem").filter({ hasText: "Sales bills" });
-      await sales.getByLabel("Add Sales bills (photo or PDF)").setInputFiles({ name: "sales.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
+      // A paper already received offers Add more in place of the large button.
+      await sales.getByLabel(/^Add (more for )?Sales bills/).setInputFiles({ name: "sales.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
       await expect(sales).toContainText(received);
     }
     await visitor.close();
