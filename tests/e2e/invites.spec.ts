@@ -1133,8 +1133,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(details.reminded).toHaveLength(1);
   await query(local.dbUrl, "update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-3 where client_id=$1 and code=$2", [clientId,code]);
   await owner.goto("/app");
-  // Other test clients share the start of this name, so the row is found by its exact name.
-  const late = owner.locator("section[aria-labelledby=t-late] li").filter({ has: owner.getByText(mailClient, { exact: true }) });
+  // This file makes more than one client with this name, so the row is found by the client's link.
+  const late = owner.locator("section[aria-labelledby=t-late] li").filter({ has: owner.locator(`a[href="/app/clients/${clientId}?tab=due"]`) });
   await expect(late).toBeVisible();
   // M5 acceptance: filing removes this return from the pending firm's reminder run.
   await query(local.dbUrl, "update public.tasks set status='filed',details=(details-'reminder') || jsonb_build_object('filed_on',current_date) where client_id=$1 and code=$2", [clientId,code]);
@@ -1266,7 +1266,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
   await owner.goto("/app/inbox?show=reply");
   await owner.getByRole("list", { name: "Emails" }).getByText("ITR copy").first().click();
-  await expect(owner.getByRole("article", { name: "Open email" })).toContainText("This paper is kept inside your firm");
+  await expect(owner.getByRole("article", { name: "Open email" })).toContainText("Asks for a paper kept inside your firm");
   expect(name).toContain("ITR-V");
   await owner.goto("/app/settings");
   for (const section of ["section#mailbox", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
