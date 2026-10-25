@@ -61,12 +61,20 @@ export const onOfficeLine = (address: string, office: Office | undefined) => {
   return !!line && connectionRule(line, office ?? {}, "laptop") === "known";
 };
 
+// A branch with its own office replaces the firm's switch and connections for its people
+// (5.17, #13), as private.branch_settings does in the database.
+const BRANCH = "branch:groups!firm_members_firm_id_branch_id_fkey(kind, settings)";
+export const memberOffice = (office: Office | undefined, branch?: { kind: string; settings: unknown } | null): Office | undefined => {
+  const own = branch?.kind === "branch" ? (branch.settings as { office?: Office }).office : undefined;
+  return own ? { ...office, on: false, lines: [], ...own } : office;
+};
+
 // The server checks both the approved PC and its connection on every request.
 export async function officeDeviceAccess(userId: string, observe = true) {
   const admin = supabaseAdmin();
-  const { data: firmRow } = await admin.from("firm_members").select("firm_id, role, firms(settings)")
+  const { data: firmRow } = await admin.from("firm_members").select(`firm_id, role, firms(settings), ${BRANCH}`)
     .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
-  const office = (firmRow?.firms?.settings as { office?: Office } | undefined)?.office;
+  const office = memberOffice((firmRow?.firms?.settings as { office?: Office } | undefined)?.office, firmRow?.branch);
   const requestHeaders = await headers();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const line = requestLine(requestHeaders, today);
@@ -135,10 +143,10 @@ export async function officePc(userId: string) {
 // or a deputy, marked as first used away (5.17.4 #28, #48).
 export async function askAway(userId: string) {
   const admin = supabaseAdmin();
-  const { data: firmRow } = await admin.from("firm_members").select("firm_id, role, firms(settings)")
+  const { data: firmRow } = await admin.from("firm_members").select(`firm_id, role, firms(settings), ${BRANCH}`)
     .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
   const token = (await cookies()).get(DEVICE_COOKIE)?.value;
-  const office = (firmRow?.firms?.settings as { office?: Office } | undefined)?.office;
+  const office = memberOffice((firmRow?.firms?.settings as { office?: Office } | undefined)?.office, firmRow?.branch);
   // The Office only and Solo CA presets turn asking off (5.17).
   if (!firmRow || !token || !office?.on || office.away === false || !officeBound(firmRow.role)) return;
   const { error } = await admin.rpc("register_device", {

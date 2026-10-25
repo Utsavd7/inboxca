@@ -805,7 +805,7 @@ isOneToOne: false
 { Args: { "at"?: string,"settings": Json }; Returns: string
                            },
 "office_control":
-{ Args: { "actor": string,"co_admin"?: string,"connection"?: Json,"decision": string,"deputies"?: (string)[],"request_id"?: string,"target_firm": string }; Returns: undefined
+{ Args: { "actor": string,"branch"?: string,"co_admin"?: string,"connection"?: Json,"decision": string,"deputies"?: (string)[],"request_id"?: string,"target_firm": string }; Returns: undefined
                            },
 "office_housekeeping":
 { Args: { "at"?: string,"target_firm": string }; Returns: undefined

@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { closingToday } from "./hours";
@@ -41,6 +41,10 @@ export const currentMember = cache(async () => {
   const access = (data.access ?? {}) as Record<string, unknown>;
 
   const settings = (data.firms?.settings ?? {}) as Record<string, unknown>;
+  // India only (5.17, Remote friendly): the country the host vouches for, from the header
+  // COUNTRY_HEADER names (Cloudflare's CF-IPCountry); unset, the check is off. The owner works from anywhere.
+  const countryHeader = process.env.COUNTRY_HEADER;
+  if (countryHeader && data.role !== "owner" && accessSetting(settings, data.role, data.access, "india_only") && (await headers()).get(countryHeader) !== "IN") redirect("/auth/sign-out?reason=country");
   const idleMinutes = Number(accessSetting(settings, data.role, data.access, "idle_minutes")) || 0;
   if (idleMinutes) {
     // Last active: the signed cookie, or the latest sign in proof if there is none yet.
