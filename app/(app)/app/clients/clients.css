@@ -177,3 +177,6 @@
 .side-panel .upload-file.fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2) var(--s3); }
 .upload-file > legend, .upload-file > div:first-of-type, .upload-file > .upload-name { grid-column: 1 / -1; }
 .client-name { color: var(--ink); font-size: 20px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.25; }
+/* An income tax return's cards: their lists and forms sit inside the card's padding. */
+.itr-body { padding: 0 var(--s4) var(--s4); }
+.itr-body > .form-row:first-child { margin-top: 0; }

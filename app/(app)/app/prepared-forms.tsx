@@ -5,6 +5,8 @@ import {currentMember} from "@/src/lib/member";
 import {preparedSchema,formName} from "@/src/lib/prepared";
 import {draftSchema} from "@/src/lib/datasets";
 import {periodName} from "@/src/lib/documents";
+import {itrReady,itrYear} from "@/src/lib/itr-fields";
+import {itrWork} from "@/src/lib/itr";
 import {grantFor} from "@/src/lib/permission-grants";
 import {askPermission} from "@/app/(app)/actions";
 import {Pending} from "./pending";
@@ -26,13 +28,20 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     const review=forms?.filter(file=>latest.has(file.id) && file.status!=="deleted" && (preparedSchema.parse(file.prepared).status==="draft" || waiting?.some(item=>item.entity_id===file.id)));
     return review?.length ? <section className="panel"><h2>Forms to review</h2><ul className="rows">{review.map(file=><li key={file.id}><Link href={`/app/clients/${file.client_id}?tab=outputs`}>{file.clients?.name}: {file.name}</Link>{waiting?.some(item=>item.entity_id===file.id) && <span className="hint">An acknowledgement arrived. Confirm filing.</span>}</li>)}</ul></section> : null;
   }
-  const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations}]=await Promise.all([
+  const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations},{data:pans},{data:itrRows}]=await Promise.all([
     supabase.from("datasets").select("id,form_code,period_key,data").eq("firm_id",membership.firmId).eq("client_id",client).in("form_code",["GSTR1","GSTR3B"]).order("period_key",{ascending:false}).limit(100),
     supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","gstin"),
-    supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",client).eq("document_type","Acknowledgement").eq("status","filed").limit(100),
+    supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",client).in("document_type",["Acknowledgement","ITR-V"]).eq("status","filed").limit(100),
     supabase.from("requests").select("entity_id,details").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","form_confirmation").eq("status","pending"),
+    supabase.from("client_registrations").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","pan"),
+    supabase.from("datasets").select("id,period_key,data").eq("firm_id",membership.firmId).eq("client_id",client).eq("form_code","ITR").order("period_key",{ascending:false}).limit(100),
   ]);
-  const sourceIds=[...new Set(rows?.map(row=>draftSchema.parse(row.data).lines[0].source.document))];
+  // Income tax: one return per form and year that has figures entered for it, built with the
+  // figures read from the client's papers for that year. Each lists what it still needs.
+  const itrDrafts=(itrRows ?? []).map(row=>({...row,data:draftSchema.parse(row.data)}));
+  const returns=[...new Set(itrDrafts.flatMap(row=>row.data.target && row.data.lines.some(line=>line.source.entered_by) ? [`${row.data.target.form}:${row.period_key}`] : []))].map(key=>key.split(":") as [string,string]);
+  const itr=pans?.length===1 ? await Promise.all(returns.map(async([form,period])=>({form,period,missing:await itrWork(client,form,period).then(work=>work.review.missing.length,()=>null)}))) : [];
+  const sourceIds=[...new Set([...(rows ?? []).map(row=>draftSchema.parse(row.data).lines[0].source.document),...itrDrafts.map(row=>row.data.lines[0].source.document)].filter((id):id is string=>!!id))];
   const {data:sourceNames}=sourceIds.length ? await supabase.from("documents").select("id,name").eq("firm_id",membership.firmId).eq("client_id",client).in("id",sourceIds) : {data:null};
   const canPrepare=!membership.viewOnlyUntil && (membership.may("edit_figures", client) || !!await grantFor(membership.firmId,userId,"edit_figures",client));
   // The client's GST numbers, shown to choose which one a register belongs to.
@@ -42,7 +51,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   const label=(row:{form_code:string;data:unknown})=>{const data=draftSchema.parse(row.data);return `${row.form_code==="GSTR3B" ? "GSTR-2B credit" : sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Source file"}, ${data.lines.length} figures${data.lines.every(line=>line.state==="confirmed") ? ", checked" : ", check these first"}`;};
   return <section className="panel" aria-labelledby="prepared-title"><h2 id="prepared-title">Prepared forms</h2>
     <p className="hint">Check every figure first. Your firm files the approved file on the portal with its own code or signature.</p>
-    {message && <p className="alert" role="status">{message==="edited" ? "Choose the filled official workbook. Its headings, supported cells and figures must pass the checks, and you need permission to edit figures." : message==="ack" ? "Add the acknowledgement or its number for the latest approved form. Check that the drive is connected." : message==="approval" ? "Another person must approve the latest checked figures. A rejection needs a reason." : "Check the figures, permission, drive and official form for this month, then try again."}</p>}
+    {message && <p className="alert" role="status">{message==="edited" ? "Choose the filled official workbook. Its headings, supported cells and figures must pass the checks, and you need permission to edit figures." : message==="ack" ? "Add the acknowledgement or its number for the latest approved form. Check that the drive is connected." : message==="approval" ? "Another person must approve the latest checked figures. A rejection needs a reason." : "Check the figures, permission, drive and official form for this period, then try again."}</p>}
     {!!forms?.length && <ul className="rows">{forms.filter(file=>file.status!=="deleted").map(file=>{
       const meta=preparedSchema.parse(file.prepared),active=latest.has(file.id) && !membership.viewOnlyUntil && file.size>0;
       return <li key={file.id}><div className="grow">
@@ -70,7 +79,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
           <Pending className="b b-secondary b-small">Mark filed</Pending>
         </form></details>}
         {active && canPrepare && <details><summary>File corrected outside InboxCA</summary><form action={addEditedForm} className="fields">
-          <input type="hidden" name="document" value={file.id}/><div><label htmlFor={`edited-${file.id}`}>Filled official workbook</label><input id={`edited-${file.id}`} name="edited_file" type="file" accept=".xlsx" required/></div>
+          <input type="hidden" name="document" value={file.id}/><div><label htmlFor={`edited-${file.id}`}>{meta.form.startsWith("ITR") ? "Official return file" : "Filled official workbook"}</label><input id={`edited-${file.id}`} name="edited_file" type="file" accept={meta.form.startsWith("ITR") ? ".json" : ".xlsx"} required/></div>
           <p className="hint">Prefer correcting the source figures. An uploaded correction is a new version, checked against the official form. Its figures must be checked again.</p><Pending className="b b-secondary b-small">Add corrected version</Pending>
         </form></details>}
       </div></li>;
@@ -99,5 +108,17 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
             <Pending className="b b-primary">Prepare GSTR-3B {periodName(period)}</Pending></form>)}</>}
         </Fragment>;})}
     </> : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-secondary">Ask to prepare forms</Pending></form>)}
+    {!!pans?.length && <><h3>Income tax returns</h3>
+      {pans.length!==1 ? <p className="hint">A single PAN is needed before preparing a return.</p> : !itr.length && <p className="hint">No return started yet. <Link href={`/app/clients/${client}/itr`}>Fill an income tax return</Link></p>}
+      {canPrepare ? itr.map(({form,period,missing})=>{
+        const sources=itrDrafts.filter(row=>row.period_key===period && (!row.data.target || row.data.target.form===form && row.data.lines.some(line=>line.source.entered_by)));
+        return <form action={prepareForm} className="fields" key={`${form}-${period}`}><input type="hidden" name="client" value={client}/><input type="hidden" name="registration" value={pans[0].id}/><input type="hidden" name="period" value={period}/><input type="hidden" name="form" value={form}/>
+          <fieldset><legend>{formName(form)} {itrYear(period)}</legend>{sources.map(row=>{const ready=row.data.lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{row.data.target ? "Entered by your team" : sourceNames?.find(source=>source.id===row.data.lines[0].source.document)?.name ?? "Figures from a paper"}</Link>, {row.data.lines.length} figures{ready ? ", checked" : ", check these first"}</label>;})}</fieldset>
+          {missing!==0 && <p className="hint">{missing===null ? "This return cannot be checked yet." : `${missing} details still to fill.`} <Link href={`/app/clients/${client}/itr?form=${form}&year=${period}`}>Open the return</Link></p>}
+          {!itrReady() && <p className="hint">Not set up yet: InboxCA needs its software ID from the Income Tax Department before it can make the return file.</p>}
+          <Pending className="b b-primary" disabled={!itrReady() || missing!==0}>Prepare {formName(form)} {itrYear(period)}</Pending>
+        </form>;
+      }) : !rows?.length && !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-secondary">Ask to prepare forms</Pending></form>}
+    </>}
   </section>;
 }

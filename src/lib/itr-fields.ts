@@ -1,5 +1,10 @@
+import {createHash} from "node:crypto";
 export const itrForms=["ITR1","ITR2","ITR3","ITR4","ITR5","ITR6"] as const;
 export type ItrForm=typeof itrForms[number];
+// The returns InboxCA prepares; ITR-5 and ITR-6 follow later (PLAN.md 5.7.3).
+export const itrReturns=["ITR1","ITR2","ITR3","ITR4"] as const;
+// period_key 2026 is AY 2026-27, the same key as FY 2025-26 elsewhere.
+export const itrYear=(year:string)=>`AY ${year}-${String(Number(year)+1).slice(-2)}`;
 
 // AY 2026-27 schemas from the Income Tax Department; hashes and URLs are in itr/README.md.
 export const itrSources={
@@ -19,7 +24,17 @@ const detail="EmployerOrDeductorOrCollectDetl";
 const salaryRows=(tail:string)=>({ITR1:`TDSonSalaries.TDSonSalary.*.${tail}`,ITR4:`TDSonSalaries.TDSonSalary.*.${tail}`,ITR2:`ScheduleTDS1.TDSonSalary.*.${tail}`,ITR3:`ScheduleTDS1.TDSonSalary.*.${tail}`});
 const otherRows=(one:string,four:string,others:string)=>paths(`TDSonOthThanSals.TDSonOthThanSal.*.${one}`,`TDSonOthThanSals.TDSonOthThanSalDtls.*.${four}`,`ScheduleTDS2.TDSOthThanSalaryDtls.*.${others}`);
 
+// A detail's field name: its shared name below, or a short fixed hash of its official path,
+// with one * for each repeating row.
+export const itrFieldName=(form:ItrForm,path:string)=>Object.entries(itrFields).find(([,entry])=>(entry.paths as Partial<Record<ItrForm,string>>)[form]===path)?.[0] ?? `itr.f.${createHash("sha256").update(path).digest("hex").slice(0,16)}${".*".repeat(path.split(".").filter(key=>key==="*").length)}`;
+
+// The software ID the Income Tax Department gives a registered software, and its city. Off until both are set.
+export const itrReady=()=>/^SW\d{8}$/.test(process.env.ITR_SOFTWARE_ID ?? "") && /^.{1,25}$/.test(process.env.ITR_SOFTWARE_CITY?.trim() ?? "");
+
 export const itrFields={
+  // Client details InboxCA holds: the PAN registration and the client's email address.
+  "itr.personal.pan":{label:"PAN",paths:{ITR1:"PersonalInfo.PAN",ITR4:"PersonalInfo.PAN",ITR2:"PartA_GEN1.PersonalInfo.PAN",ITR3:"PartA_GEN1.PersonalInfo.PAN"}},
+  "itr.personal.email":{label:"Email address",paths:{ITR1:"PersonalInfo.Address.EmailAddress",ITR4:"PersonalInfo.Address.EmailAddress",ITR2:"PartA_GEN1.PersonalInfo.Address.EmailAddress",ITR3:"PartA_GEN1.PersonalInfo.Address.EmailAddress"}},
   // Salary: IncomeDeductions in ITR-1/4, ScheduleS and PartB-TI in ITR-2/3.
   "itr.salary.gross":{label:"Gross salary",paths:{...salary("GrossSalary"),ITR2:"ScheduleS.TotalGrossSalary",ITR3:"ScheduleS.TotalGrossSalary"}},
   "itr.salary.income":{label:"Income from salary",paths:{...salary("IncomeFromSal"),ITR2:"PartB-TI.Salaries",ITR3:"PartB-TI.Salaries"}},
