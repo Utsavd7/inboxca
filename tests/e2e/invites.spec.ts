@@ -1321,7 +1321,7 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await expect(boss.getByText(/On an iPhone, add InboxCA to the home screen first/)).toBeVisible();
     await boss.goto("/app/settings#office");
     await officeSwitch(boss);
-    await boss.getByLabel("Yes, this is my office").check();
+    await boss.getByLabel("Yes, I am in the office now").check();
     await officeSwitch(boss);
     await boss.getByRole("button", { name: "Turn on", exact: true }).click();
     await expect(boss.getByRole("button", { name: "Turn off", exact: true, includeHidden: true })).toBeAttached();
