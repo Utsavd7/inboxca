@@ -12,6 +12,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { supabase, userId, membership } = copy ? await currentWriter() : await currentMember();
   const { id } = await params;
   const sheet=new URL(request.url).searchParams.get("sheet");
+  // A thumbnail, the first page of the paper a list shows first, is one page only; it is still
+  // logged, marked as a thumbnail, so every page anyone sees has a record.
+  const thumb=!copy && sheet===null && new URL(request.url).searchParams.get("thumb")==="1";
   if(sheet!==null && !/^(?:[1-9]|[1-9][0-9]|100)$/.test(sheet)) return new Response("Not found",{status:404});
   if (!membership) return new Response("Not found", { status: 404 });
   const { data: visible } = await supabase.from("documents").select("id, size, client_id, prepared").eq("firm_id", membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle();
@@ -31,7 +34,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     if (!["local", "dropbox"].includes(account.provider)) throw new Error("Drive not supported");
     const credentials = account.provider === "local" ? null : JSON.parse(await serverCrypto().decrypt(membership.firmId, `accounts/${account.id}/credentials`, account.credentials_enc));
-    const view: ViewRequest = { firm: membership.firmId, file: document.drive_file_id, name: document.name, label: viewerLabel(membership.email, membership.firmName), limit: viewLimits.pages, expires: Math.floor(Date.now() / 1000) + 60, ...(sheet && {sheet:Number(sheet)}), ...(copy && {purpose:"copy" as const}), provider: account.provider as ViewRequest["provider"], token: credentials ? await dropboxAccessToken(credentials.refreshToken) : "" };
+    const view: ViewRequest = { firm: membership.firmId, file: document.drive_file_id, name: document.name, label: viewerLabel(membership.email, membership.firmName), limit: thumb ? 1 : viewLimits.pages, expires: Math.floor(Date.now() / 1000) + 60, ...(sheet && {sheet:Number(sheet)}), ...(copy && {purpose:"copy" as const}), provider: account.provider as ViewRequest["provider"], token: credentials ? await dropboxAccessToken(credentials.refreshToken) : "" };
     const body = JSON.stringify(view);
     const response = await fetch(`${process.env.FILE_WORKER_URL.replace(/\/$/, "")}/${copy ? "copy" : "view"}/${encodeURIComponent(view.file)}`, {
       method: "POST", headers: { Authorization: await signView(body, process.env.FILE_WORKER_SECRET), "Content-Type": "application/json" }, body,
@@ -42,7 +45,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const {data:spent,error}=await admin.from("requests").update({status:"used"}).eq("id",permission).eq("firm_id",membership.firmId).eq("status","approved").gt("expires_at",new Date().toISOString()).select("id").maybeSingle();
       if(error || !spent) {await response.body.cancel();return new Response("Ask for permission again.",{status:403,headers});}
     }
-    const { error } = await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: copy ? "document.downloaded" : "document.viewed", entity_type: "document", entity_id: id, ...(copy && {details:{stamped:true,limit:viewLimits.pages,...(sheet && {sheet:Number(sheet)}),permission}}) });
+    const { error } = await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: copy ? "document.downloaded" : "document.viewed", entity_type: "document", entity_id: id, ...(copy && {details:{stamped:true,limit:viewLimits.pages,...(sheet && {sheet:Number(sheet)}),permission}}), ...(thumb && {details:{thumb:true}}) });
     if (error) { await response.body.cancel(); throw error; }
     // Do not collect the body. Cancellation and backpressure reach the worker through fetch.
     return new Response(response.body, { headers: { ...headers, "Content-Type": copy ? "application/pdf" : "application/x-inboxca-pages", ...(copy && {"Content-Disposition":"attachment; filename=\"document-pages.pdf\""}) } });

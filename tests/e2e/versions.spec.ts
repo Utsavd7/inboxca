@@ -49,8 +49,8 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     await page.goto(`/app/clients/${client}?tab=documents`);
     const rows = page.locator("section[aria-labelledby=files] tbody tr");
     const upload = async (content: string, gstin?: string) => {
-      await page.getByRole("link", { name: "Upload a file" }).click();
-      await page.getByLabel("File", { exact: true }).setInputFiles({ name: "bills.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
+      await page.getByRole("link", { name: "Upload papers" }).click();
+      await page.getByLabel("Files", { exact: true }).setInputFiles({ name: "bills.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
       await page.getByLabel("Type", { exact: true }).selectOption("Purchase bills");
       await page.getByLabel("Work", { exact: true }).selectOption("gst");
       await page.getByLabel("Period", { exact: true }).selectOption({ label: "Sep 2026" });
@@ -69,7 +69,7 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     const papers = await query(local.dbUrl, "select name, status, registration_id from public.documents where client_id = $1 order by received_at", [client]);
     expect(papers.map((row) => [row.status, row.registration_id])).toEqual([["earlier", gstins[0]], ["filed", gstins[0]]]);
     expect((await readdir(path.join(tmpdir(), "inboxca-test-drive", "InboxCA", "FY 2026-27", name, "GST"))).sort()).toEqual(papers.map((row) => row.name).sort());
-    await rows.getByRole("link", { name: /^Change/ }).click();
+    await rows.getByRole("link", { name: /^Open/ }).click();
     await expect(page.getByRole("list", { name: "Earlier versions" })).toContainText(papers[0].name);
 
     // The Documents page lists the current paper only, with its GSTIN.
@@ -79,10 +79,15 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     await list.getByRole("link", { name: /Purchase bills/ }).click();
     await expect(page.getByRole("complementary", { name: "Paper" })).toContainText("24AAACS1234A1Z5");
 
-    // Asking for papers starts from the list for a business, and names the GSTIN for GST papers.
+    // Asking for papers starts from the list for a business, each paper once, the usual five
+    // first, for the month of the next return due; it names the GSTIN for GST papers.
+    const [{ due }] = await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, 'GSTR1_M', to_char(current_date - interval '2 months', 'YYYY-MM'), current_date + 3) returning period_key as due", [firm.firmId, client]);
     await page.goto(`/app/clients/${client}?tab=documents&ask=1`);
     const ask = page.getByRole("dialog");
-    await expect(ask.getByRole("group", { name: "Usual for Business" })).toContainText("Expense bills");
+    await expect(ask.getByRole("group", { name: "Papers" })).toContainText("Expense bills");
+    await expect(ask.getByRole("checkbox", { name: "Bank statement" })).toHaveCount(1);
+    await expect(ask.getByRole("checkbox", { name: "Trial balance" })).toBeHidden();
+    await expect(ask.getByLabel("For", { exact: true })).toHaveValue(due);
     // Two items, so the link stays open while the client sends the sales bills twice.
     await ask.getByLabel("Sales bills").check();
     await ask.getByLabel("Expense bills").check();
@@ -107,12 +112,12 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     await ask.getByText("Change the usual list for Business").click();
     await ask.getByLabel(/One paper on each line/).fill("Partnership deed\nBank statement");
     await ask.getByRole("button", { name: "Save list" }).click();
-    await expect(ask.getByRole("group", { name: "Usual for Business" })).toContainText("Partnership deed");
-    await expect(ask.getByRole("group", { name: "Usual for Business" })).not.toContainText("Expense bills");
+    await expect(ask.getByRole("group", { name: "Papers" })).toContainText("Partnership deed");
+    await expect(ask.getByRole("group", { name: "Papers" })).not.toContainText("Expense bills");
     await ask.getByText("Change the usual list for Business").click();
     await ask.getByLabel(/One paper on each line/).fill("");
     await ask.getByRole("button", { name: "Save list" }).click();
-    await expect(ask.getByRole("group", { name: "Usual for Business" })).toContainText("Expense bills");
+    await expect(ask.getByRole("group", { name: "Papers" })).toContainText("Expense bills");
   } finally {
     await firm.remove();
   }

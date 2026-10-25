@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { readFrames, viewLimits, type ViewHeader } from "@/src/lib/file-worker";
 import { logCapture } from "@/app/(app)/actions";
 
-// The file worker sends only stamped pages. Each appears as soon as its frame arrives.
-export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 1 }: { id: string; hideInactive?: boolean; page?: number; sheet?: number }) {
+// The file worker sends only stamped pages. Each appears as soon as its frame arrives. A
+// thumbnail asks for the first page only, which is not logged as a view.
+export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 1, thumb = false }: { id: string; hideInactive?: boolean; page?: number; sheet?: number; thumb?: boolean }) {
   const [pages, setPages] = useState<{ url: string; width: number; height: number }[]>([]);
   const [limited, setLimited] = useState(false);
   const [state, setState] = useState<"loading" | "shown" | "failed">("loading");
@@ -44,7 +45,7 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
     const controller = new AbortController();
     const urls: string[] = [];
     (async () => {
-      const response = await fetch(`/app/files/${id}/stream${sheet===1 ? "" : `?sheet=${sheet}`}`, { signal: controller.signal });
+      const response = await fetch(`/app/files/${id}/stream${thumb ? "?thumb=1" : sheet===1 ? "" : `?sheet=${sheet}`}`, { signal: controller.signal });
       if (!response.ok || !response.body) throw new Error("file");
       let header: ViewHeader | undefined, number = 0;
       for await (const frame of readFrames(response.body)) {
@@ -69,7 +70,7 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
       controller.abort();
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [id, sheet]);
+  }, [id, sheet, thumb]);
 
   return (
     <div className="viewer">
@@ -80,7 +81,7 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
         </p>
       )}
       {blank && <p className="hint viewer-blank">The document is hidden for a moment.</p>}
-      {limited && <p className="hint">Only the first 30 pages, or the first 1,000 rows and 26 columns of the selected sheet, are shown here.</p>}
+      {limited && !thumb && <p className="hint">Only the first 30 pages, or the first 1,000 rows and 26 columns of the selected sheet, are shown here.</p>}
       <div className={`viewer-pages${blank ? " is-blank" : ""}`} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} onCopy={(event) => event.preventDefault()}>
         {pages.map((page, index) => (
           // eslint-disable-next-line @next/next/no-img-element

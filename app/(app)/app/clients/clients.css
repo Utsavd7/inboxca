@@ -100,3 +100,33 @@
 .ask-list:focus { border-color: var(--accent); }
 /* A client late and missing papers shows both tags, late first. */
 .clients-tags { display: inline-flex; gap: 4px; }
+
+/* Ask for papers: each paper once, the usual five first. */
+.ask-papers { display: grid; gap: var(--s1); margin-top: var(--s4); border: 0; }
+.ask-papers legend { margin-bottom: var(--s1); font-weight: 600; }
+.ask-more { display: grid; gap: var(--s1); margin-top: var(--s2); }
+
+/* A paper's panel: Name shows only while Type is Other; sending asks once more; More holds the rest. */
+.fields:not(:has(#file-type option[value="Other"]:checked)) > .other-name { display: none; }
+.send-ask { margin-top: var(--s4); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.send-to fieldset { display: grid; gap: var(--s2); border: 0; }
+.send-to > .hint { margin-top: var(--s2); }
+.paper-more { margin-top: var(--s5); }
+
+/* Upload papers: one drop zone for one or many files, then each file's type, work and period. */
+.upload-form { display: grid; gap: var(--s3); margin-top: var(--s4); }
+.upload-form > .b { justify-self: start; }
+.ui .upload-drop { display: grid; justify-items: center; gap: var(--s1); padding: var(--s5) var(--s4); border: 1px dashed var(--line-2); border-radius: var(--r3); color: var(--ink-3); font-size: 12px; text-align: center; cursor: pointer; transition: background var(--fast) var(--out), border-color var(--fast) var(--out); }
+.ui .upload-drop:hover, .ui .upload-drop.is-over { border-color: var(--accent); background: var(--accent-soft); }
+.upload-drop:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.upload-drop strong { color: var(--ink); font-size: 14px; font-weight: 600; }
+.upload-file { margin-top: 0; padding-top: var(--s3); border: 0; border-top: 1px solid var(--line); }
+.upload-file legend { float: left; width: 100%; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.upload-portal { margin-top: var(--s5); }
+.upload-portal a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.upload-portal a:hover { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) { .ui .upload-drop { transition: none; } }
+.clients-bulk .bulk-ask { flex: 1 1 320px; max-width: 560px; }
+/* Each file in two short rows: its type, then its work and period side by side. */
+.side-panel .upload-file.fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2) var(--s3); }
+.upload-file > legend, .upload-file > div:first-of-type, .upload-file > .upload-name { grid-column: 1 / -1; }

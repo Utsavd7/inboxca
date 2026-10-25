@@ -1,5 +1,5 @@
 import "./documents.css";
-import { FileText, FolderOpen, Search, Upload } from "lucide-react";
+import { FolderOpen, Search, Upload } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { todayInIndia } from "@/src/lib/calendar";
@@ -21,7 +21,7 @@ const drives: Record<string, string> = { dropbox: "Dropbox", onedrive: "OneDrive
 
 // Every paper of the clients this person may see, in the firm's own drive: by financial
 // year and work, as the drive files them, 50 at a time. All choices live in the address.
-export default async function Documents({ searchParams }: { searchParams: Promise<{ year?: string; kind?: string; q?: string; page?: string; file?: string; upload?: string; for?: string; portal?: string; dropped?: string; error?: string }> }) {
+export default async function Documents({ searchParams }: { searchParams: Promise<{ year?: string; kind?: string; q?: string; page?: string; file?: string; upload?: string; for?: string; portal?: string; dropped?: string; error?: string; show?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
@@ -32,10 +32,13 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const kind = params.kind && params.kind in workTypes ? (params.kind as WorkType) : "";
   const q = params.q?.trim().slice(0, 200) ?? "";
   const page = /^\d{1,6}$/.test(params.page ?? "") ? Math.max(1, Number(params.page)) : 1;
+  // Today's missing papers line opens only the papers no longer in the drive.
+  const missing = params.show === "missing";
+  const live = missing ? (["eq", "missing"] as const) : (["not.in", "(deleted,earlier)"] as const);
   const typed = words(q, 8);
   const tokens = typed.length ? await searchTokens(membership.firmId, typed) : null;
 
-  const state = { year: year === years[0] ? "" : year ? `${Number(year) - 1}-${year.slice(2)}` : "all", kind, q, page: page > 1 ? String(page) : "", file: "", upload: "", portal: "" };
+  const state = { year: year === years[0] ? "" : year ? `${Number(year) - 1}-${year.slice(2)}` : "all", kind, q, page: page > 1 ? String(page) : "", file: "", upload: "", portal: "", show: missing ? "missing" : "" };
   const link = (next: Partial<typeof state>) => {
     const search = new URLSearchParams(Object.entries({ ...state, ...next }).filter(([, value]) => value));
     return `/app/documents${search.size ? `?${search}` : ""}`;
@@ -47,11 +50,11 @@ export default async function Documents({ searchParams }: { searchParams: Promis
     return tokens ? query.contains("search_tokens", tokens) : query;
   };
   const count = (work?: WorkType) => {
-    const query = scoped(supabase.from("documents").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).not("status", "in", "(deleted,earlier)"));
+    const query = scoped(supabase.from("documents").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).filter("status", live[0], live[1]));
     return work ? query.eq("work_type", work) : query;
   };
   // Earlier versions are listed only in their current paper's panel on the client's page.
-  const listed = scoped(supabase.from("documents").select(columns).eq("firm_id", membership.firmId).not("status", "in", "(deleted,earlier)"));
+  const listed = scoped(supabase.from("documents").select(columns).eq("firm_id", membership.firmId).filter("status", live[0], live[1]));
   const [{ data: papers, error }, all, ...byWork] = await Promise.all([
     (kind ? listed.eq("work_type", kind) : listed).order("received_at", { ascending: false }).order("id", { ascending: false }).range((page - 1) * PAGE, page * PAGE - 1),
     count(),
@@ -104,7 +107,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const tag = (status: string) => (status === "to_check" ? <Badge tone="warn">To check</Badge> : status === "missing" ? <Badge tone="late">Missing in the drive</Badge> : null);
   const canUpload = !membership.viewOnlyUntil;
   const portal = membership.may("portal_files");
-  const filtered = !!(q || kind || year !== years[0]);
+  const filtered = !!(q || kind || year !== years[0] || missing);
 
   // Upload papers: find the client, then their upload form opens with type, work and period.
   const find = params.upload ? params.for?.trim().slice(0, 100) ?? "" : "";
@@ -168,8 +171,18 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             {state.year && <input type="hidden" name="year" value={state.year} />}
             {kind && <input type="hidden" name="kind" value={kind} />}
             <Search size={16} aria-hidden />
+            {missing && <input type="hidden" name="show" value="missing" />}
             <input name="q" type="search" defaultValue={q} placeholder="Find a paper by its name or words inside it" aria-label="Find papers" />
           </form>
+          {missing && (
+            <p className="docs-only">
+              <Badge tone="late">Missing in the drive</Badge>
+              <span>Only papers no longer in your drive. Put each file back in its folder, or remove the paper on its client&apos;s Documents.</span>
+              <Link className="b b-secondary" href={link({ show: "", page: "" })}>
+                Show all papers
+              </Link>
+            </p>
+          )}
           {papers?.length ? (
             <>
               <div className="pane docs-table">
@@ -186,11 +199,12 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                     {papers.map((row) => (
                       <tr key={row.id} className={row.id === paper?.id ? "on" : undefined}>
                         <td>
-                          <span className="docs-name">
-                            <Link href={link({ page: state.page, file: row.id })} scroll={false} title={row.name} aria-current={row.id === paper?.id ? "true" : undefined}>
-                              {/* The Client column already names the client, so its name is not repeated here. */}
-                              {row.clients?.name && row.name.startsWith(`${row.clients.name} - `) ? row.name.slice(row.clients.name.length + 3) : row.name}
-                            </Link>
+                          <Link className="docs-name" href={link({ page: state.page, file: row.id })} scroll={false} title={row.name} aria-current={row.id === paper?.id ? "true" : undefined}>
+                            {/* The Client column already names the client, so its name is not repeated here. */}
+                            {row.clients?.name && row.name.startsWith(`${row.clients.name} - `) ? row.name.slice(row.clients.name.length + 3) : row.name}
+                          </Link>
+                          <span className="docs-tag">
+                            {workTypes[row.work_type as WorkType]}
                             {tag(row.status)}
                           </span>
                         </td>
@@ -240,17 +254,14 @@ export default async function Documents({ searchParams }: { searchParams: Promis
         {paper && (
           <aside key={paper.id} className="pane pane-in docs-detail" aria-label="Paper">
             <div className="docs-preview">
-              {!chosen ? (
-                <Link href={link({ page: state.page, file: paper.id })} scroll={false}>
-                  <FileText size={24} aria-hidden />
-                  Show the preview
-                </Link>
-              ) : !viewable ? (
+              {!viewable ? (
                 <span>This kind of file cannot be shown here.</span>
               ) : !process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET ? (
                 <span>Papers cannot be shown yet.</span>
               ) : (
-                <FileViewer id={paper.id} page={1} hideInactive={membership.settings.viewer_hide_inactive === true} />
+                // The paper first in the list shows its first page as a thumbnail, logged as a
+                // thumbnail view; choosing a paper opens it, logged as viewed.
+                <FileViewer id={paper.id} page={1} thumb={!chosen} hideInactive={membership.settings.viewer_hide_inactive === true} />
               )}
             </div>
             <h2>{paper.name}</h2>

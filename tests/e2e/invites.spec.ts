@@ -420,7 +420,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   ]);
 
   await person.goto(files);
-  await expect(person.getByRole("link", { name: "Upload a file" })).toHaveCount(0);
+  await expect(person.getByRole("link", { name: "Upload papers" })).toHaveCount(0);
   await person.getByRole("button", { name: "Ask to upload" }).click();
   await expect(person.getByRole("status")).toContainText("Asked.");
   // Within seconds the owner's browser gets it, sealed for that browser alone, naming no client.
@@ -464,7 +464,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
 
   await person.goto(files);
-  await expect(person.getByRole("link", { name: "Upload a file" })).toBeVisible();
+  await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
 
   const [{ expires_at: grantedUntil }] = await query(local.dbUrl, "select expires_at from public.requests where id=$1", [fields.request]);
   expect(Date.parse(grantedUntil) - Date.now()).toBeGreaterThan(0.9 * 3_600_000);
@@ -479,7 +479,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a file" }).getByRole("button", { name: "Always allow" }).click();
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
   await person.goto(files);
-  await expect(person.getByRole("link", { name: "Upload a file" })).toBeVisible();
+  await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
   await owner.goto("/app/settings#permissions");
   const standing = owner.getByRole("listitem").filter({ hasText: /may upload files.*without asking/ });
   await standing.getByRole("button", { name: "Withdraw" }).click();
@@ -491,7 +491,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await owner.getByLabel("Upload files: employees").check();
   await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save permissions", exact: true }).click()]);
   await person.goto(files);
-  await expect(person.getByRole("link", { name: "Upload a file" })).toBeVisible();
+  await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
   await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Reset to defaults", exact: true }).click()]);
   await person.goto(files);
   await expect(person.getByRole("button", { name: "Ask to upload" })).toBeVisible();
@@ -532,7 +532,7 @@ test("away from the office, the owner allows a staff member's own device to view
   await home.getByRole("link", { name: `Ask Client ${tag}` }).click();
   await home.goto(`${home.url().split("?")[0]}?tab=files`);
   await expect(home.getByRole("button", { name: "Ask to upload" })).toHaveCount(0);
-  await expect(home.getByRole("link", { name: "Upload a file" })).toHaveCount(0);
+  await expect(home.getByRole("link", { name: "Upload papers" })).toHaveCount(0);
 
   // Withdrawn, the device is refused at once.
   await owner.reload();
@@ -850,10 +850,12 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   // #46: corrections and undo are logged; a third rename tells the owner on Home.
   for (const attempt of [0, 1]) {
-    await rows.getByRole("link", { name: `Change ${mailClient} - Document.pdf` }).click();
+    await rows.getByRole("link", { name: `Check ${mailClient} - Document.pdf` }).click();
+    // Name shows only once Type is Other.
+    await expect(owner.getByRole("dialog").getByLabel("Name", { exact: true })).toBeHidden();
     await owner.getByLabel("Type", { exact: true }).selectOption("Other");
-    await owner.getByLabel("Name for Other").fill("HDFC loan sanction letter");
-    if (attempt === 0) await owner.getByLabel("Keep this name as one of the firm's types").check();
+    await owner.getByRole("dialog").getByLabel("Name", { exact: true }).fill("HDFC loan sanction letter");
+    if (attempt === 0) await owner.getByLabel("Add to our list of paper types").check();
     await owner.getByRole("button", { name: "Save", exact: true }).click();
     await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - HDFC loan sanction letter.pdf`);
     const gst = path.join(drive, thisYear, mailClient, "GST");
@@ -869,7 +871,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
     expect(await readFile(path.join(gst, "To check", `${mailClient} - Document.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
   }
   // The kept name is offered as a type from now on.
-  await owner.getByRole("link", { name: "Upload a file" }).click();
+  await owner.getByRole("link", { name: "Upload papers" }).click();
+  await owner.getByLabel("Files", { exact: true }).setInputFiles({ name: "scan.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 not uploaded") });
   await expect(owner.getByLabel("Type", { exact: true }).locator("option", { hasText: "HDFC loan sanction letter" })).toHaveCount(1);
   // Activity names each rename's old and new name; a manager or the owner puts back the latest in one click.
   await owner.goto(`${owner.url().split("?")[0]}?tab=activity`);
@@ -887,7 +890,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
 
   // The owner removes the second copy: it waits in the drive's Deleted and old versions folder and can be put back.
-  await rows.filter({ hasText: "Same file as" }).getByRole("link", { name: /^Change/ }).click();
+  await rows.filter({ hasText: "Same file as" }).getByRole("link", { name: /^Check/ }).click();
   await owner.getByRole("dialog").getByRole("button", { name: /^Remove/ }).click();
   await expect(owner.getByRole("status")).toContainText("waits 30 days");
   expect(await readFile(path.join(drive, "Deleted and old versions", `${mailClient} - Purchase bills - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented purchase bills");
@@ -897,8 +900,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
 
   // A manager or the owner uploads a file and types it; it is saved under its name in the client's folder.
-  await owner.getByRole("link", { name: "Upload a file" }).click();
-  await owner.getByLabel("File", { exact: true }).setInputFiles({ name: "IMG_2041.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 invented form 16") });
+  await owner.getByRole("link", { name: "Upload papers" }).click();
+  await owner.getByLabel("Files", { exact: true }).setInputFiles({ name: "IMG_2041.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 invented form 16") });
   await owner.getByLabel("Type", { exact: true }).selectOption("Form 16");
   await owner.getByLabel("Work", { exact: true }).selectOption("income_tax");
   await owner.getByLabel("Period", { exact: true }).selectOption({ label: "FY 2025-26" });
@@ -908,6 +911,11 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   // Asking the client for files emails them a private link; they upload with no sign in.
   await owner.getByRole("link", { name: "Ask for papers" }).click();
+  // The five usual papers for an individual come first, each once; the rest wait under More papers.
+  const askList = owner.getByRole("group", { name: "Papers" });
+  await expect(askList.getByRole("checkbox", { name: "Bank statement" })).toHaveCount(1);
+  await expect(askList.getByRole("checkbox", { name: "Sales bills" })).toBeHidden();
+  await askList.getByText("More papers").click();
   await owner.getByLabel("Sales bills").check();
   await owner.getByLabel("Anything else, by name").fill("Loan statement");
   await owner.getByRole("button", { name: "Ask for papers" }).click();
@@ -952,7 +960,10 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(visitor.getByText("Questions?")).toHaveCount(0);
 
   // A filed document goes to the client as a secure link that stops after 5 downloads.
-  await rows.getByRole("link", { name: `Change ${mailClient} - Loan statement`, exact: false }).click();
+  await rows.getByRole("link", { name: `Open ${mailClient} - Loan statement`, exact: false }).click();
+  await owner.getByRole("link", { name: "Send this paper" }).click();
+  // Sending is its own step that names the paper and the address.
+  await expect(owner.getByRole("dialog")).toContainText(`Send Loan statement to client-${tag}@patel.test?`);
   await owner.getByRole("button", { name: "Send", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText("works for 7 days and 5 downloads");
   const shared = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/s\/[\w-]+/)![0];
@@ -1004,7 +1015,12 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.reload();
   await expect(rows.filter({ hasText: "Form 16" })).toContainText("Missing in the drive");
   await owner.goto("/app");
-  await expect(owner.getByRole("alert").filter({ hasText: "no longer in your drive" })).toBeVisible();
+  await expect(owner.getByRole("alert").filter({ hasText: "1 paper is missing from your drive." })).toBeVisible();
+  // It opens the Documents page with only the missing papers.
+  await owner.getByRole("link", { name: "See missing papers" }).click();
+  await expect(owner).toHaveURL(/\/app\/documents\?year=all&show=missing$/);
+  await expect(owner.getByRole("region", { name: "Papers" }).getByRole("row")).toHaveCount(2);
+  await expect(owner.getByRole("region", { name: "Papers" }).getByRole("row").nth(1)).toContainText("Form 16");
 
   // M5 acceptance: the registered request gets the right year, and private papers wait.
   // A client asks for papers by email: a routine ITR-V goes back at once as a secure link in
@@ -1013,8 +1029,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
     await owner.goto("/app/clients");
     await owner.getByRole("link", { name: mailClient }).click();
     await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Documents/ }).click();
-    await owner.getByRole("link", { name: "Upload a file" }).click();
-    await owner.getByLabel("File", { exact: true }).setInputFiles({ name: `${type}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
+    await owner.getByRole("link", { name: "Upload papers" }).click();
+    await owner.getByLabel("Files", { exact: true }).setInputFiles({ name: `${type}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
     await owner.getByLabel("Type", { exact: true }).selectOption(type);
     await owner.getByLabel("Period", { exact: true }).selectOption({ label: period });
     await owner.getByRole("button", { name: "Upload", exact: true }).click();
@@ -1117,11 +1133,11 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
 
   // Old files already in the drive: final papers are sorted into the client's folder in
-  // place after a preview, and can be put back.
+  // place after a preview, and can be put back. This ITR-V is for another year than the one uploaded above.
   const old = path.join(tmpdir(), "inboxca-test-drive", `Old files ${tag}`);
   await mkdir(path.join(old, mailClient, "2025-26"), { recursive: true });
   await mkdir(path.join(old, "Someone else"), { recursive: true });
-  await writeFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2025-26.pdf"), "%PDF-1.4 invented ITR-V");
+  await writeFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2024-25.pdf"), "%PDF-1.4 invented ITR-V");
   await writeFile(path.join(old, mailClient, "2025-26", "working notes.txt"), "invented notes");
   await writeFile(path.join(old, "Someone else", "notice.pdf"), "%PDF-1.4 invented notice");
   // Past the first 14 days, when older files may come in too.
@@ -1133,13 +1149,13 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.getByRole("button", { name: "Move these files" }).click();
   await expect(owner.getByRole("status")).toContainText("Moving your files now");
   await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
-  const itrv = path.join(drive, "FY 2024-25", mailClient, "Income tax", `${mailClient} - ITR-V - FY 2024-25.pdf`);
+  const itrv = path.join(drive, "FY 2023-24", mailClient, "Income tax", `${mailClient} - ITR-V - FY 2023-24.pdf`);
   expect(await readFile(itrv, "utf8")).toBe("%PDF-1.4 invented ITR-V");
   await owner.reload();
   await owner.getByRole("button", { name: "Put them back" }).click();
   await expect(owner.getByRole("status")).toContainText("Putting the files back");
   for (let sweep = 0; sweep < 3; sweep++) await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
-  expect(await readFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2025-26.pdf"), "utf8")).toBe("%PDF-1.4 invented ITR-V");
+  expect(await readFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2024-25.pdf"), "utf8")).toBe("%PDF-1.4 invented ITR-V");
   expect(await readFile(path.join(old, "Someone else", "notice.pdf"), "utf8")).toBe("%PDF-1.4 invented notice");
 
 });
@@ -1154,7 +1170,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await lead.goto("/app/clients");
   await expect(lead.locator(".rail-me")).toContainText("Partner");
   await expect(lead.locator("#bulk-send")).toHaveCount(0);
-  const fields=await actionFields(owner,"/app/clients",{type:"AIS"});
+  const fields=await actionFields(owner,"/app/clients",{type:""});
   const [{id: chosenClient}]=await query(local.dbUrl,"select id from public.clients where firm_id=$1 and name=$2",[firm.firmId,mailClient]);
   await lead.request.post("/app/clients",{multipart:{...fields,client:chosenClient,type:"ITR-V",period:"2025"},headers:{Origin:new URL(lead.url()).origin}});
   expect((await query(local.dbUrl,"select count(*)::int n from public.requests where firm_id=$1 and kind='bulk_send'",[firm.firmId]))[0].n).toBe(0);
@@ -1163,10 +1179,16 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await query(local.dbUrl,"insert into public.clients(firm_id,name,kind) values ($1,$2,'individual')",[firm.firmId,noEmail]);
   const send = async (type:string,period:string,names=[mailClient]) => {
     await owner.goto("/app/clients");
-    for (const name of names) await owner.getByLabel(`Send a paper to ${name}`,{exact:true}).check();
-    await owner.locator("#bulk-send").getByLabel("Paper",{exact:true}).selectOption(type);
-    await owner.locator("#bulk-send").getByLabel("Year",{exact:true}).selectOption(period);
-    await owner.getByRole("button",{name:"Send chosen papers"}).click();
+    for (const name of names) await owner.getByLabel(`Choose ${name}`,{exact:true}).check();
+    const bar=owner.locator("#bulk-send");
+    await expect(bar.getByLabel("Paper",{exact:true})).toHaveValue("");
+    await bar.getByLabel("Paper",{exact:true}).selectOption(type);
+    await bar.getByLabel("Year",{exact:true}).selectOption(period);
+    // The button names what happens; a second step lists who gets what.
+    const label=`Send ${type} to ${names.length} client${names.length===1 ? "" : "s"}`;
+    await bar.getByRole("button",{name:label}).click();
+    for (const name of names) await expect(bar).toContainText(name);
+    await bar.getByRole("button",{name:label}).click();
     await expect(owner).toHaveURL(/\/app\/clients\?bulk=/);
     await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
     try {
@@ -1191,7 +1213,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await expect(progress).toContainText(`${mailClient}: Sent`);
   const sentBefore=await mailCount(`client-${tag}@patel.test`);
   await owner.goto("/app/clients");
-  const again=await actionFields(owner,"/app/clients",{type:"AIS"});
+  const again=await actionFields(owner,"/app/clients",{type:""});
   await Promise.all([0,1].map(()=>owner.request.post("/app/clients",{multipart:{...again,client:chosenClient,type:"ITR-V",period:"2025"},headers:{Origin:new URL(owner.url()).origin}})));
   await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
   await query(local.dbUrl,"update public.jobs set run_at=now() where firm_id=$1 and kind='bulk_send' and state='pending'",[firm.firmId]);
@@ -1208,12 +1230,15 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   const [{id:client}] = await query(local.dbUrl,"select id from public.clients where firm_id=$1 and name=$2",[firm.firmId,mailClient]);
   const [{id:doc,name}] = await query(local.dbUrl,"select id,name from public.documents where client_id=$1 and document_type='ITR-V' and status='filed'",[client]);
   await owner.goto(`/app/clients/${client}?tab=files&edit=${doc}`);
+  // The paper's own sending choice waits under More.
+  await expect(owner.getByLabel("Sending this paper")).toBeHidden();
+  await owner.getByRole("dialog").getByText("More",{exact:true}).click();
   await owner.getByLabel("Sending this paper").selectOption("internal");
   await owner.getByRole("button",{name:"Save sending choice"}).click();
   await expect.poll(async()=>(await query(local.dbUrl,"select share_policy from public.documents where id=$1",[doc]))[0].share_policy).toBe("internal");
   await owner.reload();
   await expect(owner.getByLabel("Sending this paper")).toHaveValue("internal");
-  await expect(owner.getByRole("dialog").getByRole("button",{name:"Send",exact:true})).toHaveCount(0);
+  await expect(owner.getByRole("dialog").getByRole("link",{name:"Send this paper"})).toHaveCount(0);
   await send("ITR-V","2025");
   await expect(progress).toContainText("Skipped. Kept inside your firm");
   const [{n}] = await query(local.dbUrl,"select count(*)::int n from public.shares where document_id=$1 and status='sent'",[doc]);

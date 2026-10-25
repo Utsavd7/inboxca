@@ -31,7 +31,7 @@ const alertText = (reason: string, details: { free_bytes?: number; files?: numbe
     captures: `${details.email} tried to capture a document's screen ${details.count} times today. Each try is logged.`,
     parallel: `${details.email} signed in on another PC ${details.count} times today, which ends the other session each time. Ask whether their login is shared.`,
     request_stalled: `${details.client} has not uploaded the documents you asked for, after three reminders. A call may help.`,
-    drive_missing: `${details.files} ${details.files === 1 ? "file" : "files"} InboxCA filed ${details.files === 1 ? "is" : "are"} no longer in your drive. Each is marked Missing on its client's Files tab.`,
+    drive_missing: `${details.files} ${details.files === 1 ? "paper is" : "papers are"} missing from your drive.`,
   })[reason] ?? "Something in your drive needs a look.";
 const reasons: Record<string, string> = {
   no_rule: "Could not tell what it asks",
@@ -154,8 +154,13 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       action: "Review notice",
     })),
     ...(alerts?.data ?? [])
-      .filter((alert) => !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames"].includes(alert.reason_code ?? "") || (alert.details as { day?: string }).day === today))
-      .map((alert) => ({ key: alert.id, text: alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number }) })),
+      // Missing papers are the owner's to sort out, on the Documents page.
+      .filter((alert) => (owner || alert.reason_code !== "drive_missing") && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames"].includes(alert.reason_code ?? "") || (alert.details as { day?: string }).day === today))
+      .map((alert) => ({
+        key: alert.id,
+        text: alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number }),
+        ...(alert.reason_code === "drive_missing" && { href: "/app/documents?year=all&show=missing", action: "See missing papers" }),
+      })),
   ];
   const steps = setup && [
     { done: setup[0].includes("mail"), name: "Email", href: "/app/settings#mailbox", action: "Connect the firm's email" },
