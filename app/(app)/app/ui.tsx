@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import { Lock, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { PanelEscape } from "./panel-escape";
 import "./side-panel.css";
@@ -24,13 +24,10 @@ export const initials = (text: string) => {
   return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? words[0]?.[1] ?? "")).toUpperCase();
 };
 
-// Each name keeps one of eight soft colours, so the same client is easy to spot anywhere.
-const tones = ["blue", "green", "amber", "purple", "teal", "pink", "red", "gray"];
-const toneOf = (name: string) => tones[[...name].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) >>> 0, 7) % tones.length];
-
+// Initials on a quiet grey, never a colour: red or green would read as late or done.
 export function Avatar({ name, square = false, big = false }: { name: string; square?: boolean; big?: boolean }) {
   return (
-    <span className={`avatar tone-${toneOf(name)}${square ? " square" : ""}${big ? " big" : ""}`} aria-hidden>
+    <span className={`avatar${square ? " square" : ""}${big ? " big" : ""}`} aria-hidden>
       {initials(name)}
     </span>
   );
@@ -83,3 +80,20 @@ export function SidePanel({ id, title, close, children }: { id: string; title: R
 // InboxCA storage in KB, MB or GB, for the owner's meters.
 export const storage = (bytes: number) =>
   bytes < 1024 ** 2 ? `${Math.ceil(bytes / 1024)} KB` : bytes < 1024 ** 3 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+
+// What a page says to someone whose role does not use it, in place of sending them away.
+export function NotForYou({ title, who }: { title: string; who: string }) {
+  return (
+    <>
+      <PageHead title={title} />
+      <div className="panel">
+        <Empty Icon={Lock} title={`This page is for ${who}`}>
+          <span>Ask the owner if something here needs changing.</span>
+          <Link className="b b-primary" href="/app">
+            Go to Today
+          </Link>
+        </Empty>
+      </div>
+    </>
+  );
+}

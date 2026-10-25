@@ -1,5 +1,6 @@
 import { FileUp } from "lucide-react";
 import { dropPortalFiles } from "@/app/(app)/actions";
+import { Toast } from "./ui";
 
 // The box for files fetched from the government portals (PLAN.md 5.3.1): drop in one or
 // many, for one client or many; InboxCA reads the client and month from inside each.
@@ -34,9 +35,6 @@ export function DroppedNotice({ value }: { value?: string }) {
     again && `${again} already there`,
     left && `${left} not filed: not a known portal file, or its GSTIN is not one of your clients'`,
   ].filter(Boolean);
-  return (
-    <p className={left ? "alert" : "notice"} role="status">
-      {parts.join("; ") || "No files were added"}.
-    </p>
-  );
+  const text = `${parts.join("; ") || "No files were added"}.`;
+  return left ? <p className="alert" role="status">{text}</p> : <Toast>{text}</Toast>;
 }

@@ -12,7 +12,9 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 const FIXED_SUGGESTION_TAPS = 3;
 const FIXED_SUGGESTION_DAYS = 14;
 
-export async function OfficePanel({ compact = false, error = false }: { compact?: boolean; error?: boolean }) {
+// inPreset draws it inside Settings' Access preset card, the one office control there: the
+// Office only switch waits under Change details, the rest shows as usual.
+export async function OfficePanel({ compact = false, error = false, inPreset = false }: { compact?: boolean; error?: boolean; inPreset?: boolean }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership || !officeApprover(membership.role, userId, membership.settings)) return null;
   const office = (membership.settings.office ?? {}) as Office;
@@ -40,11 +42,21 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
   const suggestFixed =
     isAdmin && office.on && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= FIXED_SUGGESTION_TAPS || !trustedPc);
   if (compact && !requests?.length && !refusals.length && (owner || !waiting.length)) return null;
+  const line = <p className="hint">Staff, managers and front desk use approved PCs on your office internet connection. You and partners can use InboxCA anywhere.</p>;
+  const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">
+    <button className="b b-ghost" name="intent" value="forget">Forget office connections</button><button className="b b-secondary" name="intent" value="off">Turn off</button>
+  </form> : isAdmin && <form action={setOfficeOnly}>
+    <fieldset className="fieldset"><legend>Are you in your office right now?</legend>
+      <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, this is my office</label>
+      <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it from the office</label>
+    </fieldset><button className="b b-primary" name="intent" value="on">Turn on</button>
+  </form>;
+  const Box = inPreset ? "div" : "section";
   return (
-    <section className="panel" aria-labelledby={compact ? "office-alerts" : "office-title"} id={compact ? undefined : "office"}>
-      <h2 id={compact ? "office-alerts" : "office-title"}>{compact ? "Your office today" : "Staff can use InboxCA only in the office"}</h2>
+    <Box className={inPreset ? "office-in-preset" : "panel"} aria-labelledby={inPreset ? undefined : compact ? "office-alerts" : "office-title"} id={compact ? undefined : "office"}>
+      {!inPreset && <h2 id={compact ? "office-alerts" : "office-title"}>{compact ? "Your office today" : "Staff can use InboxCA only in the office"}</h2>}
       {error && <p className="alert" role="alert">Choose up to 2 active partners as deputies.</p>}
-      {!compact && <p className="hint">Staff, managers and front desk use approved PCs on your office internet connection. You and partners can use InboxCA anywhere.</p>}
+      {!compact && !inPreset && line}
       {office.on && !compact && <p className={here ? "notice" : "alert"} role="status">{here ? "On. You are on your office internet connection now." : "On. Waiting for your firm to confirm the office internet connection."}</p>}
       {office.on && requests?.map((request) => {
         const details = request.details as { person?: string; day?: string };
@@ -102,15 +114,10 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
             </form>
           </li>)}</ul>
         </div>}
-        {office.on ? <form action={setOfficeOnly} className="form-row">
-          {!here && <button className="b b-primary" name="intent" value="here">This is my office</button>}
-          {isAdmin && <><button className="b b-ghost" name="intent" value="forget">Forget office connections</button><button className="b b-secondary" name="intent" value="off">Turn off</button></>}
-        </form> : isAdmin && <form action={setOfficeOnly}>
-          <fieldset className="fieldset"><legend>Are you in your office right now?</legend>
-            <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, this is my office</label>
-            <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it from the office</label>
-          </fieldset><button className="b b-primary" name="intent" value="on">Turn on</button>
+        {office.on && !here && <form action={setOfficeOnly} className="form-row">
+          <button className="b b-primary" name="intent" value="here">This is my office</button>
         </form>}
+        {inPreset && toggle ? <details className="reveal office-switch"><summary>Change details</summary><h3 className="sub-head">Office only {office.on ? "is on" : "is off"}</h3>{line}{toggle}</details> : toggle}
         {suggestFixed && <form action={setOfficeOnly} className="fixed-suggestion">
           <p><strong>To stop these confirmations, ask your internet provider for a fixed address.</strong> Here is what to say:</p>
           <blockquote>&ldquo;Please add a fixed internet address to our broadband connection, account number ___. We need it for office software access.&rdquo;</blockquote>
@@ -149,6 +156,6 @@ export async function OfficePanel({ compact = false, error = false }: { compact?
           <li>Photos of the screen cannot be blocked; every page InboxCA shows names who viewed it and when.</li>
         </ul></div>}
       </>}
-    </section>
+    </Box>
   );
 }

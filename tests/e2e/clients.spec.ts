@@ -26,6 +26,10 @@ test.afterAll(() => firm.remove());
 
 test("a client added with only a GSTIN gets its PAN too, and opens with both", async () => {
   await owner.getByRole("link", { name: "Clients" }).click();
+  // A missing name is shown under the Name field, which is marked.
+  await owner.getByRole("button", { name: "Add client" }).click();
+  await expect(owner.getByLabel("Name", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  await expect(owner.locator("#client-name + .field-error")).toHaveText("Enter the client's name.");
   await owner.getByLabel("Name", { exact: true }).fill("Patel Textiles");
   await owner.getByLabel("Kind", { exact: true }).selectOption("business");
   await owner.getByLabel("GSTIN", { exact: true }).fill("27aapfu0939f1zv");
@@ -43,7 +47,7 @@ test("services on a client's GSTIN give it its due dates", async () => {
   await gstin.getByLabel("GSTR-1 (monthly)").check();
   await gstin.getByLabel("GSTR-3B (monthly)").check();
   // Wait for the save: it is what adds the due dates.
-  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), gstin.getByRole("button", { name: "Save services" }).click()]);
+  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("dialog", { name: "Services" }).getByRole("button", { name: "Save services" }).click()]);
   await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Returns/ }).click();
   const due = owner.locator("section[aria-labelledby=due] li");
   await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");
@@ -208,7 +212,11 @@ test("importing 500 clients with emails adds them all and reports every bad row"
   await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "clients.csv", mimeType: "text/csv", buffer: Buffer.from(lines.join("\n")) });
   await owner.getByRole("button", { name: "Check the file" }).click();
   await expect(owner.getByText("500 ready to import, 6 with a problem and left out.")).toBeVisible({ timeout: 30_000 });
-  const problems = owner.locator("section[aria-labelledby=import]").getByRole("table");
+  // The first rows show as they will be saved, the kind read from the sheet's own words.
+  const first = owner.locator("section[aria-labelledby=import]").getByRole("table").first();
+  await expect(first.locator("tbody tr")).toHaveCount(5);
+  await expect(first.locator("tbody tr").nth(1)).toContainText("Client 1Business");
+  const problems = owner.locator("section[aria-labelledby=import]").getByRole("table").last();
   for (const text of ["PAN is not valid", "not a kind InboxCA knows", "on an earlier row", "Enter the client's name", "already in your firm", "email address is not valid"])
     await expect(problems).toContainText(text);
 
@@ -218,6 +226,16 @@ test("importing 500 clients with emails adds them all and reports every bad row"
   await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
   await owner.goto("/app/clients?q=client42@example.test");
   await expect(owner.getByRole("link", { name: "Client 42", exact: true })).toBeVisible();
+});
+
+test("the sample sheet has the headings the import reads", async () => {
+  await owner.goto("/app/clients?panel=import");
+  const href = await owner.getByRole("link", { name: "Download a sample sheet" }).getAttribute("href");
+  const sample = await owner.request.get(href ?? "");
+  await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "sample.csv", mimeType: "text/csv", buffer: await sample.body() });
+  await owner.getByRole("button", { name: "Check the file" }).click();
+  await expect(owner.getByText("1 ready to import.")).toBeVisible();
+  await expect(owner.locator("section[aria-labelledby=import] table")).toContainText("Example Client (delete this row)Businessaccounts@example.com");
 });
 
 test("the client list shows its true count and a second page", async () => {
@@ -397,4 +415,33 @@ test("the people looking after a client show by name, not email", async () => {
   const row = owner.getByRole("row").filter({ hasText: "Names Test Client" });
   await expect(row).toContainText("Clients");
   await expect(row).not.toContainText("@");
+});
+
+test("keys: / opens search, j and k move through a table, and Esc keeps a panel being typed in", async () => {
+  // A Windows PC is shown Ctrl K, not the Mac key.
+  await owner.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "Win32" }));
+  await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, 'Keys Client A', 'individual'), ($1, 'Keys Client B', 'individual')", [firm.firmId]);
+  await owner.goto("/app/clients?q=Keys%20Client");
+  await expect(owner.locator(".rail-search kbd")).toHaveText("Ctrl K");
+  await owner.keyboard.press("/");
+  await expect(owner.getByRole("dialog", { name: "Search" })).toBeVisible();
+  await owner.keyboard.press("Escape");
+  await expect(owner.getByRole("dialog", { name: "Search" })).toHaveCount(0);
+  await expect(owner.locator(".rail-search")).toBeFocused();
+  const links = owner.locator(".stage-body table tbody tr").locator("a.row-link");
+  await owner.keyboard.press("j");
+  await expect(links.first()).toBeFocused();
+  await owner.keyboard.press("j");
+  await expect(links.nth(1)).toBeFocused();
+  await owner.keyboard.press("k");
+  await expect(links.first()).toBeFocused();
+
+  await owner.goto("/app/clients?panel=add");
+  const panel = owner.getByRole("dialog", { name: "Add a client" });
+  await panel.getByLabel("Name", { exact: true }).fill("Half typed");
+  await owner.keyboard.press("Escape");
+  await expect(panel).toBeVisible();
+  await panel.getByLabel("Email", { exact: true }).focus();
+  await owner.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
 });

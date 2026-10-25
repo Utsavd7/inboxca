@@ -14,6 +14,7 @@ import { BulkSendBar } from "./bulk-send";
 import { ImportForm } from "./import-form";
 import { LinkTabs } from "../link-tabs";
 import { Badge, Empty, PageHead } from "../ui";
+import { RowKeys } from "../row-keys";
 import "./clients.css";
 
 const pills = { all: "All", late: "Late", missing: "Missing papers", mine: "Assigned to me" } as const;
@@ -262,6 +263,7 @@ export default async function Clients({
               ))}
             </tbody>
           </table>
+          <RowKeys />
         </div>
       ) : (
         <Empty Icon={UsersRound} title={empty[0]}>

@@ -14,6 +14,7 @@ import { AutoSelect } from "../auto-select";
 import { FileViewer } from "../files/[id]/view/file-viewer";
 import { DroppedNotice, PortalDrop } from "../portal-drop";
 import { Badge, Empty, PageHead, SidePanel } from "../ui";
+import { RowKeys } from "../row-keys";
 
 const PAGE = 50;
 const columns = "id, client_id, name, document_type, work_type, period_key, status, email_event_id, received_at, form:prepared->>form, clients(name), email_events(contact_id, contacts(name_enc)), client_registrations(number_enc)";
@@ -215,6 +216,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                     ))}
                   </tbody>
                 </table>
+                <RowKeys />
               </div>
               <div className="docs-pages">
                 <span>

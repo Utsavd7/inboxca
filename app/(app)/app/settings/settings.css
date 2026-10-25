@@ -40,6 +40,12 @@
 .set-page #office .fieldset { display: grid; gap: 8px; justify-items: start; margin: 0; }
 .set-page #office .fieldset legend { margin-bottom: 8px; }
 .set-page #office > form > .form-row { margin: 0; }
+/* Inside the Access preset card: below the preset, with the Office only switch under Change details. */
+.set-page .office-in-preset { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.set-page .office-in-preset > :first-child { margin-top: 0; }
+.set-page #office > .office-switch > form:not(.form-row) { display: grid; gap: 12px; justify-items: start; margin-top: 12px; }
+.set-page #office > .office-switch > .sub-head { margin-top: 16px; }
+.set-page #office > .office-switch + form { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 
 /* Ticks and choices line up on one grid. */
 .set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 8px 16px; }

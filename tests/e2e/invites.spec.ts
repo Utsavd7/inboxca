@@ -16,6 +16,13 @@ import { laterBy } from "@/src/lib/hours";
 import { pdf } from "@/tests/fixtures/pdf";
 import { actionFields, askForCode, emailStep, latestEmail, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
+// The Office only switch sits under Change details in Settings' Access preset card.
+const officeSwitch = async (page: Page) => {
+  // An old #office link first opens the right group of Settings.
+  await page.locator("#office details.office-switch > summary").waitFor();
+  if (!(await page.locator("#office details.office-switch[open]").count())) await page.locator("#office details.office-switch > summary").click();
+};
+
 // The owner invites a new person, who signs in from the invite email, sets up a 2 step
 // code and joins the firm. Skipped when local Supabase is not running.
 const local = localSupabase();
@@ -153,7 +160,9 @@ test("under Office only, staff need the office connection and an approved PC", a
   // The test server reads each request's address from this header, as it would Cloudflare's.
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await owner.goto("/app/settings#office");
+  await officeSwitch(owner);
   await owner.getByLabel("Yes, this is my office").check();
+  await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn on" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "On." })).toContainText("You are on your office internet connection now.");
   // No PC stays in the office yet, so the owner is told how to get a fixed connection, once.
@@ -248,8 +257,9 @@ test("under Office only, staff need the office connection and an approved PC", a
 
   // Off again, staff reach the firm from anywhere.
   await owner.goto("/app/settings#office");
+  await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn off" }).click();
-  await expect(owner.getByText("Are you in your office right now?")).toBeVisible();
+  await expect(owner.getByText("Are you in your office right now?")).toBeAttached();
   await person.getByLabel("6 digit code from the app").fill(totp(personKey));
   await person.getByRole("button", { name: "Continue" }).click();
   await person.getByRole("link", { name: "Clients" }).click();
@@ -274,8 +284,10 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await owner.reload();
   await expect(owner.getByLabel(deputyEmail, { exact: true })).toBeVisible();
   await owner.getByLabel(deputyEmail, { exact: true }).check();
-  await owner.getByRole("button", { name: "Save deputies" }).click();
+  // Wait for the save, so the page it redraws is the one the switch opens on.
+  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save deputies" }).click()]);
   await expect(owner.getByLabel(deputyEmail, { exact: true })).toBeChecked();
+  await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn on" }).click();
 
   const deputy = await browser.newPage();
@@ -334,6 +346,7 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await person.goto("/app/clients");
   await expect(person.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
   await owner.goto("/app/settings#office");
+  await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn off", exact: true }).click();
   await query(local.dbUrl, "update public.firms set settings = settings - 'special_hours' where id = $1", [firm.firmId]);
   await person.setExtraHTTPHeaders({});
@@ -347,8 +360,9 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await owner.goto("/app/settings#office");
   await owner.reload();
+  await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn on" }).click();
-  await expect(owner.getByRole("button", { name: "Turn off", exact: true })).toBeVisible();
+  await expect(owner.getByRole("button", { name: "Turn off", exact: true, includeHidden: true })).toBeAttached();
 
   // Browsers make keys only for a named site, so this PC uses localhost; its key is Chrome's
   // virtual one, kept on the PC like Windows Hello's.
@@ -388,8 +402,9 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await reception.goto("/app/clients");
   await expect(reception.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
   await owner.goto("/app/settings#office");
+  await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn off", exact: true }).click();
-  await expect(owner.getByText("Are you in your office right now?")).toBeVisible();
+  await expect(owner.getByText("Are you in your office right now?")).toBeAttached();
   await owner.setExtraHTTPHeaders({});
   await context.close();
 });
@@ -523,7 +538,9 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
 test("away from the office, the owner allows a staff member's own device to view only, until a day", async ({ browser }) => {
   await owner.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await owner.goto("/app/settings#office");
+  await officeSwitch(owner);
   await owner.getByLabel("Yes, this is my office").check();
+  await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn on" }).click();
 
   const homeContext = await browser.newContext({ userAgent: pcUserAgent });
@@ -554,8 +571,9 @@ test("away from the office, the owner allows a staff member's own device to view
   await expect(personal).toHaveCount(0);
   await home.goto("/app");
   await expect(home.getByRole("heading", { name: "Your firm refused this PC." })).toBeVisible();
+  await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn off", exact: true }).click();
-  await expect(owner.getByText("Are you in your office right now?")).toBeVisible();
+  await expect(owner.getByText("Are you in your office right now?")).toBeAttached();
   await owner.setExtraHTTPHeaders({});
   await homeContext.close();
 });
@@ -1097,6 +1115,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(owner.getByRole("status").filter({ hasText: "Action date confirmed." })).toBeVisible();
   await expect(notice).toContainText("24 Dec 2026");
   await notice.getByRole("link", { name: `Update the notice for ${mailClient}` }).click();
+  // The panel names who confirmed the date.
+  await expect(noticePanel.locator(".props")).toContainText("Confirmed byOwner");
   await noticePanel.getByRole("button", { name: "Mark replied" }).click();
   await owner.getByRole("link", { name: /^Replied or closed/ }).click();
   await expect(owner.locator("section[aria-label=Notices]")).toContainText(mailClient);
@@ -1292,9 +1312,11 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await boss.getByRole("button", { name: "Turn on notifications on this device" }).click();
     await expect(boss.getByText(/On an iPhone, add InboxCA to the home screen first/)).toBeVisible();
     await boss.goto("/app/settings#office");
+    await officeSwitch(boss);
     await boss.getByLabel("Yes, this is my office").check();
+    await officeSwitch(boss);
     await boss.getByRole("button", { name: "Turn on", exact: true }).click();
-    await expect(boss.getByRole("button", { name: "Turn off", exact: true })).toBeVisible();
+    await expect(boss.getByRole("button", { name: "Turn off", exact: true, includeHidden: true })).toBeAttached();
     await expect(boss.getByRole("heading", { name: "Doors InboxCA cannot close for you" })).toBeVisible();
     const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
     for (let n = 0; n < 5; n++) {
@@ -1331,14 +1353,14 @@ test("five office PCs need one batch approval, and managers cannot forge office 
       await pc.goto("/app/clients");
       await expect(pc.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
     }
-    const words = await boss.locator("section#office").innerText();
+    const words = await boss.locator("#office").innerText();
     expect(words).not.toMatch(/\bIP\b|cookie|token|passkey|watermark|device ID/i);
 
     // A manager copies the owner's forms. Both requests are refused and logged.
     const [{ user_id: manager }] = await query(local.dbUrl, "select user_id from public.firm_members m join auth.users u on u.id=m.user_id where m.firm_id=$1 and u.email=$2", [batch.firmId, emails[0]]);
     await query(local.dbUrl, "update public.firm_members set role='manager' where firm_id=$1 and user_id=$2", [batch.firmId, manager]);
     for (const [button, value] of [["Turn off", { intent: "off" }], ["Withdraw", { decision: "withdraw" }]] as const) {
-      const form = boss.locator("section#office form").filter({ has: boss.getByRole("button", { name: button, exact: true }) }).first();
+      const form = boss.locator("#office form").filter({ has: boss.getByRole("button", { name: button, exact: true }) }).first();
       const fields = await actionFields(boss, "/app/settings?group=access", button === "Turn off" ? { intent: "off" } : { device: await form.locator('input[name="device"]').inputValue() });
       await staff[0].request.post("/app/settings", { multipart: { ...fields, ...value }, headers: { Origin: new URL(staff[0].url()).origin } });
     }
