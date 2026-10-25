@@ -14,6 +14,8 @@ const shift = (date: string, days: number) => new Date(Date.parse(date) + days *
 // At most this many clients' emails a run; the job comes back in 10 minutes for the rest,
 // so a big firm's reminders spread over the morning inside the mailbox's daily limits.
 const PER_RUN = 100;
+// Every day of the last year counts as a stage when the late clients are reminded at once.
+const LATE_DAYS = Array.from({ length: 366 }, (_, day) => -1 - day);
 
 type RequestDetails = DocumentRequest & { reminder?: { day: string; state: "sending" | "sent" | "failed" } };
 type Details = { reminder?: { day: string; state: "sending" | "sent" | "failed" }; reminded?: string[]; skipped?: { day: string; reason: string } } & Record<string, unknown>;
@@ -29,11 +31,14 @@ function nextMorning(now = new Date()) {
 // return at a reminder stage, from the firm's own mailbox, between 09:00 and 20:00 India
 // time. Skips are kept on each task with their reason. Before a send, each task records it;
 // after a crash, the Sent folder is checked before anything goes again.
+// Today's buttons send now, asked for by an owner or partner: "late" reminds every client with
+// a late return, "papers" follows up every request still missing papers, whatever the stage.
 export const sendReminders: Handler = async (job) => {
   const admin = supabaseAdmin();
   const firm = job.entity_id ?? "";
+  const now = job.entity_type === "late" || job.entity_type === "papers" ? job.entity_type : null;
   const { data: firmRow } = await admin.from("firms").select("name, settings").eq("id", firm).maybeSingle();
-  if (!firmRow || (firmRow.settings as { reminders?: boolean }).reminders !== true) return { done: true };
+  if (!firmRow || (!now && (firmRow.settings as { reminders?: boolean }).reminders !== true)) return { done: true };
   const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric", hourCycle: "h23" }));
   if (!process.env.REMINDERS_ANY_HOUR && (hour < 9 || hour >= 20)) return { retry: "quiet_hours", at: nextMorning() };
   const mailer = await firmMailer(firm, firmRow.name);
@@ -48,8 +53,8 @@ export const sendReminders: Handler = async (job) => {
       .eq("kind", "compliance")
       .neq("status", "filed")
       .is("clients.archived_at", null)
-      .gte("due_on", shift(today, -3))
-      .lte("due_on", shift(today, 7)),
+      .gte("due_on", shift(today, now === "late" ? -366 : -3))
+      .lte("due_on", shift(today, now === "late" ? -1 : 7)),
     admin.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", ""),
     admin.from("requests").select("client_id").eq("firm_id", firm).eq("kind", "team_reply").eq("status", "pending"),
   ]);
@@ -57,7 +62,7 @@ export const sendReminders: Handler = async (job) => {
   const clientIds = [...new Set(rows?.map((row) => row.client_id))];
   const { data: documents } = clientIds.length ? await admin.from("documents").select("client_id, work_type, period_key").in("client_id", clientIds).neq("status", "deleted") : { data: [] };
   const filed = new Set(documents?.map((document) => `${document.client_id}:${document.work_type}:${document.period_key}`));
-  const tasks: (ReminderTask & { details: Details; name: string; email_enc: string | null })[] = (rows ?? []).map((row) => ({
+  const tasks: (ReminderTask & { details: Details; name: string; email_enc: string | null })[] = (now === "papers" ? [] : rows ?? []).map((row) => ({
     id: row.id,
     client_id: row.client_id,
     code: row.code ?? "",
@@ -69,7 +74,7 @@ export const sendReminders: Handler = async (job) => {
     name: row.clients.name,
     email_enc: row.clients.email_enc,
   }));
-  const { send, skipped } = planReminders(tasks, today, filed, new Set(handling?.map((request) => request.client_id ?? "")), reminderStages(firmRow.settings as { reminder_stages?: unknown }));
+  const { send, skipped } = planReminders(tasks, today, filed, new Set(handling?.map((request) => request.client_id ?? "")), now === "late" ? LATE_DAYS : reminderStages(firmRow.settings as { reminder_stages?: unknown }));
   const save = (task: { id: string; details: Details }, details: Details) => admin.from("tasks").update({ details: { ...task.details, ...details } as unknown as NonNullable<Json> }).eq("id", task.id);
   for (const { task, reason } of skipped) {
     const details = (task as (typeof tasks)[number]).details;
@@ -88,10 +93,10 @@ export const sendReminders: Handler = async (job) => {
   const follow = new Map<string, (FollowUp & { details: RequestDetails })[]>();
   const people = new Map(tasks.map((task) => [task.client_id, { name: task.name, email_enc: task.email_enc }]));
   // A follow-up carries the upload link, which needs the app's own address.
-  for (const request of process.env.APP_BASE_URL ? (requests ?? []) : []) {
+  for (const request of process.env.APP_BASE_URL && now !== "late" ? (requests ?? []) : []) {
     const details = request.details as unknown as RequestDetails;
     const client = request.clients;
-    const missing = followUpDue({ expires_at: request.expires_at!, details }, today);
+    const missing = followUpDue({ expires_at: request.expires_at!, details }, today, now === "papers");
     if (!missing || !client || !client.email_enc || client.reminders_paused || client.archived_at || !details.link_enc || !request.client_id) continue;
     const link = `${process.env.APP_BASE_URL}/u/${await crypto.decrypt(firm, `requests/${request.id}/link`, details.link_enc)}`;
     follow.set(request.client_id, [...(follow.get(request.client_id) ?? []), { requestId: request.id, client_id: request.client_id, period: details.period, missing, link, count: details.followups?.length ?? 0, details }]);

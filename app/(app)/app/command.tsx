@@ -5,18 +5,21 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { findClients, findDocuments } from "@/app/(app)/actions";
 import { clientKinds, type ClientKind } from "@/src/lib/clients";
+import { ASK_EVENT, quickActions, type QuickAction } from "./ui-client";
 
 type Page = { href: string; name: string };
-type Hit = { href: string; name: string; note: string };
+type Hit = { href: string; name: string; note: string; action?: QuickAction };
 
 // True in the browser when a field has the keyboard, so a typed letter is not a shortcut.
 export const typing = (target: EventTarget | null) => target instanceof HTMLElement && !!target.closest("input, textarea, select, [contenteditable]");
 const nothing = () => () => {};
 
-// Find a client or a page from anywhere: the search box in the rail, / or Ctrl K (⌘K on a Mac).
-export function Command({ pages }: { pages: Page[] }) {
+// Find a client or a page, or start something, from anywhere: the search box in the rail, / or
+// Ctrl K (⌘K on a Mac). Ask for papers first asks which client, then opens its Ask panel.
+export function Command({ pages, manage = false, write = false }: { pages: Page[]; manage?: boolean; write?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [text, setText] = useState("");
   const [clients, setClients] = useState<Hit[]>([]);
   const [active, setActive] = useState(0);
@@ -33,8 +36,17 @@ export function Command({ pages }: { pages: Page[] }) {
         setOpen(true);
       }
     };
+    const ask = () => {
+      setAsking(true);
+      setText("");
+      setOpen(true);
+    };
     window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
+    window.addEventListener(ASK_EVENT, ask);
+    return () => {
+      window.removeEventListener("keydown", key);
+      window.removeEventListener(ASK_EVENT, ask);
+    };
   }, []);
   useEffect(() => {
     if (!text.trim()) return;
@@ -52,19 +64,37 @@ export function Command({ pages }: { pages: Page[] }) {
     return () => clearTimeout(timer);
   }, [text]);
 
-  const hits: Hit[] = [
-    ...pages.filter((page) => page.name.toLowerCase().includes(text.trim().toLowerCase())).map((page) => ({ ...page, note: "Page" })),
-    ...(text.trim() ? clients : []),
-  ];
+  const typed = text.trim().toLowerCase();
+  const found = text.trim() ? clients : [];
+  const hits: Hit[] = asking
+    ? found.filter((hit) => hit.href.startsWith("/app/clients/")).map((hit) => ({ ...hit, href: `${hit.href}?tab=documents&ask=1`, note: "Ask for papers" }))
+    : [
+        ...quickActions({ manage, write }).filter((action) => action.label.toLowerCase().includes(typed)).map((action) => ({ href: action.href ?? `#${action.key}`, name: action.label, note: "Start", action })),
+        ...pages.filter((page) => page.name.toLowerCase().includes(typed)).map((page) => ({ ...page, note: "Page" })),
+        ...found,
+      ];
   const go = (hit: Hit | undefined) => {
     if (!hit) return;
+    if (hit.action && !hit.action.href) {
+      setAsking(true);
+      setText("");
+      setActive(0);
+      return;
+    }
     setOpen(false);
+    setAsking(false);
     setText("");
     router.push(hit.href);
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(now) => {
+        setOpen(now);
+        if (!now) setAsking(false);
+      }}
+    >
       <Dialog.Trigger className="rail-search" title={`Search (/ or ${mac ? "⌘K" : "Ctrl K"})`}>
         <Search size={15} aria-hidden />
         Search
@@ -77,7 +107,7 @@ export function Command({ pages }: { pages: Page[] }) {
             <Search size={16} aria-hidden />
             <input
               autoFocus
-              placeholder="Type a client's name or a page"
+              placeholder={asking ? "Ask which client for papers? Type a name" : "Type a client's name, a page or what to do"}
               value={text}
               onChange={(event) => {
                 setText(event.target.value);
@@ -105,12 +135,13 @@ export function Command({ pages }: { pages: Page[] }) {
                   go(hit);
                 }}
               >
+                {hit.action && <hit.action.Icon size={15} aria-hidden />}
                 <span>{hit.name}</span>
                 <small>{hit.note}</small>
                 {index === active && <CornerDownLeft size={14} aria-hidden />}
               </li>
             ))}
-            {!hits.length && <li className="cmd-none">No client or page by that name.</li>}
+            {!hits.length && <li className="cmd-none">{asking ? (text.trim() ? "No client by that name." : "Type a client's name.") : "No client or page by that name."}</li>}
           </ul>
         </Dialog.Popup>
       </Dialog.Portal>

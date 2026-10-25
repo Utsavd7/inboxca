@@ -71,16 +71,16 @@ export function planReminders(tasks: ReminderTask[], today: string, filed: Set<s
 }
 
 // A document request still waiting for files (PLAN.md 5.2): followed up every 3 days, up to
-// 4 times, asking only for what has not arrived.
+// 4 times, asking only for what has not arrived. `now` (Chase missing papers on Today) skips the wait.
 export type FollowUp = { requestId: string; client_id: string; period: string; missing: string[]; link: string; count: number };
 export const FOLLOW_UP_DAYS = 3;
 export const MAX_FOLLOW_UPS = 4;
-export function followUpDue(request: { expires_at: string; details: { items: { type: string; received: string[] }[]; followups?: string[] } }, today: string) {
+export function followUpDue(request: { expires_at: string; details: { items: { type: string; received: string[] }[]; followups?: string[] } }, today: string, now = false) {
   const missing = request.details.items.filter((item) => !item.received.length).map((item) => item.type);
   const asked = new Date(Date.parse(request.expires_at) - 30 * DAY).toISOString().slice(0, 10);
   const last = request.details.followups?.at(-1) ?? asked;
   const count = request.details.followups?.length ?? 0;
-  return missing.length && count < MAX_FOLLOW_UPS && -daysUntil(last, today) >= FOLLOW_UP_DAYS ? missing : null;
+  return missing.length && count < MAX_FOLLOW_UPS && (now || -daysUntil(last, today) >= FOLLOW_UP_DAYS) ? missing : null;
 }
 
 // The one email a client gets today, in English (Hindi and Gujarati follow once a native

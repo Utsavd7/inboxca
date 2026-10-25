@@ -25,7 +25,7 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(() => firm.remove());
 
 test("a client added with only a GSTIN gets its PAN too, and opens with both", async () => {
-  await owner.getByRole("link", { name: "Clients" }).click();
+  await owner.getByRole("link", { name: "Clients", exact: true }).click();
   // A missing name is shown under the Name field, which is marked.
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.getByLabel("Name", { exact: true })).toHaveAttribute("aria-invalid", "true");
@@ -103,6 +103,42 @@ test("Today shows what needs the owner today and the next setup step", async () 
   await expect(owner.getByRole("row").filter({ hasText: "GSTR-1 (monthly)" }).first()).toContainText("Late");
   await owner.goto("/app/calendar?view=month");
   await expect(views.getByRole("link", { name: /^Due in 30 days/ })).toHaveAttribute("aria-current", "page");
+});
+
+test("Today's late returns: the month's numbers, a preview before reminding, Mark filed with an undo and Assign to me", async () => {
+  const [{ n }] = await query(local.dbUrl, "select count(*)::int n from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed' and t.due_on<(now() at time zone 'Asia/Kolkata')::date", [firm.firmId]);
+  const [{ id: anand }] = await query(local.dbUrl, "insert into public.clients(firm_id,name,kind) values ($1,'Anand Late','individual') returning id", [firm.firmId]);
+  await query(local.dbUrl, "insert into public.tasks(firm_id,client_id,kind,code,period_key,due_on) values ($1,$2,'compliance','ITR_NA','2026',(now() at time zone 'Asia/Kolkata')::date-2)", [firm.firmId, anand]);
+  await owner.goto("/app");
+  const month = owner.getByRole("region", { name: "This month" });
+  await expect(month.getByRole("img", { name: /of \d+ returns due this month filed/ })).toBeVisible();
+  await expect(month.getByRole("link", { name: /Clients late/ })).toHaveAttribute("href", "/app/clients?show=late");
+  // Remind all late clients shows who gets what first; with no firm email nothing can go.
+  await owner.getByRole("link", { name: "Remind all late clients" }).click();
+  const preview = owner.getByRole("dialog", { name: "Remind 2 late clients" });
+  await expect(preview.getByRole("listitem").filter({ hasText: "Patel Textiles" })).toContainText("Will be emailed");
+  await expect(preview.getByRole("listitem").filter({ hasText: "Anand Late" })).toContainText("No email address");
+  await expect(preview.getByRole("alert")).toContainText("Connect the firm's email");
+  await expect(preview.getByRole("button", { name: "Send 1 reminder" })).toBeDisabled();
+  await preview.getByRole("link", { name: "Cancel" }).click();
+  await expect(preview).toHaveCount(0);
+  // Mark filed opens the client's late returns; Undo puts them back.
+  const late = owner.locator("section[aria-labelledby=t-late]");
+  await late.getByRole("listitem").filter({ hasText: "Patel Textiles" }).hover();
+  await late.getByRole("link", { name: "Mark filed for Patel Textiles" }).click();
+  const panel = owner.getByRole("dialog", { name: `Mark ${n} returns filed` });
+  await panel.getByRole("button", { name: "Mark filed" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: `${n} returns marked filed.` })).toBeVisible();
+  await owner.getByRole("status").getByRole("button", { name: "Undo" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: `${n} returns marked not filed.` })).toBeVisible();
+  await expect(late.getByRole("listitem").filter({ hasText: "Patel Textiles" })).toBeVisible();
+  // A late client nobody looks after can be taken on in one click.
+  await late.getByRole("listitem").filter({ hasText: "Anand Late" }).hover();
+  await late.getByRole("button", { name: "Assign Anand Late to me" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Assigned to you." })).toBeVisible();
+  await expect(late.getByRole("button", { name: "Assign Anand Late to me" })).toHaveCount(0);
+  expect((await query(local.dbUrl, "select user_id from public.client_assignments where client_id=$1", [anand]))[0].user_id).toBe(firm.ownerId);
+  await query(local.dbUrl, "delete from public.clients where id=$1", [anand]);
 });
 
 test("late clients lead the list, and a client's return is marked filed from its Returns tab with an undo", async () => {
@@ -456,4 +492,25 @@ test("keys: / opens search, j and k move through a table, and Esc keeps a panel 
   await panel.getByLabel("Email", { exact: true }).focus();
   await owner.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
+});
+
+test("the menu's New and the search palette start things, and the bell lists updates", async () => {
+  await owner.goto("/app");
+  await owner.getByRole("button", { name: "New", exact: true }).click();
+  await expect(owner.getByRole("menuitem", { name: "New client" })).toHaveAttribute("href", "/app/clients?panel=add");
+  await expect(owner.getByRole("menuitem", { name: "Add a notice" })).toHaveAttribute("href", "/app/notices?add=1");
+  // Ask for papers first asks which client, in the search palette.
+  await owner.getByRole("menuitem", { name: "Ask for papers" }).click();
+  const search = owner.getByRole("dialog", { name: "Search" });
+  await expect(search.getByRole("textbox")).toHaveAttribute("placeholder", /Ask which client for papers/);
+  await search.getByRole("textbox").fill("Patel Tex");
+  await search.getByRole("option", { name: /Patel Textiles/ }).click();
+  await expect(owner).toHaveURL(/\/app\/clients\/[^/]+\?tab=documents&ask=1$/);
+  // The palette lists the same things to start.
+  await owner.keyboard.press("Control+k");
+  await search.getByRole("textbox").fill("upload");
+  await expect(search.getByRole("option", { name: /Upload papers/ })).toBeVisible();
+  await owner.keyboard.press("Escape");
+  await owner.getByRole("button", { name: /^Updates/ }).click();
+  await expect(owner.getByRole("dialog", { name: "Updates for you" })).toBeVisible();
 });

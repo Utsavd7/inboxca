@@ -583,6 +583,11 @@ isOneToOne: false
 "access_setting":
 { Args: { "key": string,"person": Json,"role": string,"settings": Json }; Returns: Json
                            },
+"activity_feed":
+{ Args: { "mine"?: boolean,"since": string,"target_firm": string }; Returns: {
+              "action": string,"at": string,"client_id": string,"client_name": string
+            }[]
+                           },
 "add_clients":
 { Args: { "clients": Json,"target_firm": string }; Returns: number
                            },

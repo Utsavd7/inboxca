@@ -1,35 +1,67 @@
-/* Today: the greeting, then two columns of cards. Each card a title over rows of 56,
-   one button a row. Only the app's tokens and the design scale. */
-.today { display: flex; flex-direction: column; gap: 24px; line-height: 1.5; }
+/* Today: the greeting, the month at a glance (a ring and three numbers), then two columns of
+   cards, each with its own tile. One button a row; secondary ones show on hover. */
+.today { display: flex; flex-direction: column; gap: var(--s4); line-height: 1.5; }
 .today > * { margin: 0; }
-.today .page-head p { margin-top: 4px; }
-.today h2 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.3; }
+.today > .page-head { padding-bottom: var(--s2); }
+.today h2 { margin: 0; }
 
-.today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px; align-items: start; }
-.today-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.today-card { min-width: 0; border: 1px solid var(--line); border-radius: 12px; }
-.today-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px 16px 8px; }
-.today-card li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 56px; padding: 8px 16px; border-top: 1px solid var(--line); }
-.today-card li:first-child { border-top: 0; }
-.today-card li .grow { flex: 1 1 160px; min-width: 0; }
-.today-card li strong { display: block; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.today-card li .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: var(--s4); align-items: start; }
+.today-col { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
 .today-time { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
-.today-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; padding: 0 16px 16px; color: var(--ink-3); font-size: 13px; }
-.today-foot { padding: 12px 16px 16px; border-top: 1px solid var(--line); }
-.today-date { display: grid; flex: none; width: 48px; text-align: center; line-height: 1.3; }
-.today-date span { color: var(--ink-3); font-size: 12px; font-weight: 600; }
-.today-card .today-date strong { font-size: 16px; }
+.today-date { display: grid; flex: none; width: 40px; padding: 2px 0; border-radius: var(--r2); background: var(--k-week-bg); color: var(--k-week); text-align: center; line-height: 1.25; }
+.today-date span { font-size: 12px; font-weight: 600; }
+.today-date strong { font-size: 15px; font-weight: 700; }
 
-.today-setup { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; }
-.today-setup ol { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.today-setup li { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 6px; background: var(--gray-bg); color: var(--gray-fg); font-size: 12px; font-weight: 600; }
-.today-setup li.done { background: var(--green-bg); color: var(--green-fg); }
+/* Setting up: one strip with the steps done and the next one's button. */
+.today-setup { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s4); padding: var(--s3) var(--s4); }
+.today-setup h2 { font-size: 15px; font-weight: 600; }
+.today-setup ol { display: flex; flex-wrap: wrap; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.today-setup li { display: inline-flex; align-items: center; gap: var(--s1); height: 22px; padding: 0 var(--s2); border-radius: var(--round); background: var(--none-bg); color: var(--none-fg); font-size: 12px; font-weight: 600; }
+.today-setup li.done { background: var(--done-bg); color: var(--done-fg); }
 .today-setup .b { margin-left: auto; }
 
-.today-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13px; }
+/* The month at a glance: returns filed as a ring, then three numbers that open their list. */
+.today-stats { display: grid; grid-template-columns: minmax(260px, auto) minmax(0, 1fr); align-items: center; gap: var(--s4) var(--s6); padding: var(--s4) var(--s5); }
+.today-ring { display: flex; align-items: center; gap: var(--s4); }
+.today-ring > span { display: grid; gap: 2px; }
+.today-ring strong { font-size: 15px; font-weight: 600; }
+.today-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); margin: 0; padding: 0; list-style: none; }
+.stat-chip { position: relative; display: grid; gap: 2px; height: 100%; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface); color: var(--ink-2); font-size: 13px; text-decoration: none; transition: border-color var(--fast) var(--out), box-shadow var(--base) var(--out), transform var(--base) var(--out); }
+.stat-chip::before { content: ""; position: absolute; top: var(--s3); bottom: var(--s3); left: 0; width: 3px; border-radius: var(--round); background: var(--line-2); }
+.stat-chip.k-late::before { background: var(--k-late); }
+.stat-chip.k-reply::before { background: var(--k-reply); }
+.stat-chip.k-approve::before { background: var(--k-approve); }
+.stat-chip.k-papers::before { background: var(--k-papers); }
+.stat-chip.is-zero::before { background: var(--line-2); }
+.stat-chip strong { color: var(--ink); font-family: var(--font-plex), ui-monospace, monospace; font-size: 28px; font-weight: 500; letter-spacing: -0.03em; line-height: 1.15; }
+.stat-chip:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) {
+  .stat-chip:hover { border-color: var(--line-2); box-shadow: var(--shadow-2); transform: translateY(-1px); }
+}
+.today-use { grid-column: 1 / -1; margin: 0; padding-top: var(--s3); border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+.today-use a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.today-use a:hover { text-decoration: underline; }
+
+/* What InboxCA did today: quiet lines on a thin rail, newest first. */
+.today-feed { position: relative; display: grid; margin: 0; padding: 0 var(--s4) var(--s3); list-style: none; }
+.today-feed::before { content: ""; position: absolute; top: var(--s3); bottom: var(--s5); left: 19px; width: 2px; border-radius: var(--round); background: var(--line); }
+.today-feed li { display: flex; align-items: center; gap: var(--s3); min-height: 36px; color: var(--ink-2); font-size: 13px; }
+.today-feed .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-feed .sub-inline { margin-left: var(--s1); color: var(--ink); font-weight: 600; }
+.today-feed-dot { position: relative; flex: none; width: 8px; height: 8px; border: 2px solid var(--surface); border-radius: var(--round); background: var(--k-docs); box-shadow: 0 0 0 1px var(--k-docs-bg); }
+
+.today-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); color: var(--ink-2); font-size: 13px; }
 .today-line form { display: flex; }
-.today-line .form-row { align-items: center; gap: 8px; margin: 0; }
+.today-line .form-row { align-items: center; gap: var(--s2); margin: 0; }
 .today-line .grow { flex: 1 1 auto; }
-.today-panel { position: fixed; inset: 0 0 0 auto; z-index: 20; display: flex; flex-direction: column; gap: 8px; width: min(400px, 100%); border-left: 1px solid var(--line); background: var(--side); }
-.today-panel .drop { margin: 0 16px; }
+.side-panel .drop { margin-top: 0; }
+.today-preview { margin: var(--s3) calc(var(--s4) * -1) 0; }
+.today-send { position: sticky; bottom: calc(var(--s4) * -1); margin: 0 calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
+
+@media (max-width: 980px) {
+  .today-stats { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .today-chips { grid-template-columns: minmax(0, 1fr); }
+  .stat-chip { grid-template-columns: auto 1fr; align-items: baseline; gap: var(--s3); }
+}
