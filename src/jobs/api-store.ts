@@ -41,7 +41,9 @@ export function apiJobStore(supabase: SupabaseClient<Database>): JobStore {
 async function claimTestJobs(supabase: SupabaseClient<Database>, testRun: string, batch: number, leaseSeconds: number) {
   await supabase.rpc("claim_jobs", { batch: 0, lease_seconds: leaseSeconds });
   const { data: firms } = await supabase.from("firms").select("id").eq("settings->>test_run", testRun);
-  const { data: due, error } = await supabase.from("jobs").select("id, attempts").eq("state", "pending").lte("run_at", new Date().toISOString())
+  // "now" is Postgres's own word for the current time, so "due" is by the database's clock,
+  // as in claim_jobs; this machine's clock can be a little behind the database container's.
+  const { data: due, error } = await supabase.from("jobs").select("id, attempts").eq("state", "pending").lte("run_at", "now")
     .in("firm_id", (firms ?? []).map((firm) => firm.id)).order("run_at").limit(batch);
   if (error) throw new Error(`claim failed: ${error.code}`);
   const jobs: Job[] = [];
