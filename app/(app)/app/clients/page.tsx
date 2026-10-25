@@ -1,7 +1,7 @@
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { sendSkip, type BulkSend } from "@/src/lib/records";
-import { CircleCheck, FileCheck2, FilePlus2, Mail, Search, Send, UserRound, UsersRound } from "lucide-react";
+import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { canManageClients } from "@/src/lib/clients";
@@ -14,7 +14,6 @@ import { BulkSendBar } from "./bulk-send";
 import { ImportForm } from "./import-form";
 import { LinkTabs } from "../link-tabs";
 import { Avatar, Badge, Card, Empty, PageHead } from "../ui";
-import { CopyButton } from "../ui-client";
 import { RowKeys } from "../row-keys";
 import "./clients.css";
 
@@ -282,7 +281,7 @@ export default async function Clients({
                         </Link>
                       </span>
                     </td>
-                    <td className="num">{client.gstin ? <>{client.gstin}<CopyButton text={client.gstin} label="GSTIN" /></> : <span className="hint">None</span>}</td>
+                    <td className="num">{client.gstin || <span className="hint">None</span>}</td>
                     <td>
                       {client.lead ? (
                         <span className="who">
@@ -301,15 +300,14 @@ export default async function Clients({
                             <Badge key={word} tone={tone}>{word}</Badge>
                           ))}
                         </span>
-                        {/* The quick things to do for a client, shown while its row is pointed at. */}
+                        {/* The quick things to do for a client, shown while its row is pointed at.
+                            Words only: an icon on every row would double the page's size. */}
                         {!archived && !membership.viewOnlyUntil && (
                           <span className="row-more">
                             <Link className="b b-secondary" href={`/app/inbox?compose=${client.id}`} aria-describedby={`c-${client.id}`}>
-                              <Mail size={14} aria-hidden />
                               Write
                             </Link>
                             <Link className="b b-secondary" href={`/app/clients/${client.id}?tab=documents&ask=1`} aria-describedby={`c-${client.id}`}>
-                              <FilePlus2 size={14} aria-hidden />
                               Ask for papers
                             </Link>
                           </span>

@@ -283,12 +283,14 @@ export default async function Client({ params, searchParams }: { params: Promise
       {page > 1 && <input type="hidden" name="page" value={page} />}
     </>
   );
+  // A page of 50 at a time keeps a busy client's page quick; paging keeps the view's filter.
+  const keep = `${show === "filed" ? "&show=filed" : ""}${find ? `&find=${encodeURIComponent(find)}` : ""}`;
   const pager = (total: number, rows: number, label: string, key: string) => (
     <nav className="pager" aria-label={`${label} pages`}>
       <p>Showing {rows ? (start + 1).toLocaleString("en-IN") : 0} to {rows ? (start + rows).toLocaleString("en-IN") : 0} of {total.toLocaleString("en-IN")} {label.toLowerCase()}</p>
       <span>
-        {page > 1 && <Link className="b b-secondary" href={`?tab=${key}&page=${page - 1}${show === "filed" ? "&show=filed" : ""}`}>Previous</Link>}
-        {start + rows < total && <Link className="b b-secondary" href={`?tab=${key}&page=${page + 1}${show === "filed" ? "&show=filed" : ""}`}>Next</Link>}
+        {page > 1 && <Link className="b b-secondary" href={`?tab=${key}&page=${page - 1}${keep}`}>Previous</Link>}
+        {start + rows < total && <Link className="b b-secondary" href={`?tab=${key}&page=${page + 1}${keep}`}>Next</Link>}
       </span>
     </nav>
   );
@@ -658,7 +660,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                       </tr>
                     </thead>
                     <tbody className="stagger">
-                      {documents.map((document) => {
+                      {documents.slice(start, start + 50).map((document) => {
                         const twin = document.status === "to_check" && sameAs(document);
                         const path = folderFor(order, client.name, { work: document.work_type as WorkType, period: document.period_key, receivedAt: document.received_at, toCheck: document.status === "to_check" }).join(" / ");
                         return (
@@ -709,6 +711,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 </Empty>
               )}
             </section>
+            {documents.length > 50 && pager(documents.length, documents.slice(start, start + 50).length, "Papers", "documents")}
             {owner && !!removedFiles.length && (
               <Card id="removed" title="Removed in the last 30 days" Icon={Trash2} count={removedFiles.length}>
                 <ul className="app-rows">

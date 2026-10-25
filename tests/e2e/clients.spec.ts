@@ -545,4 +545,16 @@ test("a client's row offers Write and Ask for papers; its header copies numbers 
   const days = Math.round((Date.parse(next.due) - Date.parse(todayInIndia())) / 86_400_000);
   await expect(head.getByRole("link", { name: /^Next due: / })).toContainText(days === 0 ? ", today" : days === 1 ? ", tomorrow" : `, in ${days} days`);
   await expect(head.getByRole("link", { name: /^Next due: / })).toHaveAttribute("href", `/app/clients/${id}?tab=returns`);
+
+  // Papers show 50 at a time, each with its type and a Copy for its drive folder.
+  await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, period_key, drive_file_id, name, size, sha256) select $1, $2, 'gst', 'Sales bills', '2026-09', 'paging/' || n, 'Paging paper ' || n || '.pdf', 10, md5('paging' || n) from generate_series(1, 51) n", [firm.firmId, id]);
+  const [{ papers }] = await query(local.dbUrl, "select count(*)::int papers from public.documents where client_id=$1 and status not in ('deleted', 'earlier')", [id]);
+  await owner.goto(`/app/clients/${id}?tab=documents`);
+  await expect(owner.locator("section[aria-labelledby=files] tbody tr")).toHaveCount(50);
+  await expect(owner.locator("section[aria-labelledby=files] tbody tr").first().getByRole("button", { name: "Copy Drive folder" })).toHaveCount(1);
+  const pages = owner.getByRole("navigation", { name: "Papers pages" });
+  await expect(pages).toContainText(`Showing 1 to 50 of ${papers} papers`);
+  await pages.getByRole("link", { name: "Next" }).click();
+  await expect(pages).toContainText(`Showing 51 to ${Math.min(100, papers)} of ${papers} papers`);
+  await query(local.dbUrl, "delete from public.documents where client_id=$1 and drive_file_id like 'paging/%'", [id]);
 });
