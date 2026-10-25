@@ -250,11 +250,11 @@ isOneToOne: false
                   }
                   Relationships: [
                     {
-      foreignKeyName: "documents_email_event_id_fkey"
-      columns: ["email_event_id"]
+      foreignKeyName: "documents_email_event_fkey"
+      columns: ["firm_id","email_event_id"]
 isOneToOne: false
       referencedRelation: "email_events"
-      referencedColumns: ["id"]
+      referencedColumns: ["firm_id","id"]
     },{
       foreignKeyName: "documents_firm_id_client_id_fkey"
       columns: ["firm_id","client_id"]
@@ -287,11 +287,11 @@ isOneToOne: false
                   }
                   Relationships: [
                     {
-      foreignKeyName: "email_events_account_id_fkey"
-      columns: ["account_id"]
+      foreignKeyName: "email_events_account_fkey"
+      columns: ["firm_id","account_id"]
 isOneToOne: false
       referencedRelation: "connected_accounts"
-      referencedColumns: ["id"]
+      referencedColumns: ["firm_id","id"]
     },{
       foreignKeyName: "email_events_firm_id_client_id_fkey"
       columns: ["firm_id","client_id"]
@@ -502,17 +502,17 @@ isOneToOne: false
                   }
                   Relationships: [
                     {
-      foreignKeyName: "shares_document_id_fkey"
-      columns: ["document_id"]
+      foreignKeyName: "shares_document_fkey"
+      columns: ["firm_id","document_id"]
 isOneToOne: false
       referencedRelation: "documents"
-      referencedColumns: ["id"]
+      referencedColumns: ["firm_id","id"]
     },{
-      foreignKeyName: "shares_email_event_id_fkey"
-      columns: ["email_event_id"]
+      foreignKeyName: "shares_email_event_fkey"
+      columns: ["firm_id","email_event_id"]
 isOneToOne: false
       referencedRelation: "email_events"
-      referencedColumns: ["id"]
+      referencedColumns: ["firm_id","id"]
     },{
       foreignKeyName: "shares_firm_id_contact_id_fkey"
       columns: ["firm_id","contact_id"]
@@ -899,6 +899,9 @@ isOneToOne: false
                            },
 "open_to":
 { Args: { "at"?: string,"person": Json,"role": string,"settings": Json }; Returns: boolean
+                           },
+"rate_limit":
+{ Args: { "bucket": string,"most": number,"seconds": number }; Returns: boolean
                            },
 "register_device":
 { Args: { "actor": string,"away"?: boolean,"label": string,"target_firm": string,"token_digest": string }; Returns: {

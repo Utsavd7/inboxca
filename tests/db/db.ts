@@ -48,6 +48,6 @@ export async function attempt(client: Client, sql: string, params: unknown[] = [
     return { ok: true as const, rows: result.rows, count: result.rowCount ?? 0 };
   } catch (error) {
     await client.query("rollback to savepoint attempt");
-    return { ok: false as const, error: (error as Error).message };
+    return { ok: false as const, error: (error as Error).message, code: (error as { code?: string }).code };
   }
 }

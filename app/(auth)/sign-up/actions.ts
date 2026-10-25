@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { dpaUpdated, legalUpdated } from "@/content/legal";
 import { log } from "@/src/lib/logger";
+import { withinLimit } from "@/src/lib/rate-limit";
 import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
 import { states } from "./states";
 
@@ -22,6 +23,8 @@ export async function signUp(_prev: SignUpState, form: FormData): Promise<SignUp
   if (form.get("accept") !== "on")
     return fail("Tick the box to accept the terms, privacy notice and DPA.");
 
+  // The code this sends counts towards the address's sign in codes, whether it has an account or not.
+  if (!(await withinLimit("code", email))) return fail("Too many codes asked for this address. Try again in an hour.");
   const admin = supabaseAdmin();
   // A public form that makes sign ins and sends email: at most 30 new firms an hour in all.
   const { count } = await admin.from("activity_log").select("at", { count: "exact", head: true })
