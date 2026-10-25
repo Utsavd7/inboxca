@@ -108,5 +108,65 @@
         "sha256": "043917ea6fcbe34e97e851fde6cfe9a472aaefb2be503e9438973b16e67480ae"
       }
     }
+  },
+  {
+    "form_code": "ITR1",
+    "version": "1.1",
+    "valid_from": "2026-04-01",
+    "valid_until": "2027-04-01",
+    "status": "active",
+    "source": {
+      "file": "itr/ITR-1_2026_Main_V1.1.json",
+      "url": "https://www.incometax.gov.in/iec/foportal/sites/default/files/2026-06/ITR-1_2026_Main_V1.1.json",
+      "sha256": "6a0ef9f64065431879dcc724869d8455a640bcf11279d1818eb19f11448ce763"
+    },
+    "mappings": {
+      "format": "json"
+    }
+  },
+  {
+    "form_code": "ITR2",
+    "version": "1.2",
+    "valid_from": "2026-04-01",
+    "valid_until": "2027-04-01",
+    "status": "active",
+    "source": {
+      "file": "itr/ITR-2_2026_Main_V1.2.json",
+      "url": "https://www.incometax.gov.in/iec/foportal/sites/default/files/2026-08/ITR-2_2026_Main_V1.2.json",
+      "sha256": "4e34389cb1cb1a0d9261fc6db8594d9bdfaf761f13d4af6b84c1862510e2aeeb"
+    },
+    "mappings": {
+      "format": "json"
+    }
+  },
+  {
+    "form_code": "ITR3",
+    "version": "1.1",
+    "valid_from": "2026-04-01",
+    "valid_until": "2027-04-01",
+    "status": "active",
+    "source": {
+      "file": "itr/ITR-3_2026_Main_V1.1.json",
+      "url": "https://www.incometax.gov.in/iec/foportal/sites/default/files/2026-07/ITR-3_2026_Main_V1.1.json",
+      "sha256": "66f4bd705e0e0788fdacb37eb297ace56749d791b84f2f170f4da84236c25e8b"
+    },
+    "mappings": {
+      "format": "json"
+    }
+  },
+  {
+    "form_code": "ITR4",
+    "version": "1.1",
+    "valid_from": "2026-04-01",
+    "valid_until": "2027-04-01",
+    "status": "active",
+    "source": {
+      "file": "itr/ITR-4_2026_Main_V1.1.json",
+      "url": "https://www.incometax.gov.in/iec/foportal/sites/default/files/2026-07/ITR-4_2026_Main_V1.1.json",
+      "sha256": "5e9af50083ad92faa684a02ae51693189b43df16b92c1da5a184026fc5cdc2ac"
+    },
+    "mappings": {
+      "format": "json"
+    }
   }
 ]

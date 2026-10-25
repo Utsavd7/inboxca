@@ -272,8 +272,8 @@ export default async function Client({ params, searchParams }: { params: Promise
   );
   const askPeriod = due?.map((task) => task.period_key).find((key) => periodChoices(today).includes(key ?? "")) ?? periodChoices(today)[1];
   const openNotices = (notices ?? []).filter((notice) => ["upcoming", "in_progress"].includes(notice.status));
-  const showExtraction = !!drafts || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name));
-  const showOutputs = !!draftForms?.some(row=>["GSTR1","GSTR3B"].includes(row.form_code)) || !!outputs;
+  const showExtraction = !!drafts || !!pan || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name));
+  const showOutputs = !!draftForms?.some(row=>["GSTR1","GSTR3B","ITR"].includes(row.form_code)) || !!outputs;
   const counts: Record<Main, number | undefined> = { overview: undefined, emails: mailCount ?? 0, documents: needFiles ? documents.length : fileCount ?? 0, returns: show === "filed" ? undefined : taskCount ?? 0, notices: noticeCount ?? 0 };
   const base = `/app/clients/${client.id}`;
   const here = `${base}${tab === "overview" ? "" : `?tab=${tab}`}`;
@@ -808,7 +808,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns","returns")}
           </>
         )}
-        {sub === "extraction" && <><PortalInput clientId={id} message={portal}/><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
+        {sub === "extraction" && <>{pan && <Card id="itr-return" title="Income tax return" Icon={FileText} kind="docs" end={<Link className="b b-secondary b-small" href={`${base}/itr`}>Open the return</Link>}><p className="app-card-none">ITR-1 to ITR-4, filled with the client&apos;s PAN and the figures InboxCA already holds for the year. The rest is listed for you to fill.</p></Card>}<PortalInput clientId={id} message={portal}/><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
         {sub === "outputs" && <PreparedForms client={id} message={formMessage}/>}
 
         {tab === "notices" && (

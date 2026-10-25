@@ -2,7 +2,7 @@
 import type {Template} from "./templates.ts";
 export const viewLimits = { bytes: 25_000_000, pages: 30, rows: 1000, columns: 26, rowsPerPage: 40, pixels: 40_000_000 };
 export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean };
-export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox"; token: string; purpose?: "sheet" | "portal" | "edited" | "copy"; sheet?: number; form?:{template:Template;period:string;gstin:string} };
+export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox"; token: string; purpose?: "sheet" | "portal" | "edited" | "copy"; sheet?: number; form?:{template:Template;period:string;gstin?:string;pan?:string} };
 const text = new TextEncoder();
 
 export function viewerLabel(person: string, firm: string, at = new Date()) {

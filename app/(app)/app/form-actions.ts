@@ -7,12 +7,13 @@ import {runJobsSoon} from "@/src/jobs/run-soon";
 import {draftSchema,saveDraft} from "@/src/lib/datasets";
 import {currentWriter} from "@/src/lib/member";
 import {grantFor} from "@/src/lib/permission-grants";
+import {itrReturns} from "@/src/lib/itr-fields";
 
 export async function prepareForm(form:FormData) {
   const client=z.uuid().parse(form.get("client")),back=`/app/clients/${client}?tab=outputs`;
   let id:string;
   try {
-    id=await prepareDocument({client,registration:String(form.get("registration")),form:z.enum(["GSTR1","GSTR3B"]).parse(form.get("form") ?? "GSTR1"),period:String(form.get("period")),drafts:form.getAll("draft").map(String),version:String(form.get("version") ?? "") || undefined,reason:String(form.get("reason") ?? "") || undefined});
+    id=await prepareDocument({client,registration:String(form.get("registration")),form:z.enum(["GSTR1","GSTR3B",...itrReturns]).parse(form.get("form") ?? "GSTR1"),period:String(form.get("period")),drafts:form.getAll("draft").map(String),version:String(form.get("version") ?? "") || undefined,reason:String(form.get("reason") ?? "") || undefined});
   } catch {redirect(`${back}&form=check`);}
   revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
 }

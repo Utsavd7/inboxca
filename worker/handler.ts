@@ -14,6 +14,7 @@ import {stampedPdf} from "./download.ts";
 import {listMail, readThread} from "../src/lib/mailbox.ts";
 import * as mailApi from "../src/lib/mail-api.ts";
 import {verifyMail} from "../src/lib/mail-view.ts";
+import {editedItr} from "./itr.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
 const reads = new Map<string, number>();
@@ -81,6 +82,11 @@ export async function handle(request: Request): Promise<Response> {
     request.signal.throwIfAborted();
     const data = await original(view, request.signal);
     if(edited) {
+      if(view.form?.template.form_code.startsWith("ITR")) {
+        if(!/\.json$/i.test(view.name)) throw new Error("Choose the official return file");
+        const context=z.object({template:templateSchema,period:z.string().regex(/^20\d{2}$/),pan:z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/)}).parse(view.form);
+        return Response.json({...editedItr(data,context),sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
+      }
       if(!/\.xlsx$/i.test(view.name)) throw new Error("Choose the official workbook");
       const context=z.object({template:templateSchema,period:z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/),gstin:z.string().length(15)}).parse(view.form);
       return Response.json({...editedForm(Buffer.from(data.buffer,data.byteOffset,data.byteLength),context),sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
