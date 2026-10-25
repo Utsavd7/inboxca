@@ -1,11 +1,13 @@
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
+import { checkAdminKey, checkAdminKeyUse, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
 
 // An office PC's key answering InboxCA's question, as a browser would send it.
 const origin = "https://inboxca.example";
-const answer = (type: string, challenge: string, flags: number) => {
-  const authenticatorData = Buffer.concat([createHash("sha256").update("inboxca.example").digest(), Buffer.of(flags), Buffer.alloc(4)]);
+const answer = (type: string, challenge: string, flags: number, counter = 0) => {
+  const count = Buffer.alloc(4);
+  count.writeUInt32BE(counter);
+  const authenticatorData = Buffer.concat([createHash("sha256").update("inboxca.example").digest(), Buffer.of(flags), count]);
   const clientData = Buffer.from(JSON.stringify({ type, challenge, origin }));
   return { clientData, authenticatorData, response: { clientDataJSON: clientData.toString("base64url"), authenticatorData: authenticatorData.toString("base64url") } };
 };
@@ -27,5 +29,30 @@ describe("an office PC's own key", () => {
     expect(checkKeyUse({ ...use.response, signature }, spki, "https://elsewhere.example", cookie, "pc-1")).toBe(false);
     const other = generateKeyPairSync("ec", { namedCurve: "P-256" }).publicKey.export({ format: "der", type: "spki" }).toString("base64url");
     expect(checkKeyUse({ ...use.response, signature }, other, origin, cookie, "pc-1")).toBe(false);
+  });
+});
+
+describe("an Orelu admin's passkey", () => {
+  const signed = (use: ReturnType<typeof answer>, privateKey: KeyObject) =>
+    ({ ...use.response, signature: sign("sha256", Buffer.concat([use.authenticatorData, createHash("sha256").update(use.clientData).digest()]), privateKey).toString("base64url") });
+
+  // PLAN.md 8.1: a passkey with the admin verified (PIN or fingerprint), synced or not.
+  it("needs the admin verified, allows a synced passkey, and returns the signature counter", () => {
+    const { challenge, cookie } = newChallenge("admin:a-1");
+    expect(checkAdminKey(answer("webauthn.create", challenge, 0x05).response, origin, cookie, "a-1")).toBe(true);
+    expect(checkAdminKey(answer("webauthn.create", challenge, 0x0d).response, origin, cookie, "a-1")).toBe(true);
+    expect(checkAdminKey(answer("webauthn.create", challenge, 0x01).response, origin, cookie, "a-1")).toBe(false);
+    expect(checkAdminKey(answer("webauthn.create", challenge, 0x05).response, origin, cookie, "a-2")).toBe(false);
+    expect(checkAdminKey(answer("webauthn.create", challenge, 0x05).response, origin, newChallenge("pc-1").cookie, "a-1")).toBe(false);
+
+    for (const { privateKey, publicKey } of [generateKeyPairSync("ec", { namedCurve: "P-256" }), generateKeyPairSync("rsa", { modulusLength: 2048 })]) {
+      const spki = publicKey.export({ format: "der", type: "spki" }).toString("base64url");
+      expect(checkAdminKeyUse(signed(answer("webauthn.get", challenge, 0x1d, 7), privateKey), spki, origin, cookie, "a-1")).toBe(7);
+      expect(checkAdminKeyUse(signed(answer("webauthn.get", challenge, 0x01, 7), privateKey), spki, origin, cookie, "a-1")).toBeNull();
+      expect(checkAdminKeyUse(signed(answer("webauthn.create", challenge, 0x05), privateKey), spki, origin, cookie, "a-1")).toBeNull();
+      expect(checkAdminKeyUse(signed(answer("webauthn.get", challenge, 0x05), privateKey), spki, origin, cookie, "a-2")).toBeNull();
+      const tampered = signed(answer("webauthn.get", challenge, 0x05, 1), privateKey);
+      expect(checkAdminKeyUse({ ...tampered, authenticatorData: answer("webauthn.get", challenge, 0x05, 9).response.authenticatorData }, spki, origin, cookie, "a-1")).toBeNull();
+    }
   });
 });

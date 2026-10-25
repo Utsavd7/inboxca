@@ -96,8 +96,9 @@ export async function verifyTwoStep(_prev: StepState, form: FormData): Promise<S
   if (error) return { error: "That code did not work. Codes change every 30 seconds; try the new one." };
   const { data: claims } = await supabase.auth.getClaims();
   if (claims) await oneSession(supabase, claims.claims.sub, String(claims.claims.email ?? ""));
-  const { data: admin } = await supabase.rpc("is_orelu_admin");
-  redirect(admin ? "/admin" : "/app");
+  // An Orelu admin checks a passkey next (PLAN.md 8.1).
+  const { data: admin } = claims ? await supabaseAdmin().from("orelu_admins").select("user_id").eq("user_id", claims.claims.sub).maybeSingle() : { data: null };
+  redirect(admin ? "/sign-in/passkey" : "/app");
 }
 
 // Lost phone (5.17.4 #23): after the email code, one of the owner's recovery codes removes
