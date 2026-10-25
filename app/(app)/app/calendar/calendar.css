@@ -50,7 +50,7 @@
 .d-done { background: var(--done-dot); }
 .cal-legend { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); margin: var(--s3) var(--s4) 0; padding: var(--s3) 0 0; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; list-style: none; }
 .cal-legend li { display: inline-flex; align-items: center; gap: 6px; }
-@media (max-width: 1200px) {
+@media (max-width: 1360px) {
   .cal-month-split { grid-template-columns: minmax(0, 1fr); }
   .cal-month { position: static; }
   .cal-cell { aspect-ratio: auto; min-height: 56px; }
@@ -64,7 +64,7 @@
 .cal-list > .empty .b { margin-top: var(--s2); }
 :is(.cal, .notices) .cal-table { flex: 1; overflow: auto; }
 .cal-table .t { min-width: 760px; }
-.cal-month-split .cal-table .t { min-width: 640px; }
+.cal-month-split .cal-table .t { min-width: 600px; }
 .cal-table .t th { position: sticky; top: 0; z-index: 1; height: 40px; padding: 0 var(--s3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(8px); color: var(--ink-3); font-size: 12px; font-weight: 600; }
 .cal-table .t td { height: 48px; padding: 0 var(--s3); font-size: 14px; white-space: nowrap; }
 .cal-table .t td .sub { font-size: 12px; }

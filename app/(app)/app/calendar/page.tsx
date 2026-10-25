@@ -134,6 +134,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     </>
   );
   const close = href({ page });
+  // Beside the month the list is narrower: the period goes under the return, and a chosen
+  // day's returns need no due date.
+  const compact = !!month;
   const thisMonth = today.slice(0, 7);
 
   const list = (
@@ -169,8 +172,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 )}
                 <th scope="col">Client</th>
                 <th scope="col">Return</th>
-                <th scope="col">Period</th>
-                <th scope="col">Due</th>
+                {!compact && <th scope="col">Period</th>}
+                {!(compact && day) && <th scope="col">Due</th>}
                 <th scope="col">Status</th>
                 <th scope="col">
                   <span className="sr-only">Action</span>
@@ -197,12 +200,17 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                         </Link>
                       </span>
                     </td>
-                    <td>{form}</td>
-                    <td>{of}</td>
                     <td>
-                      {dueLabel(task.due_on)}
-                      {!rule.get(task.code ?? "")?.verified_on && "*"}
+                      {form}
+                      {compact && <span className="sub">{of}</span>}
                     </td>
+                    {!compact && <td>{of}</td>}
+                    {!(compact && day) && (
+                      <td>
+                        {dueLabel(task.due_on)}
+                        {!rule.get(task.code ?? "")?.verified_on && "*"}
+                      </td>
+                    )}
                     <td>
                       <span className="cal-status">
                         <Badge tone={tone}>{word}</Badge>

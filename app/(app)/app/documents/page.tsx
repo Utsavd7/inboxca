@@ -270,7 +270,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                         <td>
                           <span className="who">
                             <Avatar name={row.clients?.name ?? ""} />
-                            <span>{row.clients?.name}</span>
+                            <span title={row.clients?.name}>{row.clients?.name}</span>
                           </span>
                         </td>
                         <td>{periodName(row.period_key) || <span className="docs-faint">No period</span>}</td>
