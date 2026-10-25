@@ -7,6 +7,7 @@ import { describeFile, folderFor, gstinFor, periodName, placeUnderFreeName, rece
 import type { FolderOrder, Naming } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { firmMailer, mailHealth, openMail } from "@/src/lib/firm-mail";
+import { receive } from "@/src/lib/intake";
 import type { NoticeDetails } from "@/src/lib/notices";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { queueRead } from "./read-document";
@@ -94,43 +95,54 @@ async function fileAttachments(
   const { data: existing } = await admin.from("documents").select("id, email_event_id, sha256, document_type, period_key, status").eq("client_id", event.client_id);
   const known = existing ?? [];
   const { data: gstins } = await admin.from("client_registrations").select("id").eq("client_id", event.client_id).eq("kind", "gstin");
-  for (const file of read.files) {
-    const sha256 = createHash("sha256").update(file.bytes).digest("hex");
-    const previous=known.find((document)=>document.email_event_id===event.id && document.sha256===sha256);
-    if (previous) {if(previous.status==="filed" && /\.(xlsx?|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,previous.id);if(error) throw new Error("sales_not_queued");}filed.push({type:previous.document_type,period:previous.period_key,toCheck:previous.status!=="filed"});continue;}
-    const described = describeFile(file.name, read.subject, event.label, event.received_at);
-    const about = notice ? { ...described, work: notice.authority, type: described.type === "Document" && /\.pdf$/i.test(file.name) ? "Notice" : described.type } : described;
-    const again = known.some((document) => document.sha256 === sha256);
-    const registration = gstinFor(about.work, (gstins ?? []).map((row) => row.id));
-    const toCheck = !about.sure || again;
-    const folder = await drive.ensureFolder(folderFor(order, client, { ...about, receivedAt: event.received_at, toCheck }));
-    const parts = { client, type: about.type, period: periodName(about.period), extension: path.extname(file.name) };
-    const saved = await placeUnderFreeName(parts, receivedLabel(event.received_at), (name) => drive.save(folder, name, file.bytes), naming);
-    if (saved === "taken") throw new Error("name_taken");
-    const id = randomUUID();
-    const { error } = await admin.from("documents").insert({
-      id,
-      firm_id: firm,
-      client_id: event.client_id,
-      work_type: about.work,
-      document_type: about.type,
-      period_key: about.period,
-      status: toCheck ? "to_check" : "filed",
-      email_event_id: event.id,
-      drive_file_id: saved.id,
-      name: saved.name,
-      original_name_enc: file.name ? await crypto.encrypt(firm, `documents/${id}/original_name`, file.name) : null,
-      size: file.bytes.length,
-      sha256,
-      received_at: event.received_at,
-      registration_id: registration,
-    });
-    if (error) throw new Error("document_not_saved");
-    if (!toCheck) await settleVersions(admin, { client_id: event.client_id, work_type: about.work, document_type: about.type, period_key: about.period, registration_id: registration });
-    await queueRead(firm, id);
-    if(about.work==="gst" && !toCheck && /\.(xlsx?|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,id);if(error) throw new Error("sales_not_queued");}
-    filed.push({ type: about.type, period: about.period, toCheck });
-    known.push({ id, email_event_id: event.id, sha256, document_type: about.type, period_key: about.period, status:toCheck ? "to_check" : "filed" });
+  for (const attachment of read.files) {
+    // Checked by the file worker first (src/lib/intake.ts): a virus goes to the owner's folder
+    // for it, a program or an unsafe ZIP is left out and logged, and each file in a ZIP is
+    // filed like an attachment of its own, read with the ZIP's name too.
+    const sent = await receive(firm, null, { id: event.client_id, name: client }, attachment, drive);
+    if ("unsafe" in sent) {
+      if (sent.unsafe !== "virus") await admin.from("activity_log").insert({ firm_id: firm, action: "document.refused", entity_type: "email", entity_id: event.id, details: { reason: sent.unsafe } });
+      continue;
+    }
+    for await (const file of sent.papers) {
+      const sha256 = createHash("sha256").update(file.bytes).digest("hex");
+      const previous=known.find((document)=>document.email_event_id===event.id && document.sha256===sha256);
+      if (previous) {if(previous.status==="filed" && /\.(xlsx?|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,previous.id);if(error) throw new Error("sales_not_queued");}filed.push({type:previous.document_type,period:previous.period_key,toCheck:previous.status!=="filed"});continue;}
+      const described = describeFile(file.name, file === attachment ? read.subject : `${read.subject} ${attachment.name}`, event.label, event.received_at);
+      const about = notice ? { ...described, work: notice.authority, type: described.type === "Document" && /\.pdf$/i.test(file.name) ? "Notice" : described.type } : described;
+      const again = known.some((document) => document.sha256 === sha256);
+      const registration = gstinFor(about.work, (gstins ?? []).map((row) => row.id));
+      const toCheck = !about.sure || again;
+      const folder = await drive.ensureFolder(folderFor(order, client, { ...about, receivedAt: event.received_at, toCheck }));
+      const parts = { client, type: about.type, period: periodName(about.period), extension: path.extname(file.name) };
+      const saved = await placeUnderFreeName(parts, receivedLabel(event.received_at), (name) => drive.save(folder, name, file.bytes), naming);
+      if (saved === "taken") throw new Error("name_taken");
+      const id = randomUUID();
+      const { error } = await admin.from("documents").insert({
+        id,
+        firm_id: firm,
+        client_id: event.client_id,
+        work_type: about.work,
+        document_type: about.type,
+        period_key: about.period,
+        status: toCheck ? "to_check" : "filed",
+        email_event_id: event.id,
+        drive_file_id: saved.id,
+        name: saved.name,
+        original_name_enc: file.name ? await crypto.encrypt(firm, `documents/${id}/original_name`, file.name) : null,
+        size: file.bytes.length,
+        sha256,
+        received_at: event.received_at,
+        registration_id: registration,
+        scanned_at: sent.scanned ? new Date().toISOString() : null,
+      });
+      if (error) throw new Error("document_not_saved");
+      if (!toCheck) await settleVersions(admin, { client_id: event.client_id, work_type: about.work, document_type: about.type, period_key: about.period, registration_id: registration });
+      await queueRead(firm, id);
+      if(about.work==="gst" && !toCheck && /\.(xlsx?|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,id);if(error) throw new Error("sales_not_queued");}
+      filed.push({ type: about.type, period: about.period, toCheck });
+      known.push({ id, email_event_id: event.id, sha256, document_type: about.type, period_key: about.period, status:toCheck ? "to_check" : "filed" });
+    }
   }
   return filed;
 }

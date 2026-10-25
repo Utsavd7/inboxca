@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { readSheet } from "../src/lib/sheet.ts";
 import { viewLimits, type ViewHeader } from "../src/lib/file-worker.ts";
 import { jsonSource } from "./json-source.ts";
+import { wordSource } from "./word-source.ts";
 
 // A picture's size from its header, read before anything is decoded, so a small file that
 // claims to be enormous never reaches the decoder. Null for anything not a known picture.
@@ -35,8 +36,10 @@ export function tiles(width: number, height: number, textWidth: number, size: nu
   return positions;
 }
 
-// Parse once, measure pages without rendering, then reuse one canvas for this opening.
-export async function openView(bytes: Buffer, name: string, label: string, limit = viewLimits.pages, signal = new AbortController().signal, sheet?:number) {
+// Parse once, measure pages without rendering, then reuse one canvas for this opening. A PDF
+// with a password opens only with the one a person typed; a wrong or missing one throws
+// pdf.js's PasswordException, and nothing is ever guessed.
+export async function openView(bytes: Buffer, name: string, label: string, limit = viewLimits.pages, signal = new AbortController().signal, sheet?:number, password?:string) {
   signal.throwIfAborted();
   if (bytes.length > viewLimits.bytes) throw new Error("File too large");
   const fit = (width: number, height: number) => {
@@ -53,7 +56,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
     const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const root = join(process.cwd(), "node_modules/pdfjs-dist");
     // pdf.js owns this backing buffer for the life of the document, without another copy.
-    const task = getDocument({ data: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), standardFontDataUrl: join(root, "standard_fonts/"), cMapUrl: join(root, "cmaps/"), cMapPacked: true, wasmUrl: join(root, "wasm/") });
+    const task = getDocument({ data: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), password, standardFontDataUrl: join(root, "standard_fonts/"), cMapUrl: join(root, "cmaps/"), cMapPacked: true, wasmUrl: join(root, "wasm/") });
     dispose = () => task.destroy();
     const stop = () => { void dispose(); };
     signal.addEventListener("abort", stop, { once: true });
@@ -82,18 +85,20 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
         return canvas;
       };
     } catch (error) { await dispose(); throw error; }
-  } else if (/\.(json|txt)$/i.test(name)) {
-    const source=/\.json$/i.test(name) ? jsonSource(JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,""))) : {lines:bytes.subarray(0,100_000).toString("utf8").split(/\r?\n/),limited:bytes.length>100_000},lines=source.lines;
+  } else if (/\.(json|txt|docx|odt)$/i.test(name)) {
+    // A Word or OpenDocument letter is drawn as its words, without line numbers.
+    const word=/\.(docx|odt)$/i.test(name);
+    const source=/\.json$/i.test(name) ? jsonSource(JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/,""))) : word ? wordSource(bytes,name) : {lines:bytes.subarray(0,100_000).toString("utf8").split(/\r?\n/),limited:bytes.length>100_000},lines=source.lines;
     const count=Math.max(1,Math.min(limit,Math.ceil(lines.length/40)));
     header.limited=source.limited || lines.length>count*40;
     for(let number=1;number<=count;number++) header.pages.push({width:1200,height:1320});
     draw=async(number)=>{
       canvas ??= createCanvas(1200,1320);const context=canvas.getContext("2d");
-      context.fillStyle="white";context.fillRect(0,0,1200,1320);context.fillStyle="#17202f";context.font="18px monospace";
-      lines.slice((number-1)*40,number*40).forEach((line,index)=>context.fillText(`${(number-1)*40+index+1} ${line}`,20,40+index*30));
+      context.fillStyle="white";context.fillRect(0,0,1200,1320);context.fillStyle="#17202f";context.font=word ? "20px sans-serif" : "18px monospace";
+      lines.slice((number-1)*40,number*40).forEach((line,index)=>context.fillText(word ? line : `${(number-1)*40+index+1} ${line}`,20,40+index*30));
       return canvas;
     };
-  } else if (/\.(xlsx?|csv)$/i.test(name)) {
+  } else if (/\.(xlsx?|csv|ods)$/i.test(name)) {
     const cap=viewLimits.rows+(sheet ? 4 : 0);
     const all = readSheet(bytes, name, { rows: cap + 1, columns: viewLimits.columns + 1, keepEmpty:true, sheet });
     const capped=all.length>cap;

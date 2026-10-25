@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   turbopack: { root: process.cwd() },
   images: { formats: ["image/avif", "image/webp"] },
   // Client imports upload a spreadsheet, and a person uploads a client's file of up to
-  // 25 MB (larger files wait for the file worker).
-  experimental: { serverActions: { bodySizeLimit: "26mb" } },
+  // 50 MB (PLAN.md 5.15), each checked by the file worker before it is saved.
+  experimental: { serverActions: { bodySizeLimit: "51mb" } },
 };
 export default nextConfig;

@@ -132,7 +132,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const order = ((drive?.settings as { folder_order?: FolderOrder } | null)?.folder_order ?? "year_client_work") as FolderOrder;
   const path = paper && [drives[drive?.provider ?? ""], "InboxCA", ...folderFor(order, paper.clients?.name ?? "", { work: paper.work_type as WorkType, period: paper.period_key, receivedAt: paper.received_at, toCheck: paper.status === "to_check" }), paper.name].filter(Boolean).join(" / ");
   const extension = paper?.name.split(".").pop()?.toLowerCase() ?? "";
-  const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "json", "txt"].includes(extension);
+  const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "ods", "json", "txt", "docx", "odt"].includes(extension);
   const tag = (status: string) => (status === "to_check" ? <Badge tone="warn">To check</Badge> : status === "missing" ? <Badge tone="late">Missing in the drive</Badge> : null);
   const portal = membership.may("portal_files");
   const filtered = !!(q || kind || year !== years[0] || missing);

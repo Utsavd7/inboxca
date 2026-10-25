@@ -2,6 +2,7 @@ import { deflateRawSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { readCsv, readSheet } from "@/src/lib/sheet";
+import { zip } from "@/src/lib/firm-download";
 
 it("reads an Excel sheet's shared, inline and number cells in their columns", () => {
   expect(readSheet(readFileSync("tests/fixtures/clients.xlsx"), "clients.xlsx")).toEqual([
@@ -59,4 +60,11 @@ it("never inflates unused workbook entries, and caps the entries it needs", () =
 
 it("keeps empty rows when showing a source cell",()=>{
   expect(readSheet(Buffer.from("Name,Amount\n\nInvented Client,1200"),"source.csv",{rows:1000,columns:12,keepEmpty:true})).toEqual([["Name","Amount"],[""],["Invented Client","1200"]]);
+});
+
+it("reads an OpenDocument sheet, writing out repeated cells and rows only within the limit", () => {
+  const ods = zip([{ name: "content.xml", text: `<office:document-content><office:body><office:spreadsheet><table:table table:name="One"><table:table-row><table:table-cell><text:p>Client</text:p></table:table-cell><table:table-cell table:number-columns-repeated="2"><text:p>x &amp; y</text:p></table:table-cell></table:table-row><table:table-row table:number-rows-repeated="1048570"><table:table-cell table:number-columns-repeated="16384"/></table:table-row></table:table><table:table table:name="Two"><table:table-row><table:table-cell><text:p>Second</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>` }]);
+  expect(readSheet(ods, "register.ods")).toEqual([["Client", "x & y", "x & y"]]);
+  expect(readSheet(ods, "register.ods", { rows: 5, columns: 2, keepEmpty: true })).toEqual([["Client", "x & y"], [], [], [], []]);
+  expect(readSheet(ods, "register.ods", { rows: 5, columns: 2, sheet: 2 })).toEqual([["Second"]]);
 });

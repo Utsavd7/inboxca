@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { askAwayDevice, joinFirm, manageClient, manageTasks, sendNow, stopSend } from "@/app/(app)/actions";
+import { askAwayDevice, joinFirm, manageClient, manageTasks, seenAlert, sendNow, stopSend } from "@/app/(app)/actions";
 import { PcKey } from "./pc-key";
 import { PushSwitch } from "./push-switch";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -32,7 +32,7 @@ import "./today.css";
 const DAY = 86_400_000;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 // What the daily drive check found, in a sentence the owner can act on.
-const alertText = (reason: string, details: { free_bytes?: number; files?: number; client?: string; email?: string; count?: number }) =>
+const alertText = (reason: string, details: { free_bytes?: number; files?: number; client?: string; email?: string; count?: number; name?: string }) =>
   ({
     drive_shared: "InboxCA's folder in your drive is shared with someone, or has a link. Only you should reach it: stop the sharing in your drive.",
     drive_full: `Your drive has ${((details.free_bytes ?? 0) / 1024 ** 2).toFixed(0)} MB left. Free some space or add more, so new client files can be saved.`,
@@ -41,6 +41,7 @@ const alertText = (reason: string, details: { free_bytes?: number; files?: numbe
     parallel: `${details.email} signed in on another PC ${details.count} times today, which ends the other session each time. Ask whether their login is shared.`,
     request_stalled: `${details.client} has not uploaded the documents you asked for, after three reminders. A call may help.`,
     drive_missing: `${details.files} ${details.files === 1 ? "paper is" : "papers are"} missing from your drive.`,
+    virus: `${details.name} had a virus. Nobody can open it in InboxCA; it is in the Files with a virus folder of your drive.`,
   })[reason] ?? "Something in your drive needs a look.";
 
 // The phone notifications line stays hidden once the person closes it.
@@ -261,7 +262,7 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
     const waitingToday = waitingIds.length
       ? await count(supabase.from("activity_log").select("entity_id", { count: "exact", head: true }).eq("firm_id", firm).eq("action", "device.first_seen").in("entity_id", waitingIds).gte("at", dayStart))
       : 0;
-    const looksList: { key: string; text: string; href?: string; action?: string; urgent?: boolean }[] = [
+    const looksList: { key: string; text: string; href?: string; action?: string; urgent?: boolean; seen?: string }[] = [
       ...(asks.length ? [{ key: "questions", text: `${asks.length === 1 ? "1 question waits" : `${asks.length} questions wait`} for your answer.`, href: "/app/inbox", action: "Answer" }] : []),
       ...(mailboxes?.find((account) => account.kind === "mail")?.status === "needs_reconnect" ? [{ key: "mailbox", text: "Connect your firm's email again. Replies wait until it is connected.", href: "/app/settings#mailbox", action: "Reconnect email", urgent: true }] : []),
       ...(waitingIds.length
@@ -280,12 +281,13 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
         urgent: notice.due_on <= today,
       })),
       ...(alerts?.data ?? [])
-        // Missing papers are the owner's to sort out, on the Documents page.
-        .filter((alert) => (owner || alert.reason_code !== "drive_missing") && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames"].includes(alert.reason_code ?? "") || (alert.details as { day?: string }).day === today))
+        // Missing papers and files with a virus are the owner's to sort out.
+        .filter((alert) => (owner || !["drive_missing", "virus"].includes(alert.reason_code ?? "")) && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames"].includes(alert.reason_code ?? "") || (alert.details as { day?: string }).day === today))
         .map((alert) => ({
           key: alert.id,
-          text: alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number }),
+          text: alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number; name?: string }),
           ...(alert.reason_code === "drive_missing" && { href: "/app/documents?year=all&show=missing", action: "See missing papers" }),
+          ...(alert.reason_code === "virus" && { seen: alert.id, urgent: true }),
         })),
       ...(followUps?.data ?? []).map((row) => ({
         key: row.id,
@@ -513,7 +515,12 @@ async function NeedsNow({ data }: { data: Data }) {
               lead={<IconTile Icon={TriangleAlert} kind={look.urgent ? "late" : "notice"} />}
               title={<span role="alert">{look.text}</span>}
               action={
-                look.href && (
+                look.seen ? (
+                  <form action={seenAlert}>
+                    <input type="hidden" name="alert" value={look.seen} />
+                    <button className="b b-secondary">Got it</button>
+                  </form>
+                ) : look.href && (
                   <Link className="b b-secondary" href={look.href}>
                     {look.action}
                   </Link>

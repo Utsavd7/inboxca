@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { Readable } from "node:stream";
 import { handle } from "./handler.ts";
 import {formLimit} from "../src/lib/form-worker.ts";
 import {mailLimits} from "../src/lib/mail-view.ts";
@@ -12,12 +13,15 @@ createServer(async (incoming, outgoing) => {
   try {
     const chunks: Buffer[] = [];
     let size = 0;
-    for await (const chunk of incoming) {
+    // A file sent in is passed on as it arrives; the handler stops at its signed size.
+    const streamed = incoming.method === "POST" && incoming.url === "/intake";
+    if (!streamed) for await (const chunk of incoming) {
       size += chunk.length;
       if (size > (incoming.url?.startsWith("/prepare/") ? formLimit : incoming.url?.startsWith("/mail/") ? mailLimits.body : 16_384)) { outgoing.writeHead(413).end(); return; }
       chunks.push(chunk);
     }
-    const request = new Request(`http://worker${incoming.url}`, { method: incoming.method, headers: { authorization: incoming.headers.authorization ?? "" }, body: incoming.method === "POST" ? Buffer.concat(chunks) : undefined, signal: stop.signal });
+    const headers = { authorization: incoming.headers.authorization ?? "", "x-inboxca-intake": String(incoming.headers["x-inboxca-intake"] ?? "") };
+    const request = new Request(`http://worker${incoming.url}`, { method: incoming.method, headers, body: streamed ? Readable.toWeb(incoming) as ReadableStream : incoming.method === "POST" ? Buffer.concat(chunks) : undefined, signal: stop.signal, ...(streamed && { duplex: "half" }) } as RequestInit);
     const response = await handle(request);
     outgoing.writeHead(response.status, Object.fromEntries(response.headers));
     if (response.body) {

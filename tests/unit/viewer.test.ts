@@ -1,8 +1,12 @@
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { pictureSize, openView, tiles } from "@/worker/render";
-import { viewerLabel } from "@/src/lib/file-worker";
+import { signView, viewerLabel } from "@/src/lib/file-worker";
+import { handle } from "@/worker/handler";
 import {stampedPdf} from "@/worker/download";
 
 async function renderPage(bytes: Buffer, name: string, number: number, label: string) {
@@ -12,7 +16,9 @@ async function renderPage(bytes: Buffer, name: string, number: number, label: st
     return { bytes: Buffer.from(image.subarray(1)), count: view.header.pages.length, limited: view.header.limited, ...view.header.pages[number - 1] };
   } finally { await view.dispose(); }
 }
-import { pdf } from "../fixtures/pdf";
+import { lockedPdf, pdf } from "../fixtures/pdf";
+import { zip } from "@/src/lib/firm-download";
+import { wordSource } from "@/worker/word-source";
 
 // #53: every page carries the person and server time in its pixels.
 it("tiles the person's identity, Indian date and time beyond every page edge", () => {
@@ -81,4 +87,46 @@ it("refuses a picture whose header claims more pixels than the viewer draws", as
   huge.writeUInt32BE(50_000, 16);
   huge.writeUInt32BE(50_000, 20);
   await expect(renderPage(huge, "huge.png", 1, "Person")).rejects.toThrow("Not a picture this viewer shows");
+});
+
+// A PDF with a password opens only with the one a person typed; nothing is guessed.
+it("opens a locked PDF only with its password, and says when it needs one", async () => {
+  const bytes = Buffer.from(lockedPdf("Invented bank statement", "invented-pass"));
+  await expect(openView(bytes, "statement.pdf", "Person")).rejects.toMatchObject({ name: "PasswordException" });
+  await expect(openView(bytes, "statement.pdf", "Person", 30, undefined, undefined, "wrong-pass")).rejects.toMatchObject({ name: "PasswordException" });
+  const view = await openView(bytes, "statement.pdf", "Person", 30, undefined, undefined, "invented-pass");
+  try { expect(view.header.pages).toHaveLength(1); expect((await view.render(1))[0]).toBe(1); } finally { await view.dispose(); }
+});
+
+it("shows Word and OpenDocument letters as their words, and OpenDocument sheets as rows", async () => {
+  const letter = zip([{ name: "[Content_Types].xml", text: "<Types/>" }, { name: "word/document.xml", text: `<w:document><w:body><w:p><w:r><w:t>Invented engagement letter</w:t></w:r></w:p><w:p><w:r><w:instrText> PAGE </w:instrText><w:t xml:space="preserve">Fees &amp; terms</w:t><w:tab/><w:t>${"word ".repeat(40)}</w:t></w:r></w:p></w:body></w:document>` }]);
+  const source = wordSource(letter, "letter.docx");
+  expect(source.lines[0]).toBe("Invented engagement letter");
+  expect(source.lines[1]).toMatch(/^Fees & terms {4}word word/);
+  expect(source.lines.every((line) => line.length <= 100)).toBe(true);
+  expect(source.lines.join(" ")).not.toContain("PAGE");
+  const page = await renderPage(letter, "letter.docx", 1, "Person");
+  expect(page.count).toBe(1);
+  const odt = zip([{ name: "content.xml", text: "<office:document-content><office:body><office:text><text:h>Invented certificate</text:h><text:p>Issued to <text:span>Invented Traders</text:span></text:p></office:text></office:body></office:document-content>" }]);
+  expect(wordSource(odt, "certificate.odt").lines.slice(0, 2)).toEqual(["Invented certificate", "Issued to Invented Traders"]);
+  const ods = zip([{ name: "content.xml", text: `<office:document-content><office:body><office:spreadsheet><table:table table:name="Sheet1"><table:table-row><table:table-cell><text:p>Name</text:p></table:table-cell><table:table-cell><text:p>Amount</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell><text:p>Invented Client</text:p></table:table-cell><table:table-cell office:value="1200"><text:p>1,200</text:p></table:table-cell><table:table-cell table:number-columns-repeated="1000"/></table:table-row><table:table-row table:number-rows-repeated="1048000"><table:table-cell table:number-columns-repeated="1024"/></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>` }]);
+  expect((await renderPage(ods, "register.ods", 1, "Person")).count).toBe(1);
+  await expect(openView(Buffer.from("not a letter"), "letter.docx", "Person")).rejects.toThrow();
+});
+
+it("tells the app a PDF needs its password, or that the saved one did not open it", async () => {
+  const root = await mkdtemp(join(tmpdir(), "locked-worker-"));
+  vi.stubEnv("DRIVE_LOCAL_DIR", root);
+  vi.stubEnv("FILE_WORKER_SECRET", "invented-locked-test-secret");
+  try {
+    await writeFile(join(root, "locked.pdf"), lockedPdf("Invented statement", "invented-pass"));
+    const open = async (password?: string) => {
+      const body = JSON.stringify({ firm: "invented-firm", file: "locked.pdf", name: "locked.pdf", label: "Person", provider: "local", token: "", limit: 30, expires: Math.floor(Date.now() / 1000) + 60, ...(password && { password }) });
+      const response = await handle(new Request("http://worker/view/locked.pdf", { method: "POST", body, headers: { authorization: await signView(body, "invented-locked-test-secret") } }));
+      return [response.status, response.status === 423 ? await response.text() : (await response.body?.cancel(), "")];
+    };
+    expect(await open()).toEqual([423, "password"]);
+    expect(await open("wrong-pass")).toEqual([423, "wrong"]);
+    expect((await open("invented-pass"))[0]).toBe(200);
+  } finally { vi.unstubAllEnvs(); await rm(root, { recursive: true, force: true }); }
 });

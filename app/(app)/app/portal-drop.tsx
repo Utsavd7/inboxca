@@ -29,13 +29,15 @@ export function PortalDrop({ clientId, back }: { clientId?: string; back?: strin
 
 // What happened to the files just dropped, from the address the drop returned to.
 export function DroppedNotice({ value }: { value?: string }) {
-  const [filed, again, left] = (value ?? "").split("-").map(Number);
-  if (!value || [filed, again, left].some(Number.isNaN)) return null;
+  const [filed, again, left, unsafe = 0, unchecked = 0] = (value ?? "").split("-").map(Number);
+  if (!value || [filed, again, left, unsafe, unchecked].some(Number.isNaN)) return null;
   const parts = [
     filed && `${filed} filed in ${filed === 1 ? "its client's folder" : "their clients' folders"}`,
     again && `${again} already there`,
     left && `${left} not filed: not a known portal file, or its GSTIN is not one of your clients'`,
+    unsafe && `${unsafe} not saved: a virus, a program or a ZIP InboxCA could not open`,
+    unchecked && `${unchecked} could not be checked for viruses just now; add ${unchecked === 1 ? "it" : "them"} again in a minute`,
   ].filter(Boolean);
   const text = `${parts.join("; ") || "No files were added"}.`;
-  return left ? <p className="alert" role="status">{text}</p> : <Toast>{text}</Toast>;
+  return left || unsafe || unchecked ? <p className="alert" role="status">{text}</p> : <Toast>{text}</Toast>;
 }

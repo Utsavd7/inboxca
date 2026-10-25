@@ -8,6 +8,9 @@ const origin = `http://127.0.0.1:${process.env.PORT || 3000}`;
 export const TEST_WORKER_SECRET = "test-only-worker-secret";
 export const FILE_WORKER_SECRET = process.env.FILE_WORKER_SECRET ||= randomBytes(32).toString("hex");
 export const FILE_WORKER_URL = `http://127.0.0.1:${Number(process.env.PORT || 3000) + 1}`;
+// The file worker's virus check talks to a stand in for ClamAV that finds only the EICAR test string.
+// PORT+2 is the fake mail providers' (MAIL_API_URL below).
+const CLAMD_PORT = Number(process.env.PORT || 3000) + 3;
 // Runs on one machine share the database and mail server: each port gets its own drive
 // folder, and its server runs only the jobs of firms its own tests made (seedFirm marks them).
 export const TEST_DRIVE = `${tmpdir()}/inboxca-test-drive-${process.env.PORT || 3000}`;
@@ -30,8 +33,10 @@ export default defineConfig({
   reporter: "list",
   use: { baseURL: origin, trace: "on-first-retry" },
   webServer: [{
+    command: "node --experimental-strip-types tests/fixtures/fake-clamd.ts", port: CLAMD_PORT, env: { CLAMD_PORT: String(CLAMD_PORT) },
+  }, {
     command: "npm run worker", url: `${FILE_WORKER_URL}/health`,
-    env: { FILE_WORKER_SECRET, FILE_WORKER_PORT: String(Number(process.env.PORT || 3000) + 1), FILE_WORKER_TEST: "1", MAIL_ALLOW_LOCAL: "1", MAIL_API_TEST_URL: MAIL_API_URL, DRIVE_LOCAL_DIR: TEST_DRIVE, ...ITR },
+    env: { FILE_WORKER_SECRET, FILE_WORKER_PORT: String(Number(process.env.PORT || 3000) + 1), FILE_WORKER_TEST: "1", MAIL_ALLOW_LOCAL: "1", MAIL_API_TEST_URL: MAIL_API_URL, DRIVE_LOCAL_DIR: TEST_DRIVE, CLAMD_HOST: "127.0.0.1", CLAMD_PORT: String(CLAMD_PORT), ...ITR },
   }, {
     command: "npm run start",
     url: origin,

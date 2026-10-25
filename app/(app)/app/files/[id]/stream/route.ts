@@ -26,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (visible.size > viewLimits.bytes) return new Response("This file is too large to show here.", { status: 413, headers });
   const admin = supabaseAdmin();
   const [{ data: document }, { data: account }] = await Promise.all([
-    admin.from("documents").select("drive_file_id, name").eq("firm_id", membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle(),
+    admin.from("documents").select("drive_file_id, name, password_enc").eq("firm_id", membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle(),
     admin.from("connected_accounts").select("id, provider, credentials_enc").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
   ]);
   if (!document) return new Response("Not found", { status: 404, headers });
@@ -34,12 +34,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     if (!["local", "dropbox"].includes(account.provider)) throw new Error("Drive not supported");
     const credentials = account.provider === "local" ? null : JSON.parse(await serverCrypto().decrypt(membership.firmId, `accounts/${account.id}/credentials`, account.credentials_enc));
-    const view: ViewRequest = { firm: membership.firmId, file: document.drive_file_id, name: document.name, label: viewerLabel(membership.email, membership.firmName), limit: thumb ? 1 : viewLimits.pages, expires: Math.floor(Date.now() / 1000) + 60, ...(sheet && {sheet:Number(sheet)}), ...(copy && {purpose:"copy" as const}), provider: account.provider as ViewRequest["provider"], token: credentials ? await dropboxAccessToken(credentials.refreshToken) : "" };
+    const view: ViewRequest = { firm: membership.firmId, file: document.drive_file_id, name: document.name, label: viewerLabel(membership.email, membership.firmName), limit: thumb ? 1 : viewLimits.pages, expires: Math.floor(Date.now() / 1000) + 60, ...(sheet && {sheet:Number(sheet)}), ...(copy && {purpose:"copy" as const}), provider: account.provider as ViewRequest["provider"], token: credentials ? await dropboxAccessToken(credentials.refreshToken) : "",
+      // A PDF's password, typed once by a person in the viewer, goes only to the worker.
+      ...(document.password_enc && { password: await serverCrypto().decrypt(membership.firmId, `documents/${id}/password`, document.password_enc) }) };
     const body = JSON.stringify(view);
     const response = await fetch(`${process.env.FILE_WORKER_URL.replace(/\/$/, "")}/${copy ? "copy" : "view"}/${encodeURIComponent(view.file)}`, {
       method: "POST", headers: { Authorization: await signView(body, process.env.FILE_WORKER_SECRET), "Content-Type": "application/json" }, body,
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(180_000)]), cache: "no-store",
     });
+    // A PDF with a password: the viewer asks for it, and nothing is shown or logged as viewed.
+    if (response.status === 423) return new Response(await response.text(), { status: 423, headers });
     if (!response.ok || !response.body) { await response.body?.cancel(); throw new Error("Worker refused"); }
     if(permission) {
       const {data:spent,error}=await admin.from("requests").update({status:"used"}).eq("id",permission).eq("firm_id",membership.firmId).eq("status","approved").gt("expires_at",new Date().toISOString()).select("id").maybeSingle();

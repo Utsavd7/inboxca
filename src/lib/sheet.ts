@@ -1,10 +1,10 @@
 import { readXls } from "./xls.ts";
 import { inflateRawSync } from "node:zlib";
 
-// The rows of a CSV file, or of an Excel file's first sheet, as text, for imports. Excel
-// files are zip files of XML, so Node's own zlib reads them; no spreadsheet package.
+// The rows of a CSV file, or of an Excel or OpenDocument file's first sheet, as text, for
+// imports. Both are zip files of XML, so Node's own zlib reads them; no spreadsheet package.
 export function readSheet(data: Buffer, fileName: string, limit?: { rows: number; columns: number; keepEmpty?:boolean; sheet?:number }): string[][] {
-  const rows = /\.xlsx$/i.test(fileName) ? readXlsx(data, limit) : /\.xls$/i.test(fileName) ? readXls(data) : readCsv(data.toString("utf8").replace(/^﻿/, ""));
+  const rows = /\.xlsx$/i.test(fileName) ? readXlsx(data, limit) : /\.ods$/i.test(fileName) ? readOds(data, limit) : /\.xls$/i.test(fileName) ? readXls(data) : readCsv(data.toString("utf8").replace(/^﻿/, ""));
   return limit?.keepEmpty ? rows : rows.filter((row) => row.some((cell) => cell.trim()));
 }
 
@@ -62,13 +62,34 @@ export function xlsxEntries(data: Buffer) {
   return files;
 }
 
-const unescape = (text: string) =>
+export const unescape = (text: string) =>
   text.replace(/&(lt|gt|amp|quot|apos|#x?[0-9a-f]+);/gi, (_, code: string) =>
     code[0] === "#"
       ? String.fromCodePoint(parseInt(code.slice(code[1] === "x" ? 2 : 1), code[1] === "x" ? 16 : 10))
       : ({ lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" } as Record<string, string>)[code],
   );
 const texts = (xml: string) => [...xml.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(([, text]) => unescape(text)).join("");
+
+// An OpenDocument sheet's rows. A row or cell marked as repeated is written out only within
+// the limit, and a row's empty cells at its end are dropped, so a sheet that says a million
+// empty rows follow costs nothing.
+function readOds(data: Buffer, limit?: { rows: number; columns: number; sheet?:number }) {
+  const content = xlsxEntries(data).get("content.xml")?.().toString();
+  const table = content && [...content.matchAll(/<table:table [\s\S]*?<\/table:table>/g)][(limit?.sheet ?? 1) - 1]?.[0];
+  if (!table) throw new Error("No sheet in the file");
+  const rows: string[][] = [], most = limit?.rows ?? 100_000, wide = limit?.columns ?? 16_384;
+  for (const [, attributes, cells = ""] of table.matchAll(/<table:table-row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/table:table-row>)/g)) {
+    const row: string[] = [];
+    for (const [, cell, body = ""] of cells.matchAll(/<table:(?:covered-)?table-cell\b([^>]*?)(?:\/>|>([\s\S]*?)<\/table:(?:covered-)?table-cell>)/g)) {
+      const value = [...body.matchAll(/<text:p\b[^>]*>([\s\S]*?)<\/text:p>/g)].map(([, text]) => unescape(text.replace(/<[^>]+>/g, ""))).join(" ");
+      for (let times = Math.min(Number(/table:number-columns-repeated="(\d+)"/.exec(cell)?.[1] ?? 1), wide - row.length); times > 0; times--) row.push(value);
+    }
+    while (row.length && !row.at(-1)) row.pop();
+    for (let times = Math.min(Number(/table:number-rows-repeated="(\d+)"/.exec(attributes)?.[1] ?? 1), most - rows.length); times > 0; times--) rows.push([...row]);
+    if (rows.length >= most) break;
+  }
+  return rows;
+}
 
 function readXlsx(data: Buffer, limit?: { rows: number; columns: number; keepEmpty?:boolean; sheet?:number }) {
   const files = xlsxEntries(data);
