@@ -3,6 +3,7 @@ import { useLinkStatus } from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { going } from "../nav-progress";
 import { draftEmail, draftReply, sendEmail, sendReply, type Draft } from "./actions";
 
 type Paper = { id: string; name: string };
@@ -37,6 +38,7 @@ export function InboxKeys() {
           if (document.querySelector(".side-panel") || document.querySelector<HTMLTextAreaElement>("#reply-text")?.value || !(url.searchParams.has("mail") || url.searchParams.has("sent"))) return;
           url.searchParams.delete("mail");
           url.searchParams.delete("sent");
+          going(url.href);
           router.push(`${url.pathname}${url.search}`, { scroll: false });
         },
       };
@@ -200,7 +202,7 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm }:
       <div className="ib-reply-foot">
         {draft.error && <span className="ib-note" role="status">{draft.error}</span>}
         {ai && (
-          <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={drafting} title="A draft for you to check. AI never sends.">
+          <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={drafting} aria-busy={drafting || undefined} title="A draft for you to check. AI never sends.">
             {drafting ? "Writing a draft" : "Write a reply with AI"}
           </button>
         )}
@@ -242,7 +244,7 @@ export function ComposeBox({ client, recipients, papers, ai, mayAttach, name, fi
       <div className="ib-reply-foot">
         {draft.error && <span className="ib-note" role="status">{draft.error}</span>}
         {ai && (
-          <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={drafting} title="A draft for you to check. AI never sends.">
+          <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={drafting} aria-busy={drafting || undefined} title="A draft for you to check. AI never sends.">
             {drafting ? "Writing a draft" : "Write with AI"}
           </button>
         )}

@@ -8,6 +8,7 @@ import { checkFigures, draftSchema, openFigures, verifySources, place } from "@/
 import { periodName } from "@/src/lib/documents";
 import { askPermission } from "@/app/(app)/actions";
 import { FileViewer } from "../../files/[id]/view/file-viewer";
+import { Pending } from "../../pending";
 import { reviewFigure } from "./dataset-actions";
 const messages:Record<string,string>={stale:"Someone changed these figures. Read the latest values and try again.",source:"The source file is not available. Ask your team to restore it.",permission:"Ask for permission before changing a figure.",value:"Check the value. Figures need no more than two decimal places; dates need a valid day.",reason:"Say why the figure needs to change.",totals:"The totals must agree before a figure can be confirmed.",saved:"Your check was saved."};
 
@@ -47,11 +48,11 @@ export async function DatasetReview({clientId,draftId,lineId,check}:{clientId:st
         {active.by && <p className="hint">Checked by {people?.find((person)=>person.user_id===active.by)?.email ?? "your team"}, {new Date(active.at!).toLocaleString("en-IN",{timeZone:"Asia/Kolkata"})}</p>}
         <form action={reviewFigure} className="fields">
           <input type="hidden" name="client" value={clientId}/><input type="hidden" name="draft" value={row.id}/><input type="hidden" name="line" value={active.id}/><input type="hidden" name="revision" value={row.revision}/>
-          <div className="form-row"><button className="b b-primary" name="intent" value="confirmed" disabled={viewOnly || !membership.may("check_figures",clientId) || !sourceReady || !source || !!issues.length || active.state==="confirmed"}>Yes, this is right</button><button className="b b-secondary" name="intent" value="rejected" disabled={viewOnly || !membership.may("check_figures",clientId) || active.state==="rejected"}>No, this is wrong</button></div>
+          <div className="form-row"><Pending className="b b-primary" name="intent" value="confirmed" disabled={viewOnly || !membership.may("check_figures",clientId) || !sourceReady || !source || !!issues.length || active.state==="confirmed"}>Yes, this is right</Pending><Pending className="b b-secondary" name="intent" value="rejected" disabled={viewOnly || !membership.may("check_figures",clientId) || active.state==="rejected"}>No, this is wrong</Pending></div>
 
         </form>
         {!viewOnly && sourceReady && canEdit && <FigureEdit key={`${row.id}-${active.id}-${row.revision}`} client={clientId} draft={row.id} line={active.id} revision={row.revision} value={candidate?.value ?? figures.get(active.id)!.value} reason={candidate?.reason} kind={figures.get(active.id)!.kind} kept={!!candidate}/>}
-        {!viewOnly && !canEdit && <form action={askPermission}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-ghost">Ask to edit figures</button></form>}
+        {!viewOnly && !canEdit && <form action={askPermission}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-ghost">Ask to edit figures</Pending></form>}
       </div>
       <div className="panel"><h3>Source</h3><p>{source?.name ?? "Source unavailable"}. {active.source.cell ? `Sheet ${active.source.sheet}, cell ${active.source.cell}` : `Page ${active.source.page}`}</p>{source && process.env.FILE_WORKER_URL && process.env.FILE_WORKER_SECRET ? <FileViewer key={`${source.id}-${active.source.sheet ?? 1}`} sheet={active.source.sheet ?? 1} id={source.id} page={active.source.page} hideInactive={membership.settings.viewer_hide_inactive===true}/> : <p className="hint">The source cannot be shown here yet.</p>}</div>
     </div>

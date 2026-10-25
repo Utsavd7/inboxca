@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { findClients, findDocuments } from "@/app/(app)/actions";
 import { clientKinds, type ClientKind } from "@/src/lib/clients";
+import { going } from "./nav-progress";
 import { ASK_EVENT, quickActions, type QuickAction } from "./ui-client";
 
 type Page = { href: string; name: string };
@@ -84,6 +85,7 @@ export function Command({ pages, manage = false, write = false }: { pages: Page[
     setOpen(false);
     setAsking(false);
     setText("");
+    going(hit.href);
     router.push(hit.href);
   };
 

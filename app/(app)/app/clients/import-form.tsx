@@ -73,7 +73,7 @@ export function ImportForm() {
           )}
           <form action={run} className="form-row">
             <input type="hidden" name="rows" value={JSON.stringify(state.rows)} />
-            <button className="b b-primary" type="submit" disabled={running || !ready}>
+            <button className="b b-primary" type="submit" disabled={running || !ready} aria-busy={running || undefined}>
               {running ? "Importing" : `Import ${ready} clients`}
             </button>
             <button className="b b-secondary" type="button" onClick={() => window.location.reload()}>
@@ -87,7 +87,7 @@ export function ImportForm() {
             <label htmlFor="import-file">CSV or Excel file</label>
             <input id="import-file" name="file" type="file" accept=".csv,.xlsx" required />
           </div>
-          <button className="b b-secondary" type="submit" disabled={running}>
+          <button className="b b-secondary" type="submit" disabled={running} aria-busy={running || undefined}>
             {running ? "Reading" : "Check the file"}
           </button>
           <p className="hint">

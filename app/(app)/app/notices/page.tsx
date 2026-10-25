@@ -11,6 +11,8 @@ import { personName } from "@/src/lib/roles";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
 import { LinkTabs } from "../link-tabs";
+import { Item, List, Presence } from "../motion";
+import { Pending } from "../pending";
 import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Tone } from "../ui";
 import { RowKeys } from "../row-keys";
 
@@ -145,12 +147,12 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                   </th>
                 </tr>
               </thead>
-              <tbody className="stagger">
+              <List key={href()} as="tbody">
                 {rows.map((notice) => {
                   const details = notice.details as unknown as NoticeDetails;
                   const [tone, word] = tag(notice);
                   return (
-                    <tr key={notice.id} className={notice.id === openId ? "on" : undefined}>
+                    <Item as="tr" key={notice.id} className={notice.id === openId ? "on" : undefined}>
                       <td>
                         <span className="who">
                           <Avatar name={notice.clients?.name ?? ""} />
@@ -178,10 +180,10 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                           {decides ? "Update" : "Open"}
                         </Link>
                       </td>
-                    </tr>
+                    </Item>
                   );
                 })}
-              </tbody>
+              </List>
             </table>
             <RowKeys />
           </div>
@@ -212,8 +214,9 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
         </nav>
       </section>
 
+      <Presence>
       {opened && openDetails && (
-        <SidePanel id="notice-panel" title={openDetails.notice_type} close={href()}>
+        <SidePanel key="notice" id="notice-panel" title={openDetails.notice_type} close={href()}>
           <div className="notices-head">
             <IconTile Icon={authorityIcons[openDetails.authority] ?? Scale} kind="notice" />
             <span className="grow">
@@ -267,9 +270,9 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 <input id="notice-confirm" name="date" type="date" defaultValue={openDetails.suggested_date} required />
                 <span className="hint need-date">Pick the date from the notice first</span>
               </div>
-              <button className="b b-primary" name="intent" value="confirm">
+              <Pending className="b b-primary" name="intent" value="confirm">
                 Confirm date
-              </button>
+              </Pending>
             </form>
           )}
           {!viewOnly && !decides && <p className="hint">The owner, a partner or a manager confirms the date and moves the notice on.</p>}
@@ -283,9 +286,9 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 {Object.keys(noticeStatuses)
                   .filter((status) => status !== opened.status)
                   .map((status) => (
-                    <button key={status} className="b b-secondary" name="intent" value={status}>
+                    <Pending key={status} className="b b-secondary" name="intent" value={status}>
                       {moves[status]}
-                    </button>
+                    </Pending>
                   ))}
               </form>
             </>
@@ -294,7 +297,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
       )}
 
       {add && (
-        <SidePanel id="add-notice" title="Add a notice" close={href()}>
+        <SidePanel key="add" id="add-notice" title="Add a notice" close={href()}>
           {params.error === "notice" && (
             <p className="alert" role="alert">
               Choose the client, the authority and the day it was received.
@@ -345,9 +348,9 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 <label htmlFor="notice-date">Action date, as the notice states it</label>
                 <input id="notice-date" name="date" type="date" />
               </div>
-              <button className="b b-primary" name="intent" value="add">
+              <Pending className="b b-primary" name="intent" value="add">
                 Add notice
-              </button>
+              </Pending>
             </form>
           ) : (
             <>
@@ -400,6 +403,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
           )}
         </SidePanel>
       )}
+      </Presence>
 
       {saved[params.saved ?? ""] && <Toast>{saved[params.saved!]}</Toast>}
     </div>

@@ -2,6 +2,7 @@
 import { FileUp, UserSearch } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { going } from "../nav-progress";
 
 // Files dropped on the page wait here while the upload panel opens, then fill its form.
 let held: File[] = [];
@@ -48,7 +49,10 @@ export function DropUpload({ client, href }: { client: string | null; href: stri
       held = [...(event.dataTransfer?.files ?? [])];
       if (!held.length) return;
       if (form()) fill();
-      else router.push(href, { scroll: false });
+      else {
+        going(href);
+        router.push(href, { scroll: false });
+      }
     };
     window.addEventListener("dragenter", enter);
     window.addEventListener("dragleave", leave);

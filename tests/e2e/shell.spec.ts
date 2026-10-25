@@ -67,3 +67,48 @@ test("the frame remembers the theme and the folded sidebar, and its keys and pan
     await firm.remove();
   }
 });
+
+test("a slow page shows the loading bar, and a slow save keeps its button busy", async ({ page }) => {
+  test.setTimeout(90_000);
+  const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+  const email = `shell-busy-${randomUUID()}@invented.test`;
+  const firm = await seedFirm("Invented Busy Firm", email, key);
+  try {
+    await emailStep(page, email);
+    await page.getByLabel("6 digit code from the app").fill(totp(key));
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/app$/);
+
+    // People answers only when let go: the bar shows meanwhile, and is gone once it is in.
+    const held: (() => void)[] = [];
+    let hold = true;
+    await page.route(/\/app\/people/, async (route) => {
+      const headers = route.request().headers();
+      if (hold && headers.rsc) await new Promise<void>((resolve) => held.push(resolve));
+      // Then a slow save, so its button is seen busy.
+      if (headers["next-action"]) await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.continue();
+    });
+    await page.locator(".side").getByRole("link", { name: "People" }).click();
+    const bar = page.locator(".nav-bar");
+    await expect(bar).toHaveAttribute("data-state", "run");
+    await expect(bar).toHaveCSS("pointer-events", "none");
+    hold = false;
+    held.forEach((resolve) => resolve());
+    await expect(page.getByRole("heading", { name: "People", level: 1 })).toBeVisible();
+    await expect(bar).not.toHaveAttribute("data-state");
+
+    // A slow save: the pressed button says so and takes no second click until it is done.
+    await page.getByRole("link", { name: "Teams and branches" }).click();
+    const panel = page.getByRole("dialog", { name: "Teams and branches" });
+    await panel.getByLabel("New team").fill("Invented Team");
+    await panel.getByRole("button", { name: "Add team" }).click();
+    const busy = panel.locator('button[aria-busy="true"]');
+    await expect(busy).toHaveText("Adding");
+    await expect(busy).toBeDisabled();
+    await expect(panel.getByText("Invented Team")).toBeVisible();
+    await expect(busy).toHaveCount(0);
+  } finally {
+    await firm.remove();
+  }
+});

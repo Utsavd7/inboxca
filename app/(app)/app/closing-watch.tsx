@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { askMoreTime, stayLater } from "@/app/(app)/actions";
+import { Pending } from "./pending";
 
 // Office hours end for this person at `at` (PLAN.md 5.17.4 #14, #15): 10 minutes before, a
 // warning with one more hour (once a day) or a question to the owner for longer; at closing
@@ -26,7 +27,7 @@ export function ClosingWatch({ at, close, extended }: { at: number; close: strin
       <span>InboxCA closes for you at {close}. Finish what you are doing.</span>
       {!extended && (
         <form action={stayLater}>
-          <button className="b b-secondary b-small">Stay 1 more hour</button>
+          <Pending className="b b-secondary b-small">Stay 1 more hour</Pending>
         </form>
       )}
       <form action={askMoreTime} className="form-row">
@@ -35,7 +36,7 @@ export function ClosingWatch({ at, close, extended }: { at: number; close: strin
           <option value="2">2 more hours</option>
           <option value="3">3 more hours</option>
         </select>
-        <button className="b b-ghost b-small">Ask the owner</button>
+        <Pending className="b b-ghost b-small">Ask the owner</Pending>
       </form>
     </div>
   );

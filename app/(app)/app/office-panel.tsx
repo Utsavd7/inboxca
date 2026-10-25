@@ -6,6 +6,7 @@ import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
 import { firmAdmin, memberOffice, officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { supabaseAdmin } from "@/src/lib/supabase";
+import { Pending } from "./pending";
 
 // Only office approvers read these requests and the activity behind them.
 // When to suggest a fixed connection; later these move to admin configuration (5.8).
@@ -62,13 +63,13 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   if (compact && !requests?.length && !refusals.length && (owner || !waiting.length)) return null;
   const line = <p className="hint">Staff, managers and front desk use approved PCs on your office internet connection. You and partners can use InboxCA anywhere.</p>;
   const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">{where}
-    <button className="b b-ghost" name="intent" value="forget">Forget office connections</button><button className="b b-secondary" name="intent" value="off">Turn off</button>
+    <Pending className="b b-ghost" name="intent" value="forget">Forget office connections</Pending><Pending className="b b-secondary" name="intent" value="off">Turn off</Pending>
   </form> : isAdmin && inPreset ? <><input type="hidden" form="preset-form" name="intent" value="on" />{picked && <input type="hidden" form="preset-form" name="branch" value={picked.id} />}<button className="b b-primary" form="preset-form" formAction={setOfficeOnly} formNoValidate>Turn on</button></>
     : isAdmin && <form action={setOfficeOnly}>{where}
     <fieldset className="fieldset"><legend>Are you in your office right now?</legend>
       <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, this is my office</label>
       <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it from the office</label>
-    </fieldset><button className="b b-primary" name="intent" value="on">Turn on</button>
+    </fieldset><Pending className="b b-primary" name="intent" value="on">Turn on</Pending>
   </form>;
   const Box = inPreset ? "div" : "section";
   return (
@@ -100,10 +101,10 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
           <form action={setOfficeOnly} className="form-row">
             <input type="hidden" name="request" value={request.id} />
             {request.reason_code === "office_waiting" && <>
-              <button className="b b-primary b-small" name="intent" value="confirm">This is my office</button>
-              <button className="b b-secondary b-small" name="intent" value="today">Allow this network today</button>
+              <Pending className="b b-primary b-small" name="intent" value="confirm">This is my office</Pending>
+              <Pending className="b b-secondary b-small" name="intent" value="today">Allow this network today</Pending>
             </>}
-            <button className="b b-ghost b-small" name="intent" value="refuse">Not my office</button>
+            <Pending className="b b-ghost b-small" name="intent" value="refuse">Not my office</Pending>
           </form>
         </div>;
       })}
@@ -123,16 +124,16 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
                 <input type="hidden" name="device" value={pc.id} />
                 {away ? <>
                   <label className="until">Until <input type="date" name="until" required min={today} max={addDays(today, 90)} defaultValue={addDays(today, 7)} /></label>
-                  <button className="b b-primary b-small" name="decision" value="personal">Allow</button>
+                  <Pending className="b b-primary b-small" name="decision" value="personal">Allow</Pending>
                 </> : <>
-                  <button className="b b-primary b-small" name="decision" value="office">Stays in the office</button>
-                  <button className="b b-secondary b-small" name="decision" value="laptop">Laptop</button>
+                  <Pending className="b b-primary b-small" name="decision" value="office">Stays in the office</Pending>
+                  <Pending className="b b-secondary b-small" name="decision" value="laptop">Laptop</Pending>
                 </>}
-                <button className="b b-ghost b-small" name="decision" value="refuse" formNoValidate>Refuse</button>
+                <Pending className="b b-ghost b-small" name="decision" value="refuse" formNoValidate>Refuse</Pending>
               </form>
             </li>;
           })}</ul>
-          {waiting.length > 1 && <form action={reviewDevice}><button className="b b-secondary" name="decision" value="office">Approve all as staying in the office</button></form>}
+          {waiting.length > 1 && <form action={reviewDevice}><Pending className="b b-secondary" name="decision" value="office">Approve all as staying in the office</Pending></form>}
         </div>}
         {!!approved.length && <div className="device-list">
           <h3 className="sub-head">Approved devices</h3>
@@ -140,12 +141,12 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
             <span className="grow"><strong>{pc.name}</strong>, {pc.kind === "office" ? (pc.key_id ? "stays in the office" : "stays in the office, waiting for its key to be set up on it") : pc.kind === "laptop" ? "laptop" : `${personName(emails.get(pc.person_id ?? ""))}'s, away from the office until ${dueLabel(pc.ends_on ?? today)}`}</span>
             <form action={reviewDevice} className="end">
               <input type="hidden" name="device" value={pc.id} />
-              <button className="b b-ghost b-small" name="decision" value="withdraw">Withdraw</button>
+              <Pending className="b b-ghost b-small" name="decision" value="withdraw">Withdraw</Pending>
             </form>
           </li>)}</ul>
         </div>}
         {office.on && !here && <form action={setOfficeOnly} className="form-row">{where}
-          <button className="b b-primary" name="intent" value="here">This is my office</button>
+          <Pending className="b b-primary" name="intent" value="here">This is my office</Pending>
         </form>}
         {inPreset && toggle ? <details className="reveal office-switch"><summary>Change details</summary><h3 className="sub-head">Office only {office.on ? "is on" : "is off"}</h3>{line}{toggle}</details> : toggle}
         {suggestFixed && <form action={setOfficeOnly} className="fixed-suggestion">{where}
@@ -153,14 +154,14 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
           <blockquote>&ldquo;Please add a fixed internet address to our broadband connection, account number ___. We need it for office software access.&rdquo;</blockquote>
           <p className="hint">When it is done, press Done from a PC in the office.</p>
           <span className="form-row">
-            <button className="b b-primary" name="intent" value="fixed">Done</button>
-            <button className="b b-ghost" name="intent" value="no_fixed">My provider doesn&apos;t offer it</button>
+            <Pending className="b b-primary" name="intent" value="fixed">Done</Pending>
+            <Pending className="b b-ghost" name="intent" value="no_fixed">My provider doesn&apos;t offer it</Pending>
           </span>
         </form>}
         {isAdmin && office.on && !suggestFixed && (office as { fixed_declined?: boolean }).fixed_declined && !trustedPc && <p className="hint">Without a fixed connection, mark one desktop in the office as Stays in the office and name a deputy, so a changed connection is confirmed without you.</p>}
         {isAdmin && office.on && !suggestFixed && <form action={setOfficeOnly}>{where}
           <p className="hint">If your internet provider gave your office a fixed connection, confirm it here from the office.</p>
-          <button className="b b-secondary" name="intent" value="fixed">Done</button>
+          <Pending className="b b-secondary" name="intent" value="fixed">Done</Pending>
         </form>}
         {owner && <form action={setOfficeOnly}>
           <fieldset className="fieldset"><legend>Name up to 2 deputies</legend>
@@ -177,7 +178,7 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
             </select>
           </div></div>
           <p className="hint">A partner who is also a deputy and changes the access preset, Office only, office hours, signing in and permissions like you. Your email, drive, people, recovery codes and closing the firm stay yours.</p>
-          <button className="b b-secondary" name="intent" value="deputies">Save deputies and co-admin</button>
+          <Pending className="b b-secondary" name="intent" value="deputies">Save deputies and co-admin</Pending>
         </form>}
         {isAdmin && office.on && <div className="side-doors"><h3 className="sub-head">Doors InboxCA cannot close for you</h3><ul>
           <li>Don&apos;t give staff the firm mailbox&apos;s password; InboxCA does the email work.</li>

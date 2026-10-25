@@ -52,7 +52,7 @@ export function AddClientForm() {
           <input id="client-gstin" name="gstin" autoComplete="off" maxLength={15} className="num" defaultValue={state.values?.gstin} {...mark("gstin")} />
           {error("gstin")}
         </div>
-        <button className="b b-primary" type="submit" disabled={adding}>
+        <button className="b b-primary" type="submit" disabled={adding} aria-busy={adding || undefined}>
           {adding ? "Adding" : "Add client"}
         </button>
       </form>

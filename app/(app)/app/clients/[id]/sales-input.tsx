@@ -10,6 +10,7 @@ import {salesSections,type SalesSection} from "@/src/lib/gstr1-fields";
 import {askPermission} from "@/app/(app)/actions";
 import {serverCrypto} from "@/src/lib/crypto";
 import {supabaseAdmin} from "@/src/lib/supabase";
+import {Pending} from "../../pending";
 
 async function readRegister(form:FormData) {
   "use server";
@@ -62,6 +63,6 @@ export async function SalesInput({clientId,source,section:asked,header:askedHead
     {canEdit ? <form action={readRegister} className="fields"><input type="hidden" name="client" value={clientId}/><input type="hidden" name="source" value={selected.id}/><input type="hidden" name="section" value={section}/><input type="hidden" name="header" value={header}/>{!!gstins.length && <label>GST number this register is for<select name="registration" required defaultValue={selected.registration_id ?? ""}><option value="" disabled>Choose</option>{gstins.map((reg)=><option key={reg.id} value={reg.id}>{reg.number}</option>)}</select></label>}{salesSections[section].headings.map((name,index)=>{
       const column=suggestion?.section===section && suggestion.header===header-1 ? suggestion.columns[index] : headings.findIndex((heading)=>heading.trim().toLowerCase()===name.toLowerCase());
       return <label key={name}>{name}<select name={`column${index}`} defaultValue={column}><option value={-1}>Not in this file</option>{headings.map((heading,n)=><option key={n} value={n}>{String.fromCharCode(65+n)}: {heading.slice(0,200)}</option>)}</select></label>;
-    })}<button className="b b-primary">Confirm columns and read figures</button></form> : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-secondary">Ask to edit figures</button></form>}</>}
+    })}<Pending className="b b-primary">Confirm columns and read figures</Pending></form> : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-secondary">Ask to edit figures</Pending></form>}</>}
   </section>;
 }

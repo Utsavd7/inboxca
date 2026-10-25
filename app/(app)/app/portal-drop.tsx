@@ -1,5 +1,6 @@
 import { FileUp } from "lucide-react";
 import { dropPortalFiles } from "@/app/(app)/actions";
+import { Pending } from "./pending";
 import { Toast } from "./ui";
 
 // The box for files fetched from the government portals (PLAN.md 5.3.1): drop in one or
@@ -18,9 +19,9 @@ export function PortalDrop({ clientId, back }: { clientId?: string; back?: strin
       </p>
       <span className="drop-pick">
         <input id="portal-files" name="files" type="file" multiple required accept=".json,application/json" />
-        <button className="b b-secondary" type="submit">
+        <Pending className="b b-secondary" type="submit">
           Add
-        </button>
+        </Pending>
       </span>
     </form>
   );

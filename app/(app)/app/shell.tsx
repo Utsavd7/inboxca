@@ -34,6 +34,7 @@ import { bellItems, markBellRead } from "@/app/(app)/actions";
 import { contactEmail } from "@/src/lib/site";
 import { typing } from "./command";
 import { MotionRoot, spring, springSoft } from "./motion";
+import { going } from "./nav-progress";
 import { Avatar } from "./ui";
 import { NEW_EVENT } from "./ui-client";
 import { news, newsLatest, type News } from "./whats-new";
@@ -159,6 +160,7 @@ function Keys() {
       const letter = event.key.toLowerCase();
       if (Date.now() - go.current < 1200 && places[letter]) {
         go.current = 0;
+        going(places[letter]);
         router.push(places[letter]);
       } else if (letter === "g") go.current = Date.now();
       else if (event.key === "?") shell?.open("keys");

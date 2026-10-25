@@ -162,7 +162,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .side { position: relative; z-index: 6; display: flex; flex-direction: column; gap: 2px; min-width: 0; height: 100dvh; padding: var(--s3) var(--s3) var(--s2); overflow: hidden auto; border-right: 1px solid var(--line); background: var(--side); }
 .side-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity var(--base) var(--out); }
 .ui[data-side="rail"] .side-text { opacity: 0; pointer-events: none; }
-.side-item { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; height: var(--control); padding: 0 11px; border: 0; border-radius: var(--r2); background: none; color: var(--ink-2); font: inherit; font-size: 14px; font-weight: 500; text-align: left; text-decoration: none; white-space: nowrap; cursor: pointer; overflow: clip; transition: background var(--fast) var(--out), color var(--fast) var(--out); }
+.side-item { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; height: var(--control); padding: 0 11px; border: 0; border-radius: var(--r2); background: none; color: var(--ink-2); font: inherit; font-size: 14px; font-weight: 500; text-align: left; text-decoration: none; white-space: nowrap; cursor: pointer; overflow: clip; transition: background var(--fast) var(--out), color var(--fast) var(--out), transform var(--fast) var(--out); }
 .side-item > svg { flex: none; color: var(--ink-3); transition: color var(--fast) var(--out); }
 .side-item > :not(.side-pill) { position: relative; }
 .side-item:hover { background: var(--hover); color: var(--ink); }
@@ -195,7 +195,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .side-tools .rail-new { width: 100%; min-width: 0; justify-content: flex-start; gap: 10px; padding: 0 11px; overflow: clip; }
 .side-tools .rail-new .side-kbd { margin-left: auto; }
 .side-kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 5px; background: var(--kbd-on-accent); color: var(--on-accent); font: 600 11px var(--font-jakarta), sans-serif; }
-.rail-search { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; height: var(--control); padding: 0 6px 0 11px; border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface); color: var(--ink-3); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; overflow: clip; box-shadow: var(--shadow-button); transition: border-color var(--fast) var(--out), color var(--fast) var(--out); }
+.rail-search { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; height: var(--control); padding: 0 6px 0 11px; border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface); color: var(--ink-3); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; overflow: clip; box-shadow: var(--shadow-button); transition: border-color var(--fast) var(--out), color var(--fast) var(--out), transform var(--fast) var(--out); }
 .rail-search > svg { flex: none; }
 .rail-search:hover { border-color: var(--line-2); color: var(--ink-2); }
 .rail-search kbd { margin-left: auto; padding: 1px 5px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink-3); font: 500 11px var(--font-jakarta), sans-serif; }
@@ -228,6 +228,11 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .stage-notes > * { margin: 0; }
 .stage-panel { flex: 1; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .stage-body { max-width: 1440px; margin-inline: auto; padding: 0 var(--s6) var(--s7); }
+/* The bar along the top of the stage while the next page loads (nav-progress.tsx): it creeps
+   on while waiting, then fills and fades. */
+.nav-bar { position: fixed; top: 0; right: 0; left: var(--side-w); z-index: var(--z-toast); height: 2px; background: var(--accent); opacity: 0; transform: scaleX(0); transform-origin: left; pointer-events: none; }
+.nav-bar[data-state] { opacity: 1; transition: transform 240ms var(--out), opacity var(--fast) var(--out); }
+.nav-bar[data-state="done"] { opacity: 0; transition: transform var(--base) var(--out), opacity var(--base) var(--out) var(--fast); }
 .pane-in { animation: page-in var(--slow) var(--out); }
 @keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
 .panel-in { animation: panel-in var(--spring-time) var(--spring); }
@@ -311,10 +316,18 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
    a hairline, ghost bare. Every one presses in; a busy one shows a spinner and keeps its words. */
 .b { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--s2); height: var(--control); padding: 0 var(--s3); border: 1px solid transparent; border-radius: var(--r2); font: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; text-decoration: none; cursor: pointer; transition: background var(--fast) var(--out), border-color var(--fast) var(--out), color var(--fast) var(--out), box-shadow var(--fast) var(--out), transform var(--fast) var(--out), filter var(--fast) var(--out); }
 .b:active:not(:disabled) { transform: scale(0.97); }
+/* The rest that is clicked presses in the same way; rows and menu choices darken instead. */
+:is(.tabs a, .pills a, .side-item, .rail-search, a.app-card, .app-card.is-link):active { transform: scale(0.97); }
+:is(.menu-item, .bell-list a):active { background: var(--press); }
 .b:disabled { opacity: 0.5; cursor: not-allowed; }
 .b[aria-busy="true"] { cursor: progress; }
 .b[aria-busy="true"]::before { content: ""; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: var(--round); animation: spin 700ms linear infinite; }
+.b[aria-busy="true"]:disabled { opacity: 1; }
+.b-icon[aria-busy="true"] > svg { display: none; }
 @keyframes spin { to { transform: rotate(1turn); } }
+/* A busy choice that is not a .b (in a small menu) breathes instead. */
+.ui button[aria-busy="true"]:not(.b) { cursor: progress; animation: breathe 700ms var(--out) infinite alternate; }
+@keyframes breathe { to { opacity: 0.45; } }
 .b-primary { border-color: transparent; background: var(--accent-fill); color: var(--on-accent); box-shadow: var(--shadow-primary); }
 .b-primary:hover:not(:disabled) { background: var(--accent-fill-hover); }
 .b-secondary { border-color: var(--line-2); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-button); }
@@ -476,14 +489,14 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 /* Tabs and filters. The current one carries a line (tabs) or a thumb (pills) that slides
    from the last one when the view changes (link-tabs.tsx). */
 .tabs { display: flex; gap: var(--s4); overflow-x: auto; border-bottom: 1px solid var(--line); }
-.tabs a { position: relative; flex-shrink: 0; white-space: nowrap; padding: var(--s2) 0 var(--s3); color: var(--ink-3); text-decoration: none; transition: color var(--fast) var(--out); }
+.tabs a { position: relative; flex-shrink: 0; white-space: nowrap; padding: var(--s2) 0 var(--s3); color: var(--ink-3); text-decoration: none; transition: color var(--fast) var(--out), transform var(--fast) var(--out); }
 .tabs a:hover { color: var(--ink); }
 .tabs a[aria-current="page"] { color: var(--ink); font-weight: 600; }
 .tabs a::after { content: none; }
 .tab-line { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; border-radius: var(--round); background: var(--accent); }
 .tabs small { margin-left: var(--s1); color: var(--ink-3); font-size: 12px; font-weight: 500; }
 .pills { display: inline-flex; flex-wrap: wrap; gap: var(--s1); padding: 3px; border-radius: var(--r2); background: var(--press); }
-.pills a { position: relative; display: inline-flex; align-items: center; height: 28px; padding: 0 var(--s3); border-radius: var(--r1); color: var(--ink-2); font-size: 13px; text-decoration: none; transition: color var(--fast) var(--out); }
+.pills a { position: relative; display: inline-flex; align-items: center; height: 28px; padding: 0 var(--s3); border-radius: var(--r1); color: var(--ink-2); font-size: 13px; text-decoration: none; transition: color var(--fast) var(--out), transform var(--fast) var(--out); }
 .pills a > :not(.tab-thumb) { position: relative; }
 .pills a:hover { color: var(--ink); }
 .pills a[aria-current="page"] { color: var(--ink); font-weight: 600; }
@@ -562,6 +575,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
   .side-scrim { position: fixed; inset: 0; z-index: 44; display: block; background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity 200ms var(--out); }
   .ui[data-drawer="open"] .side-scrim { opacity: 1; pointer-events: auto; }
   .stage, .stage-panel, .stage-panel:has(.fill) { height: auto; overflow: visible; }
+  .nav-bar { left: 0; }
   .stage-body:has(.fill) { height: auto; padding-inline: var(--s4); }
   /* The header scrolls away on a phone, so a tall one with wrapped actions never covers the page. */
   .topbar { position: static; flex-wrap: wrap; gap: var(--s2); }
@@ -580,6 +594,9 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
   .ui { transition: none; }
   .skeleton span, .skel { animation: none; }
   .toast { animation: none; }
+  /* Busy marks hold still, and the loading bar shows full width without creeping. */
+  .ui .b[aria-busy="true"]::before, .ui button[aria-busy="true"]:not(.b), .ui .side-going { animation: none !important; }
+  .nav-bar[data-state="run"] { transform: none !important; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation-duration: 0s !important; animation-delay: 0s !important; }
 }
 .until { display: inline-flex; align-items: center; gap: var(--s1); font-size: 13px; color: var(--ink-2); }
@@ -665,6 +682,7 @@ a.app-card, .app-card.is-link { position: relative; text-decoration: none; trans
 .stagger > :nth-child(8) { animation-delay: 175ms; } .stagger > :nth-child(9) { animation-delay: 200ms; }
 .stagger > :nth-child(10) { animation-delay: 225ms; } .stagger > :nth-child(11) { animation-delay: 250ms; }
 .stagger > :nth-child(n + 12) { animation-delay: 275ms; }
+.stagger > .kept { animation: none; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 
 /* A progress ring (ui.tsx ProgressRing): the arc draws once from empty. */
@@ -681,6 +699,8 @@ a.app-card, .app-card.is-link { position: relative; text-decoration: none; trans
 .copy:hover { background: var(--press); color: var(--ink); }
 .copy:active { transform: scale(0.9); }
 .copy.is-done { color: var(--done-fg); }
+.copy.is-done svg { animation: tick-in var(--base) var(--out); }
+@keyframes tick-in { from { opacity: 0; transform: scale(0.5) rotate(-12deg); } }
 
 /* Menus and popovers (New, workspace, account, notifications): a sheet that grows from its
    trigger's corner and shrinks back into it. */

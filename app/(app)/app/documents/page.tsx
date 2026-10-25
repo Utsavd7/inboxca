@@ -21,6 +21,7 @@ import { UploadForm } from "../clients/[id]/upload-form";
 import { FileViewer } from "../files/[id]/view/file-viewer";
 import { Pending } from "../pending";
 import { DroppedNotice, PortalDrop } from "../portal-drop";
+import { Item, List, Presence } from "../motion";
 import { Avatar, Badge, Empty, PageHead, Row, SidePanel, Toast } from "../ui";
 import { CopyButton } from "../ui-client";
 import { RowKeys } from "../row-keys";
@@ -246,9 +247,9 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                       <th scope="col">Came from</th>
                     </tr>
                   </thead>
-                  <tbody className="stagger">
+                  <List key={link({})} as="tbody">
                     {papers.map((row) => (
-                      <tr key={row.id} className={row.id === paper?.id ? "on" : undefined}>
+                      <Item as="tr" key={row.id} className={row.id === paper?.id ? "on" : undefined}>
                         {picking && (
                           <td className="docs-pick">{mayPick(row) && <input className="pick" type="checkbox" form="docs-pick" name="pick" value={row.id} aria-label={`Choose ${row.name}`} />}</td>
                         )}
@@ -275,9 +276,9 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                         </td>
                         <td>{periodName(row.period_key) || <span className="docs-faint">No period</span>}</td>
                         <td className="docs-faint docs-from" title={cameFrom(row)}>{cameFrom(row)}</td>
-                      </tr>
+                      </Item>
                     ))}
-                  </tbody>
+                  </List>
                 </table>
                 <RowKeys />
               </div>
@@ -413,8 +414,9 @@ export default async function Documents({ searchParams }: { searchParams: Promis
         </form>
       )}
 
+      <Presence>
       {params.upload && canUpload && (
-        <SidePanel id="upload-papers" title={uploadClient ? `Upload papers for ${uploadClient.name}` : "Upload papers"} close={close}>
+        <SidePanel key="upload" id="upload-papers" title={uploadClient ? `Upload papers for ${uploadClient.name}` : "Upload papers"} close={close}>
           {uploadClient ? (
             <>
               <p className="hint">Each file is saved in the client&apos;s folder in your firm&apos;s drive, named by the type and period you choose.</p>
@@ -477,12 +479,12 @@ export default async function Documents({ searchParams }: { searchParams: Promis
         </SidePanel>
       )}
       {params.portal && portal && (
-        <SidePanel id="portal-panel" title="Files from the GST portal" close={close}>
+        <SidePanel key="portal" id="portal-panel" title="Files from the GST portal" close={close}>
           <PortalDrop back="/app/documents" />
         </SidePanel>
       )}
       {preview && (
-        <SidePanel id="send-papers" title={`Send ${preview.length === 1 ? "1 paper" : `${preview.length} papers`} as secure links`} close={close}>
+        <SidePanel key="send" id="send-papers" title={`Send ${preview.length === 1 ? "1 paper" : `${preview.length} papers`} as secure links`} close={close}>
           <p className="hint">Each paper goes to its own client&apos;s email from your firm&apos;s address, as a link that works for 7 days and 5 downloads.</p>
           {picked.length > SEND && (
             <p className="alert" role="alert">
@@ -513,6 +515,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           </form>
         </SidePanel>
       )}
+      </Presence>
       {params.sent && !Number.isNaN(sent) && (
         <Toast>
           {sent ? `${sent === 1 ? "1 paper" : `${sent} papers`} sent as secure links.` : "No paper was sent."}

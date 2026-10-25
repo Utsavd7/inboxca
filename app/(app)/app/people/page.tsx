@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { changeGroup, manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
 import { Avatar, Badge, Empty, IconTile, NotForYou, PageHead, SidePanel, type Tone } from "../ui";
+import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { invitableRoles, personName, roleLabel } from "@/src/lib/roles";
 import { InviteForm } from "./invite-form";
@@ -81,9 +82,9 @@ export default async function People({ searchParams }: { searchParams: Promise<{
               )}
             </tr>
           </thead>
-          <tbody className="stagger">
+          <List as="tbody">
             {people?.map((one) => (
-              <tr key={one.user_id} className={`${one.status === "deactivated" ? "is-off" : ""}${one.user_id === person?.user_id ? " on" : ""}`}>
+              <Item as="tr" key={one.user_id} className={`${one.status === "deactivated" ? "is-off" : ""}${one.user_id === person?.user_id ? " on" : ""}`}>
                 <td>
                   <span className="people-who">
                     <Avatar name={one.email} />
@@ -116,9 +117,9 @@ export default async function People({ searchParams }: { searchParams: Promise<{
                     )}
                   </td>
                 )}
-              </tr>
+              </Item>
             ))}
-          </tbody>
+          </List>
         </table>
       </div>
       {count <= 1 && (
@@ -134,10 +135,11 @@ export default async function People({ searchParams }: { searchParams: Promise<{
         </div>
       )}
 
-      {isOwner && panel === "invite" && <InviteForm />}
+      <Presence>
+      {isOwner && panel === "invite" && <InviteForm key="invite" />}
 
       {person && (
-        <SidePanel id="person" title={person.email} close="/app/people">
+        <SidePanel key="person" id="person" title={person.email} close="/app/people">
           <div className="people-card">
             <Avatar name={person.email} big />
             <span className="grow">
@@ -178,7 +180,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
                     </div>
                   ) : null,
                 )}
-                <Pending className="b b-primary" name="intent" value="role">
+                <Pending busy="Saving" className="b b-primary" name="intent" value="role">
                   Save changes
                 </Pending>
               </>
@@ -202,7 +204,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
       )}
 
       {panel === "groups" && (isOwner || !!groups?.length) && (
-        <SidePanel id="groups" title="Teams and branches" close="/app/people">
+        <SidePanel key="groups" id="groups" title="Teams and branches" close="/app/people">
           <p className="hint">Group people into teams, and say which branch each works at. Clients can then be given to a whole team.</p>
           {kinds.map(({ kind, column, title, one, Icon }) => (
             <section key={kind} aria-labelledby={title.toLowerCase()}>
@@ -211,23 +213,23 @@ export default async function People({ searchParams }: { searchParams: Promise<{
                 {title}
               </h3>
               {groupsOf(kind).length ? (
-                <ul className="people-groups">
+                <List name={kind} className="people-groups" rise={false}>
                   {groupsOf(kind).map((group) => (
-                    <li key={group.id}>
+                    <Item key={group.id}>
                       <span className="grow">{group.name}</span>
                       <span className="hint">{size(column, group.id)}</span>
                       {isOwner && (
                         <form action={changeGroup}>
                           <input type="hidden" name="kind" value={kind} />
                           <input type="hidden" name="group" value={group.id} />
-                          <button className="b b-ghost" name="intent" value="remove" aria-label={`Remove ${one.toLowerCase()} ${group.name}`}>
+                          <Pending className="b b-ghost" name="intent" value="remove" aria-label={`Remove ${one.toLowerCase()} ${group.name}`}>
                             Remove
-                          </button>
+                          </Pending>
                         </form>
                       )}
-                    </li>
+                    </Item>
                   ))}
-                </ul>
+                </List>
               ) : (
                 <p className="hint">No {title.toLowerCase()} yet.</p>
               )}
@@ -247,6 +249,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
           ))}
         </SidePanel>
       )}
+      </Presence>
     </div>
   );
 }

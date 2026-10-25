@@ -171,7 +171,7 @@ function FileForm({ entry, here, choices, done }: { entry: Entry; here: Listing;
           {error}
         </p>
       )}
-      <button className="b b-primary" disabled={pending}>
+      <button className="b b-primary" disabled={pending} aria-busy={pending || undefined}>
         {pending ? "Filing" : "File this paper"}
       </button>
     </form>
