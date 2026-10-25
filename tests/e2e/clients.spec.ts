@@ -150,7 +150,8 @@ test("late clients lead the list, and a client's return is marked filed from its
   const rows = owner.locator(".clients-table tbody tr");
   await expect(rows.first()).toContainText("Patel Textiles");
   await expect(rows.first().locator(".badge")).toHaveText([`Late: ${n} returns`, "Missing papers"]);
-  await expect(rows.first()).toContainText(/Late since \d{1,2} \w{3}( \d{4})?: GSTR-1 \(monthly\) \w{3} \d{4}/);
+  // The late return over the day it fell late, the pills one over the other.
+  await expect(rows.first().locator(".clients-next")).toContainText(/^GSTR-1 \(monthly\) \w{3} \d{4}Late since \d{1,2} \w{3}( \d{4})?$/);
   await expect(rows.nth(1)).toContainText("Anand Dairy");
   // That request has no items list: Today and the client page still open.
   await owner.goto("/app");
@@ -167,7 +168,7 @@ test("late clients lead the list, and a client's return is marked filed from its
   await expect(due.getByRole("link", { name: /^Mark .* filed$/ })).toHaveCount(soon);
   await expect(due.last().getByRole("link")).toHaveCount(0);
   const late = due.filter({ has: owner.locator(".badge", { hasText: "Late" }) }).first();
-  const title = (await late.locator(".name").textContent())!;
+  const title = (await late.locator(".grow > strong").textContent())!;
   await late.getByRole("link", { name: `Mark ${title} filed` }).click();
   const panel = owner.getByRole("dialog", { name: "Mark filed" });
   await expect(panel.getByLabel("Filed on")).toHaveValue(todayInIndia());
@@ -455,7 +456,7 @@ test("the people looking after a client show by name, not email", async () => {
   await owner.goto(`/app/clients/${client}`);
   await expect(owner.locator("section[aria-labelledby=team-card]")).toContainText("Clients");
   await expect(owner.locator("section[aria-labelledby=team-card]")).not.toContainText("@");
-  await expect(owner.locator(".client-meta")).toContainText("looked after by Clients");
+  await expect(owner.locator(".client-team")).toContainText("Looked after by Clients");
   await owner.goto("/app/clients?q=Names%20Test");
   const row = owner.getByRole("row").filter({ hasText: "Names Test Client" });
   await expect(row).toContainText("Clients");
@@ -513,4 +514,35 @@ test("the menu's New and the search palette start things, and the bell lists upd
   await owner.keyboard.press("Escape");
   await owner.getByRole("button", { name: /^Updates/ }).click();
   await expect(owner.getByRole("dialog", { name: "Updates for you" })).toBeVisible();
+});
+
+test("a client's row offers Write and Ask for papers; its header copies numbers and the upload link and counts down to the next return", async () => {
+  const [{ id }] = await query(local.dbUrl, "select id from public.clients where firm_id=$1 and name='Patel Textiles Pvt Ltd'", [firm.firmId]);
+  await owner.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const copied = () => owner.evaluate(() => navigator.clipboard.readText());
+  // The quick actions wait on the row until it is pointed at.
+  await owner.goto("/app/clients?q=patel");
+  const row = owner.getByRole("row").filter({ hasText: "Patel Textiles Pvt Ltd" });
+  await row.hover();
+  await expect(row.getByRole("link", { name: "Write" })).toHaveAttribute("href", `/app/inbox?compose=${id}`);
+  await row.getByRole("link", { name: "Ask for papers" }).click();
+  await expect(owner).toHaveURL(new RegExp(`/app/clients/${id}\\?tab=documents&ask=1$`));
+
+  // With no firm email the link is shown once; the header keeps a Copy for it while it is open.
+  await owner.getByLabel("Anything else, by name").fill("Loan statement");
+  await owner.getByRole("dialog").getByRole("button", { name: "Ask for papers" }).click();
+  const link = (await owner.locator(".link-once").textContent())!;
+  const head = owner.locator(".page-head");
+  await head.getByRole("button", { name: "Copy upload link" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Upload link copied" })).toBeVisible();
+  expect(await copied()).toBe(link);
+  await head.getByRole("button", { name: "Copy GSTIN" }).click();
+  expect(await copied()).toBe("27AAPFU0939F1ZV");
+  await expect(head.getByRole("button", { name: "Copy PAN" })).toBeVisible();
+
+  // The next return still to file, in days from today.
+  const [next] = await query(local.dbUrl, "select due_on::text due from public.tasks where client_id=$1 and kind='compliance' and status<>'filed' and due_on>=(now() at time zone 'Asia/Kolkata')::date order by due_on limit 1", [id]);
+  const days = Math.round((Date.parse(next.due) - Date.parse(todayInIndia())) / 86_400_000);
+  await expect(head.getByRole("link", { name: /^Next due: / })).toContainText(days === 0 ? ", today" : days === 1 ? ", tomorrow" : `, in ${days} days`);
+  await expect(head.getByRole("link", { name: /^Next due: / })).toHaveAttribute("href", `/app/clients/${id}?tab=returns`);
 });

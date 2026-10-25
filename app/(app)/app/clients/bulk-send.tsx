@@ -23,6 +23,11 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
     return () => document.removeEventListener("change", read);
   }, []);
   const clients = `${names.length} ${names.length === 1 ? "client" : "clients"}`;
+  // Clear unticks every client, and the bar goes back down.
+  const clear = () => {
+    for (const box of document.querySelectorAll<HTMLInputElement>('input[form="bulk-send"][name="client"]:checked')) box.checked = false;
+    document.dispatchEvent(new Event("change"));
+  };
   const year = years.find(([value]) => value === period)?.[1] ?? "";
 
   return (
@@ -41,7 +46,13 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
         </>
       ) : (
         <>
-          <span>Send the chosen clients a filed paper.</span>
+          <span className="bulk-count">
+            <strong>{names.length}</strong> chosen
+          </span>
+          <button className="b b-ghost" type="button" onClick={clear}>
+            Clear
+          </button>
+          <span className="bulk-what">Send them a filed paper</span>
           <select id="bulk-paper" name="type" required aria-label="Paper" value={type} onChange={(event) => setType(event.target.value)}>
             <option value="">Choose a paper</option>
             {types.map((choice) => (
@@ -67,7 +78,7 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
 function Send({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
-    <button className="b b-primary" type="submit" disabled={pending}>
+    <button className="b b-primary" type="submit" disabled={pending} aria-busy={pending || undefined}>
       {pending ? "Sending" : label}
     </button>
   );
