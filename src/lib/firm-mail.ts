@@ -18,7 +18,7 @@ type Failed = { error: "sign_in" | "server" };
 export type MailAccess = { provider: "imap"; address: string; password: string; settings: MailSettings } | (api.ApiMailbox & { address: string });
 
 // Every use and save of a mailbox token is logged, never the token (PLAN.md 8.7).
-async function logToken(firm: string, account: string, action: string, details: Record<string, string | boolean>, actor: string | null = null) {
+async function logToken(firm: string, account: string, action: "mailbox.token_read" | "mailbox.token_saved" | "mailbox.token_deleted", details: { provider: string; why?: string; revoked?: boolean }, actor: string | null = null) {
   const { error } = await supabaseAdmin().from("activity_log").insert({ firm_id: firm, actor_id: actor, action, entity_type: "account", entity_id: account, details });
   if (error) throw new Error("token_log_not_saved");
 }

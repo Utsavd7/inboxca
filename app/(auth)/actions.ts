@@ -5,6 +5,7 @@ import { z } from "zod";
 import { log } from "@/src/lib/logger";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { officeDeviceAccess } from "@/src/lib/office";
+import { withinLimit } from "@/src/lib/rate-limit";
 import { recoveryDigest, SEEN_COOKIE, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
 
@@ -19,6 +20,9 @@ export async function requestCode(_prev: CodeState, form: FormData): Promise<Cod
     return { step: "email", error: "Enter a valid email address." };
   if (await mailboxLogin(email))
     return { step: "email", email, error: "The firm's email address cannot be used to sign in." };
+  // Counted for every address alike, so the answer never tells whether it has an account.
+  if (!(await withinLimit("code", email)))
+    return { step: "email", email, error: "Too many codes asked for this address. Try again in an hour." };
   const supabase = await supabaseServer();
   const origin = (await headers()).get("origin") ?? process.env.APP_BASE_URL ?? "";
   const { error } = await supabase.auth.signInWithOtp({
@@ -38,6 +42,8 @@ export async function verifyCode(_prev: CodeState, form: FormData): Promise<Code
   const token = String(form.get("code") ?? "").replace(/\s/g, "");
   if (!/^\d{6}$/.test(token))
     return { step: "code", email, error: "The code is the 6 digits in the email." };
+  if (!(await withinLimit("check", email)))
+    return { step: "code", email, error: "Too many codes tried. Wait an hour, then ask for a new one." };
   const supabase = await supabaseServer();
   if (await mailboxLogin(email))
     return { step: "code", email, error: "The firm's email address cannot be used to sign in." };
@@ -92,6 +98,8 @@ export async function verifyTwoStep(_prev: StepState, form: FormData): Promise<S
   const code = String(form.get("code") ?? "").replace(/\s/g, "");
   if (!/^\d{6}$/.test(code)) return { error: "Enter the 6 digit code from your authenticator app." };
   const supabase = await supabaseServer();
+  const { data: signedIn } = await supabase.auth.getClaims();
+  if (signedIn && !(await withinLimit("twoStep", signedIn.claims.sub))) return { error: "Too many tries. Wait an hour, then try again." };
   const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
   if (error) return { error: "That code did not work. Codes change every 30 seconds; try the new one." };
   const { data: claims } = await supabase.auth.getClaims();
@@ -108,6 +116,7 @@ export async function recoverTwoStep(_prev: StepState, form: FormData): Promise<
   const { data: claims } = await supabase.auth.getClaims();
   if (!claims) redirect("/sign-in");
   const userId = claims.claims.sub;
+  if (!(await withinLimit("recovery", userId))) return { error: "Too many tries. Wait an hour, then try again." };
   const admin = supabaseAdmin();
   const { data } = await admin.auth.admin.getUserById(userId);
   const saved = (data.user?.app_metadata.recovery ?? []) as string[];

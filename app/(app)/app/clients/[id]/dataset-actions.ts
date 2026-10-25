@@ -50,7 +50,7 @@ export async function reviewFigure(form:FormData) {
   const crypto=serverCrypto();
   const figures=await openFigures(membership.firmId,id,data);
   let permission:string|null=null;
-  const audit:Record<string,string>={line:lineId,state:intent};
+  const audit:{line:string;state:string;before?:string;after?:string;reason_enc?:string}={line:lineId,state:intent};
   if(intent==="edit") {
     permission=membership.may("edit_figures", client) ? null : await grantFor(membership.firmId,userId,"edit_figures",client);
     if(!membership.may("edit_figures", client) && !permission) redirect(`${back}&check=permission`);

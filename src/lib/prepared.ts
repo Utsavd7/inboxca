@@ -1,6 +1,5 @@
 import {createHash,randomUUID} from "node:crypto";
 import {z} from "zod";
-import type {Json} from "@/src/db/types";
 import type {FormRequest} from "./form-worker";
 import {checkedForm,workerForm} from "./prepare-form";
 import {currentWriter} from "./member";
@@ -69,7 +68,7 @@ export async function visibleForm(id:string) {
 
 export async function recordFormDecision(id:string,decision:"approved"|"rejected",code:string,text:string) {
   const {document,userId,membership}=await visibleForm(id);
-  const reason:Record<string,Json>={};
+  const reason:{code?:string;text_enc?:string}={};
   if(decision==="rejected") {
     if(!["figures","source","other"].includes(code) || text.trim().length<3 || text.length>300) throw new Error("Choose a reason and say what needs to change.");
     reason.code=code;reason.text_enc=await serverCrypto().encrypt(membership.firmId,`documents/${id}/rejection`,text.trim());
