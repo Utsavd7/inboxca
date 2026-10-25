@@ -1,4 +1,5 @@
 "use client";
+import { useLinkStatus } from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
@@ -6,9 +7,14 @@ import { draftEmail, draftReply, sendEmail, sendReply, type Draft } from "./acti
 
 type Paper = { id: string; name: string };
 
+// Inside a link: a small spinner from the click until the page it opens is ready.
+export function LinkBusy() {
+  return useLinkStatus().pending ? <span className="ib-busy" aria-hidden /> : null;
+}
+
 // The Inbox's keys, never required: j and k move through the list, Enter opens, r goes to the
-// reply, e takes the open email out of Needs reply, / goes to search, Esc leaves the reply,
-// then closes the open email back to the list.
+// reply, e takes the open email out of Needs reply, h opens Snooze, / goes to search, Esc
+// leaves the reply, then closes the open email back to the list.
 export function InboxKeys() {
   const router = useRouter();
   useEffect(() => {
@@ -23,6 +29,7 @@ export function InboxKeys() {
         k: () => rows[Math.max(0, at === -1 ? 0 : at - 1)]?.focus(),
         r: () => document.getElementById("reply-text")?.focus(),
         e: () => document.querySelector<HTMLButtonElement>("[data-key=e]")?.click(),
+        h: () => document.querySelector<HTMLElement>("[data-key=h]")?.click(),
         "/": () => document.querySelector<HTMLInputElement>("#mail-search")?.focus(),
         Escape: () => {
           const url = new URL(location.href);
@@ -43,8 +50,12 @@ export function InboxKeys() {
   return null;
 }
 
-// The list and the reading pane: from a click on an email until the address changes, the pane
-// shows its outline (inbox.css) and the list stays as it is.
+// The selected tint on one row of the list (inbox.css), or on none.
+const pick = (row?: Element | null) => document.querySelectorAll(".ib-row").forEach((each) => each.toggleAttribute("data-picked", each === row));
+
+// The list and the reading pane: from a click on an email until the address changes, the
+// clicked row takes the selected tint at once, the pane shows its outline (inbox.css) and the
+// list stays as it is.
 export function Reading({ children }: { children: React.ReactNode }) {
   const now = useSearchParams().toString();
   const [from, setFrom] = useState<string | null>(null);
@@ -53,9 +64,18 @@ export function Reading({ children }: { children: React.ReactNode }) {
     setSeen(now);
     setFrom(null);
   }
+  // The tint follows the address: the list may still show its last rows while it refreshes.
+  useEffect(() => {
+    const at = new URLSearchParams(now);
+    const open = at.get("mail") ?? at.get("sent");
+    const links = [...document.querySelectorAll<HTMLAnchorElement>(".ib-row > a")];
+    pick(open ? links.find((link) => { const its = new URL(link.href).searchParams; return (its.get("mail") ?? its.get("sent")) === open; })?.parentElement : null);
+  }, [now]);
   const open = (event: React.MouseEvent) => {
     const link = (event.target as HTMLElement).closest<HTMLAnchorElement>(".ib-row > a");
-    if (link && !event.metaKey && !event.ctrlKey && !event.shiftKey && link.href !== location.href) setFrom(now);
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || link.href === location.href) return;
+    setFrom(now);
+    pick(link.parentElement);
   };
   return (
     <div className="split" data-opening={from === now ? "" : undefined} onClick={open}>
@@ -67,9 +87,48 @@ export function Reading({ children }: { children: React.ReactNode }) {
 function Send({ children }: { children: string }) {
   const { pending } = useFormStatus();
   return (
-    <button className="b b-primary" disabled={pending} title="Sends from the firm's mailbox">
+    <button className="b b-primary" disabled={pending} aria-busy={pending || undefined} title="Sends from the firm's mailbox. Ctrl or Cmd and Enter also send">
       {pending ? "Sending" : children}
     </button>
+  );
+}
+
+// Ctrl or Cmd and Enter in the text sends, as in other mail programs.
+const sendKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit();
+};
+
+// Quick replies in the firm's voice: one click writes the email around the line, ready to
+// change; with words already written, only the line goes in where the cursor is.
+const templates = [
+  { label: "Received, thank you", line: "Thank you, we have received your email and the papers with it. We will get back to you if we need anything more." },
+  { label: "Please send the missing papers", line: "Thank you for your email. To finish your work we still need the papers below. Please send them by replying to this email.\n\n- " },
+  { label: "We will call you", line: "Thank you for your email. Someone from our team will call you shortly about this." },
+];
+function Templates({ name, firm }: { name: string; firm: string }) {
+  const whole = (line: string) => `Dear ${name},\n\n${line}\n\nRegards,\n${firm}`;
+  const use = (button: HTMLButtonElement, line: string) => {
+    const box = button.form?.elements.namedItem("text");
+    if (!(box instanceof HTMLTextAreaElement)) return;
+    if (!box.value.trim() || templates.some((template) => box.value === whole(template.line))) {
+      box.value = whole(line);
+      // The cursor waits where the person writes next: the first missing paper, or the end.
+      const at = box.value.indexOf("\n- ");
+      const end = at < 0 ? box.value.length : at + 3;
+      box.setSelectionRange(end, end);
+    } else box.setRangeText(line, box.selectionStart, box.selectionEnd, "end");
+    // Counts as typed, so Esc never throws the words away.
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+    box.focus();
+  };
+  return (
+    <div className="ib-templates" role="group" aria-label="Quick replies">
+      {templates.map((template) => (
+        <button key={template.label} type="button" className="ib-chip" onClick={(event) => use(event.currentTarget, template.line)}>
+          {template.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -121,9 +180,9 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
   );
 }
 
-// The reply under an open conversation: plain text, papers and files, and an AI draft only
-// once AI is set up.
-export function ReplyBox({ mail, papers, suggested, ai, mayAttach }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean }) {
+// The reply under an open conversation: quick replies, plain text, papers and files, and an
+// AI draft only once AI is set up.
+export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const text = useRef<HTMLTextAreaElement>(null);
   const [draft, ask, drafting] = useActionState<Draft, FormData>(async (previous, form) => {
@@ -135,7 +194,8 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach }: { mail: str
   return (
     <form action={sendReply} className="ib-reply" aria-label="Reply">
       <input type="hidden" name="mail" value={mail} />
-      <textarea id="reply-text" ref={text} name="text" rows={4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." />
+      <Templates name={name} firm={firm} />
+      <textarea id="reply-text" ref={text} name="text" rows={4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." onKeyDown={sendKey} />
       {mayAttach && <Attach papers={papers} chosen={chosen} setChosen={setChosen} offered={[...suggested, ...(draft.papers ?? [])]} />}
       <div className="ib-reply-foot">
         {draft.error && <span className="ib-note" role="status">{draft.error}</span>}
@@ -152,7 +212,7 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach }: { mail: str
 
 // A new email to one client. Who gets it is picked from the client's own addresses, never
 // typed, so mail only goes to addresses InboxCA knows.
-export function ComposeBox({ client, recipients, papers, ai, mayAttach }: { client: string; recipients: { value: string; label: string }[]; papers: Paper[]; ai: boolean; mayAttach: boolean }) {
+export function ComposeBox({ client, recipients, papers, ai, mayAttach, name, firm }: { client: string; recipients: { value: string; label: string }[]; papers: Paper[]; ai: boolean; mayAttach: boolean; name: string; firm: string }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const text = useRef<HTMLTextAreaElement>(null);
   const [draft, ask, drafting] = useActionState<Draft, FormData>(async (previous, form) => {
@@ -176,7 +236,8 @@ export function ComposeBox({ client, recipients, papers, ai, mayAttach }: { clie
         Subject
         <input name="subject" required maxLength={300} autoComplete="off" />
       </label>
-      <textarea ref={text} name="text" rows={8} required maxLength={20_000} aria-label="Your email" placeholder="Write your email." />
+      <Templates name={name} firm={firm} />
+      <textarea ref={text} name="text" rows={8} required maxLength={20_000} aria-label="Your email" placeholder="Write your email." onKeyDown={sendKey} />
       {mayAttach && <Attach papers={papers} chosen={chosen} setChosen={setChosen} />}
       <div className="ib-reply-foot">
         {draft.error && <span className="ib-note" role="status">{draft.error}</span>}

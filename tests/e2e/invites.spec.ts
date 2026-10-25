@@ -791,7 +791,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   }
   expect(reasons.sort()).toEqual(["Asks for a paper that is not in the drive", "Asks something InboxCA could not answer"]);
   await owner.goto("/app/inbox?show=reply");
-  await expect(owner.getByText("No emails here")).toBeVisible();
+  await expect(owner.getByText("No email needs a reply")).toBeVisible();
   await owner.goto("/app/inbox?show=in");
   await expect(waiting).toHaveCount(2);
   await waiting.first().locator(".ib-subject").click();

@@ -1,13 +1,13 @@
 /* The Inbox: filters on one line, the list on the left and the open conversation on the
-   right, each scrolling on its own (.fill, .split and .pane come from app.css). Only the
-   design scale: type 12 / 13 / 14 / 16 / 24, space 4 to 48, controls 32, tags 20. */
+   right, each scrolling on its own (.fill, .split and .pane come from app.css). Quick like a
+   mail program: the picked row tints at once, the open email crossfades in by its id. */
 .ib { gap: var(--s4); }
 .ib :is(.notice, .alert) { margin: 0; }
-.ib .empty { border: 0; padding: var(--s7) var(--s4); }
+.ib .split .empty { border: 0; background: none; padding: var(--s7) var(--s4); }
 .ib-note { color: var(--ink-3); font-size: 13px; font-weight: 500; }
 
 /* What waits for the team besides email: short, scrolls on its own. */
-.ib-wait { display: grid; gap: var(--s2); max-height: 168px; overflow: auto; padding: var(--s2) var(--s4); border: 1px solid var(--line); border-radius: var(--r3); }
+.ib-wait { display: grid; gap: var(--s2); max-height: 184px; overflow: auto; padding: var(--s2) var(--s4); border: 1px solid var(--edge); border-radius: var(--r3); box-shadow: var(--shadow-1); }
 .ib-wait :is(h2, summary) { color: var(--ink-3); font-size: 12px; font-weight: 600; line-height: 1.3; }
 .ib-wait summary { cursor: pointer; }
 .ib-wait li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); min-height: var(--row); }
@@ -21,92 +21,142 @@
 .ib-wait section[aria-labelledby=questions] .b { flex: none; }
 .ib-wait form { display: flex; flex-wrap: wrap; gap: var(--s2); }
 
-/* Filters */
+/* Filters: the views as a segmented control, then menus that look like buttons. */
 .ib-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
-.ib-pills { display: flex; flex-wrap: wrap; gap: var(--s2); }
-.ib-pill, .ib-menu summary { display: inline-flex; align-items: center; gap: var(--s2); height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); color: var(--ink-2); font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; transition: background 120ms var(--out), color 120ms var(--out); }
-.ib-pill:hover, .ib-menu summary:hover { background: var(--hover); color: var(--ink); }
-.ib-pill[aria-current] { border-color: var(--accent-soft); background: var(--accent-soft); color: var(--accent); }
 .ib-menu { position: relative; }
-.ib-menu summary { list-style: none; }
+.ib-menu summary { display: inline-flex; align-items: center; gap: var(--s2); height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow-button); color: var(--ink); font-size: 13px; font-weight: 600; list-style: none; white-space: nowrap; cursor: pointer; user-select: none; transition: background var(--fast) var(--out), border-color var(--fast) var(--out), transform var(--fast) var(--out); }
 .ib-menu summary::-webkit-details-marker { display: none; }
-.ib-pop { position: absolute; z-index: 20; top: calc(100% + var(--s1)); left: 0; display: grid; gap: var(--s1); width: 264px; max-height: 336px; overflow: auto; padding: var(--s2); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--white); box-shadow: var(--shadow-float); animation: ib-drop 160ms var(--out); }
-.ib-pop :is(a, button) { display: flex; align-items: center; min-height: var(--control); padding: 0 var(--s2); border: 0; border-radius: var(--r1); background: transparent; color: inherit; font: inherit; font-size: 14px; text-align: left; text-decoration: none; overflow-wrap: anywhere; cursor: pointer; }
-.ib-pop :is(a, button):hover { background: var(--hover); }
-.ib-pop :is(a, button)[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.ib-menu summary:hover { border-color: var(--line-3); background: var(--hover); }
+.ib-menu summary:active { transform: scale(0.97); }
+.ib-menu[open] > summary { border-color: var(--line-3); background: var(--press); }
+.ib-menu summary > svg:last-child { margin-right: calc(var(--s1) * -1); color: var(--ink-3); transition: transform var(--base) var(--out); }
+.ib-menu[open] > summary > svg:last-child { transform: rotate(180deg); }
+.ib-menu summary .avatar { width: 20px; height: 20px; margin-left: calc(var(--s1) * -1); font-size: 10px; }
+.ib-pop { position: absolute; z-index: 20; top: calc(100% + var(--s1)); left: 0; display: grid; gap: 2px; width: 280px; max-height: 360px; overflow: auto; padding: var(--s1); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-float); transform-origin: top left; animation: ib-drop var(--base) var(--out); }
+.ib-pop :is(a, button):not(.b) { display: flex; align-items: center; gap: var(--s2); min-height: var(--control); padding: var(--s1) var(--s2); border: 0; border-radius: var(--r2); background: transparent; color: inherit; font: inherit; font-size: 14px; text-align: left; text-decoration: none; overflow-wrap: anywhere; cursor: pointer; }
+.ib-pop :is(a, button):not(.b):hover { background: var(--hover); }
+.ib-pop :is(a, button):not(.b)[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.ib-pop .avatar { width: 24px; height: 24px; font-size: 10px; }
+.ib-pop .grow { display: grid; flex: 1; min-width: 0; }
+.ib-pop small { color: var(--ink-3); font-size: 12px; font-weight: 500; }
 .ib-pop .ib-note { padding: 0 var(--s2); }
 .ib .ib-pop input { height: var(--control); font-size: 14px; }
-.ib-search { display: flex; align-items: center; gap: var(--s2); flex: 0 1 288px; min-width: 0; height: var(--control); margin-left: auto; padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); color: var(--ink-3); }
-.ib-search:focus-within { border-color: var(--accent); }
+.ib-pop form[role=search] { padding: var(--s1); }
+/* Snooze: two quick days with their dates, then any day. */
+.ib-pop-list { display: grid; gap: 2px; }
+.ib-pop-list button:not(.b) { justify-content: space-between; }
+.ib-day { display: flex; gap: var(--s2); margin-top: var(--s1); padding: var(--s2) var(--s1) var(--s1); border-top: 1px solid var(--line); }
+.ib .ib-day input { flex: 1; min-width: 0; }
+.ib-search { display: flex; align-items: center; gap: var(--s2); flex: 1 1 160px; max-width: 288px; min-width: 0; height: var(--control); margin-left: auto; padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow-button); color: var(--ink-3); transition: border-color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
+.ib-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-glow); }
 .ib .ib-search input { width: 100%; height: 30px; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: 14px; }
 
-/* The two panes */
-.ib-list { flex: 0 1 400px; min-width: 280px; border-right: 1px solid var(--line); }
+/* The list: an avatar a row, the client over the subject and the first line. An email that
+   waits for a reply has a dot and a darker subject; the open one is tinted. */
+.ib-list { flex: 0 1 420px; min-width: 280px; border-right: 1px solid var(--line); }
+.ib-list > ul { margin: 0; padding: 0; list-style: none; }
 .ib-list .alert { margin: var(--s3) var(--s4); }
 .ib-row { position: relative; border-bottom: 1px solid var(--line); }
-.ib-row > a { display: grid; gap: var(--s1); padding: var(--s3) var(--s4); text-decoration: none; transition: background 120ms var(--out); }
+.ib-row > a { position: relative; display: flex; align-items: flex-start; gap: var(--s3); padding: var(--s3) var(--s4) var(--s3) var(--s5); text-decoration: none; transition: background var(--base) var(--out); }
 .ib-row > a:hover { background: var(--hover); }
-.ib-row > a:focus-visible { border-radius: 0; }
-.ib-row[aria-current] > a { background: var(--accent-soft); }
+.ib-row > a:focus-visible { border-radius: 0; box-shadow: inset 0 0 0 2px var(--accent-hi); }
+/* The picked row (set by the page's script from the address) wins over the server's mark,
+   which the list may still carry from the last email while it refreshes. */
+.ib-row[data-picked] > a, .ib-list:not(:has([data-picked])) .ib-row[aria-current] > a { background: var(--accent-soft); }
+.ib-row > a > .avatar { margin-top: 2px; transition: box-shadow var(--base) var(--out); }
+.ib-row[data-picked] > a > .avatar, .ib-list:not(:has([data-picked])) .ib-row[aria-current] > a > .avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent-hi); }
+/* Until the mailbox answers, a row's subject and first line are an outline. */
+.ib-row .ib-skel-line { width: 72%; height: 10px; margin: 5px 0; border-radius: var(--round); }
+.ib-row .ib-skel-line.short { flex: 1; width: auto; max-width: 56%; }
+.ib-list-wait { display: grid; gap: var(--s2); padding: var(--s3) var(--s4); }
+.ib-list-wait .skel { height: 64px; }
+.ib-row[data-waits] > a::before { content: ""; position: absolute; top: 24px; left: 9px; width: 7px; height: 7px; border-radius: var(--round); background: var(--wait-dot); }
+.ib-row-main { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .ib-row-top, .ib-row-foot { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
 .ib-row-top strong { flex: 1; min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.ib-dir { color: var(--ink-3); font-size: 12px; font-weight: 600; }
-.ib-dir.in { color: var(--accent); }
+.ib-sent-to { color: var(--ink-3); font-weight: 500; }
+.ib-who-has { display: inline-flex; }
+.ib-who-has .avatar { width: 20px; height: 20px; font-size: 10px; }
 .ib-row time, .ib-who time { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
-.ib-subject { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ib-subject { overflow: hidden; color: var(--ink-2); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.ib-row[data-waits] .ib-subject { color: var(--ink); font-weight: 600; }
 .ib-snippet { flex: 1; min-width: 0; overflow: hidden; color: var(--ink-3); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.ib-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 var(--s2); border-radius: var(--r1); background: var(--gray-bg); color: var(--gray-fg); font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
-.ib-tag.done { background: var(--green-bg); color: var(--green-fg); }
-.ib-tag.warn { background: var(--amber-bg); color: var(--amber-fg); }
-/* A row's own actions show when it is pointed at or reached by keyboard. */
-.ib-acts { position: absolute; top: var(--s2); right: var(--s4); display: none; gap: var(--s2); }
-.ib-row:is(:hover, :focus-within) .ib-acts { display: flex; }
+.ib-tag { display: inline-flex; align-items: center; height: 22px; padding: 0 var(--s2); border-radius: var(--round); background: var(--none-bg); color: var(--none-fg); font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+/* A row's own actions fade in when it is pointed at or reached by keyboard. */
+.ib-acts { position: absolute; top: var(--s2); right: var(--s3); display: flex; gap: var(--s2); padding-left: var(--s5); background: linear-gradient(to right, transparent, var(--hover) var(--s5)); opacity: 0; pointer-events: none; transition: opacity var(--fast) var(--out); }
+.ib-row[data-picked] .ib-acts, .ib-list:not(:has([data-picked])) .ib-row[aria-current] .ib-acts { background: linear-gradient(to right, transparent, var(--accent-soft) var(--s5)); }
+.ib-row:is(:hover, :focus-within) .ib-acts { opacity: 1; pointer-events: auto; }
 .ib-acts form { display: contents; }
+.ib-more { list-style: none; }
 .ib-more a { display: flex; align-items: center; justify-content: center; height: var(--row); color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: none; }
 
+/* The open email */
 .ib-open { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .ib-pick { margin: auto; padding: var(--s7) var(--s5); color: var(--ink-3); text-align: center; }
+.ib-keys { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s2) var(--s4); max-width: 360px; margin-top: var(--s2); font-size: 12px; }
+.ib-keys > span { display: inline-flex; align-items: center; gap: var(--s1); }
 .ib-convo { display: flex; flex-direction: column; gap: var(--s4); flex: 1; padding: var(--s5) var(--s5) 0; }
-.ib-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
-.ib-head h2 { font-size: 16px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
-.ib-head .ib-note { margin-top: var(--s1); }
+.ib-head { display: flex; align-items: flex-start; gap: var(--s3); }
+.ib-head > .avatar { width: 40px; height: 40px; font-size: 14px; }
+.ib-head .grow { flex: 1; min-width: 0; }
+.ib-head h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; overflow-wrap: anywhere; }
+.ib-head .ib-note { margin-top: 2px; }
 .ib-actions, .ib-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.ib-actions > form { display: flex; }
+.ib-actions .b .kbd { height: 18px; margin-right: calc(var(--s1) * -1); padding: 0 5px; border-color: var(--line); font-size: 11px; }
 .ib .ib-inline select { width: auto; max-width: 240px; height: var(--control); font-size: 13px; }
 /* The email's label as a tag, with a small menu to change it. */
 .ib-label { gap: var(--s1); }
-.ib-label .ib-menu summary { height: 24px; padding: 0 var(--s2); border-color: transparent; color: var(--accent); }
-.ib-label .ib-pop { right: 0; left: auto; }
+.ib-label .ib-menu summary { height: 24px; padding: 0 var(--s2); border-color: transparent; background: none; box-shadow: none; color: var(--accent); }
+.ib-label .ib-pop { right: 0; left: auto; transform-origin: top right; }
+/* Filing an email InboxCA could not match: the client picked, then one button. */
+.ib-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--s3) var(--s4); border-radius: var(--r2); background: var(--accent-soft); color: var(--ink); animation: rise var(--slow) var(--out); }
+.ib-confirm > svg { color: var(--accent); }
+.ib-confirm .grow { flex: 1 1 240px; }
+.ib-confirm strong { font-weight: 600; }
 
-/* While an email opens, its pane shows an outline and the list stays as it is. */
+/* While an email opens, its pane shows the outline of one at once (the first one on the
+   click, the one in its place while the mailbox is read) and the list stays as it is. */
 .ib-skeleton { display: none; }
-.split[data-opening] .ib-open > :not(.ib-skeleton) { display: none; }
-.split[data-opening] .ib-skeleton { display: grid; padding: var(--s5); }
-.ib-skeleton span:not(.skeleton-title) { height: var(--s4); }
+.split[data-opening] .ib-open > :not(:first-child) { display: none; }
+:is(.split[data-opening] .ib-open > .ib-skeleton:first-child, .ib-skeleton.is-on) { display: grid; gap: var(--s3); padding: var(--s5); }
+.ib-skeleton span { height: var(--s4); }
+.ib-skeleton .skeleton-title { width: min(360px, 70%); margin: 0; }
+.ib-skeleton .ib-skel-meta { width: 180px; height: 14px; }
+.ib-skeleton .ib-skel-acts { width: min(320px, 80%); height: var(--control); margin-bottom: var(--s3); }
+.ib-skeleton span:nth-last-child(3) { width: 86%; }
+.ib-skeleton span:nth-last-child(2) { width: 72%; }
+.ib-skeleton span:last-child { width: 44%; }
 
-/* Answering a question, in the side panel. */
+/* The conversation: each message under its sender's avatar. */
 .ib-answer { display: grid; gap: var(--s4); }
 .ib-answer strong { font-weight: 600; overflow-wrap: anywhere; }
-.ib-thread { display: grid; gap: var(--s4); }
+.ib-thread { display: grid; gap: var(--s4); margin: 0; padding: 0; list-style: none; }
 .ib-thread > li { display: grid; gap: var(--s2); padding-top: var(--s4); border-top: 1px solid var(--line); }
-.ib-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); font-size: 13px; }
+.ib-thread > li > :not(.ib-who) { margin-left: 40px; }
+.ib-who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); font-size: 13px; }
 .ib-who strong { font-weight: 600; }
 .ib-body { display: grid; gap: var(--s2); max-width: 68ch; font-weight: 400; overflow-wrap: anywhere; white-space: pre-line; }
-.ib-files { display: grid; gap: var(--s2); }
-.ib-files > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--s3) var(--s4); border: 1px solid var(--line-2); border-radius: var(--r2); }
-.ib-files > li.ib-note { padding: 0; border: 0; }
+.ib-files { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.ib-files > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--s2) var(--s3); border: 1px solid var(--edge); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow-button); }
+.ib-files > li.ib-note { padding: 0; border: 0; background: none; box-shadow: none; }
 .ib-files .grow { display: grid; flex: 1; min-width: 0; }
 .ib-files strong { font-weight: 600; overflow-wrap: anywhere; }
-.ib-ext { display: flex; flex: none; align-items: center; justify-content: center; width: var(--control); height: var(--row); border-radius: var(--r1); background: var(--gray-bg); color: var(--gray-fg); font-size: 12px; font-weight: 600; }
+.ib-ext { display: flex; flex: none; align-items: center; justify-content: center; width: var(--control); height: var(--control); border-radius: var(--r1); background: var(--k-docs-bg); color: var(--k-docs); font-size: 11px; font-weight: 700; }
 .ib-path { color: var(--ink-3); font-family: var(--font-plex), ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere; }
 
-/* The reply stays at the foot of the conversation. */
-.ib-reply { position: sticky; bottom: 0; display: grid; gap: var(--s2); margin-top: auto; padding: var(--s3) 0 var(--s4); border-top: 1px solid var(--line); background: var(--white); }
-.ib :is(.ib-reply, .ib-compose) textarea { width: 100%; min-height: 96px; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.5; resize: vertical; }
-.ib :is(.ib-reply, .ib-compose) textarea:focus { border-color: var(--accent); outline: none; }
+/* The reply stays at the foot of the conversation, quick replies above the text. */
+.ib-reply { position: sticky; bottom: 0; display: grid; gap: var(--s2); margin-top: auto; padding: var(--s3) 0 var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
+.ib :is(.ib-reply, .ib-compose) textarea { width: 100%; min-height: 96px; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.5; resize: vertical; transition: border-color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
+.ib :is(.ib-reply, .ib-compose) textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-glow); outline: none; }
+.ib-templates { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.ib-templates .ib-chip { height: 28px; border-radius: var(--round); }
 .ib-attach { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
-.ib-chip { display: inline-flex; align-items: center; gap: var(--s1); height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); background: transparent; color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 120ms var(--out); }
-.ib-chip:hover { background: var(--hover); }
+.ib-chip { display: inline-flex; align-items: center; gap: var(--s1); height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background var(--fast) var(--out), color var(--fast) var(--out), transform var(--fast) var(--out); }
+.ib-chip:hover { background: var(--hover); color: var(--ink); }
+.ib-chip:active { transform: scale(0.97); }
 .ib-chip.on { border-color: var(--accent-soft); background: var(--accent-soft); color: var(--accent); cursor: default; }
+.ib-chip.on:active { transform: none; }
 .ib-chip button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .ib .ib-attach select { width: auto; max-width: 280px; height: var(--control); font-size: 13px; }
 /* The file input hides behind its "Upload a file" label, which shows its focus. */
@@ -127,17 +177,29 @@
 .ib-to .check { overflow-wrap: anywhere; }
 .ib-compose .ib-reply-foot { padding-top: var(--s3); border-top: 1px solid var(--line); }
 
-@keyframes ib-drop { from { opacity: 0; transform: translateY(calc(var(--s1) * -1)); } }
-@media (prefers-reduced-motion: reduce) { .ib-pop { animation: none; } .ib-row > a, .ib-pill, .ib-chip { transition: none; } }
+/* Mark all as done: the emails it takes, then the one button at the panel's foot. */
+.ib-preview { margin: var(--s3) calc(var(--s4) * -1) 0; }
+.ib-send { position: sticky; bottom: calc(var(--s4) * -1); display: flex; justify-content: flex-end; margin: 0 calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
+
+/* The open email changes by crossfade: the old one fades out, the new one rises in. */
+::view-transition-old(.ib-out) { animation: vt-fade var(--fast) var(--out) both reverse; }
+::view-transition-new(.ib-in) { animation: vt-rise var(--slow) var(--out) both; }
+
+/* A link whose page is on its way shows a small spinner. */
+.ib-busy { width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: var(--round); animation: spin 700ms linear infinite; }
+
+@keyframes ib-drop { from { opacity: 0; transform: translateY(calc(var(--s1) * -1)) scale(0.97); } }
 
 /* On a phone the page scrolls as one: the list, then the open email. */
 @media (max-width: 720px) {
   .stage-panel:has(.ib) { overflow-y: auto; }
   .stage-body:has(.ib), .stage-body:has(.ib) > .page-in { display: block; height: auto; }
-  .ib-search { flex: 1 1 100%; margin-left: 0; }
+  .ib-search { flex: 1 1 100%; max-width: none; margin-left: 0; }
   .ib .split { flex: none; flex-direction: column; }
   .ib .pane { overflow: visible; }
   .ib-reply { position: static; }
   .ib-list { flex: none; min-width: 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .ib-convo { padding: var(--s4) var(--s4) 0; }
+  .ib-thread > li > :not(.ib-who) { margin-left: 0; }
+  .ib-pop { width: min(280px, calc(100vw - 48px)); }
 }

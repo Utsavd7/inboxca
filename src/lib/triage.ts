@@ -23,6 +23,9 @@ export const replyReasons: Record<string, string> = {
   data_unclear: "Sent data for more than one kind of work",
   client_unclear: "Writes for several clients. Pick which one",
 };
+// A Needs reply email snoozed to a later day stays out of Needs reply until that day (India
+// time), as a PostgREST filter on the request's details.
+export const awake = (today: string) => `details->>snooze.is.null,details->>snooze.lte.${today}`;
 export type Email = { subject: string; text: string; attachments: string[] };
 
 const words = {
