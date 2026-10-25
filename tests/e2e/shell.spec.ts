@@ -112,3 +112,22 @@ test("a slow page shows the loading bar, and a slow save keeps its button busy",
     await firm.remove();
   }
 });
+
+test("the page never slides sideways when something scrolls it", async ({ page }) => {
+  const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+  const email = `shell-side-${randomUUID()}@invented.test`;
+  const firm = await seedFirm("Invented Side Firm", email, key);
+  try {
+    await emailStep(page, email);
+    await page.getByLabel("6 digit code from the app").fill(totp(key));
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/app$/);
+    // The header's backdrop is wider than the pane, so a focused field could scroll it sideways.
+    const pane = page.locator(".stage-panel");
+    expect(await pane.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+    await pane.evaluate((el) => { el.scrollLeft = 120; });
+    await expect.poll(() => pane.evaluate((el) => el.scrollLeft)).toBe(0);
+  } finally {
+    await firm.remove();
+  }
+});
