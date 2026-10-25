@@ -1,8 +1,8 @@
 import {createHash,randomBytes,randomUUID} from "node:crypto";
 import {readFile} from "node:fs/promises";
-import {tmpdir} from "node:os";
 import {loadEnvConfig} from "@next/env";
 import {test,expect} from "@playwright/test";
+import {TEST_DRIVE} from "../../playwright.config";
 import {serverCrypto} from "@/src/lib/crypto";
 import {localDrive} from "@/src/lib/drive";
 import {pdf} from "../fixtures/pdf";
@@ -16,7 +16,7 @@ test("the owner's scoped permission gives a personal copy only for that client",
   const key=Array.from(randomBytes(16),byte=>"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte%32]).join("");
   const ownerEmail=`rights-owner-${randomUUID()}@invented.test`,staffEmail=`rights-staff-${randomUUID()}@invented.test`;
   const firm=await seedFirm("Invented Scoped Firm",ownerEmail,key),staff=await seedFirm("Invented Staff Setup",staffEmail,key);
-  const context=await browser.newContext(),person=await context.newPage(),drive=localDrive(`${tmpdir()}/inboxca-test-drive`);
+  const context=await browser.newContext(),person=await context.newPage(),drive=localDrive(TEST_DRIVE);
   let stored:string|undefined;
   try {
     await query(local.dbUrl,"delete from public.firm_members where firm_id=$1 and user_id=$2",[staff.firmId,staff.ownerId]);

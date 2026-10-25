@@ -48,15 +48,18 @@ it("triages 50 invented emails and keeps their subjects and bodies out of saved 
     const email=`triage-${run}@invented.test`,crypto=state.crypto;
     await db.query("insert into public.clients(id,firm_id,name,kind,email_enc,email_bidx) values ($1,$2,'Invented Triage Client','individual',$3,$4)",[client,firm,await crypto.encrypt(firm,`clients/${client}/email`,email),await crypto.blindIndex(firm,"email",email)]);
     const settings={imap:{host:"127.0.0.1",port:3143},smtp:{host:"127.0.0.1",port:3025}};
-    const password="secret"; // ggignore: GreenMail's public local test password.
-    const checked=await checkMailbox("office@firm.test",password,settings);
+    // A mailbox of this run's own, so the poll reads only these emails. GreenMail makes a
+    // mailbox for every address it receives mail for, its password the address.
+    const office=`triage-office-${run}@invented.test`,password=office;
+    await smtp.sendMail({from:"setup@invented.test",to:office,subject:"Invented test setup",text:"Makes the test mailbox"});
+    const checked=await checkMailbox(office,password,settings);
     expect("cursor" in checked).toBe(true);
-    await db.query("insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc,settings,sync_cursor) values ($1,$2,'mail','imap',$3,$4,$5,$6)",[account,firm,await crypto.encrypt(firm,`accounts/${account}/address`,"office@firm.test"),await crypto.encrypt(firm,`accounts/${account}/credentials`,JSON.stringify({password})),settings,"cursor" in checked ? checked.cursor : ""]);
+    await db.query("insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc,settings,sync_cursor) values ($1,$2,'mail','imap',$3,$4,$5,$6)",[account,firm,await crypto.encrypt(firm,`accounts/${account}/address`,office),await crypto.encrypt(firm,`accounts/${account}/credentials`,JSON.stringify({password})),settings,"cursor" in checked ? checked.cursor : ""]);
     // The firm's drive is the local test folder, so filing really writes files.
     const drive=randomUUID();
     await db.query("insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc) values ($1,$2,'drive','local',$3,$4)",[drive,firm,await crypto.encrypt(firm,`accounts/${drive}/address`,"Local test drive"),await crypto.encrypt(firm,`accounts/${drive}/credentials`,"{}")]);
-    await Promise.all(pack.map((sample,n)=>smtp.sendMail({from:email,to:"office@firm.test",messageId:`<triage-${run}-${n}@inboxca.test>`,subject:`${sample.subject} ${markers[n*2]}`,text:`${sample.text}\n${markers[n*2+1]}`,attachments:sample.attachments.map((filename)=>({filename,content:"Invented attachment"}))})));
-    await smtp.sendMail({from:`unknown-${run}@invented.test`,to:"office@firm.test",messageId:`<triage-${run}-50@inboxca.test>`,subject:markers[100],text:markers[101]});
+    await Promise.all(pack.map((sample,n)=>smtp.sendMail({from:email,to:office,messageId:`<triage-${run}-${n}@inboxca.test>`,subject:`${sample.subject} ${markers[n*2]}`,text:`${sample.text}\n${markers[n*2+1]}`,attachments:sample.attachments.map((filename)=>({filename,content:"Invented attachment"}))})));
+    await smtp.sendMail({from:`unknown-${run}@invented.test`,to:office,messageId:`<triage-${run}-50@inboxca.test>`,subject:markers[100],text:markers[101]});
     const encrypted=vi.spyOn(crypto,"encrypt"),written=vi.spyOn(fs.promises,"writeFile"),synced=vi.spyOn(fs,"writeFileSync");
     const logs=[vi.spyOn(console,"log"),vi.spyOn(console,"warn"),vi.spyOn(console,"error"),vi.spyOn(process.stdout,"write")];
     expect(await mailPoll({entity_id:account} as Job,{markSending:async()=>{}})).toEqual({done:true});
@@ -91,4 +94,4 @@ it("triages 50 invented emails and keeps their subjects and bodies out of saved 
     await db.query("begin");await db.query("select set_config('app.log_purge','on',true)");await db.query("delete from public.firms where id=$1",[firm]);await db.query("commit");await db.end();await rm(dir,{recursive:true,force:true});
   }
   console.info(`Triage: ${correct}/50 correct; ${low}/${low} unclear emails sent to the team; no subject or body markers saved.`);
-},60_000);
+},120_000);

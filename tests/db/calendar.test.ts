@@ -37,11 +37,12 @@ async function seed() {
 }
 const setServices = (kind: string, services: string[]) =>
   attempt(db, "update public.client_registrations set services = $1 where kind = $2", [services, kind]);
-// Plans the calendar as of a fixed day, so the expected tasks never move.
+// Plans this firm's calendar as of a fixed day, so the expected tasks never move; only this
+// firm, so other firms in the shared database (a large scale test firm, say) cost nothing.
 async function planAsOf(day: string) {
   await asOwner(db);
   await db.query("delete from public.tasks where firm_id = $1", [FIRM]);
-  await db.query("select private.plan_tasks(null, $1)", [day]);
+  await db.query("select private.plan_tasks_for(null, $2, $1)", [day, FIRM]);
 }
 const due = async (code: string) =>
   (await db.query("select period_key, to_char(due_on, 'YYYY-MM-DD') as due_on from public.tasks where firm_id = $2 and code = $1 order by due_on", [code, FIRM])).rows;
@@ -116,7 +117,7 @@ describe("the compliance calendar", () => {
       await db.query(
         "update public.compliance_types set source_url = 'https://example.test/notification', verified_on = '2026-10-15', approved_by = 'CA Test' where period_key = '2026-09'",
       );
-      await db.query("select private.plan_tasks(null, '2026-10-01')");
+      await db.query("select private.plan_tasks_for(null, $1, '2026-10-01')", [FIRM]);
       expect((await due("GSTR3B_M"))[0]).toEqual({ period_key: "2026-09", due_on: "2026-10-25" });
     }));
 

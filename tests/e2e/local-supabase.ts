@@ -56,17 +56,19 @@ export async function query(dbUrl: string, sql: string, params: unknown[] = []) 
 
 // An active firm and its owner, who can sign in by email. With a key, the owner's
 // authenticator app is already set up. remove() deletes the firm, its log lines (which
-// needs the purge flag) and the given people.
+// needs the purge flag) and the given people. The firm is marked with this run's tag, so
+// only this run's test server runs its jobs.
 export async function seedFirm(firmName: string, ownerEmail: string, totpKey?: string) {
   const local = localSupabase();
+  const { TEST_RUN } = await import("../../playwright.config");
   const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
   const { data, error } = await admin.auth.admin.createUser({ email: ownerEmail, email_confirm: true });
   if (error) throw error;
   const ownerId = data.user.id;
   const [{ id: firmId }] = await query(
     local.dbUrl,
-    "insert into public.firms (name, state_code, status) values ($1, '27', 'active') returning id",
-    [firmName],
+    "insert into public.firms (name, state_code, status, settings) values ($1, '27', 'active', $2) returning id",
+    [firmName, { test_run: TEST_RUN }],
   );
   await query(
     local.dbUrl,

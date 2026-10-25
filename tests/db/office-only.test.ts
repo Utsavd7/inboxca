@@ -182,8 +182,9 @@ it("claims automation jobs while staff cannot open the firm", () => rollback(db,
   await actAs(db, STAFF);
   expect(await role()).toBeNull();
   await asOwner(db);
-  await db.query("insert into public.jobs (firm_id,kind,idempotency_key,run_at) values ($1,'test','office-closed-worker',now()-interval '1 second')", [FIRM]);
+  await db.query("insert into public.jobs (firm_id,kind,idempotency_key,run_at) values ($1,'test','office-closed-worker','2000-01-01')", [FIRM]);
   await db.query("set local role service_role");
-  const claimed = (await db.query("select * from public.claim_jobs(10000,120)")).rows;
+  // Due long ago, so a batch of one claims it and locks no other run's jobs.
+  const claimed = (await db.query("select * from public.claim_jobs(1,120)")).rows;
   expect(claimed.some((job) => job.idempotency_key === "office-closed-worker")).toBe(true);
 }));

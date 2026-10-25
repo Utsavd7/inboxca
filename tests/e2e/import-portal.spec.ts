@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
-import { TEST_WORKER_SECRET } from "../../playwright.config";
+import { TEST_DRIVE, TEST_WORKER_SECRET } from "../../playwright.config";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
 // Portal files dropped in from Documents and from a client's Returns, and old files sent from
@@ -16,7 +16,7 @@ const tag = randomUUID().slice(0, 8);
 const ownerEmail = `import-${tag}@example.test`;
 const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
 const clientName = `Patel Textiles ${tag}`;
-const drive = path.join(tmpdir(), "inboxca-test-drive");
+const drive = TEST_DRIVE;
 const statement = (rtnprd: string) => Buffer.from(JSON.stringify({ data: { gstin: "27AAPFU0939F1ZV", rtnprd, version: "1.0", docdata: { b2b: [] } } }));
 let firm: Awaited<ReturnType<typeof seedFirm>>;
 let owner: Page;

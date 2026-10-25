@@ -48,26 +48,24 @@ const states = async () =>
 describe("claiming jobs", () => {
   it("claims only what is due, oldest first, up to the batch size", () =>
     rollback(db, async () => {
-      // Jobs a local demo or browser test left due are set aside for this rolled-back check.
-      await db.query("delete from public.jobs where idempotency_key not like $1", [`${PREFIX}%`]);
+      // Due long ago, so they come before any job a local demo or another test run has due,
+      // which this check leaves alone.
       await add("later", { run_at: new Date(Date.now() + 3600_000).toISOString() });
-      await add("old", { run_at: new Date(Date.now() - 60_000).toISOString() });
-      await add("new", { run_at: new Date(Date.now() - 1_000).toISOString() });
+      await add("old", { run_at: "2000-01-01T00:00:00Z" });
+      await add("new", { run_at: "2000-01-02T00:00:00Z" });
       const claimed = await pgJobStore(db).claim(1, 120);
       expect(claimed.map((job) => job.idempotency_key)).toEqual([`${PREFIX}old`]);
       expect(await states()).toEqual({ later: "pending", old: "claimed", new: "pending" });
     }));
 
   it("never hands the same job to two workers", async () => {
-    // Other jobs due now (a local demo's, or ones the browser tests left) wait an hour, so
-    // the two workers share only this test's 30.
-    await db.query("update public.jobs set run_at = now() + interval '1 hour' where state = 'pending' and run_at <= now() and idempotency_key not like $1", [`${PREFIX}%`]);
-    for (let i = 0; i < 30; i++) await add(`pair-${i}`);
+    // Due long ago, so these 30 come first and the two workers, 15 each, share only them,
+    // never the jobs a local demo or another test run has due.
+    for (let i = 0; i < 30; i++) await add(`pair-${i}`, { run_at: new Date(Date.UTC(2000, 0, 1, 0, 0, i)).toISOString() });
     await Promise.all([db.query("begin"), second.query("begin")]);
-    // Room for jobs a local demo firm queued meanwhile; only this test's own are counted.
     const [a, b] = await Promise.all([
-      pgJobStore(db).claim(500, 120),
-      pgJobStore(second).claim(500, 120),
+      pgJobStore(db).claim(15, 120),
+      pgJobStore(second).claim(15, 120),
     ]);
     await Promise.all([db.query("commit"), second.query("commit")]);
     const ids = [...a, ...b].filter((job) => job.idempotency_key.startsWith(`${PREFIX}pair-`)).map((job) => job.id);
@@ -97,13 +95,13 @@ describe("when a worker stops halfway", () => {
 describe("finishing jobs", () => {
   it("records done, retry and failure through the runner", () =>
     rollback(db, async () => {
-      await add("ok", { kind: "ok" });
-      await add("again", { kind: "again" });
-      await add("unknown", { kind: "unknown" });
+      // Due long ago and one batch of 3 only, so jobs other runs have due are not run.
+      for (const kind of ["ok", "again", "unknown"]) await add(kind, { kind, run_at: "2000-01-01T00:00:00Z" });
+      let tick = 0;
       const summary = await runDueJobs(pgJobStore(db), {
         ok: async () => ({ done: true }),
         again: async () => ({ retry: "busy" }),
-      });
+      }, { batch: 3, maxRunMs: 2, clock: () => tick++ });
       expect(summary).toEqual({ claimed: 3, done: 1, retried: 1, failed: 1 });
       expect(await states()).toEqual({ ok: "done", again: "pending", unknown: "failed" });
       const again = await db.query(

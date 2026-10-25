@@ -1,9 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { readdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { loadEnvConfig } from "@next/env";
 import { test, expect } from "@playwright/test";
+import { TEST_DRIVE } from "../../playwright.config";
 import { serverCrypto } from "@/src/lib/crypto";
 import { pdf } from "../fixtures/pdf";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
@@ -68,7 +68,7 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     await expect(rows.filter({ hasText: "Purchase bills" })).toHaveCount(1);
     const papers = await query(local.dbUrl, "select name, status, registration_id from public.documents where client_id = $1 order by received_at", [client]);
     expect(papers.map((row) => [row.status, row.registration_id])).toEqual([["earlier", gstins[0]], ["filed", gstins[0]]]);
-    expect((await readdir(path.join(tmpdir(), "inboxca-test-drive", "InboxCA", "FY 2026-27", name, "GST"))).sort()).toEqual(papers.map((row) => row.name).sort());
+    expect((await readdir(path.join(TEST_DRIVE, "InboxCA", "FY 2026-27", name, "GST"))).sort()).toEqual(papers.map((row) => row.name).sort());
     await rows.getByRole("link", { name: /^Open/ }).click();
     await expect(page.getByRole("list", { name: "Earlier versions" })).toContainText(papers[0].name);
 

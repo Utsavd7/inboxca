@@ -1,6 +1,9 @@
-// ggignore: GreenMail uses this public password only on the local test server.
-vi.mock("@/src/lib/crypto",()=>({serverCrypto:()=>({encrypt:async()=>"invented encrypted link",decrypt:async(firm:string,place:string)=>place.endsWith("/credentials") ? JSON.stringify({password:"secret"}) : place.endsWith("/address") ? "office@firm.test" : `worker-${firm}@invented.test`})}));
+// A mailbox of this run's own on GreenMail, which makes one for every address it receives
+// mail for, its password the address.
+const office=vi.hoisted(()=>`bulk-office-${crypto.randomUUID()}@invented.test`);
+vi.mock("@/src/lib/crypto",()=>({serverCrypto:()=>({encrypt:async()=>"invented encrypted link",decrypt:async(firm:string,place:string)=>place.endsWith("/credentials") ? JSON.stringify({password:office}) : place.endsWith("/address") ? office : `worker-${firm}@invented.test`})}));
 import {randomUUID} from "node:crypto";
+import nodemailer from "nodemailer";
 import {expect,it,vi} from "vitest";
 import {localSupabase} from "../local-env";
 import {supabaseAdmin} from "@/src/lib/supabase";
@@ -18,6 +21,7 @@ it("runs a bulk list through the database and local mailbox, skipping a missing 
     expect((await admin.from("requests").select("id,firm_id,status,details,firms(name,settings)").eq("id",request).maybeSingle()).error).toBeNull();
     expect(await bulkSend({entity_id:request} as Job,{markSending:async()=>{}})).toEqual({done:true});
     expect((await db.query("select status,details#>>'{clients,0,reason}' reason from public.requests where id=$1",[request])).rows).toEqual([{status:"done",reason:"no_email"}]);
+    await nodemailer.createTransport({host:"127.0.0.1",port:3025,secure:false,ignoreTLS:true}).sendMail({from:"setup@invented.test",to:office,subject:"Invented test setup",text:"Makes the test mailbox"});
     await db.query("insert into public.connected_accounts(firm_id,kind,provider,address_enc,credentials_enc,settings) values ($1,'mail','imap','invented encrypted address','invented encrypted credentials',$2)",[firm,{imap:{host:"127.0.0.1",port:3143},smtp:{host:"127.0.0.1",port:3025}}]);
     await db.query("update public.clients set email_enc='invented encrypted email',email_bidx='invented index' where id=$1",[client]);
     await db.query("insert into public.documents(firm_id,client_id,work_type,document_type,period_key,status,drive_file_id,name,size,sha256) values ($1,$2,'income_tax','ITR-V','2025','filed','invented.pdf','Invented ITR-V',1,'invented')",[firm,client]);

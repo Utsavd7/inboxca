@@ -5,8 +5,7 @@ import {serverCrypto} from "@/src/lib/crypto";
 import {localDrive} from "@/src/lib/drive";
 import {place,type Draft} from "@/src/lib/datasets";
 import {actionFields,emailStep,localSupabase,query,seedFirm,totp} from "./local-supabase";
-import {tmpdir} from "node:os";
-import {FILE_WORKER_URL} from "../../playwright.config";
+import {FILE_WORKER_URL,TEST_DRIVE} from "../../playwright.config";
 import {readSalesRegister} from "@/src/jobs/read-sales";
 import {readPortalFile} from "@/src/jobs/read-portal";
 import {inventedGstin,statement} from "../fixtures/portal";
@@ -19,7 +18,7 @@ test("staff check figures beside the source; totals, edit rights and stale revie
   test.setTimeout(90_000);loadEnvConfig(process.cwd());
   const email=`figures-${randomUUID()}@invented.test`,key=Array.from(randomBytes(16),(byte)=>"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte%32]).join("");
   const firm=await seedFirm("Figure Test Firm",email,key);
-  const drive=localDrive(`${tmpdir()}/inboxca-test-drive`);
+  const drive=localDrive(TEST_DRIVE);
   let artifact:string|undefined;
   try {
     const bytes=Buffer.from("First sale,100.00\nSecond sale,200.00\nTotal,310.00"),sha256=createHash("sha256").update(bytes).digest("hex");
@@ -87,7 +86,7 @@ test("a portal statement becomes encrypted pending figures beside its source, wi
   test.setTimeout(90_000);loadEnvConfig(process.cwd());process.env.FILE_WORKER_URL=FILE_WORKER_URL;
   const email=`portal-${randomUUID()}@invented.test`,key=Array.from(randomBytes(16),(byte)=>"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte%32]).join("");
   const firm=await seedFirm("Portal Test Firm",email,key),crypto=serverCrypto(),client=randomUUID(),account=randomUUID();
-  const drive=localDrive(`${tmpdir()}/inboxca-test-drive`),artifacts:string[]=[];
+  const drive=localDrive(TEST_DRIVE),artifacts:string[]=[];
   try {
     await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Portal Client','business')",[client,firm.firmId]);
     await query(local.dbUrl,"insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc,settings) values ($1,$2,'drive','local',$3,$4,'{}')",[account,firm.firmId,await crypto.encrypt(firm.firmId,`accounts/${account}/address`,'Test drive'),await crypto.encrypt(firm.firmId,`accounts/${account}/credentials`,'{}')]);
@@ -125,7 +124,7 @@ test("a client's confirmed columns read the next month's register automatically 
   test.setTimeout(90_000);loadEnvConfig(process.cwd());process.env.FILE_WORKER_URL=FILE_WORKER_URL;
   const email=`register-${randomUUID()}@invented.test`,key=Array.from(randomBytes(16),(byte)=>"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte%32]).join("");
   const firm=await seedFirm("Register Test Firm",email,key),crypto=serverCrypto(),client=randomUUID(),account=randomUUID();
-  const drive=localDrive(`${tmpdir()}/inboxca-test-drive`),artifacts:string[]=[];
+  const drive=localDrive(TEST_DRIVE),artifacts:string[]=[];
   try {
     await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Register Client','business')",[client,firm.firmId]);
     await query(local.dbUrl,"insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc,settings) values ($1,$2,'drive','local',$3,$4,'{}')",[account,firm.firmId,await crypto.encrypt(firm.firmId,`accounts/${account}/address`,'Test drive'),await crypto.encrypt(firm.firmId,`accounts/${account}/credentials`,'{}')]);
