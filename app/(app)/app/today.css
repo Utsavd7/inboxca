@@ -27,7 +27,8 @@
 .today-ring strong { font-size: 15px; font-weight: 600; }
 .today-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); margin: 0; padding: 0; list-style: none; }
 .stat-chip { position: relative; display: grid; gap: 2px; height: 100%; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface); color: var(--ink-2); font-size: 13px; text-decoration: none; transition: border-color var(--fast) var(--out), box-shadow var(--base) var(--out), transform var(--base) var(--out); }
-.stat-chip::before { content: ""; position: absolute; top: var(--s3); bottom: var(--s3); left: 0; width: 3px; border-radius: var(--round); background: var(--line-2); }
+/* A small coloured dot names the kind of figure; a side stripe would read as decoration. */
+.stat-chip::before { content: ""; position: absolute; top: var(--s4); right: var(--s4); width: 8px; height: 8px; border-radius: var(--round); background: var(--line-2); }
 .stat-chip.k-late::before { background: var(--k-late); }
 .stat-chip.k-reply::before { background: var(--k-reply); }
 .stat-chip.k-approve::before { background: var(--k-approve); }
