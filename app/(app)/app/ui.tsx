@@ -1,21 +1,41 @@
 import { Lock, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { ViewTransition, type CSSProperties } from "react";
+import { ViewTransition } from "react";
+import { Draw, Item, PanelMotion, ToastMotion } from "./motion";
 import { PanelEscape } from "./panel-escape";
+import { HeadTools, MenuButton } from "./shell";
 import "./side-panel.css";
 
 // The app's small shared pieces, so every page speaks the same visual language.
 
-export function PageHead({ title, sub, crumb, actions }: { title: React.ReactNode; sub?: React.ReactNode; crumb?: React.ReactNode; actions?: React.ReactNode }) {
+// The top of every page: the sticky header, with the breadcrumbs (the places above this page,
+// then its title), the page's actions, notifications and help; then the line under it (sub).
+// - crumbs: the places above, as [href, label] pairs, e.g. [["/app/clients", "Clients"]] on a
+//   client's page; each is a link named "Back to Clients" for screen readers.
+// - actions: the page's main actions (one primary, one or two secondary). They sit on the right
+//   of the header and stay in view while the page scrolls; on a phone they wrap under the title.
+// The header crossfades in place when the page changes.
+export function PageHead({ title, sub, crumb, crumbs = [], actions }: { title: React.ReactNode; sub?: React.ReactNode; crumb?: React.ReactNode; crumbs?: [href: string, label: string][]; actions?: React.ReactNode }) {
   return (
-    <header className="page-head">
-      <div>
-        {crumb}
-        <h1>{title}</h1>
-        {sub && <p>{sub}</p>}
-      </div>
-      {actions && <div className="page-actions">{actions}</div>}
-    </header>
+    <div className="page-head">
+      <ViewTransition name="page-bar" share="auto" default="none">
+        <header className="topbar">
+          <MenuButton />
+          <div className="crumbs">
+            {crumbs.map(([href, label]) => (
+              <Link key={href} href={href} aria-label={`Back to ${label}`}>
+                {label}
+              </Link>
+            ))}
+            {crumb}
+            <h1>{title}</h1>
+          </div>
+          {actions && <div className="page-actions">{actions}</div>}
+          <HeadTools />
+        </header>
+      </ViewTransition>
+      {sub && <div className="page-sub">{sub}</div>}
+    </div>
   );
 }
 
@@ -42,7 +62,7 @@ export type Kind = "reply" | "approve" | "papers" | "late" | "notice" | "week" |
 export function IconTile({ Icon, kind = "" }: { Icon: LucideIcon; kind?: Kind }) {
   return (
     <span className={`icon-tile k-${kind}`} aria-hidden>
-      <Icon size={16} strokeWidth={2.2} />
+      <Icon size={15} strokeWidth={2.2} />
     </span>
   );
 }
@@ -56,11 +76,11 @@ export function CountPill({ tone = "", label, children }: { tone?: "late" | "war
   );
 }
 
-// A white card: icon tile, title, count pill and anything for the right of its head (one
-// action), then its rows. The section is named by its title for screen readers and tests.
-export function Card({ id, title, Icon, kind, count, countTone, countLabel, end, children }: { id: string; title: React.ReactNode; Icon?: LucideIcon; kind?: Kind; count?: React.ReactNode; countTone?: "late" | "warn" | "blue" | ""; countLabel?: string; end?: React.ReactNode; children: React.ReactNode }) {
+// A card: icon tile, title, count pill and anything for the right of its head (one action),
+// then its rows. The section is named by its title for screen readers and tests.
+export function Card({ id, title, Icon, kind, count, countTone, countLabel, end, className = "", children }: { id: string; title: React.ReactNode; Icon?: LucideIcon; kind?: Kind; count?: React.ReactNode; countTone?: "late" | "warn" | "blue" | ""; countLabel?: string; end?: React.ReactNode; className?: string; children: React.ReactNode }) {
   return (
-    <section className="app-card" aria-labelledby={id}>
+    <section className={`app-card ${className}`} aria-labelledby={id}>
       <header className="app-card-head">
         {Icon && <IconTile Icon={Icon} kind={kind} />}
         <h2 id={id}>{title}</h2>
@@ -73,10 +93,11 @@ export function Card({ id, title, Icon, kind, count, countTone, countLabel, end,
 }
 
 // A row in a card: avatar or icon, a title over its meta, then a status pill, the actions
-// that show on hover, and the one action. Rows go in <ul className="app-rows">.
+// that show on hover, and the one action. Rows go in <ul className="app-rows">, or in
+// <List className="app-rows"> (motion.tsx) so they glide when one moves or leaves.
 export function Row({ lead, title, meta, status, more, action }: { lead?: React.ReactNode; title: React.ReactNode; meta?: React.ReactNode; status?: React.ReactNode; more?: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <li className="app-row">
+    <Item className="app-row">
       {lead}
       <span className="grow">
         <strong>{title}</strong>
@@ -93,19 +114,7 @@ export function Row({ lead, title, meta, status, more, action }: { lead?: React.
           {action}
         </span>
       )}
-    </li>
-  );
-}
-
-// A number that counts up from 0 once, on the page's first showing (CSS only, app.css .count-up).
-// Large numbers, which a CSS counter cannot group, are shown as they are.
-export function CountUp({ value }: { value: number }) {
-  if (value >= 1000) return <>{value.toLocaleString("en-IN")}</>;
-  return (
-    <>
-      <span className="count-up" style={{ "--n": value } as CSSProperties} aria-hidden />
-      <span className="sr-only">{value}</span>
-    </>
+    </Item>
   );
 }
 
@@ -113,30 +122,17 @@ export function CountUp({ value }: { value: number }) {
 export function ProgressRing({ done, total, label }: { done: number; total: number; label: string }) {
   const percent = total ? Math.min(100, Math.round((done * 100) / total)) : 0;
   return (
-    <div className={`progress-ring${total && done >= total ? " is-done" : ""}`} style={{ "--ring-p": percent } as CSSProperties} role="img" aria-label={`${done} of ${total} ${label}`}>
+    <div className={`progress-ring${total && done >= total ? " is-done" : ""}`} role="img" aria-label={`${done} of ${total} ${label}`}>
       <svg viewBox="0 0 88 88" aria-hidden>
         <circle className="ring-track" cx="44" cy="44" r="36" />
-        <circle className="ring-arc" cx="44" cy="44" r="36" />
+        {!!percent && <Draw className="ring-arc" cx={44} cy={44} r={36} progress={percent / 100} />}
       </svg>
       <strong aria-hidden>{percent}%</strong>
     </div>
   );
 }
 
-// A shimmering outline of a page while it loads: its title, a wide block and two columns of cards.
-export function Skeleton() {
-  return (
-    <div className="skeleton" aria-busy="true" aria-label="Loading">
-      <span className="skeleton-title" />
-      <span className="skel" />
-      <div className="skeleton-grid">
-        {Array.from({ length: 4 }, (_, card) => <span key={card} className="skeleton-card" />)}
-      </div>
-    </div>
-  );
-}
-
-export type Tone = "blue" | "done" | "late" | "warn" | "purple" | "";
+export type Tone ="blue" | "done" | "late" | "warn" | "purple" | "";
 export function Badge({ tone = "", plain = false, children }: { tone?: Tone; plain?: boolean; children: React.ReactNode }) {
   return <span className={`badge ${tone}${plain ? " plain" : ""}`}>{children}</span>;
 }
@@ -162,37 +158,33 @@ export function Empty({ Icon, title, kind = "", children }: { Icon: LucideIcon; 
 }
 
 // A short note at the bottom after an action, for a page that read ?saved= or similar from
-// its address. It slides up, then hides itself after five seconds (CSS only). undo is a small
+// its address. It springs up, then leaves the way it came after five seconds. undo is a small
 // form or button that reverses the action, when one exists.
 export function Toast({ children, undo }: { children: React.ReactNode; undo?: React.ReactNode }) {
   return (
-    <div className="toast" role="status">
+    <ToastMotion>
       <span>{children}</span>
       {undo}
-    </div>
+    </ToastMotion>
   );
 }
 
 // A form beside the page, opened by a link, so the list behind it stays in view (dimmed a
-// little). It springs in from the right and slides back out the same way when Close goes back
-// to the page without it.
+// little). It springs in from the right; wrapped in <Presence> (motion.tsx), as in
+// <Presence>{open && <SidePanel key="add" ... />}</Presence>, it also slides back out the same
+// way when Close goes back to the page without it.
 export function SidePanel({ id, title, close, children }: { id: string; title: React.ReactNode; close: string; children: React.ReactNode }) {
   return (
-    <>
-      <div className="side-backdrop" aria-hidden />
-      <ViewTransition enter="panel-open" exit="panel-close" default="none">
-        <section className="side-panel" role="dialog" aria-labelledby={id}>
-          <header className="side-panel-head">
-            <h2 id={id}>{title}</h2>
-            <Link className="b b-ghost" href={close} scroll={false} title="Close (Esc)">
-              Close
-            </Link>
-            <PanelEscape />
-          </header>
-          <div className="side-panel-body">{children}</div>
-        </section>
-      </ViewTransition>
-    </>
+    <PanelMotion labelledBy={id}>
+      <header className="side-panel-head">
+        <h2 id={id}>{title}</h2>
+        <Link className="b b-ghost" href={close} scroll={false} title="Close (Esc)">
+          Close
+        </Link>
+        <PanelEscape />
+      </header>
+      <div className="side-panel-body">{children}</div>
+    </PanelMotion>
   );
 }
 

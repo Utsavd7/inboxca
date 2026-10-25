@@ -95,7 +95,7 @@ test("Today shows what needs the owner today and the next setup step", async () 
   await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date where id=(select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and code='GSTR3B_M' order by due_on desc limit 1)",[firm.firmId]);
   await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-4 where id in (select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and code='GSTR1_M' order by due_on desc limit 2)",[firm.firmId]);
   const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and due_on<(now() at time zone 'Asia/Kolkata')::date",[firm.firmId]);
-  await owner.getByRole("link", { name: "Today" }).click();
+  await owner.getByRole("link", { name: "Today", exact: true }).click();
   await expect(owner.locator(".page-head")).toContainText(/\d+ things? needs? you today\./);
   const late = owner.locator("section[aria-labelledby=t-late]").getByRole("listitem");
   await expect(late).toHaveCount(1);
@@ -104,8 +104,8 @@ test("Today shows what needs the owner today and the next setup step", async () 
   await expect(owner.locator("section[aria-labelledby=t-week]").getByRole("listitem").filter({ hasText: "GSTR-3B (monthly)" })).toContainText("1 client");
   await late.getByRole("link", { name: "See returns for Patel Textiles" }).click();
   await expect(owner).toHaveURL(/\/app\/clients\/[^/]+\?tab=due$/,{timeout:15_000});
-  await owner.getByRole("link", { name: "Today" }).click();
-  const start = owner.getByRole("region", { name: "Finish setting up" });
+  await owner.getByRole("link", { name: "Today", exact: true }).click();
+  const start = owner.getByRole("region", { name: "Getting started" });
   await expect(start.getByRole("listitem").filter({ hasText: "Clients" }).getByLabel("Done")).toBeVisible();
   await expect(start.getByRole("link", { name: "Connect the firm's email" })).toHaveAttribute("href", "/app/settings#mailbox");
   // With returns late, the Calendar opens on them; a link to another view still works.
@@ -524,8 +524,8 @@ test("the menu's New and the search palette start things, and the bell lists upd
   await search.getByRole("textbox").fill("upload");
   await expect(search.getByRole("option", { name: /Upload papers/ })).toBeVisible();
   await owner.keyboard.press("Escape");
-  await owner.getByRole("button", { name: /^Updates/ }).click();
-  await expect(owner.getByRole("dialog", { name: "Updates for you" })).toBeVisible();
+  await owner.getByRole("button", { name: /^Notifications/ }).click();
+  await expect(owner.getByRole("dialog", { name: "Notifications" })).toBeVisible();
 });
 
 test("a client's row offers Write and Ask for papers; its header copies numbers and the upload link and counts down to the next return", async () => {

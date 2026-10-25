@@ -11,17 +11,17 @@ export const roleNames: Record<string, string> = {
 export const invitableRoles = ["partner", "manager", "staff", "front_desk"] as const;
 export const roleLabel = (role: string) => roleNames[role][0].toUpperCase() + roleNames[role].slice(1);
 
-// The pages each role uses. The rail shows the four daily places, with People and Settings
-// at its foot; Calendar and Notices are reached from Today, each client and search.
+// The pages each role uses. The sidebar shows the four daily places, then a small Workspace
+// group with Calendar, Notices, People and Settings.
 export const pagesFor = (role: string) => [
   { href: "/app", name: "Today", place: "main" },
   { href: "/app/inbox", name: "Inbox", place: "main" },
   { href: "/app/clients", name: "Clients", place: "main" },
   { href: "/app/documents", name: "Documents", place: "main" },
-  { href: "/app/calendar", name: "Calendar", place: "search" },
-  { href: "/app/notices", name: "Notices", place: "search" },
-  ...(["owner", "partner", "manager"].includes(role) ? [{ href: "/app/people", name: "People", place: "foot" }] : []),
-  ...(role === "owner" ? [{ href: "/app/settings", name: "Settings", place: "foot" }] : []),
+  { href: "/app/calendar", name: "Calendar", place: "workspace" },
+  { href: "/app/notices", name: "Notices", place: "workspace" },
+  ...(["owner", "partner", "manager"].includes(role) ? [{ href: "/app/people", name: "People", place: "workspace" }] : []),
+  ...(role === "owner" ? [{ href: "/app/settings", name: "Settings", place: "workspace" }] : []),
 ];
 
 // "Ravi" for ravi.shah@firm.in: how messages name a person.

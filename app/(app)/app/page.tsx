@@ -1,27 +1,31 @@
-import { AlarmClock, CalendarDays, Check, FileCheck2, FileClock, MessageSquareText, Rocket, Sparkles, TriangleAlert, X } from "lucide-react";
+import { AlarmClock, CalendarDays, Check, FileClock, Inbox, PartyPopper, Rocket, Sparkles, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { askAwayDevice, joinFirm, manageClient, manageTasks, sendNow, stopSend } from "@/app/(app)/actions";
 import { PcKey } from "./pc-key";
 import { PushSwitch } from "./push-switch";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { canManageClients } from "@/src/lib/clients";
-import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
+import { addDays, dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { periodName } from "@/src/lib/documents";
 import { describeHours, type Hours } from "@/src/lib/hours";
 import { currentMember, myQuestions } from "@/src/lib/member";
 import { formName, preparedSchema } from "@/src/lib/prepared";
-import { roleNames } from "@/src/lib/roles";
+import { personName, roleNames } from "@/src/lib/roles";
 import { OfficePanel } from "./office-panel";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { awake, replyReasons } from "@/src/lib/triage";
 import { activityNames } from "@/src/lib/activity";
 import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
 import { MarkFiled } from "./mark-filed";
+import { Count, Draw, List, Presence, Press } from "./motion";
 import { Pending } from "./pending";
-import { Avatar, Badge, Card, CountUp, PageHead, ProgressRing, Row, SidePanel, storage, Toast } from "./ui";
+import { firmAccounts } from "./shell-data";
+import { Celebrate } from "./today-client";
+import { Avatar, Badge, Card, IconTile, PageHead, ProgressRing, Row, SidePanel, Toast } from "./ui";
 import "./today.css";
 
 const DAY = 86_400_000;
@@ -44,185 +48,50 @@ async function hidePush() {
   (await cookies()).set("push_line", "hidden", { path: "/app", maxAge: 31_536_000, httpOnly: true, sameSite: "lax" });
 }
 
-// Today: what needs this person, in two columns of cards. Mail waiting for a reply, returns
-// to approve and papers still missing on the left; late returns, one row a client, and what
-// falls due this week on the right. Each row has one button. Everything is limited to what
-// this person's role and the database's row rules let them see.
-export default async function AppHome({ searchParams }: { searchParams: Promise<{ dropped?: string; error?: string; asked?: string; panel?: string; client?: string; confirm?: string; sending?: string; job?: string; stopped?: string; assigned?: string; marked?: string; t?: string }> }) {
-  const { dropped, error, asked, panel, client: panelClient, confirm, sending, job, stopped, assigned, marked, t } = await searchParams;
+type Params = { dropped?: string; error?: string; asked?: string; panel?: string; client?: string; confirm?: string; sending?: string; job?: string; stopped?: string; assigned?: string; marked?: string; t?: string };
+type Db = Awaited<ReturnType<typeof currentMember>>["supabase"];
+type Member = NonNullable<Awaited<ReturnType<typeof currentMember>>["membership"]>;
+type Data = ReturnType<typeof load>;
+
+// Today: what needs this person, as a dashboard. A greeting with how many things need them,
+// four figures for the month (each opens its list), then "Needs you now" (replies, approvals
+// and what the owner must look at, most urgent first) and the late returns on the left, and
+// getting started, the next 7 days, papers still missing and what InboxCA did on the right.
+// Every query starts at once; each part shows as soon as its own data is in, so the page
+// paints at once. Everything is limited to what this person's role and the row rules allow.
+export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
+  const params = await searchParams;
+  const { dropped, error, asked, panel, sending, job, stopped, assigned, marked, t } = params;
   const { supabase, userId, membership, deviceStatus, connectionWaiting, pcKey } = await currentMember();
-  const { data: invites } = await supabase.rpc("my_invites");
-  const closed = membership ? null : (await supabase.rpc("closed_firms")).data?.[0];
-  if (closed?.reason === "session") redirect("/auth/sign-out?reason=session");
-  if (!membership) return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} connectionWaiting={connectionWaiting} pcKey={pcKey} />;
-
-  const today = todayInIndia();
-  const owner = membership.role === "owner";
-  const lead = owner || membership.role === "partner";
-  const approver = ["owner", "partner", "manager"].includes(membership.role);
-  const count = (query: PromiseLike<{ count: number | null }>) => Promise.resolve(query).then((result) => result.count ?? 0);
-  const { data: waitingDevices } = owner
-    ? await supabase.from("devices").select("id").eq("firm_id", membership.firmId).eq("status", "waiting")
-    : { data: [] };
-  const waitingIds = waitingDevices?.map((device) => device.id) ?? [];
-  const waitingToday = waitingIds.length
-    ? await count(
-        supabase
-          .from("activity_log")
-          .select("entity_id", { count: "exact", head: true })
-          .eq("firm_id", membership.firmId)
-          .eq("action", "device.first_seen")
-          .in("entity_id", waitingIds)
-          .gte("at", new Date(`${today}T00:00:00+05:30`).toISOString()),
-      )
-    : 0;
-  const [replies, papers, forms, confirming, late, week, rules, setup, alerts, noticeAlerts, asks, mailboxNotice, usage] = await Promise.all([
-    supabase.from("requests").select("id, entity_id, client_id, reason_code, clients(name)", { count: "exact" }).eq("kind", "team_reply").eq("status", "pending").or(awake(today)).limit(5),
-    supabase.from("requests").select("id, client_id, details, clients(name)", { count: "exact" }).eq("kind", "documents").eq("status", "pending").gt("expires_at", new Date().toISOString()).order("expires_at", { ascending: false }).limit(5),
-    approver || membership.may("mark_filed")
-      ? supabase.from("documents").select("id, client_id, period_key, status, prepared, clients(name)").eq("firm_id", membership.firmId).not("prepared", "is", null).order("received_at", { ascending: false }).limit(100)
-      : null,
-    supabase.from("requests").select("entity_id").eq("firm_id", membership.firmId).eq("kind", "form_confirmation").eq("status", "pending").limit(100),
-    supabase.rpc("late_clients", { target_firm: membership.firmId }, { count: "exact" }).limit(5),
-    supabase.rpc("due_soon", { target_firm: membership.firmId }).limit(6),
-    supabase.from("compliance_types").select("code, name, frequency").eq("period_key", ""),
-    owner
-      ? Promise.all([
-          supabase
-            .from("connected_accounts")
-            .select("kind")
-            .then((result) => result.data?.map((row) => row.kind) ?? []),
-          count(supabase.from("clients").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).is("archived_at", null)),
-          count(supabase.from("client_registrations").select("id", { count: "exact", head: true }).filter("services", "neq", "{}")),
-          count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
-        ])
-      : null,
-    lead ? supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending").limit(20) : null,
-    supabase.rpc("notice_alerts", { target_firm: membership.firmId }).limit(10),
-    myQuestions(),
-    owner ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : null,
-    owner ? supabase.rpc("firm_usage", { target_firm: membership.firmId }).then((result) => result.data?.[0]) : null,
-  ]);
-  // The month's returns for the ring, who looks after each late client, and what InboxCA did
-  // by itself today (papers filed from email come from the papers themselves).
-  const dayStart = new Date(`${today}T00:00:00+05:30`).toISOString();
-  const monthStart = `${today.slice(0, 8)}01`;
-  const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).toISOString().slice(0, 10);
-  const monthTasks = () => supabase.from("tasks").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("kind", "compliance").gte("due_on", monthStart).lte("due_on", monthEnd);
-  const lateIds = late.data?.map((row) => row.client_id) ?? [];
-  const [monthDue, monthFiled, { data: looked }, { data: done }, { data: filedToday }] = await Promise.all([
-    count(monthTasks()),
-    count(monthTasks().eq("status", "filed")),
-    lateIds.length ? supabase.from("client_assignments").select("client_id").in("client_id", lateIds) : Promise.resolve({ data: [] }),
-    supabase.rpc("activity_feed", { target_firm: membership.firmId, since: dayStart }),
-    supabase.from("documents").select("client_id, received_at, clients(name)").eq("firm_id", membership.firmId).not("email_event_id", "is", null).eq("status", "filed").gte("received_at", dayStart).order("received_at", { ascending: false }).limit(100),
-  ]);
-  const assignedIds = new Set(looked?.map((row) => row.client_id));
-  const papersBy = new Map<string, { at: string; name: string; papers: number }>();
-  for (const paper of filedToday ?? []) {
-    const seenClient = papersBy.get(paper.client_id);
-    papersBy.set(paper.client_id, { at: seenClient?.at ?? paper.received_at, name: paper.clients?.name ?? "", papers: (seenClient?.papers ?? 0) + 1 });
+  if (!membership) {
+    const [{ data: invites }, { data: closedFirms }] = await Promise.all([supabase.rpc("my_invites"), supabase.rpc("closed_firms")]);
+    const closed = closedFirms?.[0];
+    if (closed?.reason === "session") redirect("/auth/sign-out?reason=session");
+    return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} connectionWaiting={connectionWaiting} pcKey={pcKey} />;
   }
-  const feed = [
-    ...[...papersBy.entries()].map(([id, item]) => ({ key: `papers-${id}`, at: item.at, client: item.name, what: `${plural(item.papers, "paper", "papers")} filed from email` })),
-    ...(done ?? []).map((line, at) => ({ key: `${line.at}-${at}`, at: line.at, client: line.client_name, what: activityNames[line.action] ?? "Client record changed" })),
-  ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6);
-  const sends = lead && !membership.viewOnlyUntil;
-  const assignAs = membership.role === "manager" ? "manager" : "partner_in_charge";
-  // The panels this page opens: Mark filed for a late client, and the preview before a send.
-  const [{ data: marking }, preview] = await Promise.all([
-    panel === "filed" && panelClient && /^[0-9a-f-]{36}$/.test(panelClient)
-      ? supabase.from("tasks").select("id, code, period_key, due_on, clients(name)").eq("client_id", panelClient).eq("kind", "compliance").neq("status", "filed").lt("due_on", today).order("due_on").limit(100)
-      : Promise.resolve({ data: null }),
-    sends && (confirm === "late" || confirm === "papers") ? sendPreview(supabase, membership.firmId, confirm) : null,
-  ]);
-  const replyIds = replies.data?.map((request) => request.entity_id) ?? [];
-  const { data: events } = replyIds.length ? await supabase.from("email_events").select("id, received_at").in("id", replyIds) : { data: [] };
-  const eventById = new Map(events?.map((event) => [event.id, event]));
-  // Questions this person may answer (5.17.2), counted for one line on Today.
-  const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
-  const questions = asks.length;
-  // Approvers are asked once to get questions on their phone (5.17.3), until one device has it
-  // or they close the line.
-  const pushKey = process.env.VAPID_PUBLIC_KEY ?? "";
-  const askPush = !!pushKey && (owner || deputy || membership.role === "manager") && (await cookies()).get("push_line")?.value !== "hidden"
-    && !(await supabaseAdmin().from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", userId)).count;
-  const rule = new Map(rules.data?.map((r) => [r.code, r]));
-  const returnName = (code: string | null, period: string | null) => `${rule.get(code ?? "")?.name ?? code ?? ""} for ${periodLabel(rule.get(code ?? "")?.frequency ?? null, period)}`;
-  // Only the latest version of each prepared form counts: drafts to approve, and approved forms
-  // whose acknowledgement arrived, to confirm the filing.
-  const seen = new Set<string>();
-  const waitingAck = new Set(confirming.data?.map((item) => item.entity_id));
-  const toApprove = (forms?.data ?? [])
-    .map((file) => ({ ...file, meta: preparedSchema.parse(file.prepared) }))
-    .filter((file) => {
-      const group = [file.client_id, file.period_key, file.meta.form, file.meta.registration].join(":");
-      if (seen.has(group)) return false;
-      seen.add(group);
-      return file.status !== "deleted" && ((approver && file.meta.status === "draft") || (waitingAck.has(file.id) && membership.may("mark_filed", file.client_id)));
-    });
-  const short = (date: string) => dueLabel(date).slice(0, -5);
-  const at = (iso: string) => {
-    const day = new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-    return day === today ? new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" }) : short(day);
-  };
-  // Things only the owner or partners act on: drive checks, PCs, the mailbox, notice dates.
-  const looks: { key: string; text: string; href?: string; action?: string }[] = [
-    ...(questions ? [{ key: "questions", text: `${questions === 1 ? "1 question waits" : `${questions} questions wait`} for your answer.`, href: "/app/inbox", action: "Answer" }] : []),
-    ...(mailboxNotice?.data?.status === "needs_reconnect" ? [{ key: "mailbox", text: "Connect your firm's email again. Replies wait until it is connected.", href: "/app/settings#mailbox", action: "Reconnect email" }] : []),
-    ...(waitingIds.length
-      ? [{
-          key: "pcs",
-          text: waitingToday === waitingIds.length ? `${plural(waitingToday, "PC signed", "PCs signed")} in from your office today.` : `${plural(waitingIds.length, "PC is", "PCs are")} waiting for approval.`,
-          href: "/app/settings#office",
-          action: "Approve",
-        }]
-      : []),
-    ...(noticeAlerts.data ?? []).map((notice) => ({
-      key: notice.id,
-      text: `${notice.client_name}: a notice's ${notice.action_date ? "action date" : "review deadline"} ${notice.due_on < today ? "has passed" : notice.due_on === today ? "is today" : "is within 3 days"}.`,
-      href: "/app/notices",
-      action: "Review notice",
-    })),
-    ...(alerts?.data ?? [])
-      // Missing papers are the owner's to sort out, on the Documents page.
-      .filter((alert) => (owner || alert.reason_code !== "drive_missing") && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames"].includes(alert.reason_code ?? "") || (alert.details as { day?: string }).day === today))
-      .map((alert) => ({
-        key: alert.id,
-        text: alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number }),
-        ...(alert.reason_code === "drive_missing" && { href: "/app/documents?year=all&show=missing", action: "See missing papers" }),
-      })),
-  ];
-  const steps = setup && [
-    { done: setup[0].includes("mail"), name: "Email", href: "/app/settings#mailbox", action: "Connect the firm's email" },
-    { done: setup[0].includes("drive"), name: "Drive", href: "/app/settings#drive", action: "Link the firm's drive" },
-    { done: !!setup[1], name: "Clients", href: "/app/clients", action: "Add your clients" },
-    { done: !!setup[2], name: "Services", href: "/app/clients", action: "Tick what you file for a client" },
-    { done: setup[3] > 1, name: "Team", href: "/app/people", action: "Invite your team" },
-  ];
-  const next = steps?.find((step) => !step.done);
-  const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric" }));
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const lateCount = late.count ?? late.data?.length ?? 0;
-  const things = (replies.count ?? 0) + toApprove.length + lateCount + looks.length;
+  const data = load(supabase, membership, userId, params);
   const portal = membership.may("portal_files");
-
-  const replyCount = replies.count ?? 0;
-  const close = "/app";
   const markedCount = t?.split(".").filter(Boolean).length ?? 0;
-  const stats = [
-    { key: "late", label: lateCount === 1 ? "Client late" : "Clients late", value: lateCount, href: "/app/clients?show=late", tone: "late" },
-    { key: "reply", label: replyCount === 1 ? "Reply waiting" : "Replies waiting", value: replyCount, href: "/app/inbox?status=reply", tone: "reply" },
-    approver
-      ? { key: "approve", label: "For your approval", value: toApprove.length, href: "#t-approve", tone: "approve" }
-      : { key: "papers", label: "Papers missing", value: papers.count ?? papers.data?.length ?? 0, href: "#t-missing", tone: "papers" },
-  ];
+  const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric", hourCycle: "h23" }));
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
     <div className="today">
       <PageHead
-        title={greeting}
-        sub={`${new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" })}. ${things ? `${plural(things, "thing needs", "things need")} you today.` : "Nothing needs you today."}`}
+        title="Today"
+        sub={
+          <section className="greet" aria-label="Greeting">
+            <p className="greet-hi">
+              {greeting}, {personName(membership.email)}
+            </p>
+            <p className="greet-line">
+              {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" })}.{" "}
+              <Suspense fallback={<span className="greet-wait">Looking at what needs you</span>}>
+                <Things data={data} />
+              </Suspense>
+            </p>
+          </section>
+        }
         actions={
           <>
             {portal && (
@@ -244,65 +113,9 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         }
       />
 
-      {next && steps && (
-        <section className="app-card today-setup" aria-labelledby="setup-title">
-          <span className="icon-tile k-approve" aria-hidden>
-            <Rocket size={16} />
-          </span>
-          <h2 id="setup-title">Finish setting up</h2>
-          <ol aria-label="Setup steps">
-            {steps.map((step) => (
-              <li key={step.name} className={step.done ? "done" : undefined}>
-                {step.done && <Check size={12} aria-label="Done" />}
-                {step.name}
-              </li>
-            ))}
-          </ol>
-          <Link className="b b-primary" href={next.href}>
-            {next.action}
-          </Link>
-        </section>
-      )}
-
-      <section className="app-card today-stats" aria-label="This month">
-        <div className="today-ring">
-          <ProgressRing done={monthFiled} total={monthDue} label="returns due this month filed" />
-          <span>
-            <strong>Returns filed this month</strong>
-            <span className="sub">{monthDue ? `${monthFiled.toLocaleString("en-IN")} of ${monthDue.toLocaleString("en-IN")} due by ${dueLabel(monthEnd).slice(0, -5)}` : "No returns fall due this month."}</span>
-          </span>
-        </div>
-        <ul className="today-chips">
-          {stats.map((stat) => (
-            <li key={stat.key}>
-              <Link className={`stat-chip k-${stat.tone}${stat.value ? "" : " is-zero"}`} href={stat.href}>
-                <strong>
-                  <CountUp value={stat.value} />
-                </strong>
-                <span>{stat.label}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-        {!!usage?.returns_this_year && (
-          <p className="today-use">
-            {usage.returns_so_far.toLocaleString("en-IN")} of {usage.returns_this_year.toLocaleString("en-IN")} returns this year are due so far. InboxCA storage used: {storage(usage.workspace_bytes)}.{" "}
-            <Link href="/app/settings?group=data#use">See InboxCA use</Link>
-          </p>
-        )}
-      </section>
-
-      {askPush && (
-        <div className="today-line">
-          <span className="grow">Get questions and approvals on your phone too.</span>
-          <PushSwitch publicKey={pushKey} />
-          <form action={hidePush}>
-            <button className="b b-ghost b-icon" aria-label="Close">
-              <X size={16} aria-hidden />
-            </button>
-          </form>
-        </div>
-      )}
+      <Suspense fallback={null}>
+        <PushLine data={data} />
+      </Suspense>
       {asked === "time" && <Toast>The owner is asked for more time today. You can keep working until closing.</Toast>}
       {assigned && <Toast>Assigned to you. The client is now on your list.</Toast>}
       {stopped && <Toast>Stopped. Nothing was sent.</Toast>}
@@ -339,271 +152,683 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           {todayErrors[error]}
         </p>
       )}
-      <OfficePanel compact />
+      <Suspense fallback={null}>
+        <OfficePanel compact />
+      </Suspense>
 
-      <div className="today-grid">
+      <Suspense fallback={<KpiSkeleton />}>
+        <Kpis data={data} />
+      </Suspense>
+
+      <div className="today-bento">
         <div className="today-col">
-          {!!looks.length && (
-            <Card id="t-look" title="Needs a look" Icon={TriangleAlert} kind="notice" count={looks.length} countTone="late">
-              <ul className="app-rows stagger">
-                {looks.map((look) => (
-                  <li key={look.key} className="app-row">
-                    <span className="grow" role="alert">
-                      {look.text}
-                    </span>
-                    {look.href && (
-                      <Link className="b b-secondary" href={look.href}>
-                        {look.action}
-                      </Link>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-
-          <Card id="t-reply" title="Clients waiting for a reply" Icon={MessageSquareText} kind="reply" count={replyCount} countTone="warn">
-            {replies.data?.length ? (
-              <ul className="app-rows stagger">
-                {replies.data.map((request) => {
-                  const event = eventById.get(request.entity_id);
-                  const client = request.clients?.name ?? "A contact";
-                  return (
-                    <Row
-                      key={request.id}
-                      lead={<Avatar name={client} />}
-                      title={client}
-                      meta={`${replyReasons[request.reason_code ?? ""] ?? "Needs your team"}${event ? `. Emailed ${at(event.received_at)}` : ""}`}
-                      action={
-                        <Link className="b b-secondary" href={event ? `/app/inbox?mail=${event.id}` : request.client_id ? `/app/clients/${request.client_id}` : "/app/inbox"} aria-label={`Reply to ${client}`}>
-                          Reply
-                        </Link>
-                      }
-                    />
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="app-card-none">No client is waiting for a reply.</p>
-            )}
-            {replyCount > 5 && <SeeAll href="/app/inbox">See all {replyCount}</SeeAll>}
-          </Card>
-
-          {(approver || !!toApprove.length) && (
-            <Card id="t-approve" title="Returns ready for your approval" Icon={FileCheck2} kind="approve" count={toApprove.length} countTone="blue">
-              {toApprove.length ? (
-                <ul className="app-rows stagger">
-                  {toApprove.slice(0, 5).map((file) => (
-                    <Row
-                      key={file.id}
-                      lead={<Avatar name={file.clients?.name ?? ""} />}
-                      title={file.clients?.name}
-                      meta={`${formName(file.meta.form)} for ${periodName(file.period_key)}${file.meta.status !== "draft" ? ", acknowledgement arrived" : ""}`}
-                      action={
-                        <Link className="b b-secondary" href={`/app/clients/${file.client_id}?tab=outputs`}>
-                          {file.meta.status === "draft" ? "Review and approve" : "Confirm filing"}
-                        </Link>
-                      }
-                    />
-                  ))}
-                </ul>
-              ) : (
-                <p className="app-card-none">Nothing waits for your approval.</p>
-              )}
-            </Card>
-          )}
-
-          <Card
-            id="t-missing"
-            title="Papers still missing"
-            Icon={FileClock}
-            kind="papers"
-            end={
-              papers.data?.length ? (
-                sends ? (
-                  <Link className="b b-secondary" href="/app?confirm=papers" scroll={false}>
-                    Chase missing papers
-                  </Link>
-                ) : (
-                  <span className="today-time">InboxCA is reminding them</span>
-                )
-              ) : null
-            }
-          >
-            {papers.data?.length ? (
-              <ul className="app-rows stagger">
-                {papers.data.map((request) => {
-                  const details = request.details as unknown as DocumentRequest;
-                  const missing = (details.items ?? []).filter((item) => !item.received.length).map((item) => item.type);
-                  const reminded = details.followups?.at(-1);
-                  return (
-                    <Row
-                      key={request.id}
-                      lead={<Avatar name={request.clients?.name ?? ""} />}
-                      title={request.clients?.name}
-                      meta={`${(missing.length ? missing : (details.items ?? []).map((item) => item.type)).join(", ")}${details.period ? ` for ${periodName(details.period)}` : ""}`}
-                      status={<Badge plain>{reminded ? `Reminded ${short(reminded)}` : "Not reminded yet"}</Badge>}
-                      action={
-                        request.client_id && (
-                          <Link className="b b-secondary" href={`/app/clients/${request.client_id}`}>
-                            Open client
-                          </Link>
-                        )
-                      }
-                    />
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="app-card-none">
-                No papers are missing.{" "}
-                <Link className="b b-secondary" href="/app/clients">
-                  Ask a client for papers
-                </Link>
-              </p>
-            )}
-          </Card>
+          <Suspense fallback={<CardSkeleton title="Needs you now" rows={4} />}>
+            <NeedsNow data={data} />
+          </Suspense>
+          <Suspense fallback={<CardSkeleton title="Late returns" rows={4} />}>
+            <LateReturns data={data} />
+          </Suspense>
         </div>
-
         <div className="today-col">
-          <Card
-            id="t-late"
-            title="Late returns"
-            Icon={AlarmClock}
-            kind="late"
-            count={lateCount ? plural(lateCount, "client", "clients") : null}
-            countTone="late"
-            end={
-              sends &&
-              !!lateCount && (
-                <Link className="b b-secondary" href="/app?confirm=late" scroll={false}>
-                  Remind all late clients
-                </Link>
-              )
-            }
-          >
-            {late.data?.length ? (
-              <>
-                <ul className="app-rows stagger">
-                  {late.data.map((row) => {
-                    const days = Math.round((Date.parse(today) - Date.parse(row.due_on)) / DAY);
-                    return (
-                      <Row
-                        key={row.client_id}
-                        lead={<Avatar name={row.client_name} />}
-                        title={row.client_name}
-                        meta={`${returnName(row.code, row.period_key)}${row.returns > 1 ? ` and ${row.returns - 1} more` : ""}`}
-                        status={<Badge tone="late">{plural(days, "day", "days")} late</Badge>}
-                        more={
-                          <>
-                            {!membership.viewOnlyUntil && membership.may("mark_filed", row.client_id) && (
-                              <Link className="b b-ghost" href={`/app?panel=filed&client=${row.client_id}`} scroll={false} aria-label={`Mark filed for ${row.client_name}`}>
-                                Mark filed
-                              </Link>
-                            )}
-                            {!membership.viewOnlyUntil && canManageClients(membership.role) && !assignedIds.has(row.client_id) && (
-                              <form action={manageClient}>
-                                <input type="hidden" name="from" value="today" />
-                                <input type="hidden" name="client" value={row.client_id} />
-                                <input type="hidden" name="intent" value="assign" />
-                                <input type="hidden" name="role" value={assignAs} />
-                                <input type="hidden" name="who" value={`person:${userId}`} />
-                                <Pending className="b b-ghost" busy="Assigning" aria-label={`Assign ${row.client_name} to me`}>
-                                  Assign to me
-                                </Pending>
-                              </form>
-                            )}
-                          </>
-                        }
-                        action={
-                          <Link className="b b-secondary" href={`/app/clients/${row.client_id}?tab=due`} aria-label={`See returns for ${row.client_name}`}>
-                            See returns
-                          </Link>
-                        }
-                      />
-                    );
-                  })}
-                </ul>
-                {lateCount > late.data.length && <SeeAll href="/app/calendar?view=overdue">See all {lateCount} clients</SeeAll>}
-              </>
-            ) : late.error ? (
-              <p className="app-card-none">Late returns could not load. Refresh the page.</p>
-            ) : (
-              <p className="app-card-none">No return is late.</p>
-            )}
-          </Card>
-
-          <Card id="t-week" title="Due in the next 7 days" Icon={CalendarDays} kind="week">
-            {week.data?.length ? (
-              <ul className="app-rows stagger">
-                {week.data.slice(0, 5).map((row) => {
-                  const [day, month] = dueLabel(row.due_on).split(" ");
-                  const left = row.clients - row.filed;
-                  return (
-                    <Row
-                      key={`${row.due_on}-${row.code}`}
-                      lead={
-                        <span className="today-date" aria-label={dueLabel(row.due_on)}>
-                          <span>{month}</span>
-                          <strong>{day}</strong>
-                        </span>
-                      }
-                      title={rule.get(row.code)?.name ?? row.code}
-                      meta={plural(row.clients, "client", "clients")}
-                      status={left ? <Badge tone="warn">{left} to file</Badge> : <Badge tone="done">Filed</Badge>}
-                    />
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="app-card-none">
-                Nothing is due in the next 7 days.{" "}
-                <Link className="b b-secondary" href="/app/calendar">
-                  Open calendar
-                </Link>
-              </p>
-            )}
-            {(week.data?.length ?? 0) > 5 && <SeeAll href="/app/calendar?view=week">See all</SeeAll>}
-          </Card>
-
-          <Card id="t-done" title="What InboxCA did today" Icon={Sparkles} kind="docs">
-            {feed.length ? (
-              <ol className="today-feed">
-                {feed.map((item) => (
-                  <li key={item.key}>
-                    <span className="today-feed-dot" aria-hidden />
-                    <span className="grow">
-                      {item.what} <span className="sub-inline">{item.client}</span>
-                    </span>
-                    <time className="today-time" dateTime={item.at}>
-                      {at(item.at)}
-                    </time>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="app-card-none">Nothing yet today. Papers filed from email and reminders sent show here.</p>
-            )}
-          </Card>
+          {data.owner && (
+            <Suspense fallback={null}>
+              <GettingStarted data={data} />
+            </Suspense>
+          )}
+          <Suspense fallback={<CardSkeleton title="Due this week" rows={2} />}>
+            <ThisWeek data={data} />
+          </Suspense>
+          <Suspense fallback={<CardSkeleton title="Papers still missing" rows={2} />}>
+            <Missing data={data} />
+          </Suspense>
+          <Suspense fallback={<CardSkeleton title="What InboxCA did today" rows={3} />}>
+            <Feed data={data} />
+          </Suspense>
         </div>
       </div>
 
-      {portal && panel === "portal" && (
-        <SidePanel id="portal-title" title="Files from the GST portal" close={close}>
+      <Suspense fallback={null}>
+        <Panels data={data} portal={portal && panel === "portal"} />
+      </Suspense>
+    </div>
+  );
+}
+
+// Every query Today needs, started together; each part awaits only its own.
+function load(supabase: Db, membership: Member, userId: string, params: Params) {
+  const today = todayInIndia();
+  const firm = membership.firmId;
+  const owner = membership.role === "owner";
+  const lead = owner || membership.role === "partner";
+  const approver = ["owner", "partner", "manager"].includes(membership.role);
+  const sends = lead && !membership.viewOnlyUntil;
+  const count = (query: PromiseLike<{ count: number | null }>) => Promise.resolve(query).then((result) => result.count ?? 0);
+  const dayStart = new Date(`${today}T00:00:00+05:30`).toISOString();
+  const weekStart = addDays(today, -6);
+  const monthStart = `${today.slice(0, 8)}01`;
+  const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const monthTasks = () => supabase.from("tasks").select("id", { count: "exact", head: true }).eq("firm_id", firm).eq("kind", "compliance").gte("due_on", monthStart).lte("due_on", monthEnd);
+
+  const replies = Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, clients(name)", { count: "exact" }).eq("kind", "team_reply").eq("status", "pending").or(awake(today)).limit(5));
+  // Every waiting reply's email (up to 200), for the average wait and each row's time.
+  const waits = Promise.resolve(supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "pending").or(awake(today)).limit(200)).then(async ({ data: rows }) => {
+    const ids = rows?.map((row) => row.entity_id) ?? [];
+    const { data: events } = ids.length ? await supabase.from("email_events").select("id, received_at").in("id", ids) : { data: [] };
+    const ages = events?.map((event) => Date.now() - Date.parse(event.received_at)) ?? [];
+    // The average only when every waiting reply was read.
+    const average = ages.length && ages.length === ids.length && ids.length < 200 ? ages.reduce((sum, age) => sum + age, 0) / ages.length : null;
+    return { at: new Map(events?.map((event) => [event.id, event.received_at])), average };
+  });
+  const papers = Promise.resolve(supabase.from("requests").select("id, client_id, details, clients(name)", { count: "exact" }).eq("kind", "documents").eq("status", "pending").gt("expires_at", new Date().toISOString()).order("expires_at", { ascending: false }).limit(5));
+  const late = Promise.resolve(supabase.rpc("late_clients", { target_firm: firm }, { count: "exact" }).limit(5));
+  const week = Promise.resolve(supabase.rpc("due_soon", { target_firm: firm }));
+  const rules = Promise.resolve(supabase.from("compliance_types").select("code, name, frequency").eq("period_key", "")).then(({ data: rows }) => new Map(rows?.map((rule) => [rule.code, rule])));
+  const questions = myQuestions();
+  const accounts = firmAccounts();
+
+  // Prepared returns: drafts to approve, and approved forms whose acknowledgement arrived, to
+  // confirm the filing. Only the latest version of each counts.
+  const toApprove = Promise.all([
+    approver || membership.may("mark_filed")
+      ? Promise.resolve(supabase.from("documents").select("id, client_id, period_key, status, prepared, clients(name)").eq("firm_id", firm).not("prepared", "is", null).order("received_at", { ascending: false }).limit(100))
+      : null,
+    Promise.resolve(supabase.from("requests").select("entity_id").eq("firm_id", firm).eq("kind", "form_confirmation").eq("status", "pending").limit(100)),
+  ]).then(([forms, confirming]) => {
+    const seen = new Set<string>();
+    const waitingAck = new Set(confirming.data?.map((item) => item.entity_id));
+    return (forms?.data ?? [])
+      .map((file) => ({ ...file, meta: preparedSchema.parse(file.prepared) }))
+      .filter((file) => {
+        const group = [file.client_id, file.period_key, file.meta.form, file.meta.registration].join(":");
+        if (seen.has(group)) return false;
+        seen.add(group);
+        return file.status !== "deleted" && ((approver && file.meta.status === "draft") || (waitingAck.has(file.id) && membership.may("mark_filed", file.client_id)));
+      });
+  });
+
+  // Things only the owner or partners act on: drive checks, PCs, the mailbox, notice dates.
+  const looks = Promise.all([
+    questions,
+    owner ? accounts : null,
+    owner ? Promise.resolve(supabase.from("devices").select("id").eq("firm_id", firm).eq("status", "waiting")) : null,
+    Promise.resolve(supabase.rpc("notice_alerts", { target_firm: firm }).limit(10)),
+    lead ? Promise.resolve(supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending").limit(20)) : null,
+  ]).then(async ([asks, mailboxes, devices, noticeAlerts, alerts]) => {
+    const waitingIds = devices?.data?.map((device) => device.id) ?? [];
+    const waitingToday = waitingIds.length
+      ? await count(supabase.from("activity_log").select("entity_id", { count: "exact", head: true }).eq("firm_id", firm).eq("action", "device.first_seen").in("entity_id", waitingIds).gte("at", dayStart))
+      : 0;
+    const looksList: { key: string; text: string; href?: string; action?: string; urgent?: boolean }[] = [
+      ...(asks.length ? [{ key: "questions", text: `${asks.length === 1 ? "1 question waits" : `${asks.length} questions wait`} for your answer.`, href: "/app/inbox", action: "Answer" }] : []),
+      ...(mailboxes?.find((account) => account.kind === "mail")?.status === "needs_reconnect" ? [{ key: "mailbox", text: "Connect your firm's email again. Replies wait until it is connected.", href: "/app/settings#mailbox", action: "Reconnect email", urgent: true }] : []),
+      ...(waitingIds.length
+        ? [{
+            key: "pcs",
+            text: waitingToday === waitingIds.length ? `${plural(waitingToday, "PC signed", "PCs signed")} in from your office today.` : `${plural(waitingIds.length, "PC is", "PCs are")} waiting for approval.`,
+            href: "/app/settings#office",
+            action: "Approve",
+          }]
+        : []),
+      ...(noticeAlerts.data ?? []).map((notice) => ({
+        key: notice.id,
+        text: `${notice.client_name}: a notice's ${notice.action_date ? "action date" : "review deadline"} ${notice.due_on < today ? "has passed" : notice.due_on === today ? "is today" : "is within 3 days"}.`,
+        href: "/app/notices",
+        action: "Review notice",
+        urgent: notice.due_on <= today,
+      })),
+      ...(alerts?.data ?? [])
+        // Missing papers are the owner's to sort out, on the Documents page.
+        .filter((alert) => (owner || alert.reason_code !== "drive_missing") && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames"].includes(alert.reason_code ?? "") || (alert.details as { day?: string }).day === today))
+        .map((alert) => ({
+          key: alert.id,
+          text: alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number }),
+          ...(alert.reason_code === "drive_missing" && { href: "/app/documents?year=all&show=missing", action: "See missing papers" }),
+        })),
+    ];
+    return looksList.sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent));
+  });
+
+  // The figures: the month's returns, and how the late count, replies and papers moved.
+  const month = Promise.all([count(monthTasks()), count(monthTasks().eq("status", "filed"))]).then(([due, filed]) => ({ due, filed, end: monthEnd }));
+  // Clients late on each of the last 14 days: a return is late from the day after it falls due
+  // until the day it is filed. Read from the open late returns and those filed since; when
+  // there are too many to read at once the trend is left out rather than guessed.
+  const lateTrend = Promise.resolve(
+    supabase
+      .from("tasks")
+      .select("client_id, due_on, status, filed_on:details->>filed_on, clients!inner(archived_at)")
+      .eq("firm_id", firm)
+      .eq("kind", "compliance")
+      .lt("due_on", today)
+      .is("clients.archived_at", null)
+      .or(`status.neq.filed,details->>filed_on.gte.${addDays(today, -13)}`)
+      .limit(5000),
+  ).then(({ data: rows, error }) => {
+    if (error || !rows || rows.length >= 5000) return null;
+    return Array.from({ length: 14 }, (_, at) => {
+      const day = addDays(today, at - 13);
+      return new Set(rows.filter((row) => row.due_on < day && !(row.status === "filed" && row.filed_on && row.filed_on <= day)).map((row) => row.client_id)).size;
+    });
+  });
+  // Papers received in the last 7 days, and on each of them (the days only when all were read).
+  const papersWeek = Promise.resolve(
+    supabase.from("documents").select("received_at", { count: "exact" }).eq("firm_id", firm).is("prepared", null).neq("status", "deleted").gte("received_at", new Date(`${weekStart}T00:00:00+05:30`).toISOString()).limit(2000),
+  ).then(({ data: rows, count: total }) => {
+    const days = rows?.map((row) => new Date(row.received_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })) ?? [];
+    return {
+      total: total ?? 0,
+      days: rows && rows.length === total ? Array.from({ length: 7 }, (_, at) => ({ day: addDays(weekStart, at), count: days.filter((received) => received === addDays(weekStart, at)).length })) : null,
+    };
+  });
+
+  // What InboxCA did by itself today (papers filed from email come from the papers themselves).
+  const feed = Promise.all([
+    Promise.resolve(supabase.rpc("activity_feed", { target_firm: firm, since: dayStart })),
+    Promise.resolve(supabase.from("documents").select("client_id, received_at, clients(name)").eq("firm_id", firm).not("email_event_id", "is", null).eq("status", "filed").gte("received_at", dayStart).order("received_at", { ascending: false }).limit(100)),
+  ]).then(([{ data: done }, { data: filedToday }]) => {
+    const papersBy = new Map<string, { at: string; name: string; papers: number }>();
+    for (const paper of filedToday ?? []) {
+      const seenClient = papersBy.get(paper.client_id);
+      papersBy.set(paper.client_id, { at: seenClient?.at ?? paper.received_at, name: paper.clients?.name ?? "", papers: (seenClient?.papers ?? 0) + 1 });
+    }
+    return [
+      ...[...papersBy.entries()].map(([id, item]) => ({ key: `papers-${id}`, at: item.at, client: item.name, what: `${plural(item.papers, "paper", "papers")} filed from email` })),
+      ...(done ?? []).map((line, at) => ({ key: `${line.at}-${at}`, at: line.at, client: line.client_name, what: activityNames[line.action] ?? "Client record changed" })),
+    ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6);
+  });
+
+  // Getting started (the owner): email, drive, clients, the work for each, the team.
+  const setup = owner
+    ? Promise.all([
+        accounts,
+        count(supabase.from("clients").select("id", { count: "exact", head: true }).eq("firm_id", firm).is("archived_at", null)),
+        count(supabase.from("client_registrations").select("id", { count: "exact", head: true }).filter("services", "neq", "{}")),
+        count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
+      ]).then(([kinds, clients, services, members]) => [
+        { done: kinds.some((account) => account.kind === "mail"), name: "Firm email connected", href: "/app/settings#mailbox", action: "Connect the firm's email" },
+        { done: kinds.some((account) => account.kind === "drive"), name: "Drive linked", href: "/app/settings#drive", action: "Link the firm's drive" },
+        { done: !!clients, name: "Clients added", href: "/app/clients", action: "Add your clients" },
+        { done: !!services, name: "Work ticked", href: "/app/clients", action: "Tick what you file for each client" },
+        { done: members > 1, name: "Team invited", href: "/app/people", action: "Invite your team" },
+      ])
+    : null;
+
+  // Late clients nobody looks after, for Assign to me.
+  const assigned = late.then(({ data: rows }) => {
+    const ids = rows?.map((row) => row.client_id) ?? [];
+    return ids.length ? Promise.resolve(supabase.from("client_assignments").select("client_id").in("client_id", ids)).then(({ data: looked }) => new Set(looked?.map((row) => row.client_id))) : new Set<string>();
+  });
+
+  // Phone notifications are offered to approvers once, until one device has them or they close the line.
+  const pushKey = process.env.VAPID_PUBLIC_KEY ?? "";
+  const deputy = ((membership.settings.office as { deputies?: string[] } | undefined)?.deputies ?? []).includes(userId);
+  const askPush =
+    pushKey && (owner || deputy || membership.role === "manager")
+      ? cookies().then(async (jar) => jar.get("push_line")?.value !== "hidden" && !(await supabaseAdmin().from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", userId)).count)
+      : Promise.resolve(false);
+
+  // The panels this page opens: Mark filed for a late client, and the preview before a send.
+  const marking =
+    params.panel === "filed" && params.client && /^[0-9a-f-]{36}$/.test(params.client) && !membership.viewOnlyUntil
+      ? Promise.resolve(supabase.from("tasks").select("id, code, period_key, due_on, clients(name)").eq("client_id", params.client).eq("kind", "compliance").neq("status", "filed").lt("due_on", today).order("due_on").limit(100)).then(({ data: rows }) => rows)
+      : Promise.resolve(null);
+  const preview = sends && (params.confirm === "late" || params.confirm === "papers") ? sendPreview(supabase, firm, params.confirm) : Promise.resolve(null);
+
+  return { today, owner, sends, membership, userId, replies, waits, papers, late, week, rules, toApprove, looks, month, lateTrend, papersWeek, feed, setup, assigned, askPush, pushKey, marking, preview, confirm: params.confirm };
+}
+
+const returnName = (rule: Map<string, { name: string | null; frequency: string | null }>, code: string | null, period: string | null) => `${rule.get(code ?? "")?.name ?? code ?? ""} for ${periodLabel(rule.get(code ?? "")?.frequency ?? null, period)}`;
+const short = (date: string) => dueLabel(date).slice(0, -5);
+const timeOf = (iso: string, today: string) => {
+  const day = new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return day === today ? new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" }) : short(day);
+};
+// "3 h", "2 days": how long a reply has waited, roughly.
+const waitFor = (ms: number) => (ms < 3_600_000 ? `${Math.max(1, Math.round(ms / 60_000))} min` : ms < DAY ? `${Math.round(ms / 3_600_000)} h` : plural(Math.round(ms / DAY), "day", "days"));
+
+// The greeting's line: how many things need this person today.
+async function Things({ data }: { data: Data }) {
+  const [replies, toApprove, late, looks] = await Promise.all([data.replies, data.toApprove, data.late, data.looks]);
+  const things = (replies.count ?? 0) + toApprove.length + (late.count ?? late.data?.length ?? 0) + looks.length;
+  return <span>{things ? `${plural(things, "thing needs", "things need")} you today.` : "Nothing needs you today."}</span>;
+}
+
+async function PushLine({ data }: { data: Data }) {
+  if (!(await data.askPush)) return null;
+  return (
+    <div className="today-line">
+      <span className="grow">Get questions and approvals on your phone too.</span>
+      <PushSwitch publicKey={data.pushKey} />
+      <form action={hidePush}>
+        <button className="b b-ghost b-icon" aria-label="Close">
+          <X size={16} aria-hidden />
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// The month at a glance: four figures of different kinds, each opening its own list.
+async function Kpis({ data }: { data: Data }) {
+  const [month, late, trend, replies, waits, papersWeek] = await Promise.all([data.month, data.late, data.lateTrend, data.replies, data.waits, data.papersWeek]);
+  const lateCount = late.count ?? late.data?.length ?? 0;
+  const replyCount = replies.count ?? 0;
+  const averageWait = waits.average;
+  const most = Math.max(1, ...(papersWeek.days?.map((day) => day.count) ?? []));
+  return (
+    <section className="kpis" aria-label="This month">
+      <Press href="/app/calendar?view=month" className="kpi kpi-ring" lift>
+        <ProgressRing done={month.filed} total={month.due} label="returns due this month filed" />
+        <span className="kpi-text">
+          <span className="kpi-label">Returns filed this month</span>
+          <span className="kpi-big">
+            <Count value={month.filed} /> <small>of {month.due.toLocaleString("en-IN")}</small>
+          </span>
+          <span className="kpi-sub">{month.due ? `Due by ${short(month.end)}` : "No returns fall due this month"}</span>
+        </span>
+      </Press>
+      <Press href="/app/clients?show=late" className="kpi" lift>
+        <span className="kpi-label">
+          <span className={`kpi-dot${lateCount ? " late" : ""}`} aria-hidden />
+          {lateCount === 1 ? "Client late" : "Clients late"}
+        </span>
+        <span className="kpi-big">
+          <Count value={lateCount} />
+        </span>
+        {trend ? <Sparkline points={trend} /> : <span className="kpi-sub">Open the list</span>}
+        {trend && <span className="kpi-sub">Last 14 days</span>}
+      </Press>
+      <Press href="/app/inbox?status=reply" className="kpi" lift>
+        <span className="kpi-label">
+          <span className={`kpi-dot${replyCount ? " wait" : ""}`} aria-hidden />
+          {replyCount === 1 ? "Reply waiting" : "Replies waiting"}
+        </span>
+        <span className="kpi-big">
+          <Count value={replyCount} />
+        </span>
+        <span className="kpi-sub">{averageWait !== null ? `Waiting ${waitFor(averageWait)} on average` : replyCount ? "Open the Inbox" : "No client is waiting"}</span>
+      </Press>
+      <Press href="/app/documents" className="kpi" lift>
+        <span className="kpi-label">
+          <span className="kpi-dot docs" aria-hidden />
+          Papers this week
+        </span>
+        <span className="kpi-big">
+          <Count value={papersWeek.total} />
+        </span>
+        {papersWeek.days && (
+          <span className="kpi-bars" aria-hidden>
+            {papersWeek.days.map((day, at) => (
+              <span key={day.day} className={at === 6 ? "is-today" : undefined} style={{ height: `${Math.max(6, Math.round((day.count * 100) / most))}%`, animationDelay: `${120 + at * 40}ms` }} />
+            ))}
+          </span>
+        )}
+        <span className="kpi-sub">Received in the last 7 days</span>
+      </Press>
+    </section>
+  );
+}
+
+// A line for the late count over 14 days, drawn once; its last point is today.
+function Sparkline({ points }: { points: number[] }) {
+  const top = Math.max(1, ...points);
+  const x = (at: number) => 3 + (at * 194) / (points.length - 1);
+  const y = (value: number) => 30 - (value * 26) / top;
+  const line = points.map((value, at) => `${at ? "L" : "M"}${x(at).toFixed(1)} ${y(value).toFixed(1)}`).join(" ");
+  return (
+    <svg className="kpi-spark" viewBox="0 0 200 34" preserveAspectRatio="none" aria-hidden>
+      <path className="kpi-spark-fill" d={`${line} L197 34 L3 34 Z`} />
+      <Draw className="kpi-spark-line" d={line} />
+      <circle className="kpi-spark-end" cx={x(points.length - 1)} cy={y(points.at(-1)!)} r="2.5" />
+    </svg>
+  );
+}
+
+// Needs you now: what the owner must look at, clients waiting for a reply, and returns to
+// approve, most urgent first, each with one action.
+async function NeedsNow({ data }: { data: Data }) {
+  const [looks, replies, waits, toApprove] = await Promise.all([data.looks, data.replies, data.waits, data.toApprove]);
+  const replyCount = replies.count ?? 0;
+  const replyRows = (replies.data ?? [])
+    .map((request) => ({ request, at: waits.at.get(request.entity_id) }))
+    .sort((a, b) => (a.at ?? "").localeCompare(b.at ?? ""));
+  const total = looks.length + replyCount + toApprove.length;
+  return (
+    <Card id="t-now" title="Needs you now" Icon={Inbox} kind="reply" count={total} countTone={looks.some((look) => look.urgent) ? "late" : "warn"} className="today-now">
+      {total ? (
+        <List className="app-rows">
+          {looks.map((look) => (
+            <Row
+              key={look.key}
+              lead={<IconTile Icon={TriangleAlert} kind={look.urgent ? "late" : "notice"} />}
+              title={<span role="alert">{look.text}</span>}
+              action={
+                look.href && (
+                  <Link className="b b-secondary" href={look.href}>
+                    {look.action}
+                  </Link>
+                )
+              }
+            />
+          ))}
+          {replyRows.map(({ request, at }) => {
+            const client = request.clients?.name ?? "A contact";
+            return (
+              <Row
+                key={request.id}
+                lead={<Avatar name={client} />}
+                title={client}
+                meta={`${replyReasons[request.reason_code ?? ""] ?? "Needs your team"}${at ? `. Emailed ${timeOf(at, data.today)}` : ""}`}
+                status={<Badge tone="warn">Reply</Badge>}
+                action={
+                  <Link className="b b-secondary" href={at ? `/app/inbox?mail=${request.entity_id}` : request.client_id ? `/app/clients/${request.client_id}` : "/app/inbox"} aria-label={`Reply to ${client}`}>
+                    Reply
+                  </Link>
+                }
+              />
+            );
+          })}
+          {toApprove.slice(0, 5).map((file) => (
+            <Row
+              key={file.id}
+              lead={<Avatar name={file.clients?.name ?? ""} />}
+              title={file.clients?.name}
+              meta={`${formName(file.meta.form)} for ${periodName(file.period_key)}${file.meta.status !== "draft" ? ", acknowledgement arrived" : ""}`}
+              status={<Badge tone="blue">Approve</Badge>}
+              action={
+                <Link className="b b-secondary" href={`/app/clients/${file.client_id}?tab=outputs`}>
+                  {file.meta.status === "draft" ? "Review and approve" : "Confirm filing"}
+                </Link>
+              }
+            />
+          ))}
+        </List>
+      ) : (
+        <Calm title="You are all caught up" line="No client is waiting for a reply, and nothing waits for your approval." />
+      )}
+      {replyCount > 5 && <SeeAll href="/app/inbox">See all {replyCount} replies in the Inbox</SeeAll>}
+    </Card>
+  );
+}
+
+// Late returns: one row a client, with the bulk reminder, Mark filed and Assign to me.
+async function LateReturns({ data }: { data: Data }) {
+  const [late, rule, assignedIds] = await Promise.all([data.late, data.rules, data.assigned]);
+  const { membership } = data;
+  const lateCount = late.count ?? late.data?.length ?? 0;
+  const assignAs = membership.role === "manager" ? "manager" : "partner_in_charge";
+  return (
+    <Card
+      id="t-late"
+      title="Late returns"
+      Icon={AlarmClock}
+      kind="late"
+      count={lateCount ? plural(lateCount, "client", "clients") : null}
+      countTone="late"
+      end={
+        data.sends &&
+        !!lateCount && (
+          <Link className="b b-secondary" href="/app?confirm=late" scroll={false}>
+            Remind all late clients
+          </Link>
+        )
+      }
+    >
+      {late.data?.length ? (
+        <>
+          <List className="app-rows">
+            {late.data.map((row) => {
+              const days = Math.round((Date.parse(data.today) - Date.parse(row.due_on)) / DAY);
+              return (
+                <Row
+                  key={row.client_id}
+                  lead={<Avatar name={row.client_name} />}
+                  title={row.client_name}
+                  meta={`${returnName(rule, row.code, row.period_key)}${row.returns > 1 ? ` and ${row.returns - 1} more` : ""}`}
+                  status={<Badge tone="late">{plural(days, "day", "days")} late</Badge>}
+                  more={
+                    <>
+                      {!membership.viewOnlyUntil && membership.may("mark_filed", row.client_id) && (
+                        <Link className="b b-ghost" href={`/app?panel=filed&client=${row.client_id}`} scroll={false} aria-label={`Mark filed for ${row.client_name}`}>
+                          Mark filed
+                        </Link>
+                      )}
+                      {!membership.viewOnlyUntil && canManageClients(membership.role) && !assignedIds.has(row.client_id) && (
+                        <form action={manageClient}>
+                          <input type="hidden" name="from" value="today" />
+                          <input type="hidden" name="client" value={row.client_id} />
+                          <input type="hidden" name="intent" value="assign" />
+                          <input type="hidden" name="role" value={assignAs} />
+                          <input type="hidden" name="who" value={`person:${data.userId}`} />
+                          <Pending className="b b-ghost" busy="Assigning" aria-label={`Assign ${row.client_name} to me`}>
+                            Assign to me
+                          </Pending>
+                        </form>
+                      )}
+                    </>
+                  }
+                  action={
+                    <Link className="b b-secondary" href={`/app/clients/${row.client_id}?tab=due`} aria-label={`See returns for ${row.client_name}`}>
+                      See returns
+                    </Link>
+                  }
+                />
+              );
+            })}
+          </List>
+          {lateCount > late.data.length && <SeeAll href="/app/calendar?view=overdue">See all {lateCount} clients</SeeAll>}
+        </>
+      ) : late.error ? (
+        <p className="app-card-none">Late returns could not load. Refresh the page.</p>
+      ) : (
+        <Calm title="No return is late." line="Returns that pass their due date without being marked filed show here." />
+      )}
+    </Card>
+  );
+}
+
+// Getting started, for the owner until every step is done; then a small celebration, once.
+async function GettingStarted({ data }: { data: Data }) {
+  const steps = (await data.setup)!;
+  const done = steps.filter((step) => step.done).length;
+  if (done === steps.length) {
+    if ((await cookies()).get("setup_done")?.value) return null;
+    return (
+      <section className="app-card today-ready" aria-labelledby="t-ready">
+        <Celebrate />
+        <IconTile Icon={PartyPopper} kind="done" />
+        <span>
+          <h2 id="t-ready">You are all set</h2>
+          <span className="sub">Email, drive, clients, their work and your team are in. InboxCA takes it from here.</span>
+        </span>
+      </section>
+    );
+  }
+  const next = steps.find((step) => !step.done)!;
+  return (
+    <section className="app-card today-setup" aria-labelledby="t-setup">
+      <header className="app-card-head">
+        <IconTile Icon={Rocket} kind="approve" />
+        <h2 id="t-setup">Getting started</h2>
+        <span className="head-end today-setup-count">
+          {done} of {steps.length}
+        </span>
+      </header>
+      <div className="today-setup-bar" role="progressbar" aria-label="Setup done" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={done}>
+        <span style={{ width: `${(done * 100) / steps.length}%` }} />
+      </div>
+      <ol aria-label="Setup steps">
+        {steps.map((step) => (
+          <li key={step.action} className={step.done ? "done" : step === next ? "next" : undefined}>
+            <span className="today-step-mark">{step.done && <Check size={12} strokeWidth={3} aria-label="Done" />}</span>
+            {step.done ? (
+              <span>{step.name}</span>
+            ) : (
+              <Link href={step.href} className={step === next ? "b b-primary" : undefined}>
+                {step.action}
+              </Link>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+// The next 7 days as a strip, a count of returns still to file under each day, then the
+// returns themselves.
+async function ThisWeek({ data }: { data: Data }) {
+  const [week, rule] = await Promise.all([data.week, data.rules]);
+  const rows = week.data ?? [];
+  const days = Array.from({ length: 7 }, (_, at) => {
+    const day = addDays(data.today, at);
+    const due = rows.filter((row) => row.due_on === day);
+    return { day, left: due.reduce((sum, row) => sum + row.clients - row.filed, 0), all: due.reduce((sum, row) => sum + row.clients, 0) };
+  });
+  const most = Math.max(1, ...days.map((day) => day.left));
+  return (
+    <Card id="t-week" title="Due this week" Icon={CalendarDays} kind="week" end={<Link className="b b-ghost b-small" href="/app/calendar?view=week">Open calendar</Link>}>
+      <ol className="week-strip" aria-label="Returns to file each day">
+        {days.map(({ day, left, all }, at) => {
+          const date = new Date(`${day}T12:00:00+05:30`);
+          return (
+            <li key={day} className={`${at ? "" : "is-today"}${left ? " has-due" : ""}`}>
+              <span className="week-day">{at ? date.toLocaleDateString("en-IN", { weekday: "short", timeZone: "Asia/Kolkata" }) : "Today"}</span>
+              <strong className="week-date">{Number(day.slice(8))}</strong>
+              <span className="week-bar" aria-hidden>
+                <span style={{ height: `${left ? Math.max(14, (left * 100) / most) : 0}%` }} />
+              </span>
+              <span className="week-count">{left ? `${left} to file` : all ? "Filed" : "None"}</span>
+            </li>
+          );
+        })}
+      </ol>
+      {rows.length ? (
+        <List className="app-rows">
+          {rows.slice(0, 4).map((row) => {
+            const left = row.clients - row.filed;
+            return (
+              <Row
+                key={`${row.due_on}-${row.code}`}
+                title={rule.get(row.code)?.name ?? row.code}
+                meta={`${plural(row.clients, "client", "clients")}, due ${short(row.due_on)}`}
+                status={left ? <Badge tone="warn">{left} to file</Badge> : <Badge tone="done">Filed</Badge>}
+              />
+            );
+          })}
+        </List>
+      ) : (
+        <p className="app-card-none">Nothing is due in the next 7 days.</p>
+      )}
+      {rows.length > 4 && <SeeAll href="/app/calendar?view=week">See all</SeeAll>}
+    </Card>
+  );
+}
+
+async function Missing({ data }: { data: Data }) {
+  const papers = await data.papers;
+  return (
+    <Card
+      id="t-missing"
+      title="Papers still missing"
+      Icon={FileClock}
+      kind="papers"
+      end={
+        papers.data?.length ? (
+          data.sends ? (
+            <Link className="b b-secondary" href="/app?confirm=papers" scroll={false}>
+              Chase missing papers
+            </Link>
+          ) : (
+            <span className="today-time">InboxCA is reminding them</span>
+          )
+        ) : null
+      }
+    >
+      {papers.data?.length ? (
+        <List className="app-rows">
+          {papers.data.map((request) => {
+            const details = request.details as unknown as DocumentRequest;
+            const missing = (details.items ?? []).filter((item) => !item.received.length).map((item) => item.type);
+            const reminded = details.followups?.at(-1);
+            return (
+              <Row
+                key={request.id}
+                lead={<Avatar name={request.clients?.name ?? ""} />}
+                title={request.clients?.name}
+                meta={`${(missing.length ? missing : (details.items ?? []).map((item) => item.type)).join(", ")}${details.period ? ` for ${periodName(details.period)}` : ""}`}
+                status={<Badge plain>{reminded ? `Reminded ${short(reminded)}` : "Not reminded yet"}</Badge>}
+                action={
+                  request.client_id && (
+                    <Link className="b b-secondary" href={`/app/clients/${request.client_id}`}>
+                      Open client
+                    </Link>
+                  )
+                }
+              />
+            );
+          })}
+        </List>
+      ) : (
+        <p className="app-card-none">
+          No papers are missing.{" "}
+          <Link className="b b-secondary" href="/app/clients">
+            Ask a client for papers
+          </Link>
+        </p>
+      )}
+    </Card>
+  );
+}
+
+async function Feed({ data }: { data: Data }) {
+  const feed = await data.feed;
+  return (
+    <Card id="t-done" title="What InboxCA did today" Icon={Sparkles} kind="docs" end={<span className="today-live">Live</span>}>
+      {feed.length ? (
+        <ol className="today-feed stagger">
+          {feed.map((item) => (
+            <li key={item.key}>
+              <span className="today-feed-dot" aria-hidden />
+              <span className="grow">
+                {item.what} <span className="sub-inline">{item.client}</span>
+              </span>
+              <time className="today-time" dateTime={item.at}>
+                {timeOf(item.at, data.today)}
+              </time>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="app-card-none">Nothing yet today. Papers filed from email and reminders sent show here.</p>
+      )}
+    </Card>
+  );
+}
+
+// The side panels Today opens: portal files, Mark filed, and the preview before a send. Each
+// springs in and slides back out when closed.
+async function Panels({ data, portal }: { data: Data; portal: boolean }) {
+  const [marking, preview, rule] = await Promise.all([data.marking, data.preview, data.rules]);
+  const close = "/app";
+  return (
+    <Presence>
+      {portal && (
+        <SidePanel key="portal" id="portal-title" title="Files from the GST portal" close={close}>
           <PortalDrop />
         </SidePanel>
       )}
-      {marking && !membership.viewOnlyUntil && (
-        <SidePanel id="mark-filed" title={marking.length > 1 ? `Mark ${marking.length} returns filed` : "Mark filed"} close={close}>
+      {marking && (
+        <SidePanel key="filed" id="mark-filed" title={marking.length > 1 ? `Mark ${marking.length} returns filed` : "Mark filed"} close={close}>
           {marking.length ? (
-            <MarkFiled state={<input type="hidden" name="from" value="today" />} rows={marking.map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${returnName(task.code, task.period_key)}, due ${dueLabel(task.due_on)}` }))} />
+            <MarkFiled state={<input type="hidden" name="from" value="today" />} rows={marking.map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${returnName(rule, task.code, task.period_key)}, due ${dueLabel(task.due_on)}` }))} />
           ) : (
             <p className="hint">This client has no late return now.</p>
           )}
         </SidePanel>
       )}
       {preview && (
-        <SidePanel id="send-title" title={preview.title} close={close}>
+        <SidePanel key="send" id="send-title" title={preview.title} close={close}>
           <p className="hint">{preview.hint}</p>
           {!preview.mailbox && (
             <p className="alert" role="alert">
@@ -616,7 +841,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
             ))}
           </ul>
           <form action={sendNow} className="mark-filed-actions today-send">
-            <input type="hidden" name="what" value={confirm} />
+            <input type="hidden" name="what" value={data.confirm} />
             <Pending className="b b-primary" busy="Sending" disabled={!preview.mailbox || !preview.count}>
               {preview.button}
             </Pending>
@@ -626,7 +851,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           </form>
         </SidePanel>
       )}
-    </div>
+    </Presence>
   );
 }
 
@@ -640,7 +865,7 @@ const todayErrors: Record<string, string> = {
 
 // Who gets what when the late clients are reminded or missing papers chased at once, for the
 // preview before Send. The job decides the rest the same way (see src/jobs/reminders.ts).
-async function sendPreview(supabase: Awaited<ReturnType<typeof currentMember>>["supabase"], firm: string, what: "late" | "papers") {
+async function sendPreview(supabase: Db, firm: string, what: "late" | "papers") {
   const skipFor = (client: { email_enc: string | null; reminders_paused: boolean } | null) => (!client ? "Not emailed" : client.reminders_paused ? "Reminders paused" : !client.email_enc ? "No email address" : null);
   const [{ data: mailbox }, list] = await Promise.all([
     supabase.from("connected_accounts").select("status").eq("firm_id", firm).eq("kind", "mail").maybeSingle(),
@@ -678,10 +903,51 @@ async function sendPreview(supabase: Awaited<ReturnType<typeof currentMember>>["
 function SeeAll({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <div className="app-card-foot">
-      <Link className="b b-secondary" href={href}>
+      <Link className="b b-ghost b-small" href={href}>
         {children}
       </Link>
     </div>
+  );
+}
+
+// A calm empty state: a small drawing in tint colours and one line.
+function Calm({ title, line }: { title: string; line: string }) {
+  return (
+    <div className="today-calm">
+      <svg viewBox="0 0 64 48" aria-hidden>
+        <rect x="8" y="10" width="40" height="30" rx="8" className="calm-back" />
+        <rect x="16" y="6" width="40" height="30" rx="8" className="calm-front" />
+        <path d="M28 21l5 5 9-10" className="calm-tick" />
+        <circle cx="6" cy="8" r="2" className="calm-dot" />
+        <circle cx="60" cy="42" r="2.5" className="calm-dot" />
+      </svg>
+      <span>
+        <strong>{title}</strong>
+        <span className="sub">{line}</span>
+      </span>
+    </div>
+  );
+}
+
+// The shape of the figures and of a card while their data comes.
+function KpiSkeleton() {
+  return (
+    <div className="kpis" aria-busy="true" aria-label="Loading the month">
+      {[0, 1, 2, 3].map((tile) => <span key={tile} className="kpi kpi-skel skel" />)}
+    </div>
+  );
+}
+function CardSkeleton({ title, rows }: { title: string; rows: number }) {
+  return (
+    <section className="app-card" aria-busy="true" aria-label={`Loading ${title}`}>
+      <header className="app-card-head">
+        <span className="skel skel-tile" />
+        <h2 className="skel-title">{title}</h2>
+      </header>
+      <div className="card-skel">
+        {Array.from({ length: rows }, (_, row) => <span key={row} className="skel" />)}
+      </div>
+    </section>
   );
 }
 
