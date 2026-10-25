@@ -56,8 +56,9 @@
 .clients-page:has(input[name="client"]:checked) .clients-bulk { visibility: visible; opacity: 1; transform: translate(-50%, 0); }
 @media (max-width: 720px) { .clients-bulk { position: fixed; bottom: var(--s4); max-width: calc(100vw - var(--s6)); } }
 .clients-page .clients-bulk select[name] { width: auto; max-width: 190px; }
-.bulk-count { display: inline-flex; align-items: center; gap: var(--s2); font-weight: 600; }
-.bulk-count strong { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 7px; border-radius: var(--round); background: var(--accent); color: var(--white); font-size: 12px; font-weight: 700; }
+.clients-bulk .bulk-count { display: inline-flex; align-items: center; gap: var(--s2); font-weight: 600; }
+.clients-bulk .bulk-count::before { content: none; }
+.clients-bulk .bulk-count strong { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 7px; border-radius: var(--round); background: var(--accent); color: var(--white); font-size: 12px; font-weight: 700; }
 .bulk-what { padding-left: var(--s2); color: var(--nav-ink); }
 .clients-bulk .b-ghost { color: var(--nav-ink); }
 .clients-bulk .b-ghost:hover:not(:disabled) { background: var(--on-dark); color: var(--white); }
