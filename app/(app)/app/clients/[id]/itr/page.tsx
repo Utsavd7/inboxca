@@ -10,6 +10,7 @@ import {serverCrypto} from "@/src/lib/crypto";
 import {askPermission} from "@/app/(app)/actions";
 import {grantFor} from "@/src/lib/permission-grants";
 import {Badge,Card,PageHead} from "../../../ui";
+import {Pending} from "../../../pending";
 import "../../clients.css";
 
 // One income tax return for one assessment year: what InboxCA already holds, what is still
@@ -42,9 +43,10 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
   async function save(input:FormData) {
     "use server";
     // Only the amounts listed as still to fill on this page get a 0, and only when asked.
-    if(input.get("zero")==="1") for(const field of String(input.get("empty") ?? "").split(",")) if(/^itr\.[a-z0-9_.]{1,95}$/.test(field) && !String(input.get(field) ?? "").trim()) input.set(field,"0");
+    let zeroed=0;
+    if(input.get("zero")==="1") for(const field of String(input.get("empty") ?? "").split(",")) if(/^itr\.[a-z0-9_.]{1,95}$/.test(field) && !String(input.get(field) ?? "").trim()) {input.set(field,"0");zeroed++;}
     let draft:string;
-    try {draft=await enterItr(id,form,period,input);} catch(error) {unstable_rethrow(error);redirect(`${base}&group=${encodeURIComponent(String(input.get("group") ?? ""))}&message=check`);}
+    try {draft=await enterItr(id,form,period,input,zeroed);} catch(error) {unstable_rethrow(error);redirect(`${base}&group=${encodeURIComponent(String(input.get("group") ?? ""))}&message=check`);}
     revalidatePath("/app","layout");redirect(`${base}&group=${encodeURIComponent(String(input.get("group") ?? ""))}&saved=${draft}`);
   }
   const empty=shown.filter(entry=>entry.kind==="number" && !entry.choices && missing.has(itrField(entry,rows))).map(entry=>itrField(entry,rows));
@@ -83,7 +85,7 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
         <button className="b b-secondary">Open</button>
       </form>
       <p className="hint">Leave anything that does not apply empty. Details marked To fill are needed by the official form.</p>
-      {!canEdit ? <form action={askPermission}><input type="hidden" name="client" value={id}/><input type="hidden" name="right" value="edit_figures"/><button className="b b-secondary" disabled={!!membership.viewOnlyUntil}>Ask to enter figures</button></form> : <form action={save} className="fields">
+      {!canEdit ? <form action={askPermission}><input type="hidden" name="client" value={id}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-secondary" disabled={!!membership.viewOnlyUntil}>Ask to enter figures</Pending></form> : <form action={save} className="fields">
         <input type="hidden" name="draft" value={own?.id ?? ""}/><input type="hidden" name="revision" value={own?.revision ?? 0}/><input type="hidden" name="group" value={group}/><input type="hidden" name="empty" value={empty.join(",")}/>
         {shown.map(entry=>{
           const field=itrField(entry,rows),from=held.get(field),label=<>{entry.label}{entry.rows>0 && `, row ${rows[0]+1}`} {missing.has(field) && <Badge tone="warn">To fill</Badge>}</>;
@@ -97,7 +99,8 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
             {entry.defaultValue!==undefined && entry.defaultValue!=="0" && <p className="hint">The official form&apos;s usual value is {entry.defaultValue}.</p>}
           </div>;
         })}
-        <div className="form-row"><button className="b b-primary">Save for checking</button>{!!empty.length && <button className="b b-secondary" name="zero" value="1">Save, with 0 for the {empty.length} amounts still to fill</button>}</div>
+        <div className="form-row"><Pending className="b b-primary">Save for checking</Pending>{!!empty.length && <Pending className="b b-secondary" name="zero" value="1">Save, putting 0 in the {empty.length} empty amounts</Pending>}</div>
+        {!!empty.length && <p className="hint">Amounts you type are kept. Only the amounts marked To fill that you leave empty get 0.</p>}
       </form>}
       </div>
     </Card>

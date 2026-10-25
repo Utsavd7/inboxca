@@ -69,7 +69,9 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await page.getByRole("button",{name:"Save for checking",exact:true}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
     await page.getByRole("link",{name:/^Taxes paid: \d+$/}).click();
     await page.getByLabel(/^Total TDS claimed/).fill("5000");await page.getByLabel(/^Taxes Paid · Total Taxes Paid/).fill("5000");
-    await page.getByRole("button",{name:/^Save, with 0 for the \d+ amounts still to fill$/}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
+    await page.getByRole("button",{name:"Save, putting 0 in the 6 empty amounts",exact:true}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
+    // The 4 amounts left empty were saved as 0, and the log says so.
+    expect((await query(local.dbUrl,"select details->>'zeroed' zeroed from public.activity_log where firm_id=$1 and action='dataset.changed' and details ? 'zeroed'",[firm.firmId])).map(row=>row.zeroed)).toEqual(["4"]);
     const [own]=await query(local.dbUrl,"select * from public.datasets where firm_id=$1 and data->'target'->>'form'='ITR1'",[firm.firmId]);
     expect(own.data.lines.map((line:Draft["lines"][number])=>[line.field,line.state,line.source.entered_by])).toEqual(expect.arrayContaining([["itr.personal.email","pending",firm.ownerId],["itr.advance_tax.total","pending",firm.ownerId],["itr.self_assessment_tax.total","pending",firm.ownerId]]));
     // The other required details, as the CA would enter them, already checked (invented values).

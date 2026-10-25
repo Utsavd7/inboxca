@@ -41,7 +41,8 @@ export async function itrWork(client:string,form:string,period:string) {
 }
 
 // The form supplies values only. The server supplies their labels, source and person.
-export async function enterItr(client:string,form:string,period:string,input:FormData) {
+// zeroed: how many amounts the person asked to be saved as 0, kept in the activity log.
+export async function enterItr(client:string,form:string,period:string,input:FormData,zeroed=0) {
   const {context,entries}=await itrDetails(client,form,period),{supabase,membership,userId,permission}=context;
   const chosen=String(input.get("draft") ?? "");if(chosen) z.uuid().parse(chosen);
   const {data:row,error}=chosen ? await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",client).eq("form_code","ITR").eq("period_key",period).eq("id",chosen).maybeSingle() : {data:null,error:null};
@@ -64,7 +65,7 @@ export async function enterItr(client:string,form:string,period:string,input:For
   }
   if(!added) throw new Error("Enter a figure first.");
   data.target={form:z.enum(itrReturns).parse(form),version:context.template.version};
-  if(!await saveDraft({id,firm_id:membership.firmId,client_id:client,form_code:"ITR",period_key:period,revision:row?.revision ?? 0},data,userId,row ? "dataset.changed" : "dataset.created",{entered:added},permission)) throw new Error("The figures changed. Try again.");
+  if(!await saveDraft({id,firm_id:membership.firmId,client_id:client,form_code:"ITR",period_key:period,revision:row?.revision ?? 0},data,userId,row ? "dataset.changed" : "dataset.created",{entered:added,...(zeroed ? {zeroed} : {})},permission)) throw new Error("The figures changed. Try again.");
   return id;
 }
 export function itrField(entry:ItrEntry,rows:number[]) {let at=0;return entry.field.replaceAll("*",()=>String(rows[at++] ?? 0));}
