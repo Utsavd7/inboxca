@@ -59,3 +59,13 @@ it("reminds a client ten days late at once when asked, and only then",async()=>{
   expect(mock.send).toHaveBeenCalledOnce();
   expect(mock.send.mock.calls[0][1]).toBe("Overdue: GSTR-3B due 7 Oct 2026");
 });
+
+// The Calendar's "Remind client": a return due in 5 days, not a stage of the daily reminders,
+// goes at once for that one client, even with the daily reminders off.
+it("reminds one client of a return due this week when asked from the Calendar",async()=>{
+  mock.details={};mock.due="2026-10-22";mock.on=false;
+  await sendReminders({entity_id:"firm"} as Job,{markSending:async()=>{}});
+  expect(mock.send).not.toHaveBeenCalled();
+  await sendReminders({firm_id:"firm",entity_type:"client",entity_id:"client0"} as Job,{markSending:async()=>{}});
+  expect(mock.send).toHaveBeenCalledOnce();
+});

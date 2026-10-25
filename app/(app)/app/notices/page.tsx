@@ -1,6 +1,6 @@
 import "../calendar/calendar.css";
 import "./notices.css";
-import { FileWarning, Search } from "lucide-react";
+import { Building2, FileWarning, Landmark, Receipt, Scale, Search, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageNotice } from "@/app/(app)/actions";
@@ -11,7 +11,7 @@ import { personName } from "@/src/lib/roles";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
 import { LinkTabs } from "../link-tabs";
-import { Badge, Empty, PageHead, SidePanel, Toast, type Tone } from "../ui";
+import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Tone } from "../ui";
 import { RowKeys } from "../row-keys";
 
 const catalog = ["Intimation u/s 143(1)", "Notice u/s 143(2)", "Notice u/s 142(1)", "Notice u/s 148", "Demand notice u/s 156", "DRC-01", "ASMT-10", "Registration notice", "Show cause notice", "Summons"];
@@ -23,6 +23,9 @@ const saved: Record<string, string> = { add: "Notice added.", confirm: "Action d
 const PAGE = 50;
 const PICK = 8;
 const uuid = /^[0-9a-f-]{36}$/;
+// Each authority's notices carry its own icon.
+const authorityIcons: Record<string, LucideIcon> = { income_tax: Landmark, gst: Receipt, roc: Building2 };
+const statusTones: Record<string, Tone> = { upcoming: "warn", in_progress: "blue" };
 
 // Notices the firm's clients received (PLAN.md 5.6), the nearest date first. A date the rules
 // found is only a suggestion until a person confirms it against the notice; until then the
@@ -84,7 +87,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
 
   const done = (status: string) => status === "replied" || status === "closed";
   const label = (status: string) => noticeStatuses[status as keyof typeof noticeStatuses] ?? status;
-  const tag = (notice: { status: string; due_on: string }): [Tone, string] => (done(notice.status) ? ["done", label(notice.status)] : notice.due_on < today ? ["late", "Late"] : ["", label(notice.status)]);
+  const tag = (notice: { status: string; due_on: string }): [Tone, string] => (done(notice.status) ? ["done", label(notice.status)] : notice.due_on < today ? ["late", "Late"] : [statusTones[notice.status] ?? "", label(notice.status)]);
   const actionDate = (notice: { due_on: string; status: string; details: unknown }) => {
     const details = notice.details as NoticeDetails;
     return details.action_date ? <span className={notice.due_on < today && !done(notice.status) ? "notices-late" : undefined}>{dueLabel(details.action_date)}</span> : <Badge tone="warn">Review by {dueLabel(notice.due_on)}</Badge>;
@@ -143,20 +146,28 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="stagger">
                 {rows.map((notice) => {
                   const details = notice.details as unknown as NoticeDetails;
                   const [tone, word] = tag(notice);
                   return (
                     <tr key={notice.id} className={notice.id === openId ? "on" : undefined}>
                       <td>
-                        <Link className="row-link" href={`/app/clients/${notice.client_id}`}>
-                          {notice.clients?.name}
-                        </Link>
+                        <span className="who">
+                          <Avatar name={notice.clients?.name ?? ""} />
+                          <Link className="row-link" href={`/app/clients/${notice.client_id}`}>
+                            {notice.clients?.name}
+                          </Link>
+                        </span>
                       </td>
                       <td>
-                        {details.notice_type}
-                        <span className="sub">{[authorities[details.authority] ?? details.authority, details.reference].filter(Boolean).join(", ")}</span>
+                        <span className="notices-what">
+                          <IconTile Icon={authorityIcons[details.authority] ?? Scale} kind="notice" />
+                          <span>
+                            {details.notice_type}
+                            <span className="sub">{[authorities[details.authority] ?? details.authority, details.reference].filter(Boolean).join(", ")}</span>
+                          </span>
+                        </span>
                       </td>
                       <td>{dueLabel(details.received_on)}</td>
                       <td>{actionDate(notice)}</td>
@@ -176,7 +187,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
             <RowKeys />
           </div>
         ) : (
-          <Empty Icon={FileWarning} title={empty[0]}>
+          <Empty Icon={FileWarning} kind={show === "confirm" ? "done" : "notice"} title={empty[0]}>
             <span>{empty[1]}</span>
             {!viewOnly && (show === "open" || show === "all") && (
               <Link className="b b-secondary" href={href({ add: true })} scroll={false}>
@@ -204,10 +215,19 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
 
       {opened && openDetails && (
         <SidePanel id="notice-panel" title={openDetails.notice_type} close={href()}>
+          <div className="notices-head">
+            <IconTile Icon={authorityIcons[openDetails.authority] ?? Scale} kind="notice" />
+            <span className="grow">
+              <strong>{authorities[openDetails.authority] ?? openDetails.authority}</strong>
+              <span className="sub">Received {dueLabel(openDetails.received_on)}</span>
+            </span>
+            <Badge tone={tag(opened)[0]}>{tag(opened)[1]}</Badge>
+          </div>
           <dl className="props">
             <div>
               <dt>Client</dt>
-              <dd>
+              <dd className="who">
+                <Avatar name={opened.clients?.name ?? ""} />
                 <Link className="row-link" href={`/app/clients/${opened.client_id}`}>
                   {opened.clients?.name}
                 </Link>
@@ -237,15 +257,9 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 <dd>{confirmedBy}</dd>
               </div>
             )}
-            <div>
-              <dt>Status</dt>
-              <dd>
-                <Badge tone={tag(opened)[0]}>{tag(opened)[1]}</Badge>
-              </dd>
-            </div>
           </dl>
           {decides && !openDetails.action_date && (
-            <form action={manageNotice} className="fields">
+            <form action={manageNotice} className="fields notices-confirm">
               {state}
               <input type="hidden" name="notice" value={opened.id} />
               <p className="hint">Until it is confirmed, your firm&apos;s review deadline shows instead. Check the date on the notice, then confirm it.</p>
@@ -263,6 +277,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
           {decides && (
             <>
               <h3>Move it on</h3>
+              <p className="hint">Now {label(opened.status).toLowerCase()}.</p>
               <form action={manageNotice} className="notices-moves">
                 {state}
                 <input type="hidden" name="notice" value={opened.id} />
@@ -291,7 +306,8 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
               {state}
               <input type="hidden" name="client" value={chosen.id} />
               <div className="notices-chosen">
-                <span>
+                <Avatar name={chosen.name} />
+                <span className="grow">
                   <span className="sub">Client</span>
                   <strong>{chosen.name}</strong>
                 </span>
@@ -348,14 +364,18 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
               </form>
               {picker?.data?.length ? (
                 <>
-                  <ul className="notices-clients">
+                  <ul className="app-rows notices-clients">
                     {picker.data.map((client) => (
-                      <li key={client.id}>
-                        <span>{client.name}</span>
-                        <Link className="b b-secondary" href={href({ add: true, client: client.id })} scroll={false} aria-label={`Choose ${client.name}`}>
-                          Choose
-                        </Link>
-                      </li>
+                      <Row
+                        key={client.id}
+                        lead={<Avatar name={client.name} />}
+                        title={client.name}
+                        action={
+                          <Link className="b b-secondary" href={href({ add: true, client: client.id })} scroll={false} aria-label={`Choose ${client.name}`}>
+                            Choose
+                          </Link>
+                        }
+                      />
                     ))}
                   </ul>
                   <nav className="cal-pages notices-pick-pages" aria-label="Client pages">

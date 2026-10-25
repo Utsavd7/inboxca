@@ -13,3 +13,9 @@ it("writes a ZIP that reads back file by file", () => {
   expect([...files.keys()]).toEqual(["clients.csv", "activity-log.csv"]);
   expect(files.get("clients.csv")!().toString()).toBe("Client\r\nPatel Textiles\r\n");
 });
+
+it("puts a paper's bytes in a ZIP as they are", () => {
+  const bytes = Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0, 255, 128]);
+  const files = xlsxEntries(zip([{ name: "Patel - Form 16.pdf", text: bytes }]));
+  expect([...files.get("Patel - Form 16.pdf")!()]).toEqual([...bytes]);
+});

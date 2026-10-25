@@ -1,73 +1,100 @@
 /* Documents: folders, the papers and the chosen paper side by side, each scrolling on its own. */
-.docs-folders { display: flex; flex: 0 0 200px; flex-direction: column; gap: 4px; padding: 8px; border-right: 1px solid var(--line); }
-.docs-year .cell-select { width: 100%; height: 32px; color: var(--ink-3); font-size: 12px; font-weight: 600; }
-.docs-folder { display: flex; flex: none; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 8px; color: var(--ink-2); font-size: 14px; font-weight: 500; text-decoration: none; transition: background var(--fast) var(--out), color var(--fast) var(--out); }
-.docs-folder:hover { background: var(--hover); color: var(--ink); }
-.docs-folder[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.docs-folders { display: flex; flex: 0 0 208px; flex-direction: column; gap: 2px; padding: var(--s2); border-right: 1px solid var(--line); background: var(--hover); }
+.docs-year { margin-bottom: var(--s1); }
+.docs-year .cell-select { width: 100%; height: var(--control); color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.docs-folder { display: flex; flex: none; align-items: center; gap: var(--s2); height: var(--control); padding: 0 var(--s2); border-radius: var(--r2); color: var(--ink-2); font-size: 14px; font-weight: 500; text-decoration: none; transition: background var(--fast) var(--out), color var(--fast) var(--out); }
+.docs-folder svg { color: var(--ink-3); transition: color var(--fast) var(--out); }
+.docs-folder:hover { background: var(--press); color: var(--ink); }
+.docs-folder:active { transform: scale(0.98); }
+.docs-folder[aria-current] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--edge), var(--shadow-button); }
+.docs-folder[aria-current] svg { color: var(--k-docs); }
 .docs-n { margin-left: auto; color: var(--ink-3); font: 500 12px var(--font-plex), ui-monospace, monospace; }
 
+/* A paper's kind (file-tile.tsx): PDF, sheet, image, JSON; anything else stays grey. */
+.icon-tile.f-pdf { background: var(--pink-bg); color: var(--pink-fg); }
+.icon-tile.f-sheet { background: var(--k-week-bg); color: var(--k-week); }
+.icon-tile.f-image { background: var(--k-papers-bg); color: var(--k-papers); }
+.icon-tile.f-json { background: var(--k-reply-bg); color: var(--k-reply); }
+
 .docs-list { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-.docs-find { position: relative; display: flex; align-items: center; padding: 12px; border-bottom: 1px solid var(--line); }
-.docs-find svg { position: absolute; left: 24px; color: var(--ink-3); pointer-events: none; }
-.ui .docs-find input[type="search"] { padding-left: 32px; font-size: 14px; }
+.docs-find { position: relative; display: flex; align-items: center; padding: var(--s3); border-bottom: 1px solid var(--line); }
+.docs-find svg { position: absolute; left: var(--s5); color: var(--ink-3); pointer-events: none; }
+.ui .docs-find input[type="search"] { padding-left: var(--s6); font-size: 14px; }
 .docs-table { flex: 1; overflow-x: auto; }
-.docs-table table { width: 100%; min-width: 560px; table-layout: fixed; border-collapse: collapse; }
+.docs-table table { width: 100%; min-width: 600px; table-layout: fixed; border-collapse: collapse; }
 /* The paper's name gets most of the width; its work and any tag sit on a second line. */
-.docs-table th:nth-child(1) { width: 46%; }
-.docs-table th:nth-child(3) { width: 96px; }
-.docs-table th { position: sticky; top: 0; z-index: 1; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--side); color: var(--ink-3); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; }
-.docs-table td { height: 40px; padding: 0 12px; overflow: hidden; border-bottom: 1px solid var(--line); font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
+.docs-table th:nth-child(1 of :not(.docs-pick)) { width: 44%; }
+.docs-table th:nth-child(3 of :not(.docs-pick)) { width: 104px; }
+.docs-table .docs-pick { width: 44px; padding-right: 0; }
+.docs-table th { position: sticky; top: 0; z-index: 2; height: 40px; padding: 0 var(--s3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(8px); color: var(--ink-3); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; }
+.docs-table td { height: 56px; padding: 0 var(--s3); overflow: hidden; border-bottom: 1px solid var(--line); font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
+.docs-table :is(th, td):first-child { padding-left: var(--s4); }
 .docs-table tbody tr { position: relative; transition: background var(--fast) var(--out); }
 .docs-table tbody tr:hover { background: var(--hover); }
-.docs-table tbody tr.on { background: var(--accent-soft); }
-.docs-table td:first-child { height: 56px; }
+.docs-table tbody tr:has(.pick:checked) { background: var(--accent-soft); }
+.docs-table tbody tr.on { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--select); }
 /* Client names and who a paper came from wrap rather than cut off. */
 .docs-table td:not(:first-child) { white-space: normal; overflow-wrap: anywhere; }
-.docs-name { display: block; overflow: hidden; color: var(--ink); font-weight: 600; text-decoration: none; text-overflow: ellipsis; }
-.docs-tag { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 12px; font-weight: 500; }
-/* The whole row chooses the paper. */
+.docs-table .who { gap: var(--s2); font-weight: 500; }
+.docs-table .who .avatar { width: 24px; height: 24px; font-size: 11px; }
+.docs-paper { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+.docs-paper .grow { display: grid; min-width: 0; }
+.docs-name { display: block; overflow: hidden; color: var(--ink); font-weight: 600; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.docs-tag { display: flex; align-items: center; gap: var(--s2); color: var(--ink-3); font-size: 12px; font-weight: 500; }
+/* The whole row chooses the paper; its tick box sits above. */
 .docs-table td a::after { content: ""; position: absolute; inset: 0; }
+.docs-table .pick { position: relative; z-index: 1; }
 .docs-faint { color: var(--ink-3); }
-.docs-pages { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+.docs-pages { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3) var(--s2) var(--s4); border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
 .docs-pages span { margin-right: auto; }
-.docs-list > .empty { margin: 16px; }
-.docs-only { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 13px; }
+.docs-list > .empty { margin: var(--s4); }
+.docs-only { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 13px; }
 .docs-only span:not(.badge) { flex: 1 1 240px; }
 
-.docs-detail { display: flex; flex: 0 0 280px; flex-direction: column; gap: 8px; padding: 16px; border-left: 1px solid var(--line); }
-.docs-detail h2 { font-size: 16px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
-.docs-detail p { font-size: 13px; }
-.docs-preview { display: grid; flex: none; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--side); color: var(--ink-3); font-size: 13px; text-align: center; }
-.docs-preview > a { display: grid; justify-items: center; gap: 8px; color: var(--ink-2); font-weight: 600; text-decoration: none; }
-.docs-preview > a:hover { color: var(--accent); }
+/* The chosen paper: its first page on a quiet ground, like a sheet on a desk, then its facts. */
+.docs-detail { display: flex; flex: 0 0 300px; flex-direction: column; gap: var(--s3); padding: var(--s4); border-left: 1px solid var(--line); }
+.docs-preview { display: grid; flex: none; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; border-radius: var(--r2); background: var(--canvas); box-shadow: inset 0 0 0 1px var(--edge); color: var(--ink-3); font-size: 13px; text-align: center; }
+.docs-preview-none { display: grid; justify-items: center; gap: var(--s2); padding: var(--s4); }
 .docs-preview .viewer { align-self: start; width: 100%; margin: 0; }
-.docs-preview .viewer > .hint, .docs-preview .viewer > .alert { margin: 16px; }
-.docs-preview .viewer-pages { padding: 8px; border-radius: 0; }
-.docs-path { color: var(--ink-2); font: 500 12px var(--font-plex), ui-monospace, monospace; overflow-wrap: anywhere; }
-.docs-label { display: block; color: var(--ink-3); font-size: 12px; font-weight: 600; }
-.docs-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.docs-preview .viewer > .hint, .docs-preview .viewer > .alert { margin: var(--s4); }
+.docs-preview .viewer-pages { padding: var(--s3) var(--s4) 0; border-radius: 0; background: none; }
+.docs-preview .viewer-pages img { border-radius: var(--r1) var(--r1) 0 0; box-shadow: var(--shadow-2), 0 0 0 1px var(--edge); animation: rise var(--slow) var(--out) both; }
+.docs-title { display: flex; align-items: flex-start; gap: var(--s3); }
+.docs-title .grow { display: grid; gap: 2px; min-width: 0; }
+.docs-title h2 { font-size: 15px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.docs-detail > .badge { align-self: flex-start; }
+.docs-facts { display: grid; gap: var(--s3); margin: 0; padding-top: var(--s3); border-top: 1px solid var(--line); font-size: 13px; }
+.docs-facts dt { color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.docs-facts dd { display: flex; align-items: center; gap: var(--s1); margin: 2px 0 0; color: var(--ink); }
+.docs-facts .avatar { width: 22px; height: 22px; font-size: 10px; }
+.docs-facts .docs-path { align-items: flex-start; color: var(--ink-2); font: 500 12px/1.5 var(--font-plex), ui-monospace, monospace; overflow-wrap: anywhere; }
+.docs-facts .docs-path .copy { flex: none; margin-top: -3px; }
+.docs-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: auto; padding-top: var(--s3); border-top: 1px solid var(--line); }
 
-/* Upload papers opens over the right side; the list stays in view. */
-.docs-shade { position: fixed; inset: 0; z-index: var(--z-panel); background: color-mix(in srgb, var(--ink) 16%, transparent); }
-.docs-sheet { position: fixed; top: 0; right: 0; bottom: 0; z-index: var(--z-panel); display: flex; flex-direction: column; gap: 12px; width: min(400px, 100%); padding: 24px; overflow-y: auto; border-left: 1px solid var(--line); background: var(--white); box-shadow: var(--shadow-float); }
-.docs-sheet h2 { font-size: 16px; font-weight: 600; line-height: 1.3; }
-.docs-sheet p { font-size: 13px; }
-.docs-sheet .docs-find { padding: 0; border: 0; }
-.docs-sheet .docs-find svg { left: 12px; }
-.docs-sheet > .b { align-self: flex-start; }
-.docs-clients { display: flex; flex-direction: column; list-style: none; border: 1px solid var(--line); border-radius: 12px; }
-.docs-clients li { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; border-top: 1px solid var(--line); font-weight: 600; }
-.docs-clients li:first-child { border-top: 0; }
-.docs-clients span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Upload papers: the client search, a page of matches, then their upload form. */
+.side-panel .docs-find { margin: var(--s3) 0; padding: 0; border: 0; }
+.side-panel .docs-find svg { left: var(--s3); }
+.docs-clients { margin: 0 calc(var(--s4) * -1); }
+.docs-other { margin-top: var(--s3); }
+.docs-held { margin: 0 0 var(--s3); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.docs-send { margin: var(--s3) calc(var(--s4) * -1) 0; }
+.docs-send-foot { position: sticky; bottom: calc(var(--s4) * -1); display: flex; gap: var(--s2); margin: 0 calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
+
+/* Files dragged over the page: the whole page says where they will go. */
+.docs-drop { position: fixed; inset: 0; z-index: calc(var(--z-panel) + 5); display: grid; place-items: center; padding: var(--s5); background: var(--scrim); backdrop-filter: blur(3px); animation: vt-fade var(--base) var(--out); }
+.docs-drop-frame { display: grid; justify-items: center; gap: var(--s2); width: min(560px, 100%); padding: var(--s7) var(--s5); border: 2px dashed var(--accent-hi); border-radius: var(--r3); background: var(--surface); color: var(--ink-2); text-align: center; box-shadow: var(--shadow-float); animation: drop-in var(--spring-time) var(--spring); pointer-events: none; }
+.docs-drop-frame .icon-tile { width: 48px; height: 48px; margin-bottom: var(--s2); border-radius: var(--r3); }
+.docs-drop-frame strong { color: var(--ink); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+@keyframes drop-in { from { opacity: 0; transform: scale(0.96); } }
 
 /* On a smaller laptop the period stays in the paper's name and on the right. */
 @media (max-width: 1360px) {
-  .docs-table table { min-width: 440px; }
-  .docs-table :is(th, td):nth-child(3) { display: none; }
+  .docs-table table { min-width: 480px; }
+  .docs-table :is(th, td):nth-child(3 of :not(.docs-pick)) { display: none; }
 }
 @media (max-width: 1100px) {
-  .docs-folders { flex-basis: 160px; }
-  .docs-detail { flex-basis: 240px; }
+  .docs-folders { flex-basis: 168px; }
+  .docs-detail { flex-basis: 260px; }
 }
 @media (max-width: 720px) {
   .docs-folders, .docs-detail { flex-basis: auto; border: 0; border-top: 1px solid var(--line); }

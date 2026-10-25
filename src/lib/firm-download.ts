@@ -18,8 +18,8 @@ const row = (cells: unknown[]) =>
   }).join(",");
 export const csv = (header: string[], rows: unknown[][]) => [header, ...rows].map(row).join("\r\n") + "\r\n";
 
-// A ZIP of the given files, each compressed.
-export function zip(files: { name: string; text: string }[]) {
+// A ZIP of the given files, each compressed: text, or the bytes of a paper.
+export function zip(files: { name: string; text: string | Uint8Array }[]) {
   const parts: Buffer[] = [], directory: Buffer[] = [];
   let offset = 0;
   for (const file of files) {

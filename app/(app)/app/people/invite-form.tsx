@@ -1,14 +1,18 @@
 "use client";
+import { MailPlus } from "lucide-react";
 import { useActionState } from "react";
 import { inviteMember, type InviteState } from "@/app/(app)/actions";
 import { invitableRoles, roleLabel } from "@/src/lib/roles";
-import { SidePanel, Toast } from "../ui";
+import { IconTile, SidePanel, Toast } from "../ui";
 
 export function InviteForm() {
   const [state, invite, inviting] = useActionState(inviteMember, {} as InviteState);
   return (
     <SidePanel id="invite" title="Invite person" close="/app/people">
-      <p className="hint">They get an email with a sign in code, then set up their 2 step code.</p>
+      <div className="people-intro">
+        <IconTile Icon={MailPlus} kind="reply" />
+        <p className="hint">They get an email with a sign in code, then set up their 2 step code. Their role decides what they may do.</p>
+      </div>
       <form key={JSON.stringify(state.values)} action={invite} className="fields" noValidate>
         <div>
           <label htmlFor="invite-email">Their work email</label>
@@ -33,7 +37,7 @@ export function InviteForm() {
             ))}
           </select>
         </div>
-        <button className="b b-primary" type="submit" disabled={inviting}>
+        <button className="b b-primary" type="submit" disabled={inviting} aria-busy={inviting || undefined}>
           {inviting ? "Sending invite" : "Send invite"}
         </button>
       </form>

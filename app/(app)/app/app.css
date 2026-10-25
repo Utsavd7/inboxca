@@ -617,3 +617,16 @@ a.app-card, .app-card.is-link { position: relative; text-decoration: none; trans
 .count-up { counter-reset: n var(--n); animation: count-up 700ms var(--out) both; }
 .count-up::after { content: counter(n); }
 @keyframes count-up { from { --n: 0; } }
+
+/* Ticking rows raises a bar to act on them together (Calendar, Documents); it counts what is
+   ticked. The page root has .has-bulk, each row's box .pick, and the bar comes after the rows. */
+.has-bulk { counter-reset: picked; }
+.has-bulk input.pick:checked { counter-increment: picked; }
+.bulk { position: fixed; bottom: var(--s5); left: 50%; z-index: var(--z-toast); display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); width: max-content; max-width: calc(100vw - 32px); padding: var(--s2) var(--s2) var(--s2) var(--s4); border-radius: var(--r3); background: var(--navy); color: var(--white); font-size: 13px; box-shadow: var(--shadow-float); visibility: hidden; opacity: 0; transform: translate(-50%, 12px) scale(0.98); transition: opacity var(--base) var(--out), transform var(--spring-time) var(--spring), visibility var(--base); }
+.has-bulk:has(input.pick:checked) .bulk { visibility: visible; opacity: 1; transform: translate(-50%, 0); }
+.bulk-count { margin-right: var(--s2); font-weight: 600; }
+.bulk-count::before { content: counter(picked) " "; font-family: var(--font-plex), ui-monospace, monospace; }
+.bulk .b-secondary { border-color: transparent; background: var(--on-dark); color: var(--white); box-shadow: none; }
+.bulk .b-secondary:hover:not(:disabled) { background: var(--on-dark-hover); border-color: transparent; }
+.bulk .b-primary { background: var(--white); color: var(--navy); box-shadow: none; }
+.bulk .b-primary:hover:not(:disabled) { background: var(--accent-soft); }

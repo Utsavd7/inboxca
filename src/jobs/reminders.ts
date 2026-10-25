@@ -16,6 +16,8 @@ const shift = (date: string, days: number) => new Date(Date.parse(date) + days *
 const PER_RUN = 100;
 // Every day of the last year counts as a stage when the late clients are reminded at once.
 const LATE_DAYS = Array.from({ length: 366 }, (_, day) => -1 - day);
+// Remind client on the Calendar: every return of that client due today or in the next 7 days.
+const SOON_DAYS = Array.from({ length: 8 }, (_, day) => day);
 
 type RequestDetails = DocumentRequest & { reminder?: { day: string; state: "sending" | "sent" | "failed" } };
 type Details = { reminder?: { day: string; state: "sending" | "sent" | "failed" }; reminded?: string[]; skipped?: { day: string; reason: string } } & Record<string, unknown>;
@@ -33,10 +35,12 @@ function nextMorning(now = new Date()) {
 // after a crash, the Sent folder is checked before anything goes again.
 // Today's buttons send now, asked for by an owner or partner: "late" reminds every client with
 // a late return, "papers" follows up every request still missing papers, whatever the stage.
+// Remind client on the Calendar ("client") reminds one client of its returns due within 7 days.
 export const sendReminders: Handler = async (job) => {
   const admin = supabaseAdmin();
-  const firm = job.entity_id ?? "";
-  const now = job.entity_type === "late" || job.entity_type === "papers" ? job.entity_type : null;
+  const one = job.entity_type === "client" ? job.entity_id : null;
+  const firm = (one ? job.firm_id : job.entity_id) ?? "";
+  const now = job.entity_type === "late" || job.entity_type === "papers" ? job.entity_type : one ? "soon" : null;
   const { data: firmRow } = await admin.from("firms").select("name, settings").eq("id", firm).maybeSingle();
   if (!firmRow || (!now && (firmRow.settings as { reminders?: boolean }).reminders !== true)) return { done: true };
   const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric", hourCycle: "h23" }));
@@ -45,16 +49,17 @@ export const sendReminders: Handler = async (job) => {
   if (!mailer) return {retry:"mail_not_connected",at:new Date(Date.now()+3600_000)};
 
   const today = todayInIndia();
+  const open = admin
+    .from("tasks")
+    .select("id, client_id, code, period_key, due_on, details, clients!inner(name, email_enc, reminders_paused, archived_at)")
+    .eq("firm_id", firm)
+    .eq("kind", "compliance")
+    .neq("status", "filed")
+    .is("clients.archived_at", null)
+    .gte("due_on", shift(today, now === "late" ? -366 : now === "soon" ? 0 : -3))
+    .lte("due_on", shift(today, now === "late" ? -1 : 7));
   const [{ data: rows }, { data: rules }, { data: handling }] = await Promise.all([
-    admin
-      .from("tasks")
-      .select("id, client_id, code, period_key, due_on, details, clients!inner(name, email_enc, reminders_paused, archived_at)")
-      .eq("firm_id", firm)
-      .eq("kind", "compliance")
-      .neq("status", "filed")
-      .is("clients.archived_at", null)
-      .gte("due_on", shift(today, now === "late" ? -366 : -3))
-      .lte("due_on", shift(today, now === "late" ? -1 : 7)),
+    one ? open.eq("client_id", one) : open,
     admin.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", ""),
     admin.from("requests").select("client_id").eq("firm_id", firm).eq("kind", "team_reply").eq("status", "pending"),
   ]);
@@ -74,7 +79,7 @@ export const sendReminders: Handler = async (job) => {
     name: row.clients.name,
     email_enc: row.clients.email_enc,
   }));
-  const { send, skipped } = planReminders(tasks, today, filed, new Set(handling?.map((request) => request.client_id ?? "")), now === "late" ? LATE_DAYS : reminderStages(firmRow.settings as { reminder_stages?: unknown }));
+  const { send, skipped } = planReminders(tasks, today, filed, new Set(handling?.map((request) => request.client_id ?? "")), now === "late" ? LATE_DAYS : now === "soon" ? SOON_DAYS : reminderStages(firmRow.settings as { reminder_stages?: unknown }));
   const save = (task: { id: string; details: Details }, details: Details) => admin.from("tasks").update({ details: { ...task.details, ...details } as unknown as NonNullable<Json> }).eq("id", task.id);
   for (const { task, reason } of skipped) {
     const details = (task as (typeof tasks)[number]).details;
@@ -93,7 +98,7 @@ export const sendReminders: Handler = async (job) => {
   const follow = new Map<string, (FollowUp & { details: RequestDetails })[]>();
   const people = new Map(tasks.map((task) => [task.client_id, { name: task.name, email_enc: task.email_enc }]));
   // A follow-up carries the upload link, which needs the app's own address.
-  for (const request of process.env.APP_BASE_URL && now !== "late" ? (requests ?? []) : []) {
+  for (const request of process.env.APP_BASE_URL && now !== "late" && now !== "soon" ? (requests ?? []) : []) {
     const details = request.details as unknown as RequestDetails;
     const client = request.clients;
     const missing = followUpDue({ expires_at: request.expires_at!, details }, today, now === "papers");

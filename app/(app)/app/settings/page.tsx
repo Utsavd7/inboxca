@@ -1,4 +1,4 @@
-import { HardDrive, Mail } from "lucide-react";
+import { BellRing, CalendarClock, CalendarOff, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, KeyRound, LifeBuoy, LogIn, Mail, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
@@ -14,7 +14,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
-import { Badge, NotForYou, PageHead, storage, Toast } from "../ui";
+import { Badge, IconTile, NotForYou, PageHead, storage, Toast, type Kind } from "../ui";
 import { Pending } from "../pending";
 import { STAGES, stageNames, reminderStages } from "@/src/lib/reminders";
 import { MailboxForm } from "./mailbox-form";
@@ -45,14 +45,29 @@ const groups = [
   ["reminders", "Reminders and papers", ["reminders", "records"]],
   ["data", "Your data", ["use", "data", "close"]],
 ] as const;
+const groupIcons: Record<string, LucideIcon> = { email: Mail, access: ShieldCheck, hours: Clock, people: Users, reminders: BellRing, data: Database };
+// Each card's tile: what it is about, in the colour of its kind.
+const cardIcons: Record<string, [LucideIcon, Kind]> = {
+  mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], recovery: [LifeBuoy, "approve"],
+  hours: [Clock, "week"], special: [CalendarClock, "week"], holidays: [CalendarOff, "week"],
+  permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"],
+  reminders: [BellRing, "notice"], records: [FileCheck2, "notice"],
+  use: [Gauge, "docs"], data: [Download, "docs"], close: [TriangleAlert, "late"],
+};
 const ownerOnly = ["mailbox", "drive", "recovery", "visibility", "reminders", "records", "use", "data", "close"];
 const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
 
 function Card({ id, title, line, danger, children }: { id: string; title: string; line?: React.ReactNode; danger?: boolean; children: React.ReactNode }) {
+  const [Icon, kind] = cardIcons[id] ?? [Database, "docs"];
   return (
     <section id={id} className={`panel set-card${danger ? " set-danger" : ""}`} aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`}>{title}</h2>
-      {line && <p className="hint">{line}</p>}
+      <header className="set-head">
+        <IconTile Icon={Icon} kind={kind} />
+        <span className="grow">
+          <h2 id={`${id}-title`}>{title}</h2>
+          {line && <p className="hint">{line}</p>}
+        </span>
+      </header>
       {children}
     </section>
   );
@@ -131,11 +146,15 @@ export default async function Settings({
       <GroupAnchor groupOf={groupOf} />
       <div className="set">
         <nav className="set-nav" aria-label="Settings">
-          {shown.map(([id, name]) => (
-            <Link key={id} href={`/app/settings?group=${id}`} aria-current={group === id ? "page" : undefined}>
-              {name}
-            </Link>
-          ))}
+          {shown.map(([id, name]) => {
+            const Icon = groupIcons[id];
+            return (
+              <Link key={id} href={`/app/settings?group=${id}`} aria-current={group === id ? "page" : undefined}>
+                <Icon size={16} aria-hidden />
+                {name}
+              </Link>
+            );
+          })}
         </nav>
         <div key={group} className="set-body page-in">
           {group === "email" && <>
@@ -292,7 +311,7 @@ export default async function Settings({
                 </select>
               </div>
               <label className="check">
-                <input type="checkbox" name="india_only" defaultChecked={!!access.india_only} />
+                <input className="toggle" type="checkbox" name="india_only" defaultChecked={!!access.india_only} />
                 Everyone except you can use InboxCA only from India
               </label>
               <div className="set-foot"><Pending className="b b-primary" type="submit">Save signing in limits</Pending></div>
@@ -313,7 +332,7 @@ export default async function Settings({
                       <th scope="row">{name}</th>
                       <td>
                         <label className="check">
-                          <input type="checkbox" name={`open-${day}`} defaultChecked={!!hours[day]} /> Open
+                          <input className="toggle" type="checkbox" name={`open-${day}`} defaultChecked={!!hours[day]} /> Open
                         </label>
                       </td>
                       <td>
@@ -326,7 +345,7 @@ export default async function Settings({
                 </tbody>
               </table>
               <label className="check">
-                <input type="checkbox" name="hours_only" defaultChecked={hoursOnly} />
+                <input className="toggle" type="checkbox" name="hours_only" defaultChecked={hoursOnly} />
                 Everyone except you can use InboxCA only during office hours, and not on holidays
               </label>
               {problem("hours")}
@@ -423,10 +442,10 @@ export default async function Settings({
               <p className="hint">Partners follow managers. Removing files stays yours.</p>
               <details className="reveal"><summary>Limit these role permissions</summary><p className="hint">Leave blank for every client with no end date. View only access stays the same.</p><div className="set-fields">{(["employee","manager"] as const).map(column=><fieldset key={column} className="set-stack"><legend>{column==="employee" ? "Employees" : "Managers"}</legend><div><label htmlFor={`${column}-clients`}>Client names, one per line</label><textarea id={`${column}-clients`} name={`${column}:clients`} rows={3} defaultValue={namesOf(permissions[column]?.scope?.clients)}/></div><div><label htmlFor={`${column}-until`}>Last day, if needed</label><input id={`${column}-until`} type="date" name={`${column}:until`} defaultValue={permissions[column]?.scope?.until}/></div></fieldset>)}</div></details>
               <label className="check">
-                <input type="checkbox" name="hide_inactive" defaultChecked={settings.viewer_hide_inactive === true} />
+                <input className="toggle" type="checkbox" name="hide_inactive" defaultChecked={settings.viewer_hide_inactive === true} />
                 Hide documents when InboxCA is not the active window (staff often read a document while typing in the portal beside it, so this is off unless you need it)
               </label>
-              <label className="check"><input type="checkbox" name="second_form_approval" defaultChecked={settings.second_form_approval===true}/>Second approval before filing. Another person must approve after the figures are checked.</label>
+              <label className="check"><input className="toggle" type="checkbox" name="second_form_approval" defaultChecked={settings.second_form_approval===true}/>Second approval before filing. Another person must approve after the figures are checked.</label>
               {problem("permissions")}
               <div className="set-foot">
                 <Pending className="b b-primary" name="intent" value="save">
@@ -484,7 +503,7 @@ export default async function Settings({
           <Card id="reminders" title="Reminders" line="InboxCA emails each client once a day at most, from your firm's address, at the stages you choose. Only dates a CA has confirmed are reminded.">
             <form action={saveReminders} className="set-stack">
               <label className="check">
-                <input type="checkbox" name="on" defaultChecked={settings.reminders === true} />
+                <input className="toggle" type="checkbox" name="on" defaultChecked={settings.reminders === true} />
                 Email clients before their returns are due
               </label>
               <fieldset>
@@ -492,7 +511,7 @@ export default async function Settings({
                 <div className="set-grid">{STAGES.map((day) => <label className="check" key={day}><input type="checkbox" name="stage" value={day} defaultChecked={reminderStages(settings).includes(day)} />{stageNames[day]}</label>)}</div>
               </fieldset>
               <label className="check">
-                <input type="checkbox" name="acknowledge" defaultChecked={settings.acknowledge === true} />
+                <input className="toggle" type="checkbox" name="acknowledge" defaultChecked={settings.acknowledge === true} />
                 Reply to clients when their files arrive, saying what was received
               </label>
               <p className="hint">A reminder is skipped when the return is filed, the client already sent files for it, or your team is replying to them.</p>
@@ -512,7 +531,7 @@ export default async function Settings({
                 ))}</div>
               </fieldset>
               <label className="check">
-                <input type="checkbox" name="approve_all" defaultChecked={records.approve_all === true} />
+                <input className="toggle" type="checkbox" name="approve_all" defaultChecked={records.approve_all === true} />
                 Wait for approval for every paper
               </label>
               <div className="set-foot"><Pending className="b b-primary" type="submit">Save papers</Pending></div>
