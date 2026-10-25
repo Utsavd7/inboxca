@@ -678,7 +678,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.getByRole("button", { name: "Assign" }).click();
   await expect(owner.getByRole("dialog", { name: "Looked after by" }).getByRole("listitem").filter({ hasText: "Team: GST team" })).toContainText("Staff");
   await person.reload();
-  await expect(person.locator("section[aria-labelledby=t-late] li").filter({ hasText: "Shared Client" })).toContainText("GSTR-1 (monthly) for Jan 2026");
+  await expect(person.locator("section[aria-labelledby=t-late] li").filter({ hasText: "Shared Client" }).filter({ visible: true })).toContainText("GSTR-1 (monthly) for Jan 2026");
   await person.goto("/app/clients");
   await expect(person.getByRole("link", { name: "Shared Client" })).toBeVisible();
   await expect(person.locator(".page-head")).toContainText("1 client.");
@@ -1161,7 +1161,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await query(local.dbUrl, "update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-3 where client_id=$1 and code=$2", [clientId,code]);
   await owner.goto("/app");
   // This file makes more than one client with this name, so the row is found by the client's link.
-  const late = owner.locator("section[aria-labelledby=t-late] li").filter({ has: owner.locator(`a[href="/app/clients/${clientId}?tab=due"]`) });
+  // While the page streams in, a hidden copy of the row can exist for a moment; only the shown one counts.
+  const late = owner.locator("section[aria-labelledby=t-late] li").filter({ has: owner.locator(`a[href="/app/clients/${clientId}?tab=due"]`) }).filter({ visible: true });
   await expect(late).toBeVisible();
   // M5 acceptance: filing removes this return from the pending firm's reminder run.
   await query(local.dbUrl, "update public.tasks set status='filed',details=(details-'reminder') || jsonb_build_object('filed_on',current_date) where client_id=$1 and code=$2", [clientId,code]);
@@ -1396,7 +1397,8 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await boss.reload();
     await expect(boss.getByText("ask your internet provider for a fixed address")).toBeVisible();
   } finally {
-    for (const context of contexts) await context.close();
+    // A context the test already closed is gone; closing it again is not a failure.
+    for (const context of contexts) await context.close().catch(() => {});
     await batch.remove(...emails);
   }
 });
