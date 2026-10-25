@@ -40,6 +40,8 @@ const schema = z
 
     AWS_SES_REGION: z.string().default("ap-south-1"),
     EMAIL_FROM_DOMAIN: z.string().optional(),
+    // Orelu's system mail over SES SMTP: smtps://user:password@email-smtp.ap-south-1.amazonaws.com:465
+    SYSTEM_MAIL_URL: secret,
 
     GOOGLE_OAUTH_CLIENT_ID: secret,
     GOOGLE_OAUTH_CLIENT_SECRET: secret,

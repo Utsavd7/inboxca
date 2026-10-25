@@ -4,14 +4,11 @@ import { reviewDevice, setOfficeOnly } from "@/app/(app)/actions";
 import { addDays, todayInIndia, dueLabel } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
-import { firmAdmin, memberOffice, officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
+import { firmAdmin, fixedSuggestion, memberOffice, officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { Pending } from "./pending";
 
 // Only office approvers read these requests and the activity behind them.
-// When to suggest a fixed connection; later these move to admin configuration (5.8).
-const FIXED_SUGGESTION_TAPS = 3;
-const FIXED_SUGGESTION_DAYS = 14;
 
 // inPreset draws it inside Settings' Access preset card, the one office control there: the
 // Office only switch waits under Change details, the rest shows as usual. Its Turn on sends
@@ -35,12 +32,13 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const isAdmin = firmAdmin(membership.role, userId, membership.settings);
   const admin = supabaseAdmin();
   const today = todayInIndia();
-  const [{ data: pcs }, { data: activity }, { data: people }, { data: requests }, { data: branches }] = await Promise.all([
+  const [{ data: pcs }, { data: activity }, { data: people }, { data: requests }, { data: branches }, fixedRule] = await Promise.all([
     admin.from("devices").select("id, name, status, kind, person_id, ends_on, key_id").eq("firm_id", membership.firmId),
     admin.from("activity_log").select("entity_id, actor_id, action, at, details").eq("firm_id", membership.firmId).in("action", ["device.first_seen", "office.refused", "office.here", "office.confirm", "office.today"]),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     admin.from("requests").select("id, entity_id, reason_code, details").eq("firm_id", membership.firmId).eq("entity_type", "office_connection").eq("status", "pending"),
     admin.from("groups").select("id, name, kind, settings").eq("firm_id", membership.firmId).eq("kind", "branch").order("name"),
+    fixedSuggestion(),
   ]);
   // The office shown and changed below: the main one, or the picked branch's own (5.17.4 #13).
   const picked = branches?.find((row) => row.id === branch);
@@ -53,13 +51,13 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const approved = (pcs ?? []).filter((pc) => pc.status === "approved" && (pc.kind !== "personal" || (pc.ends_on ?? "") >= today));
   const refusals = (activity ?? []).filter((entry) => entry.action === "office.refused" && Date.parse(entry.at) >= Date.parse(`${today}T00:00:00+05:30`));
   const here = onOfficeLine(requestAddress(await headers()), office);
-  // Self-adjusting (5.8): after 3 office confirmations in 14 days, or with no PC that stays in
-  // the office, the owner is told once how to get a fixed connection.
-  const since = Date.parse(`${today}T00:00:00+05:30`) - FIXED_SUGGESTION_DAYS * 86_400_000;
+  // Self-adjusting (5.8): after 3 office confirmations in 14 days (the admin console's numbers),
+  // or with no PC that stays in the office, the owner is told once how to get a fixed connection.
+  const since = Date.parse(`${today}T00:00:00+05:30`) - fixedRule.days * 86_400_000;
   const confirmations = (activity ?? []).filter((entry) => entry.action !== "device.first_seen" && entry.action !== "office.refused" && Date.parse(entry.at) >= since).length;
   const trustedPc = (pcs ?? []).some((pc) => pc.status === "approved" && pc.kind === "office" && pc.key_id);
   const suggestFixed =
-    isAdmin && office.on && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= FIXED_SUGGESTION_TAPS || !trustedPc);
+    isAdmin && office.on && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= fixedRule.taps || !trustedPc);
   if (compact && !requests?.length && !refusals.length && (owner || !waiting.length)) return null;
   const line = <p className="hint">Staff, managers and front desk use approved PCs on your office internet connection. You and partners can use InboxCA anywhere.</p>;
   const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">{where}

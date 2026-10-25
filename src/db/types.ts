@@ -394,6 +394,19 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"incidents": {
+                  Row: {
+                    "ended_at": string | null,"id": string,"level": string,"parts": (string)[],"started_at": string,"title": string,"updates": NonNullable<Json>
+                  }
+                  Insert: {
+                    "ended_at"?: string | null,"id"?: string,"level": string,"parts": (string)[],"started_at"?: string,"title": string,"updates"?: NonNullable<Json>
+                  }
+                  Update: {
+                    "ended_at"?: string | null,"id"?: string,"level"?: string,"parts"?: (string)[],"started_at"?: string,"title"?: string,"updates"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"jobs": {
                   Row: {
                     "attempts": number,"claimed_until": string | null,"entity_id": string | null,"entity_type": string | null,"firm_id": string | null,"id": number,"idempotency_key": string,"kind": string,"last_error_code": string | null,"run_at": string,"schedule_version": number,"state": string
@@ -599,19 +612,49 @@ isOneToOne: false
               "failures": number,"firm": string,"kind": string,"last_error": string,"last_run": string,"provider": string,"status": string
             }[]
                            },
+"admin_add_extension":
+{ Args: { "link": string,"new_date": string,"rule_code": string,"rule_period": string }; Returns: boolean
+                           },
+"admin_ask_support":
+{ Args: { "target": string }; Returns: boolean
+                           },
+"admin_email_incident":
+{ Args: { "incident": string }; Returns: number
+                           },
 "admin_failed_jobs":
 { Args: Record<PropertyKey, never>; Returns: {
               "at": string,"attempts": number,"error": string,"firm": string,"id": number,"kind": string
             }[]
+                           },
+"admin_firm":
+{ Args: { "target": string }; Returns: Json
                            },
 "admin_firms":
 { Args: Record<PropertyKey, never>; Returns: {
               "created_at": string,"drive": boolean,"id": string,"last_active": string,"mailbox": boolean,"members": number,"name": string,"status": string
             }[]
                            },
+"admin_incidents":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "emailed": number,"ended_at": string,"id": string,"level": string,"parts": (string)[],"started_at": string,"title": string,"updates": Json
+            }[]
+                           },
+"admin_office":
+{ Args: { "days": number }; Returns: {
+              "changes": number,"declined": boolean,"firm": string,"fixed": boolean,"provider": string,"taps": number
+            }[]
+                           },
 "admin_people":
 { Args: Record<PropertyKey, never>; Returns: {
               "email": string,"passkeys": number,"user_id": string
+            }[]
+                           },
+"admin_post_incident":
+{ Args: { "incident_level": string,"incident_parts": (string)[],"incident_title": string }; Returns: string
+                           },
+"admin_reach":
+{ Args: { "codes": (string)[],"moved_to"?: string,"period"?: string }; Returns: {
+              "firm": string,"returns": number
             }[]
                            },
 "admin_remove_passkeys":
@@ -623,8 +666,23 @@ isOneToOne: false
 "admin_review_change":
 { Args: { "change_at": string,"change_source": string }; Returns: boolean
                            },
+"admin_set_office":
+{ Args: { "days": number,"taps": number }; Returns: boolean
+                           },
+"admin_support_view":
+{ Args: { "target": string }; Returns: Json
+                           },
+"admin_update_incident":
+{ Args: { "finish": boolean,"incident": string,"note": string }; Returns: boolean
+                           },
+"admin_verify_rule":
+{ Args: { "checked_by": string,"link": string,"rule_code": string,"rule_period": string }; Returns: boolean
+                           },
 "admin_watch":
 { Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"answer_support":
+{ Args: { "decision": string,"target": string }; Returns: boolean
                            },
 "append_automatic_dataset":
 { Args: { "body": Json,"client": string,"draft": string,"expected": number,"firm": string,"form": string,"period": string }; Returns: boolean
@@ -861,6 +919,9 @@ isOneToOne: false
                            },
 "save_figure_edit":
 { Args: { "base": string,"client": string,"draft": string,"firm": string,"line": string,"person": string,"value_enc": string }; Returns: boolean
+                           },
+"service_status":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "session_ended":
 { Args: Record<PropertyKey, never>; Returns: boolean

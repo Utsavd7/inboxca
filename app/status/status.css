@@ -1,0 +1,11 @@
+/* The public status page: the private link frame, a row a part, and incidents as notes. */
+.ui-public .public-card h2 { margin-bottom: 8px; font-size: 16px; font-weight: 700; }
+.status-parts { display: grid; }
+.status-parts li { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; border-top: 1px solid var(--pub-line); }
+.status-parts li:first-child { border-top: 0; }
+.status-incident { display: grid; gap: 4px; padding-block: 12px; border-top: 1px solid var(--pub-line); }
+.status-incident:first-of-type { border-top: 0; }
+.status-incident h3 { font-size: 15px; font-weight: 700; }
+.status-incident ol { display: grid; gap: 4px; margin-top: 4px; color: var(--pub-ink-2); font-size: 14px; }
+.status-incident .num { margin-right: 6px; color: var(--pub-ink-3); }
+.status-note { padding-inline: 4px; color: var(--pub-ink-3); font-size: 13px; }

@@ -808,6 +808,15 @@ export async function closeFirm(form: FormData) {
   redirect(data ? "/app/settings" : "/app/settings?group=data&error=close_name#close");
 }
 
+// Orelu support access (PLAN.md 8.5): the owner allows an hour's look, refuses, or ends it early.
+export async function answerSupport(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  if (membership?.role !== "owner") redirect("/app");
+  const decision = String(form.get("decision"));
+  if (["approve", "refuse", "end"].includes(decision)) await supabase.rpc("answer_support", { target: membership.firmId, decision });
+  revalidatePath("/app/settings");
+}
+
 // The search palette: the firm's current clients whose name matches, as many as fit a list.
 export async function findClients(text: string) {
   const { supabase, membership } = await currentMember();

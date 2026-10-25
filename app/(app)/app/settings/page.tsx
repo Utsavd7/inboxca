@@ -1,8 +1,8 @@
-import { BellRing, CalendarClock, CalendarOff, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, KeyRound, LifeBuoy, LogIn, Mail, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
+import { BellRing, CalendarClock, CalendarOff, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, Headset, KeyRound, LifeBuoy, LogIn, Mail, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
-import { changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
+import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
 import { firmAdmin, officeApprover, type Office } from "@/src/lib/office";
 import { presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
@@ -45,7 +45,7 @@ const groups = [
   ["hours", "Hours and holidays", ["hours", "special", "holidays"]],
   ["people", "People's access", ["permissions", "always", "visibility"]],
   ["reminders", "Reminders and papers", ["reminders", "records"]],
-  ["data", "Your data", ["use", "data", "close"]],
+  ["data", "Your data", ["use", "data", "support", "close"]],
 ] as const;
 const groupIcons: Record<string, LucideIcon> = { email: Mail, access: ShieldCheck, hours: Clock, people: Users, reminders: BellRing, data: Database };
 // Each card's tile: what it is about, in the colour of its kind.
@@ -54,9 +54,9 @@ const cardIcons: Record<string, [LucideIcon, Kind]> = {
   hours: [Clock, "week"], special: [CalendarClock, "week"], holidays: [CalendarOff, "week"],
   permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"],
   reminders: [BellRing, "notice"], records: [FileCheck2, "notice"],
-  use: [Gauge, "docs"], data: [Download, "docs"], close: [TriangleAlert, "late"],
+  use: [Gauge, "docs"], data: [Download, "docs"], support: [Headset, "approve"], close: [TriangleAlert, "late"],
 };
-const ownerOnly = ["mailbox", "drive", "recovery", "visibility", "reminders", "records", "use", "data", "close"];
+const ownerOnly = ["mailbox", "drive", "recovery", "visibility", "reminders", "records", "use", "data", "support", "close"];
 const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
 
 function Card({ id, title, line, danger, children }: { id: string; title: string; line?: React.ReactNode; danger?: boolean; children: React.ReactNode }) {
@@ -556,6 +556,9 @@ export default async function Settings({
           <Card id="data" title="Your data" line="Your client list, returns and notices, the list of papers and the activity log, as spreadsheet files in one ZIP. The papers themselves are already in your firm's drive.">
             <div className="set-foot">{download}</div>
           </Card>
+          <Card id="support" title="Orelu support" line="Orelu cannot see your clients or papers. To help with a problem, Orelu support may ask here for an hour's look at your people and client names.">
+            <Support supabase={supabase} firmId={membership.firmId} />
+          </Card>
           <Card id="close" title="Close the firm" danger line="Everyone is signed out, your team can no longer sign in, and the firm email and drive are disconnected. For 30 days you can still sign in and download your data. Then InboxCA deletes your firm's data; the activity log is kept one more year, as Indian rules require. Files in your drive are not touched.">
             <details className="reveal" open={error === "close_name"}>
               <summary>Close the firm</summary>
@@ -571,6 +574,48 @@ export default async function Settings({
       </div>
       {saved && savedNames[saved] && <Toast>{savedNames[saved]}</Toast>}
     </div>
+  );
+}
+
+const supportWords: Record<string, string> = {
+  "support.asked": "Orelu support asked for a look",
+  "support.approved": "You allowed an hour",
+  "support.refused": "You refused",
+  "support.viewed": "Orelu support looked at your people and client names",
+  "support.ended": "You ended it",
+};
+const at = (when: string) => new Date(when).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+
+// Orelu's support access to this firm (PLAN.md 8.5): what is asked or allowed now, one answer,
+// and the last few steps from the activity log.
+async function Support({ supabase, firmId }: { supabase: Awaited<ReturnType<typeof currentMember>>["supabase"]; firmId: string }) {
+  const [{ data: request }, { data: steps }] = await Promise.all([
+    supabase.from("requests").select("status, expires_at").eq("firm_id", firmId).eq("kind", "support_access").eq("entity_id", firmId).maybeSingle(),
+    supabase.from("activity_log").select("action, at").eq("firm_id", firmId).like("action", "support.%").order("at", { ascending: false }).limit(5),
+  ]);
+  const open = request?.status === "approved" && !!request.expires_at && new Date(request.expires_at) > new Date();
+  const answer = (decision: string, label: string, kind = "b-secondary") => <Pending className={`b ${kind}`} name="decision" value={decision}>{label}</Pending>;
+  return (
+    <>
+      {request?.status === "pending" && (
+        <form action={answerSupport} className="set-foot">
+          <p className="hint grow">Orelu support asks for an hour&apos;s look at your people and client names.</p>
+          {answer("refuse", "Refuse", "b-ghost")}
+          {answer("approve", "Allow for 1 hour", "b-primary")}
+        </form>
+      )}
+      {open && (
+        <form action={answerSupport} className="set-foot">
+          <p className="hint grow">Orelu support can look until {at(request.expires_at!)}.</p>
+          {answer("end", "End now")}
+        </form>
+      )}
+      {!!steps?.length && (
+        <ul className="set-support">
+          {steps.map((step) => <li key={`${step.action}${step.at}`} className="hint"><span className="num">{at(step.at)}</span> {supportWords[step.action] ?? step.action}</li>)}
+        </ul>
+      )}
+    </>
   );
 }
 
