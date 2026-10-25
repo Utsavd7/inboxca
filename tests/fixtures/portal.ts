@@ -8,3 +8,7 @@ export function inventedGstin(pan="ZZZPZ0001Z",entity="1") {
 export function statement(gstin=inventedGstin()) {
   return {chksum:"inventedstatement",data:{gstin,rtnprd:"092026",version:"1.0",itcsumm:{itcavl:{nonrevsup:{igst:100,cgst:20,sgst:20,cess:0,b2b:{igst:100,cgst:20,sgst:20,cess:0}}}},docdata:{b2b:[]}}};
 }
+// Structure: GSTN GSTR2A v2.3 response schema (B2B), with the download's own gstin and fp as the drop box reads them.
+export function gstr2a(gstin=inventedGstin()) {
+  return {gstin,fp:"092026",b2b:[{ctin:inventedGstin("ZZZPZ0002Z"),cfs:"Y",inv:[{chksum:"inventedinvoice",inum:"INV-1",idt:"05-09-2026",val:1180,pos:"24",rchrg:"N",inv_typ:"R",itms:[{num:1,itm_det:{txval:1000,rt:18,camt:90,samt:90,csamt:0}}]}]}]};
+}

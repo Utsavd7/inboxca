@@ -2,7 +2,7 @@ import {isGstin} from "../src/lib/identifiers.ts";
 import {jsonSource} from "./json-source.ts";
 import {officialSchema} from "./schema.ts";
 
-export type PortalRead={kind:"GSTR-2B";version:string;gstin:string;period:string;lines:{field:string;label:string;value:string;path:string;page:number}[];checks:{parts:string[];total:string}[]};
+export type PortalRead={kind:"GSTR-2B"|"GSTR-2A";version:string;gstin:string;period:string;lines:{field:string;label:string;value:string;path:string;page:number}[];checks:{parts:string[];total:string}[]};
 // Other official layouts join this interface only with their unchanged source and tests.
 export type PortalParser={version:string;read:(value:unknown)=>PortalRead|null};
 const object=(value:unknown):Record<string,unknown>=>value!==null && typeof value==="object" && !Array.isArray(value) ? value as Record<string,unknown> : {};
@@ -40,6 +40,36 @@ export const portalParsers:PortalParser[]=["v4.5","v4.4"].map((version)=>({versi
   if(!lines.length || lines.length>10000) return null;
   return {kind:"GSTR-2B",version,gstin,period:`${period.slice(2)}-${period.slice(0,2)}`,lines,checks};
 }}));
+// GSTR-2A by GSTN's pinned v2.3 response schema, which lays out its B2B invoices only; other
+// sections stay unread. The GSTIN and month are the download's own gstin and fp, as the drop
+// box finds them. GSTR-2A is for information: GSTR-3B credit comes from GSTR-2B alone.
+const words2a:Record<string,string>={val:"Invoice value",txval:"Taxable value",rt:"Rate",iamt:"Integrated tax",camt:"Central tax",samt:"State tax",csamt:"Cess",diff_percent:"Differential percentage"};
+portalParsers.push({version:"v2.3",read(value) {
+  const {schema,validate}=officialSchema("gstn/gstr2a-v2.3-response-schema.json","2b2e698870db2cd4a9826f09ad9ddec07abb507d268141252352e80f8c6972f0");
+  if(!validate(value)) return null;
+  const top=object(value),gstin=String(top.gstin ?? "").toUpperCase(),period=String(top.fp ?? "");
+  if(!isGstin(gstin) || !/^(0[1-9]|1[0-2])20\d{2}$/.test(period)) return null;
+  const source=jsonSource(value),lines:PortalRead["lines"]=[];
+  const visit=(item:unknown,path:string,rule:Record<string,unknown>,about:string)=>{
+    if(Array.isArray(item)) {item.forEach((entry,index)=>visit(entry,`${path}/${index}`,object(rule.items),about));return;}
+    const node=object(item),fields=object(rule.properties);
+    const here=[about,node.ctin && `from ${node.ctin}`,node.inum && `invoice ${node.inum}`,node.num && `item ${node.num}`].filter(Boolean).join(", ");
+    for(const [key,entry] of Object.entries(node)) {
+      const next=`${path}/${key}`;
+      if(!Object.hasOwn(fields,key)) throw new Error("Statement layout not supported");
+      if(entry!==null && typeof entry==="object") visit(entry,next,object(fields[key]),here);
+      else if(typeof entry==="number" && Object.hasOwn(words2a,key)) {
+        const row=source.positions.get(next),page=Math.ceil((row ?? Infinity)/40),field=`gstr2a${next.replaceAll("/",".")}`.toLowerCase();
+        if(!row || page>30 || !/^-?\d{1,13}(\.\d{1,2})?$/.test(String(entry))) throw new Error("Statement outside reading limits");
+        if(!/^[a-z][a-z0-9_.]{0,99}$/.test(field)) throw new Error("Statement layout not supported");
+        lines.push({field,label:`${words2a[key]}, ${here}`.slice(0,120),value:String(entry),path:next,page});
+      }
+    }
+  };
+  visit(top.b2b,"/b2b",object(object(schema.properties).b2b),"");
+  if(!lines.length || lines.length>10000) return null;
+  return {kind:"GSTR-2A",version:"v2.3",gstin,period:`${period.slice(2)}-${period.slice(0,2)}`,lines,checks:[]};
+}});
 
 export function readPortal(bytes:Uint8Array) {
   let value:unknown;
