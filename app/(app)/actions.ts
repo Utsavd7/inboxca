@@ -555,6 +555,17 @@ export async function saveVisibility(form: FormData) {
 // Calendar: mark the chosen returns in progress, filed (with each one's acknowledgement
 // number), or not filed after a mistake. Row level security limits it to clients the
 // person may see; every change is logged.
+// A button with its own form action loses its name and value in React, so the bulk buttons
+// that need a different intent call these instead of passing intent as the button's name.
+export async function markTasksInProgress(form: FormData) {
+  form.set("intent", "in_progress");
+  return manageTasks(form);
+}
+export async function reopenTasks(form: FormData) {
+  form.set("intent", "reopen");
+  return manageTasks(form);
+}
+
 export async function manageTasks(form: FormData) {
   const { supabase, membership, userId } = await currentWriter();
   if (!membership) redirect("/app");
