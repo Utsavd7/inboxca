@@ -24,7 +24,11 @@ export interface Drive {
   // Incoming folder (path below it), and that file's id and checksum once it is there.
   incomingLink(path: string): Promise<string>;
   incomingFile(path: string): Promise<{ id: string; hash: string } | null>;
+  // One folder below InboxCA's own ("" is its top), a page at a time, for the Documents
+  // folder view: each entry's path below InboxCA's folder, and a file's size and last change.
+  list(folder: string, cursor?: string, limit?: number): Promise<{ entries: DriveEntry[]; cursor: string | null }>;
 }
+export type DriveEntry = { id: string; name: string; path: string; folder: boolean; size: number; modified: string };
 
 // InboxCA's own folder in the drive, as on Dropbox, and where the uploader puts files: each
 // below Incoming at the path it had on the disk, every part a name the drive accepts.
@@ -108,6 +112,22 @@ export function localDrive(root = process.env.DRIVE_LOCAL_DIR ?? "", onRead?: (i
         if ((error as { code?: string }).code === "ENOENT") return null;
         throw error;
       }
+    },
+    async list(folder, cursor, limit = 200) {
+      const relative = path.join(OWN, folder);
+      if (relative !== OWN && !relative.startsWith(OWN + path.sep)) throw new Error("outside the test drive");
+      const names = await readdir(inside(relative)).catch((error) => {
+        if ((error as { code?: string }).code === "ENOENT") return [];
+        throw error;
+      });
+      const from = Number(cursor) || 0;
+      const entries = await Promise.all(
+        names.sort().slice(from, from + limit).map(async (name) => {
+          const found = await stat(inside(path.join(relative, name)));
+          return { id: path.join(relative, name), name, path: path.posix.join(folder, name), folder: found.isDirectory(), size: found.isDirectory() ? 0 : found.size, modified: found.mtime.toISOString() };
+        }),
+      );
+      return { entries, cursor: from + limit < names.length ? String(from + limit) : null };
     },
     async files(folder) {
       const entries = await readdir(inside(folder), { recursive: true, withFileTypes: true });
