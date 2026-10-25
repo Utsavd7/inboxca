@@ -43,7 +43,7 @@ test("the owner sees returns and InboxCA storage used, staff do not", async ({ p
     await expect(person.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(person.getByRole("link", { name: "See InboxCA use" })).toHaveCount(0);
     await person.goto("/app/settings?group=data#use");
-    await expect(person.getByRole("heading", { name: /^This page is for/ })).toBeVisible();
+    await expect(person.getByText("This page is for the owner", { exact: true })).toBeVisible();
     await expect(person.getByRole("region", { name: "InboxCA use" })).toHaveCount(0);
   } finally {
     await person.context().close();
