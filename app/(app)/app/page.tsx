@@ -17,7 +17,7 @@ import { roleNames } from "@/src/lib/roles";
 import { OfficePanel } from "./office-panel";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { replyReasons } from "@/src/lib/triage";
-import { Badge, PageHead } from "./ui";
+import { Badge, PageHead, storage } from "./ui";
 import "./today.css";
 
 const DAY = 86_400_000;
@@ -72,7 +72,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           .gte("at", new Date(`${today}T00:00:00+05:30`).toISOString()),
       )
     : 0;
-  const [replies, papers, forms, confirming, late, week, rules, setup, alerts, noticeAlerts, asks, mailboxNotice] = await Promise.all([
+  const [replies, papers, forms, confirming, late, week, rules, setup, alerts, noticeAlerts, asks, mailboxNotice, usage] = await Promise.all([
     supabase.from("requests").select("id, entity_id, client_id, reason_code, clients(name)", { count: "exact" }).eq("kind", "team_reply").eq("status", "pending").limit(5),
     supabase.from("requests").select("id, client_id, details, clients(name)", { count: "exact" }).eq("kind", "documents").eq("status", "pending").gt("expires_at", new Date().toISOString()).order("expires_at", { ascending: false }).limit(5),
     approver || membership.may("mark_filed")
@@ -97,6 +97,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     supabase.rpc("notice_alerts", { target_firm: membership.firmId }).limit(10),
     myQuestions(),
     owner ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : null,
+    owner ? supabase.rpc("firm_usage", { target_firm: membership.firmId }).then((result) => result.data?.[0]) : null,
   ]);
   // The emails behind the replies, for the time and a link straight to the mail.
   const replyIds = replies.data?.map((request) => request.entity_id) ?? [];
@@ -213,6 +214,14 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         </section>
       )}
 
+      {!!usage?.returns_this_year && (
+        <div className="today-line">
+          <span className="grow">
+            {usage.returns_so_far.toLocaleString("en-IN")} of {usage.returns_this_year.toLocaleString("en-IN")} returns this year are due so far. InboxCA storage used: {storage(usage.workspace_bytes)}.
+          </span>
+          <Link href="/app/settings?group=data#use">See InboxCA use</Link>
+        </div>
+      )}
       {askPush && (
         <div className="today-line">
           <span className="grow">Get questions and approvals on your phone too.</span>

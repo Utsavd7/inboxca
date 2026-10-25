@@ -79,3 +79,7 @@ export function SidePanel({ id, title, close, children }: { id: string; title: R
     </section>
   );
 }
+
+// InboxCA storage in KB, MB or GB, for the owner's meters.
+export const storage = (bytes: number) =>
+  bytes < 1024 ** 2 ? `${Math.ceil(bytes / 1024)} KB` : bytes < 1024 ** 3 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024 ** 3).toFixed(1)} GB`;
