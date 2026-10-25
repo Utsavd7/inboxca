@@ -691,8 +691,8 @@ isOneToOne: false
 { Args: { "f": Database["public"]['Tables']["firms"]['Row'] }; Returns: string
                            },
 "firm_usage":
-{ Args: { "target_firm": string }; Returns: {
-              "returns_this_year": number,"workspace_bytes": number
+{ Args: { "target_firm": string,"today"?: string }; Returns: {
+              "returns_so_far": number,"returns_this_year": number,"workspace_by_march": number,"workspace_bytes": number
             }[]
                            },
 "form_ready":

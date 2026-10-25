@@ -14,7 +14,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
-import { Badge, PageHead, Toast } from "../ui";
+import { Badge, PageHead, storage, Toast } from "../ui";
 import { Pending } from "../pending";
 import { STAGES, stageNames, reminderStages } from "@/src/lib/reminders";
 import { MailboxForm } from "./mailbox-form";
@@ -101,8 +101,10 @@ export default async function Settings({
   const hoursOnly = access.hours_only ?? false;
   const records = (settings.records ?? {}) as RecordsSettings;
   const permissions = (settings.permissions ?? {}) as Permissions;
+  // The usage meters are only on Your data; at 10,000 clients they cost about 100 ms.
+  const onData = asked === "data" || ["use", "data", "close"].includes(problems[error ?? ""]?.[0] ?? "");
   const [{ data: used }, { data: people }] = await Promise.all([
-    supabase.rpc("firm_usage", { target_firm: membership.firmId }),
+    onData ? supabase.rpc("firm_usage", { target_firm: membership.firmId }) : Promise.resolve({ data: null }),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
   ]);
   // People the owner or a deputy always allowed something, from a question in the Inbox.
@@ -515,16 +517,20 @@ export default async function Settings({
 
           {group === "data" && <>
           <Card id="use" title="InboxCA use" line="What sizes a plan. Your files stay in your own drive; InboxCA storage holds the client list, records and what InboxCA reads from files.">
-            <dl className="set-meters">
+            {usage && <dl className="set-meters">
               <div>
-                <dt>Returns this financial year</dt>
-                <dd>{usage?.returns_this_year ?? 0}</dd>
+                <dt>Returns this year</dt>
+                <dd>{usage.returns_so_far.toLocaleString("en-IN")} due so far</dd>
+                <dd className="set-bar"><span style={{ width: `${Math.round((100 * usage.returns_so_far) / Math.max(usage.returns_this_year, 1))}%` }} /></dd>
+                <dd className="set-meter-note">About {usage.returns_this_year.toLocaleString("en-IN")} by March, from your calendar</dd>
               </div>
               <div>
-                <dt>InboxCA storage</dt>
-                <dd>{(usage?.workspace_bytes ?? 0) < 1024 ** 2 ? `${Math.ceil((usage?.workspace_bytes ?? 0) / 1024)} KB` : `${((usage?.workspace_bytes ?? 0) / 1024 ** 2).toFixed(1)} MB`}</dd>
+                <dt>InboxCA storage used</dt>
+                <dd>{storage(usage.workspace_bytes)}</dd>
+                <dd className="set-bar"><span style={{ width: `${Math.round((100 * usage.workspace_bytes) / Math.max(usage.workspace_by_march, 1))}%` }} /></dd>
+                <dd className="set-meter-note">At this pace about {storage(usage.workspace_by_march)} by March</dd>
               </div>
-            </dl>
+            </dl>}
             <p className="hint set-after">Shown for your information. Plans and their limits come later; nothing is limited or charged by these figures yet.</p>
           </Card>
           <Card id="data" title="Your data" line="Your client list, returns and notices, the list of papers and the activity log, as spreadsheet files in one ZIP. The papers themselves are already in your firm's drive.">
