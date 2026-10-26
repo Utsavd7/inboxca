@@ -80,6 +80,15 @@ describe("the database's own guards", () => {
       }
     }));
 
+  it("refuses a raw IP address in the activity log; only a keyed digest is kept", () =>
+    rollback(db, async () => {
+      const firm = "00000000-0000-4000-8000-0000000009a0";
+      await db.query("insert into public.firms (id, name, state_code, status) values ($1, 'Invented Address Firm', '24', 'active')", [firm]);
+      for (const address of ["203.0.113.7", "2001:db8::1", "::ffff:198.51.100.4"])
+        expect((await attempt(db, "insert into public.activity_log (firm_id, action, details) values ($1, 'office.refused', $2)", [firm, { ip: address }])).ok).toBe(false);
+      expect((await attempt(db, "insert into public.activity_log (firm_id, action, details) values ($1, 'office.refused', $2)", [firm, { ip: "Qm9yaW5nLWtleWVkLWRpZw" }])).ok).toBe(true);
+    }));
+
   it("writes only activity actions and details listed in src/lib/activity.ts", async () => {
     // Each database function that writes the log: the actions it names, and the keys of the
     // details built inside each of its inserts.

@@ -38,4 +38,3 @@ drop function if exists private.put_lead(uuid, uuid, uuid, text, text, text, tex
 drop index if exists public.clients_leads;
 drop index if exists public.firms_enquiry_form;
 alter table public.clients drop column if exists stage, drop column if exists details, drop column if exists notes_enc;
-alter table public.activity_log drop constraint if exists activity_log_ip_hashed;
