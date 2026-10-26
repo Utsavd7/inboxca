@@ -145,7 +145,7 @@ test("the team replies in the conversation from the firm's mailbox, threaded, an
   await expect(messages).toHaveCount(2);
   await expect(messages.nth(1)).toContainText("Your team");
   await expect(messages.nth(1)).toContainText("Tuesday at 11");
-  await expect(list().getByRole("listitem").filter({ hasText: `Meeting ${tag}`, hasNotText: "Re:" })).toContainText("Done");
+  await expect(list().getByRole("listitem").filter({ hasText: `Meeting ${tag}`, hasNotText: "Re:" })).toContainText("Answered by your team");
   await expect(list().getByRole("listitem").filter({ hasText: `Re: Meeting ${tag}` })).toContainText("Sent by team");
 });
 
@@ -166,7 +166,7 @@ test("an attachment shows where it was saved in the drive, and opens in the view
   await expect(file).toContainText(`Saved to FY 2026-27 / ${clientName} / GST`);
   const [{ id }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1", [firm.firmId]);
   await expect(file.getByRole("link", { name: "View" })).toHaveAttribute("href", `/app/files/${id}/view`);
-  await expect(list().getByRole("listitem").filter({ hasText: "September purchase bills" })).toContainText("Filed");
+  await expect(list().getByRole("listitem").filter({ hasText: "September purchase bills" })).toContainText("Papers saved");
 });
 
 test("the team writes a new email to a client, only to the client's known addresses, with a paper and a file", async () => {

@@ -91,6 +91,13 @@
 .week-count { color: var(--ink-3); font-size: 11px; line-height: 1.3; }
 .week-strip li.has-due .week-count { color: var(--ink-2); font-weight: 600; }
 
+/* The week's email: four figures, each opening its list in the Inbox. */
+.mail-week { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s1); margin: 0; padding: 0 var(--s3) var(--s3); list-style: none; }
+.mail-week a { display: grid; align-content: start; gap: 2px; height: 100%; padding: var(--s2); border-radius: var(--r2); color: var(--ink); text-decoration: none; transition: background var(--base) var(--out); }
+.mail-week a:hover { background: var(--hover); }
+.mail-week strong { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.mail-week a > span { color: var(--ink-3); font-size: 12px; line-height: 1.3; }
+
 /* What InboxCA did today: a live timeline, newest first. */
 .today-live { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 12px; font-weight: 600; }
 .today-live::before { content: ""; width: 7px; height: 7px; border-radius: var(--round); background: var(--accent); animation: live 2.4s var(--out) infinite; }

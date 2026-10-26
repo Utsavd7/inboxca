@@ -33,6 +33,7 @@
 .ib-menu[open] > summary > svg:last-child { transform: rotate(180deg); }
 .ib-menu summary .avatar { width: 20px; height: 20px; margin-left: calc(var(--s1) * -1); font-size: 10px; }
 .ib-pop { position: absolute; z-index: 20; top: calc(100% + var(--s1)); left: 0; display: grid; gap: 2px; width: 280px; max-height: 360px; overflow: auto; padding: var(--s1); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-float); transform-origin: top left; animation: ib-drop var(--base) var(--out); }
+.ib-pop.is-tall { max-height: 480px; }
 .ib-pop :is(a, button):not(.b) { display: flex; align-items: center; gap: var(--s2); min-height: var(--control); padding: var(--s1) var(--s2); border: 0; border-radius: var(--r2); background: transparent; color: inherit; font: inherit; font-size: 14px; text-align: left; text-decoration: none; overflow-wrap: anywhere; cursor: pointer; }
 .ib-pop :is(a, button):not(.b):hover { background: var(--hover); }
 .ib-pop :is(a, button):not(.b):active { background: var(--press); }
@@ -103,6 +104,9 @@
 .ib-head .grow { flex: 1; min-width: 0; }
 .ib-head h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; overflow-wrap: anywhere; }
 .ib-head .ib-note { margin-top: 2px; }
+/* What InboxCA did with the open email, with a link to what was sent or recorded. */
+.ib-did a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.ib-did a:hover { text-decoration: underline; }
 .ib-actions, .ib-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .ib-actions > form { display: flex; }
 .ib-actions .b .kbd { height: 18px; margin-right: calc(var(--s1) * -1); padding: 0 5px; border-color: var(--line); font-size: 11px; }

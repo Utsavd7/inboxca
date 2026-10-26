@@ -42,7 +42,11 @@ export async function sendReply(form: FormData) {
   if (!sent) redirect(`${back}&error=mailbox`);
   const admin = supabaseAdmin();
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "email.replied", entity_type: "email", entity_id: event.id, details: { files: files.length, papers } });
-  await admin.from("requests").update({ status: "done" }).eq("firm_id", membership.firmId).eq("kind", "team_reply").eq("entity_id", event.id).eq("status", "pending");
+  // The email is done, answered by the team (the Inbox's "Answered by your team").
+  const { data: ask } = await admin.from("requests").select("id, details").eq("firm_id", membership.firmId).eq("kind", "team_reply").eq("entity_type", "email").eq("entity_id", event.id).maybeSingle();
+  await (ask
+    ? admin.from("requests").update({ status: "done", details: { ...(ask.details as object), replied: true } }).eq("id", ask.id)
+    : admin.from("requests").insert({ firm_id: membership.firmId, kind: "team_reply", client_id: event.client_id, entity_type: "email", entity_id: event.id, status: "done", details: { replied: true } }));
   const { data: chosen } = papers.length ? await supabase.from("documents").select("id, name").eq("client_id", event.client_id).eq("status", "filed").in("id", papers) : { data: [] };
   let unsent = papers.length - (chosen?.length ?? 0);
   for (const paper of chosen ?? []) {

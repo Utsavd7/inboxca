@@ -9,6 +9,7 @@ import { PushSwitch } from "./push-switch";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { canManageClients } from "@/src/lib/clients";
 import { addDays, dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
+import { inboxWeek } from "@/src/lib/work/inbox";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { periodName } from "@/src/lib/documents";
 import { describeHours, type Hours } from "@/src/lib/hours";
@@ -20,6 +21,7 @@ import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { awake, replyReasons } from "@/src/lib/triage";
 import { activityNames } from "@/src/lib/activity";
 import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
+import { MailWeek } from "./mail-week";
 import { MarkFiled } from "./mark-filed";
 import { Count, Draw, List, Presence, Press } from "./motion";
 import { Pending } from "./pending";
@@ -58,7 +60,8 @@ type Data = ReturnType<typeof load>;
 // Today: what needs this person, as a dashboard. A greeting with how many things need them,
 // four figures for the month (each opens its list), then "Needs you now" (replies, approvals
 // and what the owner must look at, most urgent first) and the late returns on the left, and
-// getting started, the next 7 days, papers still missing and what InboxCA did on the right.
+// getting started, the week's email, the next 7 days, papers still missing and what InboxCA did
+// on the right.
 // Every query starts at once; each part shows as soon as its own data is in, so the page
 // paints at once. Everything is limited to what this person's role and the row rules allow.
 export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
@@ -177,6 +180,9 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
               <GettingStarted data={data} />
             </Suspense>
           )}
+          <Suspense fallback={<CardSkeleton title="Email this week" rows={1} />}>
+            <MailWeek week={data.mailWeek} />
+          </Suspense>
           <Suspense fallback={<CardSkeleton title="Due this week" rows={2} />}>
             <ThisWeek data={data} />
           </Suspense>
@@ -325,6 +331,9 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
     };
   });
 
+  // This week's email: read, answered by InboxCA, answered by the team, waiting.
+  const mailWeek = inboxWeek({ supabase, membership, userId });
+
   // What InboxCA did by itself today (papers filed from email come from the papers themselves).
   const feed = Promise.all([
     Promise.resolve(supabase.rpc("activity_feed", { target_firm: firm, since: dayStart })),
@@ -378,7 +387,7 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
       : Promise.resolve(null);
   const preview = sends && (params.confirm === "late" || params.confirm === "papers") ? sendPreview(supabase, firm, params.confirm) : Promise.resolve(null);
 
-  return { today, owner, sends, membership, userId, replies, waits, papers, late, week, rules, toApprove, looks, month, lateTrend, papersWeek, feed, setup, assigned, askPush, pushKey, marking, preview, confirm: params.confirm };
+  return { today, owner, sends, membership, userId, replies, waits, papers, late, week, rules, toApprove, looks, month, lateTrend, papersWeek, mailWeek, feed, setup, assigned, askPush, pushKey, marking, preview, confirm: params.confirm };
 }
 
 const returnName = (rule: Map<string, { name: string | null; frequency: string | null }>, code: string | null, period: string | null) => `${rule.get(code ?? "")?.name ?? code ?? ""} for ${periodLabel(rule.get(code ?? "")?.frequency ?? null, period)}`;

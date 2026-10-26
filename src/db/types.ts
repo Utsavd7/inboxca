@@ -262,6 +262,12 @@ isOneToOne: false
       referencedRelation: "email_events"
       referencedColumns: ["firm_id","id"]
     },{
+      foreignKeyName: "documents_email_event_fkey"
+      columns: ["firm_id","email_event_id"]
+isOneToOne: false
+      referencedRelation: "email_outcomes"
+      referencedColumns: ["firm_id","id"]
+    },{
       foreignKeyName: "documents_firm_id_client_id_fkey"
       columns: ["firm_id","client_id"]
 isOneToOne: false
@@ -520,6 +526,12 @@ isOneToOne: false
       referencedRelation: "email_events"
       referencedColumns: ["firm_id","id"]
     },{
+      foreignKeyName: "shares_email_event_fkey"
+      columns: ["firm_id","email_event_id"]
+isOneToOne: false
+      referencedRelation: "email_outcomes"
+      referencedColumns: ["firm_id","id"]
+    },{
       foreignKeyName: "shares_firm_id_contact_id_fkey"
       columns: ["firm_id","contact_id"]
 isOneToOne: false
@@ -593,7 +605,32 @@ isOneToOne: false
                 }
           }
           Views: {
-            [_ in never]: never
+            "email_outcomes": {
+                  Row: {
+                    "client_id": string | null,"contact_id": string | null,"decision_source": string | null,"firm_id": string | null,"id": string | null,"label": string | null,"outcomes": (string)[] | null,"provider_message_id": string | null,"received_at": string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "email_events_firm_id_client_id_fkey"
+      columns: ["firm_id","client_id"]
+isOneToOne: false
+      referencedRelation: "clients"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "email_events_firm_id_contact_id_fkey"
+      columns: ["firm_id","contact_id"]
+isOneToOne: false
+      referencedRelation: "contacts"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "email_events_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
+                }
           }
           Functions: {
             "accept_invite":
