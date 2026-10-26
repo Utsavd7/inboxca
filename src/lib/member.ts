@@ -11,7 +11,8 @@ import { supabaseAdmin, supabaseServer } from "./supabase";
 // request, so the layout and the page share one lookup. Sends anyone who has not finished
 // the required sign in steps back to sign in, and signs out anyone past the firm's idle limit. Row
 // level security shows only active memberships, within office hours and the session limit
-// where the firm uses them; a person in two firms sees the first for now.
+// where the firm uses them. A person in two firms works in the first for now, and every query
+// after this names it (x-inboxca-firm), so the database shows that firm alone.
 export const currentMember = cache(async () => {
   const signedIn = await supabaseServer();
   const { data: claims } = await signedIn.auth.getClaims();
@@ -19,13 +20,16 @@ export const currentMember = cache(async () => {
   const userId = claims.claims.sub;
   const office = await officeDeviceAccess(userId);
   if (claims.claims.aal !== "aal2" && !office.approved) redirect("/sign-in/two-step");
-  const supabase = office.approved || office.remoteUntil ? await supabaseServer({ "x-inboxca-office": await officeProof(userId, String(claims.claims.session_id ?? "")) }) : signedIn;
-  const { data } = await supabase
+  const proof = office.approved || office.remoteUntil ? { "x-inboxca-office": await officeProof(userId, String(claims.claims.session_id ?? "")) } : undefined;
+  const anyFirm = proof ? await supabaseServer(proof) : signedIn;
+  const { data } = await anyFirm
     .from("firm_members")
     .select("firm_id, role, access, firms(name, settings)")
     .eq("user_id", userId)
+    .order("firm_id")
     .limit(1)
     .maybeSingle();
+  const supabase = data ? await supabaseServer({ ...proof, "x-inboxca-firm": data.firm_id }) : anyFirm;
   if (!data) {
     const { data: closed } = await supabase.rpc("closed_firms");
     if (closed?.[0]?.reason === "hours") {

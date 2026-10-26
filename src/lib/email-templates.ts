@@ -2,7 +2,7 @@ import { periodName } from "./documents";
 import { reminderEmail } from "./reminders";
 import { CODE_MINUTES } from "./share-codes";
 
-// English only until a native speaker approves Hindi and Gujarati wording.
+// InboxCA writes to clients in English only.
 export const TEMPLATE_VERSION=1;
 export const emailTemplates={
   reminder:reminderEmail,
