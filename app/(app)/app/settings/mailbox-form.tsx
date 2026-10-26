@@ -20,7 +20,7 @@ export function MailboxForm({initial={},reconnecting=false}:{initial?:Record<str
           <input id="mail-password" name="password" type="password" autoComplete="new-password" required />
         </div>
         <button className="b b-primary" type="submit" disabled={connecting} aria-busy={connecting || undefined}>
-          {connecting ? "Connecting" : reconnecting ? "Reconnect email" : "Connect email"}
+          {connecting ? "Connecting" : reconnecting ? "Connect email again" : "Connect email"}
         </button>
       </div>
       <p className="hint" aria-live="polite">{found || "Gmail, Google Workspace and Zoho need an app password, made in the account's security settings."}{connecting && " Connecting..."}</p>
@@ -28,9 +28,9 @@ export function MailboxForm({initial={},reconnecting=false}:{initial?:Record<str
         <summary>Change server settings</summary>
         <div className="fields">
           {[
-            ["imap_host", "Incoming (IMAP) server"],
+            ["imap_host", "Incoming mail server (IMAP)"],
             ["imap_port", "Incoming port"],
-            ["smtp_host", "Outgoing (SMTP) server"],
+            ["smtp_host", "Outgoing mail server (SMTP)"],
             ["smtp_port", "Outgoing port"],
           ].map(([name, label]) => (
             <div key={name}>

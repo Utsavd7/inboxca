@@ -42,6 +42,25 @@ export const portalParsers:PortalParser[]=["v4.5","v4.4"].map((version)=>({versi
   if(!lines.length || lines.length>10000) return null;
   return {kind:"GSTR-2B",version,gstin,period:`${period.slice(2)}-${period.slice(0,2)}`,lines,checks};
 }}));
+// A GSTR-2B's B2B invoices and its credit and debit notes (docdata b2b and cdnr, in the pinned
+// schema's own fields), for the match with the client's purchase register. Amounts are in paise,
+// from each bill's totals or else its items; a credit note's are below zero. Changed invoices and
+// notes (b2ba, cdnra) and the other sections are not read.
+export function gstr2bBills(bytes:Uint8Array) {
+  let value:unknown;
+  try {value=JSON.parse(new TextDecoder().decode(bytes).replace(/^﻿/,""));} catch {return null;}
+  const version=["v4.5","v4.4"].find((version)=>valid(value,version));
+  const data=object(object(value).data),gstin=String(data.gstin ?? "").toUpperCase(),period=String(data.rtnprd ?? "");
+  if(!version || !isGstin(gstin) || !/^(0[1-9]|1[0-2])20\d{2}$/.test(period)) return null;
+  const list=(item:unknown)=>Array.isArray(item) ? item.map(object) : [];
+  const paise=(bill:Record<string,unknown>,key:string,sign:number)=>sign*Math.round(100*(typeof bill[key]==="number" ? bill[key] as number : list(bill.items).reduce((sum,item)=>sum+(typeof item[key]==="number" ? item[key] as number : 0),0)))||0;
+  const bills=(["b2b","cdnr"] as const).flatMap((section)=>list(object(data.docdata)[section]).flatMap((supplier)=>list(supplier[section==="b2b" ? "inv" : "nt"]).map((bill)=>{
+    const note=section==="cdnr" ? (bill.typ==="C" ? "C" as const : "D" as const) : undefined,sign=note==="C" ? -1 : 1;
+    return {gstin:String(supplier.ctin).toUpperCase(),name:String(supplier.trdnm ?? "").slice(0,100),number:String(section==="b2b" ? bill.inum : bill.ntnum),date:String(bill.dt),...(note && {note}),
+      amounts:{taxable:paise(bill,"txval",sign),igst:paise(bill,"igst",sign),cgst:paise(bill,"cgst",sign),sgst:paise(bill,"sgst",sign),cess:paise(bill,"cess",sign)}};
+  })));
+  return bills.length<=10000 ? {gstin,period:`${period.slice(2)}-${period.slice(0,2)}`,version,bills} : null;
+}
 // GSTR-2A by GSTN's pinned v2.3 response schema, which lays out its B2B invoices only; other
 // sections stay unread. The GSTIN and month are the download's own gstin and fp, as the drop
 // box finds them. GSTR-2A is for information: GSTR-3B credit comes from GSTR-2B alone.

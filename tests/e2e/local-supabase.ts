@@ -168,9 +168,9 @@ export async function connectTestMailbox(page: Page, address: string) {
   await card.getByLabel("The firm's email address").fill(address);
   await card.getByLabel("Its password").fill(address);
   await card.getByText("Change server settings").click();
-  await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
+  await card.getByLabel("Incoming mail server (IMAP)").fill("127.0.0.1");
   await card.getByLabel("Incoming port").fill("3143");
-  await card.getByLabel("Outgoing (SMTP) server").fill("127.0.0.1");
+  await card.getByLabel("Outgoing mail server (SMTP)").fill("127.0.0.1");
   await card.getByLabel("Outgoing port").fill("3025");
   await card.getByRole("button", { name: "Connect email" }).click();
   await expect(card.getByRole("status")).toHaveText(`Connected: ${address}`);

@@ -122,7 +122,7 @@ test("a portal statement becomes encrypted pending figures beside its source, wi
     const [own]=await query(local.dbUrl,"select data from public.datasets where firm_id=$1 and client_id=$2 and form_code='GSTR2A'",[firm.firmId,client]);
     expect(own.data.lines).toHaveLength(6);expect(own.data.lines[0].source).toMatchObject({document:informational,path:"/b2b/0/inv/0/val",reader:"gstr2a-v2.3",page:1});
     expect((await query(local.dbUrl,"select data from public.datasets where id=$1",[draft.id]))[0].data.lines).toHaveLength(16);
-    await page.goto(`/app/clients/${client}?tab=extraction`);await expect(page.getByText("never feed GSTR 3B")).toBeVisible();
+    await page.goto(`/app/clients/${client}?tab=extraction`);await expect(page.getByText("never used for GSTR-3B")).toBeVisible();
   } finally {for(const id of artifacts) await drive.trash(id);await firm.remove();}
 });
 

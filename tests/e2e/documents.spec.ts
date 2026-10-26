@@ -98,22 +98,22 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
       { name: "IMG_0042.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf("Invented loan letter")) },
     ]);
     const sales = panel.getByRole("group", { name: "sales_bills_sep_2026.pdf" });
-    await expect(sales.getByLabel("Type")).toHaveValue("Sales bills");
-    await expect(sales.getByLabel("Work")).toHaveValue("gst");
+    await expect(sales.getByLabel("Paper type")).toHaveValue("Sales bills");
+    await expect(sales.getByLabel("Type of work")).toHaveValue("gst");
     await expect(sales.getByLabel("Period")).toHaveValue("2026-09");
     const form16 = panel.getByRole("group", { name: "Form16 FY 2025-26.pdf" });
-    await expect(form16.getByLabel("Type")).toHaveValue("Form 16");
+    await expect(form16.getByLabel("Paper type")).toHaveValue("Form 16");
     await expect(form16.getByLabel("Period")).toHaveValue("2026");
     // A name that says nothing is left for the person to choose, never Other.
     const scan = panel.getByRole("group", { name: "IMG_0042.pdf" });
-    for (const field of ["Type", "Work", "Period"]) await expect(scan.getByLabel(field)).toHaveValue("");
-    await scan.getByLabel("Type").selectOption("Other");
+    for (const field of ["Paper type", "Type of work", "Period"]) await expect(scan.getByLabel(field)).toHaveValue("");
+    await scan.getByLabel("Paper type").selectOption("Other");
     await scan.getByLabel("Name", { exact: true }).fill("Loan sanction letter");
     await scan.getByLabel("Add to our list of paper types").check();
-    await scan.getByLabel("Work").selectOption("other");
+    await scan.getByLabel("Type of work").selectOption("other");
     await scan.getByLabel("Period").selectOption({ label: "No period" });
     await panel.getByRole("button", { name: "Upload 3 files" }).click();
-    await expect(page.getByRole("status")).toContainText("3 filed in their clients' folders");
+    await expect(page.getByRole("status")).toContainText("3 saved in their clients' folders");
     const rows = page.locator("section[aria-labelledby=files] tbody tr");
     await expect(rows.filter({ hasText: "Sales bills - Sep 2026.pdf" })).toHaveCount(1);
     await expect(rows.filter({ hasText: "Form 16 - FY 2025-26.pdf" })).toHaveCount(1);
@@ -232,13 +232,13 @@ test("with no drive linked, no page asks for a paper's preview or offers its dow
     await expect(page).toHaveURL(/\/app$/);
     await page.waitForLoadState("networkidle");
     await page.goto("/app/documents?view=papers");
-    await expect(page.getByRole("complementary", { name: "Paper" })).toContainText("The firm's drive is not linked yet, so papers cannot be shown.");
+    await expect(page.getByRole("complementary", { name: "Paper" })).toContainText("The firm's drive is not connected yet, so papers cannot be shown.");
     // Nor is Download offered, which would leave the app for a bare error.
     await expect(page.getByRole("complementary", { name: "Paper" }).getByRole("link", { name: "Download" })).toHaveCount(0);
     await page.goto(`/app/clients/${client.id}?tab=documents`);
     await expect(page.getByRole("link", { name: "Invented bills.pdf", exact: true })).toBeVisible();
     await page.goto("/app/documents?view=folders");
-    await expect(page.getByText("The firm's drive is not linked yet")).toBeVisible();
+    await expect(page.getByText("The firm's drive is not connected yet")).toBeVisible();
     await page.waitForLoadState("networkidle");
     expect(asked).toEqual([]);
   } finally {

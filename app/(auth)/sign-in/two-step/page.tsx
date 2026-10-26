@@ -12,11 +12,13 @@ export default async function TwoStep() {
   const office = await officeDeviceAccess(claims.claims.sub, false);
   const { data: factors } = await supabase.auth.mfa.listFactors();
   const ready = factors?.totp.find((factor) => factor.status === "verified");
+  // Only someone with recovery codes (the owner, once downloaded) is offered one.
+  const codes = ((claims.claims.app_metadata as { recovery?: string[] } | undefined)?.recovery?.length ?? 0) > 0;
   return (
     <>
       <h1>{ready ? "Enter your 2 step code" : "Set up your 2 step code"}</h1>
-      {office.connectionWaiting && <p className="auth-note" role="status">Waiting for your firm to confirm the office internet connection</p>}
-      <TwoStepForm factorId={ready?.id} />
+      {office.connectionWaiting && <p className="auth-note" role="status">Your firm has not yet approved this internet connection as the office. Enter your 2 step code to sign in.</p>}
+      <TwoStepForm factorId={ready?.id} codes={codes} />
     </>
   );
 }

@@ -30,7 +30,7 @@ test("the owner downloads the firm's data and closes the firm, and staff are ref
     const [download]=await Promise.all([page.waitForEvent("download"),page.getByRole("button",{name:"Download your data"}).click()]);
     const files=xlsxEntries(await readFile((await download.path())!));
     expect([...files.keys()]).toEqual(["clients.csv","returns-and-notices.csv","papers.csv","activity-log.csv"]);
-    expect(readCsv(files.get("clients.csv")!().toString())[1]).toEqual(["Invented Close Client","business","accounts@invented-close.test","",""]);
+    expect(readCsv(files.get("clients.csv")!().toString())[1]).toEqual(["Invented Close Client","Business","accounts@invented-close.test","",""]);
     expect(files.get("activity-log.csv")!().toString()).toContain("firm.downloaded");
 
     await page.getByText("Close the firm",{exact:true}).last().click();

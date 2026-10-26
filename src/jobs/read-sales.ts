@@ -1,11 +1,18 @@
+import {matchPurchases} from "@/src/lib/purchase-match";
+import {MatchProblem} from "@/src/lib/purchase-register";
 import {readSales} from "@/src/lib/sales-draft";
 import {supabaseAdmin} from "@/src/lib/supabase";
 import type {Handler} from "./runner";
 
 export const readSalesRegister:Handler=async(job)=>{
   if(!job.firm_id) return {done:true};
-  const {data:document}=await supabaseAdmin().from("documents").select("id,firm_id,client_id,name,sha256,period_key,status,work_type").eq("firm_id",job.firm_id).eq("id",job.entity_id ?? "").maybeSingle();
+  const {data:document}=await supabaseAdmin().from("documents").select("id,firm_id,client_id,name,sha256,period_key,status,work_type,document_type,registration_id").eq("firm_id",job.firm_id).eq("id",job.entity_id ?? "").maybeSingle();
   if(!document || document.status!=="filed" || document.work_type!=="gst" || !/\.(xlsx?|csv)$/i.test(document.name)) return {done:true};
+  // A purchase register is never read as sales: it is matched with the month's GSTR-2B.
+  if(document.document_type==="Purchase bills") {
+    try {await matchPurchases(document,null);return {done:true};}
+    catch(error) {return error instanceof MatchProblem ? {done:true} : {retry:"purchases_not_matched",patient:true};}
+  }
   try {await readSales(document,null);return {done:true};}
   catch {return {retry:"sales_not_read",patient:true};}
 };

@@ -13,7 +13,9 @@ import { reviewFigure } from "./dataset-actions";
 import {itrYear} from "@/src/lib/itr-fields";
 import {formName} from "@/src/lib/prepared";
 import {checkItr} from "@/src/lib/itr";
-const messages:Record<string,string>={stale:"Someone changed these figures. Read the latest values and try again.",source:"The source file is not available. Ask your team to restore it.",permission:"Ask for permission before changing a figure.",value:"Check the value. Figures need no more than two decimal places; dates need a valid day.",reason:"Say why the figure needs to change.",totals:"The totals must agree before a figure can be confirmed.",itr:"Fix the problems listed for this return before confirming a figure.",saved:"Your check was saved."};
+// How each figure stands, in the words of the buttons that set it.
+const states:Record<string,string>={pending:"To check",confirmed:"Right",rejected:"Wrong"};
+const messages:Record<string,string>={stale:"Someone changed these figures. Read the latest values and try again.",source:"The paper these figures came from is not available. Ask the owner to restore it.",permission:"Ask for permission before changing a figure.",value:"Check the value. Figures need no more than two decimal places; dates need a valid day.",reason:"Say why the figure needs to change.",totals:"The totals do not add up. Correct the figures before you mark any as right.",itr:"Fix the problems listed for this return before you mark a figure as right.",saved:"Your check was saved."};
 
 export async function DatasetReview({clientId,draftId,lineId,check}:{clientId:string;draftId?:string;lineId?:string;check?:string}) {
   const {supabase,membership,userId}=await currentMember();
@@ -37,15 +39,15 @@ export async function DatasetReview({clientId,draftId,lineId,check}:{clientId:st
   const candidate=canEdit && kept?.base===active.value_enc ? z.object({value:z.string().max(2000),reason:z.string().max(300)}).parse(JSON.parse(await serverCrypto().decrypt(membership.firmId,`${place(row.id,active.id)}/edit/${userId}`,kept.value_enc))) : null;
   return <section aria-labelledby="figures">
     <h2 id="figures">Check the figures</h2>
-    <p className="hint">Check each figure against its source. Nothing is used in a form until every figure is confirmed.</p>
-    <nav className="pills" aria-label="Drafts">{rows?.map((item)=><Link key={item.id} href={`?tab=extraction&draft=${item.id}`} aria-current={row.id===item.id ? "page" : undefined}>{item.form_code==="ITR" ? `${item.target ? formName(item.target) : "Income tax"} ${itrYear(item.period_key)}` : `${item.form_code} ${periodName(item.period_key)}`}</Link>)}</nav>
+    <p className="hint">Check each figure against the paper it came from. InboxCA uses none of these figures in a return until every one is checked.</p>
+    <nav className="pills" aria-label="Sets of figures">{rows?.map((item)=><Link key={item.id} href={`?tab=extraction&draft=${item.id}`} aria-current={row.id===item.id ? "page" : undefined}>{item.form_code==="ITR" ? `${item.target ? formName(item.target) : "Income tax"} ${itrYear(item.period_key)}` : `${item.form_code.replace(/^GSTR(\d)/,"GSTR-$1")} ${periodName(item.period_key)}`}</Link>)}</nav>
     {check && messages[check] && <p className="alert" role="status">{messages[check]}</p>}
-    {!sourceReady && <p className="alert" role="alert">A source changed or is not available. Ask your team to restore or read it again before checking these figures.</p>}
-    {!!issues.length && <p className="alert" role="alert">{issues.join(" ")} Correct the figures before confirming them.</p>}
+    {!sourceReady && <p className="alert" role="alert">A paper these figures came from was changed or removed. Ask the owner to restore it, or read the paper again, before you check these figures.</p>}
+    {!!issues.length && <p className="alert" role="alert">{issues.join(" ")} Correct the figures before you mark them as right.</p>}
     <div className="figure-review">
       <div className="panel">
-        <p className="hint">{draft.lines.filter((line)=>line.state==="confirmed").length} of {draft.lines.length} confirmed</p>
-        <ul className="rows">{shown.map((line)=><li key={line.id}><Link href={href(line.id)} aria-current={active.id===line.id ? "true" : undefined}>{figures.get(line.id)!.label}: <span className="num">{figures.get(line.id)!.value}</span></Link><span className="hint">{line.state}</span></li>)}</ul>
+        <p className="hint">{draft.lines.filter((line)=>line.state==="confirmed").length} of {draft.lines.length} checked</p>
+        <ul className="rows">{shown.map((line)=><li key={line.id}><Link href={href(line.id)} aria-current={active.id===line.id ? "true" : undefined}>{figures.get(line.id)!.label}: <span className="num">{figures.get(line.id)!.value}</span></Link><span className="hint">{states[line.state] ?? line.state}</span></li>)}</ul>
         <nav className="pager" aria-label="Figure pages"><span>{at>=50 && <Link href={href(draft.lines[Math.floor(at/50)*50-50].id)}>Previous</Link>}{Math.floor(at/50)*50+50<draft.lines.length && <Link href={href(draft.lines[Math.floor(at/50)*50+50].id)}>Next</Link>}</span></nav>
         <h3>{figures.get(active.id)!.label}</h3>
         <p className="num">{figures.get(active.id)!.value}</p>

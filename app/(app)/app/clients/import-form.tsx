@@ -14,7 +14,7 @@ export function ImportForm() {
 
   return (
     <SidePanel id="import" title="Import from Excel or CSV" close="/app/clients">
-      {state.done ? <Toast>Imported {state.done} clients.</Toast> : null}
+      {state.done ? <Toast>Imported {state.done} {state.done === 1 ? "client" : "clients"}.</Toast> : null}
       {state.rows ? (
         <>
           <p className="hint" role="status">
@@ -28,7 +28,7 @@ export function ImportForm() {
                   <thead>
                     <tr>
                       <th scope="col">Name</th>
-                      <th scope="col">Kind</th>
+                      <th scope="col">Client type</th>
                       <th scope="col">Email</th>
                       <th scope="col">PAN</th>
                       <th scope="col">GSTIN</th>
@@ -74,7 +74,7 @@ export function ImportForm() {
           <form action={run} className="form-row">
             <input type="hidden" name="rows" value={JSON.stringify(state.rows)} />
             <button className="b b-primary" type="submit" disabled={running || !ready} aria-busy={running || undefined}>
-              {running ? "Importing" : `Import ${ready} clients`}
+              {running ? "Importing" : `Import ${ready} ${ready === 1 ? "client" : "clients"}`}
             </button>
             <button className="b b-secondary" type="button" onClick={() => window.location.reload()}>
               Choose another file
@@ -91,8 +91,8 @@ export function ImportForm() {
             {running ? "Reading" : "Check the file"}
           </button>
           <p className="hint">
-            The first row names the columns: Name, and Kind, Email, PAN and GSTIN when you have them. Nothing is added
-            until you see the check.
+            Row 1 must hold the column names: Name, and if you have them, Client type, Email, PAN and GSTIN. InboxCA
+            adds nothing until you have seen the check.
           </p>
           <a className="hint" href="/clients-sample.csv" download>
             Download a sample sheet

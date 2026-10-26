@@ -3,7 +3,7 @@
 // Uploading other files and sending files to clients are requests for employees and
 // managers unless the owner switches them on in Settings → Permissions; removing a file is
 // the owner's alone, whatever the settings. Partners follow the manager column.
-export const switchable = { upload: "Upload files", send: "Send files to clients", edit_figures: "Edit figures and prepare forms", download: "Download other files, one at a time", rename: "Correct a file's type or period", portal_files: "Add portal files", check_figures: "Check extracted figures", mark_filed: "Mark work filed", approve_requests: "Approve the team's requests" } as const;
+export const switchable = { upload: "Upload papers", send: "Send papers to clients", edit_figures: "Edit figures and prepare returns", download: "Download papers one at a time, with their email on each page", rename: "Correct a paper's type or period", portal_files: "Add portal files", check_figures: "Check extracted figures", mark_filed: "Mark returns filed", approve_requests: "Approve the team's permission requests" } as const;
 export type Right = keyof typeof switchable | "remove";
 export type Column = "employee" | "manager";
 export type Scope = {clients?: string[]; until?: string};
@@ -47,4 +47,4 @@ export function mayDecide(decider: { id: string; role: string; team_id: string |
   return request.route === "manager" && ["manager","partner"].includes(decider.role) && !!request.team_id && decider.team_id === request.team_id;
 }
 
-export const rightWords: Record<Right, string> = { upload: "upload a file", send: "send a file to the client", remove: "remove a file", edit_figures: "edit figures and prepare forms", download:"download a file", rename:"correct a file's type or period", portal_files:"add portal files", check_figures:"check extracted figures", mark_filed:"mark work filed", approve_requests:"approve the team's requests" };
+export const rightWords: Record<Right, string> = { upload: "upload a paper", send: "send a paper to the client", remove: "remove a paper", edit_figures: "edit figures and prepare returns", download:"download a paper", rename:"correct a paper's type or period", portal_files:"add portal files", check_figures:"check extracted figures", mark_filed:"mark returns filed", approve_requests:"approve the team's permission requests" };

@@ -20,7 +20,7 @@ export function AddClientForm() {
     );
   return (
     <SidePanel id="add-client" title="Add a client" close="/app/clients">
-      <p className="hint">Only the name is needed. Add the email, PAN and GSTIN if you have them; InboxCA uses them to recognise the client&apos;s emails and documents.</p>
+      <p className="hint">Only the name is needed. Add the email, PAN and GSTIN if you have them; InboxCA uses them to recognise the client&apos;s emails and papers.</p>
       <form key={JSON.stringify(state.values)} action={add} className="fields" noValidate>
         <div>
           <label htmlFor="client-name">Name</label>
@@ -28,7 +28,7 @@ export function AddClientForm() {
           {error("name")}
         </div>
         <div>
-          <label htmlFor="client-kind">Kind</label>
+          <label htmlFor="client-kind">Client type</label>
           <select id="client-kind" name="kind" defaultValue={state.values?.kind ?? "individual"}>
             {Object.entries(clientKinds).map(([value, label]) => (
               <option key={value} value={value}>

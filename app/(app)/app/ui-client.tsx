@@ -98,3 +98,10 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
     </>
   );
 }
+
+// A link whose page is fetched once the pointer rests on it or it takes focus, so the click
+// shows it at once (the sidebar's links do the same).
+export function WarmLink(props: React.ComponentProps<typeof Link>) {
+  const [warm, setWarm] = useState(false);
+  return <Link prefetch={warm || null} onMouseEnter={() => setWarm(true)} onFocus={() => setWarm(true)} {...props} />;
+}

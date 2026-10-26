@@ -2,7 +2,10 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { statusKind, type Delivery } from "@/src/jobs/answer-mail";
+import { runJobsSoon } from "@/src/jobs/run-soon";
 import { aiReady, askAi } from "@/src/lib/ai";
+import { answerOf } from "@/src/lib/answers";
 import { serverCrypto } from "@/src/lib/crypto";
 import { firmMailer } from "@/src/lib/firm-mail";
 import { replySubject, stripQuoted, threadKeys } from "@/src/lib/mail-view";
@@ -155,4 +158,36 @@ export async function draftReply(_previous: Draft, form: FormData): Promise<Draf
   } catch {
     return { error: "No draft this time. Write the reply yourself." };
   }
+}
+
+// InboxCA's answer by rules (Inbox, answered B and C) from the open email or the Inbox's list:
+// Send one held for a person (Ask me first) now, or stop it: Don't send a held one, Undo one
+// still in its 5 minutes. Whoever may see and reply to the email may do it. A stopped question
+// waits in Needs reply; a stopped receipt is simply not sent. Each is logged.
+export async function manageAnswer(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const back = String(form.get("back") ?? "").startsWith("/app/inbox") ? String(form.get("back")) : "/app/inbox";
+  const note = (part: string) => `${back}${back.includes("?") ? "&" : "?"}${part}`;
+  const { data: event } = await supabase.from("email_events").select("id, client_id, label, delivery").eq("firm_id", membership.firmId).eq("id", String(form.get("email") ?? "")).maybeSingle();
+  const kind = answerOf(event?.label ?? null);
+  const delivery = (event?.delivery ?? {}) as Delivery;
+  if (!event?.client_id || !kind) redirect(note("error=answer"));
+  const admin = supabaseAdmin();
+  revalidatePath("/app", "layout");
+  if (form.get("intent") === "send") {
+    const { data: held } = await admin.from("email_events").update({ delivery: { ...delivery, ack: "queued", at: new Date().toISOString(), by: userId } }).eq("id", event.id).eq("delivery->>ack", "held").select("id");
+    if (!held?.length) redirect(note("error=answer"));
+    await admin.from("jobs").insert({ firm_id: membership.firmId, kind: "answer_mail", entity_type: "email", entity_id: event.id, idempotency_key: `answer_mail:${event.id}:${randomUUID()}` });
+    runJobsSoon();
+    redirect(note(`went=${event.id}`));
+  }
+  if (delivery.ack === "queued") {
+    const { data: stopped } = await admin.from("jobs").update({ state: "cancelled" }).eq("kind", "answer_mail").eq("entity_type", "email").eq("entity_id", event.id).eq("state", "pending").select("id");
+    if (!stopped?.length) redirect(note("error=started"));
+  } else if (delivery.ack !== "held") redirect(note("error=started"));
+  await admin.from("email_events").update({ delivery: { ...delivery, ack: "stopped" } }).eq("id", event.id);
+  if (statusKind(kind)) await admin.from("requests").upsert({ firm_id: membership.firmId, kind: "team_reply", client_id: event.client_id, entity_type: "email", entity_id: event.id, reason_code: event.label }, { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true });
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "email.answer_stopped", entity_type: "email", entity_id: event.id, details: { kind } });
+  redirect(note(`stopped=${kind}`));
 }

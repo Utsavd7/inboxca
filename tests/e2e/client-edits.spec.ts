@@ -33,9 +33,9 @@ test.afterAll(() => firm.remove(staffEmail));
 test("a number added by mistake is removed from the client", async () => {
   await owner.goto(`/app/clients/${clients["Mehta Traders"]}`);
   await owner.getByRole("link", { name: "Change numbers" }).click();
-  const panel = owner.getByRole("dialog", { name: "Registrations" });
-  await panel.getByLabel("Number", { exact: true }).selectOption("tan");
-  await panel.getByLabel("Value").fill("ahma12345c");
+  const panel = owner.getByRole("dialog", { name: "Tax numbers" });
+  await panel.getByLabel("Type", { exact: true }).selectOption("tan");
+  await panel.getByLabel("Number", { exact: true }).fill("ahma12345c");
   await panel.getByRole("button", { name: "Add number" }).click();
   await expect(panel.getByRole("listitem").filter({ hasText: "AHMA12345C" })).toBeVisible();
   await panel.getByRole("button", { name: "Remove AHMA12345C" }).click();
@@ -51,13 +51,13 @@ test("a contact is taken off one client and still acts for the other", async () 
     await owner.getByLabel("Contact's name").fill("Kiran Mehta");
     await owner.getByLabel("Contact's email").fill(contactEmail);
     await owner.getByRole("button", { name: "Add contact" }).click();
-    await expect(owner.getByRole("dialog", { name: "Contact people" }).getByRole("listitem").filter({ hasText: "Kiran Mehta" })).toBeVisible();
+    await expect(owner.getByRole("dialog", { name: "Contacts" }).getByRole("listitem").filter({ hasText: "Kiran Mehta" })).toBeVisible();
   }
   const links = async () => (await query(local.dbUrl, "select client_id from public.contact_clients where firm_id = $1", [firm.firmId])).map((row) => row.client_id);
   expect((await links()).sort()).toEqual([clients["Mehta Traders"], clients["Mehta Exports"]].sort());
 
   await owner.goto(`/app/clients/${clients["Mehta Traders"]}?tab=contacts`);
-  const panel = owner.getByRole("dialog", { name: "Contact people" });
+  const panel = owner.getByRole("dialog", { name: "Contacts" });
   await panel.getByRole("listitem").filter({ hasText: "Kiran Mehta" }).getByRole("button", { name: "Remove", exact: true }).click();
   await expect(panel.getByRole("listitem").filter({ hasText: "Kiran Mehta" })).toHaveCount(0);
   expect(await links()).toEqual([clients["Mehta Exports"]]);

@@ -16,7 +16,7 @@ export async function readPortalDraft(document:{id:string;firm_id:string;client_
   const {read}=result.parse(await workerRead(document.firm_id,document,"portal",undefined,password));
   if(!read || read.kind!==document.document_type) return null;
   if("pan" in read) return readTaxDraft(document,read);
-  if(read.period!==document.period_key) throw new Error("The file's month does not match this work.");
+  if(read.period!==document.period_key) throw new Error("The paper's month does not match this return.");
   const admin=supabaseAdmin(),crypto=serverCrypto();
   const {data:registration}=await admin.from("client_registrations").select("id").eq("firm_id",document.firm_id).eq("client_id",document.client_id).eq("kind","gstin").eq("number_bidx",await crypto.blindIndex(document.firm_id,"gstin",read.gstin)).maybeSingle();
   if(!registration) throw new Error("This statement belongs to a different client.");

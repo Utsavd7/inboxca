@@ -11,7 +11,7 @@ const unescape=(value:string)=>value.replaceAll("&amp;","&").replaceAll("&lt;","
 // Only named lists from the official file, never a hand-written rate or state list.
 export function gstr1Workbook(template:Template,period:string,gstin:string,drafts:Map<string,Figure>[]) {
   chooseTemplate([template],"GSTR1",period);
-  if(!isGstin(gstin) || !template.mappings.validator) throw new Error("Check the client's GST number and official form");
+  if(!isGstin(gstin) || !template.mappings.validator) throw new Error("Check the client's GSTIN and the official form");
   if(!/^gstr1-v[\d.]+\/GSTR1_Excel_Workbook_Template_V[\d.]+\.xlsx$/.test(template.source.file)) throw new Error("Unknown official workbook");
   const original=officialFile(template.source.file,template.source.sha256);
   const files=xlsxEntries(original),workbook=files.get("xl/workbook.xml")!().toString();
@@ -42,7 +42,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
     }
     for(const [key,row] of rows) {
       const section=key.split(".")[0] as SalesSection,sheet=template.mappings.sheets?.[section];
-      if(!sheet) throw new Error("This register section does not fit the work's month");
+      if(!sheet) throw new Error("This register section does not fit the return's month");
       if(!checkedSheets.has(section)) {
         const headings=sheetCells(sheet);
         if(salesSections[section].headings.some((heading,column)=>headings.get(`${String.fromCharCode(65+column)}4`)!==heading)) throw new Error("The official headings changed");
@@ -60,7 +60,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
       if(!cells.has(path)) cells.set(path,new Map());
       for(const [column,figure] of row) {
         const heading=salesSections[section].headings[column];if(!heading) throw new Error("Unknown register column");
-        if(/GSTIN|GSTIN\/UIN/.test(heading) && /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(figure.value) && !isGstin(figure.value)) throw new Error("Check the GST number's last character");
+        if(/GSTIN|GSTIN\/UIN/.test(heading) && /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(figure.value) && !isGstin(figure.value)) throw new Error("Check the GSTIN's last character");
         const listed=codes[heading] || sheetLists.test(heading),list=codes[heading] ? lists.get(codes[heading]) : validated.get(section)!.get(column);
         if(listed && (!list || !list.some((item)=>["Rate","Applicable % of Tax Rate"].includes(heading) ? Number(item)===Number(figure.value) : item===figure.value))) throw new Error(`Check ${heading} against the official choices`);
         let value=figure.value,number=numericHeadings.test(heading);
@@ -69,7 +69,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
         if(/date$/i.test(heading)) {
           if(!/^\d{4}-\d{2}-\d{2}$/.test(value) || new Date(value).toISOString().slice(0,10)!==value) throw new Error("Check the invoice or note date");
           // A shipping bill may follow later (Help Instruction); invoices and notes may not.
-          if(value>last && heading!=="Shipping Bill Date") throw new Error("An invoice or note is after the work's month");
+          if(value>last && heading!=="Shipping Bill Date") throw new Error("An invoice or note is after the return's month");
           value=String((Date.parse(value)-Date.UTC(1899,11,30))/86400000);number=true;
         }
         cells.get(path)!.set(`${String.fromCharCode(65+column)}${at}`,{value,number});
@@ -85,7 +85,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
       const data:Record<string,unknown>={gstin,fp:period.slice(5)+period.slice(0,4)};
       const optional=(values:[string,number][])=>Object.fromEntries(values.filter(([,column])=>get(column)!=="").map(([field,column])=>[field,field==="diff_percent" ? num(column)/100 : field==="etin" ? get(column) : num(column)]));
       if(kind==="b2b" || kind==="cdnr") {
-        if(get(0).toUpperCase()===gstin || !/^[A-Z0-9]+$/.test(get(0))) throw new Error("Check the recipient's GST number");
+        if(get(0).toUpperCase()===gstin || !/^[A-Z0-9]+$/.test(get(0))) throw new Error("Check the recipient's GSTIN");
         const note=kind==="cdnr",inv:Record<string,unknown>=note ? {nt_num:get(2),nt_dt:date(3),ntty:get(4),pos:get(5).slice(0,2),rchrg:get(6),inv_typ:types[get(7)],val:num(8),...optional([["diff_percent",9]])} : {inum:get(2),idt:date(3),val:num(4),pos:get(5).slice(0,2),rchrg:get(6),inv_typ:types[get(8)],...optional([["diff_percent",7],["etin",9]])};
         if(!note && get(9) && ["SEWP","SEWOP","DE"].includes(String(inv.inv_typ))) throw new Error("This invoice type cannot name a commerce operator");
         if(get(2)==="0") throw new Error("An invoice or note number cannot be zero");
@@ -143,7 +143,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
         data.doc_issue=v5 ? {doc_det_new:[{doc_num:String(position),doc_typ:get(0),docs}]} : {doc_det:[{doc_num:position,docs}]};
       } else if(kind==="eco") {
         // Help Instruction, common mistakes: the operator's GSTIN has the supplier's State code.
-        if(get(1).slice(0,2)!==gstin.slice(0,2)) throw new Error("The operator's GST number must be from the client's State");
+        if(get(1).slice(0,2)!==gstin.slice(0,2)) throw new Error("The operator's GSTIN must be from the client's State");
         data.supeco={[get(0)==="Liable to collect tax u/s 52(TCS)" ? "clttx" : "paytx"]:[{etin:get(1),suppval:num(3),igst:num(4),cgst:num(5),sgst:num(6),...optional([["cess",7]])}]};
       } else if(kind==="ecob2b" || kind==="ecourp2b") {
         // The schema needs a "tax payer action" flag and a supply type the workbook has no column for. For this

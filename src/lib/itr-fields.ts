@@ -59,8 +59,8 @@ export const itrFields={
   "itr.tds.other.*.section":{label:"TDS section",paths:otherRows("TDSSection","TDSSection","TDSSection")},
   "itr.tds.other.*.year":{label:"Year tax was deducted",paths:otherRows("DeductedYr","DeductedYr","DeductedYr")},
   "itr.tds.other.*.income":{label:"Income on the tax statement",paths:otherRows("AmtForTaxDeduct","GrossAmount","GrossAmount")},
-  "itr.tds.other.*.deducted":{label:"Tax deducted in your own name",paths:otherRows("TotTDSOnAmtPaid","TDSDeducted","TaxDeductCreditDtls.TaxDeductedOwnHands")},
-  "itr.tds.other.*.claimed":{label:"TDS claimed this year in your own name",paths:otherRows("ClaimOutOfTotTDSOnAmtPaid","TDSClaimed","TaxDeductCreditDtls.TaxClaimedOwnHands")},
+  "itr.tds.other.*.deducted":{label:"Tax deducted in the client's own name",paths:otherRows("TotTDSOnAmtPaid","TDSDeducted","TaxDeductCreditDtls.TaxDeductedOwnHands")},
+  "itr.tds.other.*.claimed":{label:"TDS claimed this year in the client's own name",paths:otherRows("ClaimOutOfTotTDSOnAmtPaid","TDSClaimed","TaxDeductCreditDtls.TaxClaimedOwnHands")},
   // TCS: TaxesPaid.TCS is the claimed credit; amounts collected are separate schedule fields.
   "itr.tcs.total":{label:"Total TCS claimed",paths:taxes("TCS")},
   // Advance and self assessment tax: TaxesPaid and the individual challans in ScheduleIT/TaxPayments.

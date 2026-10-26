@@ -1,5 +1,3 @@
-import { emailTemplates, TEMPLATE_VERSION } from "@/src/lib/email-templates";
-import type { Json } from "@/src/db/types";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { clientReplied, receiveAsked } from "@/src/lib/checklists";
@@ -7,7 +5,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { describeFile, folderFor, gstinFor, periodName, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
 import type { FolderOrder, Naming } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
-import { firmMailer, mailHealth, openMail } from "@/src/lib/firm-mail";
+import { mailHealth, openMail } from "@/src/lib/firm-mail";
 import { receive } from "@/src/lib/intake";
 import type { NoticeDetails } from "@/src/lib/notices";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -25,7 +23,7 @@ export const fileMail: Handler = async (job) => {
   const admin = supabaseAdmin();
   const { data: event } = await admin
     .from("email_events")
-    .select("id, firm_id, client_id, contact_id, provider_message_id, received_at, label, delivery, clients(name, email_enc), connected_accounts(id, provider, address_enc, credentials_enc, settings, status), firms(name, settings)")
+    .select("id, firm_id, client_id, provider_message_id, received_at, label, clients(name), connected_accounts(id, provider, address_enc, credentials_enc, settings, status)")
     .eq("id", job.entity_id ?? "")
     .maybeSingle();
   const mailbox = event?.connected_accounts;
@@ -50,30 +48,10 @@ export const fileMail: Handler = async (job) => {
     // The drive is away or refused: the files wait, and are tried every hour for 7 days.
     return { retry: "drive_unreachable", patient: true };
   }
-  // A short reply saying what arrived, if the owner has turned it on (5.5.0), only to the
-  // client's own address or a contact allowed to receive its papers.
-  if (filed.length && event.firms && (event.firms.settings as { acknowledge?: boolean }).acknowledge === true) {
-    let to = "";
-    if (event.contact_id) {
-      const { data: link } = await admin.from("contact_clients").select("can_receive_documents, contacts(email_enc)").eq("contact_id", event.contact_id).eq("client_id", event.client_id).maybeSingle();
-      if (link?.can_receive_documents && link.contacts) to = await crypto.decrypt(firm, `contacts/${event.contact_id}/email`, link.contacts.email_enc);
-    } else if (event.clients.email_enc) to = await crypto.decrypt(firm, `clients/${event.client_id}/email`, event.clients.email_enc);
-    const delivery=event.delivery as {ack?:string};
-    if (delivery.ack==="sent" || !to) return {done:true};
-    const mailer=await firmMailer(firm,event.firms.name);
-    if (!mailer) return {retry:"mail_not_connected",at:new Date(Date.now()+3600_000)};
-    const messageId=`<received-${event.id}@${new URL(process.env.APP_BASE_URL ?? "http://inboxca.local").host}>`;
-    const save=async(ack:string)=>{
-      const {error}=ack==="sent" ? await admin.rpc("finish_mail_ack",{event_id:event.id,template_version:TEMPLATE_VERSION}) : await admin.from("email_events").update({delivery:{...delivery,ack} as NonNullable<Json>}).eq("id",event.id);
-      if (error) throw new Error("acknowledgement_not_saved");
-    };
-    if (delivery.ack==="sending" && await mailer.sentAlready(messageId)) {await save("sent");return {done:true};}
-    await save("sending");
-    const message=emailTemplates.received(event.clients.name,event.firms.name,filed);
-    const sent=await mailer.send(to,message.subject,message.text,messageId,event.provider_message_id);
-    if (!sent) {if(mailer.waitUntil) await save("ready");return mailer.waitUntil ? {retry:"mail_wait",at:mailer.waitUntil} : {retry:"mail_not_sent",patient:true};}
-    await save("sent");
-
+  // The receipt saying what arrived is a job of its own, by the firm's setting (Inbox, answered C).
+  if (filed.length) {
+    const { error } = await admin.from("jobs").upsert({ firm_id: firm, kind: "answer_mail", entity_type: "email", entity_id: event.id, idempotency_key: `answer_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+    if (error) return { retry: "receipt_not_queued" };
   }
   return { done: true };
 };

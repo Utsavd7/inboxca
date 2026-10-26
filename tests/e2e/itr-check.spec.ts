@@ -30,7 +30,7 @@ test("an ITR that differs from Form 26AS shows each difference and is approved o
     await drive.getByLabel("Test drive on this computer").check();await drive.getByLabel(/I have read this and I agree/).check();
     await drive.getByRole("button",{name:"Connect drive"}).click();await expect(drive.getByRole("status")).toContainText("Connected");
     await page.goto("/app/clients?panel=add");
-    await page.getByLabel("Name",{exact:true}).fill(name);await page.getByLabel("Kind",{exact:true}).selectOption("individual");await page.getByLabel("PAN",{exact:true}).fill(pan);
+    await page.getByLabel("Name",{exact:true}).fill(name);await page.getByLabel("Client type",{exact:true}).selectOption("individual");await page.getByLabel("PAN",{exact:true}).fill(pan);
     await page.getByRole("button",{name:"Add client"}).click();await expect(page.locator(".page-head")).toContainText(name);
     const [{id:client}]=await query(local.dbUrl,"select id from public.clients where firm_id=$1 and name=$2",[firm.firmId,name]);
     // The papers: Form 26AS with the employer's salary TDS and a bank's interest TDS booked U, and the employer's Form 16.

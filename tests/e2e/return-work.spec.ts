@@ -43,7 +43,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await query(local.dbUrl,"insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values($1,$2,$3,'GSTR1','2026-09',$4)",[draft,firm.firmId,client,{lines,checks:[]}]);
 
     await signIn(page,email,key);
-    const now=page.getByRole("region",{name:"Needs you now"});
+    const now=page.getByRole("region",{name:"Your list"});
     await expect(now.getByText(`GSTR-1 for ${name}, Sep 2026`)).toHaveCount(0);
     await page.goto("/app/calendar?view=month");await expect(page.getByRole("button",{name:`Fill ${name} GSTR-1 (monthly)`})).toBeVisible();
     // Fill by hand, pressed twice: one draft, made from the figures read so far.
@@ -78,7 +78,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await page.goto("/app");await expect(now.getByText("Checked and ready for your approval")).toHaveCount(0);
     // The manager approves from Today.
     const other=await managerContext.newPage();await signIn(other,managerEmail,managerKey);
-    const managerNow=other.getByRole("region",{name:"Needs you now"});
+    const managerNow=other.getByRole("region",{name:"Your list"});
     await expect(managerNow.getByText("Checked and ready for your approval")).toBeVisible();
     await managerNow.getByRole("link",{name:/Review and approve/}).click();await expect(other).toHaveURL(/tab=outputs/);
     await other.getByRole("button",{name:"Give second approval"}).click();
@@ -89,7 +89,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await page.goto(returns);await expect(row.getByText("Approved. Download it and file on the portal")).toBeVisible();
     await page.goto(`/app/clients/${client}?tab=outputs`);
     const filing=page.locator("li").filter({has:page.getByRole("link",{name:forms[1].name,exact:true})});
-    await filing.getByText("Record filing",{exact:true}).click();await filing.getByLabel("Acknowledgement number, if known").fill("AA2409260012345");await filing.getByRole("button",{name:"Mark filed",exact:true}).click();
+    await filing.locator("summary",{hasText:"Mark filed"}).click();await filing.getByLabel("Acknowledgement number, if known").fill("AA2409260012345");await filing.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select status from public.tasks where firm_id=$1",[firm.firmId]))[0].status,{timeout:30_000}).toBe("filed");
     await page.goto(`${returns}&show=filed`);await expect(page.locator("li").filter({hasText:"GSTR-1 (monthly) Sep 2026"})).toContainText("AA2409260012345");
     await page.goto("/app");await expect(now.getByText(`GSTR-1 for ${name}, Sep 2026`)).toHaveCount(0);

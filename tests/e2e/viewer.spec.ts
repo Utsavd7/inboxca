@@ -47,9 +47,9 @@ test("PDFs, spreadsheets and photos arrive as personal page images, with no file
       await page.goto(`${clientUrl}?tab=files`);
       await page.getByRole("link", { name: "Upload papers" }).click();
       await page.getByLabel("Files", { exact: true }).setInputFiles({ ...file, buffer: await file.buffer });
-      await page.getByLabel("Type", { exact: true }).selectOption("Other");
+      await page.getByLabel("Paper type", { exact: true }).selectOption("Other");
       await page.getByRole("dialog").getByLabel("Name", { exact: true }).fill("Sample statement");
-      await page.getByLabel("Work", { exact: true }).selectOption("income_tax");
+      await page.getByLabel("Type of work", { exact: true }).selectOption("income_tax");
       await page.getByLabel("Period", { exact: true }).selectOption({ label: "No period" });
       const uploadFields = grant ? await actionFields(page, page.url(), { client: client.id, file: "" }) : null;
       await page.getByRole("button", { name: "Upload", exact: true }).click();
@@ -114,13 +114,13 @@ test("PDFs, spreadsheets and photos arrive as personal page images, with no file
     }
     await expect.poll(async () => (await query(local.dbUrl, "select (details->>'count')::int n from public.requests where firm_id=$1 and reason_code='captures'", [firm.firmId]))[0]?.n).toBe(5);
     await page.goto("/app");
-    await expect(page.getByRole("alert").filter({ hasText: `${email} tried to capture a document's screen 5 times today.` })).toBeVisible();
+    await expect(page.locator("section[aria-labelledby=t-list] li").filter({ hasText: `Ask ${email} about screen captures` })).toContainText("Tried to capture a paper's screen 5 times today");
     await expect.poll(async () => (await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id=$1 and action='document.viewed'", [firm.firmId]))[0].n).toBe(12);
     // With no drive linked a paper says so, not that it was moved or removed.
     const [paper] = await query(local.dbUrl, "select id from public.documents where firm_id = $1 limit 1", [firm.firmId]);
     await query(local.dbUrl, "delete from public.connected_accounts where firm_id = $1 and kind = 'drive'", [firm.firmId]);
     await page.goto(`/app/files/${paper.id}/view`);
-    await expect(page.getByText("The firm's drive is not linked yet, so papers cannot be shown.")).toBeVisible();
+    await expect(page.getByText("The firm's drive is not connected yet, so papers cannot be shown.")).toBeVisible();
     await expect(page.getByRole("alert").filter({ hasText: "could not be opened" })).toHaveCount(0);
   } finally {
     await firm.remove();

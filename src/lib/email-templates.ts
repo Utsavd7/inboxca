@@ -1,4 +1,6 @@
+import type { AnswerKind } from "./answers";
 import { periodName } from "./documents";
+import { askName, paperType } from "./paper-type";
 import { reminderEmail } from "./reminders";
 import { CODE_MINUTES } from "./share-codes";
 
@@ -6,17 +8,26 @@ import { CODE_MINUTES } from "./share-codes";
 export const TEMPLATE_VERSION=1;
 export const emailTemplates={
   reminder:reminderEmail,
-  received(client:string,firm:string,files:{type:string;period:string;toCheck:boolean}[]) {
-    const named=files.filter((file)=>!file.toCheck).map((file)=>`- ${[file.type,periodName(file.period)].filter(Boolean).join(", ")}`);
-    const unclear=files.filter((file)=>file.toCheck).length;
-    return {subject:"We have received your files",text:[`Dear ${client},`,"","Thank you. We have received:",...named,...(unclear ? [`- ${unclear===1 ? "1 file" : `${unclear} files`} our team will check`] : []),"",firm].join("\n")};
+  // InboxCA's answer to a client's email (src/lib/answers.ts), its lines built from the firm's records.
+  answer(kind:AnswerKind,client:string,firm:string,lines:string[]) {
+    const [subject,opening]=({
+      filed:["Returns filed","Thank you for your email. As per our records:"],
+      papers:["Papers still needed","Thank you for your email.\n"],
+      due:["What is due","Thank you for your email. As per our records, these are due:"],
+      received:["We received your papers","Thank you. We received these papers:"],
+      notice:["We received your notice","We received your notice. Your CA will look at it."],
+    } as const)[kind];
+    return {subject,text:[`Dear ${client},`,"",opening,...lines,"",firm].join("\n")};
   },
-  paper(client:string,firm:string,name:string,link:string,privatePaper:boolean,reply:boolean) {
-    return {subject:reply ? `Re: your request for ${name}` : name,text:[`Dear ${client},`,"",`${firm} has shared ${name} with you.`,"",`Download it here: ${link}`,privatePaper ? "It is private: the page emails a one-time code to this address before it opens. The link works for 7 days and up to 5 downloads." : "The link works for 7 days and up to 5 downloads.","",firm].join("\n")};
+  // The client reads the paper's type and period ("Form 16 for FY 2025-26"), never the drive's
+  // file name with its version; a paper of no known type keeps its name.
+  paper(client:string,firm:string,name:string,link:string,privatePaper:boolean,reply:boolean,paper?:{type:string;period:string}) {
+    const what=paper?.type && paper.type!=="Document" ? `${paperType(paper.type)}${paper.period ? ` for ${periodName(paper.period)}` : ""}` : name;
+    return {subject:reply ? `Re: your request for ${what}` : `${what} from ${firm}`,text:[`Dear ${client},`,"",`${firm} has shared ${what} with you.`,"",`Download it here: ${link}`,privatePaper ? "This paper is private. When you open the link, choose Email me a code. We send a 6 digit code to this email address. The link works for 7 days and up to 5 downloads." : "The link works for 7 days and up to 5 downloads.","",firm].join("\n")};
   },
   request(client:string,firm:string,period:string,items:{type:string}[],link:string) {
     const when=period ? ` for ${periodName(period)}` : "";
-    return {subject:`Documents needed${when}`,text:[`Dear ${client},`,"",`Please upload these documents${when}:`,...items.map((item)=>`- ${item.type}`),"",`Upload them here, no sign in needed: ${link}`,"The link works for 30 days.","",firm].join("\n")};
+    return {subject:`Documents needed${when}`,text:[`Dear ${client},`,"",`Please upload these documents${when}:`,...items.map((item)=>`- ${askName(item.type)}`),"",`Upload them here, no sign in needed: ${link}`,"The link works for 30 days.","",firm].join("\n")};
   },
   receipt(client:string,firm:string,period:string,items:{type:string;received:string[]}[]) {
     const when=period ? ` for ${periodName(period)}` : "";

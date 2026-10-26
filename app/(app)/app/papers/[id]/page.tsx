@@ -46,7 +46,7 @@ export default async function Papers({ params, searchParams }: { params: Promise
   const live = request.status === "pending" && Date.parse(request.expires_at ?? "") > new Date().getTime();
   const what = details.returns?.length ? details.returns.map((code) => rules?.find((rule) => rule.code === code)?.name ?? code).join(" and ") : "";
   // Anything that stops an email going now.
-  const stop = mailbox?.status !== "connected" ? "Connect the firm's email in Settings first. Reminders go from the firm's own address." : !client.email_enc ? "This client has no email address. Add one on the client's page." : client.reminders_paused ? "Reminders are paused for this client. Resume them on the client's page." : emailed ? "Already emailed today. The next reminder can go tomorrow." : "";
+  const stop = mailbox?.status !== "connected" ? "Connect the firm email in Settings first. Reminders go from the firm email." : !client.email_enc ? "This client has no email address. Add one on the client's page." : client.reminders_paused ? "Reminders are paused for this client. Resume them on the client's page." : emailed ? "Already emailed today. The next reminder can go tomorrow." : "";
   const hidden = (
     <>
       <input type="hidden" name="client" value={request.client_id} />
@@ -121,7 +121,7 @@ export default async function Papers({ params, searchParams }: { params: Promise
             </form>
           }
         >
-          The reminder goes out in a minute from your firm&apos;s email.
+          The reminder goes out from your firm email in about 20 seconds. Undo stops it.
         </Toast>
       )}
       {query.phoned && <Toast>Marked as asked by phone. The next reminder email waits 3 days.</Toast>}

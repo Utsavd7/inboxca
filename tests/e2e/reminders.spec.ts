@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { appKey, connectTestMailbox, localSupabase, mailTexts, makeMailbox, query, runJobs, seedFirm, signIn } from "./local-supabase";
 
-// Today's sends, each previewed first, with an Undo before it goes: Remind all late clients,
-// and Chase missing papers after the client was asked for them. The mail goes from the firm's
-// mailbox on the local GreenMail server. Skipped when local Supabase is not running.
+// The full list's sends (/app/work), each previewed first, with an Undo before it goes: Remind
+// all late clients, and Remind about missing papers after the client was asked for them. The
+// mail goes from the firm's mailbox on the local GreenMail server. Skipped when local Supabase
+// is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 test.describe.configure({ mode: "serial", timeout: 90_000 });
@@ -51,7 +52,7 @@ test.afterAll(async () => {
 
 test("Remind all late clients: a preview, Undo before it goes, then one email listing the late returns", async () => {
   const remind = async () => {
-    await owner.goto("/app");
+    await owner.goto("/app/work?show=late");
     await owner.getByRole("link", { name: "Remind all late clients" }).click();
     const preview = owner.getByRole("dialog", { name: "Remind 1 late client" });
     await expect(preview.getByRole("listitem").filter({ hasText: late.name })).toContainText("Will be emailed");
@@ -74,7 +75,7 @@ test("Remind all late clients: a preview, Undo before it goes, then one email li
   expect(await mailTexts(papers.email)).toEqual([]);
 });
 
-test("Chase missing papers emails the client's upload link again, naming what is still missing", async () => {
+test("Remind about missing papers emails the client's upload link again, naming what is still missing", async () => {
   await owner.goto(`/app/clients/${papers.id}?tab=files&ask=1`);
   await owner.getByRole("group", { name: "Papers" }).getByRole("checkbox", { name: "Bank statement" }).check();
   await owner.getByLabel("Anything else, by name").fill("Rent receipts");
@@ -83,12 +84,12 @@ test("Chase missing papers emails the client's upload link again, naming what is
   await expect.poll(async () => (await mailTexts(papers.email)).length).toBe(1);
   const link = (await mailTexts(papers.email))[0].match(/http\S+\/u\/[\w-]+/)![0];
 
-  await owner.goto("/app");
-  await owner.getByRole("link", { name: "Chase missing papers" }).click();
-  const preview = owner.getByRole("dialog", { name: "Chase missing papers" });
+  await owner.goto("/app/work?show=papers");
+  await owner.getByRole("link", { name: "Remind about missing papers" }).click();
+  const preview = owner.getByRole("dialog", { name: "Remind about missing papers" });
   await expect(preview.getByRole("listitem").filter({ hasText: papers.name })).toContainText("Bank statement, Rent receipts");
-  await preview.getByRole("button", { name: "Send 1 follow up" }).click();
-  await expect(toast("Follow ups go out in a minute")).toBeVisible();
+  await preview.getByRole("button", { name: "Send 1 reminder" }).click();
+  await expect(toast("Reminders go out in a minute")).toBeVisible();
   await goNow();
   const [, followUp] = await mailTexts(papers.email);
   expect(followUp).toContain("Bank statement");

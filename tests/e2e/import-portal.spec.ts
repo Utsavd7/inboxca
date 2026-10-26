@@ -40,7 +40,7 @@ test.beforeAll(async ({ browser }) => {
   await expect(section.getByRole("status")).toContainText("Connected");
   await owner.goto("/app/clients");
   await owner.getByLabel("Name", { exact: true }).fill(clientName);
-  await owner.getByLabel("Kind", { exact: true }).selectOption("business");
+  await owner.getByLabel("Client type", { exact: true }).selectOption("business");
   await owner.getByLabel("GSTIN", { exact: true }).fill("27AAPFU0939F1ZV");
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText(clientName);
@@ -60,7 +60,7 @@ test("a GSTR-2B added on Documents comes back to Documents and closes what was a
   await owner.getByLabel("Add portal files").setInputFiles({ name: "download.json", mimeType: "application/json", buffer: statement("092026") });
   await owner.getByRole("button", { name: "Add", exact: true }).click();
   await expect(owner).toHaveURL(/\/app\/documents\?dropped=1-0-0$/);
-  await expect(owner.getByRole("status")).toContainText("1 filed in its client's folder");
+  await expect(owner.getByRole("status")).toContainText("1 saved in its client's folder");
   const [request] = await query(local.dbUrl, "select status, details from public.requests where id = $1", [ask]);
   expect(request.status).toBe("done");
   expect(request.details.items[0].received).toHaveLength(1);
@@ -70,7 +70,7 @@ test("a GSTR-2A added on Documents closes the GSTR-2A asked for", async () => {
   const name = `Mehta Agencies ${tag}`;
   await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill(name);
-  await owner.getByLabel("Kind", { exact: true }).selectOption("business");
+  await owner.getByLabel("Client type", { exact: true }).selectOption("business");
   await owner.getByLabel("GSTIN", { exact: true }).fill(inventedGstin());
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText(name);
@@ -96,7 +96,7 @@ test("a Form 26AS text file and a Form 16 added on Documents are filed under the
   const name = `Iyer Consultants ${tag}`;
   await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill(name);
-  await owner.getByLabel("Kind", { exact: true }).selectOption("individual");
+  await owner.getByLabel("Client type", { exact: true }).selectOption("individual");
   await owner.getByLabel("PAN", { exact: true }).fill(pan);
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText(name);
@@ -134,7 +134,7 @@ test("a locked ITR-V under a client's To check is filed as soon as a person type
   const name = `Desai Associates ${tag}`, who = "ZZZPZ0006Z"; // ggignore: an invented PAN.
   await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill(name);
-  await owner.getByLabel("Kind", { exact: true }).selectOption("individual");
+  await owner.getByLabel("Client type", { exact: true }).selectOption("individual");
   await owner.getByLabel("PAN", { exact: true }).fill(who);
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText(name);

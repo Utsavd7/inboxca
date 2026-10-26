@@ -15,7 +15,7 @@ const icons: Record<string, typeof House> = { Today: House, Inbox, Clients: User
 export function NavLinks({ role, waiting, place }: { role: string; waiting?: Promise<number>; place: "main" | "workspace" }) {
   const path = usePathname();
   return pagesFor(role).filter((page) => page.place === place).map(({ href, name }) => (
-    <NavLink key={href} href={href} name={name} current={path === href || (href !== "/app" && path.startsWith(`${href}/`))} waiting={name === "Inbox" ? waiting : undefined} />
+    <NavLink key={href} href={href} name={name} current={path === href || (href !== "/app" ? path.startsWith(`${href}/`) : path === "/app/work")} waiting={name === "Inbox" ? waiting : undefined} />
   ));
 }
 

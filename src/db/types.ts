@@ -95,13 +95,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"reminders_paused": boolean,"sales_mapping_enc": string | null
+                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"purchase_mapping_enc": string | null,"reminders_paused": boolean,"sales_mapping_enc": string | null
                   }
                   Insert: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
                   }
                   Update: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
                   }
                   Relationships: [
                     {
@@ -404,6 +404,31 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "firms"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"gst_matches": {
+                  Row: {
+                    "counts": NonNullable<Json>,"firm_id": string,"register_id": string,"result_enc": string,"statement_id": string
+                  }
+                  Insert: {
+                    "counts": NonNullable<Json>,"firm_id": string,"register_id": string,"result_enc": string,"statement_id": string
+                  }
+                  Update: {
+                    "counts"?: NonNullable<Json>,"firm_id"?: string,"register_id"?: string,"result_enc"?: string,"statement_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "gst_matches_register_fkey"
+      columns: ["firm_id","register_id"]
+isOneToOne: false
+      referencedRelation: "documents"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "gst_matches_statement_fkey"
+      columns: ["firm_id","statement_id"]
+isOneToOne: false
+      referencedRelation: "documents"
+      referencedColumns: ["firm_id","id"]
     }
                   ]
                 },"incidents": {
@@ -856,14 +881,14 @@ isOneToOne: false
 "fill_form":
 { Args: { "client": string,"extension": string,"firm": string,"form": string,"period": string,"person": string,"prefix": string,"registration": string,"sources": Json,"template": string }; Returns: Json
                            },
+"finish_answer":
+{ Args: { "actor"?: string,"event_id": string,"template": string }; Returns: undefined
+                           },
 "finish_form":
 { Args: { "bytes": number,"checksum": string,"file": string,"firm": string,"permission"?: string,"person": string,"target": string }; Returns: boolean
                            },
 "finish_job":
 { Args: { "error_code"?: string,"job_id": number,"outcome": string,"retry_at"?: string }; Returns: boolean
-                           },
-"finish_mail_ack":
-{ Args: { "event_id": string,"template_version": number }; Returns: undefined
                            },
 "finish_share":
 { Args: { "actor"?: string,"share_id": string }; Returns: undefined
@@ -890,6 +915,11 @@ isOneToOne: false
 "gov_updates":
 { Args: { "target_firm": string }; Returns: Json
                            },
+"gst_match_items":
+{ Args: { "target_firm": string }; Returns: {
+              "client_id": string,"client_name": string,"counts": Json,"due_on": string,"period_key": string,"register_id": string
+            }[]
+                           },
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
                            },
@@ -897,7 +927,7 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
 "late_clients":
-{ Args: { "target_firm": string }; Returns: {
+{ Args: { "mine"?: boolean,"target_firm": string }; Returns: {
               "client_id": string,"client_name": string,"code": string,"due_on": string,"period_key": string,"returns": number
             }[]
                            },
@@ -905,6 +935,9 @@ isOneToOne: false
 { Args: { "target_firm": string }; Returns: {
               "client_name": string,"due_on": string,"id": string
             }[]
+                           },
+"looked_after":
+{ Args: { "clients": (string)[],"target_firm": string }; Returns: string[]
                            },
 "looks_after":
 { Args: { "client": string,"target_firm": string }; Returns: boolean
@@ -930,6 +963,9 @@ isOneToOne: false
 { Args: { "first_day": string }; Returns: {
               "codes": (string)[],"due": number,"due_on": string,"filed": number
             }[]
+                           },
+"my_clients":
+{ Args: { "target_firm": string }; Returns: string[]
                            },
 "my_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]
@@ -1047,6 +1083,11 @@ isOneToOne: false
 "take_form_download":
 { Args: { "person": string,"ticket": string,"token_hash": string }; Returns: string
                            },
+"team_load":
+{ Args: { "target_firm": string,"until": string }; Returns: {
+              "returns": number,"user_id": string
+            }[]
+                           },
 "team_replies":
 { Args: { "target_firm": string }; Returns: {
               "assignee": string,"client_id": string,"client_name": string,"days": number,"email_id": string,"id": string,"late": boolean,"reason_code": string,"received_at": string
@@ -1062,6 +1103,11 @@ isOneToOne: false
                            },
 "user_id_for_email":
 { Args: { "address": string }; Returns: string
+                           },
+"work_numbers":
+{ Args: { "mine"?: boolean,"since": string,"target_firm": string,"until": string }; Returns: {
+              "due": number,"filed": number,"waiting": number
+            }[]
                            }
           }
           Enums: {

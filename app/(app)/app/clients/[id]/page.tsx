@@ -1,6 +1,7 @@
 import {PreparedForms} from "../../prepared-forms";
 import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
+import { PurchaseMatch } from "./purchase-match";
 import { DatasetReview } from "./dataset-review";
 import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
 import Form from "next/form";
@@ -17,6 +18,7 @@ import { activityNames } from "@/src/lib/activity";
 import { type Right } from "@/src/lib/rights";
 import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, folderFor, periodChoices, periodName, receivedLabel, workOfType } from "@/src/lib/documents";
+import { paperType } from "@/src/lib/paper-type";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
@@ -47,8 +49,8 @@ import "../clients.css";
 import "../../today.css";
 
 const errors: Record<string, string> = {
-  details: "Enter a name, choose a kind, and check the email address.",
-  number: "That number is not valid for its kind. Check it for a typing mistake.",
+  details: "Enter a name, choose a client type, and check the email address.",
+  number: "That number does not fit the type you chose. Check the type, and check the number for a typing mistake.",
   "one-pan": "This client already has a PAN.",
   "gstin-pan": "That GSTIN holds a different PAN from this client's.",
   taken: "Another client in your firm already has that number.",
@@ -56,24 +58,24 @@ const errors: Record<string, string> = {
   assign: "Choose a person and what they do for this client.",
   assigned: "That person is already assigned to this client.",
   contact: "Enter the contact's name and a valid email address.",
-  linked: "That contact is already linked to this client.",
-  services: "Those services do not fit together. Choose one GSTR-1 and one GSTR-3B frequency, and not composition with regular returns.",
+  linked: "That contact is already added to this client.",
+  services: "These services cannot go together. Choose one GSTR-1 and one GSTR-3B, monthly or quarterly. Do not choose composition with regular GST returns.",
   role: "Only the owner, a partner or a manager can change clients.",
-  document: "Choose the file's type, work and period. A type of your own needs a name.",
+  document: "Choose the paper type, type of work and period. If you chose Other, type a name for the paper.",
   drive: "The firm's drive is not connected or could not be reached. Try again in a minute.",
-  upload: "Choose a file of up to 50 MB, and its type, work and period.",
+  upload: "Choose up to 20 files, 50 MB in all, and each file's paper type, type of work and period.",
   ...unsafeText,
   scan: "The file could not be checked for viruses just now. Try again in a minute.",
-  twin: "This client already has this file.",
+  twin: "This client already has this paper, so InboxCA did not save it again.",
   gstin: "Choose the GSTIN this GST paper is for.",
   list: "Put one paper on each line, up to 30, each up to 80 letters and without a colon.",
-  owner: "Only the owner can remove a file.",
-  copy: "InboxCA could not keep its safety copy, so the file was not removed. Try again in a minute.",
-  needs: "This needs permission first. Ask, and the button appears here once it is allowed.",
-  asked: "You already have several questions waiting. Wait for an answer first.",
-  ask: "Tick at least one document, or name one, to ask for.",
-  recipient: "Choose who gets the file: the client's own email, or a contact allowed to receive documents.",
-  mailbox: "The file could not be emailed. Connect the firm's email in Settings, or try again in a minute.",
+  owner: "Only the owner can remove a paper. Choose Ask to remove to ask for permission.",
+  copy: "InboxCA could not make its safety copy, so the paper was not removed. Try again in a minute.",
+  needs: "You need permission for this first. Choose the Ask button. Once your manager or the owner allows it, the button appears here.",
+  asked: "You already have 10 permission requests waiting. Wait for an answer before you ask again.",
+  ask: "Tick at least one paper, or name one, to ask for.",
+  recipient: "Choose who gets the paper: the client's email, or a contact with Receives papers ticked.",
+  mailbox: "InboxCA could not email the paper. Try again in a minute. If it fails again, ask the owner to connect the firm email in Settings.",
   notice: "Choose the authority and the day the notice was received.",
 };
 
@@ -102,12 +104,18 @@ const panels = ["notice", "numbers", "services", "contacts", "team", "details", 
 const lookAfter = ["partner_in_charge", "manager", "staff"];
 const uuid = /^[0-9a-f-]{36}$/;
 const taskChanges: Record<string, string> = { filed: "marked filed", in_progress: "marked in progress", reopen: "marked not filed" };
+// What a save on this page says once it is done (?changed=).
+const changes: Record<string, string> = {
+  details: "Details saved.", services: "Services saved.", "contact-rights": "Contact saved.", "add-contact": "Contact added.", "unlink-contact": "Contact removed.",
+  "add-number": "Tax number added.", "remove-number": "Tax number removed.", assign: "Assigned.", unassign: "Unassigned.", archive: "Client archived.", restore: "Client restored.",
+  reminders: "Reminders saved.", list: "List saved.", sharing: "Sending choice saved.",
+};
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; task?: string; marked?: string; t?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; task?: string; marked?: string; t?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, source, section, header, read, portal, edit, renamed, saved, removed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
   const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "overview";
   const sub = asked === "extraction" || asked === "outputs" ? asked : tab;
   const panel = panels.includes(asked ?? "") ? asked! : "";
@@ -130,7 +138,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase
       .from("clients")
       .select(
-        "id, name, kind, archived_at, email_enc, group_id, branch_id, reminders_paused, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_view_status, can_receive_documents, contacts(name_enc, email_enc))",
+        "id, name, kind, archived_at, email_enc, group_id, branch_id, reminders_paused, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_receive_documents, contacts(name_enc, email_enc))",
       )
       .eq("id", id)
       .eq("firm_id", firm)
@@ -233,7 +241,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const listed = tab === "documents" ? [...documents.slice(start, start + 50), ...(paper ? [paper] : [])] : [];
   const origins = await paperOrigins(supabase, firm, listed.map((file) => ({ ...file, client_id: id, clients: client })), paper?.id);
   const earlier = (allFiles ?? []).filter((file) => paper && file.status === "earlier" && file.document_type === paper.document_type && file.period_key === paper.period_key && file.registration_id === paper.registration_id);
-  const noticeFile = (allFiles ?? []).find((file) => file.id === (renamed ?? saved ?? removed));
+  const noticeFile = (allFiles ?? []).find((file) => file.id === (renamed ?? saved ?? removed ?? restored));
   const sharedFile = documents.find((file) => file.id === shared);
   const receivers = contacts.filter((contact) => contact.can_receive_documents);
   // Who a filed paper can go to. Sending is its own step that names the paper and the address.
@@ -502,7 +510,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                         key={notice.id}
                         lead={<IconTile Icon={Scale} kind="notice" />}
                         title={(notice.details as unknown as NoticeDetails).notice_type}
-                        meta={`Check the action date by ${dueLabel(notice.due_on)}`}
+                        meta={`Check by ${dueLabel(notice.due_on)}`}
                         status={<Badge tone="warn">Notice</Badge>}
                         action={
                           <Link className="b b-ghost" href={`${base}?tab=notices`}>
@@ -532,7 +540,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             <div className="client-col">
               <Card id="details-card" title="Details" Icon={Info} end={manage && <Link className="b b-ghost" href={`${base}?tab=details`} scroll={false}>Edit details</Link>}>
                 <dl className="props client-props">
-                  <div><dt>Kind</dt><dd>{clientKinds[client.kind as ClientKind]}</dd></div>
+                  <div><dt>Client type</dt><dd>{clientKinds[client.kind as ClientKind]}</dd></div>
                   <div><dt>Email</dt><dd>{email || <span className="hint">None yet</span>}</dd></div>
                   <div><dt>Group</dt><dd>{groupName ? <Link href={`/app/clients?group=${client.group_id}`}>{groupName}</Link> : <span className="hint">None</span>}</dd></div>
                   {!!branches.length && <div><dt>Branch</dt><dd>{branchName ? <Link href={`/app/clients?branch=${client.branch_id}`}>{branchName}</Link> : <span className="hint">None</span>}</dd></div>}
@@ -540,7 +548,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                   <div><dt>Changes</dt><dd><Link href={`${base}?tab=activity`} scroll={false}>Activity</Link></dd></div>
                 </dl>
               </Card>
-              <Card id="numbers" title="Registrations" Icon={Hash} kind="docs" end={manage && <Link className="b b-ghost" href={`${base}?tab=numbers`} scroll={false}>Change numbers</Link>}>
+              <Card id="numbers" title="Tax numbers" Icon={Hash} kind="docs" end={manage && <Link className="b b-ghost" href={`${base}?tab=numbers`} scroll={false}>Change numbers</Link>}>
                 {numbers.length ? (
                   <ul className="app-rows">
                     {numbers.map((registration) => {
@@ -560,7 +568,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                     ))}
                   </ul>
                 ) : (
-                  <p className="app-card-none">No contact people yet.</p>
+                  <p className="app-card-none">No contacts yet.</p>
                 )}
               </Card>
               <Card id="team-card" title="Looked after by" Icon={UsersRound} kind="papers" end={manage && <Link className="b b-ghost" href={`${base}?tab=team`} scroll={false}>Change people</Link>}>
@@ -582,7 +590,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           <Card id="client-mail" title="Emails" Icon={Mail} kind="reply" count={mailCount ?? 0}>
             {mailList("app-rows client-mails stagger") ?? (
               <Empty Icon={Mail} kind="reply" title="No email from this client yet">
-                <span>Emails from the client&apos;s address and its contact people show here once the firm&apos;s email is connected.</span>
+                <span>Emails from the client&apos;s address and its contacts show here once the firm email is connected.</span>
               </Empty>
             )}
             {(mailCount ?? 0) > 50 && <div className="app-card-foot">{pager(mailCount ?? 0, mails?.length ?? 0, "Emails", "emails")}</div>}
@@ -596,7 +604,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <input type="hidden" name="tab" value="documents" />
                 <span className="search">
                   <Search size={16} aria-hidden />
-                  <input name="find" type="search" defaultValue={find} placeholder="Find a paper by a word in it or its name" aria-label="Find a file" />
+                  <input name="find" type="search" defaultValue={find} placeholder="Find a paper by a word in it or its name" aria-label="Find a paper" />
                 </span>
                 <button className="b b-secondary" type="submit">Find</button>
                 {find && <Link className="b b-ghost" href={`${base}?tab=documents`}>Show all</Link>}
@@ -604,13 +612,13 @@ export default async function Client({ params, searchParams }: { params: Promise
               {!canUpload && <span className="page-actions">{askButton("upload", "Ask to upload")}</span>}
             </div>
             <DroppedNotice value={dropped} />
-            {askedRight && <Toast>Asked. Your manager or the owner answers in their Inbox; the button appears here once it is allowed, for one use within an hour.</Toast>}
+            {askedRight && <Toast>Permission asked. Your manager or the owner answers in their Inbox. Once they allow it, the button appears here and works once, within one hour.</Toast>}
             {sharedFile && <Toast>Sent {sharedFile.name}. The link works for 7 days and 5 downloads.</Toast>}
             {askedFor === "sent" && <Toast>The client was emailed a private upload link. What they upload is saved here.</Toast>}
             {askedFor && askedFor !== "sent" && (
               <p className="notice" role="status">
                 <span>
-                  Send the client this private upload link; it is shown only now and works for 30 days: <span className="num link-once">{askedFor}</span>
+                  InboxCA could not email the client, so send this private upload link yourself. It works for 30 days: <span className="num link-once">{askedFor}</span>
                 </span>
               </p>
             )}
@@ -622,18 +630,18 @@ export default async function Client({ params, searchParams }: { params: Promise
                     <form action={removed ? removeDocument : manageDocument}>
                       <input type="hidden" name="document" value={noticeFile.id} />
                       <Pending className="b" name="intent" value={removed ? "restore" : "undo"}>
-                        {removed ? "Put back" : "Undo"}
+                        {removed ? "Restore" : "Undo"}
                       </Pending>
                     </form>
                   )
                 }
               >
-                {removed ? `Removed ${noticeFile.name}. It waits 30 days in the drive's Deleted and old versions folder.` : `Saved as ${noticeFile.name}.`}
+                {removed ? `Removed ${noticeFile.name}. It stays in the Removed papers folder of your firm's drive for 30 days.` : restored ? `Restored ${noticeFile.name}.` : `Saved as ${noticeFile.name}.`}
               </Toast>
             )}
             {!!asking.length && (
               <Card id="asks" title="Papers asked for" Icon={FileClock} kind="papers" count={asking.length} countTone="warn">
-                <ul className="app-rows" aria-label="Files asked for">
+                <ul className="app-rows" aria-label="Papers asked for">
                   {asking.map((request) => {
                     const details = request.details as unknown as DocumentRequest;
                     const got = details.items.filter((item) => item.received.length).length;
@@ -653,7 +661,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                                     <input type="hidden" name="item" value={at} />
                                     <span className="hint">{item.type}</span>
                                     <Pending className="b b-secondary" name="intent" value="checked" aria-label={`${item.type} is right`}>
-                                      Checked
+                                      Mark checked
                                     </Pending>
                                     <Pending className="b b-ghost" name="intent" value="again" aria-label={`Ask again for ${item.type}`}>
                                       Ask again
@@ -678,7 +686,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                     <thead>
                       <tr>
                         <th scope="col">Paper</th>
-                        <th scope="col">Kind</th>
+                        <th scope="col">Paper type</th>
                         <th scope="col">Period</th>
                         <th scope="col">Came from</th>
                         <th scope="col">Status</th>
@@ -709,14 +717,14 @@ export default async function Client({ params, searchParams }: { params: Promise
                                 </span>
                               </span>
                             </td>
-                            <td>{document.document_type}</td>
+                            <td>{paperType(document.document_type)}</td>
                             <td>{periodName(document.period_key) || <span className="hint">None</span>}</td>
                             <td className="hint">
                               <CameFrom origin={origins.get(document.id)!} why={!twin} />
                             </td>
                             <td>
                               <Badge tone={document.status === "to_check" ? "warn" : document.status === "missing" ? "late" : "done"}>
-                                {document.status === "to_check" ? "To check" : document.status === "missing" ? "Missing in the drive" : "Filed"}
+                                {document.status === "to_check" ? "To check" : document.status === "missing" ? "Missing in the drive" : "Saved"}
                               </Badge>
                             </td>
                             <td className="shrink">
@@ -751,7 +759,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                       action={
                         <form action={removeDocument}>
                           <input type="hidden" name="document" value={document.id} />
-                          <Pending className="b b-secondary" name="intent" value="restore">Put back</Pending>
+                          <Pending className="b b-secondary" name="intent" value="restore">Restore</Pending>
                         </form>
                       }
                     />
@@ -763,7 +771,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         )}
 
         {tab === "returns" && (showExtraction || showOutputs) && (
-          <LinkTabs kind="pills" label="Returns work" items={[["returns", "Returns"], ...(showExtraction ? [["extraction", "Figures"]] : []), ...(showOutputs ? [["outputs", "Prepared forms"]] : [])].map(([key, label]) => ({ href: `${base}?tab=${key}`, label, current: sub === key }))} />
+          <LinkTabs kind="pills" label="Parts of the Returns tab" items={[["returns", "Returns"], ...(showExtraction ? [["extraction", "Figures"]] : []), ...(showOutputs ? [["outputs", "Return files"]] : [])].map(([key, label]) => ({ href: `${base}?tab=${key}`, label, current: sub === key }))} />
         )}
         {sub === "returns" && (
           <>
@@ -839,19 +847,20 @@ export default async function Client({ params, searchParams }: { params: Promise
               ) : (
                 <p className="app-card-none">{show==="filed" ? "No filed returns on this page." : "No returns due. Add a number and choose its services on Overview."}</p>
               )}
-              {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="app-card-foot hint">Dates marked * are not yet confirmed by a CA against the official notification.</p>}
+              {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="app-card-foot hint">InboxCA has not yet checked dates marked * against the government notification.</p>}
             </Card>
             {!!needs2b.size && membership.may("portal_files", client.id) && <PortalDrop clientId={client.id} back="returns" />}
             {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns","returns")}
           </>
         )}
         {sub === "extraction" && <>{pan && <Card id="itr-return" title="Income tax return" Icon={FileText} kind="docs" end={<Link className="b b-secondary b-small" href={`${base}/itr`}>Open the return</Link>}><p className="app-card-none">ITR-1 to ITR-4, filled with the client&apos;s PAN and the figures InboxCA already holds for the year. The rest is listed for you to fill.</p></Card>}<PortalInput clientId={id} message={portal}/><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
+        {sub === "extraction" && <PurchaseMatch clientId={id} searchParams={searchParams}/>}
         {sub === "outputs" && <PreparedForms client={id} message={formMessage}/>}
 
         {tab === "notices" && (
           <>
             <p className="client-tools hint">
-              <span>Check a suggested date against the notice before confirming it.</span>
+              <span>Check each suggested date against the notice, then choose Mark date checked.</span>
               <Link href="/app/notices">All notices</Link>
             </p>
             <section aria-labelledby="client-notices">
@@ -873,15 +882,15 @@ export default async function Client({ params, searchParams }: { params: Promise
                           </td>
                           <td>{dueLabel(details.received_on)}</td>
                           <td>
-                            {details.action_date ? <>{dueLabel(details.action_date)}{confirmedBy.get(notice.id) && <span className="sub">Confirmed by {confirmedBy.get(notice.id)}</span>}</> : (
+                            {details.action_date ? <>{dueLabel(details.action_date)}{confirmedBy.get(notice.id) && <span className="sub">Checked by {confirmedBy.get(notice.id)}</span>}</> : (
                               <form action={manageNotice} className="cell-form">
                                 <input type="hidden" name="notice" value={notice.id} />
                                 <input type="hidden" name="back" value="client" />
-                                <Badge tone="warn">Review by {dueLabel(notice.due_on)}</Badge>
+                                <Badge tone="warn">Check by {dueLabel(notice.due_on)}</Badge>
                                 {!viewOnly && manage && <>
                                   <input type="date" name="date" defaultValue={details.suggested_date} aria-label={`Action date for ${details.notice_type}`} className="cell-input" required />
                                   <span className="hint need-date">Pick the date from the notice first</span>
-                                  <Pending className="b b-secondary" name="intent" value="confirm">Confirm date</Pending>
+                                  <Pending className="b b-secondary" name="intent" value="confirm">Mark date checked</Pending>
                                 </>}
                               </form>
                             )}
@@ -905,7 +914,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 </div>
               ) : (
                 <Empty Icon={Scale} kind="notice" title="No notices">
-                  <span>A notice that comes by email is filed here and shown on Today. Add one by hand if it came another way.</span>
+                  <span>A notice that comes by email is saved here and shown on Today. If it came another way, add it here.</span>
                   {!viewOnly && <Link className="b b-primary" href={`${base}?tab=notice`} scroll={false}>Add a notice</Link>}
                 </Empty>
               )}
@@ -918,7 +927,7 @@ export default async function Client({ params, searchParams }: { params: Promise
 
       <Presence>
       {panel === "numbers" && manage && (
-        <SidePanel key="numbers-panel" id="numbers-panel" title="Registrations" close={base}>
+        <SidePanel key="numbers-panel" id="numbers-panel" title="Tax numbers" close={base}>
           {alert}
           <ul className="client-rows">
             {numbers.map((registration) => (
@@ -935,13 +944,13 @@ export default async function Client({ params, searchParams }: { params: Promise
           <form action={manageClient} className="fields">
             {hidden("numbers")}
             <div>
-              <label htmlFor="number-kind">Number</label>
+              <label htmlFor="number-kind">Type</label>
               <select id="number-kind" name="kind" defaultValue="gstin">
                 {Object.entries(numberKinds).map(([value, { name }]) => <option key={value} value={value}>{name}</option>)}
               </select>
             </div>
             <div>
-              <label htmlFor="number-value">Value</label>
+              <label htmlFor="number-value">Number</label>
               <input id="number-value" name="number" required autoComplete="off" className="num" />
             </div>
             <Pending className="b b-primary" name="intent" value="add-number">Add number</Pending>
@@ -974,9 +983,9 @@ export default async function Client({ params, searchParams }: { params: Promise
         </SidePanel>
       )}
       {panel === "contacts" && (
-        <SidePanel key="contacts" id="contacts" title="Contact people" close={base}>
+        <SidePanel key="contacts" id="contacts" title="Contacts" close={base}>
           {alert}
-          <p className="hint">People who write for this client. InboxCA recognises their emails, and sends documents only to those allowed.</p>
+          <p className="hint">People who write for this client. InboxCA knows their emails belong to this client. It sends papers only to contacts with Receives papers ticked.</p>
           <ul className="client-rows">
             {contacts.map((contact) => (
               <li key={contact.contact_id}>
@@ -984,30 +993,28 @@ export default async function Client({ params, searchParams }: { params: Promise
                   <span className="name">{contact.name}</span>
                   <span className="sub">{contact.email}{contact.relation && `, ${contact.relation}`}</span>
                   {manage ? (
-                    <form key={`${contact.can_view_status}${contact.can_receive_documents}`} action={manageClient} className="cell-form contact-form">
+                    <form key={`${contact.can_receive_documents}`} action={manageClient} className="cell-form contact-form">
                       {hidden("contacts")}
                       <input type="hidden" name="contact" value={contact.contact_id} />
-                      <label className="check"><input type="checkbox" name="can_view_status" defaultChecked={contact.can_view_status} /> Sees work status</label>
-                      <label className="check"><input type="checkbox" name="can_receive_documents" defaultChecked={contact.can_receive_documents} /> Receives documents</label>
+                      <label className="check"><input type="checkbox" name="can_receive_documents" defaultChecked={contact.can_receive_documents} /> Receives papers</label>
                       <Pending className="b b-secondary" name="intent" value="contact-rights">Save</Pending>
                       <Pending className="b b-ghost" name="intent" value="unlink-contact">Remove</Pending>
                     </form>
                   ) : (
-                    <span className="sub">{[contact.can_view_status && "Sees work status", contact.can_receive_documents && "Receives documents"].filter(Boolean).join(", ")}</span>
+                    <span className="sub">{contact.can_receive_documents && "Receives papers"}</span>
                   )}
                 </span>
               </li>
             ))}
           </ul>
-          {!contacts.length && <p className="hint">No contact people yet.</p>}
+          {!contacts.length && <p className="hint">No contacts yet.</p>}
           {manage && (
             <form action={manageClient} className="fields">
               {hidden("contacts")}
               <div><label htmlFor="contact-name">Contact&apos;s name</label><input id="contact-name" name="contact_name" required maxLength={120} /></div>
               <div><label htmlFor="contact-email">Contact&apos;s email</label><input id="contact-email" name="contact_email" type="email" required /></div>
               <div><label htmlFor="contact-relation">Who they are, if known</label><input id="contact-relation" name="relation" maxLength={60} /></div>
-              <label className="check"><input type="checkbox" name="can_view_status" /> Sees work status</label>
-              <label className="check"><input type="checkbox" name="can_receive_documents" /> Receives documents</label>
+              <label className="check"><input type="checkbox" name="can_receive_documents" /> Receives papers</label>
               <Pending className="b b-primary" name="intent" value="add-contact">Add contact</Pending>
             </form>
           )}
@@ -1059,7 +1066,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             <div><label htmlFor="client-name">Name</label><input id="client-name" name="name" required defaultValue={client.name} /></div>
             <div><label htmlFor="client-email">Email</label><input id="client-email" name="email" type="email" defaultValue={email} /></div>
             <div>
-              <label htmlFor="client-kind">Kind</label>
+              <label htmlFor="client-kind">Client type</label>
               <select id="client-kind" name="kind" defaultValue={client.kind}>
                 {Object.entries(clientKinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
@@ -1164,7 +1171,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               <form action={saveChecklist} className="fields">
                 <input type="hidden" name="client" value={client.id} />
                 <div>
-                  <label htmlFor="ask-list">One paper on each line. It changes the list for every client of this kind; leave it empty to go back to the starting list.</label>
+                  <label htmlFor="ask-list">One paper on each line. This changes the list for every client of this type. Leave it empty to use the starting list again.</label>
                   <textarea id="ask-list" className="ask-list" name="items" rows={8} defaultValue={kindList.join("\n")} />
                 </div>
                 <Pending className="b b-secondary" type="submit">Save list</Pending>
@@ -1200,7 +1207,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           {paper.status === "to_check" && <p className="hint">{sameAs(paper) || `Waiting to be checked: ${origins.get(paper.id)?.why}`}.</p>}
           {canRename && !paper.prepared && (
             <>
-              <p className="hint">{paper.status === "to_check" ? "Check its type and period, then save to file it." : "The file moves to the folder and name these give, in your firm's drive."}</p>
+              <p className="hint">{paper.status === "to_check" ? "Check its paper type and period, then choose Save." : "When you save, InboxCA moves and renames the file in your firm's drive to match."}</p>
               <form action={manageDocument} className="fields">
                 <input type="hidden" name="document" value={paper.id} />
                 <DocumentFields type={paper.document_type} work={paper.work_type} period={paper.period_key} firmTypes={firmTypes} keep={manage} />
@@ -1231,7 +1238,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                     Send this paper
                   </Link>
                 ) : (
-                  <p className="hint">Add the client&apos;s email in Details, or a contact who may receive documents, to send files.</p>
+                  <p className="hint">To send this paper, add the client&apos;s email in Details, or add a contact with Receives papers ticked.</p>
                 )
               ) : (
                 askButton("send", "Ask to send", paper.id)
@@ -1242,7 +1249,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           {canRemove(paper.id) ? (
             <form action={removeDocument} className="form-row">
               <input type="hidden" name="document" value={paper.id} />
-              <p className="hint">It waits 30 days in the drive&apos;s Deleted and old versions folder and can be put back. {workspaceStore() ? "InboxCA also keeps its own locked copy for 30 days." : "InboxCA's own safety copy is not set up yet."}</p>
+              <p className="hint">It stays 30 days in the Removed papers folder of your firm&apos;s drive, and the owner can restore it. {workspaceStore() ? "InboxCA also keeps its own locked copy for 30 days." : "InboxCA's own safety copy is not set up yet."}</p>
               <Pending className="b b-secondary" name="intent" value="remove" aria-label={`Remove ${paper.name}`}>Remove</Pending>
             </form>
           ) : (
@@ -1253,7 +1260,8 @@ export default async function Client({ params, searchParams }: { params: Promise
               <summary>More</summary>
               <form key={paper.share_policy ?? "firm"} action={setPaperSharing} className="form-row">
                 <input type="hidden" name="document" value={paper.id} />
-                <div><label htmlFor="paper-sharing">Sending this paper</label><select id="paper-sharing" name="policy" defaultValue={paper.share_policy ?? ""}><option value="">Use the firm&apos;s choice</option><option value="auto">Routine paper</option><option value="approval">Ask before sending</option><option value="internal">Keep inside the firm</option></select></div>
+                <div><label htmlFor="paper-sharing">Sending this paper</label><select id="paper-sharing" name="policy" defaultValue={paper.share_policy ?? ""}><option value="">Use the firm&apos;s choice</option><option value="auto">Send without asking</option><option value="approval">Ask before sending</option><option value="internal">Keep inside the firm</option></select></div>
+                <p className="hint">With Ask before sending, a person who sends it from this page approves it by sending. When InboxCA sends it on its own or to many clients at once, it waits in the Inbox for approval.</p>
                 <Pending className="b b-secondary">Save sending choice</Pending>
               </form>
             </details>
@@ -1268,11 +1276,11 @@ export default async function Client({ params, searchParams }: { params: Promise
             {recipients.length === 1 ? (
               <>
                 <input type="hidden" name="to" value={recipients[0].value} />
-                <p className="send-ask">Send {paper.document_type} to {recipients[0].email}?</p>
+                <p className="send-ask">Send {paperType(paper.document_type)} to {recipients[0].email}?</p>
               </>
             ) : (
               <fieldset>
-                <legend className="send-ask">Send {paper.document_type} to</legend>
+                <legend className="send-ask">Send {paperType(paper.document_type)} to</legend>
                 {recipients.map((recipient, at) => (
                   <label key={recipient.value} className="check">
                     <input type="radio" name="to" value={recipient.value} defaultChecked={!at} />
@@ -1281,7 +1289,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 ))}
               </fieldset>
             )}
-            <p className="hint">{paper.name} goes from your firm&apos;s address as a secure link that works for 7 days and 5 downloads.</p>
+            <p className="hint">InboxCA emails {paper.name} from your firm email as a secure link. The link works for 7 days and up to 5 downloads.</p>
             <span className="form-row">
               <Pending className="b b-primary" type="submit">Send</Pending>
               <Link className="b b-secondary" href={`${base}?tab=documents&edit=${paper.id}`} scroll={false}>Back</Link>
@@ -1310,6 +1318,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           {done.length === 1 ? `${rule.get(done[0].code ?? "")?.name ?? done[0].code} ${periodLabel(rule.get(done[0].code ?? "")?.frequency ?? null, done[0].period_key)}` : `${done.length} returns`} {taskChanges[marked!]}.
         </Toast>
       )}
+      {changed && changes[changed] && <Toast>{changes[changed]}</Toast>}
     </div>
   );
 }
@@ -1320,10 +1329,10 @@ function DocumentFields({ type = "", work = "other", period = "", firmTypes = []
   return (
     <>
       <div>
-        <label htmlFor="file-type">Type</label>
+        <label htmlFor="file-type">Paper type</label>
         <select id="file-type" name="type" defaultValue={known ? type || "Document" : "Other"}>
           {[...documentTypes, ...firmTypes].map((choice) => (
-            <option key={choice}>{choice}</option>
+            <option key={choice} value={choice}>{paperType(choice)}</option>
           ))}
           <option value="Other">Other, named below</option>
         </select>
@@ -1340,7 +1349,7 @@ function DocumentFields({ type = "", work = "other", period = "", firmTypes = []
         )}
       </div>
       <div>
-        <label htmlFor="file-work">Work</label>
+        <label htmlFor="file-work">Type of work</label>
         <select id="file-work" name="work" defaultValue={work}>
           {Object.entries(workTypes).map(([value, label]) => (
             <option key={value} value={value}>
@@ -1403,7 +1412,7 @@ async function MailRows({ firm, clientName, mails, className }: { firm: string; 
             </Link>
           }
           meta={`From ${senders[at]}, ${mailTime(mail.received_at)}`}
-          status={waiting.has(mail.id) ? <Badge tone="warn">Needs a reply</Badge> : (mail.delivery as { ack?: string }).ack === "sent" ? <Badge tone="done">Replied</Badge> : null}
+          status={waiting.has(mail.id) ? <Badge tone="warn">Needs reply</Badge> : (mail.delivery as { ack?: string }).ack === "sent" ? <Badge tone="done">Replied</Badge> : null}
         />
       ))}
     </ul>
@@ -1425,7 +1434,7 @@ async function Activity({ client, people, undoable }: { client: string; people: 
           <li key={index}>
             <IconTile Icon={Icon} kind={kind} />
             <span className="grow">
-              <span className="name">{activityNames[entry.action] ?? "Client record changed"}</span>
+              <span className="name">{activityNames[entry.action] ?? "Client changed"}</span>
               {entry.renamed_from && <span className="sub">{entry.renamed_to ? `${entry.renamed_from} to ${entry.renamed_to}` : `Was ${entry.renamed_from}`}</span>}
               <span className="sub">{entry.actor_id ? people.find((person) => person.user_id === entry.actor_id)?.email ?? "Former team member" : "InboxCA"}, <time className="num" dateTime={entry.at}>{mailTime(entry.at)}</time></span>
             </span>

@@ -18,7 +18,8 @@ export const noticeFromMail: Handler = async (job) => {
   if (!event?.client_id || event.label !== "notice_received") return { done: true };
   if (mailbox?.status !== "connected") return {retry:"mail_not_connected",at:new Date(Date.now()+3600_000)};
   const { data: known } = await admin.from("tasks").select("id").eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1);
-  const queueFiles = () => admin.from("jobs").upsert({ firm_id: event.firm_id, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+  // Its attachments are filed, and the client gets the receipt by the firm's setting (Inbox, answered C).
+  const queueFiles = () => admin.from("jobs").upsert(["file_mail", "answer_mail"].map((kind) => ({ firm_id: event.firm_id, kind, entity_type: "email", entity_id: event.id, idempotency_key: `${kind}:${event.id}` })), { onConflict: "idempotency_key", ignoreDuplicates: true });
   if (known?.length) { await queueFiles(); return { done: true }; }
   const firm = event.firm_id;
   const read = await (await openMail(firm, mailbox)).readAttachments(event.provider_message_id);

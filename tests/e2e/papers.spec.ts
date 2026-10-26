@@ -130,26 +130,26 @@ test("papers chosen in Documents go from the firm's mailbox as secure links; pri
   await expect(row(itr)).toContainText("Will be emailed");
   await expect(row(balance)).toContainText("Will be emailed");
   await expect(row(noAddress)).toContainText("No email address");
-  await expect(row(unchecked)).toContainText("Not filed yet");
+  await expect(row(unchecked)).toContainText("Not ready to send: still in To check or missing in the drive");
   await expect(row(kept)).toContainText("Kept inside the firm");
   await preview.getByRole("button", { name: "Send 2 links" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "2 papers sent as secure links. 3 were skipped." })).toBeVisible();
+  await expect(owner.getByRole("status").filter({ hasText: "2 papers sent as secure links. 3 were not sent. Choose them again to see why." })).toBeVisible();
 
   // The routine paper opens at once; the private one only after a one-time code.
-  await expect.poll(async () => (await lastMail(routine.email))?.text ?? "").toContain(`shared ${itr.name} with you`);
+  await expect.poll(async () => (await lastMail(routine.email))?.text ?? "").toContain("shared ITR-V for FY 2025-26 with you");
   const plain = (await lastMail(routine.email))!;
   expect(plain.from?.text).toContain(office);
   expect(plain.text).toContain("The link works for 7 days and up to 5 downloads.");
   expect(plain.text).not.toContain("It is private");
   const open = plain.text!.match(/Download it here: (http\S+)/)![1];
   expect((await (await request.get(`${open}/file`)).body()).toString()).toContain("Invented ITR-V");
-  await expect.poll(async () => (await lastMail(secret.email))?.text ?? "").toContain(`shared ${balance.name} with you`);
+  await expect.poll(async () => (await lastMail(secret.email))?.text ?? "").toContain("shared Balance sheet for FY 2025-26 with you");
   const locked = (await lastMail(secret.email))!;
   expect(locked.from?.text).toContain(office);
-  expect(locked.text).toContain("It is private: the page emails a one-time code to this address before it opens.");
+  expect(locked.text).toContain("This paper is private. When you open the link, choose Email me a code.");
   const closed = await request.get(`${locked.text!.match(/Download it here: (http\S+)/)![1]}/file`);
   expect(closed.status()).toBe(403);
-  expect(await closed.text()).toBe("Enter the code from your email first.");
+  expect(await closed.text()).toContain("This paper is private. Enter the code from your email first.");
   // Each sent paper is logged; the skipped ones were never shared.
   expect((await logged("document.shared")).map((line) => line.entity_id).sort()).toEqual([itr.id, balance.id].sort());
   expect(await query(local.dbUrl, "select document_id from public.shares where document_id = any($1)", [[noAddress.id, unchecked.id, kept.id]])).toEqual([]);
@@ -179,18 +179,18 @@ test("Ask to send goes to the team's manager, who allows it once; the paper goes
   const panel = staff.getByRole("dialog", { name: itr.name });
   await expect(panel.getByRole("link", { name: "Send this paper" })).toHaveCount(0);
   await panel.getByRole("button", { name: `Ask to send: ${itr.name}` }).click();
-  await expect(staff.getByRole("status")).toContainText("Asked.");
+  await expect(staff.getByRole("status")).toContainText("Permission asked.");
   await staff.goto(panelOf(routine, itr));
   await expect(panel.getByText("Asked", { exact: true })).toBeVisible();
   const question = await asked("send");
   expect(question.details).toMatchObject({ by: staffId, route: "manager", document_id: itr.id });
 
   // The manager answers; only the owner could always allow it.
-  const dialog = await answer(manager, "send a file to the client");
-  await expect(dialog).toContainText(`The file: ${itr.name}`);
+  const dialog = await answer(manager, "send a paper to the client");
+  await expect(dialog).toContainText(`The paper: ${itr.name}`);
   await expect(dialog.getByRole("button", { name: "Always allow Sunil" })).toHaveCount(0);
   await dialog.getByRole("button", { name: "Allow once" }).click();
-  await expect(manager.getByRole("status").filter({ hasText: "Sunil may send a file to the client once, within an hour." })).toBeVisible();
+  await expect(manager.getByRole("status").filter({ hasText: "Sunil may send a paper to the client once, within an hour." })).toBeVisible();
 
   const sent = await mailCount(routine.email);
   await staff.goto(panelOf(routine, itr));
@@ -213,7 +213,7 @@ test("Ask to remove goes to the owner alone, who refuses, then allows it once; t
   const panel = staff.getByRole("dialog", { name: rent.name });
   await expect(panel.getByRole("button", { name: `Remove ${rent.name}` })).toHaveCount(0);
   await panel.getByRole("button", { name: `Ask to remove: ${rent.name}` }).click();
-  await expect(staff.getByRole("status")).toContainText("Asked.");
+  await expect(staff.getByRole("status")).toContainText("Permission asked.");
   const first = await asked("remove");
   expect(first.details).toMatchObject({ by: staffId, route: "owner", document_id: rent.id });
 
@@ -225,20 +225,20 @@ test("Ask to remove goes to the owner alone, who refuses, then allows it once; t
   expect(await status(first.id)).toBe("pending");
   expect((await logged("approval.denied")).map((line) => line.actor_id)).toEqual([managerId]);
 
-  const refuse = await answer(owner, "remove a file");
+  const refuse = await answer(owner, "remove a paper");
   await expect(refuse.getByRole("button", { name: "Always allow Sunil" })).toHaveCount(0);
   await refuse.getByRole("button", { name: "Refuse" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Refused. Sunil may not remove a file." })).toBeVisible();
+  await expect(owner.getByRole("status").filter({ hasText: "Refused. Sunil may not remove a paper." })).toBeVisible();
   expect(await status(first.id)).toBe("refused");
   await staff.goto(panelOf(routine, rent));
   await expect(panel.getByRole("button", { name: `Remove ${rent.name}` })).toHaveCount(0);
 
   // Asked again, the owner allows it once.
   await panel.getByRole("button", { name: `Ask to remove: ${rent.name}` }).click();
-  await expect(staff.getByRole("status")).toContainText("Asked.");
+  await expect(staff.getByRole("status")).toContainText("Permission asked.");
   const second = await asked("remove");
-  await (await answer(owner, "remove a file")).getByRole("button", { name: "Allow once" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Sunil may remove a file once, within an hour." })).toBeVisible();
+  await (await answer(owner, "remove a paper")).getByRole("button", { name: "Allow once" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Sunil may remove a paper once, within an hour." })).toBeVisible();
   await staff.goto(panelOf(routine, rent));
   await panel.getByRole("button", { name: `Remove ${rent.name}` }).click();
   await expect.poll(async () => (await query(local.dbUrl, "select status from public.documents where id = $1", [rent.id]))[0].status).toBe("deleted");
@@ -253,7 +253,7 @@ test("Ask to download expires unanswered; asked again, the manager allows one ma
   const viewer = `/app/files/${balance.id}/view`;
   await staff.goto(viewer);
   await staff.getByRole("button", { name: "Ask to download", exact: true }).click();
-  await expect(staff.getByRole("status")).toContainText("Asked.");
+  await expect(staff.getByRole("status")).toContainText("Permission asked.");
   const stale = await asked("download");
   expect(stale.details).toMatchObject({ by: staffId, route: "manager", document_id: balance.id });
   // Four hours on, nobody can answer it any more.
@@ -263,13 +263,13 @@ test("Ask to download expires unanswered; asked again, the manager allows one ma
 
   await staff.goto(viewer);
   await staff.getByRole("button", { name: "Ask to download", exact: true }).click();
-  await expect(staff.getByRole("status")).toContainText("Asked.");
+  await expect(staff.getByRole("status")).toContainText("Permission asked.");
   const question = await asked("download");
   expect(question.id).not.toBe(stale.id);
-  const dialog = await answer(manager, "download a file");
-  await expect(dialog).toContainText(`The file: ${balance.name}`);
+  const dialog = await answer(manager, "download a paper");
+  await expect(dialog).toContainText(`The paper: ${balance.name}`);
   await dialog.getByRole("button", { name: "Allow once" }).click();
-  await expect(manager.getByRole("status").filter({ hasText: "Sunil may download a file once, within an hour." })).toBeVisible();
+  await expect(manager.getByRole("status").filter({ hasText: "Sunil may download a paper once, within an hour." })).toBeVisible();
 
   await staff.goto(viewer);
   const [download] = await Promise.all([staff.waitForEvent("download"), staff.getByRole("button", { name: "Download these pages" }).click()]);

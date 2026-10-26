@@ -19,7 +19,7 @@ const money=(value:number)=>Math.round(value*100)/100;
 
 export function gstr3bJson(template:Template,period:string,gstin:string,registration:string,drafts:Map<string,Figure>[]) {
   chooseTemplate([template],"GSTR3B",period);
-  if(!isGstin(gstin) || !template.mappings.validator) throw new Error("Check the client's GST number and official form");
+  if(!isGstin(gstin) || !template.mappings.validator) throw new Error("Check the client's GSTIN and the official form");
   const {validate}=officialSchema(template.mappings.validator.file,template.mappings.validator.sha256);
   const home=gstin.slice(0,2),taxable=empty(),zero=empty(),nil=empty(),nonGst=empty(),registered={txval:0},unregistered=new Map<string,{txval:number;iamt:number}>();
   // Advances stopped flowing into 3.2 from the October 2025 tax period (GSTR-3B FAQ).

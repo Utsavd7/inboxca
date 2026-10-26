@@ -76,7 +76,7 @@ export function DiskUpload({ incoming }: { incoming?: string }) {
   return (
     <section className="panel" aria-labelledby="disk">
       <h2 id="disk">Files on a computer or hard disk</h2>
-      <p className="hint">Each file goes from this browser straight into your drive&apos;s Incoming folder, then you sort it like any folder above. For hundreds of GB, your drive&apos;s own desktop app is easier: it keeps copying by itself for days.</p>
+      <p className="hint">Each file goes from this computer into the Incoming folder in your drive. Then tick Incoming above to move the files into client folders. For a very large amount (hundreds of GB), use your drive&apos;s own computer app instead. It keeps copying on its own for days.</p>
       <div className="disk-pick">
         <label htmlFor="disk-folder">Choose a folder</label>
         <input id="disk-folder" type="file" multiple disabled={!!sending && !sending.finished} onChange={(event) => read(event.target.files)} {...{ webkitdirectory: "" }} />
@@ -92,14 +92,14 @@ export function DiskUpload({ incoming }: { incoming?: string }) {
                 <input type="radio" name="disk-scope" checked={scope === which} onChange={() => setScope(which)} />
                 {which === "final" ? "Final papers only (recommended)" : which === "year" ? "One year in full" : "Everything in this folder"}
                 <span className="hint">
-                  {list.length ? `${list.length} files, ${size(bytes)}${speed > 0 ? `, ${time(bytes / speed)}` : ""}` : "No files"}
+                  {list.length ? `${list.length} ${list.length === 1 ? "file" : "files"}, ${size(bytes)}${speed > 0 ? `, ${time(bytes / speed)}` : ""}` : "No files"}
                 </span>
               </label>
             );
           })}
           {years.length > 1 && (
             <label>
-              The year, for one year in full
+              Year (only for One year in full)
               <select value={chosenYear} onChange={(event) => setYear(event.target.value)}>
                 {years.map((choice) => (
                   <option key={choice}>{choice}</option>
@@ -107,7 +107,7 @@ export function DiskUpload({ incoming }: { incoming?: string }) {
               </select>
             </label>
           )}
-          {!!tooBig && <p className="hint">{tooBig} files are over 150 MB. Copy those with your drive&apos;s desktop app.</p>}
+          {!!tooBig && <p className="hint">{tooBig === 1 ? "1 file is" : `${tooBig} files are`} too large to send here (over 150 MB). Copy {tooBig === 1 ? "it" : "them"} with your drive&apos;s own computer app.</p>}
           <button className="b b-primary" type="button" disabled={!chosen.length || (!!sending && !sending.finished)} onClick={send}>
             {sending && !sending.finished ? "Sending" : "Send to your drive"}
           </button>
@@ -117,9 +117,9 @@ export function DiskUpload({ incoming }: { incoming?: string }) {
         <div className="disk-progress" role="status">
           <progress max={sending.total} value={sending.done} aria-label="Files sent" />
           <span>
-            {sending.finished ? `${sending.done - sending.failed.length - sending.taken.length} of ${sending.total} files are in your drive's Incoming folder.` : `${sending.done} of ${sending.total} files sent. ${sending.left} left.`}
+            {sending.finished ? `${sending.done - sending.failed.length - sending.taken.length} of ${sending.total} files are in your drive's Incoming folder.` : `${sending.done} of ${sending.total} files sent.${sending.left ? ` Time left: ${sending.left}.` : ""}`}
           </span>
-          {!!sending.taken.length && <span className="hint">{sending.taken.length} were left out: a different file by the same name is already in Incoming.</span>}
+          {!!sending.taken.length && <span className="hint">{sending.taken.length === 1 ? "1 was" : `${sending.taken.length} were`} not sent: Incoming already has a different file with the same name.</span>}
           {!!sending.failed.length && <span className="hint">{sending.failed.length} could not be sent. Choose the folder again to send only those.</span>}
           {sending.finished && incoming && (
             <Link className="b b-secondary" href={`/app/import?folder=${encodeURIComponent(incoming)}`}>

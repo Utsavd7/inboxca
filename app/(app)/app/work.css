@@ -1,0 +1,16 @@
+/* A person's list (work-rows.tsx), on Today and its full page: the client strong, why now in
+   muted words (red only when late or held up), the one button quiet until the row is pointed at
+   or reached with j and k. */
+.work-rows .app-row { font-size: 14px; }
+.work-rows .sub { display: block; }
+.work-client { margin-right: var(--s2); color: var(--ink); font-weight: 600; }
+.work-why { color: var(--ink-3); }
+.work-why.is-red { color: var(--late-fg); }
+.work-rows .row-end > .b, .work-rows .row-end > form .b { border-color: transparent; background: transparent; box-shadow: none; color: var(--accent); transition: background var(--fast) var(--out), border-color var(--fast) var(--out), color var(--fast) var(--out); }
+.work-rows .app-row:is(:hover, :focus-within) .row-end > .b, .work-rows .app-row:is(:hover, :focus-within) .row-end > form .b { border-color: var(--line-2); background: var(--surface); box-shadow: var(--shadow-button); color: var(--ink); }
+.work-rows .app-row:focus-within { background: var(--hover); }
+
+/* The full list: the filters, then the rows a page at a time. */
+.work-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-bottom: var(--s3); }
+.work-preview { margin: var(--s3) calc(var(--s4) * -1) 0; }
+.work-send { position: sticky; bottom: calc(var(--s4) * -1); margin: 0 calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }

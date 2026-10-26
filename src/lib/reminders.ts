@@ -1,6 +1,7 @@
 import { dueLabel, periodLabel } from "./calendar";
 import { checklists, workOfService } from "./checklists";
 import { periodName, workOfType } from "./documents";
+import { askName } from "./paper-type";
 import type { WorkType } from "./drive";
 
 // Smart reminders (PLAN.md 5.2, 5.2.1, D25): which of a firm's open returns are reminded
@@ -27,10 +28,10 @@ export type ReminderTask = {
 };
 export type Skip = "date_not_confirmed" | "paused" | "no_email" | "data_received" | "team_handling";
 export const skipReasons: Record<Skip, string> = {
-  date_not_confirmed: "Not reminded: the due date is not yet confirmed by a CA",
+  date_not_confirmed: "Not reminded: InboxCA has not yet checked this due date against the government notification",
   paused: "Not reminded: reminders are paused for this client",
   no_email: "Not reminded: the client has no email address",
-  data_received: "Not reminded: the client already sent files for this period",
+  data_received: "Not reminded: the client already sent papers for this period",
   team_handling: "Not reminded: your team is replying to this client",
 };
 
@@ -147,11 +148,11 @@ export function reminderEmail(client: string, firm: string, tasks: ReminderTask[
   };
   const lines = tasks.map((task) => `- ${task.rule.name} for ${periodLabel(task.rule.frequency, task.period_key)}: due ${when(task.due_on)}, on ${dueLabel(task.due_on)}`);
   const asks = [...new Set(tasks.flatMap((task) => checklists[workOfService(task.code) as WorkType] ?? []))];
-  const late = tasks.some((task) => daysUntil(task.due_on, today) < 0);
+  const late = tasks.filter((task) => daysUntil(task.due_on, today) < 0).length;
   const waiting = followUps.flatMap((followUp) => [
     followUp.first
-      ? `${followUp.returns?.length ? `To prepare your ${followUp.returns.join(" and ")}${followUp.period ? ` for ${periodName(followUp.period)}` : ""}, please` : "Please"} send these documents: ${followUp.missing.join(", ")}.`
-      : `We are still waiting for these documents${followUp.period ? ` for ${periodName(followUp.period)}` : ""}: ${followUp.missing.join(", ")}.`,
+      ? `${followUp.returns?.length ? `To prepare your ${followUp.returns.join(" and ")}${followUp.period ? ` for ${periodName(followUp.period)}` : ""}, please` : "Please"} send these documents: ${followUp.missing.map(askName).join(", ")}.`
+      : `We are still waiting for these documents${followUp.period ? ` for ${periodName(followUp.period)}` : ""}: ${followUp.missing.map(askName).join(", ")}.`,
     `Upload them here, no sign in needed: ${followUp.link}`,
     "",
   ]);
@@ -160,7 +161,7 @@ export function reminderEmail(client: string, firm: string, tasks: ReminderTask[
       ? followUps.every((followUp) => followUp.first) ? "Documents needed" : "Documents still needed"
       : tasks.length === 1
         ? `${late ? "Overdue" : "Reminder"}: ${tasks[0].rule.name} due ${dueLabel(tasks[0].due_on)}`
-        : `${late ? "Overdue returns" : "Returns due soon"}: ${tasks.length} returns`,
+        : late ? `Returns due: ${tasks.length} returns, ${late} overdue` : `Returns due soon: ${tasks.length} returns`,
     text: [
       `Dear ${client},`,
       "",
@@ -169,7 +170,7 @@ export function reminderEmail(client: string, firm: string, tasks: ReminderTask[
             `This is a reminder from ${firm} about:`,
             ...lines,
             "",
-            ...(asks.length ? [`If you have not sent them yet, please reply to this email with your ${asks.join(", ").toLowerCase()}.`, ""] : []),
+            ...(asks.length ? [`If you have not sent these papers yet, please reply to this email with them attached: ${asks.map(askName).join(", ")}.`, ""] : []),
           ]
         : []),
       ...waiting,

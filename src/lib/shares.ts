@@ -31,7 +31,7 @@ export async function sendShare(share: {
   const admin = supabaseAdmin();
   const id = share.waitingId ?? randomUUID();
   const [{ data: document, error: documentError }, { data: firm, error: firmError }, { data: existing, error: existingError }] = await Promise.all([
-    admin.from("documents").select("client_id,document_type,share_policy,status").eq("firm_id",share.firmId).eq("id",share.documentId).maybeSingle(),
+    admin.from("documents").select("client_id,document_type,share_policy,status,period_key").eq("firm_id",share.firmId).eq("id",share.documentId).maybeSingle(),
     admin.from("firms").select("settings").eq("id",share.firmId).single(),
     admin.from("shares").select("firm_id,document_id,status,delivery").eq("id",id).maybeSingle(),
   ]);
@@ -71,7 +71,7 @@ export async function sendShare(share: {
   if (saved.error) throw new Error("share_not_saved");
   if (!saved.data) return false;
   const link = `${process.env.APP_BASE_URL ?? ""}/s/${token}`;
-  const message=emailTemplates.paper(share.clientName,share.firmName,share.documentName,link,!!share.needsCode,!!share.inReplyTo);
+  const message=emailTemplates.paper(share.clientName,share.firmName,share.documentName,link,!!share.needsCode,!!share.inReplyTo,{type:document.document_type,period:document.period_key});
   const sent=await mailer.send(share.to,message.subject,message.text,messageId,share.inReplyTo);
   if (!sent) {
     if (mailer.waitUntil) {

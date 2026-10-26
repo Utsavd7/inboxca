@@ -18,6 +18,8 @@ import { paragraphs, sentKind, suggestPapers, whenRange, whens, type MailItem } 
 import { currentMember, myQuestions } from "@/src/lib/member";
 import { opensInMailbox } from "@/src/lib/mailbox";
 import { askedPaper } from "@/src/lib/records";
+import { answerEvent, draftAnswer, statusKind, type Delivery } from "@/src/jobs/answer-mail";
+import { answerOf, answerWords } from "@/src/lib/answers";
 import { awake, labels, replyReasons } from "@/src/lib/triage";
 import { suggestedReply, waitingWords } from "@/src/lib/team-replies";
 import { LinkTabs } from "../link-tabs";
@@ -25,12 +27,13 @@ import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { Avatar, Badge, Empty, PageHead, Row as ListRow, SidePanel, Toast } from "../ui";
 import { clientsOf, contactName, conversation } from "./conversation";
+import { manageAnswer } from "./actions";
 import { ComposeBox, InboxKeys, LinkBusy, Reading, ReplyBox } from "./inbox-client";
 import "./inbox.css";
 
 const PAGE = 30;
 const shows = { "": "All", reply: "Needs reply", mine: "Mine", in: "From clients", out: "Sent to clients" } as const;
-const statuses = { reply: "Needs reply", snoozed: "Snoozed", approval: "Waiting for approval", check: "To check", answered: "Answered by InboxCA", replied: "Answered by your team", notice: "Notice recorded", filed: "Papers saved", none: "No reply needed", reminder: "Reminder sent", team: "Sent by team" } as const;
+const statuses = { reply: "Needs reply", snoozed: "Snoozed", approval: "Waiting for approval", draft: "Reply ready to send", queued: "Sending soon", check: "To check", answered: "Answered by InboxCA", replied: "Answered by your team", notice: "Notice recorded", filed: "Papers saved", none: "Done", reminder: "Reminder sent", team: "Sent by team" } as const;
 const sentTags = { reminder: "Reminder sent", inboxca: "Sent by InboxCA", team: "Sent by team" } as const;
 type Tag = { text: string; tone: "warn" | "done" | "blue" | "late" | "" };
 // What InboxCA did with an email it read (email_outcomes, the most pressing first), in
@@ -38,15 +41,17 @@ type Tag = { text: string; tone: "warn" | "done" | "blue" | "late" | "" };
 const outcomeTags: Record<string, Tag> = {
   reply: { text: "Needs reply", tone: "warn" },
   approval: { text: "Waiting for approval", tone: "warn" },
+  draft: { text: "Reply ready", tone: "warn" },
   check: { text: "To check", tone: "warn" },
   unanswered: { text: "Not answered yet", tone: "blue" },
+  queued: { text: "Sending soon", tone: "blue" },
   answered: { text: "Answered by InboxCA", tone: "done" },
   replied: { text: "Answered by your team", tone: "done" },
   notice: { text: "Notice recorded", tone: "blue" },
   filed: { text: "Papers saved", tone: "done" },
-  none: { text: "No reply needed", tone: "" },
+  none: { text: "Done", tone: "" },
 };
-const outcomeKeys = ["reply", "snoozed", "approval", "check", "answered", "replied", "notice", "filed", "none"];
+const outcomeKeys = ["reply", "snoozed", "approval", "draft", "queued", "check", "answered", "replied", "notice", "filed", "none"];
 type Row = { key: string; href: string; dir: "in" | "out"; client: string; clientId: string | null; at: string; messageId: string; subject: string; snippet: string; tags: Tag[]; request?: string; assignee?: string };
 // What a Needs reply request keeps besides its status: snoozed until a day, and who answers
 // when a person chose (null for nobody).
@@ -61,7 +66,7 @@ const longTime = (at: string) => india(at, { day: "numeric", month: "short", hou
 const dayName = (day: string) => india(`${day}T12:00:00+05:30`, { weekday: "short", day: "numeric", month: "short" });
 const uuid = /^[0-9a-f-]{36}$/;
 
-type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "compose" | "approved" | "error" | "replied" | "written" | "unsent" | "answer" | "decided" | "cleared" | "confirm" | "file" | "snoozed" | "assigned" | "filed", string | undefined>;
+type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "compose" | "approved" | "error" | "replied" | "written" | "unsent" | "answer" | "decided" | "cleared" | "confirm" | "file" | "snoozed" | "assigned" | "filed" | "edit" | "went" | "stopped", string | undefined>;
 
 // What a slow part gives, once it has it, so the page around it shows at once (Suspense).
 async function Later({ children }: { children: Promise<React.ReactNode> }) {
@@ -129,6 +134,13 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   let pick = supabase.from("clients").select("id, name").is("archived_at", null).order("name").range(cpage * 8, cpage * 8 + 8);
   if (cq) pick = pick.ilike("name", `%${cq.replace(/[\\%_]/g, "\\$&")}%`);
   const owner = membership.role === "owner";
+  // InboxCA's answers that wait for a person (Ask me first) or go soon (Auto), oldest first,
+  // unless a person answers the email instead.
+  const answerList = supabase.from("email_events").select("id, label, delivery, clients(name)").eq("firm_id", firm).in("delivery->>ack", ["held", "queued", "sending", "ready"]).order("received_at").limit(20)
+    .then(async ({ data }) => {
+      const { data: taken } = data?.length ? await supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("entity_type", "email").in("entity_id", data.map((row) => row.id)) : { data: [] };
+      return (data ?? []).filter((row) => !taken?.some((ask) => ask.entity_id === row.id)).map((row) => ({ ...row, delivery: row.delivery as Delivery }));
+    });
   const [{ data: rows }, { count: needs }, { count: fromClients }, { data: pickList }, { data: waiting }, { data: toCheck }, { data: papers }, toAnswer, { data: people }, { data: accounts }, { data: decided }, { data: week }] = await Promise.all([
     wantIn && (!only || only.length) ? events.order("received_at", { ascending: false }).order("id").limit(q ? 500 : PAGE).overrideTypes<{ id: string; received_at: string; provider_message_id: string }[]>() : Promise.resolve({ data: [] as never[] }),
     needsCount,
@@ -150,7 +162,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       : Promise.resolve({ data: null }),
   ]);
   const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
-  // A question in words, with the person's name: "Sunil asks to upload a file".
+  // A question in words, with the person's name: "Sunil asks to upload a paper".
   const asking = (ask: { reason_code: string | null; details: unknown }) => {
     const details = ask.details as { by: string; until?: string };
     return { name: personName(emailOf.get(details.by)), what: ask.reason_code === "time" ? `work until ${details.until} today` : rightWords[ask.reason_code as Right] };
@@ -160,8 +172,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     ({
       "permission.allowed": details.right === "time" ? `gave ${personName(emailOf.get(details.for ?? ""))} more time` : `allowed ${personName(emailOf.get(details.for ?? ""))} once to ${rightWords[details.right as Right]}`,
       "permission.always": `always allowed ${personName(emailOf.get(details.for ?? ""))} to ${rightWords[details.right as Right]}`,
-      "device.approved": details.kind === "personal" ? "allowed a device away from the office" : details.kind === "office" ? "approved a PC that stays in the office" : "approved a laptop",
-      "office.confirm": "confirmed an office internet connection",
+      "device.approved": details.kind === "personal" ? "allowed a laptop away from the office" : details.kind === "office" ? "approved an office PC" : "approved a laptop",
+      "office.confirm": "approved an office internet connection",
       "office.today": "allowed a different internet connection for a day",
     })[action] ?? action;
   const approver = canManageClients(membership.role);
@@ -264,14 +276,17 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const here = href(sp.mail ? { mail: sp.mail } : sp.sent ? { sent: sp.sent } : {});
   const gmail = mailbox?.provider === "gmail" || opensInMailbox(((mailbox?.settings ?? {}) as { imap?: { host?: string } }).imap?.host ?? "");
   const errors: Record<string, string> = {
-    mailbox: "The email could not be sent. Check the firm's email in Settings, then try again.",
+    mailbox: "The email could not be sent. Try again in a minute. If it fails again, the owner needs to check the firm email in Settings.",
     reply: "Write the reply first.",
     write: "Write a subject and the email first.",
     to: "Choose who gets the email.",
-    needs: "Sending files to this client needs permission. Ask on the client's Documents tab.",
+    needs: "You need permission to send papers or files to this client. Ask for permission on the client's Documents tab.",
     upload: "Files can be up to 25 MB together.",
+    answer: "That reply is no longer waiting. Open the email to see where it stands.",
+    started: "It had already gone, so it could not be stopped.",
   };
-  const hasWait = !!toAnswer.length || !!papers?.length || !!toCheck?.length || !!week?.length;
+  const answers = await answerList;
+  const hasWait = !!toAnswer.length || !!papers?.length || !!answers.length || !!toCheck?.length || !!week?.length;
   const team = (people ?? []).filter((person) => person.status === "active").sort((a, b) => Number(b.user_id === userId) - Number(a.user_id === userId));
   // Mark all as done takes every email of the list that waits for a reply, after a preview
   // (not for a search, whose list is only what the mailbox found).
@@ -345,7 +360,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <form action={manageEmail}>
                 <input type="hidden" name="request" value={row.request} />
                 <input type="hidden" name="back" value={here} />
-                <Pending className="b b-secondary" name="intent" value="done" busy="Moving">No reply needed</Pending>
+                <Pending className="b b-secondary" name="intent" value="done" busy="Marking">Mark done</Pending>
               </form>
             )}
             {row.clientId && <Link className="b b-secondary" href={`/app/clients/${row.clientId}`}>Open client</Link>}
@@ -358,7 +373,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const filtered = Object.values(filters).some(Boolean) || !!before;
   const listed_ = listed.then(({ list, older, failed }) => (
     <>
-      {failed === "unreachable" && <p className="alert" role="alert">The firm&apos;s mailbox could not be reached just now, so subjects and text are missing. Try again in a minute.</p>}
+      {failed === "unreachable" && <p className="alert" role="alert">The firm email could not be reached just now, so subjects and text are missing. Try again in a minute.</p>}
       {list.length ? (
         listView(list, true, older)
       ) : q ? (
@@ -373,7 +388,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         </Empty>
       ) : (
         <Empty Icon={InboxIcon} kind="reply" title={filtered ? "No emails here" : "No client email yet"}>
-          <span>{filtered ? "Nothing matches these filters." : "New mail from your clients shows here, sorted."}</span>
+          <span>{filtered ? "Nothing matches these filters." : "New emails from your clients show here, sorted."}</span>
           {filtered && <Link className="b b-secondary" href="/app/inbox">Show all email</Link>}
         </Empty>
       )}
@@ -385,7 +400,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const open = await conversation(supabase, firm, { mail: sp.mail && uuid.test(sp.mail) ? sp.mail : undefined, sent: sp.mail ? undefined : sp.sent?.slice(0, 998) });
     if (!open) return <p className="ib-pick">This email is not available.</p>;
     const { event, opened } = open;
-    if (!opened) return <p className="ib-pick" role="alert">{open.error ? "The firm's mailbox could not be reached just now. Try again in a minute." : "This email is no longer in the firm's mailbox."}</p>;
+    if (!opened) return <p className="ib-pick" role="alert">{open.error ? "The firm email could not be reached just now. Try again in a minute." : "This email is no longer in the firm email account."}</p>;
     const clientId = open.client?.id ?? null;
     const request = event ? pending.get(event.id) : undefined;
     const inIds = open.messages.filter((message) => message.box === "inbox").map((message) => message.messageId);
@@ -402,7 +417,12 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       event ? supabase.from("tasks").select("id").eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1).maybeSingle() : Promise.resolve({ data: null }),
       event ? event.clients?.name ?? contactName(firm, event).then((name) => name || "A contact") : "",
     ]);
-    const outcome = what?.outcomes?.[0] ?? "none";
+    // InboxCA's answer shows on its own above, so the line says what else InboxCA did.
+    const outcomes = what?.outcomes ?? [];
+    const outcome = outcomes.find((key) => key !== "draft" && key !== "queued") ?? (outcomes.length ? "" : "none");
+    const { data: answerRow } = event && (outcomes.includes("draft") || outcomes.includes("queued")) ? await admin.from("email_events").select(answerEvent).eq("id", event.id).maybeSingle() : { data: null };
+    const drafted = answerRow ? await draftAnswer(admin, answerRow, !membership.viewOnlyUntil) : null;
+    const held = outcomes.includes("draft");
     const shared = sends?.find((share) => share.status === (outcome === "approval" ? "waiting" : "sent"));
     const eventOf = new Map(threadEvents?.map((row) => [row.provider_message_id, row.id]));
     const { data: saved } = threadEvents?.length
@@ -411,7 +431,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const order = ((drive?.settings ?? {}) as { folder_order?: FolderOrder }).folder_order ?? "year_client_work";
     const place = (doc: NonNullable<typeof saved>[number]) => folderFor(order, open.client?.name ?? "", { work: doc.work_type as never, period: doc.period_key, receivedAt: doc.received_at ?? "", toCheck: doc.status === "to_check" }).join(" / ");
     const kind = opened.box === "sent" ? sentKind(opened.messageId) : null;
-    const openTag: Tag | null = event ? outcomeTag(event.id, outcome) : kind ? { text: sentTags[kind], tone: "" } : null;
+    const openTag: Tag | null = event ? outcomeTag(event.id, outcomes[0]) : kind ? { text: sentTags[kind], tone: "" } : null;
     const asked = askedPaper(opened.subject, opened.text);
     const suggested = clientPapers ? suggestPapers(`${opened.subject}\n${opened.text}`, clientPapers, asked, [...documentTypes, ...((membership.settings.document_types ?? []) as string[])]).map((doc) => doc.id) : [];
     // Snooze and who answers, for an email that needs a reply.
@@ -425,11 +445,11 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       approval: { text: `InboxCA found ${shared?.documents?.name ?? "the paper"}. It goes to the client once someone approves it.`, link: paperLink },
       check: { text: "InboxCA saved its papers under To check. Check their type and period.", link: event.client_id ? [`/app/clients/${event.client_id}?tab=files`, "Check them"] : undefined },
       unanswered: { text: "The client asked for a paper. InboxCA has not sent it yet." },
-      answered: { text: shared ? `InboxCA sent ${shared.documents?.name ?? "the paper"} as a secure link.` : "InboxCA told the client their papers arrived.", link: paperLink },
+      answered: { text: shared ? `InboxCA sent ${shared.documents?.name ?? "the paper"} as a secure link.` : answerWords[answerOf(event.label) ?? "received"][1], link: paperLink },
       replied: { text: "Your team answered it." },
-      notice: { text: "InboxCA recorded the notice. Confirm its dates.", link: notice ? [`/app/notices?notice=${notice.id}`, "Open the notice"] : undefined },
-      filed: { text: `InboxCA filed ${filedHere === 1 ? "its paper" : `its ${filedHere} papers`} into ${open.client?.name ?? "the client"}'s folders.` },
-      none: { text: "No reply needed. Nothing waits for anyone." },
+      notice: { text: "InboxCA recorded the notice. Check its dates.", link: notice ? [`/app/notices?notice=${notice.id}`, "Open the notice"] : undefined },
+      filed: { text: `InboxCA saved ${filedHere === 1 ? "its paper" : `its ${filedHere} papers`} in ${open.client?.name ?? "the client"}'s folders.` },
+      none: { text: "Done. Nothing waits for anyone." },
     } as Record<string, { text: string; link?: [string, string] }>)[outcome];
     return (
       <ViewTransition enter="ib-in" exit="ib-out" default="none">
@@ -444,12 +464,12 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             {event && waitTag(event.id).map((tag) => <Badge key={tag.text} tone={tag.tone} plain={!tag.tone}>{tag.text}</Badge>)}
           </header>
           <div className="ib-actions">
-            {event?.client_id && connected && <a className="b b-secondary" href="#reply-text" title="Press r"><Reply size={16} aria-hidden />Reply<kbd className="kbd" aria-hidden>r</kbd></a>}
+            {event?.client_id && connected && <a className="b b-secondary" href={answerRow && held && sp.edit !== "answer" ? `${href({ mail: event.id, edit: "answer" })}#reply-text` : "#reply-text"} title="Press r"><Reply size={16} aria-hidden />Reply<kbd className="kbd" aria-hidden>r</kbd></a>}
             {request && (
               <form action={manageEmail}>
                 <input type="hidden" name="request" value={request.id} />
                 <input type="hidden" name="back" value={here} />
-                <Pending className="b b-secondary" name="intent" value="done" busy="Moving" data-key="e" title="Takes it out of Needs reply. Press e"><CheckCheck size={16} aria-hidden />No reply needed<kbd className="kbd" aria-hidden>e</kbd></Pending>
+                <Pending className="b b-secondary" name="intent" value="done" busy="Marking" data-key="e" title="Takes it out of Needs reply. Press e"><CheckCheck size={16} aria-hidden />Mark done<kbd className="kbd" aria-hidden>e</kbd></Pending>
               </form>
             )}
             {request && event && (snoozedTill(event.id) ? (
@@ -510,7 +530,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                 <Pending className="b b-secondary" name="intent" value="client">It is for this client</Pending>
               </form>
             )}
-            {event && !event.client_id && clientPicker(links?.length ? "Another client" : "File to a client", { ...filters, mail: event.id, file: "pick" }, (id) => href({ mail: event.id, file: id }), undefined, sp.file === "pick" && (!!cq || !!sp.cpage))}
+            {event && !event.client_id && clientPicker(links?.length ? "Save to another client" : "Save to a client", { ...filters, mail: event.id, file: "pick" }, (id) => href({ mail: event.id, file: id }), undefined, sp.file === "pick" && (!!cq || !!sp.cpage))}
             {event && (
               <span className="ib-inline ib-label">
                 <Badge plain>{labelTag(event.label).text}</Badge>
@@ -530,14 +550,14 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             {event && gmail && <a className="b b-ghost" href={`/app/inbox/${event.id}/open`} target="_blank" rel="noreferrer">Open in Gmail</a>}
           </div>
           {fileTo && event && (
-            <form action={manageEmail} className="ib-confirm" aria-label="File to a client">
+            <form action={manageEmail} className="ib-confirm" aria-label="Save to a client">
               <input type="hidden" name="email" value={event.id} />
               <input type="hidden" name="client" value={fileTo.id} />
               <input type="hidden" name="back" value={here} />
               <FolderInput size={16} aria-hidden />
-              <span className="grow">File this email to <strong>{fileTo.name}</strong>? Any papers in it are saved in the client&apos;s folder.</span>
+              <span className="grow">Save this email to <strong>{fileTo.name}</strong>? InboxCA saves any papers in it in the client&apos;s folder.</span>
               <Link className="b b-ghost" href={here} scroll={false}>Cancel</Link>
-              <Pending className="b b-primary" name="intent" value="file" busy="Filing">File to {fileTo.name}</Pending>
+              <Pending className="b b-primary" name="intent" value="file" busy="Saving">Save to {fileTo.name}</Pending>
             </form>
           )}
           {did && <p className="ib-note ib-did">{did.text}{did.link && <> <Link href={did.link[0]}>{did.link[1]}</Link></>}</p>}
@@ -575,14 +595,30 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               );
             })}
           </ol>
-          {event?.client_id && connected && (
+          {answerRow && (sp.edit !== "answer" || !held) ? (
+            <section className="ib-drafted" aria-label="InboxCA's reply">
+              <p className="ib-note">{held ? "InboxCA wrote this reply from your records. Check it, then send it or change it." : `InboxCA sends this reply at ${india((answerRow.delivery as Delivery).at ?? new Date().toISOString(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}. Undo stops it.`}</p>
+              {drafted && ("text" in drafted ? <pre className="ib-draft-text">{drafted.text}</pre> : "team" in drafted && <p>{replyReasons[drafted.team]}. It goes to Needs reply instead.</p>)}
+              <form action={manageAnswer} className="ib-reply-foot">
+                <input type="hidden" name="email" value={answerRow.id} />
+                <input type="hidden" name="back" value={here} />
+                {held ? (
+                  <>
+                    <Pending className="b b-ghost" name="intent" value="stop" busy="Stopping">Don&apos;t send</Pending>
+                    {drafted && "text" in drafted && <Link className="b b-secondary" href={`${href({ mail: answerRow.id, edit: "answer" })}#reply-text`} scroll={false}>Edit</Link>}
+                    <Pending className="b b-primary" name="intent" value="send" busy="Sending">Send</Pending>
+                  </>
+                ) : <Pending className="b b-secondary" name="intent" value="stop" busy="Stopping">Undo</Pending>}
+              </form>
+            </section>
+          ) : event?.client_id && connected && (
             // An email waiting for a person gets a reply suggested by why it waits; a paper not in the drive, the client's Ask for papers too.
             // Once it no longer waits, the box starts empty again.
-            <ReplyBox key={request?.id ?? "reply"} mail={event.id} papers={(clientPapers ?? []).map(({ id, name }) => ({ id, name }))} suggested={suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
+            <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : undefined} mail={event.id} papers={(clientPapers ?? []).map(({ id, name }) => ({ id, name }))} suggested={suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
               suggestion={request ? suggestedReply(request.reason_code, { name: sender || open.client?.name || "", client: open.client?.name ?? "", firm: membership.firmName, paper: asked }) : undefined}
               askPapers={request?.reason_code === "record_not_found" && !membership.viewOnlyUntil ? `/app/clients/${event.client_id}?tab=documents&ask=1` : undefined} />
           )}
-          {sp.filed && open.client && <Toast>Filed to {open.client.name}. Any papers in it go to the client&apos;s folder.</Toast>}
+          {sp.filed && open.client && <Toast>Saved to {open.client.name}. InboxCA is now saving any papers in it to the client&apos;s folder.</Toast>}
         </div>
       </ViewTransition>
     );
@@ -593,17 +629,17 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       <InboxKeys />
       <PageHead
         title="Inbox"
-        sub="Every email with your clients, both ways. Read live from the firm's mailbox; InboxCA keeps no copy."
+        sub="Every email to and from your clients. InboxCA reads them from the firm email each time and keeps no copy."
         actions={connected && <Link className="b b-primary" href={href({ compose: "1" })} scroll={false}><PenLine size={16} aria-hidden />Write to a client</Link>}
       />
       {sp.approved && <p className="notice" role="status">Sent. The client got a secure link to the paper, in reply to their email.</p>}
-      {sp.error && errors[sp.error] && !composing && <p className="alert" role="alert">{sp.error === "mailbox" && !sp.mail ? "The paper could not be sent. Check the firm's email in Settings, then try again." : errors[sp.error]}</p>}
+      {sp.error && errors[sp.error] && !composing && <p className="alert" role="alert">{sp.error === "mailbox" && !sp.mail ? "The paper could not be sent. Check that the client has an email address. If it fails again, the owner needs to check the firm email in Settings." : errors[sp.error]}</p>}
 
       {hasWait && (
         <div className="ib-wait">
           {!!toAnswer.length && (
             <section aria-labelledby="questions">
-              <h2 id="questions">Questions for you</h2>
+              <h2 id="questions">Permission requests for you</h2>
               <ul>
                 {toAnswer.map((ask) => {
                   const { name, what } = asking(ask);
@@ -644,12 +680,43 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               </ul>
             </section>
           )}
+          {!!answers.length && (
+            <section aria-labelledby="answers">
+              <h2 id="answers">Replies by InboxCA</h2>
+              <ul>
+                {answers.map((row) => {
+                  const kind = answerOf(row.label);
+                  const name = row.clients?.name ?? "";
+                  const ready = row.delivery.ack === "held";
+                  return (
+                    <li key={row.id}>
+                      <Avatar name={name} />
+                      <span className="grow">
+                        <strong>{name}</strong>
+                        <span className="ib-note">{kind && answerWords[kind][0]}{!ready && `. Goes at ${india(row.delivery.at ?? new Date().toISOString(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}`}</span>
+                      </span>
+                      <form action={manageAnswer}>
+                        <input type="hidden" name="email" value={row.id} />
+                        <input type="hidden" name="back" value={here} />
+                        {ready ? (
+                          <>
+                            <Link className="b b-ghost" href={`${href({ mail: row.id, edit: "answer" })}#reply-text`} scroll={false} aria-label={`Edit the reply to ${name}`}>Edit</Link>
+                            <Pending className="b b-secondary" name="intent" value="send" busy="Sending" aria-label={`Send the reply to ${name}`}>Send</Pending>
+                          </>
+                        ) : <Pending className="b b-secondary" name="intent" value="stop" busy="Stopping" aria-label={`Undo the reply to ${name}`}>Undo</Pending>}
+                      </form>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
           {!!toCheck?.length && (
             <section aria-labelledby="to-check">
-              <h2 id="to-check">Files to check</h2>
+              <h2 id="to-check">Papers to check</h2>
               <ul>
                 {toCheck.map((file) => (
-                  <li key={file.id} title="Saved in the client's To check folder. Confirm or correct their type and period.">
+                  <li key={file.id} title="Saved in the client's To check folder. Check their type and period, or correct them.">
                     <Avatar name={file.clients?.name ?? ""} />
                     <span className="grow">
                       <strong>{file.name}</strong>
@@ -710,7 +777,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         {!!clearable.length && (
           <Link className="b b-ghost" href={`${here}${here.includes("?") ? "&" : "?"}confirm=done`} scroll={false} title="Takes every email of this list out of Needs reply, after a check">
             <CheckCheck size={16} aria-hidden />
-            Mark all as done
+            Mark all done
             <LinkBusy />
           </Link>
         )}
@@ -725,7 +792,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         <div className="pane ib-list">
           {!connected ? (
             <Empty Icon={Mail} title="Connect the firm's email">
-              <span>New client mail shows here once the firm&apos;s mailbox is connected.</span>
+              <span>New client email shows here once the firm email is connected.</span>
               {owner && <Link className="b b-primary" href="/app/settings#mailbox">Connect email</Link>}
             </Empty>
           ) : (
@@ -744,7 +811,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
                   <span><kbd className="kbd">j</kbd> <kbd className="kbd">k</kbd> move</span>
                   <span><kbd className="kbd">Enter</kbd> opens</span>
                   <span><kbd className="kbd">r</kbd> reply</span>
-                  <span><kbd className="kbd">e</kbd> no reply needed</span>
+                  <span><kbd className="kbd">e</kbd> mark done</span>
                   <span><kbd className="kbd">h</kbd> snooze</span>
                   <span><kbd className="kbd">/</kbd> search</span>
                 </span>
@@ -786,7 +853,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         return (
           <SidePanel key="answer" id="answer-title" title={`${name} asks to ${what}${answering.clients?.name ? ` for ${answering.clients.name}` : ""}`} close={here}>
             <div className="ib-answer">
-              {file && <p>The file: <strong>{file}</strong></p>}
+              {file && <p>The paper: <strong>{file}</strong></p>}
               <p className="ib-note">{time ? "Allow today lets them keep working until then, today only." : "Allow once lets them do it one time, within an hour. Always allow lets them do it from now on, until you withdraw it in Settings."}</p>
               <form action={decidePermission} className="ib-inline">
                 <input type="hidden" name="request" value={answering.id} />
@@ -817,8 +884,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       })()}
       <Presence>
       {sp.confirm === "done" && !!clearable.length && (
-        <SidePanel key="done" id="done-title" title={`Mark ${clearable.length === 1 ? "1 email" : `${clearable.length} emails`} as done?`} close={here}>
-          <p className="hint">They leave Needs reply. Nobody is emailed, and Undo brings them back.</p>
+        <SidePanel key="done" id="done-title" title={`Mark ${clearable.length === 1 ? "1 email" : `${clearable.length} emails`} done?`} close={here}>
+          <p className="hint">They move out of Needs reply. No one gets an email. You can undo this.</p>
           <ul className="app-rows ib-preview">
             {/* Each email by its client and status at once, its subject once the mailbox answers. */}
             <Suspense fallback={clearable.map((row) => <ListRow key={row.key} lead={<Avatar name={row.client} />} title={row.client} meta={`Emailed ${shortTime(row.at, today)}`} status={<Badge tone={row.tags[0]?.tone} plain={!row.tags[0]?.tone}>{row.tags[0]?.text}</Badge>} />)}>
@@ -834,7 +901,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             <input type="hidden" name="back" value={here} />
             <Pending className="b b-primary" name="intent" value="done" busy="Marking">
               <CheckCheck size={16} aria-hidden />
-              Mark {clearable.length === 1 ? "1 email" : `${clearable.length} emails`} as done
+              Mark {clearable.length === 1 ? "1 email" : `${clearable.length} emails`} done
             </Pending>
           </form>
         </SidePanel>
@@ -850,7 +917,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             </form>
           }
         >
-          {cleared.length === 1 ? "Moved out of Needs reply." : `${cleared.length} emails moved out of Needs reply.`}
+          {cleared.length === 1 ? "Marked done." : `${cleared.length} emails marked done.`}
         </Toast>
       )}
       {sp.snoozed && (touched?.details as Ask | undefined)?.snooze && (
@@ -867,8 +934,10 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         </Toast>
       )}
       {sp.assigned && touched && <Toast>{(touched.details as Ask).assignee ? `Assigned to ${whoWords((touched.details as Ask).assignee!)}.` : "Nobody is assigned now."}</Toast>}
-      {sp.replied && <Toast>Reply sent{sp.unsent ? `. ${sp.unsent} ${sp.unsent === "1" ? "paper" : "papers"} could not go; send from the client's Documents tab.` : ""}</Toast>}
-      {sp.written && <Toast>Email sent{sp.unsent ? `. ${sp.unsent} ${sp.unsent === "1" ? "paper" : "papers"} could not go; send from the client's Documents tab.` : ""}</Toast>}
+      {sp.went && <Toast>Sending the reply now.</Toast>}
+      {sp.stopped && <Toast>{statusKind(sp.stopped) ? "Not sent. The email waits in Needs reply." : "Not sent."}</Toast>}
+      {sp.replied && <Toast>Reply sent{sp.unsent ? `. ${sp.unsent === "1" ? "1 paper was" : `${sp.unsent} papers were`} not sent. Send ${sp.unsent === "1" ? "it" : "them"} from the client's Documents tab.` : "."}</Toast>}
+      {sp.written && <Toast>Email sent{sp.unsent ? `. ${sp.unsent === "1" ? "1 paper was" : `${sp.unsent} papers were`} not sent. Send ${sp.unsent === "1" ? "it" : "them"} from the client's Documents tab.` : "."}</Toast>}
     </div>
   );
 }

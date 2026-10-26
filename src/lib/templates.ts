@@ -12,7 +12,7 @@ export const version=(a:string,b:string)=>{const left=a.split(".").map(Number),r
 // A retired form still works for its own period. Today's date never chooses a form.
 export function chooseTemplate(templates:Template[],form:string,period:string,asked?:string,reason?:string) {
   const itr=/^ITR[1-6]$/.test(form);
-  if(!(itr ? /^20\d{2}$/ : /^20\d{2}-(0[1-9]|1[0-2])$/).test(period)) throw new Error(itr ? "Choose the assessment year." : "Choose the work's month.");
+  if(!(itr ? /^20\d{2}$/ : /^20\d{2}-(0[1-9]|1[0-2])$/).test(period)) throw new Error(itr ? "Choose the assessment year." : "Choose the return's month.");
   const day=itr ? `${period}-04-01` : `${period}-01`,choices=templates.map((item)=>templateSchema.parse(item)).filter((item)=>item.form_code===form && item.status!=="draft" && item.valid_from && item.valid_from<=day && (!item.valid_until || day<item.valid_until)).sort((a,b)=>version(a.version,b.version));
   const usual=choices.find((item)=>item.status==="active") ?? choices[0];
   const selected=asked ? choices.find((item)=>item.version===asked) : usual;

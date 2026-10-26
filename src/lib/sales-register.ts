@@ -15,7 +15,7 @@ export function exactMapping(rows:string[][]):SalesMapping|undefined {
     if(matches.length===1) {const [section,{headings}]=matches[0];return {section:section as SalesSection,header,headings:rows[header],columns:headings.map((name)=>rows[header].findIndex((value)=>normal(value)===normal(name)))};}
   }
 }
-function date(value:string) {
+export function date(value:string) {
   if(/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   if(/^\d{5}(\.0+)?$/.test(value)) return new Date((Number(value)-25569)*86400_000).toISOString().slice(0,10);
   const parts=/^(\d{1,2})[-/ ]([A-Za-z]{3}|\d{1,2})[-/ ](\d{4})$/.exec(value);

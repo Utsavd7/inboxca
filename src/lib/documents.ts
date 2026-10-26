@@ -10,6 +10,7 @@ const types: [RegExp, string, WorkType][] = [
   [/itr[\s-]?v\b/, "ITR-V", "income_tax"],
   [/acknowledg/, "Acknowledgement", "other"],
   [/audit report|\b3c[abd]\b/, "Audit report", "tax_audit"],
+  [/computation/, "Computation", "income_tax"],
   [/gstr[\s-]?2b/, "GSTR-2B", "gst"],
   [/gstr[\s-]?2a/, "GSTR-2A", "gst"],
   [/gstr[\s-]?3b/, "GSTR-3B", "gst"],
@@ -45,7 +46,7 @@ const types: [RegExp, string, WorkType][] = [
 
 // Final papers: what clients ask for in later years, and what the first import brings by
 // default (PLAN.md 5.16).
-export const finalPapers = new Set(["ITR-V", "Acknowledgement", "Audit report", "GSTR-1", "GSTR-3B", "Notice", "Order", "Certificate", "Challan", "Form 16", "Form 130", "Balance sheet"]);
+export const finalPapers = new Set(["ITR-V", "Acknowledgement", "Audit report", "GSTR-1", "GSTR-3B", "Notice", "Order", "Certificate", "Challan", "Form 16", "Form 130", "Balance sheet", "Computation"]);
 const labelWork: Partial<Record<Label, WorkType>> = { data_gst: "gst", data_income_tax: "income_tax", data_tax_audit: "tax_audit" };
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const monthNames = months.map((month) => month[0].toUpperCase() + month.slice(1));
@@ -88,6 +89,11 @@ export const gstinFor = (work: string, gstins: string[], chosen?: string | null)
 // a Form 16 for each employer and often its Part A and Part B apart, and Form 26AS as both
 // its PDF and its text file.
 const manyAPeriod = new Set(["Acknowledgement", "Challan", "Notice", "Order", "Certificate", "Document", "Form 16", "Form 130", "Form 26AS"]);
+// Bills, statements, slips and the like also come many to a period, each file its own paper; only a
+// spreadsheet of them (a register InboxCA reads for a return) replaces an earlier spreadsheet, so a
+// corrected register is read once and never added to the one it corrects.
+const loose = new Set(["Purchase bills", "Sales bills", "E-way bills", "Invoices", "Salary slips", "Rent receipts", "Investment proofs", "Bank statement", "Interest certificate", "Capital gains statement", "Ledger"]);
+const spreadsheet = (name: string) => /\.(xlsx?|csv)$/i.test(name);
 
 // Versions (decided 24 Oct 2026): of a client's filed papers of one type, period and GSTIN,
 // the latest to arrive is current and the others are kept as earlier versions, their files
@@ -102,9 +108,16 @@ export async function settleVersions(
     const { count } = await admin.from("client_registrations").select("id", { count: "exact", head: true }).eq("client_id", paper.client_id).eq("kind", "gstin");
     if ((count ?? 0) > 1) return;
   }
-  const group = admin.from("documents").select("id, status").eq("client_id", paper.client_id).eq("document_type", paper.document_type).eq("period_key", paper.period_key).in("status", ["filed", "earlier"]).is("prepared", null);
+  const group = admin.from("documents").select("id, status, name").eq("client_id", paper.client_id).eq("document_type", paper.document_type).eq("period_key", paper.period_key).in("status", ["filed", "earlier"]).is("prepared", null);
   const { data } = await (paper.registration_id ? group.eq("registration_id", paper.registration_id) : group.is("registration_id", null)).order("received_at", { ascending: false }).order("id", { ascending: false });
-  const [current, ...older] = data ?? [];
+  let rows = data ?? [];
+  if (loose.has(paper.document_type)) {
+    // A bill the earlier rule took for an old version is its own paper again.
+    const back = rows.filter((row) => !spreadsheet(row.name) && row.status === "earlier").map((row) => row.id);
+    if (back.length) await admin.from("documents").update({ status: "filed" }).in("id", back);
+    rows = rows.filter((row) => spreadsheet(row.name));
+  }
+  const [current, ...older] = rows;
   if (current?.status === "earlier") await admin.from("documents").update({ status: "filed" }).eq("id", current.id);
   const earlier = older.filter((other) => other.status === "filed").map((other) => other.id);
   if (earlier.length) await admin.from("documents").update({ status: "earlier" }).in("id", earlier);

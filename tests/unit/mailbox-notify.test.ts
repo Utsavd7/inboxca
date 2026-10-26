@@ -12,7 +12,7 @@ it("tells the active owner, and skips an alert that reconnect already made obsol
   const job={entity_id:"mailbox"} as Job,tools={markSending:async()=>{}};
   await mailboxReconnect(job,tools);
   expect(mock.filters).toEqual(expect.arrayContaining(["id:mailbox","firm_id:firm","role:owner","status:active"]));
-  expect(mock.notify).toHaveBeenCalledExactlyOnceWith(["owner"],{title:"Connect your firm's email again",body:"InboxCA could not sign in. Replies will wait until you connect it again.",url:"/app/settings#mailbox"});
+  expect(mock.notify).toHaveBeenCalledExactlyOnceWith(["owner"],{title:"Connect the firm email again",body:"InboxCA cannot sign in to your firm email. It cannot read or send emails until you connect it again.",url:"/app/settings#mailbox"});
   mock.status="connected";
   await mailboxReconnect(job,tools);
   expect(mock.notify).toHaveBeenCalledTimes(1);

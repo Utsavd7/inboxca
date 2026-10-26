@@ -19,7 +19,7 @@ it("notifies the owner, partners and client team only once, without naming the c
   await noticeAlert(job, { markSending: async () => {} });
   await noticeAlert(job, { markSending: async () => {} });
   expect(state.notify).toHaveBeenCalledTimes(1);
-  expect(state.notify).toHaveBeenCalledWith(["owner","partner","team"], { title: "A notice needs attention", body: "A notice's review deadline is within 3 days.", url: "/app/notices" });
+  expect(state.notify).toHaveBeenCalledWith(["owner","partner","team"], { title: "A notice needs attention", body: "A notice still needs its action date checked. Your firm's deadline for this is within 3 days.", url: "/app/notices" });
 });
 
 it("retries a failed recipient lookup without consuming the stage", async () => {
