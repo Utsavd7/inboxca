@@ -131,7 +131,7 @@ test("Today's late returns: the month's numbers, a preview before reminding, Mar
   const preview = owner.getByRole("dialog", { name: "Remind 2 late clients" });
   await expect(preview.getByRole("listitem").filter({ hasText: "Patel Textiles" })).toContainText("Will be emailed");
   await expect(preview.getByRole("listitem").filter({ hasText: "Anand Late" })).toContainText("No email address");
-  await expect(preview.getByRole("alert")).toContainText("The firm email is not connected");
+  await expect(preview.getByRole("alert")).toContainText("Connect the firm's email");
   await expect(preview.getByRole("button", { name: "Send 1 reminder" })).toBeDisabled();
   await preview.getByRole("link", { name: "Cancel" }).click();
   await expect(preview).toHaveCount(0);

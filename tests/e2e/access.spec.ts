@@ -105,7 +105,7 @@ test("staff are told People and Settings are not theirs, and only see a notice's
     const [{ id: notice }] = await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, due_on, details) values ($1, $2, 'notice', '2026-10-22', '{"authority":"income_tax","notice_type":"Invented notice","reference":"","received_on":"2026-10-20"}') returning id`, [firm.firmId, client]);
     await partner.goto(`/app/notices?notice=${notice}`);
     const panel = partner.getByRole("dialog", { name: "Invented notice" });
-    await expect(panel).toContainText("The owner, a partner or a manager confirms the date");
+    await expect(panel).toContainText("The owner, a partner or a manager checks the date");
     await expect(panel.getByRole("button", { name: "Mark date checked" })).toHaveCount(0);
     await expect(panel.getByRole("button", { name: "Mark replied" })).toHaveCount(0);
 

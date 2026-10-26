@@ -161,7 +161,7 @@ test("Remote friendly lets staff in only on approved devices, with the 2 step co
   await owner.goto("/app/settings?group=access#office");
   await expect(owner.locator("#office").getByText("Approved computers only is on")).toBeAttached();
   await expect(owner.getByRole("button", { name: "Approve as office PC" })).toHaveCount(0);
-  await owner.getByRole("button", { name: "Allow", exact: true }).click();
+  await owner.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(owner.getByRole("heading", { name: "PCs waiting for approval" })).toHaveCount(0);
   expect(await query(local.dbUrl, "select kind from public.devices where firm_id = $1 order by kind", [firm.firmId])).toEqual([{ kind: "laptop" }, { kind: "office" }]);
   await laptop.goto("/app/clients");

@@ -551,7 +551,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
   await owner.goto("/app/settings#permissions");
-  const standing = owner.getByRole("listitem").filter({ hasText: /may upload files.*without asking/ });
+  const standing = owner.getByRole("listitem").filter({ hasText: /may upload papers.*without asking/ });
   await standing.getByRole("button", { name: "Withdraw" }).click();
   await expect(standing).toHaveCount(0);
   await person.goto(files);
@@ -599,10 +599,10 @@ test("away from the office, the owner allows a staff member's own device to view
 
   await owner.reload();
   const asked = owner.getByRole("listitem").filter({ hasText: "asks to use it away from the office" });
-  await asked.getByRole("button", { name: "Allow" }).click();
+  await asked.getByRole("button", { name: "Approve" }).click();
   await expect(asked).toHaveCount(0);
   await home.goto("/app/clients");
-  await expect(home.getByRole("status").filter({ hasText: "this device only views" })).toBeVisible();
+  await expect(home.getByRole("status").filter({ hasText: "can only view papers until" })).toBeVisible();
   await home.getByRole("link", { name: `Ask Client ${tag}` }).click();
   await home.goto(`${home.url().split("?")[0]}?tab=files`);
   await expect(home.getByRole("button", { name: "Ask to upload" })).toHaveCount(0);
@@ -937,7 +937,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(owner.getByText("View only. Your email and the time are shown across every page.")).toBeVisible();
   // A screenshot key blanks the pages for a moment, and each try is logged.
   await owner.keyboard.press("PrintScreen");
-  await expect(owner.getByText("The document is hidden for a moment.")).toBeVisible();
+  await expect(owner.getByText("The pages are hidden. They show again in a few seconds, or when you come back to this window.")).toBeVisible();
   await expect.poll(async () => (await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and action = 'capture_attempt'", [firm.firmId]))[0].n).toBe(1);
   const raw = owner.url().replace(/\/view$/, "");
   const file = await owner.request.get(raw);
@@ -990,16 +990,17 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await rows.filter({ hasText: "Same file as" }).getByRole("link", { name: /^Check/ }).click();
   await expect(owner.getByRole("dialog")).toContainText("InboxCA also keeps its own locked copy for 30 days.");
   await owner.getByRole("dialog").getByRole("button", { name: /^Remove/ }).click();
-  await expect(owner.getByRole("status")).toContainText("waits 30 days");
+  await expect(owner.getByRole("status")).toContainText("Removed papers folder of your firm's drive for 30 days");
   const removedFile = path.join(drive, "Removed papers", `${mailClient} - Purchase bills - Sep 2026.pdf`);
   expect(await readFile(removedFile, "utf8")).toBe("%PDF-1.4 invented purchase bills");
   await expect(rows).toHaveCount(2);
   // InboxCA's own safety copy is sealed with the firm's key. With the Deleted folder emptied
-  // in the drive, Put back brings the file back from that copy.
+  // in the drive, Restore brings the file back from that copy.
   const [{ id: removedId }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1 and status = 'deleted' and name = $2", [firm.firmId, path.basename(removedFile)]);
   expect((await readFile(path.join(TEST_WORKSPACE, "safety", firm.firmId, removedId))).includes("invented purchase bills")).toBe(false);
   await unlink(removedFile);
   await owner.getByRole("button", { name: "Restore" }).first().click();
+  await expect(owner.getByRole("status")).toContainText("Restored ");
   await expect(rows).toHaveCount(3);
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
   const [putBack] = await query(local.dbUrl, "select drive_file_id from public.documents where id = $1", [removedId]);
@@ -1046,7 +1047,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(visitor.getByRole("region", { name: "Progress" })).toContainText("1 of 2 papers received");
   await owner.reload();
   await expect(owner.getByRole("list", { name: "Papers asked for" })).toContainText("1 of 2 received");
-  await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Filed");
+  await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Saved");
   await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Sent by the client through their upload link, ");
   // The team checks what arrived. Ask again clears an item, so the client's link asks for it once more.
   // Several files chosen together all arrive before the request closes.
@@ -1215,11 +1216,11 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, $3, '2026-09', (now() at time zone 'Asia/Kolkata')::date + 3)", [firm.firmId, clientId, code]);
   await owner.goto("/app/settings?group=reminders");
   await owner.getByLabel("Email clients before their returns are due").check();
-  await owner.getByLabel("Reply to clients when their files arrive, saying what was received").check();
+  await owner.getByLabel("Reply to clients when their papers arrive, saying what was received").check();
   await owner.getByLabel("1 day before", { exact: true }).uncheck();
   await owner.getByRole("button", { name: "Save reminders" }).click();
   await expect(owner.getByLabel("1 day before", { exact: true })).not.toBeChecked();
-  await expect(owner.getByLabel("Reply to clients when their files arrive, saying what was received")).toBeChecked();
+  await expect(owner.getByLabel("Reply to clients when their papers arrive, saying what was received")).toBeChecked();
   // Files that arrive now get a short reply saying what was received.
   await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "August sales", text: "Attached.", attachments: [{ filename: "sales_bills_aug_2026.pdf", content: "%PDF-1.4 invented sales" }] });
   await pollFirmMail(request, firm.firmId);
@@ -1514,10 +1515,10 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     // With a trusted PC present, three confirmation taps trigger the suggestion.
     await query(local.dbUrl, "update public.devices set key_id='test-key',key_public='test-public' where id=(select id from public.devices where firm_id=$1 limit 1)", [batch.firmId]);
     await boss.reload();
-    await expect(boss.getByText("ask your internet provider for a fixed address")).toHaveCount(0);
+    await expect(boss.getByText("ask your internet provider for a fixed internet address")).toHaveCount(0);
     for (const ipv4 of ["203.0.113.71", "203.0.113.72", "203.0.113.73"]) await query(local.dbUrl, "select public.office_control($1,$2,'here',connection=>$3)", [batch.firmId, batch.ownerId, { ipv4 }]);
     await boss.reload();
-    await expect(boss.getByText("ask your internet provider for a fixed address")).toBeVisible();
+    await expect(boss.getByText("ask your internet provider for a fixed internet address")).toBeVisible();
   } finally {
     // A context the test already closed is gone; closing it again is not a failure.
     for (const context of contexts) await context.close().catch(() => {});
