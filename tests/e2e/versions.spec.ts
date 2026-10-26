@@ -50,8 +50,8 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     const rows = page.locator("section[aria-labelledby=files] tbody tr");
     const upload = async (content: string, gstin?: string) => {
       await page.getByRole("link", { name: "Upload papers" }).click();
-      await page.getByLabel("Files", { exact: true }).setInputFiles({ name: "bills.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
-      await page.getByLabel("Type", { exact: true }).selectOption("Purchase bills");
+      await page.getByLabel("Files", { exact: true }).setInputFiles({ name: "gstr3b.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
+      await page.getByLabel("Type", { exact: true }).selectOption("GSTR-3B");
       await page.getByLabel("Work", { exact: true }).selectOption("gst");
       await page.getByLabel("Period", { exact: true }).selectOption({ label: "Sep 2026" });
       if (gstin) await page.getByLabel("GSTIN, for GST papers").selectOption({ label: gstin });
@@ -61,11 +61,11 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Choose the GSTIN this GST paper is for.");
     await page.goto(`/app/clients/${client}?tab=documents`);
     await upload("Invented purchase bills, first copy", "24AAACS1234A1Z5");
-    await expect(page.getByRole("status")).toContainText(`Saved as ${name} - Purchase bills - Sep 2026.pdf`);
+    await expect(page.getByRole("status")).toContainText(`Saved as ${name} - GSTR-3B - Sep 2026.pdf`);
     await upload("Invented purchase bills, corrected copy", "24AAACS1234A1Z5");
     await expect(page.getByRole("status")).toContainText("Saved as");
     // One row for the paper; the first copy is listed under Earlier versions, and both files stay in the drive.
-    await expect(rows.filter({ hasText: "Purchase bills" })).toHaveCount(1);
+    await expect(rows.filter({ hasText: "GSTR-3B" })).toHaveCount(1);
     const papers = await query(local.dbUrl, "select name, status, registration_id from public.documents where client_id = $1 order by received_at", [client]);
     expect(papers.map((row) => [row.status, row.registration_id])).toEqual([["earlier", gstins[0]], ["filed", gstins[0]]]);
     expect((await readdir(path.join(TEST_DRIVE, "InboxCA", "FY 2026-27", name, "GST"))).sort()).toEqual(papers.map((row) => row.name).sort());
@@ -76,7 +76,7 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     await page.goto("/app/documents?year=all");
     const list = page.getByRole("region", { name: "Papers" });
     await expect(list.getByRole("row")).toHaveCount(2);
-    await list.getByRole("link", { name: /Purchase bills/ }).click();
+    await list.getByRole("link", { name: /GSTR-3B/ }).click();
     await expect(page.getByRole("complementary", { name: "Paper" })).toContainText("24AAACS1234A1Z5");
 
     // Asking for papers starts from the list for a business, each paper once, the usual five
@@ -97,16 +97,17 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     const link = (await page.locator(".link-once").textContent())!;
     const visitor = await (await browser.newContext()).newPage();
     await visitor.goto(link);
-    for (const [content, received] of [["Invented sales bills", "Received: 1 file"], ["Invented sales bills, corrected", "Received: 2 files"]]) {
+    for (const [content, received] of [["Invented sales bills", "Received: 1 file"], ["More invented sales bills", "Received: 2 files"]]) {
       const sales = visitor.getByRole("listitem").filter({ hasText: "Sales bills" });
       // A paper already received offers Add more in place of the large button.
       await sales.getByLabel(/^Add (more for )?Sales bills/).setInputFiles({ name: "sales.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
       await expect(sales).toContainText(received);
     }
     await visitor.close();
-    expect((await query(local.dbUrl, "select status, registration_id from public.documents where client_id = $1 and document_type = 'Sales bills' order by received_at", [client])).map((row) => [row.status, row.registration_id])).toEqual([["earlier", gstins[1]], ["filed", gstins[1]]]);
+    expect((await query(local.dbUrl, "select status, registration_id from public.documents where client_id = $1 and document_type = 'Sales bills' order by received_at", [client])).map((row) => [row.status, row.registration_id])).toEqual([["filed", gstins[1]], ["filed", gstins[1]]]);
+    // Bills come as many files a month, so both are kept as papers, not one as an earlier version.
     await page.goto(`/app/clients/${client}?tab=documents`);
-    await expect(rows.filter({ hasText: "Sales bills" })).toHaveCount(1);
+    await expect(rows.filter({ hasText: "Sales bills" })).toHaveCount(2);
 
     // The firm changes its own list for businesses; an empty list goes back to the starting one.
     await page.goto(`/app/clients/${client}?tab=documents&ask=1`);
