@@ -721,7 +721,7 @@ export async function checkFigures(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const { data: item } = await supabase.from("requests").select("id, client_id").eq("firm_id", membership.firmId).eq("kind", "alert").eq("entity_type", "papers_in").eq("entity_id", String(form.get("request") ?? "")).maybeSingle();
-  if (!item?.client_id) redirect("/app");
+  if (!item?.client_id || !(canManageClients(membership.role) || (await supabase.rpc("looks_after", { target_firm: membership.firmId, client: item.client_id })).data)) redirect("/app");
   const { data: seen } = await supabaseAdmin().from("requests").update({ status: "done" }).eq("id", item.id).eq("status", "pending").select("id").maybeSingle();
   if (seen) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.changed", entity_type: "request", entity_id: item.id });
   revalidatePath("/app", "layout");
