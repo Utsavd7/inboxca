@@ -1,4 +1,5 @@
 "use server";
+import {randomUUID} from "node:crypto";
 import {redirect} from "next/navigation";
 import {revalidatePath} from "next/cache";
 import {z} from "zod";
@@ -59,6 +60,29 @@ export async function fillNow(_:FillState,form:FormData):Promise<FillState> {
     id=await savePrepared(requestFor(context,work.drafts),context.userId,context.permission,undefined,true);
   } catch(error) {return {error:error instanceof Error && error.name==="Error" ? error.message : "The return could not be filled. Try again in a moment."};}
   revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
+}
+
+// Fill all, from the full list (/app/work) after its preview: InboxCA fills every GSTR-1 and
+// GSTR-3B due in the next 7 days that this person may fill, as it fills them by itself before
+// the due date (public.queue_fills picks them; one fill a return, none twice). Every draft still
+// waits for its checks. The fills start in 20 seconds, so Undo can stop them.
+export async function fillAll() {
+  const {supabase,membership}=await currentWriter();
+  if(!membership) redirect("/app");
+  const batch=randomUUID(),{data,error}=await supabase.rpc("queue_fills",{target_firm:membership.firmId,batch});
+  const asked=data?.[0];
+  if(error || !asked) redirect("/app/work?show=returns&error=fill");
+  if(!asked.queued) redirect("/app/work?show=returns&error=fill_none");
+  redirect(`/app/work?show=returns&filling=${asked.queued}&clients=${asked.clients}&batch=${batch}&job=${asked.first_job}`);
+}
+
+// Undo on its toast: the whole batch stops while none of it has started (public.stop_fills).
+export async function stopFills(form:FormData) {
+  const {supabase,membership}=await currentWriter();
+  const batch=z.uuid().safeParse(form.get("batch")),job=z.coerce.number().int().positive().safeParse(form.get("job"));
+  if(!membership || !batch.success || !job.success) redirect("/app");
+  const {data}=await supabase.rpc("stop_fills",{target_firm:membership.firmId,batch:batch.data,first_job:job.data});
+  redirect(data ? "/app/work?show=returns&stopped=fill" : "/app/work?show=returns&error=fill_started");
 }
 
 export async function decideForm(form:FormData) {

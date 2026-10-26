@@ -826,6 +826,11 @@ isOneToOne: false
 "drive_year_bytes":
 { Args: { "target_firm": string }; Returns: number
                            },
+"due_fills":
+{ Args: { "target_firm": string }; Returns: {
+              "client": string,"client_name": string,"code": string,"due_on": string,"filling": boolean,"missing": string,"open": number,"period_key": string,"ready": boolean,"stage": string,"task": string,"wrong": number
+            }[]
+                           },
 "due_soon":
 { Args: { "target_firm": string }; Returns: {
               "clients": number,"code": string,"due_on": string,"filed": number
@@ -966,6 +971,11 @@ isOneToOne: false
               "client_id": string,"client_name": string,"details": Json,"id": string,"kind": string
             }[]
                            },
+"queue_fills":
+{ Args: { "batch": string,"target_firm": string }; Returns: {
+              "clients": number,"first_job": number,"queued": number
+            }[]
+                           },
 "rate_limit":
 { Args: { "bucket": string,"most": number,"seconds": number }; Returns: boolean
                            },
@@ -1033,6 +1043,9 @@ isOneToOne: false
                            },
 "sign_up_firm":
 { Args: { "accepted": Json,"firm_name": string,"owner": string,"state": string }; Returns: string
+                           },
+"stop_fills":
+{ Args: { "batch": string,"first_job": number,"target_firm": string }; Returns: number
                            },
 "take_form_download":
 { Args: { "person": string,"ticket": string,"token_hash": string }; Returns: string

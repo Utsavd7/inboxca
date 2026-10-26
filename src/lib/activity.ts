@@ -14,6 +14,7 @@ export const activityNames: Record<string, string> = {
   "reminder.sent": "Reminder sent", "email.changed": "Email label corrected",
   "email.acknowledged": "Files received reply sent", "request.changed": "Request updated", "request.receipt_sent": "Receipt emailed for uploaded papers",
   "email.replied": "Reply sent", "email.written": "Email written to the client",
+  "fills.asked": "Fill asked for returns due in the next 7 days", "fills.stopped": "Fill stopped before it started",
   "document.added": "Filing record added", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added",
 };
 
@@ -54,6 +55,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "share.code_sent": [], "share.approved": [], "share.refused": [], "bulk_send.asked": ["clients", "type", "period"],
   "request.created": ["auto"], "request.phoned": [], "request.receipt_sent": [], "import.started": ["files", "scope"], "import.finished": ["files"], "import.undo_asked": [], "import.undone": [],
   "email.acknowledged": ["template"], "email.replied": ["files", "papers"], "email.written": ["to", "files", "papers"],
+  "fills.asked": ["returns", "clients", "batch"], "fills.stopped": ["returns", "batch"],
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"],
   "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state"], "dataset.edit_saved": ["dataset", "line"],
   "dataset.changed": ["dataset", "revision", "line", "state", "before", "after", "reason_enc", "registration", "entered", "zeroed"], // before, after and reason encrypted
