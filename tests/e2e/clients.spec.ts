@@ -43,9 +43,10 @@ test("a client added with only a GSTIN gets its PAN too, and opens with both", a
 
 test("services on a client's GSTIN give it its due dates", async () => {
   await owner.getByRole("link", { name: "Change services" }).click();
-  // A plain business is offered a non-audit ITR on its PAN, not a tax audit.
+  // A plain business is offered the 31 August ITR on its PAN, not the 31 July one or a tax audit.
   const pan = owner.getByRole("dialog", { name: "Services" }).getByRole("listitem").filter({ hasText: "PAN" });
-  await expect(pan.getByLabel("ITR (non-audit)")).toBeVisible();
+  await expect(pan.getByLabel("ITR (business, no audit)")).toBeVisible();
+  await expect(pan.getByLabel("ITR (no business, no audit)")).toHaveCount(0);
   await expect(pan.getByLabel("Tax audit report")).toHaveCount(0);
   const gstin = owner.getByRole("dialog", { name: "Services" }).getByRole("listitem").filter({ hasText: "GSTIN" });
   await gstin.getByLabel("GSTR-1 (monthly)").check();
