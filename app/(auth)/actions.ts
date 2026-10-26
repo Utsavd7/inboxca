@@ -4,13 +4,14 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { log } from "@/src/lib/logger";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
-import { chosenFirm, officeDeviceAccess } from "@/src/lib/office";
+import { chosenFirm } from "@/src/lib/office";
 import { withinLimit } from "@/src/lib/rate-limit";
-import { recoveryDigest, SEEN_COOKIE, tellOwnerOnRepeat } from "@/src/lib/session";
+import { recoveryDigest, SEEN_COOKIE } from "@/src/lib/session";
+import { afterFirstStep, isProvider, oneSession, providers, readyProviders } from "@/src/lib/sign-in";
 import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
 
-// Sign in: an email code first, then a code from an authenticator app (PLAN.md 4.4).
-// Nobody can sign up here: people are added by their firm's owner or at payment.
+// Sign in: an email code, or Google or Microsoft, first; then a code from an authenticator
+// app (PLAN.md 4.4).
 
 export type CodeState = { step: "email" | "code"; email?: string; error?: string };
 
@@ -53,26 +54,24 @@ export async function verifyCode(_prev: CodeState, form: FormData): Promise<Code
   if (error)
     return { step: "code", email, error: "That code did not work. Check it, or ask for a new one." };
   if (before.session) await supabaseAdmin().auth.admin.signOut(before.session.access_token, "local");
-  // The email code alone only on an approved PC on the office connection (D41), never on
-  // Remote friendly's approved devices anywhere.
-  const office = data.user ? await officeDeviceAccess(data.user.id) : null;
-  if (data.user && office?.approved && !office.anywhere) {
-    await oneSession(supabase, data.user.id, email);
-    redirect("/app");
-  }
-  redirect("/sign-in/two-step");
+  redirect(data.user ? await afterFirstStep(supabase, data.user.id, email) : "/sign-in/two-step");
 }
 
-// Under Office only a finished sign in ends the person's other sessions (PLAN.md 5.17.4 #39):
-// a shared login or a second PC stops working at once, and repeats tell the owner.
-async function oneSession(supabase: Awaited<ReturnType<typeof supabaseServer>>, userId: string, email: string) {
-  const { data: ended } = await supabase.rpc("end_other_sessions");
-  if (!ended) return;
-  const admin = supabaseAdmin();
-  const member = await chosenFirm((await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
-  if (!member) return;
-  await admin.from("activity_log").insert({ firm_id: member.firm_id, actor_id: userId, action: "session.ended_other", entity_type: "user", entity_id: userId, details: { ended } });
-  await tellOwnerOnRepeat(member.firm_id, userId, email, "session.ended_other", "parallel");
+// Continue with Google or Microsoft, by Supabase Auth: the PKCE verifier waits in a cookie
+// for /auth/callback, which carries on as after the email code.
+export async function continueWith(form: FormData) {
+  const provider = form.get("provider");
+  if (!isProvider(provider) || !readyProviders().includes(provider)) redirect("/sign-in");
+  const origin = (await headers()).get("origin") ?? process.env.APP_BASE_URL ?? "";
+  const { data, error } = await (await supabaseServer()).auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: `${origin}/auth/callback?via=${provider}`, scopes: providers[provider].scopes },
+  });
+  if (error || !data.url) {
+    log.warn("sign_in.provider_start_failed", { provider, status: error?.status });
+    redirect(`/sign-in?reason=provider&via=${provider}`);
+  }
+  redirect(data.url);
 }
 
 export type Enrollment = { factorId: string; qr: string; secret: string } | { error: string };

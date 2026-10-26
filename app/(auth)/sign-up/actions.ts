@@ -1,9 +1,11 @@
 "use server";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { dpaUpdated, legalUpdated } from "@/content/legal";
 import { log } from "@/src/lib/logger";
 import { withinLimit } from "@/src/lib/rate-limit";
+import { firmlessAccount } from "@/src/lib/sign-in";
 import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
 import { states } from "./states";
 
@@ -19,17 +21,13 @@ export async function signUp(_prev: SignUpState, form: FormData): Promise<SignUp
   const fail = (error: string) => ({ error, fields: { firm: name, email, state } });
   if (!name || name.length > 200) return fail("Enter your firm's name.");
   if (!z.email().safeParse(email).success) return fail("Enter a valid email address.");
-  if (!states.some(([code]) => code === state)) return fail("Choose your firm's state.");
-  if (form.get("accept") !== "on")
-    return fail("Tick the box to accept the terms, privacy notice and DPA.");
+  const wrong = detailsProblem(state, form);
+  if (wrong) return fail(wrong);
 
   // The code this sends counts towards the address's sign in codes, whether it has an account or not.
   if (!(await withinLimit("code", email))) return fail("Too many codes asked for this address. Try again in an hour.");
   const admin = supabaseAdmin();
-  // A public form that makes sign ins and sends email: at most 30 new firms an hour in all.
-  const { count } = await admin.from("activity_log").select("at", { count: "exact", head: true })
-    .eq("action", "firm.signed_up").gte("at", new Date(Date.now() - 3_600_000).toISOString());
-  if ((count ?? 0) >= 30) return fail("Sign up is busy right now. Try again in an hour.");
+  if (await busy()) return fail("Sign up is busy right now. Try again in an hour.");
   const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true });
   // An address that already has an account gets an ordinary sign in code, so this page never
   // tells a visitor which addresses have accounts.
@@ -48,6 +46,43 @@ export async function signUp(_prev: SignUpState, form: FormData): Promise<SignUp
   }
 
   return sendCode(email);
+}
+
+// After Google or Microsoft: a signed in person in no firm yet sets one up as its owner, with
+// the address the provider confirmed, then sets up the 2 step code.
+export async function setUpFirm(_prev: SignUpState, form: FormData): Promise<SignUpState> {
+  const account = await firmlessAccount();
+  if (!account) redirect("/sign-in");
+  const name = String(form.get("firm") ?? "").trim();
+  const state = String(form.get("state") ?? "");
+  const fail = (error: string) => ({ error, fields: { firm: name, state } });
+  if (!name || name.length > 200) return fail("Enter your firm's name.");
+  const wrong = detailsProblem(state, form);
+  if (wrong) return fail(wrong);
+  if (await busy()) return fail("Sign up is busy right now. Try again in an hour.");
+  const { error } = await supabaseAdmin().rpc("sign_up_firm", {
+    firm_name: name,
+    state,
+    owner: account.id,
+    accepted: { terms: legalUpdated, privacy: legalUpdated, dpa: dpaUpdated },
+  });
+  if (error) {
+    log.error("sign_up.firm_failed", { code: error.code });
+    return fail("Sign up did not work. Try again in a minute.");
+  }
+  redirect("/sign-in/two-step");
+}
+
+function detailsProblem(state: string, form: FormData) {
+  if (!states.some(([code]) => code === state)) return "Choose your firm's state.";
+  if (form.get("accept") !== "on") return "Tick the box to accept the terms, privacy notice and DPA.";
+}
+
+// A public form that makes firms and sends email: at most 30 new firms an hour in all.
+async function busy() {
+  const { count } = await supabaseAdmin().from("activity_log").select("at", { count: "exact", head: true })
+    .eq("action", "firm.signed_up").gte("at", new Date(Date.now() - 3_600_000).toISOString());
+  return (count ?? 0) >= 30;
 }
 
 async function sendCode(email: string): Promise<SignUpState> {
