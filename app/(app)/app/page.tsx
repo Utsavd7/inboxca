@@ -17,6 +17,7 @@ import { currentMember, myQuestions } from "@/src/lib/member";
 import { formName, preparedSchema } from "@/src/lib/prepared";
 import { personName, roleNames } from "@/src/lib/roles";
 import { OfficePanel } from "./office-panel";
+import { GovLine } from "./gov-line";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { awake, replyReasons } from "@/src/lib/triage";
 import { activityNames } from "@/src/lib/activity";
@@ -120,6 +121,9 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         }
       />
 
+      <Suspense fallback={null}>
+        <GovLine />
+      </Suspense>
       <Suspense fallback={null}>
         <PushLine data={data} />
       </Suspense>

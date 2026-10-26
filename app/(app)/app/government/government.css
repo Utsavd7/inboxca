@@ -1,0 +1,12 @@
+/* New from the government: Today's one line (on .today-line) and the full list. A long
+   official title shows two lines here; the whole of it is in the tooltip and on the page. */
+.gov-lines { margin: 0; padding: 0; list-style: none; }
+.gov-lines:empty { display: none; }
+.today-line.gov-line { flex-wrap: nowrap; }
+.gov-line > svg { flex: none; color: var(--accent); }
+.gov-line p { display: -webkit-box; flex: 1 1 0; min-width: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.gov-line .form-row { flex: none; flex-wrap: nowrap; }
+@media (max-width: 640px) { .today-line.gov-line { flex-wrap: wrap; } .gov-line p { flex-basis: calc(100% - var(--s6)); } }
+.gov-line strong { color: var(--ink); }
+.gov-line .form-row a:not(.b) { color: var(--ink-2); white-space: nowrap; }
+.gov-list .app-row :is(strong, .sub) { overflow-wrap: anywhere; white-space: normal; }

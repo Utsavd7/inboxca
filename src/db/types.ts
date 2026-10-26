@@ -345,13 +345,13 @@ isOneToOne: true
                   ]
                 },"firm_members": {
                   Row: {
-                    "access": Json | null,"branch_id": string | null,"firm_id": string,"role": string,"status": string,"team_id": string | null,"user_id": string
+                    "access": Json | null,"branch_id": string | null,"dismissed": (string)[],"firm_id": string,"role": string,"status": string,"team_id": string | null,"user_id": string
                   }
                   Insert: {
-                    "access"?: Json | null,"branch_id"?: string | null,"firm_id": string,"role": string,"status"?: string,"team_id"?: string | null,"user_id": string
+                    "access"?: Json | null,"branch_id"?: string | null,"dismissed"?: (string)[],"firm_id": string,"role": string,"status"?: string,"team_id"?: string | null,"user_id": string
                   }
                   Update: {
-                    "access"?: Json | null,"branch_id"?: string | null,"firm_id"?: string,"role"?: string,"status"?: string,"team_id"?: string | null,"user_id"?: string
+                    "access"?: Json | null,"branch_id"?: string | null,"dismissed"?: (string)[],"firm_id"?: string,"role"?: string,"status"?: string,"team_id"?: string | null,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -667,6 +667,9 @@ isOneToOne: false
 "admin_email_incident":
 { Args: { "incident": string }; Returns: number
                            },
+"admin_end_template":
+{ Args: { "form": string,"link": string,"until": string,"ver": string }; Returns: boolean
+                           },
 "admin_failed_jobs":
 { Args: Record<PropertyKey, never>; Returns: {
               "at": string,"attempts": number,"error": string,"firm": string,"id": number,"kind": string
@@ -684,6 +687,9 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "emailed": number,"ended_at": string,"id": string,"level": string,"parts": (string)[],"started_at": string,"title": string,"updates": Json
             }[]
+                           },
+"admin_note_update":
+{ Args: { "item": string,"keeps"?: string,"uses"?: string }; Returns: boolean
                            },
 "admin_office":
 { Args: { "days": number }; Returns: {
@@ -814,6 +820,9 @@ isOneToOne: false
 "delete_firm":
 { Args: { "target_firm": string }; Returns: boolean
                            },
+"dismiss_gov_update":
+{ Args: { "item": string,"target_firm": string }; Returns: boolean
+                           },
 "drive_year_bytes":
 { Args: { "target_firm": string }; Returns: number
                            },
@@ -858,6 +867,9 @@ isOneToOne: false
                            },
 "form_ready":
 { Args: { "target": string }; Returns: boolean
+                           },
+"gov_updates":
+{ Args: { "target_firm": string }; Returns: Json
                            },
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean

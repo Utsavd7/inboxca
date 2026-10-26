@@ -2,7 +2,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
-import { dueLabel } from "@/src/lib/calendar";
+import { addDays, dueLabel } from "@/src/lib/calendar";
+import { firmWith, govItems, indiaToday } from "./gov-items";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase");
@@ -328,5 +329,45 @@ test("an admin records an extension a CA then checks, saves the office threshold
     await admin.close();
     await owner.close();
     await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
+  }
+});
+
+test("an admin adds the one line firms see under a new government item, and ends a form version only with its official link", async ({ browser, baseURL }) => {
+  test.setTimeout(90_000);
+  const id = randomBytes(8).toString("hex"), title = `Invented GSTR-1 workbook ${id}`, form = `ZZ${id.slice(0, 8).toUpperCase()}`;
+  // Seen yesterday, so another test's items from today stay first on Today.
+  await govItems.add([{ id, source: "gst_offline_tools", area: "gst", title, link: "https://www.gst.gov.in/download/returns", seen: addDays(indiaToday(), -1) }]);
+  await query(local.dbUrl, "insert into public.templates (form_code, version, valid_from, status, source, mappings) values ($1, '1.0', '2026-04-01', 'active', $2, $3)", [form, { file: "invented.xlsx", url: "https://tutorial.gst.gov.in/invented.zip" }, { format: "xlsx" }]);
+  const admin = await signedInAdmin(browser, baseURL!);
+  const owner = await firmWith(browser, "gstin", ["GSTR1_M"]);
+  const logged = async (action: string) => query(local.dbUrl, "select details from public.activity_log where action = $1 and actor_id = $2", [action, admin.id]);
+  try {
+    const row = admin.page.getByRole("region", { name: "New from the government" }).locator(".admin-row").filter({ hasText: title });
+    await expect(row).toContainText("GST. GST portal offline tools, seen on");
+    await row.getByRole("button", { name: "Save the line" }).click();
+    await expect(admin.page.locator("p.alert")).toContainText("Give either the date");
+    await row.getByLabel("InboxCA uses this from").fill("2026-11-01");
+    await row.getByRole("button", { name: "Save the line" }).click();
+    await expect(row).toContainText("InboxCA uses this from 1 Nov 2026.");
+    expect(await logged("admin.update_noted")).toEqual([{ details: { item: id, uses: "2026-11-01", keeps: null } }]);
+    // The firm sees the line with the item, in the government's own words.
+    await owner.page.goto("/app/government");
+    await expect(owner.page.locator(".app-row").filter({ hasText: title })).toContainText(`GST portal offline tools, seen on ${dueLabel(addDays(indiaToday(), -1))}. InboxCA uses this from 1 Nov 2026.`);
+
+    // A version ends only with the official notice that discontinues it.
+    await admin.page.getByRole("link", { name: "Form versions" }).click();
+    const version = admin.page.locator(".admin-row").filter({ hasText: `${form} version 1.0` });
+    await expect(version).toContainText("For Apr 2026 onwards.");
+    await version.getByLabel("Last period").fill("2026-09");
+    await version.getByLabel("Official link that discontinues it").fill("https://cbic-gst.gov.in/invented-notice.pdf");
+    await version.getByRole("button", { name: "Set last period" }).click();
+    await expect(version).toContainText("For Apr 2026 to Sep 2026.");
+    await expect(version.getByRole("link", { name: "The notice that ends it" })).toHaveAttribute("href", "https://cbic-gst.gov.in/invented-notice.pdf");
+    expect(await logged("admin.template_ended")).toEqual([{ details: { form, version: "1.0", until: "2026-10-01", link: "https://cbic-gst.gov.in/invented-notice.pdf" } }]);
+  } finally {
+    await govItems.remove([id]);
+    await query(local.dbUrl, "delete from public.templates where form_code = $1", [form]);
+    await admin.close();
+    await owner.close();
   }
 });

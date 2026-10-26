@@ -8,6 +8,7 @@ import { officeProof } from "@/src/lib/office";
 import { CHALLENGE_COOKIE, checkAdminKey, checkAdminKeyUse, newChallenge } from "@/src/lib/pc-key";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { systemMailReady } from "@/src/lib/system-mail";
+import { untilAfter } from "@/src/lib/templates";
 import { currentAdmin, listedAdmin, PROOF_COOKIE } from "./admin";
 
 // Puts a failed job back in the queue and runs it now.
@@ -96,6 +97,30 @@ export async function reviewChange(form: FormData) {
   const { supabase } = await currentAdmin();
   await supabase.rpc("admin_review_change", { change_source: String(form.get("source")), change_at: String(form.get("at")) });
   revalidatePath("/admin");
+}
+
+// The one line firms see under a new government item: InboxCA uses it from a date, or keeps the
+// earlier version for some periods (the database logs it).
+export async function noteUpdate(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const asked = z.object({ item: z.string().regex(/^[0-9a-f]{16}$/), uses: z.union([z.iso.date(), z.literal("")]), keeps: z.union([z.string().min(3).max(80), z.literal("")]) })
+    .safeParse({ item: form.get("item"), uses: form.get("uses") ?? "", keeps: String(form.get("keeps") ?? "").trim() });
+  if (!asked.success || !asked.data.uses === !asked.data.keeps) return fail("/admin", "line");
+  const { data, error } = await supabase.rpc("admin_note_update", { item: asked.data.item, uses: asked.data.uses || undefined, keeps: asked.data.keeps || undefined });
+  if (error || !data) return fail("/admin", "line");
+  revalidatePath("/admin");
+}
+
+// A form version's last period, only with the official link that discontinues it (logged).
+export async function endTemplate(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const asked = z.object({ form: z.string().regex(/^[A-Z0-9_]{2,30}$/), version: z.string().regex(/^\d+(\.\d+){0,3}$/), last: z.string().max(7), link: z.url({ protocol: /^https$/ }).max(500) })
+    .safeParse({ form: form.get("form"), version: form.get("version"), last: form.get("last"), link: form.get("link") });
+  const until = asked.success ? untilAfter(asked.data.form, asked.data.last) : null;
+  if (!asked.success || !until) return fail("/admin/forms", "end");
+  const { data, error } = await supabase.rpc("admin_end_template", { form: asked.data.form, ver: asked.data.version, until, link: asked.data.link });
+  if (error || !data) return fail("/admin/forms", "end");
+  revalidatePath("/admin", "layout");
 }
 
 // An admin's passkeys (PLAN.md 8.1, 8.10): a one-time question, then a new passkey or a check
