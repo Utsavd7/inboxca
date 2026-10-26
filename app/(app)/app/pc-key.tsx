@@ -15,7 +15,7 @@ export function PcKey({ mode }: { mode: "setup" | "confirm" }) {
     setMessage("");
     try {
       const start = await pcKeyChallenge();
-      if (!start) return setMessage("This PC is not one that stays in the office.");
+      if (!start) return setMessage("This PC is not marked as an office PC. Ask the owner.");
       const publicKey = { challenge: bytes(start.challenge), timeout: 60_000, userVerification: "preferred" as const };
       if (mode === "setup") {
         const credential = (await navigator.credentials.create({
@@ -29,7 +29,7 @@ export function PcKey({ mode }: { mode: "setup" | "confirm" }) {
           },
         })) as PublicKeyCredential;
         const response = credential.response as AuthenticatorAttestationResponse;
-        setMessage((await savePcKey({ id: credential.id, clientDataJSON: text(response.clientDataJSON), authenticatorData: text(response.getAuthenticatorData()), publicKey: text(response.getPublicKey()!) })) || "Done. This PC can now confirm a new office connection by itself.");
+        setMessage((await savePcKey({ id: credential.id, clientDataJSON: text(response.clientDataJSON), authenticatorData: text(response.getAuthenticatorData()), publicKey: text(response.getPublicKey()!) })) || "Done. This PC can now confirm a new office internet connection by itself.");
       } else {
         const credential = (await navigator.credentials.get({ publicKey: { ...publicKey, allowCredentials: [{ type: "public-key", id: bytes(start.keyId ?? "") }] } })) as PublicKeyCredential;
         const response = credential.response as AuthenticatorAssertionResponse;
@@ -44,7 +44,7 @@ export function PcKey({ mode }: { mode: "setup" | "confirm" }) {
   return (
     <span className="form-row">
       <button className="b b-primary b-small" type="button" onClick={run} disabled={busy}>
-        {mode === "setup" ? "Set up this PC's key" : "Confirm with this PC's key"}
+        {mode === "setup" ? "Set up this office PC" : "Confirm from this PC"}
       </button>
       {message && <span className="hint" role="status">{message}</span>}
     </span>

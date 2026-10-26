@@ -112,10 +112,6 @@ export async function settleVersions(
 
 // Every type a person can pick when confirming a file, in the order shown.
 export const documentTypes = [...new Set(types.map(([, type]) => type))].sort().concat("Document");
-// A paper type as people read it: the stored "Document" is "Other paper", and the new forms
-// name the ones they replace.
-const typeNames: Record<string, string> = { Document: "Other paper", "Filing record": "Acknowledgement number", "Form 130": "Form No. 130 (was Form 16)", "Form 168": "Form No. 168 (was Form 26AS)" };
-export const paperType = (type: string) => typeNames[type] ?? type;
 
 // The periods a person can pick: the last 18 months and the last four financial years.
 export function periodChoices(today: string) {

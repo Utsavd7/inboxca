@@ -423,7 +423,7 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
   const seen = new Set<string>();
   const checked: ImportRow[] = rows.map((row) => {
     const kind = readKind(row.kind, !!cleanNumber(row.gstin));
-    if (!kind) return { ...row, error: `"${row.kind}" is not a kind InboxCA knows. Use Individual, Business, Company, LLP or Trust.` };
+    if (!kind) return { ...row, error: `"${row.kind}" is not a client type InboxCA knows. Use Individual, Business, Company, LLP or Trust.` };
     const result = checkClient({ ...row, kind });
     if ("error" in result) return { ...row, error: result.error };
     const numbers = [result.client.pan, result.client.gstin].filter(Boolean);

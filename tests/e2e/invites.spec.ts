@@ -413,15 +413,15 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await expect(waitingPc).toHaveCount(0);
 
   await reception.goto("/app");
-  await reception.getByRole("button", { name: "Set up this PC's key" }).click();
-  await expect(reception.getByRole("button", { name: "Set up this PC's key" })).toHaveCount(0);
+  await reception.getByRole("button", { name: "Set up this office PC" }).click();
+  await expect(reception.getByRole("button", { name: "Set up this office PC" })).toHaveCount(0);
   expect(await query(local.dbUrl, "select count(*)::int as count from public.devices where firm_id = $1 and kind = 'office' and key_public is not null", [firm.firmId])).toEqual([{ count: 1 }]);
 
   // The office connection changes overnight: the PC confirms it with its key and the owner is told.
   await reception.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.40" });
   await reception.goto("/app/clients");
-  await reception.getByRole("button", { name: "Confirm with this PC's key" }).click();
-  await expect(reception.getByRole("button", { name: "Confirm with this PC's key" })).toHaveCount(0);
+  await reception.getByRole("button", { name: "Confirm from this PC" }).click();
+  await expect(reception.getByRole("button", { name: "Confirm from this PC" })).toHaveCount(0);
   await reception.goto("/app/clients");
   await expect(reception.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
   await owner.goto("/app");
@@ -1431,8 +1431,8 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await boss.getByRole("button", { name: "Continue" }).click();
     await expect(boss).toHaveURL(/\/app$/);
     await boss.evaluate(() => Reflect.deleteProperty(window, "PushManager"));
-    await boss.getByRole("button", { name: "Turn on notifications on this device" }).click();
-    await expect(boss.getByText(/On an iPhone, add InboxCA to the home screen first/)).toBeVisible();
+    await boss.getByRole("button", { name: "Show a notice on this computer when someone needs your approval" }).click();
+    await expect(boss.getByText("This browser cannot show notices. Try another browser on this computer.")).toBeVisible();
     await boss.goto("/app/settings#office");
     await officeSwitch(boss);
     await boss.getByLabel("Yes, I am in the office now").check();

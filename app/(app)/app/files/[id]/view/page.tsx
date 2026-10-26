@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import {askPermission} from "@/app/(app)/actions";
 import {grantFor} from "@/src/lib/permission-grants";
 import { periodName } from "@/src/lib/documents";
+import { paperType } from "@/src/lib/paper-type";
 import { currentMember } from "@/src/lib/member";
 import { Badge, PageHead } from "../../../ui";
 import { Pending } from "../../../pending";
@@ -42,7 +43,7 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
         title={file.name}
         sub={
           <span className="head-meta">
-            <span>{[file.document_type, periodName(file.period_key)].filter(Boolean).join(", ")}</span>
+            <span>{[paperType(file.document_type), periodName(file.period_key)].filter(Boolean).join(", ")}</span>
             {file.status === "to_check" && <Badge tone="warn">To check</Badge>}
             {meta && <span className="hint">Made on the official {formName(meta.form)} form, version {meta.template}.</span>}
             <span className="hint">View only. Your email and the time are shown across every page.</span>
@@ -52,10 +53,10 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
         }
 
       />
-      {membership.role!=="owner" && !membership.viewOnlyUntil && !meta && viewable && <div className="form-row">{canCopy ? <form method="post" action={`/app/files/${id}/stream${extension==="xlsx" ? `?sheet=${sheet}` : ""}`}><button className="b b-secondary b-small">Download these pages</button><p className="hint">A PDF with your name and the time on each page. Up to 30 pages, from this sheet for a spreadsheet.</p></form> : <form action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><Pending className="b b-ghost b-small">Ask to download</Pending></form>}</div>}
+      {membership.role!=="owner" && !membership.viewOnlyUntil && !meta && viewable && <div className="form-row">{canCopy ? <form method="post" action={`/app/files/${id}/stream${extension==="xlsx" ? `?sheet=${sheet}` : ""}`}><button className="b b-secondary b-small">Download these pages</button><p className="hint">You get a PDF with your email and the time on each page. It has up to 30 pages; for a spreadsheet, only this sheet.</p></form> : <form action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><Pending className="b b-ghost b-small">Ask to download</Pending></form>}</div>}
       {meta?.status==="draft" && <FillChecks client={file.client_id} sources={meta.sources} />}
       {!!sheets.length && <nav className="pills" aria-label="Form sheets">{sheets.map(([name,number])=><Link key={number} href={`?sheet=${number}`} aria-current={sheet===number ? "page" : undefined}>{name.toUpperCase().replaceAll("_"," ")}</Link>)}</nav>}
-      {viewable && (!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) ? <p className="hint viewer-none">Documents cannot be shown yet.</p> : viewable ? (
+      {viewable && (!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) ? <p className="hint viewer-none">Papers cannot be shown yet.</p> : viewable ? (
         <FileViewer key={`${file.id}-${sheet}`} id={file.id} sheet={sheet} hideInactive={membership.settings.viewer_hide_inactive === true} />
       ) : (
         <p className="hint viewer-none">This kind of file cannot be shown here. Ask the owner for it.</p>

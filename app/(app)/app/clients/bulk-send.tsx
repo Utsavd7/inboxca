@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { sendClientPapers } from "@/app/(app)/actions";
+import { paperType } from "@/src/lib/paper-type";
 
 // The bar that rises when clients are ticked: choose a paper and a year, then a second step
 // lists who gets what before anything is sent.
@@ -37,9 +38,9 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
           <input type="hidden" name="type" value={type} />
           <input type="hidden" name="period" value={period} />
           <span className="bulk-ask">
-            Send {type} for {year} to {names.length > 5 ? `${names.slice(0, 5).join(", ")} and ${names.length - 5} more` : names.join(", ")}? Private papers wait in the Inbox for approval.
+            Send {paperType(type)} for {year} to {names.length > 5 ? `${names.slice(0, 5).join(", ")} and ${names.length - 5} more` : names.join(", ")}? A paper set to Ask before sending waits in the Inbox until someone approves it.
           </span>
-          <Send label={`Send ${type} to ${clients}`} />
+          <Send label={`Send ${paperType(type)} to ${clients}`} />
           <button className="b b-secondary" type="button" onClick={() => setConfirming(false)}>
             Back
           </button>
@@ -56,7 +57,7 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
           <select id="bulk-paper" name="type" required aria-label="Paper" value={type} onChange={(event) => setType(event.target.value)}>
             <option value="">Choose a paper</option>
             {types.map((choice) => (
-              <option key={choice}>{choice}</option>
+              <option key={choice} value={choice}>{paperType(choice)}</option>
             ))}
           </select>
           <select id="bulk-year" name="period" required aria-label="Year" value={period} onChange={(event) => setPeriod(event.target.value)}>
@@ -67,7 +68,7 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
             ))}
           </select>
           <button className="b b-primary" type="button" disabled={!type || !names.length} onClick={() => setConfirming(true)}>
-            {type ? `Send ${type} to ${clients}` : `Choose a paper for ${clients}`}
+            {type ? `Send ${paperType(type)} to ${clients}` : `Choose a paper for ${clients}`}
           </button>
         </>
       )}

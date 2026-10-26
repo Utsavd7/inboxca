@@ -15,7 +15,7 @@ export function PortalDrop({ clientId, back }: { clientId?: string; back?: strin
         <label htmlFor="portal-files">
           <strong>Add portal files</strong>
         </label>
-        <span className="hint">GSTR-2B and GSTR-2A from the GST portal; Form 16, Form 26AS, AIS, TIS and ITR-V from the income tax portals. InboxCA reads the client and period inside each file.</span>
+        <span className="hint">GSTR-2B and GSTR-2A from the GST portal. Form 16 or Form No. 130, Form 26AS or Form No. 168, AIS, TIS and ITR-V from the income tax portal or TRACES. InboxCA finds the client and the period inside each file.</span>
       </p>
       <span className="drop-pick">
         <input id="portal-files" name="files" type="file" multiple required accept=".json,.txt,.pdf,application/json,text/plain,application/pdf" />
@@ -32,9 +32,9 @@ export function DroppedNotice({ value }: { value?: string }) {
   const [filed, again, left, unsafe = 0, unchecked = 0] = (value ?? "").split("-").map(Number);
   if (!value || [filed, again, left, unsafe, unchecked].some(Number.isNaN)) return null;
   const parts = [
-    filed && `${filed} filed in ${filed === 1 ? "its client's folder" : "their clients' folders"}`,
+    filed && `${filed} saved in ${filed === 1 ? "its client's folder" : "their clients' folders"}`,
     again && `${again} already there`,
-    left && `${left} not filed: not a known portal file, locked with a password, or its GSTIN or PAN is not one of your clients'`,
+    left && `${left} not saved: InboxCA did not recognise the file, it has a password, or its GSTIN or PAN does not match any of your clients`,
     unsafe && `${unsafe} not saved: a virus, a program or a ZIP InboxCA could not open`,
     unchecked && `${unchecked} could not be checked for viruses just now; add ${unchecked === 1 ? "it" : "them"} again in a minute`,
   ].filter(Boolean);

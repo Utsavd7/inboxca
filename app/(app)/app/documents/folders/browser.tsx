@@ -10,6 +10,7 @@ import { CopyButton } from "../../ui-client";
 import { fileDrivePaper, uploadToFolder } from "./actions";
 import type { Origin } from "@/src/lib/paper-origin";
 import { CameFrom } from "../came-from";
+import { paperType } from "@/src/lib/paper-type";
 import type { Entry, Listing } from "./data";
 
 type Slot = Listing | "gone" | "error";
@@ -24,11 +25,11 @@ const href = (parts: string[], name?: string) => `/app/documents?${new URLSearch
 const sizeOf = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${Math.round(bytes / 1024)} KB` : bytes < 1024 ** 3 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024 ** 3).toFixed(1)} GB`);
 const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" }) : "");
 const isFiles = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
-// "3 folders, 12 files, 2 not filed in InboxCA", leaving out what is none.
+// "3 folders, 12 files, 2 not in InboxCA yet", leaving out what is none.
 function counted(entries: Entry[]) {
   const folders = entries.filter((entry) => entry.kind === "folder").length;
   const loose = entries.filter((entry) => entry.kind !== "folder" && !entry.paper).length;
-  const said = [folders && `${folders} ${folders === 1 ? "folder" : "folders"}`, entries.length - folders && `${entries.length - folders} ${entries.length - folders === 1 ? "file" : "files"}`, loose && `${loose} not filed in InboxCA`].filter(Boolean);
+  const said = [folders && `${folders} ${folders === 1 ? "folder" : "folders"}`, entries.length - folders && `${entries.length - folders} ${entries.length - folders === 1 ? "file" : "files"}`, loose && `${loose} not in InboxCA yet`].filter(Boolean);
   return said.length ? said.join(", ") : "An empty folder";
 }
 
@@ -42,13 +43,13 @@ function KindIcon({ kind, size = 16 }: { kind: string; size?: number }) {
 }
 
 // What a file is: its paper's type, work and period, and its state in words, or that
-// InboxCA did not file it.
+// InboxCA has not saved it.
 function Meta({ entry }: { entry: Entry }) {
   const paper = entry.paper;
   const status = paper && statuses[paper.status];
   return (
     <span className="fb-sub">
-      {paper ? <span>{[paper.type, paper.work, paper.period].filter(Boolean).join(", ")}</span> : <Badge tone="purple">Not filed in InboxCA</Badge>}
+      {paper ? <span>{[paperType(paper.type), paper.work, paper.period].filter(Boolean).join(", ")}</span> : <Badge tone="purple">Not in InboxCA yet</Badge>}
       {status && <Badge tone={status[1]}>{status[0]}</Badge>}
     </span>
   );
@@ -113,7 +114,7 @@ function ClientPick() {
   );
 }
 
-// File this paper: the person confirms its client, type, work and period, as for a paper in
+// Save this paper: the person confirms its client, type, work and period, as for a paper in
 // To check; InboxCA then moves it to the client's folder under its own name.
 function FileForm({ entry, here, choices, done }: { entry: Entry; here: Listing; choices: Choices; done: (result: { ok?: string; folder?: string[] }) => void }) {
   const [error, setError] = useState("");
@@ -133,8 +134,8 @@ function FileForm({ entry, here, choices, done }: { entry: Entry; here: Listing;
         });
       }}
     >
-      <h3 id="fb-file-title">File this paper</h3>
-      <p className="hint">It moves to its client&apos;s folder under InboxCA&apos;s name and shows with the client&apos;s papers.</p>
+      <h3 id="fb-file-title">Save this paper to a client</h3>
+      <p className="hint">InboxCA moves it to the client&apos;s folder, names it by its type and period, and lists it with the client&apos;s papers.</p>
       <input type="hidden" name="path" value={here.path.join("/")} />
       <input type="hidden" name="name" value={entry.name} />
       {here.client ? (
@@ -147,16 +148,16 @@ function FileForm({ entry, here, choices, done }: { entry: Entry; here: Listing;
         <ClientPick />
       )}
       <label>
-        Type
+        Paper type
         <select name="type" defaultValue={guess.type} required>
           <option value="" disabled>
-            Choose the type
+            Choose the paper type
           </option>
-          {choices.types.map((type) => <option key={type}>{type}</option>)}
+          {choices.types.map((type) => <option key={type} value={type}>{paperType(type)}</option>)}
         </select>
       </label>
       <label>
-        Work
+        Type of work
         <select name="work" defaultValue={guess.work || "other"}>
           {choices.works.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
         </select>
@@ -174,7 +175,7 @@ function FileForm({ entry, here, choices, done }: { entry: Entry; here: Listing;
         </p>
       )}
       <button className="b b-primary" disabled={pending} aria-busy={pending || undefined}>
-        {pending ? "Filing" : "File this paper"}
+        {pending ? "Saving" : "Save this paper"}
       </button>
     </form>
   );
@@ -349,7 +350,7 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
                   <Upload size={16} aria-hidden />
                   {busy ? "Uploading" : "Upload"}
                 </button>
-                <input ref={chooser} type="file" multiple hidden aria-label="Papers to upload" onChange={(event) => {
+                <input ref={chooser} type="file" multiple hidden aria-label="Files to upload" onChange={(event) => {
                   upload([...(event.currentTarget.files ?? [])], path);
                   event.currentTarget.value = "";
                 }} />
@@ -365,7 +366,7 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
             ) : here === "gone" ? (
               <Empty Icon={FolderOpen} title="This folder is not here">
                 <span>It may have been moved or renamed in the drive, or it is not one of your clients&apos;.</span>
-                <a className="b b-secondary" href={href([])} onClick={opener([])}>Go to InboxCA</a>
+                <a className="b b-secondary" href={href([])} onClick={opener([])}>Open the InboxCA folder</a>
               </Empty>
             ) : here === "error" ? (
               <Empty Icon={FolderOpen} title="The drive could not be read just now">
@@ -374,7 +375,7 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
               </Empty>
             ) : !entries.length ? (
               <Empty Icon={FolderOpen} title={q ? "Nothing here by that name" : "This folder is empty"}>
-                {!q && listing?.upload && <span>Drop papers here, or Upload, to file them for {listing.client?.name}.</span>}
+                {!q && listing?.upload && <span>Drop files here, or choose Upload, to save them for {listing.client?.name}.</span>}
               </Empty>
             ) : grid ? (
               <ul className="fb-grid" aria-label="Files and folders">

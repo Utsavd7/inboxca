@@ -98,13 +98,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="stage-notes">
           {membership && pcKey === "needed" && (
             <div className="notice">
-              <span className="grow">The owner marked this PC as staying in the office. Set up its key once, so it can confirm a new office internet connection by itself.</span>
+              <span className="grow">The owner marked this PC as an office PC. Set it up once: this PC asks for its PIN or fingerprint. Then it can confirm a change in the office internet connection without the owner.</span>
               <PcKey mode="setup" />
             </div>
           )}
           {membership?.viewOnlyUntil && (
             <p className="notice" role="status">
-              Away from the office this device only views, until {longDate(membership.viewOnlyUntil)}.
+              This laptop is away from the office, so it can only view papers until {longDate(membership.viewOnlyUntil)}.
             </p>
           )}
           {membership?.closing && <ClosingWatch at={membership.closing.at} close={membership.closing.close} extended={membership.closing.extended} />}
@@ -164,7 +164,7 @@ async function StatusLine({ owner, reminders }: { owner: boolean; reminders: boo
       </span>
       <span>
         <span className={`foot-dot${drive && away ? " off" : drive ? " on" : ""}`} aria-hidden />
-        {drive && away ? fix("Drive cannot be reached, new files wait", "/app/settings#drive") : drive ? "Drive linked" : fix("Drive not linked", "/app/settings#drive")}
+        {drive && away ? fix("Drive cannot be reached, new files wait", "/app/settings#drive") : drive ? "Drive connected" : fix("Drive not connected", "/app/settings#drive")}
       </span>
       {reminders && reading && (
         <span>
