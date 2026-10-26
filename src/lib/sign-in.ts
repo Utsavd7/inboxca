@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { chosenFirm, officeDeviceAccess } from "./office";
 import { tellOwnerOnRepeat } from "./session";
 import { supabaseAdmin, supabaseServer } from "./supabase";
@@ -37,8 +38,10 @@ export async function inNoFirm(userId: string) {
   return !count && !orelu;
 }
 
-// The signed in person, when they are in no firm yet.
+// The signed in person, when they are in no firm yet. A visitor with no session cookie is no one,
+// without asking Supabase.
 export async function firmlessAccount() {
+  if (!(await cookies()).getAll().some(({ name }) => /^sb-.+-auth-token/.test(name))) return null;
   const { data } = await (await supabaseServer()).auth.getClaims();
   return data && (await inNoFirm(data.claims.sub)) ? { id: data.claims.sub, email: String(data.claims.email ?? "") } : null;
 }
