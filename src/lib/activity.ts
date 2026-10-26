@@ -1,7 +1,7 @@
 // What each line of the firm's activity log says, in plain words: a client's Activity panel,
 // Today's "What InboxCA did today" and the bell all read this one list.
 export const activityNames: Record<string, string> = {
-  "dataset.edit_saved":"Unfinished correction kept", "form.started":"Form preparation started", "form.prepared":"Form prepared", "form.edited_outside":"Corrected form added", "form.downloaded":"Form downloaded for filing", "form.filed":"Form marked filed", "form.approved":"Form approved", "form.rejected":"Form needs a correction",
+  "dataset.edit_saved":"Unfinished correction kept", "form.started":"Form preparation started", "form.prepared":"Form prepared", "form.edited_outside":"Corrected form added", "form.downloaded":"Form downloaded for filing", "form.filed":"Form marked filed", "form.approved":"Form approved", "form.rejected":"Form needs a correction", "form.differences_seen":"Differences with Form 26AS looked at",
   "dataset.created": "Figures ready to check", "dataset.checked": "Figure checked", "dataset.changed": "Figure corrected",
   "client.added": "Client added", "client.changed": "Client details changed",
   "registration.added": "Number added", "registration.changed": "Services changed", "registration.removed": "Number removed",
@@ -59,5 +59,5 @@ export const activityDetails: Record<string, readonly string[]> = {
   "dataset.changed": ["dataset", "revision", "line", "state", "before", "after", "reason_enc", "registration", "entered", "zeroed"], // before, after and reason encrypted
   "form.started": ["version", "template", "reason_code", "filled"], "form.prepared": [], "form.edited_outside": ["version", "template"], "form.approved": [],
   "form.rejected": ["code", "text_enc"], // the reason's code, and its words encrypted
-  "form.downloaded": [], "form.filed": ["ack", "paper"],
+  "form.downloaded": [], "form.filed": ["ack", "paper"], "form.differences_seen": ["differences"],
 };

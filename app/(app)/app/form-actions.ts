@@ -10,12 +10,34 @@ import {draftSchema,saveDraft} from "@/src/lib/datasets";
 import {currentMember,currentWriter} from "@/src/lib/member";
 import {grantFor} from "@/src/lib/permission-grants";
 import {itrReturns} from "@/src/lib/itr-fields";
+import {itrChecks,type ItrWork} from "@/src/lib/itr-check";
+import {supabaseAdmin} from "@/src/lib/supabase";
+
+// An ITR whose figures differ from the client's Form 26AS or Form 16 (src/lib/itr-check.ts) is
+// approved only once the person ticks that they looked at the differences, and the tick is
+// logged. Filing never waits on it. Gives the log to write, or null when the tick is missing.
+async function differencesSeen(input:FormData,work:ItrWork) {
+  if(!/^ITR[1-6]$/.test(work.form)) return async()=>{};
+  const {supabase,membership,userId}=await currentMember();
+  if(!membership) throw new Error("Sign in to your firm first.");
+  const [{differences}]=await itrChecks(supabase,membership.firmId,[work]);
+  if(!differences.length) return async()=>{};
+  if(input.get("differences_seen")!=="1") return null;
+  return async(document:string)=>{
+    const {error}=await supabaseAdmin().from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"form.differences_seen",entity_type:"document",entity_id:document,details:{differences:differences.length}});
+    if(error) throw new Error("The check could not be saved.");
+  };
+}
 
 export async function prepareForm(form:FormData) {
   const client=z.uuid().parse(form.get("client")),back=`/app/clients/${client}?tab=outputs`;
-  let id:string;
+  const code=z.enum(["GSTR1","GSTR3B",...itrReturns]).parse(form.get("form") ?? "GSTR1"),period=String(form.get("period")),drafts=form.getAll("draft").map(String);
+  let id:string,seen:Awaited<ReturnType<typeof differencesSeen>>;
+  try {seen=await differencesSeen(form,{client,period,form:code,sources:drafts});} catch {redirect(`${back}&form=check`);}
+  if(!seen) redirect(`${back}&form=differences`);
   try {
-    id=await prepareDocument({client,registration:String(form.get("registration")),form:z.enum(["GSTR1","GSTR3B",...itrReturns]).parse(form.get("form") ?? "GSTR1"),period:String(form.get("period")),drafts:form.getAll("draft").map(String),version:String(form.get("version") ?? "") || undefined,reason:String(form.get("reason") ?? "") || undefined});
+    id=await prepareDocument({client,registration:String(form.get("registration")),form:code,period,drafts,version:String(form.get("version") ?? "") || undefined,reason:String(form.get("reason") ?? "") || undefined});
+    await seen(id);
   } catch {redirect(`${back}&form=check`);}
   revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
 }
@@ -42,7 +64,10 @@ export async function fillNow(_:FillState,form:FormData):Promise<FillState> {
 export async function decideForm(form:FormData) {
   const id=z.uuid().parse(form.get("document")),{document}=await visibleForm(id),back=`/app/clients/${document.client_id}?tab=outputs`;
   const decision=z.enum(["approved","rejected"]).parse(form.get("decision"));
-  try {await recordFormDecision(id,decision,String(form.get("reason") ?? ""),String(form.get("explanation") ?? ""));}
+  let seen:Awaited<ReturnType<typeof differencesSeen>>=async()=>{};
+  if(decision==="approved") try {seen=await differencesSeen(form,{client:document.client_id,period:document.period_key,form:document.prepared.form,sources:document.prepared.sources.map(source=>source.id)});} catch {redirect(`${back}&form=approval`);}
+  if(!seen) redirect(`${back}&form=differences`);
+  try {await seen(id);await recordFormDecision(id,decision,String(form.get("reason") ?? ""),String(form.get("explanation") ?? ""));}
   catch {redirect(`${back}&form=approval`);}
   revalidatePath("/app","layout");redirect(back);
 }

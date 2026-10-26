@@ -11,6 +11,8 @@ import {formName,preparedSchema} from "@/src/lib/prepared";
 import {templateSchema} from "@/src/lib/templates";
 import { FileViewer } from "./file-viewer";
 import { FillChecks } from "../../../return-work";
+import { ItrDifferences } from "../../../itr-check";
+import { itrChecks } from "@/src/lib/itr-check";
 
 // One filed document, shown view only to everyone in the firm who may see its client (D18).
 export default async function ViewFile({ params,searchParams }: { params: Promise<{ id: string }>; searchParams:Promise<{sheet?:string}> }) {
@@ -27,6 +29,8 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
   const sheet=sheets.find(([,number])=>String(number)===asked)?.[1] ?? sheets[0]?.[1] ?? 1;
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
   const canCopy=!membership.viewOnlyUntil && (membership.may("download",file.client_id) || !!await grantFor(membership.firmId,userId,"download",file.client_id,id));
+  // A prepared return not yet filed, against the client's Form 26AS and Form 16.
+  const differences=meta && /^ITR/.test(meta.form) && meta.status!=="filed" ? (await itrChecks(supabase,membership.firmId,[{client:file.client_id,period:file.period_key,form:meta.form,sources:meta.sources.map(source=>source.id)}]).catch(()=>[]))[0]?.differences ?? [] : [];
   const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "ods", "json", "txt", "docx", "odt"].includes(extension);
 
 
@@ -54,6 +58,7 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
       />
       {membership.role!=="owner" && !membership.viewOnlyUntil && !meta && viewable && <div className="form-row">{canCopy ? <form method="post" action={`/app/files/${id}/stream${extension==="xlsx" ? `?sheet=${sheet}` : ""}`}><button className="b b-secondary b-small">Download these pages</button><p className="hint">A PDF with your name and the time on each page. Up to 30 pages, from this sheet for a spreadsheet.</p></form> : <form action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><Pending className="b b-ghost b-small">Ask to download</Pending></form>}</div>}
       {meta?.status==="draft" && <FillChecks client={file.client_id} sources={meta.sources} />}
+      <ItrDifferences differences={differences}/>
       {!!sheets.length && <nav className="pills" aria-label="Form sheets">{sheets.map(([name,number])=><Link key={number} href={`?sheet=${number}`} aria-current={sheet===number ? "page" : undefined}>{name.toUpperCase().replaceAll("_"," ")}</Link>)}</nav>}
       {viewable && (!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) ? <p className="hint viewer-none">Documents cannot be shown yet.</p> : viewable ? (
         <FileViewer key={`${file.id}-${sheet}`} id={file.id} sheet={sheet} hideInactive={membership.settings.viewer_hide_inactive === true} />

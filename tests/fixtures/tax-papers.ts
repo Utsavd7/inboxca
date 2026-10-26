@@ -11,14 +11,14 @@ export const pan = "ZZZPZ0003Z", employerPan = "ZZZCZ0001Z", signatoryPan = "ZZZ
 // Rows from the top of the page down, each a list of [x, text].
 const page = (rows: [number, string][][], top = 770): Placed => rows.flatMap((row, at) => row.map(([x, text]) => ({ x, y: top - at * 13, text })));
 
-const form16Head = (part: string, who = pan, year = "2026-27"): [number, string][][] => [
+const form16Head = (part: string, who = pan, year = "2026-27", deductor = tan): [number, string][][] => [
   [[260, "FORM NO. 16"]], [[250, "[See rule 31(1)(a)]"]], [[275, part]],
   [[40, "Certificate under Section 203 of the Income-tax Act, 1961 for tax deducted at source on salary"]],
   [[40, "Certificate No."], [110, "ZQXWVUT"], [300, "Last updated on"], [380, "26-Jun-2026"]],
   [[40, "Name and address of the Employer"], [300, "Name and address of the Employee"]],
   [[40, "INVENTED SOFTWARE PRIVATE LIMITED"], [300, "INVENTED EMPLOYEE"]],
   [[40, "PAN of the Deductor"], [170, "TAN of the Deductor"], [300, "PAN of the Employee"], [430, "Employee Reference No. provided by the Employer (If available)"]],
-  [[40, employerPan], [170, tan], [300, who], [430, "E0001"]],
+  [[40, employerPan], [170, deductor], [300, who], [430, "E0001"]],
   [[40, "CIT (TDS)"], [300, "Assessment Year"], [430, "Period with the Employer"]],
   [[40, "INVENTED CITY"], [300, year], [430, "From 01-Apr-2025 To 31-Mar-2026"]],
 ];
@@ -60,8 +60,8 @@ const partB = (gross = "1200000.00"): [number, string][][] => [
   [[40, "19. Net tax payable (17-18)"], [500, "64480.00"]],
 ];
 // Form 16: Part A, Part B (Annexure), or both, each part on its own page as TRACES prints them.
-export const form16 = (parts: "A" | "B" | "AB" = "AB", who = pan, year = "2026-27", whoInB = who) =>
-  pdf([...(parts.includes("A") ? [page([...form16Head("PART A", who, year), ...partA])] : []), ...(parts.includes("B") ? [page([...form16Head("PART B", whoInB, year), ...partB()])] : [])]);
+export const form16 = (parts: "A" | "B" | "AB" = "AB", who = pan, year = "2026-27", whoInB = who, deductor = tan) =>
+  pdf([...(parts.includes("A") ? [page([...form16Head("PART A", who, year, deductor), ...partA])] : []), ...(parts.includes("B") ? [page([...form16Head("PART B", whoInB, year, deductor), ...partB()])] : [])]);
 
 // Form No. 130 as the Rules 2026 blank lays it out: Part A and B on the first page, Part C (Annexure - I) on the next.
 export const form130 = (year = "2026-27") => pdf([

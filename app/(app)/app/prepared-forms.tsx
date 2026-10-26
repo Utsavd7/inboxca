@@ -7,9 +7,11 @@ import {draftSchema} from "@/src/lib/datasets";
 import {periodName} from "@/src/lib/documents";
 import {itrReady,itrYear} from "@/src/lib/itr-fields";
 import {itrWork} from "@/src/lib/itr";
+import {itrChecks} from "@/src/lib/itr-check";
 import {grantFor} from "@/src/lib/permission-grants";
 import {askPermission} from "@/app/(app)/actions";
 import {Pending} from "./pending";
+import {ItrDifferences} from "./itr-check";
 import {addEditedForm,decideForm,markFormFiled,prepareForm,setDraftRegistration} from "./form-actions";
 
 export async function PreparedForms({client,message}:{client?:string;message?:string}) {
@@ -41,6 +43,13 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   const itrDrafts=(itrRows ?? []).map(row=>({...row,data:draftSchema.parse(row.data)}));
   const returns=[...new Set(itrDrafts.flatMap(row=>row.data.target && row.data.lines.some(line=>line.source.entered_by) ? [`${row.data.target.form}:${row.period_key}`] : []))].map(key=>key.split(":") as [string,string]);
   const itr=pans?.length===1 ? await Promise.all(returns.map(async([form,period])=>({form,period,missing:await itrWork(client,form,period).then(work=>work.review.missing.length,()=>null)}))) : [];
+  // Each return against the client's Form 26AS and Form 16: the returns to prepare, and the
+  // latest prepared returns waiting for a second approval, made from their own sources.
+  const works=[...itr.map(({form,period})=>({key:`${form}:${period}`,client,period,form})),...(forms ?? []).flatMap(file=>{
+    const meta=preparedSchema.parse(file.prepared);
+    return latest.has(file.id) && meta.status==="draft" && /^ITR/.test(meta.form) ? [{key:file.id,client,period:file.period_key,form:meta.form,sources:meta.sources.map(source=>source.id)}] : [];
+  })];
+  const checks=new Map((await itrChecks(supabase,membership.firmId,works).catch(()=>[])).map((check,at)=>[works[at].key,check.differences]));
   const sourceIds=[...new Set([...(rows ?? []).map(row=>draftSchema.parse(row.data).lines[0].source.document),...itrDrafts.map(row=>row.data.lines[0].source.document)].filter((id):id is string=>!!id))];
   const {data:sourceNames}=sourceIds.length ? await supabase.from("documents").select("id,name").eq("firm_id",membership.firmId).eq("client_id",client).in("id",sourceIds) : {data:null};
   const canPrepare=!membership.viewOnlyUntil && (membership.may("edit_figures", client) || !!await grantFor(membership.firmId,userId,"edit_figures",client));
@@ -53,7 +62,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   const label=(row:{form_code:string;data:unknown})=>{const data=draftSchema.parse(row.data);return `${row.form_code==="GSTR3B" ? "GSTR-2B credit" : sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Source file"}, ${data.lines.length} figures${data.lines.every(line=>line.state==="confirmed") ? ", checked" : ", check these first"}`;};
   return <section className="panel" aria-labelledby="prepared-title"><h2 id="prepared-title">Prepared forms</h2>
     <p className="hint">Check every figure first. Your firm files the approved file on the portal with its own code or signature.</p>
-    {message && <p className="alert" role="status">{message==="edited" ? "Choose the filled official workbook. Its headings, supported cells and figures must pass the checks, and you need permission to edit figures." : message==="ack" ? "Add the acknowledgement or its number for the latest approved form. Check that the drive is connected." : message==="approval" ? "Another person must approve the latest checked figures. A rejection needs a reason." : "Check the figures, permission, drive and official form for this period, then try again."}</p>}
+    {message && <p className="alert" role="status">{message==="edited" ? "Choose the filled official workbook. Its headings, supported cells and figures must pass the checks, and you need permission to edit figures." : message==="ack" ? "Add the acknowledgement or its number for the latest approved form. Check that the drive is connected." : message==="approval" ? "Another person must approve the latest checked figures. A rejection needs a reason." : message==="differences" ? "This return differs from Form 26AS or Form 16. Look at the differences and tick the box, then approve again." : "Check the figures, permission, drive and official form for this period, then try again."}</p>}
     {!!forms?.length && <ul className="rows">{forms.filter(file=>file.status!=="deleted").map(file=>{
       const meta=preparedSchema.parse(file.prepared),active=latest.has(file.id) && !membership.viewOnlyUntil && file.size>0;
       return <li key={file.id}><div className="grow">
@@ -61,9 +70,10 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         <p className="hint">{meta.status[0].toUpperCase()+meta.status.slice(1)}. Official form {meta.template}.{!latest.has(file.id) && " Earlier version."}{meta.external && " Edited outside InboxCA."}</p>
         {meta.form==="GSTR3B" && <p className="hint">Built from your checked GSTR-1 figures and GSTR-2B credit: tables 3.1 (a), (b), (c) and (e), 3.1.1 (ii), 3.2 to unregistered buyers, 4(A) and 4(D)(2). Add reverse charge purchases (3.1 d), credit on imported services, reversals, other ineligible credit, inward exempt supplies and interest in the offline utility or on the portal before filing.</p>}
         {meta.form==="GSTR1" && meta.template==="2.0" && <p className="hint">This older official workbook comes with sample rows in its e-commerce sheets, so this file does not include supplies through e-commerce operators (tables 14 and 15). Add them in the offline tool or on the portal before filing.</p>}
+        {active && meta.status==="draft" && !meta.filled && ["owner","partner","manager"].includes(membership.role) && <ItrDifferences differences={checks.get(file.id) ?? []} tick={`approve-${file.id}`}/>}
         <div className="form-row">{meta.sources.map((source,n)=><Link key={source.id} href={`?tab=extraction&draft=${source.id}`}>Check source figures{meta.sources.length>1 ? ` ${n+1}` : ""}</Link>)}
           {active && ["approved","filed"].includes(meta.status) && <form action={`/app/files/${file.id}/filing`} method="post"><button className="b b-secondary b-small">Download for filing</button></form>}
-          {active && meta.status==="draft" && !meta.filled && ["owner","partner","manager"].includes(membership.role) && <form action={decideForm}><input type="hidden" name="document" value={file.id}/><Pending className="b b-secondary b-small" name="decision" value="approved">Give second approval</Pending></form>}
+          {active && meta.status==="draft" && !meta.filled && ["owner","partner","manager"].includes(membership.role) && <form action={decideForm} id={`approve-${file.id}`}><input type="hidden" name="document" value={file.id}/><Pending className="b b-secondary b-small" name="decision" value="approved">Give second approval</Pending></form>}
           {active && meta.filled && meta.status==="draft" && <><button className="b b-secondary b-small" disabled>Download for filing</button>{membership.settings.second_form_approval===true && ["owner","partner","manager"].includes(membership.role) && <button className="b b-secondary b-small" disabled>Give second approval</button>}
             <span className="hint">{unchecked(meta) ? `${unchecked(meta)} ${unchecked(meta)===1 ? "figure" : "figures"} not checked yet. ` : "Every figure is checked. InboxCA is making the checked draft now. "}<Link href={`/app/files/${file.id}/view`}>Check figures</Link></span></>}
         </div>
@@ -120,6 +130,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
           <fieldset><legend>{formName(form)} {itrYear(period)}</legend>{sources.map(row=>{const ready=row.data.lines.every(line=>line.state==="confirmed");return <label className="check" key={row.id}><input type="checkbox" name="draft" value={row.id} defaultChecked={ready} disabled={!ready}/><Link href={`?tab=extraction&draft=${row.id}`}>{row.data.target ? "Entered by your team" : sourceNames?.find(source=>source.id===row.data.lines[0].source.document)?.name ?? "Figures from a paper"}</Link>, {row.data.lines.length} figures{ready ? ", checked" : ", check these first"}</label>;})}</fieldset>
           {missing!==0 && <p className="hint">{missing===null ? "This return cannot be checked yet." : `${missing} details still to fill.`} <Link href={`/app/clients/${client}/itr?form=${form}&year=${period}`}>Open the return</Link></p>}
           {!itrReady() && <p className="hint">Not set up yet: InboxCA needs its software ID from the Income Tax Department before it can make the return file.</p>}
+          <ItrDifferences differences={checks.get(`${form}:${period}`) ?? []} tick/>
           <Pending className="b b-primary" disabled={!itrReady() || missing!==0}>Prepare {formName(form)} {itrYear(period)}</Pending>
         </form>;
       }) : !rows?.length && !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-secondary">Ask to prepare forms</Pending></form>}
