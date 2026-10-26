@@ -35,8 +35,9 @@ async function seed() {
     JSON.stringify([{ id: CLIENT, name: "Mehta Traders", kind: "business", registrations: [number("pan"), number("gstin", "24"), number("tan")] }]),
   ]);
 }
+// This firm's numbers only, so a call as the database owner never plans another firm's clients.
 const setServices = (kind: string, services: string[]) =>
-  attempt(db, "update public.client_registrations set services = $1 where kind = $2", [services, kind]);
+  attempt(db, "update public.client_registrations set services = $1 where kind = $2 and firm_id = $3", [services, kind, FIRM]);
 // Plans this firm's calendar as of a fixed day, so the expected tasks never move; only this
 // firm, so other firms in the shared database (a large scale test firm, say) cost nothing.
 async function planAsOf(day: string) {
@@ -149,6 +150,24 @@ describe("the compliance calendar", () => {
       await planAsOf("2026-04-01");
       expect(await due("ITR_NA")).toEqual([]);
       expect((await due("ADV_TAX")).length).toBe(4);
+    }));
+
+  it("dates a transfer pricing return and presumptive advance tax as the 2025 Act does", () =>
+    rollback(db, async () => {
+      await seed();
+      // Finance Act, 2026, Table Sl. No. 1: 30 November where transfer pricing applies.
+      expect((await setServices("pan", ["ITR_TP"])).ok).toBe(true);
+      await planAsOf("2026-04-01");
+      expect(await due("ITR_TP")).toEqual([{ period_key: "2026-03", due_on: "2026-11-30" }]);
+      // s.408(2): presumptive income pays all its advance tax by 15 March, instead of four instalments.
+      expect((await setServices("pan", ["ADV_TAX", "ADV_TAX_P"])).ok).toBe(false);
+      expect((await setServices("pan", ["ADV_TAX_P"])).ok).toBe(true);
+      await planAsOf("2026-04-01");
+      expect(await due("ADV_TAX_P")).toEqual([{ period_key: "2027-03", due_on: "2027-03-15" }]);
+      // s.58(11): an LLP cannot declare presumptive income.
+      await db.query("update public.clients set kind = 'llp' where id = $1", [CLIENT]);
+      await planAsOf("2026-04-01");
+      expect(await due("ADV_TAX_P")).toEqual([]);
     }));
 
   it("tops up one firm without touching another firm's tasks", () =>
