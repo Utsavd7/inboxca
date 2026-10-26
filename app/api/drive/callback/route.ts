@@ -18,7 +18,14 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   if (params.get("error")) return finish("drive_denied");
   const saved = request.cookies.get(DRIVE_COOKIE)?.value;
-  const { state, verifier } = saved ? (JSON.parse(Buffer.from(saved, "base64url").toString()) as { state?: string; verifier?: string }) : {};
+  // A cookie that is not the one Connect set counts as none.
+  let asked: { state?: string; verifier?: string } = {};
+  try {
+    if (saved) asked = JSON.parse(Buffer.from(saved, "base64url").toString()) ?? {};
+  } catch {
+    asked = {};
+  }
+  const { state, verifier } = asked;
   const code = params.get("code");
   if (!state || !verifier || !code || params.get("state") !== state) return finish("drive_failed");
   const { supabase, membership } = await currentMember();

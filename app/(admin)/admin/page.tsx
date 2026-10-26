@@ -14,7 +14,7 @@ type Watch = { sources?: Record<string, { checked?: string }>; changes?: Change[
 function Touches({ reach }: { reach: { firm: string; returns: number }[] }) {
   if (!reach.length) return <span className="sub">Touches no firm&apos;s open returns.</span>;
   const returns = reach.reduce((sum, row) => sum + row.returns, 0);
-  return <span className="sub" title={reach.map((row) => row.firm).join(", ")}>Touches {returns} open returns at {reach.length === 1 ? "1 firm" : `${reach.length} firms`}: {reach.slice(0, 3).map((row) => row.firm).join(", ")}{reach.length > 3 && " and more"}.</span>;
+  return <span className="sub" title={reach.map((row) => row.firm).join(", ")}>Touches {returns} open {returns === 1 ? "return" : "returns"} at {reach.length === 1 ? "1 firm" : `${reach.length} firms`}: {reach.slice(0, 3).map((row) => row.firm).join(", ")}{reach.length > 3 && " and more"}.</span>;
 }
 
 // Today's changes from the daily check (D42): each change to an official source waits here
