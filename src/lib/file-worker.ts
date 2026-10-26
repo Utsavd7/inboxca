@@ -4,7 +4,7 @@ import type {Template} from "./templates.ts";
 export const intakeLimits = { bytes: 50 * 1024 * 1024, entries: 1000, unpacked: 500 * 1024 * 1024 };
 export const viewLimits = { bytes: intakeLimits.bytes, pages: 30, rows: 1000, columns: 26, rowsPerPage: 40, pixels: 40_000_000 };
 export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean };
-export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox"; token: string; purpose?: "sheet" | "portal" | "edited" | "copy"; sheet?: number; form?:{template:Template;period:string;gstin?:string;pan?:string}; password?: string };
+export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox"; token: string; purpose?: "sheet" | "portal" | "edited" | "copy"; sheet?: number; form?:{template:Template;period:string;gstin?:string;pan?:string;official?:string}; password?: string };
 const text = new TextEncoder();
 
 export function viewerLabel(person: string, firm: string, at = new Date()) {

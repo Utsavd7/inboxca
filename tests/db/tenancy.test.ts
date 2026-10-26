@@ -227,6 +227,7 @@ const NOT_FIRM: Record<string, string> = {
   platform_settings: "Orelu's own settings, server only",
   push_subscriptions: "a person's phones, server only",
   incidents: "Orelu's outage notes for the status page, server only",
+  official_files: "official government files kept by their hash, server only",
 };
 const ROLES = ["owner", "partner", "manager", "staff", "front_desk"] as const;
 // Definer functions a visitor who is not signed in may call, and why.
@@ -296,6 +297,7 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["add_clients", `select public.add_clients($1, '[{"name": "Taken", "kind": "business"}]') r`, ["firm"], true],
   ["admin_accounts", "select * from public.admin_accounts()", [], false],
   ["admin_add_extension", "select public.admin_add_extension('GSTR1', '2026-09', current_date, 'https://example.test') r", [], true],
+  ["admin_add_template", "select public.admin_add_template('gst_offline_tool', '2026-10-26T03:00:00.000Z', 'GSTR1.xlsx', current_date) r", [], true],
   ["admin_ask_support", "select public.admin_ask_support($1) r", ["firm"], true],
   ["admin_email_incident", "select public.admin_email_incident(gen_random_uuid()) r", [], true],
   ["admin_end_template", "select public.admin_end_template('GSTR1', '2.2', current_date, 'https://cbic-gst.gov.in/x.pdf') r", [], true],
