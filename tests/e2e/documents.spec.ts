@@ -121,7 +121,7 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
 });
 
 // With no drive linked no paper can be read, so no page asks for one: no thumbnail, no preview.
-test("with no drive linked, no page asks for a paper's preview", async ({ page }) => {
+test("with no drive linked, no page asks for a paper's preview or offers its download", async ({ page }) => {
   test.setTimeout(90_000);
   const email = `owner-${randomUUID()}@example.test`;
   const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
@@ -140,6 +140,8 @@ test("with no drive linked, no page asks for a paper's preview", async ({ page }
     await page.waitForLoadState("networkidle");
     await page.goto("/app/documents");
     await expect(page.getByRole("complementary", { name: "Paper" })).toContainText("The firm's drive is not linked yet, so papers cannot be shown.");
+    // Nor is Download offered, which would leave the app for a bare error.
+    await expect(page.getByRole("complementary", { name: "Paper" }).getByRole("link", { name: "Download" })).toHaveCount(0);
     await page.goto(`/app/clients/${client.id}?tab=documents`);
     await expect(page.getByRole("link", { name: "Invented bills.pdf", exact: true })).toBeVisible();
     await page.goto("/app/documents?view=folders");
