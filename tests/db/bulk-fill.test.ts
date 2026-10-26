@@ -14,7 +14,7 @@ async function seed() {
   await db.query("insert into public.firms(id,name,state_code,status) values ($1,'Fill All Test Firm','24','active'),($2,'Fill All Other Firm','24','active')",[firm,elsewhere]);
   await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active'),($1,$3,'manager','active'),($1,$4,'staff','active'),($1,$5,'staff','active'),($6,$7,'partner','active')",[firm,owner,manager,staff,other,elsewhere,outsider]);
   const clients:{client:string;registration:string;task:string;draft:string}[]=[];
-  for(const [n,due] of [[1,3],[2,6],[3,9]]) {
+  for(const [n,due] of [[1,-2],[2,6],[3,9]]) {
     const client=randomUUID(),registration=randomUUID(),task=randomUUID(),draft=randomUUID();
     await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,$3,'business')",[client,firm,`Invented Fill Client ${n}`]);
     await db.query("insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values ($1,$2,$3,'gstin','invented encrypted number',$4)",[registration,firm,client,randomUUID()]);
@@ -37,7 +37,7 @@ const jobs=async(firm:string)=>(await db.query("select entity_id,state,run_at>no
 
 it("lets the owner fill the whole firm, a manager their team's clients, and anyone else only with the right",()=>rollback(db,async()=>{
   const {firm,owner,manager,staff,other,outsider,clients}=await seed();
-  // Due in 3 and 6 days; the one due in 9 days is outside the 7.
+  // 2 days late and due in 6 days; the one due in 9 days is outside the 7.
   expect((await due(firm,owner)).map(row=>row.task)).toEqual([clients[0].task,clients[1].task]);
   expect((await due(firm,owner)).every(row=>row.ready && !row.filling && row.stage==="figures" && row.open===1)).toBe(true);
   expect((await due(firm,manager)).map(row=>row.task)).toEqual([clients[0].task]);

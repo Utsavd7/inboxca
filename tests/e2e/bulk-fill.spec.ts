@@ -12,7 +12,7 @@ const local=localSupabase();
 test.skip(!local.url || !local.mailUrl,"Needs local Supabase");
 
 // Fill all on the full list (/app/work, Returns): a preview of the GSTR-1 and GSTR-3B returns
-// due in the next 7 days, Undo before any starts, then InboxCA's own fill makes one draft a
+// late or due in the next 7 days, Undo before any starts, then InboxCA's own fill makes one draft a
 // return for a person to check. A filed return, one due later and one still missing its GSTR-2B
 // are left alone; pressing again fills nothing twice; a manager sees only their team's clients.
 // All names and numbers are invented.
@@ -61,15 +61,15 @@ test("Fill all: a preview, Undo before it starts, then one draft a return for a 
 
     // The manager's preview holds their team's client only.
     const other=await managerContext.newPage();await signIn(other,managerEmail,managerKey);
-    await other.goto("/app/work?show=returns");await other.getByRole("link",{name:"Fill all returns due in the next 7 days"}).click();
-    const theirs=other.getByRole("dialog",{name:"Fill returns due in the next 7 days"});
+    await other.goto("/app/work?show=returns");await other.getByRole("link",{name:"Fill all returns late or due in the next 7 days"}).click();
+    const theirs=other.getByRole("dialog",{name:"Fill returns late or due in the next 7 days"});
     await expect(theirs).toContainText("1 return for 1 client. 1 has figures still to check.");
     await expect(theirs.getByRole("listitem")).toHaveCount(1);await expect(theirs.getByRole("listitem")).toContainText(names.shah);
 
     await signIn(page,email,key);
     const open=async()=>{
-      await page.goto("/app/work?show=returns");await page.getByRole("link",{name:"Fill all returns due in the next 7 days"}).click();
-      return page.getByRole("dialog",{name:"Fill returns due in the next 7 days"});
+      await page.goto("/app/work?show=returns");await page.getByRole("link",{name:"Fill all returns late or due in the next 7 days"}).click();
+      return page.getByRole("dialog",{name:"Fill returns late or due in the next 7 days"});
     };
     let preview=await open();
     await expect(preview).toContainText("2 returns for 2 clients. 2 have figures still to check.");

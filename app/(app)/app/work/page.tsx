@@ -37,7 +37,7 @@ const errors: Record<string, string> = {
 // The person's whole list, the one Today shows the first 7 of: the same items for the same
 // person, filtered and a page at a time. Late returns have Mark filed and Assign to me here,
 // and the owner and partners remind every late client, or every client still missing papers,
-// after a preview. On Returns, whoever may fill returns fills every one due in the next 7 days.
+// after a preview. On Returns, whoever may fill returns fills every one late or due in the next 7 days.
 export default async function Work({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const { supabase, userId, membership } = await currentMember();
@@ -127,7 +127,7 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
             </Link>
           ) : fills ? (
             <Link className="b b-secondary" href={href({ extra: "confirm=fill" })} scroll={false}>
-              Fill all returns due in the next 7 days
+              Fill all returns late or due in the next 7 days
             </Link>
           ) : null
         }
@@ -250,7 +250,7 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
           </SidePanel>
         )}
         {filling && (
-          <SidePanel key="fill" id="fill-title" title="Fill returns due in the next 7 days" close={back}>
+          <SidePanel key="fill" id="fill-title" title="Fill returns late or due in the next 7 days" close={back}>
             <p className="hint">InboxCA fills each GSTR-1 and GSTR-3B from the figures it has read, as it does by itself before the due date. A person still checks every figure before a return can be approved, downloaded or filed. Returns filled already or being filled are not filled again.</p>
             <p>
               <strong>
@@ -258,7 +258,7 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
               </strong>{" "}
               {filling.toCheck ? `${filling.toCheck} ${filling.toCheck === 1 ? "has" : "have"} figures still to check.` : ""}
             </p>
-            {!filling.rows.length && <p className="hint">No GSTR-1 or GSTR-3B of your clients is due in the next 7 days.</p>}
+            {!filling.rows.length && <p className="hint">No GSTR-1 or GSTR-3B of your clients is late or due in the next 7 days.</p>}
             <ul className="app-rows work-preview">
               {filling.rows.slice(0, 200).map((row) => (
                 <Row key={row.key} lead={<Avatar name={row.name} />} title={row.name} meta={row.what} status={row.go ? <Badge tone="blue">Will be filled</Badge> : <Badge plain>{row.status}</Badge>} />
@@ -327,7 +327,7 @@ async function sendPreview(supabase: Db, firm: string, what: "late" | "papers") 
   };
 }
 
-// What Fill all would do, for its preview: each GSTR-1 and GSTR-3B due in the next 7 days that
+// What Fill all would do, for its preview: each GSTR-1 and GSTR-3B late or due in the next 7 days that
 // this person may fill (public.due_fills), and why any is left out. The fill job decides the same.
 async function fillPreview(supabase: Db, firm: string, today: string) {
   const { data } = await supabase.rpc("due_fills", { target_firm: firm });

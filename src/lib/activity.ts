@@ -22,7 +22,7 @@ export const activityNames: Record<string, string> = {
   "email.answered": "Reply sent by InboxCA", "email.answer_stopped": "Reply by InboxCA stopped",
   "document.added": "Acknowledgement saved", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked",
   "contact.added": "Contact added", "contact.changed": "Contact changed",
-  "fills.asked": "Fill asked for returns due in the next 7 days", "fills.stopped": "Fill stopped before it started",
+  "fills.asked": "Fill asked for returns late or due in the next 7 days", "fills.stopped": "Fill stopped before it started",
 };
 
 // Every action written to activity_log and the details it may carry (PLAN.md 8.0, 8.9): ids,

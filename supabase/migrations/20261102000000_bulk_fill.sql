@@ -1,7 +1,7 @@
 -- Fill all (PLAN.md "Less work for the firm": prepare every return for a big client list in one
 -- press; the user, 26 Oct 2026: "the team can manually press fill for one person or ai fills much
 -- before due date ... make sure no double filling ... a person checks"). From the full list
--- (/app/work), the GSTR-1 and GSTR-3B returns due in the next 7 days go to InboxCA's own fill
+-- (/app/work), the GSTR-1 and GSTR-3B returns late or due in the next 7 days go to InboxCA's own fill
 -- (src/jobs/fill-return.ts), the job that fills them by itself from the firm's days before the
 -- due date: one job a return, and fill_form keeps one draft a return however many run. A fill
 -- approves, downloads and files nothing: those still wait until every figure is checked.
@@ -22,7 +22,7 @@ language sql stable security definer set search_path='' as $$
     select t.id,t.client_id,c.name,t.code,t.period_key,t.due_on
     from public.tasks t join public.clients c on c.id=t.client_id and c.firm_id=t.firm_id and c.archived_at is null cross join me
     where me.role is not null and t.firm_id=target_firm and t.kind='compliance' and t.status<>'filed' and t.code ~ '^GSTR(1|3B)_'
-      and t.due_on between me.today and me.today+7
+      and t.due_on<=me.today+7
       and (me.role in ('owner','partner') or t.client_id in (select public.my_clients(target_firm))
         -- As the clients table shows them to this person (its row level security).
         and (target_firm in (select public.open_firms()) or t.client_id in (select public.assigned_clients()))

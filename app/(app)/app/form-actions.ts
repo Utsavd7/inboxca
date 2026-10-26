@@ -64,7 +64,7 @@ export async function fillNow(_:FillState,form:FormData):Promise<FillState> {
 }
 
 // Fill all, from the full list (/app/work) after its preview: InboxCA fills every GSTR-1 and
-// GSTR-3B due in the next 7 days that this person may fill, as it fills them by itself before
+// GSTR-3B late or due in the next 7 days that this person may fill, as it fills them by itself before
 // the due date (public.queue_fills picks them; one fill a return, none twice). Every draft still
 // waits for its checks. The fills start in 20 seconds, so Undo can stop them.
 export async function fillAll() {
