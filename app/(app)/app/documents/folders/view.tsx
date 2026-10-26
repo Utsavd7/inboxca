@@ -62,11 +62,11 @@ async function Loaded({ parts }: { parts: string[] }) {
   if (!ctx) redirect("/app");
   if (!ctx.drive)
     return (
-      <Empty Icon={HardDrive} title="The firm's drive is not linked yet">
-        <span>Once the owner links the drive in Settings, every folder of it shows here.</span>
+      <Empty Icon={HardDrive} title="The firm's drive is not connected yet">
+        <span>When the owner connects the drive in Settings, its folders show here.</span>
         {ctx.owner && (
           <Link className="b b-primary" href="/app/settings#drive">
-            Link the drive
+            Connect the drive
           </Link>
         )}
       </Empty>
@@ -76,7 +76,7 @@ async function Loaded({ parts }: { parts: string[] }) {
   if (reached === 0)
     return (
       <Empty Icon={HardDrive} title="The drive could not be read just now">
-        <span>Try again in a minute. If it keeps happening, the owner can link the drive again in Settings.</span>
+        <span>Try again in a minute. If it keeps happening, ask the owner to connect the drive again in Settings.</span>
       </Empty>
     );
   const shown = chain.slice(0, reached === -1 ? undefined : reached) as Listing[];

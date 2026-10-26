@@ -171,7 +171,7 @@ test("anyone sees each part's status with no sign in and no firm; an admin's inc
   try {
     expect((await page.goto("/status"))?.status()).toBe(200);
     await expect(parts).toHaveCount(4);
-    for (const part of ["The app", "Mail reading", "File worker", "Reminders"]) await expect(parts.filter({ hasText: part })).toContainText(/Working|Slow|Down|Not set up yet/);
+    for (const part of ["The app", "Reading firm email", "Reading and checking files", "Reminders"]) await expect(parts.filter({ hasText: part })).toContainText(/Working|Slow|Down|Not set up yet/);
     expect(await page.content()).not.toContain(name);
 
     await admin.page.getByRole("link", { name: "Status" }).click();

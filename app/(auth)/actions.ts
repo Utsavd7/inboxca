@@ -20,7 +20,7 @@ export async function requestCode(_prev: CodeState, form: FormData): Promise<Cod
   if (!z.email().safeParse(email).success)
     return { step: "email", error: "Enter a valid email address." };
   if (await mailboxLogin(email))
-    return { step: "email", email, error: "The firm's email address cannot be used to sign in." };
+    return { step: "email", email, error: "This is your firm email, which InboxCA reads. Sign in with your own work email instead." };
   // Counted for every address alike, so the answer never tells whether it has an account.
   if (!(await withinLimit("code", email)))
     return { step: "email", email, error: "Too many codes asked for this address. Try again in an hour." };
@@ -47,7 +47,7 @@ export async function verifyCode(_prev: CodeState, form: FormData): Promise<Code
     return { step: "code", email, error: "Too many codes tried. Wait an hour, then ask for a new one." };
   const supabase = await supabaseServer();
   if (await mailboxLogin(email))
-    return { step: "code", email, error: "The firm's email address cannot be used to sign in." };
+    return { step: "code", email, error: "This is your firm email, which InboxCA reads. Sign in with your own work email instead." };
   // A shared PC (5.17.4 #3): whoever was signed in on this browser before is signed out.
   const { data: before } = await supabase.auth.getSession();
   const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
@@ -125,7 +125,7 @@ export async function recoverTwoStep(_prev: StepState, form: FormData): Promise<
   const digest = recoveryDigest(userId, String(form.get("recovery") ?? ""));
   if (!saved.includes(digest)) return { error: "That recovery code did not work. Check it, or use another one." };
   const { error } = await admin.auth.admin.updateUserById(userId, { app_metadata: { recovery: saved.filter((code) => code !== digest) } });
-  if (error) throw new Error(`Recovery code not used: ${error.code}`);
+  if (error) return { error: "That recovery code could not be used just now. Try again in a minute." };
   const { data: factors } = await admin.auth.admin.mfa.listFactors({ userId });
   for (const factor of factors?.factors ?? []) await admin.auth.admin.mfa.deleteFactor({ id: factor.id, userId });
   const member = await chosenFirm((await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);

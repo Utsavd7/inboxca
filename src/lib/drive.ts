@@ -41,8 +41,9 @@ export const incomingPath = (relative: string) =>
     .map((part) => safeName(part))
     .join("/");
 
-// Where a removed file waits 30 days before it goes to the drive's bin.
-export const DELETED_FOLDER = "Deleted and old versions";
+// Where a removed file waits 30 days before it goes to the drive's bin. Earlier versions stay
+// in their own folders; drives set up before 26 Oct 2026 also keep "Deleted and old versions".
+export const DELETED_FOLDER = "Removed papers";
 // Where a file the virus check stopped is kept, for the owner only, never shown in InboxCA.
 export const VIRUS_FOLDER = "Files with a virus";
 
@@ -182,9 +183,9 @@ export function safeName(name: string, max = 120) {
 export const folderOrders = ["year_client_work", "work_year_client", "client_year_work"] as const;
 export type FolderOrder = (typeof folderOrders)[number];
 export const folderOrderNames: Record<FolderOrder, string> = {
-  year_client_work: "Year, client, work: FY 2026-27 / Patel Textiles / GST",
-  work_year_client: "Work, year, client: GST / FY 2026-27 / Patel Textiles",
-  client_year_work: "Client, year, work: Patel Textiles / FY 2026-27 / GST",
+  year_client_work: "Year, client, type of work: FY 2026-27 / Patel Textiles / GST",
+  work_year_client: "Type of work, year, client: GST / FY 2026-27 / Patel Textiles",
+  client_year_work: "Client, year, type of work: Patel Textiles / FY 2026-27 / GST",
 };
 export function folderPath(order: FolderOrder, year: string, client: string, work: WorkType) {
   const parts = { year, client: safeName(client, 80), work: workTypes[work] };

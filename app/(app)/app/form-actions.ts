@@ -28,6 +28,7 @@ async function differencesSeen(input:FormData,work:ItrWork) {
     if(error) throw new Error("The check could not be saved.");
   };
 }
+import {keepReason} from "@/src/lib/reason";
 
 export async function prepareForm(form:FormData) {
   const client=z.uuid().parse(form.get("client")),back=`/app/clients/${client}?tab=outputs`;
@@ -38,7 +39,7 @@ export async function prepareForm(form:FormData) {
   try {
     id=await prepareDocument({client,registration:String(form.get("registration")),form:code,period,drafts,version:String(form.get("version") ?? "") || undefined,reason:String(form.get("reason") ?? "") || undefined});
     await seen(id);
-  } catch {redirect(`${back}&form=check`);}
+  } catch(error) {await keepReason(error);redirect(`${back}&form=check`);}
   revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
 }
 
@@ -68,7 +69,7 @@ export async function decideForm(form:FormData) {
   if(decision==="approved") try {seen=await differencesSeen(form,{client:document.client_id,period:document.period_key,form:document.prepared.form,sources:document.prepared.sources.map(source=>source.id)});} catch {redirect(`${back}&form=approval`);}
   if(!seen) redirect(`${back}&form=differences`);
   try {await seen(id);await recordFormDecision(id,decision,String(form.get("reason") ?? ""),String(form.get("explanation") ?? ""));}
-  catch {redirect(`${back}&form=approval`);}
+  catch(error) {await keepReason(error);redirect(`${back}&form=approval`);}
   revalidatePath("/app","layout");redirect(back);
 }
 
@@ -76,7 +77,7 @@ export async function markFormFiled(form:FormData) {
   const id=z.uuid().parse(form.get("document")),{document}=await visibleForm(id),back=`/app/clients/${document.client_id}?tab=outputs`;
   const upload=form.get("ack_file");
   try {await fileForm(id,String(form.get("ack") ?? ""),String(form.get("paper") ?? "") || undefined,upload instanceof File ? upload : undefined);}
-  catch {redirect(`${back}&form=ack`);}
+  catch(error) {await keepReason(error);redirect(`${back}&form=ack`);}
   runJobsSoon();
   revalidatePath("/app","layout");redirect(back);
 }
@@ -85,7 +86,7 @@ export async function addEditedForm(form:FormData) {
   const id=z.uuid().parse(form.get("document")),{document}=await visibleForm(id),back=`/app/clients/${document.client_id}?tab=outputs`;
   const file=form.get("edited_file");let draft:string;
   try {if(!(file instanceof File)) throw new Error("Choose the file.");draft=(await uploadEditedForm(id,file)).draft;}
-  catch {redirect(`${back}&form=edited`);}
+  catch(error) {await keepReason(error);redirect(`${back}&form=edited`);}
   revalidatePath("/app","layout");redirect(`/app/clients/${document.client_id}?tab=extraction&draft=${draft}`);
 }
 
@@ -104,5 +105,5 @@ export async function setDraftRegistration(form:FormData) {
   if(!row || !number) redirect(`${back}&form=check`);
   const data=draftSchema.parse(row.data);
   if(data.registration!==registration && !await saveDraft(row,{...data,registration},userId,"dataset.changed",{registration},permission)) redirect(`${back}&form=check`);
-  revalidatePath("/app","layout");redirect(back);
+  revalidatePath("/app","layout");redirect(`${back}&form=gstin`);
 }

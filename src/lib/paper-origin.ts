@@ -41,7 +41,7 @@ export function originOf(paper: Arrived, seen: { sender?: string; mail?: boolean
         : line?.action === "document.filed"
           ? [`Saved from the drive by ${by}`, `Found in the drive and saved by ${by}`]
           : line?.action === "document.added"
-            ? [`Added by ${by}`, `${(line.details as { kind?: string } | null)?.kind === "acknowledgement" ? "Acknowledgement added" : "Filing record written"} by ${by}`]
+            ? [`Added by ${by}`, `${(line.details as { kind?: string } | null)?.kind === "acknowledgement" ? "Acknowledgement added" : "Acknowledgement number noted"} by ${by}`]
             : seen.imported ? ["From your old files", "Moved here from your old files"] : ["From the drive", "From the drive"];
   const origin: Origin = { short, how, at: when(paper.received_at) };
   if (seen.mail) origin.mail = paper.email_event_id!;

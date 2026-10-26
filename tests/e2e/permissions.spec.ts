@@ -31,11 +31,11 @@ test("the owner's scoped permission gives a personal copy only for that client",
     for(const [tab,email] of [[page,ownerEmail],[person,staffEmail]] as const) {
       await emailStep(tab,email);await tab.getByLabel("6 digit code from the app").fill(totp(key));await tab.getByRole("button",{name:"Continue"}).click();await expect(tab).toHaveURL(/\/app$/);
     }
-    await page.goto("/app/settings#permissions");await page.getByText("Allow one person without asking",{exact:true}).click();
+    await page.goto("/app/settings#permissions");await page.getByText("Extra permission for one person",{exact:true}).click();
     await page.getByLabel("Person",{exact:true}).selectOption(staff.ownerId);await page.getByLabel("What they may do").selectOption("download");
     await page.getByLabel("Client names, one per line. Blank means every client.").fill("Invented Scope Alpha");
     const today=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Kolkata"});
-    await page.locator("#standing-until").fill(today);await page.getByRole("button",{name:"Allow this person"}).click();await expect(page).toHaveURL(/saved=permissions/);
+    await page.locator("#standing-until").fill(today);await page.getByRole("button",{name:"Allow this person"}).click();await expect(page).toHaveURL(/saved=allowed/);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
     await page.locator("#permissions").screenshot({path:test.info().outputPath("permissions.png")});
     await person.goto(`/app/files/${other}/view`);await expect(person.getByRole("button",{name:"Ask to download",exact:true})).toBeVisible();

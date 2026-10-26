@@ -46,7 +46,7 @@ test("staff record a notice from the client's page; the date they read waits as 
   await panel.getByRole("button", { name: "Add notice" }).click();
   // Back on the client's Notices tab, under the firm's review deadline, not the date read.
   await expect(staff).toHaveURL(new RegExp(`/app/clients/${clientId}\\?tab=notices$`));
-  await expect(staff.getByRole("row").filter({ hasText: reference })).toContainText("Review by");
+  await expect(staff.getByRole("row").filter({ hasText: reference })).toContainText("Check by");
   const added = await notice();
   expect(added).toMatchObject({ status: "upcoming", details: { authority: "income_tax", notice_type: "Notice u/s 143(2)", reference, received_on: "2026-10-20", suggested_date: "2026-12-24" } });
   expect(added.details.action_date).toBeUndefined();
@@ -58,19 +58,19 @@ test("the owner confirms the suggested date, and only then is it the deadline", 
   await signIn(owner, ownerEmail, ownerKey);
   await owner.goto("/app/notices?show=confirm");
   const row = owner.locator("section[aria-label=Notices] tbody tr").filter({ hasText: reference });
-  await expect(row).toContainText("Review by");
+  await expect(row).toContainText("Check by");
   await row.getByRole("link", { name: `Update the notice for ${clientName}` }).click();
   const panel = owner.getByRole("dialog", { name: "Notice u/s 143(2)" });
   await expect(panel.getByLabel("Action date, as the notice states it")).toHaveValue("2026-12-24");
-  await panel.getByRole("button", { name: "Confirm date" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Action date confirmed." })).toBeVisible();
+  await panel.getByRole("button", { name: "Mark date checked" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Action date checked." })).toBeVisible();
   await expect(owner.locator("section[aria-label=Notices] tbody tr").filter({ hasText: reference })).toHaveCount(0);
   const confirmed = await notice();
   expect(confirmed).toMatchObject({ due_on: "2026-12-24", details: { action_date: "2026-12-24" } });
   expect(await logged("notice.date_confirmed")).toEqual([firm.ownerId]);
   // The open notice names who confirmed it.
   await owner.goto(`/app/notices?notice=${confirmed.id}`);
-  await expect(owner.getByRole("dialog", { name: "Notice u/s 143(2)" })).toContainText("Confirmed by");
+  await expect(owner.getByRole("dialog", { name: "Notice u/s 143(2)" })).toContainText("Checked by");
 });
 
 test("the owner moves the notice on to in progress, replied and closed; a done notice leaves the open list", async () => {
@@ -103,7 +103,7 @@ test("staff see the closed notice but cannot move it on", async () => {
   const { id } = await notice();
   await staff.goto(`/app/notices?show=all&notice=${id}`);
   const panel = staff.getByRole("dialog", { name: "Notice u/s 143(2)" });
-  await expect(panel).toContainText("The owner, a partner or a manager confirms the date");
+  await expect(panel).toContainText("The owner, a partner or a manager checks the date");
   await expect(panel.getByRole("button", { name: "Mark open" })).toHaveCount(0);
 });
 
@@ -113,8 +113,8 @@ test("on the client's Notices tab the owner confirms a date in its row and sets 
   await owner.goto(`/app/clients/${clientId}?tab=notices`);
   const row = owner.getByRole("row").filter({ hasText: "Invented GST notice" });
   await expect(row.getByLabel("Action date for Invented GST notice")).toHaveValue("2027-01-15");
-  await row.getByRole("button", { name: "Confirm date" }).click();
-  await expect(row).toContainText("Confirmed by");
+  await row.getByRole("button", { name: "Mark date checked" }).click();
+  await expect(row).toContainText("Checked by");
   expect(await saved()).toEqual({ status: "upcoming", due_on: "2027-01-15", action_date: "2027-01-15" });
 
   await row.getByLabel("Status of Invented GST notice").selectOption("in_progress");

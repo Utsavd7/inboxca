@@ -48,7 +48,7 @@ export const signInNames: Record<MailApi, string> = { gmail: "Google", outlook: 
 // One plain line for Settings naming the sign ins not set up yet, or null when all are.
 export function signInNotReady() {
   const off = mailApis.filter((provider) => !mailSignInReady(provider)).map((provider) => signInNames[provider]);
-  return off.length ? `Sign in with ${off.join(", ").replace(/, ([^,]+)$/, " or $1")} is not set up yet; use the address and an app password below.` : null;
+  return off.length ? `Sign in with ${off.join(", ").replace(/, ([^,]+)$/, " or $1")} is not ready yet. Use the firm email address and an app password below.` : null;
 }
 
 const address = (base: string, values: Record<string, string>) => {

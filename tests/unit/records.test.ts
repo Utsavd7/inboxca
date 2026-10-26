@@ -27,6 +27,7 @@ describe("the records auto-reply", () => {
     expect(isRoutine("Balance sheet")).toBe(false);
     expect(isRoutine("Balance sheet", { routine: ["Balance sheet"] })).toBe(true);
     expect(isRoutine("ITR-V", { approve_all: true })).toBe(false);
+    expect(isRoutine("Filing record")).toBe(false);
   });
 });
 

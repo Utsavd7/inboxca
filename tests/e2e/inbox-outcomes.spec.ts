@@ -88,8 +88,8 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   await expect(owner.getByRole("status").filter({ hasText: "Reply sent" })).toBeVisible();
   await owner.goto("/app/inbox");
   await row(owner, `Thanks ${tag}`).hover();
-  await row(owner, `Thanks ${tag}`).getByRole("button", { name: "No reply needed" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Moved out of Needs reply." })).toBeVisible();
+  await row(owner, `Thanks ${tag}`).getByRole("button", { name: "Mark done" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Marked done." })).toBeVisible();
 
   const outcomes: [string, string, string[]][] = [
     ["answered", "Answered by InboxCA", [`ITR copy ${tag}`]],
@@ -97,7 +97,7 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
     ["filed", "Papers saved", [`Bills ${tag}`]],
     ["notice", "Notice recorded", [`Notice ${tag}`]],
     ["reply", "Needs reply", [`Meeting ${tag}`, `Hidden ${tag}`]],
-    ["none", "No reply needed", [`Thanks ${tag}`]],
+    ["none", "Done", [`Thanks ${tag}`]],
     ["replied", "Answered by your team", [`Question ${tag}`]],
   ];
   await owner.goto("/app/inbox");
@@ -130,7 +130,7 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   await expect(pane(owner).getByRole("link", { name: "Open the notice" })).toHaveAttribute("href", `/app/notices?notice=${notice}`);
   await owner.goto("/app/inbox?status=filed");
   await row(owner, `Bills ${tag}`).getByText(`Bills ${tag}`).click();
-  await expect(pane(owner)).toContainText(`InboxCA filed its paper into ${shah.name}'s folders.`);
+  await expect(pane(owner)).toContainText(`InboxCA saved its paper in ${shah.name}'s folders.`);
   await owner.goto("/app/inbox?status=reply");
   await row(owner, `Meeting ${tag}`).getByText(`Meeting ${tag}`).click();
   await expect(pane(owner)).toContainText("Asks something InboxCA could not answer");

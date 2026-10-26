@@ -4,7 +4,7 @@ import { recoverTwoStep, startEnrollment, verifyTwoStep, type Enrollment, type S
 
 // With factorId: the person already has an authenticator app; ask for its code.
 // Without: show the QR code to scan once, then ask for the first code.
-export function TwoStepForm({ factorId }: { factorId?: string }) {
+export function TwoStepForm({ factorId, codes = false }: { factorId?: string; codes?: boolean }) {
   const [setup, setSetup] = useState<Enrollment | null>(null);
   const [state, verify, verifying] = useActionState(verifyTwoStep, {} as StepState);
   const [lost, recover, recovering] = useActionState(recoverTwoStep, {} as StepState);
@@ -62,7 +62,8 @@ export function TwoStepForm({ factorId }: { factorId?: string }) {
         {verifying ? "Checking" : "Continue"}
       </button>
     </form>
-    {factorId && (
+    {factorId && !codes && <p className="auth-small">Lost your phone? Ask your firm&apos;s owner for help.</p>}
+    {factorId && codes && (
       <details className="auth-small" open={!!lost.error}>
         <summary>Lost your phone? Use a recovery code</summary>
         <form action={recover} className="auth-form">

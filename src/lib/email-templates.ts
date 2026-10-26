@@ -1,5 +1,6 @@
 import type { AnswerKind } from "./answers";
 import { periodName } from "./documents";
+import { askName, paperType } from "./paper-type";
 import { reminderEmail } from "./reminders";
 import { CODE_MINUTES } from "./share-codes";
 
@@ -18,12 +19,15 @@ export const emailTemplates={
     } as const)[kind];
     return {subject,text:[`Dear ${client},`,"",opening,...lines,"",firm].join("\n")};
   },
-  paper(client:string,firm:string,name:string,link:string,privatePaper:boolean,reply:boolean) {
-    return {subject:reply ? `Re: your request for ${name}` : name,text:[`Dear ${client},`,"",`${firm} has shared ${name} with you.`,"",`Download it here: ${link}`,privatePaper ? "It is private: the page emails a one-time code to this address before it opens. The link works for 7 days and up to 5 downloads." : "The link works for 7 days and up to 5 downloads.","",firm].join("\n")};
+  // The client reads the paper's type and period ("Form 16 for FY 2025-26"), never the drive's
+  // file name with its version; a paper of no known type keeps its name.
+  paper(client:string,firm:string,name:string,link:string,privatePaper:boolean,reply:boolean,paper?:{type:string;period:string}) {
+    const what=paper?.type && paper.type!=="Document" ? `${paperType(paper.type)}${paper.period ? ` for ${periodName(paper.period)}` : ""}` : name;
+    return {subject:reply ? `Re: your request for ${what}` : `${what} from ${firm}`,text:[`Dear ${client},`,"",`${firm} has shared ${what} with you.`,"",`Download it here: ${link}`,privatePaper ? "This paper is private. When you open the link, choose Email me a code. We send a 6 digit code to this email address. The link works for 7 days and up to 5 downloads." : "The link works for 7 days and up to 5 downloads.","",firm].join("\n")};
   },
   request(client:string,firm:string,period:string,items:{type:string}[],link:string) {
     const when=period ? ` for ${periodName(period)}` : "";
-    return {subject:`Documents needed${when}`,text:[`Dear ${client},`,"",`Please upload these documents${when}:`,...items.map((item)=>`- ${item.type}`),"",`Upload them here, no sign in needed: ${link}`,"The link works for 30 days.","",firm].join("\n")};
+    return {subject:`Documents needed${when}`,text:[`Dear ${client},`,"",`Please upload these documents${when}:`,...items.map((item)=>`- ${askName(item.type)}`),"",`Upload them here, no sign in needed: ${link}`,"The link works for 30 days.","",firm].join("\n")};
   },
   receipt(client:string,firm:string,period:string,items:{type:string;received:string[]}[]) {
     const when=period ? ` for ${periodName(period)}` : "";

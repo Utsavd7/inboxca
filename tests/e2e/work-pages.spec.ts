@@ -70,7 +70,7 @@ test("Documents: tick papers to download one ZIP or preview sending them as link
   const preview = owner.getByRole("dialog", { name: "Send 2 papers as secure links" });
   await expect(preview.getByRole("listitem").filter({ hasText: "Purchase bills" })).toContainText("Will be emailed");
   await expect(preview.getByRole("listitem").filter({ hasText: "Form 16" })).toContainText("No email address");
-  await expect(preview.getByRole("alert")).toContainText("Connect the firm's email");
+  await expect(preview.getByRole("alert")).toContainText("Connect the firm email");
   await expect(preview.getByRole("button", { name: "Send 1 link" })).toBeDisabled();
   await preview.getByRole("link", { name: "Cancel" }).click();
   await expect(preview).toHaveCount(0);
@@ -100,7 +100,7 @@ test("Documents: tick papers to download one ZIP or preview sending them as link
   await sheet.getByLabel("Client name").press("Enter");
   await sheet.getByRole("link", { name: `Choose ${patelName}` }).click();
   const form = owner.getByRole("dialog", { name: `Upload papers for ${patelName}` });
-  await expect(form.getByRole("group", { name: "sales_bills_sep_2026.pdf" }).getByLabel("Type")).toHaveValue("Sales bills");
+  await expect(form.getByRole("group", { name: "sales_bills_sep_2026.pdf" }).getByLabel("Paper type")).toHaveValue("Sales bills");
 
   // With a paper open, the page names its client as where the files go.
   await owner.goto(`/app/documents?file=${papers[0]}`);
@@ -137,7 +137,7 @@ test("Calendar: a month of days with a dot for each kind of return, a day's retu
   await row.getByRole("link", { name: `Remind ${patelName}` }).click();
   const panel = owner.getByRole("dialog", { name: `Remind ${patelName}` });
   await expect(panel.getByRole("listitem")).toContainText("In the email");
-  await expect(panel.getByRole("alert")).toContainText("Connect the firm's email");
+  await expect(panel.getByRole("alert")).toContainText("The firm email is not connected");
   await expect(panel.getByRole("button", { name: "Send reminder" })).toBeDisabled();
   await panel.getByRole("link", { name: "Cancel" }).click();
   await expect(panel).toHaveCount(0);

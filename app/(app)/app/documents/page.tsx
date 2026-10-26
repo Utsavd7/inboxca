@@ -13,6 +13,7 @@ import { documentTypes, folderFor, periodChoices, periodName, workOfType } from 
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { currentMember } from "@/src/lib/member";
 import { paperOrigins } from "@/src/lib/paper-origin";
+import { paperType } from "@/src/lib/paper-type";
 import { paperPolicy, type RecordsSettings } from "@/src/lib/records";
 import { searchTokens, words } from "@/src/lib/search";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -139,7 +140,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const records = (membership.settings.records ?? {}) as RecordsSettings;
   const preview = toSend?.map((row) => ({
     ...row,
-    skip: !membership.may("send", row.client_id) ? "Ask the owner to send this" : row.status !== "filed" ? "Not filed yet" : paperPolicy(row, records) === "internal" ? "Kept inside the firm" : !row.clients?.email_enc ? "No email address" : null,
+    skip: !membership.may("send", row.client_id) ? "Ask the owner to send this" : row.status !== "filed" ? "Not ready to send: still in To check or missing in the drive" : paperPolicy(row, records) === "internal" ? "Kept inside the firm" : !row.clients?.email_enc ? "No email address" : null,
   }));
   const sending = preview?.filter((row) => !row.skip).length ?? 0;
   const [sent, skipped] = (params.sent ?? "").split("-").map(Number);
@@ -149,7 +150,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
     <div className="fill docs has-bulk">
       <PageHead
         title="Documents"
-        sub="Every client paper, kept in your firm's own drive and filed by year, client and work."
+        sub="Every client paper, kept in your firm's own drive, in folders by year, client and type of work."
         actions={
           <>
             {portal && (
@@ -226,7 +227,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           {missing && (
             <p className="docs-only">
               <Badge tone="late">Missing in the drive</Badge>
-              <span>Only papers no longer in your drive. Put each file back in its folder, or remove the paper on its client&apos;s Documents.</span>
+              <span>These papers are no longer in your drive. Move each file back to its folder in the drive, or remove the paper on the client&apos;s Documents tab.</span>
               <Link className="b b-secondary" href={link({ show: "", page: "" })}>
                 Show all papers
               </Link>
@@ -235,7 +236,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           {checking && (
             <p className="docs-only">
               <Badge tone="warn">To check</Badge>
-              <span>InboxCA could not file these papers on its own. Each one says why. Choose a paper, then check its type and period to file it.</span>
+              <span>InboxCA could not save these papers on its own. Each one says why. Choose a paper, then check its type and period to save it.</span>
               <Link className="b b-secondary" href={link({ show: "", page: "", year: "" })}>
                 Show all papers
               </Link>
@@ -313,7 +314,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             </>
           ) : checking ? (
             <Empty Icon={FileSearch} kind="docs" title="Nothing to check">
-              <span>Every paper InboxCA received is filed in its folder.</span>
+              <span>Every paper InboxCA received is saved in its folder.</span>
               <Link className="b b-secondary" href={link({ show: "", page: "", year: "" })}>
                 Show all papers
               </Link>
@@ -327,7 +328,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             </Empty>
           ) : (
             <Empty Icon={FolderOpen} kind="docs" title="No papers yet">
-              <span>Papers your clients email are filed here once the email and the drive are connected. Upload papers, or drop files on this page, to add one now.</span>
+              <span>Once the firm email and drive are connected, the papers your clients email show here. To add papers now, choose Upload papers or drop files on this page.</span>
               {canUpload && (
                 <Link className="b b-primary" href="/app/documents?view=papers&upload=1" scroll={false}>
                   Upload papers
@@ -348,7 +349,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               ) : !drive ? (
                 <span className="docs-preview-none">
                   <FileTile name={paper.name} />
-                  The firm&apos;s drive is not linked yet, so papers cannot be shown.
+                  The firm&apos;s drive is not connected yet, so papers cannot be shown.
                 </span>
               ) : !process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET ? (
                 <span className="docs-preview-none">
@@ -365,7 +366,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               <FileTile name={paper.name} />
               <span className="grow">
                 <h2>{paper.name}</h2>
-                <span className="sub">{[paper.document_type, workTypes[paper.work_type as WorkType], periodName(paper.period_key)].filter(Boolean).join(", ")}</span>
+                <span className="sub">{[paperType(paper.document_type), workTypes[paper.work_type as WorkType], periodName(paper.period_key)].filter(Boolean).join(", ")}</span>
               </span>
             </div>
             {tag(paper.status)}
@@ -409,7 +410,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               <Link className={`b ${mayCheck(paper) ? "b-secondary" : "b-primary"}`} href={`/app/files/${paper.id}/view`}>
                 View
               </Link>
-              {/* With no drive linked there is nothing to download; the preview says why. */}
+              {/* With no drive connected there is nothing to download; the preview says why. */}
               {owner && !paper.prepared && drive && (
                 <a className="b b-secondary" href={`/app/files/${paper.id}`}>
                   Download
@@ -477,7 +478,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           ) : (
             <>
               <HeldFiles />
-              <p className="hint">Choose the client. Their upload form opens, where you pick the paper&apos;s type, work and period.</p>
+              <p className="hint">Choose the client. Then pick each paper&apos;s type, type of work and period.</p>
               <Form action="/app/documents" scroll={false} className="docs-find" role="search">
             <input type="hidden" name="view" value="papers" />
                 {Object.entries({ ...state, ...here, upload: "1" }).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
@@ -514,7 +515,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
       )}
       {preview && (
         <SidePanel key="send" id="send-papers" title={`Send ${preview.length === 1 ? "1 paper" : `${preview.length} papers`} as secure links`} close={close}>
-          <p className="hint">Each paper goes to its own client&apos;s email from your firm&apos;s address, as a link that works for 7 days and 5 downloads.</p>
+          <p className="hint">Each paper goes to its own client&apos;s email from your firm email, as a link that works for 7 days and 5 downloads.</p>
           {picked.length > SEND && (
             <p className="alert" role="alert">
               Only the first {SEND} chosen papers can be sent at once.
@@ -522,7 +523,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           )}
           {mailbox?.status !== "connected" && (
             <p className="alert" role="alert">
-              Connect the firm&apos;s email in Settings first. Papers go from the firm&apos;s own address.
+              Connect the firm email in Settings first. Papers go from the firm email.
             </p>
           )}
           <ul className="app-rows docs-send">
@@ -547,8 +548,8 @@ export default async function Documents({ searchParams }: { searchParams: Promis
       </Presence>
       {params.sent && !Number.isNaN(sent) && (
         <Toast>
-          {sent ? `${sent === 1 ? "1 paper" : `${sent} papers`} sent as secure links.` : "No paper was sent."}
-          {skipped > 0 && ` ${skipped === 1 ? "1 was" : `${skipped} were`} skipped.`}
+          {sent ? `${sent === 1 ? "1 paper" : `${sent} papers`} sent as secure links.` : "No paper was sent. Choose the papers again to see the reason next to each one."}
+          {skipped > 0 && !!sent && ` ${skipped === 1 ? "1 was" : `${skipped} were`} not sent. Choose them again to see why.`}
         </Toast>
       )}
     </div>

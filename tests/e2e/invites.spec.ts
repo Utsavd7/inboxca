@@ -123,8 +123,8 @@ test("the owner invites a new person, who appears as invited", async () => {
   await expect(row).toContainText("Manager");
   await expect(row).toContainText("Invited");
   // Orelu's system email names the firm; the sign in code comes separately.
-  await expect.poll(() => lastMail(newEmail), { timeout: 15_000 }).toContain("has added you to its team.");
-  expect(await lastMail(newEmail)).toMatch(/Sign in at http\S+\/sign-in with this email address/);
+  await expect.poll(() => lastMail(newEmail), { timeout: 15_000 }).toContain("It has invited you to join its team.");
+  expect(await lastMail(newEmail)).toMatch(/To join, go to http\S+\/sign-in and enter this email address/);
 
   await owner.getByLabel("Their work email").fill(newEmail);
   await owner.getByRole("button", { name: "Send invite" }).click();
@@ -172,13 +172,16 @@ test("the owner changes the role, removes the person and brings them back", asyn
   await panel.getByLabel("Role").selectOption("staff");
   await panel.getByRole("button", { name: "Save changes" }).click();
   await expect(row).toContainText("Staff");
+  await expect(owner.getByRole("status").filter({ hasText: "Changes saved." })).toBeVisible();
   await owner.reload();
   await expect(panel.getByLabel("Role")).toHaveValue("staff");
 
-  await panel.getByRole("button", { name: "Remove from the firm" }).click();
+  // Removing asks once more before it takes access away.
+  await panel.getByRole("link", { name: "Remove from the firm" }).click();
+  await panel.getByRole("button", { name: "Yes, remove from the firm" }).click();
   await expect(row).toContainText("Removed");
-  await panel.getByRole("button", { name: "Bring back" }).click();
-  await expect(panel.getByRole("button", { name: "Remove from the firm" })).toBeVisible();
+  await panel.getByRole("button", { name: "Restore" }).click();
+  await expect(panel.getByRole("link", { name: "Remove from the firm" })).toBeVisible();
   await expect(row).toContainText("Active");
 });
 
@@ -195,10 +198,10 @@ test("under Office only, staff need the office connection and an approved PC", a
   await turnOn(owner);
   await expect(owner.getByRole("status").filter({ hasText: "On." })).toContainText("You are on your office internet connection now.");
   // No PC stays in the office yet, so the owner is told how to get a fixed connection, once.
-  await expect(owner.getByText("ask your internet provider for a fixed address")).toBeVisible();
+  await expect(owner.getByText("ask your internet provider for a fixed internet address")).toBeVisible();
   await owner.getByRole("button", { name: "My provider doesn't offer it" }).click();
-  await expect(owner.getByText("ask your internet provider for a fixed address")).toHaveCount(0);
-  await expect(owner.getByText("mark one desktop in the office as Stays in the office")).toBeVisible();
+  await expect(owner.getByText("ask your internet provider for a fixed internet address")).toHaveCount(0);
+  await expect(owner.getByText("approve one office desktop as an office PC")).toBeVisible();
 
   await person.setExtraHTTPHeaders({ "x-test-ip": "198.51.100.7" });
   await person.goto("/app");
@@ -211,7 +214,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   await expect(owner.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Approve 1 PC" })).toContainText("Signed in from your office today");
   await owner.goto("/app/settings#office");
   await expect(owner.getByText(/New on Chrome on Windows, first seen today/)).toBeVisible();
-  await owner.getByRole("button", { name: "Stays in the office" }).click();
+  await owner.getByRole("button", { name: "Approve as office PC" }).click();
   await expect(owner.getByText(/New on Chrome on Windows, first seen today/)).toHaveCount(0);
   expect(await query(local.dbUrl, "select status, kind from public.devices where firm_id = $1", [firm.firmId])).toEqual([{ status: "approved", kind: "office" }]);
   await person.goto("/app/clients");
@@ -228,8 +231,8 @@ test("under Office only, staff need the office connection and an approved PC", a
   expect((await secondContext.cookies()).some((cookie) => cookie.name === "inboxca_device")).toBe(true);
   expect(await query(local.dbUrl, "select status from public.devices where firm_id = $1 order by status", [firm.firmId])).toEqual([{ status: "approved" }, { status: "waiting" }]);
   await owner.reload();
-  await owner.getByRole("button", { name: "Laptop" }).click();
-  await expect(owner.getByRole("button", { name: "Laptop" })).toHaveCount(0);
+  await owner.getByRole("button", { name: "Approve as laptop" }).click();
+  await expect(owner.getByRole("button", { name: "Approve as laptop" })).toHaveCount(0);
   expect(await query(local.dbUrl, "select count(*)::int as count from public.activity_log where firm_id = $1 and action = 'device.approved'", [firm.firmId])).toEqual([{ count: 2 }]);
   await second.goto("/app/clients");
   await expect(second.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
@@ -343,8 +346,8 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await query(local.dbUrl, "update public.devices set name = 'Travel laptop' where firm_id = $1 and token_hash = $2", [firm.firmId, await deviceHash(laptopCookie.value)]);
   await deputy.reload();
   const laptopRow = deputy.getByRole("listitem").filter({ hasText: "Travel laptop" });
-  await laptopRow.getByRole("button", { name: "Laptop", exact: true }).click();
-  await expect(laptopRow.getByRole("button", { name: "Laptop", exact: true })).toHaveCount(0);
+  await laptopRow.getByRole("button", { name: "Approve as laptop", exact: true }).click();
+  await expect(laptopRow.getByRole("button", { name: "Approve as laptop", exact: true })).toHaveCount(0);
   await laptop.goto("/app/clients");
   await expect(laptop.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
 
@@ -364,7 +367,7 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await expect(request).toBeVisible();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   await query(local.dbUrl, "update public.firms set settings = settings || $2 where id = $1", [firm.firmId, { special_hours: [{ from: today, to: today, open: "00:00", close: "23:59" }] }]);
-  await request.getByRole("button", { name: "Allow this network today" }).click();
+  await request.getByRole("button", { name: "Allow this connection today" }).click();
   await expect(request).toHaveCount(0);
   await laptop.goto("/app/clients");
   await expect(laptop.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
@@ -409,19 +412,19 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await expect(reception.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
   await owner.reload();
   const waitingPc = owner.getByRole("listitem").filter({ hasText: "Laptop on Chrome on Windows, first seen today" });
-  await waitingPc.getByRole("button", { name: "Stays in the office" }).click();
+  await waitingPc.getByRole("button", { name: "Approve as office PC" }).click();
   await expect(waitingPc).toHaveCount(0);
 
   await reception.goto("/app");
-  await reception.getByRole("button", { name: "Set up this PC's key" }).click();
-  await expect(reception.getByRole("button", { name: "Set up this PC's key" })).toHaveCount(0);
+  await reception.getByRole("button", { name: "Set up this office PC" }).click();
+  await expect(reception.getByRole("button", { name: "Set up this office PC" })).toHaveCount(0);
   expect(await query(local.dbUrl, "select count(*)::int as count from public.devices where firm_id = $1 and kind = 'office' and key_public is not null", [firm.firmId])).toEqual([{ count: 1 }]);
 
   // The office connection changes overnight: the PC confirms it with its key and the owner is told.
   await reception.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.40" });
   await reception.goto("/app/clients");
-  await reception.getByRole("button", { name: "Confirm with this PC's key" }).click();
-  await expect(reception.getByRole("button", { name: "Confirm with this PC's key" })).toHaveCount(0);
+  await reception.getByRole("button", { name: "Confirm from this PC" }).click();
+  await expect(reception.getByRole("button", { name: "Confirm from this PC" })).toHaveCount(0);
   await reception.goto("/app/clients");
   await expect(reception.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
   await owner.goto("/app");
@@ -469,7 +472,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload papers" })).toHaveCount(0);
   await person.getByRole("button", { name: "Ask to upload" }).click();
-  await expect(person.getByRole("status")).toContainText("Asked.");
+  await expect(person.getByRole("status")).toContainText("Permission asked.");
   // Within seconds the owner's browser gets it, sealed for that browser alone, naming no client.
   // Only the question counts: the note about the PCs added above, a minute after the first of
   // them, can fall due in the same sweep.
@@ -479,9 +482,9 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   expect(push.headers["content-encoding"]).toBe("aes128gcm");
   expect(String(push.headers.authorization)).toMatch(/^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=/);
   const message = JSON.parse(openPush(push.body, browserKey, auth));
-  expect(message).toEqual({ title: "A question for you", body: "New asks to upload a file.", url: "/app/inbox" });
+  expect(message).toEqual({ title: "A permission request for you", body: "New asks to upload a paper.", url: "/app/inbox" });
   // #20, #57: an email copy too, whose link only opens the Inbox.
-  await expect.poll(() => lastMail(ownerEmail), { timeout: 15_000 }).toContain("New asks to upload a file.");
+  await expect.poll(() => lastMail(ownerEmail), { timeout: 15_000 }).toContain("New asks to upload a paper.");
   expect(await lastMail(ownerEmail)).toMatch(/Open InboxCA to see it: http\S+\/app\/inbox\n\nThis link only opens InboxCA\. Nothing changes until you sign in and choose\./);
   pushService.close();
   await query(local.dbUrl, "delete from public.push_subscriptions where user_id = $1", [ownerId]);
@@ -503,7 +506,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
 
   // The person has no team manager, so the question goes to the owner.
   await owner.goto("/app/inbox");
-  const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "New asks to upload a file" });
+  const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "New asks to upload a paper" });
   await expect(question).toContainText(`Ask Client ${tag}`);
   // #42, #44, #57: copying an approval form or visiting its address cannot approve it.
   const [{ id: asked }] = await query(local.dbUrl, "select id from public.requests where firm_id=$1 and kind='permission' and status='pending' and expires_at>now()", [firm.firmId]);
@@ -517,7 +520,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id=$1 and actor_id=$2 and action='approval.denied'", [firm.firmId, requester]))[0].n).toBe(1);
   // Answer opens the question beside the list, by name; the toast can undo the answer.
   await question.getByRole("link", { name: "Answer" }).click();
-  const answer = owner.getByRole("dialog", { name: `New asks to upload a file for Ask Client ${tag}` });
+  const answer = owner.getByRole("dialog", { name: `New asks to upload a paper for Ask Client ${tag}` });
   await answer.getByRole("button", { name: "Refuse" }).click();
   const toast = owner.getByRole("status").filter({ hasText: "Refused." });
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
@@ -526,7 +529,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   expect((await query(local.dbUrl, "select status from public.requests where id=$1", [fields.request]))[0].status).toBe("pending");
   await question.getByRole("link", { name: "Answer" }).click();
   await answer.getByRole("button", { name: "Allow once" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "New may upload a file once, within an hour." })).toBeVisible();
+  await expect(owner.getByRole("status").filter({ hasText: "New may upload a paper once, within an hour." })).toBeVisible();
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
 
   await person.goto(files);
@@ -542,24 +545,26 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await person.getByRole("button", { name: "Ask to upload" }).click();
   await expect(person.getByText("Asked", { exact: true })).toBeVisible();
   await owner.goto("/app/inbox");
-  await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a file" }).getByRole("link", { name: "Answer" }).click();
+  await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a paper" }).getByRole("link", { name: "Answer" }).click();
   await owner.getByRole("dialog").getByRole("button", { name: "Always allow New" }).click();
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
   await owner.goto("/app/settings#permissions");
-  const standing = owner.getByRole("listitem").filter({ hasText: /may upload files.*without asking/ });
+  const standing = owner.getByRole("listitem").filter({ hasText: /may upload papers.*without asking/ });
   await standing.getByRole("button", { name: "Withdraw" }).click();
   await expect(standing).toHaveCount(0);
   await person.goto(files);
   await expect(person.getByRole("button", { name: "Ask to upload" })).toBeVisible();
 
   // #47: a changed role right is read on the next request, and reset removes it.
-  await owner.getByLabel("Upload files: employees").check();
+  await owner.getByLabel("Upload papers: staff").check();
   await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save permissions", exact: true }).click()]);
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
-  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Reset to defaults", exact: true }).click()]);
+  // Reset asks once more before it clears the firm's choices.
+  await owner.getByRole("link", { name: "Reset to defaults" }).click();
+  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Yes, reset", exact: true }).click()]);
   await person.goto(files);
   await expect(person.getByRole("button", { name: "Ask to upload" })).toBeVisible();
 
@@ -594,10 +599,10 @@ test("away from the office, the owner allows a staff member's own device to view
 
   await owner.reload();
   const asked = owner.getByRole("listitem").filter({ hasText: "asks to use it away from the office" });
-  await asked.getByRole("button", { name: "Allow" }).click();
+  await asked.getByRole("button", { name: "Approve" }).click();
   await expect(asked).toHaveCount(0);
   await home.goto("/app/clients");
-  await expect(home.getByRole("status").filter({ hasText: "this device only views" })).toBeVisible();
+  await expect(home.getByRole("status").filter({ hasText: "can only view papers until" })).toBeVisible();
   await home.getByRole("link", { name: `Ask Client ${tag}` }).click();
   await home.goto(`${home.url().split("?")[0]}?tab=files`);
   await expect(home.getByRole("button", { name: "Ask to upload" })).toHaveCount(0);
@@ -750,9 +755,9 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await card.getByLabel("The firm's email address").fill(mailboxEmail);
   await card.getByLabel("Its password").fill("wrong");
   await card.getByText("Change server settings").click();
-  await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
+  await card.getByLabel("Incoming mail server (IMAP)").fill("127.0.0.1");
   await card.getByLabel("Incoming port").fill("3143");
-  await card.getByLabel("Outgoing (SMTP) server").fill("127.0.0.1");
+  await card.getByLabel("Outgoing mail server (SMTP)").fill("127.0.0.1");
   await card.getByLabel("Outgoing port").fill("3025");
   await card.getByRole("button", { name: "Connect email" }).click();
   await expect(card.getByRole("alert")).toContainText("could not sign in");
@@ -764,7 +769,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await blocked.goto("/sign-in");
   await blocked.getByLabel("Your work email").fill(mailboxEmail);
   await blocked.getByRole("button", { name: "Email me a code" }).click();
-  await expect(blocked.getByRole("alert").filter({ hasText: "The firm's email address cannot be used to sign in." })).toBeVisible();
+  await expect(blocked.getByRole("alert").filter({ hasText: "This is your firm email, which InboxCA reads. Sign in with your own work email instead." })).toBeVisible();
   await blocked.close();
 
   const [{ user_id: mailboxUser }] = await query(local.dbUrl, "select user_id from public.firm_members m join auth.users u on u.id = m.user_id where m.firm_id = $1 and u.email = $2", [firm.firmId, mailboxEmail]);
@@ -772,7 +777,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await owner.goto("/app/people?panel=invite");
   await owner.getByLabel("Their work email").fill(mailboxEmail);
   await owner.getByRole("button", { name: "Send invite" }).click();
-  await expect(owner.getByRole("alert").filter({ hasText: "The firm's email address cannot be a team login." })).toBeVisible();
+  await expect(owner.getByRole("alert").filter({ hasText: "This is the firm email. Invite each person with their own email address." })).toBeVisible();
 
   await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill(mailClient);
@@ -804,8 +809,8 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
     // The shared test mailbox holds thousands of emails, so a live read can take seconds.
     await expect(open.getByRole("heading", { name: subject })).toBeVisible({ timeout: 15_000 });
     reasons.push(await open.locator(".ib-actions + .ib-note").textContent());
-    await open.getByRole("button", { name: "No reply needed" }).click();
-    await expect(open.getByRole("button", { name: "No reply needed" })).toHaveCount(0, { timeout: 15_000 });
+    await open.getByRole("button", { name: "Mark done" }).click();
+    await expect(open.getByRole("button", { name: "Mark done" })).toHaveCount(0, { timeout: 15_000 });
   }
   // Each waiting email is given to someone; here the owner is the only person.
   expect(reasons.sort()).toEqual(["Asks for a paper that is not in the drive. Given to you", "Asks something InboxCA could not answer. Given to you"]);
@@ -815,7 +820,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await expect(waiting).toHaveCount(2);
   await waiting.first().locator(".ib-subject").click();
   await open.getByText("Change", { exact: true }).click();
-  await open.getByRole("form", { name: "What this email is" }).getByRole("button", { name: "Asks for this year's records" }).click();
+  await open.getByRole("form", { name: "What this email is" }).getByRole("button", { name: "Asks for this year's papers" }).click();
   await expect(open.getByText("Corrected")).toBeVisible({ timeout: 15_000 });
 });
 
@@ -851,7 +856,7 @@ test("repeated mailbox failures ask the owner to reconnect, then pending mail re
   const card=owner.locator("section#mailbox");
   await expect(card.getByLabel("The firm's email address")).toHaveValue(mailboxEmail);
   await card.getByLabel("Its password").fill(mailboxEmail);
-  await card.getByRole("button",{name:"Reconnect email"}).click();
+  await card.getByRole("button",{name:"Connect email again"}).click();
   await expect(card.getByRole("status")).toHaveText(`Connected: ${mailboxEmail}`);
   await runJobs(request,firm.firmId);
   expect((await query(local.dbUrl,"select id,status from public.connected_accounts where firm_id=$1 and kind='mail'",[firm.firmId]))[0]).toEqual({id:account,status:"connected"});
@@ -859,7 +864,7 @@ test("repeated mailbox failures ask the owner to reconnect, then pending mail re
   await expect.poll(()=>mailCount(addresses[0]),{timeout:15_000}).toBe(2);
   expect(await lastMail(addresses[0])).toContain("Health test return");
   await owner.goto("/app");
-  await expect(owner.getByRole("link",{name:"Reconnect email"})).toHaveCount(0);
+  await expect(owner.getByRole("link",{name:"Connect email again"})).toHaveCount(0);
   await query(local.dbUrl,"delete from public.tasks where code=$1",[code]);
   await query(local.dbUrl,"delete from public.compliance_types where code=$1",[code]);
   await query(local.dbUrl,"update public.firms set settings=settings || '{\"reminders\":false}' where id=$1",[firm.firmId]);
@@ -934,7 +939,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(owner.getByText("View only. Your email and the time are shown across every page.")).toBeVisible();
   // A screenshot key blanks the pages for a moment, and each try is logged.
   await owner.keyboard.press("PrintScreen");
-  await expect(owner.getByText("The document is hidden for a moment.")).toBeVisible();
+  await expect(owner.getByText("The pages are hidden. They show again in a few seconds, or when you come back to this window.")).toBeVisible();
   await expect.poll(async () => (await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and action = 'capture_attempt'", [firm.firmId]))[0].n).toBe(1);
   const raw = owner.url().replace(/\/view$/, "");
   const file = await owner.request.get(raw);
@@ -948,7 +953,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
     await rows.getByRole("link", { name: `Check ${mailClient} - Document.pdf` }).click();
     // Name shows only once Type is Other.
     await expect(owner.getByRole("dialog").getByLabel("Name", { exact: true })).toBeHidden();
-    await owner.getByLabel("Type", { exact: true }).selectOption("Other");
+    await owner.getByLabel("Paper type", { exact: true }).selectOption("Other");
     await owner.getByRole("dialog").getByLabel("Name", { exact: true }).fill("HDFC loan sanction letter");
     if (attempt === 0) await owner.getByLabel("Add to our list of paper types").check();
     await owner.getByRole("button", { name: "Save", exact: true }).click();
@@ -968,7 +973,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   // The kept name is offered as a type from now on.
   await owner.getByRole("link", { name: "Upload papers" }).click();
   await owner.getByLabel("Files", { exact: true }).setInputFiles({ name: "scan.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 not uploaded") });
-  await expect(owner.getByLabel("Type", { exact: true }).locator("option", { hasText: "HDFC loan sanction letter" })).toHaveCount(1);
+  await expect(owner.getByLabel("Paper type", { exact: true }).locator("option", { hasText: "HDFC loan sanction letter" })).toHaveCount(1);
   // Activity names each rename's old and new name; a manager or the owner puts back the latest in one click.
   await owner.goto(`${owner.url().split("?")[0]}?tab=activity`);
   await expect(owner.locator("section[aria-labelledby=client-activity]")).toContainText(`${mailClient} - HDFC loan sanction letter.pdf to ${mailClient} - Document.pdf`);
@@ -983,20 +988,21 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.reload();
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
 
-  // The owner removes the second copy: it waits in the drive's Deleted and old versions folder and can be put back.
+  // The owner removes the second copy: it waits in the drive's Removed papers folder and can be restored.
   await rows.filter({ hasText: "Same file as" }).getByRole("link", { name: /^Check/ }).click();
   await expect(owner.getByRole("dialog")).toContainText("InboxCA also keeps its own locked copy for 30 days.");
   await owner.getByRole("dialog").getByRole("button", { name: /^Remove/ }).click();
-  await expect(owner.getByRole("status")).toContainText("waits 30 days");
-  const removedFile = path.join(drive, "Deleted and old versions", `${mailClient} - Purchase bills - Sep 2026.pdf`);
+  await expect(owner.getByRole("status")).toContainText("Removed papers folder of your firm's drive for 30 days");
+  const removedFile = path.join(drive, "Removed papers", `${mailClient} - Purchase bills - Sep 2026.pdf`);
   expect(await readFile(removedFile, "utf8")).toBe("%PDF-1.4 invented purchase bills");
   await expect(rows).toHaveCount(2);
   // InboxCA's own safety copy is sealed with the firm's key. With the Deleted folder emptied
-  // in the drive, Put back brings the file back from that copy.
+  // in the drive, Restore brings the file back from that copy.
   const [{ id: removedId }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1 and status = 'deleted' and name = $2", [firm.firmId, path.basename(removedFile)]);
   expect((await readFile(path.join(TEST_WORKSPACE, "safety", firm.firmId, removedId))).includes("invented purchase bills")).toBe(false);
   await unlink(removedFile);
-  await owner.getByRole("button", { name: "Put back" }).first().click();
+  await owner.getByRole("button", { name: "Restore" }).first().click();
+  await expect(owner.getByRole("status").filter({ hasText: "Restored " })).toBeVisible({ timeout: 20_000 });
   await expect(rows).toHaveCount(3);
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
   const [putBack] = await query(local.dbUrl, "select drive_file_id from public.documents where id = $1", [removedId]);
@@ -1006,8 +1012,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   // A manager or the owner uploads a file and types it; it is saved under its name in the client's folder.
   await owner.getByRole("link", { name: "Upload papers" }).click();
   await owner.getByLabel("Files", { exact: true }).setInputFiles({ name: "IMG_2041.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 invented form 16") });
-  await owner.getByLabel("Type", { exact: true }).selectOption("Form 16");
-  await owner.getByLabel("Work", { exact: true }).selectOption("income_tax");
+  await owner.getByLabel("Paper type", { exact: true }).selectOption("Form 16");
+  await owner.getByLabel("Type of work", { exact: true }).selectOption("income_tax");
   await owner.getByLabel("Period", { exact: true }).selectOption({ label: "FY 2025-26" });
   await owner.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - Form 16 - FY 2025-26.pdf`);
@@ -1029,7 +1035,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(link);
   // The firm's name leads: what it needs, by when, and how much has arrived.
-  await expect(visitor.getByRole("heading", { level: 1 })).toHaveText(/ needs 2 papers by \d{1,2} \w{3} \d{4}$/);
+  await expect(visitor.getByRole("heading", { level: 1 })).toHaveText(/ needs 2 papers\. This link works until \d{1,2} \w{3} \d{4}\.$/);
   await expect(visitor.getByText(`Papers for ${mailClient}`)).toBeVisible();
   await expect(visitor.getByRole("region", { name: "Progress" })).toContainText("0 of 2 papers received");
   await expect(visitor.getByText(`Questions? Email ${mailboxEmail}`)).toBeVisible();
@@ -1042,8 +1048,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(loan.getByRole("img", { name: "Received" })).toBeVisible();
   await expect(visitor.getByRole("region", { name: "Progress" })).toContainText("1 of 2 papers received");
   await owner.reload();
-  await expect(owner.getByRole("list", { name: "Files asked for" })).toContainText("1 of 2 received");
-  await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Filed");
+  await expect(owner.getByRole("list", { name: "Papers asked for" })).toContainText("1 of 2 received");
+  await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Saved");
   await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Sent by the client through their upload link, ");
   // The team checks what arrived. Ask again clears an item, so the client's link asks for it once more.
   // Several files chosen together all arrive before the request closes.
@@ -1058,7 +1064,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(sales.getByRole("status")).toHaveText("Received: 2 files");
   await expect(visitor.getByLabel(/^Add /)).toHaveCount(0);
   await owner.reload();
-  const asks = owner.getByRole("list", { name: "Files asked for" });
+  const asks = owner.getByRole("list", { name: "Papers asked for" });
   await asks.getByRole("button", { name: "Loan statement is right" }).click();
   await expect(asks.getByRole("button", { name: "Loan statement is right" })).toHaveCount(0);
   await asks.getByRole("button", { name: "Ask again for Sales bills" }).click();
@@ -1116,11 +1122,11 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   // Each file is read once after it is filed: a word inside the PDF finds it, as does the name it came with.
   await runJobs(request, firm.firmId);
-  await owner.getByLabel("Find a file").fill("99231");
+  await owner.getByLabel("Find a paper").fill("99231");
   await owner.getByRole("button", { name: "Find", exact: true }).click();
   await expect(rows).toHaveCount(1);
   await expect(rows).toContainText("Loan statement");
-  await owner.getByLabel("Find a file").fill("IMG_2041");
+  await owner.getByLabel("Find a paper").fill("IMG_2041");
   await owner.getByRole("button", { name: "Find", exact: true }).click();
   await expect(rows).toHaveCount(1);
   await expect(rows).toContainText("Form 16");
@@ -1151,7 +1157,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
     await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Documents/ }).click();
     await owner.getByRole("link", { name: "Upload papers" }).click();
     await owner.getByLabel("Files", { exact: true }).setInputFiles({ name: `${type}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
-    await owner.getByLabel("Type", { exact: true }).selectOption(type);
+    await owner.getByLabel("Paper type", { exact: true }).selectOption(type);
     await owner.getByLabel("Period", { exact: true }).selectOption({ label: period });
     await owner.getByRole("button", { name: "Upload", exact: true }).click();
     await expect(owner.getByRole("status")).toContainText("Saved as");
@@ -1162,7 +1168,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   };
   await ask("ITR copy", "Please send my ITR for AY 2025-26 for the loan.");
   const reply = await lastMail(`client-${tag}@patel.test`);
-  expect(reply).toContain(`shared ${mailClient} - ITR-V - FY 2024-25.pdf with you`);
+  expect(reply).toContain("shared ITR-V for FY 2024-25 with you");
   expect(reply).toMatch(/Download it here: http\S+\/s\//);
   const routineLink=reply.match(/Download it here: (http\S+)/)![1];
   const opened=await request.get(routineLink);
@@ -1174,7 +1180,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(papers).toContainText(`${mailClient} - Balance sheet - FY 2025-26.pdf`);
   await papers.getByRole("button", { name: "Approve and send" }).click();
   await expect(owner.getByRole("status")).toContainText("Sent");
-  expect(await lastMail(`client-${tag}@patel.test`)).toContain(`shared ${mailClient} - Balance sheet - FY 2025-26.pdf with you`);
+  expect(await lastMail(`client-${tag}@patel.test`)).toContain("shared Balance sheet for FY 2025-26 with you");
 
   // A notice a client emails is recorded with what the rules found; its date is only a
   // suggestion until a person confirms it.
@@ -1191,16 +1197,16 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const notice = owner.locator("section[aria-label=Notices] tbody tr").filter({ hasText: mailClient });
   await expect(notice).toContainText("Notice u/s 148");
   await expect(notice).toContainText("ITBA/AST/F/148/2026-27/1050012345");
-  await expect(notice).toContainText("Review by");
+  await expect(notice).toContainText("Check by");
   await notice.getByRole("link", { name: `Update the notice for ${mailClient}` }).click();
   const noticePanel = owner.getByRole("dialog", { name: "Notice u/s 148" });
   await expect(noticePanel.getByLabel("Action date, as the notice states it")).toHaveValue("2026-12-24");
-  await noticePanel.getByRole("button", { name: "Confirm date" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Action date confirmed." })).toBeVisible();
+  await noticePanel.getByRole("button", { name: "Mark date checked" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Action date checked." })).toBeVisible();
   await expect(notice).toContainText("24 Dec 2026");
   await notice.getByRole("link", { name: `Update the notice for ${mailClient}` }).click();
   // The panel names who confirmed the date.
-  await expect(noticePanel.locator(".props")).toContainText("Confirmed byOwner");
+  await expect(noticePanel.locator(".props")).toContainText("Checked byOwner");
   await noticePanel.getByRole("button", { name: "Mark replied" }).click();
   await owner.getByRole("link", { name: /^Replied or closed/ }).click();
   await expect(owner.locator("section[aria-label=Notices]")).toContainText(mailClient);
@@ -1276,7 +1282,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const itrv = path.join(drive, "FY 2023-24", mailClient, "Income tax", `${mailClient} - ITR-V - FY 2023-24.pdf`);
   expect(await readFile(itrv, "utf8")).toBe("%PDF-1.4 invented ITR-V");
   await owner.reload();
-  await owner.getByRole("button", { name: "Put them back" }).click();
+  await owner.getByRole("button", { name: "Undo the move" }).click();
   await expect(owner.getByRole("status")).toContainText("Putting the files back");
   await runJobs(request, firm.firmId);
   expect(await readFile(path.join(old, mailClient, "2025-26", "ITR-V AY 2024-25.pdf"), "utf8")).toBe("%PDF-1.4 invented ITR-V");
@@ -1357,7 +1363,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
     await expect(owner).toHaveURL(/\/app\/clients\?bulk=/);
     await request.post("/api/jobs",{headers:{Authorization:`Bearer ${TEST_WORKER_SECRET}`}});
     try {
-      await expect.poll(async()=>{await owner.reload();return owner.locator("section[aria-labelledby=send-progress]").textContent();}).toContain("Every chosen client has been checked.");
+      await expect.poll(async()=>{await owner.reload();return owner.locator("section[aria-labelledby=send-progress]").textContent();}).toContain("Done. Each client below shows what happened.");
     } catch(error) {
       const jobs=await query(local.dbUrl,"select state,last_error_code from public.jobs where firm_id=$1 and kind='bulk_send'",[firm.firmId]);
       throw new Error(`${String(error)}. Jobs: ${JSON.stringify(jobs)}`);
@@ -1386,7 +1392,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   expect(await mailCount(`client-${tag}@patel.test`)).toBe(sentBefore);
   expect(await lastMail(`client-${tag}@patel.test`)).toMatch(/Download it here: http\S+\/s\//);
   await send("Audit report","2025");
-  await expect(progress).toContainText("Skipped. No filed paper for this year");
+  await expect(progress).toContainText("Skipped. No saved paper of this type for this year");
   await send("Balance sheet","2026");
   await expect(progress).toContainText("Waiting for approval in the Inbox");
   await owner.goto("/app/inbox");
@@ -1417,7 +1423,10 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await expect(owner.getByRole("article", { name: "Open email" })).toContainText("Asks for a paper kept inside your firm");
   expect(name).toContain("ITR-V");
   await owner.goto("/app/settings");
-  for (const section of ["section#mailbox", "section#drive"]) await owner.locator(section).getByRole("button", { name: "Disconnect" }).click();
+  for (const section of ["section#mailbox", "section#drive"]) {
+    await owner.locator(section).getByRole("link", { name: "Disconnect" }).click();
+    await owner.locator(section).getByRole("button", { name: "Yes, disconnect" }).click();
+  }
   await expect(owner.locator("section#drive").getByRole("button", { name: "Connect drive" })).toBeVisible();
   await expect(owner.locator("section#mailbox").getByLabel("The firm's email address")).toBeVisible();
 
@@ -1447,7 +1456,7 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await officeSwitch(boss);
     await turnOn(boss);
     await expect(boss.getByRole("button", { name: "Turn off", exact: true, includeHidden: true })).toBeAttached();
-    await expect(boss.getByRole("heading", { name: "Doors InboxCA cannot close for you" })).toBeVisible();
+    await expect(boss.getByRole("heading", { name: "Risks InboxCA cannot stop for you" })).toBeVisible();
     const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
     for (let n = 0; n < 5; n++) {
       const address = `batch-staff-${n}-${randomUUID()}@example.test`;
@@ -1476,7 +1485,7 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await boss.goto("/app");
     await expect(boss.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Approve 5 PCs" })).toContainText("Signed in from your office today");
     await boss.getByRole("link", { name: "Approve 5 PCs" }).click();
-    await boss.getByRole("button", { name: "Approve all as staying in the office" }).click();
+    await boss.getByRole("button", { name: "Approve all as office PCs" }).click();
     await expect(boss.getByRole("heading", { name: "PCs waiting for approval" })).toHaveCount(0);
     expect((await query(local.dbUrl, "select count(*)::int n from public.devices where firm_id=$1 and status='approved'", [batch.firmId]))[0].n).toBe(5);
     for (const pc of staff) {
@@ -1514,10 +1523,10 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     // With a trusted PC present, three confirmation taps trigger the suggestion.
     await query(local.dbUrl, "update public.devices set key_id='test-key',key_public='test-public' where id=(select id from public.devices where firm_id=$1 limit 1)", [batch.firmId]);
     await boss.reload();
-    await expect(boss.getByText("ask your internet provider for a fixed address")).toHaveCount(0);
+    await expect(boss.getByText("ask your internet provider for a fixed internet address")).toHaveCount(0);
     for (const ipv4 of ["203.0.113.71", "203.0.113.72", "203.0.113.73"]) await query(local.dbUrl, "select public.office_control($1,$2,'here',connection=>$3)", [batch.firmId, batch.ownerId, { ipv4 }]);
     await boss.reload();
-    await expect(boss.getByText("ask your internet provider for a fixed address")).toBeVisible();
+    await expect(boss.getByText("ask your internet provider for a fixed internet address")).toBeVisible();
   } finally {
     // A context the test already closed is gone; closing it again is not a failure.
     for (const context of contexts) await context.close().catch(() => {});

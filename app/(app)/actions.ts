@@ -43,7 +43,7 @@ import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings, providerFor } from "@/src/lib/mailbox";
 import { currentMember, currentWriter, FIRM_COOKIE, myQuestions } from "@/src/lib/member";
 import { activityNames } from "@/src/lib/activity";
-import { invitableRoles } from "@/src/lib/roles";
+import { invitableRoles, personName } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 import { sendSystemMail } from "@/src/lib/system-mail";
@@ -64,7 +64,7 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
   const email = values.email.trim().toLowerCase();
   if (!z.email().safeParse(email).success) return { error: "Enter a valid email address.", values };
   if (await mailboxLogin(email, membership.firmId))
-    return { error: "The firm's email address cannot be a team login.", values };
+    return { error: "This is the firm email. Invite each person with their own email address.", values };
   const role = invitable.safeParse(form.get("role"));
   if (!role.success) return { error: "Choose a role.", values };
 
@@ -92,9 +92,9 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
   });
   if (error) log.warn("invite.email_failed", { status: error.status });
   // Orelu's system email names the firm, once it is set up (PLAN.md M0 step 8).
-  await sendSystemMail(email, `${membership.firmName} added you on InboxCA`, [
-    `${membership.firmName} uses InboxCA for its clients' papers and returns, and has added you to its team.`,
-    `Sign in at ${origin}/sign-in with this email address. A sign in code comes in a separate email; there is no password.`,
+  await sendSystemMail(email, `${membership.firmName} invited you to InboxCA`, [
+    `${membership.firmName} uses InboxCA for its clients' papers and returns. It has invited you to join its team.`,
+    `To join, go to ${origin}/sign-in and enter this email address. InboxCA emails you a code to sign in. There is no password.`,
     "If you did not expect this, you can ignore this email.",
   ].join("\n\n")).catch(() => log.warn("invite.system_mail_failed"));
   revalidatePath("/app/people");
@@ -121,6 +121,7 @@ export async function manageMember(form: FormData) {
       .eq("user_id", args.person);
   }
   revalidatePath("/app/people");
+  redirect(`/app/people?person=${encodeURIComponent(args.person)}&saved=${intent === "remove" || intent === "restore" ? intent : "role"}`);
 }
 
 // People → Teams and Branches: the owner adds and removes them. Removing a team leaves its
@@ -425,7 +426,7 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
   const seen = new Set<string>();
   const checked: ImportRow[] = rows.map((row) => {
     const kind = readKind(row.kind, !!cleanNumber(row.gstin));
-    if (!kind) return { ...row, error: `"${row.kind}" is not a kind InboxCA knows. Use Individual, Business, Company, LLP or Trust.` };
+    if (!kind) return { ...row, error: `"${row.kind}" is not a client type InboxCA knows. Use Individual, Business, Company, LLP or Trust.` };
     const result = checkClient({ ...row, kind });
     if ("error" in result) return { ...row, error: result.error };
     const numbers = [result.client.pan, result.client.gstin].filter(Boolean);
@@ -467,7 +468,7 @@ export async function manageClient(form: FormData) {
     // Assign to me on the full list of a person's work goes back to its late returns.
     if (form.get("from") === "work") return redirect(error ? "/app/work?show=late&error=assign" : "/app/work?show=late&assigned=1");
     // The details panel closes once its change is saved; other panels stay open for the next one.
-    const query = new URLSearchParams({ ...(tab && tab !== "overview" && (error || tab !== "details") && { tab }), ...(error && { error }) }).toString();
+    const query = new URLSearchParams({ ...(tab && tab !== "overview" && (error || tab !== "details") && { tab }), ...(error ? { error } : { changed: String(form.get("intent") ?? "") }) }).toString();
     return redirect(`/app/clients/${id}${query ? `?${query}` : ""}`);
   };
   if (!membership || !canManageClients(membership.role)) back("role");
@@ -540,14 +541,13 @@ export async function manageClient(form: FormData) {
       contact_id: contact.id,
       client_id: id,
       relation: String(form.get("relation") ?? "").trim().slice(0, 60) || null,
-      can_view_status: form.get("can_view_status") === "on",
       can_receive_documents: form.get("can_receive_documents") === "on",
     });
     if (error) back(error.code === "23505" ? "linked" : "contact");
   } else if (intent === "contact-rights") {
     await supabase
       .from("contact_clients")
-      .update({ can_view_status: form.get("can_view_status") === "on", can_receive_documents: form.get("can_receive_documents") === "on" })
+      .update({ can_receive_documents: form.get("can_receive_documents") === "on" })
       .eq("client_id", id)
       .eq("contact_id", String(form.get("contact") ?? ""));
   } else if (intent === "unlink-contact") {
@@ -618,7 +618,7 @@ export async function pauseReminders(form: FormData) {
   const client = String(form.get("client") ?? "");
   await supabase.from("clients").update({ reminders_paused: form.get("paused") === "on" }).eq("id", client);
   revalidatePath(`/app/clients/${client}`);
-  redirect(`/app/clients/${client}?tab=details`);
+  redirect(`/app/clients/${client}?tab=details&changed=reminders`);
 }
 
 export async function saveVisibility(form: FormData) {
@@ -771,7 +771,7 @@ export async function connectMailbox(_prev: MailboxState, form: FormData): Promi
   const crypto=serverCrypto();
   const index=await crypto.blindIndex(membership.firmId,"email",address);
   const priorIndex=prior && (prior.address_bidx ?? await crypto.blindIndex(membership.firmId,"email",await crypto.decrypt(membership.firmId,`accounts/${prior.id}/address`,prior.address_enc)));
-  if (prior && (prior.status!=="needs_reconnect" || priorIndex!==index)) return {error:"A mailbox is already connected. Disconnect it first to use another address.",values};
+  if (prior && (prior.status!=="needs_reconnect" || priorIndex!==index)) return {error:"A firm email is already connected. Disconnect it first to use another address.",values};
   const id=prior?.id ?? randomUUID();
   const fields={
     id,firm_id:membership.firmId,kind:"mail",provider:"imap",status:"connected",
@@ -837,6 +837,7 @@ export async function disconnectMailbox() {
   await forgetMailToken(membership.firmId, userId).catch(() => log.warn("mail_token_not_revoked", {}));
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "mail");
   revalidatePath("/app/settings");
+  redirect("/app/settings?group=email&saved=mail_off#mailbox");
 }
 
 // Inbox: correct an email's label (a person's choice wins over the rules and is logged),
@@ -960,6 +961,7 @@ export async function disconnectDrive() {
   if (membership?.role !== "owner") redirect("/app");
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "drive");
   revalidatePath("/app/settings");
+  redirect("/app/settings?group=email&saved=drive_off#drive");
 }
 
 // Closing the firm (PLAN.md 5.5.1): the owner types the firm's name, which the database
@@ -1336,7 +1338,7 @@ export async function seenAlert(form: FormData) {
 }
 
 // The owner removes a file, or puts back one removed in the last 30 days (D18). A removed
-// file moves to the drive's Deleted and old versions folder; the nightly purge sends it to
+// file moves to the drive's Removed papers folder; the nightly purge sends it to
 // the drive's bin after 30 days. Removing for staff and managers is a request (later).
 export async function removeDocument(form: FormData) {
   const { id, userId, membership, back, document, client, clientId, drive, order, naming } = await visibleDocument(form);
@@ -1382,7 +1384,7 @@ export async function removeDocument(form: FormData) {
   await settleVersions(supabaseAdmin(), { client_id: clientId, ...document });
   await spendGrant(grant);
   revalidatePath("/app", "layout");
-  redirect(restoring ? `${back}&saved=${id}` : `${back}&removed=${id}`);
+  redirect(restoring ? `${back}&restored=${id}` : `${back}&removed=${id}`);
 }
 
 // Asks a client for files for one period (PLAN.md 5.3.1, 8.6). Every member may. The client
@@ -1457,7 +1459,7 @@ export async function saveChecklist(form: FormData) {
   else delete lists[client.kind];
   await supabaseAdmin().from("firms").update({ settings: { ...membership.settings, checklists: lists } }).eq("id", membership.firmId);
   revalidatePath("/app", "layout");
-  redirect(back);
+  redirect(`${back}&changed=list`);
 }
 
 // A file the client uploads through their private link, against one item asked for. The
@@ -1614,6 +1616,7 @@ export async function setFolderOrder(form: FormData) {
     await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "drive.folder_order", entity_type: "account", entity_id: account.id, details: { order, naming } });
   }
   revalidatePath("/app/settings");
+  redirect("/app/settings?group=email&saved=folders#drive");
 }
 
 // The first import (PLAN.md 5.16): the owner approves moving past files already in the
@@ -1864,7 +1867,7 @@ export async function setOfficeOnly(form: FormData) {
   // is not an active partner) comes back as a note on the panel, not a broken page.
   const refused = error && (Object.entries(officeRefusals).find(([text]) => error.message.includes(text))?.[1] ?? "office");
   if (!refused) revalidatePath("/app", "layout");
-  redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}${refused ? `&error=${refused}` : ""}#office`);
+  redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}${refused ? `&error=${refused}` : decision === "deputies" ? "&saved=deputies" : ""}#office`);
 }
 
 // The owner decides whether a waiting PC stays in the office, travels, or is refused.
@@ -2012,7 +2015,7 @@ export async function savePermissions(form: FormData) {
   const pinDays = form.get("intent") === "reset" ? 5 : Math.min(30, Math.max(1, Math.round(Number(form.get("pin_days"))) || 5));
   await supabase.from("firms").update({ settings: { ...membership.settings, permissions, second_form_approval:form.get("intent")!=="reset" && form.get("second_form_approval")==="on", viewer_hide_inactive: hideInactive, pin_days: pinDays } }).eq("id", membership.firmId);
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions, pin_days: pinDays } });
-  redirect("/app/settings?group=people&saved=permissions#permissions");
+  redirect(`/app/settings?group=people&saved=${form.get("intent") === "reset" ? "reset" : "permissions"}#permissions`);
 }
 
 async function permissionScope(form:FormData,prefix:string,firm:string) {
@@ -2041,7 +2044,7 @@ export async function allowStanding(form:FormData) {
   if(error) throw new Error("The permission could not be saved.");
   await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"permission.always",entity_type:"user",entity_id:person,details:{right,for:person,...scope}});
   revalidatePath("/app","layout");
-  redirect("/app/settings?group=people&saved=permissions#permissions");
+  redirect("/app/settings?group=people&saved=allowed#permissions");
 }
 
 // Settings → Permissions: the owner withdraws what one person was always allowed.
@@ -2054,7 +2057,7 @@ export async function withdrawAlways(form: FormData) {
   if (!member) redirect("/app/settings?group=people#permissions");
   await admin.from("firm_members").update({ access: { ...(member.access as object), always: [] } }).eq("firm_id", membership.firmId).eq("user_id", person);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.withdrawn", entity_type: "user", entity_id: person });
-  redirect("/app/settings?group=people&saved=permissions#permissions");
+  redirect("/app/settings?group=people&saved=withdrawn#permissions");
 }
 
 // A staff member away from the office asks to use this device there (5.17.4 #48).
@@ -2116,7 +2119,7 @@ export async function confirmWithPcKey(answer: { id: string; clientDataJSON: str
   const line = requestLine(await headers(), todayInIndia());
   if (!pc?.device.key_public || !parsed.success || parsed.data.id !== pc.device.key_id || !line
     || !checkKeyUse(parsed.data, pc.device.key_public, (await headers()).get("origin") ?? "", (await cookies()).get(CHALLENGE_COOKIE)?.value, pc.device.id))
-    return "This PC's key did not match. Ask the owner or a deputy to confirm the connection.";
+    return "This PC could not prove it is the office PC. Ask the owner or a deputy to approve the connection.";
   (await cookies()).delete(CHALLENGE_COOKIE);
   const { error } = await supabaseAdmin().rpc("observe_office", { target_firm: pc.firmId, person: userId, pc: pc.device.id, connection: line, proven: true });
   if (error) throw new Error(`Office check failed: ${error.code}`);
@@ -2166,7 +2169,7 @@ export async function setPaperSharing(form:FormData) {
   if (policy==="internal") await admin.from("shares").update({status:"refused",link_token_hash:null,link_expires_at:null,delivery:null}).eq("firm_id",membership.firmId).eq("document_id",document.id);
   await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"document.sharing",entity_type:"document",entity_id:document.id,details:{policy:policy || "firm"}});
   revalidatePath("/app","layout");
-  redirect(`/app/clients/${document.client_id}?tab=files&edit=${document.id}`);
+  redirect(`/app/clients/${document.client_id}?tab=files&edit=${document.id}&changed=sharing`);
 }
 
 export async function saveMailLimit(form:FormData) {
@@ -2227,13 +2230,16 @@ export async function bellItems() {
   const { supabase, membership } = await currentMember();
   if (!membership) return [];
   const seen = Date.parse((await cookies()).get("bell_seen")?.value ?? "") || 0;
-  const [questions, { data: lines }] = await Promise.all([
+  const [questions, { data: lines }, { data: people }] = await Promise.all([
     myQuestions(),
     supabase.rpc("activity_feed", { target_firm: membership.firmId, since: new Date(Date.now() - 14 * 86_400_000).toISOString(), mine: true }),
+    supabase.rpc("firm_people", { target_firm: membership.firmId }),
   ]);
+  // A permission request names the person who asks, and the client it is for.
+  const asker = (ask: { details: unknown }) => personName(people?.find((person) => person.user_id === (ask.details as { by?: string }).by)?.email);
   return [
-    ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}`, who: ask.clients?.name ?? "Your team", at: null as string | null, fresh: true })),
-    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: activityNames[line.action] ?? "Client record changed", who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
+    ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}${ask.clients?.name ? ` for ${ask.clients.name}` : ""}`, who: asker(ask), at: null as string | null, fresh: true })),
+    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: activityNames[line.action] ?? "Client changed", who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
   ].slice(0, 20);
 }
 

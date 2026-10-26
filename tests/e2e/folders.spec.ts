@@ -71,17 +71,17 @@ test("the drive's folders as the drive shows them: a hand placed file is filed i
 
     // The hand placed file is listed and marked; filing it moves it under InboxCA's name.
     const scan = main.getByRole("row", { name: /scan 0042\.pdf/ });
-    await expect(scan).toContainText("Not filed in InboxCA");
+    await expect(scan).toContainText("Not in InboxCA yet");
     await expect(main.getByRole("row", { name: new RegExp(filedName) })).toContainText("Purchase bills, GST, Sep 2026");
     await scan.getByRole("button").click();
     const details = page.getByRole("complementary", { name: "Details" });
-    const form = details.getByRole("form", { name: "File this paper" });
+    const form = details.getByRole("form", { name: "Save this paper to a client" });
     await expect(form).toContainText(`For ${patel}`);
-    await form.getByLabel("Type").selectOption("Sales bills");
+    await form.getByLabel("Paper type").selectOption("Sales bills");
     await form.getByLabel("Period").selectOption({ label: "Sep 2026" });
-    await form.getByRole("button", { name: "File this paper" }).click();
+    await form.getByRole("button", { name: "Save this paper" }).click();
     const sales = `${patel} - Sales bills - Sep 2026.pdf`;
-    await expect(page.getByRole("status").filter({ hasText: `Filed as ${sales}` })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: `Saved to the client's folder as ${sales}` })).toBeVisible();
     await expect(main.getByRole("row", { name: /scan 0042\.pdf/ })).toHaveCount(0);
     await expect(main.getByRole("row", { name: new RegExp(sales) })).toContainText("Sales bills, GST, Sep 2026");
     // Chosen, it says who filed it from the drive, and when, beside its path.
@@ -109,7 +109,7 @@ test("the drive's folders as the drive shows them: a hand placed file is filed i
     await main.dispatchEvent("dragover", { dataTransfer: dropped });
     await expect(main.locator(".fb-drop")).toHaveText("Drop to upload to GST");
     await main.dispatchEvent("drop", { dataTransfer: dropped });
-    await expect(page.getByRole("status").filter({ hasText: `1 paper filed for ${patel}.` })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: `1 paper saved for ${patel}.` })).toBeVisible();
     await expect(main.getByRole("row", { name: new RegExp(`${patel} - GSTR-3B - Sep 2026\\.pdf`) })).toContainText("GSTR-3B, GST, Sep 2026");
 
     // Restricted staff see their own client's folder only, and cannot ask for another's.
@@ -130,7 +130,7 @@ test("the drive's folders as the drive shows them: a hand placed file is filed i
     expect((await staff.request.get(`/app/documents/folders?path=${encodeURIComponent(`FY 2026-27/${mehta}`)}`)).status()).toBe(404);
     expect((await staff.request.get(`/app/documents/folders?path=Incoming`)).status()).toBe(404);
     const root = await (await staff.request.get("/app/documents/folders?path=")).json();
-    expect(root.entries.map((entry: { name: string }) => entry.name)).not.toContain("Deleted and old versions");
+    expect(root.entries.map((entry: { name: string }) => entry.name)).not.toContain("Removed papers");
     await staffMain.getByRole("link", { name: patel, exact: true }).click();
     await staffMain.getByRole("link", { name: "GST", exact: true }).click();
     await expect(staffMain.getByRole("row", { name: new RegExp(sales) })).toBeVisible();

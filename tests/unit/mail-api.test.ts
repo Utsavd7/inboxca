@@ -55,10 +55,10 @@ describe("signing in to a mailbox", () => {
   it("stays off until both of a provider's keys are set, and says so in one plain line", () => {
     expect(signInNotReady()).toBeNull();
     vi.stubEnv("ZOHO_CLIENT_SECRET", "");
-    expect(signInNotReady()).toBe("Sign in with Zoho is not set up yet; use the address and an app password below.");
+    expect(signInNotReady()).toBe("Sign in with Zoho is not ready yet. Use the firm email address and an app password below.");
     vi.stubEnv("GOOGLE_OAUTH_CLIENT_ID", "");
     vi.stubEnv("MICROSOFT_CLIENT_SECRET", "");
-    expect(signInNotReady()).toBe("Sign in with Google, Microsoft or Zoho is not set up yet; use the address and an app password below.");
+    expect(signInNotReady()).toBe("Sign in with Google, Microsoft or Zoho is not ready yet. Use the firm email address and an app password below.");
     expect(mailSignInReady("outlook")).toBe(false);
     for (const [key, value] of Object.entries(fakeKeyValues)) vi.stubEnv(key, value);
   });

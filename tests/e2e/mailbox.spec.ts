@@ -29,7 +29,7 @@ test("the owner connects the firm's mailbox with only its address and password",
 
     await address.fill("shah.associates@gmail.com");
     await address.blur();
-    await expect(card.getByText("Found Gmail. Gmail needs an app password: Google Account, Security, App passwords.")).toBeVisible();
+    await expect(card.getByText("Found Gmail. Gmail needs an app password, not your usual password. Make one in your Google Account under Security, then App passwords.")).toBeVisible();
     await address.fill("shah.associates@outlook.com");
     await address.blur();
     // The test server has Microsoft sign in set up (the fake in tests/fake-mail.ts).
@@ -41,10 +41,10 @@ test("the owner connects the firm's mailbox with only its address and password",
     await card.getByLabel("Its password").fill(office);
     await card.getByRole("button", { name: "Connect email" }).click();
     await expect(card.getByRole("alert")).toContainText("could not reach the mail server");
-    await expect(card.getByLabel("Incoming (IMAP) server")).toHaveValue("imap.firm.test");
-    await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
+    await expect(card.getByLabel("Incoming mail server (IMAP)")).toHaveValue("imap.firm.test");
+    await card.getByLabel("Incoming mail server (IMAP)").fill("127.0.0.1");
     await card.getByLabel("Incoming port").fill("3143");
-    await card.getByLabel("Outgoing (SMTP) server").fill("127.0.0.1");
+    await card.getByLabel("Outgoing mail server (SMTP)").fill("127.0.0.1");
     await card.getByLabel("Outgoing port").fill("3025");
     await card.getByLabel("Its password").fill("wrong");
     await card.getByRole("button", { name: "Connect email" }).click();

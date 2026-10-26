@@ -2,8 +2,9 @@
 import { useState } from "react";
 import { savePushSubscription } from "@/app/(app)/actions";
 
-// Turns on notices in this browser (PLAN.md 5.17.3), from Settings, off until pressed: the
-// website's service worker, the browser's permission, and a subscription only the server keeps.
+// Turns on notices in this browser on this computer (PLAN.md 5.17.3), from Settings, off until
+// pressed: the website's service worker, the browser's permission, and a subscription only the
+// server keeps. InboxCA is used on laptops (user, 26 Oct 2026), so the words say computer.
 export function PushSwitch({ publicKey }: { publicKey: string }) {
   const [state, setState] = useState<"idle" | "on" | "blocked" | "unsupported">("idle");
   const turnOn = async () => {
@@ -20,8 +21,8 @@ export function PushSwitch({ publicKey }: { publicKey: string }) {
       <button className="b b-secondary" type="button" onClick={turnOn}>
         Turn on notices on this computer
       </button>
-      {state === "blocked" && <span className="hint">The browser blocked them. Allow notifications for InboxCA in its settings, then try again.</span>}
-      {state === "unsupported" && <span className="hint">This browser cannot show notices. Open InboxCA in Chrome or Edge to turn them on.</span>}
+      {state === "blocked" && <span className="hint">The browser blocked notices. Allow notifications for InboxCA in the browser&apos;s settings, then try again.</span>}
+      {state === "unsupported" && <span className="hint">This browser cannot show notices. Try another browser on this computer.</span>}
     </span>
   );
 }

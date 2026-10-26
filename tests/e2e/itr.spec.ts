@@ -58,7 +58,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await expect(page.getByRole("heading",{name:"Income tax return"})).toBeVisible();
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${paper}`);
     await expect(page.getByRole("link",{name:"Income tax AY 2026-27"})).toHaveAttribute("aria-current","page");
-    for(let n=0;n<fromForm16.length;n++) {await expect(page.getByText("Invented Form 16.pdf. Page 1")).toBeVisible();await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${n+1} of ${fromForm16.length} confirmed`)).toBeVisible();}
+    for(let n=0;n<fromForm16.length;n++) {await expect(page.getByText("Invented Form 16.pdf. Page 1")).toBeVisible();await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${n+1} of ${fromForm16.length} checked`)).toBeVisible();}
     // The return: PAN and Form 16 are already filled; the rest is listed to fill.
     await page.goto(`/app/clients/${client}/itr`);
     const held=page.getByRole("region",{name:"Already filled"});await expect(held).toContainText(`PAN ${pan}`);await expect(held).toContainText("Invented Form 16.pdf");await expect(held).toContainText("8 figures, 8 checked");
@@ -68,7 +68,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await expect(page.getByLabel(/^Email address/)).toHaveValue("invented.person@invented.test");
     await page.getByRole("button",{name:"Save for checking",exact:true}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
     await page.getByRole("link",{name:/^Taxes paid: \d+$/}).click();
-    await page.getByLabel(/^Total TDS claimed/).fill("5000");await page.getByLabel(/^Taxes Paid · Total Taxes Paid/).fill("5000");
+    await page.getByLabel(/^Total TDS claimed/).fill("5000");await page.getByLabel(/^Tax paid details, detail 1/).fill("5000");
     await page.getByRole("button",{name:"Save, putting 0 in the 6 empty amounts",exact:true}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
     // The 4 amounts left empty were saved as 0, and the log says so.
     expect((await query(local.dbUrl,"select details->>'zeroed' zeroed from public.activity_log where firm_id=$1 and action='dataset.changed' and details ? 'zeroed'",[firm.firmId])).map(row=>row.zeroed)).toEqual(["4"]);
@@ -82,7 +82,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${own.id}`);
     await expect(page.getByText(/^Entered by /)).toBeVisible();
     const pending=own.data.lines.length;expect(pending).toBe(7);
-    for(let n=0;n<pending;n++) {await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${rest.length+n+1} of ${rest.length+pending} confirmed`)).toBeVisible();}
+    for(let n=0;n<pending;n++) {await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${rest.length+n+1} of ${rest.length+pending} checked`)).toBeVisible();}
     await page.goto(`/app/clients/${client}/itr`);await expect(page.getByText("Nothing left to fill.")).toBeVisible();
     // Prepared forms: the approved file is in Prepared, downloaded once and logged.
     await page.goto(`/app/clients/${client}?tab=outputs`);
@@ -115,7 +115,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await expect.poll(async()=>(await query(local.dbUrl,"select count(*)::int n from public.documents where firm_id=$1 and prepared->>'form'='ITR1' and prepared->>'version'='2' and size>0",[firm.firmId]))[0].n,{timeout:30_000}).toBe(1);
     [prepared]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'='ITR1' and prepared->>'version'='2'",[firm.firmId]);
     await page.goto(`/app/clients/${client}?tab=outputs`);row=page.locator("li").filter({has:page.getByRole("link",{name:prepared.name,exact:true})});
-    await row.getByText("Record filing",{exact:true}).click();await row.getByLabel("Acknowledgement number, if known").fill("INVENTED-ITR-ACK");await row.getByRole("button",{name:"Mark filed",exact:true}).click();
+    await row.locator("summary",{hasText:"Mark filed"}).click();await row.getByLabel("Acknowledgement number, if known").fill("INVENTED-ITR-ACK");await row.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select prepared->>'status' status from public.documents where id=$1",[prepared.id]))[0].status).toBe("filed");
     expect((await query(local.dbUrl,"select status from public.tasks where firm_id=$1 and code='ITR_NA'",[firm.firmId]))[0].status).toBe("filed");
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
@@ -145,7 +145,7 @@ test("ITR-2, ITR-3 and ITR-4 are prepared from checked figures, and a return cor
       // The fallback: a return corrected in another tool is a new version whose figures wait for checks.
       output.ITR.ITR4.Verification.Declaration.FatherName="Invented Edited Father";
       await page.goto(`/app/clients/${client}?tab=outputs`);const row=page.locator("li").filter({has:page.getByRole("link",{name:saved.name,exact:true})});
-      await row.getByText("File corrected outside InboxCA",{exact:true}).click();await row.getByLabel("Official return file",{exact:true}).setInputFiles({name:"invented-correction.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(output))});await row.getByRole("button",{name:"Add corrected version"}).click();await expect(page).toHaveURL(/tab=extraction&draft=/);
+      await row.getByText("Upload a file you corrected outside InboxCA",{exact:true}).click();await row.getByLabel("Official return file",{exact:true}).setInputFiles({name:"invented-correction.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(output))});await row.getByRole("button",{name:"Add corrected version"}).click();await expect(page).toHaveURL(/tab=extraction&draft=/);
       const [external]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'='ITR4' and prepared->>'external'='true'",[firm.firmId]);
       expect(external.prepared.status).toBe("draft");expect(external.prepared.version).toBe(2);
       const [edited]=await query(local.dbUrl,"select data from public.datasets where id=$1",[external.prepared.sources[0].id]);

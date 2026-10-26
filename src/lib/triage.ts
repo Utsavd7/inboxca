@@ -3,8 +3,8 @@
 // credits; anything unclear is "other", which goes to the team. Runs in memory only: the
 // email itself is never stored.
 export const labels = {
-  records_past: "Asks for past records",
-  records_current: "Asks for this year's records",
+  records_past: "Asks for papers of past years",
+  records_current: "Asks for this year's papers",
   notice_received: "Notice received",
   data_gst: "GST data",
   data_income_tax: "Income tax data",
@@ -12,7 +12,7 @@ export const labels = {
   ask_filed: "Asks if a return is filed",
   ask_papers: "Asks which papers are still needed",
   ask_due: "Asks what is due",
-  other: "Needs team reply",
+  other: "Other",
 } as const;
 export type Label = keyof typeof labels;
 // Questions about where things stand, which InboxCA can answer from its own records.
@@ -23,9 +23,9 @@ export const replyReasons: Record<string, string> = {
   notice_question: "Sent a notice and asks what to do",
   record_internal: "Asks for a paper kept inside your firm",
   record_not_found: "Asks for a paper that is not in the drive",
-  record_unclear: "Asks for a paper InboxCA could not pick out",
+  record_unclear: "Asks for a paper, but more than one paper matches",
   not_allowed: "Asks for a paper this sender may not receive",
-  data_unclear: "Sent data for more than one kind of work",
+  data_unclear: "Sent papers, but InboxCA could not tell if they are for GST, income tax or tax audit",
   client_unclear: "Writes for several clients. Pick which one",
   asks_several: "Asks more than one thing",
   ask_filed: "Asks if a return is filed",

@@ -90,7 +90,7 @@ export function Reading({ children }: { children: React.ReactNode }) {
 function Send({ children }: { children: string }) {
   const { pending } = useFormStatus();
   return (
-    <button className="b b-primary" disabled={pending} aria-busy={pending || undefined} title="Sends from the firm's mailbox. Ctrl or Cmd and Enter also send">
+    <button className="b b-primary" disabled={pending} aria-busy={pending || undefined} title="Sends from the firm email. Ctrl or Cmd and Enter also send">
       {pending ? "Sending" : children}
     </button>
   );

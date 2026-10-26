@@ -51,8 +51,8 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     const upload = async (content: string, gstin?: string) => {
       await page.getByRole("link", { name: "Upload papers" }).click();
       await page.getByLabel("Files", { exact: true }).setInputFiles({ name: "gstr3b.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
-      await page.getByLabel("Type", { exact: true }).selectOption("GSTR-3B");
-      await page.getByLabel("Work", { exact: true }).selectOption("gst");
+      await page.getByLabel("Paper type", { exact: true }).selectOption("GSTR-3B");
+      await page.getByLabel("Type of work", { exact: true }).selectOption("gst");
       await page.getByLabel("Period", { exact: true }).selectOption({ label: "Sep 2026" });
       if (gstin) await page.getByLabel("GSTIN, for GST papers").selectOption({ label: gstin });
       await page.getByRole("button", { name: "Upload", exact: true }).click();

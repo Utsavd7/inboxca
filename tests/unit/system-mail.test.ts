@@ -13,7 +13,7 @@ vi.mock("@/src/lib/supabase", () => ({
 vi.mock("@/src/lib/logger", () => ({ log: { warn: vi.fn() } }));
 const { mailCopy } = await import("@/src/lib/system-mail");
 
-const message = { title: "A question for you", body: "Ravi asks to download a file.", url: "/app/inbox" };
+const message = { title: "A permission request for you", body: "Ravi asks to download a paper.", url: "/app/inbox" };
 
 describe("email copies of phone notifications", () => {
   afterEach(() => {
@@ -35,8 +35,8 @@ describe("email copies of phone notifications", () => {
     expect(mock.sent).toEqual([{
       from: "InboxCA <no-reply@invented.test>",
       to: "owner@invented.test",
-      subject: "InboxCA: A question for you",
-      text: "Ravi asks to download a file.\n\nOpen InboxCA to see it: https://app.invented.test/app/inbox\n\nThis link only opens InboxCA. Nothing changes until you sign in and choose.",
+      subject: "InboxCA: A permission request for you",
+      text: "Ravi asks to download a paper.\n\nOpen InboxCA to see it: https://app.invented.test/app/inbox\n\nThis link only opens InboxCA. Nothing changes until you sign in and choose.",
     }]);
   });
 });

@@ -113,10 +113,10 @@ test("after two reminders with nothing back, the person who looks after the clie
   // Send reminder now, stopped by Undo, then sent.
   const toast = (text: string) => staff.getByRole("status").filter({ hasText: text });
   await staff.getByRole("button", { name: "Send reminder now" }).click();
-  await toast("The reminder goes out in a minute").getByRole("button", { name: "Undo" }).click();
+  await toast("The reminder goes out from your firm email in about 20 seconds").getByRole("button", { name: "Undo" }).click();
   await expect(toast("Stopped. Nothing was sent.")).toBeVisible();
   await staff.getByRole("button", { name: "Send reminder now" }).click();
-  await expect(toast("The reminder goes out in a minute")).toBeVisible();
+  await expect(toast("The reminder goes out from your firm email in about 20 seconds")).toBeVisible();
   await goNow(staff);
   expect((await query(local.dbUrl, "select state from public.jobs where firm_id = $1 and entity_type = 'client' order by id", [firm.firmId])).map((job) => job.state)).toEqual(["cancelled", "done"]);
   const [, again] = await mailTexts(client.email);

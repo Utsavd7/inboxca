@@ -16,7 +16,7 @@ export default async function Government() {
   const { items, unread } = await governmentUpdates(supabase, membership.firmId);
   return (
     <>
-      <PageHead title="From the government" sub="New forms, tools and news from government sites, for the work your clients have. InboxCA checks these sites every morning at 08:30." />
+      <PageHead title="From the government" sub="New forms, tools and news from government sites, for the services you do for your clients. InboxCA checks these sites every morning at 08:30." />
       <Card id="gov-new" title="Last 14 days" Icon={Landmark} kind="docs" count={items.length} className="gov-list">
         {items.length ? (
           <List name="gov" className="app-rows">
@@ -42,7 +42,7 @@ export default async function Government() {
           </List>
         ) : (
           <Empty Icon={Landmark} title="Nothing new from the government" kind="docs">
-            <p className="hint">When a government site adds something for your clients&apos; work, it shows here for 14 days.</p>
+            <p className="hint">When a government site adds something for the services you do for your clients, it shows here for 14 days.</p>
           </Empty>
         )}
       </Card>

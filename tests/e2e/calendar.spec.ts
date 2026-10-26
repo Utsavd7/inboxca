@@ -93,11 +93,11 @@ test("Remind client sends one email from the firm's mailbox, and Undo stops it i
     const panel = owner.getByRole("dialog", { name: `Remind ${clientName}` });
     await expect(panel.getByRole("listitem").filter({ hasText: "In the email" })).toHaveCount(2);
     await panel.getByRole("button", { name: "Send reminder" }).click();
-    await expect(toast("The reminder goes out in a minute")).toBeVisible();
+    await expect(toast("The reminder goes out from your firm email in about 20 seconds")).toBeVisible();
   };
   const job = "select state from public.jobs where firm_id = $1 and kind = 'reminders' and entity_type = 'client' and entity_id = $2 order by id";
   await remind();
-  await toast("The reminder goes out in a minute").getByRole("button", { name: "Undo" }).click();
+  await toast("The reminder goes out from your firm email in about 20 seconds").getByRole("button", { name: "Undo" }).click();
   await expect(toast("Stopped. Nothing was sent.")).toBeVisible();
   expect(await query(local.dbUrl, job, [firm.firmId, clientId])).toEqual([{ state: "cancelled" }]);
 

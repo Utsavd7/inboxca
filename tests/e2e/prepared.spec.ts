@@ -60,7 +60,7 @@ test("prepared files keep versions and checked sources, then file with an acknow
     const [second]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'version'='2'",[firm.firmId]);files.push(second.drive_file_id);
     const corrected=writeWorkbook(Buffer.from(await drive.read(second.drive_file_id)),new Map([["xl/worksheets/sheet2.xml",new Map([["L5",{value:"102.00",number:true}]])]]));
     await page.goto(outputs);const row=page.locator("li").filter({has:page.getByRole("link",{name:second.name,exact:true})});
-    await row.getByText("File corrected outside InboxCA",{exact:true}).click();await row.getByLabel("Filled official workbook").setInputFiles({name:"corrected.xlsx",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",buffer:corrected});await row.getByRole("button",{name:"Add corrected version"}).click();await expect(page).toHaveURL(/tab=extraction&draft=/);
+    await row.getByText("Upload a file you corrected outside InboxCA",{exact:true}).click();await row.getByLabel("Filled official workbook").setInputFiles({name:"corrected.xlsx",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",buffer:corrected});await row.getByRole("button",{name:"Add corrected version"}).click();await expect(page).toHaveURL(/tab=extraction&draft=/);
     const [external]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'external'='true'",[firm.firmId]);files.push(external.drive_file_id);
     const externalDraft=external.prepared.sources[0].id;
     expect(external.prepared.status).toBe("draft");await expect(page.getByText(/Sheet 2, cell/)).toBeVisible();await expect(page.getByRole("img",{name:"Page 1",exact:true})).toBeVisible();
@@ -76,7 +76,7 @@ test("prepared files keep versions and checked sources, then file with an acknow
     const download=other.waitForEvent("download",{timeout:20_000});await approved.getByRole("button",{name:"Download for filing"}).click();const downloaded=await download;
     expect(createHash("sha256").update(await readFile((await downloaded.path())!)).digest("hex")).toBe(external.sha256);expect((await other.request.get(downloaded.url())).status()).toBe(410);
     await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,'GSTR1_M','2026-09','2026-10-11')",[firm.firmId,client,registration]);
-    await approved.getByText("Record filing",{exact:true}).click();
+    await approved.locator("summary",{hasText:"Mark filed"}).click();
     await approved.getByLabel("Or upload the portal acknowledgement").setInputFiles({name:"invented-ack.pdf",mimeType:"application/pdf",buffer:Buffer.from(pdf("Invented filing acknowledgement"))});await approved.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select prepared->>'status' status from public.documents where id=$1",[external.id]))[0].status).toBe("filed");
     expect((await query(local.dbUrl,"select status from public.tasks where firm_id=$1 and code='GSTR1_M'",[firm.firmId]))[0].status).toBe("filed");
@@ -85,7 +85,7 @@ test("prepared files keep versions and checked sources, then file with an acknow
     // A second GST number: each register is given its number before its GSTR-1 is offered.
     const otherGstin=inventedGstin("ZZZPZ0003Z");
     await query(local.dbUrl,"insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values($1,$2,$3,'gstin',$4,$5)",[randomUUID(),firm.firmId,client,await crypto.encrypt(firm.firmId,`clients/${client}/gstin`,otherGstin),await crypto.blindIndex(firm.firmId,"gstin",otherGstin)]);
-    await page.goto(outputs);await expect(page.getByRole("heading",{name:"Which GST number is each register for?"})).toBeVisible();
+    await page.goto(outputs);await expect(page.getByRole("heading",{name:"Which GSTIN is each register for?"})).toBeVisible();
     const choice=page.locator("form").filter({has:page.locator(`a[href*="draft=${draft}"]`)}).filter({has:page.getByRole("combobox")});
     await choice.getByRole("combobox").selectOption({label:inventedGstin()});await choice.getByRole("button",{name:"Save",exact:true}).click();
     await expect(page.getByRole("heading",{name:`Prepare GSTR-1 for ${inventedGstin()}`})).toBeVisible();

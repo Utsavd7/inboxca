@@ -15,7 +15,7 @@ async function writable(form: FormData): Promise<{ ctx: Context; parts: string[]
   const ctx = await browseContext();
   const parts = parsePath(String(form.get("path") ?? ""));
   if (!ctx || !parts) return { error: "That folder is not open to you." };
-  if (ctx.membership.viewOnlyUntil) return { error: "This device can only view papers." };
+  if (ctx.membership.viewOnlyUntil) return { error: "This laptop can only view papers away from the office." };
   if (!ctx.drive || !ctx.account) return { error: "Connect the firm's drive in Settings first." };
   return { ctx, parts };
 }
@@ -32,16 +32,16 @@ export async function fileDrivePaper(_previous: Result | null, form: FormData): 
   const file = await driveFile(ctx, parts, String(form.get("name") ?? ""));
   if (!file) return { error: "That file is no longer in this folder." };
   const { data: filed } = await ctx.admin.from("documents").select("id").eq("firm_id", ctx.membership.firmId).eq("drive_file_id", file.id).limit(1);
-  if (filed?.length) return { error: "This paper is already filed." };
+  if (filed?.length) return { error: "This paper is already saved in InboxCA." };
   const { data: client } = await ctx.supabase.from("clients").select("id, name").eq("firm_id", ctx.membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
   if (!client) return { error: "Choose the client this paper is for." };
-  if (!ctx.membership.may("rename", client.id)) return { error: "Ask the owner to let you file papers for this client." };
+  if (!ctx.membership.may("rename", client.id)) return { error: "Ask the owner to let you save papers for this client." };
   const type = String(form.get("type") ?? "");
   const work = String(form.get("work") ?? "");
   const period = form.get("period") === "none" ? "" : String(form.get("period") ?? "");
   const types = [...documentTypes, ...((ctx.membership.settings.document_types ?? []) as string[])];
-  if (!types.includes(type) || !(work in workTypes) || (period && !periodChoices(todayInIndia()).includes(period))) return { error: "Choose the paper's type, work and period." };
-  if (file.size > MAX_FILING) return { error: "This file is too large to file here." };
+  if (!types.includes(type) || !(work in workTypes) || (period && !periodChoices(todayInIndia()).includes(period))) return { error: "Choose the paper type, type of work and period." };
+  if (file.size > MAX_FILING) return { error: "This file is over 100 MB, so InboxCA cannot save it to a client." };
   try {
     const bytes = await ctx.drive!.read(file.id);
     // Checked like a file sent in; one with a virus moves to the owner's folder for it.
@@ -55,7 +55,7 @@ export async function fileDrivePaper(_previous: Result | null, form: FormData): 
     if (filed === "twin") return { error: `${client.name} already has this same file. It stays where it is.` };
     if (filed === "drive") return { error: "The drive did not take the file. Try again." };
     forget(ctx.account!.id);
-    return { ok: `Filed as ${filed.name}`, folder: filed.folder };
+    return { ok: `Saved to the client's folder as ${filed.name}`, folder: filed.folder };
   } catch {
     return { error: "The drive could not be reached. Try again in a minute." };
   }
@@ -99,7 +99,7 @@ export async function uploadToFolder(form: FormData): Promise<Result> {
   }
   forget(ctx.account!.id);
   const said = [
-    count.filed && `${count.filed} ${count.filed === 1 ? "paper" : "papers"} filed for ${here.client.name}`,
+    count.filed && `${count.filed} ${count.filed === 1 ? "paper" : "papers"} saved for ${here.client.name}`,
     count.check && `${count.check} ${count.check === 1 ? "waits" : "wait"} in To check`,
     count.twin && `${count.twin} ${count.twin === 1 ? "was" : "were"} there already`,
     count.unsafe && `${count.unsafe} not saved: a virus, a program or a ZIP InboxCA could not open`,

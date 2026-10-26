@@ -18,11 +18,11 @@ import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type T
 import { RowKeys } from "../row-keys";
 
 const catalog = ["Intimation u/s 143(1)", "Notice u/s 143(2)", "Notice u/s 142(1)", "Notice u/s 148", "Demand notice u/s 156", "DRC-01", "ASMT-10", "Registration notice", "Show cause notice", "Summons"];
-const pills = { open: "Open", confirm: "Date to confirm", done: "Replied or closed", all: "All" } as const;
+const pills = { open: "Open", confirm: "Date to check", done: "Replied or closed", all: "All" } as const;
 type Pill = keyof typeof pills;
 const columns = "id, client_id, due_on, status, details, clients(name)";
 const moves: Record<string, string> = { upcoming: "Mark open", in_progress: "Mark in progress", replied: "Mark replied", closed: "Close notice" };
-const saved: Record<string, string> = { add: "Notice added.", confirm: "Action date confirmed.", upcoming: "Notice marked open.", in_progress: "Notice marked in progress.", replied: "Notice marked replied.", closed: "Notice closed." };
+const saved: Record<string, string> = { add: "Notice added.", confirm: "Action date checked.", upcoming: "Notice marked open.", in_progress: "Notice marked in progress.", replied: "Notice marked replied.", closed: "Notice closed." };
 const PAGE = 50;
 const PICK = 8;
 const uuid = /^[0-9a-f-]{36}$/;
@@ -97,7 +97,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
   const tag = (notice: { status: string; due_on: string }): [Tone, string] => (done(notice.status) ? ["done", label(notice.status)] : notice.due_on < today ? ["late", "Late"] : [statusTones[notice.status] ?? "", label(notice.status)]);
   const actionDate = (notice: { due_on: string; status: string; details: unknown }) => {
     const details = notice.details as NoticeDetails;
-    return details.action_date ? <span className={notice.due_on < today && !done(notice.status) ? "notices-late" : undefined}>{dueLabel(details.action_date)}</span> : <Badge tone="warn">Review by {dueLabel(notice.due_on)}</Badge>;
+    return details.action_date ? <span className={notice.due_on < today && !done(notice.status) ? "notices-late" : undefined}>{dueLabel(details.action_date)}</span> : <Badge tone="warn">Check by {dueLabel(notice.due_on)}</Badge>;
   };
   // The list, kept by every form so each change comes back to it.
   const state = (
@@ -109,7 +109,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
   const shownTo = (page - 1) * PAGE + (rows?.length ?? 0);
   const empty = {
     open: ["No open notices", "A notice a client emails is recorded here by itself. Add one by hand if it came another way."],
-    confirm: ["Every action date is confirmed", "A date InboxCA finds in a notice waits here until someone checks it."],
+    confirm: ["Every action date is checked", "A date InboxCA finds in a notice waits here until someone checks it."],
     done: ["Nothing replied or closed yet", "Notices you mark replied or closed move here."],
     all: ["No notices yet", "A notice a client emails is recorded here by itself. Add one by hand if it came another way."],
   }[show];
@@ -121,7 +121,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
     <div className="fill notices">
       <PageHead
         title="Notices"
-        sub="Notices your clients received, the nearest date first. A date InboxCA found is only a suggestion until someone confirms it."
+        sub="Notices your clients received, the nearest date first. A date InboxCA found is only a suggestion until someone checks it."
         actions={
           !viewOnly && (
             <Link className="b b-primary" href={href({ add: true })} scroll={false}>
@@ -256,7 +256,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
             </div>
             {confirmedBy && (
               <div>
-                <dt>Confirmed by</dt>
+                <dt>Checked by</dt>
                 <dd>{confirmedBy}</dd>
               </div>
             )}
@@ -265,21 +265,21 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
             <form action={manageNotice} className="fields notices-confirm">
               {state}
               <input type="hidden" name="notice" value={opened.id} />
-              <p className="hint">Until it is confirmed, your firm&apos;s review deadline shows instead. Check the date on the notice, then confirm it.</p>
+              <p className="hint">Until someone checks this date, InboxCA shows your firm&apos;s own deadline to read the notice, not the date on the notice. Look at the date on the notice, then choose Mark date checked.</p>
               <div>
                 <label htmlFor="notice-confirm">Action date, as the notice states it</label>
                 <input id="notice-confirm" name="date" type="date" defaultValue={openDetails.suggested_date} required />
                 <span className="hint need-date">Pick the date from the notice first</span>
               </div>
               <Pending className="b b-primary" name="intent" value="confirm">
-                Confirm date
+                Mark date checked
               </Pending>
             </form>
           )}
-          {!viewOnly && !decides && <p className="hint">The owner, a partner or a manager confirms the date and moves the notice on.</p>}
+          {!viewOnly && !decides && <p className="hint">The owner, a partner or a manager checks the date and changes the notice&apos;s status.</p>}
           {decides && (
             <>
-              <h3>Move it on</h3>
+              <h3>Change status</h3>
               <p className="hint">Now {label(opened.status).toLowerCase()}.</p>
               <form action={manageNotice} className="notices-moves">
                 {state}

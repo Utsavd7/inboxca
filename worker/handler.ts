@@ -58,7 +58,9 @@ export async function handle(request: Request): Promise<Response> {
     try {
       request.signal.throwIfAborted();await fetchOfficial(input.template.source,input.official);const output=prepare(input);
       return new Response(new Uint8Array(output.bytes),{headers:{"Content-Type":output.type,"Cache-Control":"private, no-store"}});
-    } catch {return new Response("The figures do not pass the official form's checks.",{status:422});}
+    // The form makers' own plain sentence (which GSTR-1 row or GSTR-3B table failed) goes back to
+    // the person; one about the official file itself stays the general line.
+    } catch(error) {return new Response(error instanceof Error && error.name==="Error" && !/^(Unknown|Missing|Invalid|Expected|Official file|Workbook too large)/.test(error.message) ? `${error.message.replace(/[.\s]+$/,"")}.`.slice(0,300) : "The figures do not pass the official form's checks.",{status:422});}
   }
   // The Inbox's live mail reads: the answer goes back to the app and nothing is kept.
   if(request.method==="POST" && url.pathname.startsWith("/mail/")) {

@@ -13,7 +13,7 @@ afterEach(()=>vi.unstubAllEnvs());
 it.each(itrReturns)("builds %s from the pinned schema only when the software ID is set",form=>{
   const request=itrRequest(form);
   vi.stubEnv("ITR_SOFTWARE_ID","");
-  expect(()=>prepare(request)).toThrow("not set up");
+  expect(()=>prepare(request)).toThrow("cannot make ITR files yet");
   ready();
   const official=officialSchema(request.template.source.file,request.template.source.sha256);
   const value=JSON.parse(prepare(request).bytes.toString());
@@ -24,7 +24,7 @@ it.each(itrReturns)("builds %s from the pinned schema only when the software ID 
   expect(itrChecks(value.ITR[form],form)).toEqual([]);
   expect(itrReview(request)).toEqual({missing:[],issues:[]});
   expect(()=>itrBody({...request,period:"2025"},itrCreation(request.template))).toThrow("year");
-  expect(()=>itrBody({...request,drafts:[request.drafts[0],request.drafts[0]]},itrCreation(request.template))).toThrow("Two sources");
+  expect(()=>itrBody({...request,drafts:[request.drafts[0],request.drafts[0]]},itrCreation(request.template))).toThrow("Two papers or entries give the same figure.");
   // A PAN typed into the figures must be the client's own.
   const pan=itrEntries(request.template).find(entry=>entry.field==="itr.personal.pan")!;
   expect(()=>itrBody({...request,drafts:[{...request.drafts[0],figures:[...request.drafts[0].figures,["itr.personal.pan",{label:"PAN",value:"ZZZPZ0002Z"}]]}]},itrCreation(request.template))).toThrow("PAN"); // ggignore: another invented PAN.
@@ -58,8 +58,8 @@ it("pins the field choices, resolves official repeating entries and keeps assess
   expect(entries.some(entry=>entry.field==="itr.salary.gross")).toBe(true);
   expect(itrEntry(request.template,"itr.tds.other.3.claimed").path).toBe("TDSonOthThanSals.TDSonOthThanSal.3.ClaimOutOfTotTDSOnAmtPaid");
   for(const field of ["itr.unknown","itr.tds.other.claimed","itr.tds.other.1000.claimed"]) expect(()=>itrEntry(request.template,field)).toThrow();
-  expect(()=>itrEntries({...request.template,version:"9.9"})).toThrow("version");
-  expect(()=>itrEntries({...itrRequest("ITR2").template,form_code:"ITR5"})).toThrow("version");
+  expect(()=>itrEntries({...request.template,version:"9.9"})).toThrow("does not have this official ITR form");
+  expect(()=>itrEntries({...itrRequest("ITR2").template,form_code:"ITR5"})).toThrow("does not have this official ITR form");
   expect(formRequest.safeParse({...request,purpose:"fields",drafts:[]}).success).toBe(true);
   expect(formRequest.safeParse({...request,purpose:"fields"}).success).toBe(false);
   expect(formRequest.safeParse({...request,purpose:"check",drafts:[]}).success).toBe(true);
@@ -73,6 +73,10 @@ it("pins the field choices, resolves official repeating entries and keeps assess
   expect(new Set(three.map(entry=>entry.group)).size).toBeGreaterThan(40);
   expect(three.some(entry=>entry.group==="Schedule HP")).toBe(true);
   expect(three.filter(entry=>entry.group===three[0].group).length).toBeLessThan(400);
+  // A detail InboxCA has no label for reads the schema's own description, else its own name
+  // from the schema, as the utility shows it.
+  expect(entries.find(entry=>entry.path==='PersonalInfo.DOB')?.label).toBe('Date of Birth of the Assessee');
+  expect(entries.find(entry=>entry.path==='PersonalInfo.Address.RoadOrStreet')?.label).toBe('Address, Road Or Street');
 });
 it.each(["ITR1","ITR4"])("blocks wrong salary, deductions, tax totals and overclaimed credits in %s",form=>{
   // ITR-1 rules 59 to 62, 24 to 28, 96, 98, 104 to 106; ITR-4 63 to 66, 46, 52 to 56, 111, 113, 127 to 129.
@@ -125,7 +129,7 @@ it("takes a whole rupee amount read with paise, and asks a person to round real 
   expect(itrValue(whole,"1200000.00")).toBe(1200000);
   expect(itrValue(whole,"1200000.0")).toBe(1200000);
   expect(itrValue(whole,"-500.00")).toBe(-500);
-  expect(()=>itrValue(whole,"1200000.50")).toThrow("Round this amount to whole rupees");
-  expect(()=>itrValue(whole,"12,00,000")).toThrow("Enter a valid amount");
+  expect(()=>itrValue(whole,"1200000.50")).toThrow("round this amount to whole rupees.");
+  expect(()=>itrValue(whole,"12,00,000")).toThrow("enter digits only, with up to two decimal places.");
   expect(itrValue({primitive:"number"} as Parameters<typeof itrValue>[0],"1200.50")).toBe(1200.5);
 });

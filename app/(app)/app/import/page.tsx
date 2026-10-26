@@ -72,7 +72,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <PageHead title="Add old files" sub="Optional. InboxCA works on new files from day one. Past files already in your drive can be sorted into their client folders here, in place." />
+      <PageHead title="Add old files" sub="You do not have to do this. InboxCA handles new papers from the first day. Here you can move old files that are already in your drive into each client's folder." />
       {typeof params.error === "string" && errors[params.error] && (
         <p className="alert" role="alert">
           {errors[params.error]}
@@ -80,7 +80,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
       )}
       {since && (
         <p className="notice" role="status">
-          In your first 14 days only files from {periodName(since)} on are brought in. The rest can follow from {receivedLabel(new Date(Date.parse(firm?.created_at ?? "") + 14 * 86_400_000).toISOString())}.
+          In your first 14 days, InboxCA adds only files from {periodName(since)} onwards. You can add older files from {receivedLabel(new Date(Date.parse(firm?.created_at ?? "") + 14 * 86_400_000).toISOString())}.
         </p>
       )}
       {params.started && <Toast>Moving your files now. Each lands in its client&apos;s folder; this page shows the progress.</Toast>}
@@ -114,11 +114,11 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
                     <label key={value} className="check">
                       <input type="radio" name="scope" value={value} defaultChecked={scope === value} />
                       {label}
-                      {!!ticked.length && <span className="hint">{files.length ? `${files.length} files, ${size(files.reduce((sum, file) => sum + file.size, 0))}` : "No files"}</span>}
+                      {!!ticked.length && <span className="hint">{files.length ? `${files.length} ${files.length === 1 ? "file" : "files"}, ${size(files.reduce((sum, file) => sum + file.size, 0))}` : "No files"}</span>}
                     </label>
                   );
                 })}
-                <label htmlFor="import-year">The year, for one year in full</label>
+                <label htmlFor="import-year">Year (only for One year in full)</label>
                 <select id="import-year" name="year" defaultValue={year}>
                   {years.map((choice) => (
                     <option key={choice}>{choice}</option>
@@ -138,7 +138,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
                 <h2 id="preview">
                   {planned.length} {planned.length === 1 ? "file" : "files"}, {size(total)}
                 </h2>
-                <p className="hint">Nothing moves until you approve. Moving inside your drive uploads nothing again.</p>
+                <p className="hint">Nothing moves until you choose to move the files. They stay in your drive, so nothing is uploaded again.</p>
               </div>
               <form action={startImport}>
                 {ticked.map((folder) => (
@@ -206,12 +206,12 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
                         <span className="name">
                           {plan.moved.length} of {plan.files.length} files moved
                         </span>
-                        <span className="sub">{request.status === "pending" ? "Moving now" : plan.moved.length ? "Finished" : "Put back"}</span>
+                        <span className="sub">{request.status === "pending" ? "Moving now" : plan.moved.length ? "Finished" : "Moved back"}</span>
                       </span>
                       {!!plan.moved.length && (
                         <form action={undoFirstImport}>
                           <input type="hidden" name="import" value={request.id} />
-                          <Pending className="b b-ghost b-small">Put them back</Pending>
+                          <Pending className="b b-ghost b-small">Undo the move</Pending>
                         </form>
                       )}
                     </li>

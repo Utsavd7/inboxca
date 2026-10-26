@@ -52,7 +52,7 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
       // A refusal's body is let go at once, or the browser keeps the request open.
       if (!response.ok || !response.body) {
         await response.body?.cancel();
-        // The stream route says why: no drive linked (409) or a file too large to show (413).
+        // The stream route says why: no drive connected (409) or a file too large to show (413).
         if (response.status === 409 || response.status === 413) return setState(response.status === 409 ? "nodrive" : "large");
         throw new Error("file");
       }
@@ -89,7 +89,7 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
           The file could not be opened. It may have been moved or removed in the drive.
         </p>
       )}
-      {state === "nodrive" && <p className="hint">The firm&apos;s drive is not linked yet, so papers cannot be shown. The owner links it in Settings, Email and drive.</p>}
+      {state === "nodrive" && <p className="hint">The firm&apos;s drive is not connected yet, so papers cannot be shown. The owner can connect it in Settings, under Email and drive.</p>}
       {state === "large" && <p className="hint">This file is too large to show here.</p>}
       {(state === "locked" || state === "wrong") && (thumb ? <p className="hint">This PDF has a password.</p> : (
         <form className="form-row" action={async (form) => { if (await savePassword(form) === "saved") { setState("loading"); setOpening((n) => n + 1); } }}>
@@ -102,7 +102,7 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
           <p className="hint">InboxCA keeps it encrypted, so your team can open this file too.</p>
         </form>
       ))}
-      {blank && <p className="hint viewer-blank">The document is hidden for a moment.</p>}
+      {blank && <p className="hint viewer-blank">The pages are hidden. They show again in a few seconds, or when you come back to this window.</p>}
       {limited && !thumb && <p className="hint">Only the first 30 pages, or the first 1,000 rows and 26 columns of the selected sheet, are shown here.</p>}
       <div className={`viewer-pages${blank ? " is-blank" : ""}`} onContextMenu={(event) => event.preventDefault()} onDragStart={(event) => event.preventDefault()} onCopy={(event) => event.preventDefault()}>
         {pages.map((page, index) => (

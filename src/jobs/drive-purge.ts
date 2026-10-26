@@ -4,7 +4,7 @@ import type { Handler } from "./runner";
 
 const DAY = 86_400_000;
 
-// Sends files the owner removed more than 30 days ago from the Deleted and old versions
+// Sends files the owner removed more than 30 days ago from the Removed papers
 // folder to the drive's own bin, and forgets them (PLAN.md 5.5.1). Each is logged.
 export const drivePurge: Handler = async (job) => {
   const admin = supabaseAdmin();

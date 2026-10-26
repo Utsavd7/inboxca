@@ -37,18 +37,18 @@ export async function savePrepared(request:FormRequest,userId:string|null,permis
     admin.from("clients").select("name").eq("firm_id",request.firm).eq("id",request.client).single(),
     admin.from("connected_accounts").select("id,provider,credentials_enc").eq("firm_id",request.firm).eq("kind","drive").maybeSingle(),
   ]);
-  if(!client || !account) throw new Error("Connect the firm's drive before preparing a form.");
+  if(!client || !account) throw new Error("Connect your firm's drive before preparing a return.");
   // Refuse unavailable ITR exports before reserving a name in the drive.
   const itrResponse=request.pan ? await workerForm(request) : null;
   const sources=request.drafts.map(({id,revision})=>({id,revision})).sort((a,b)=>a.id.localeCompare(b.id));
   const work={firm:request.firm,client:request.client,registration:request.registration,form:request.template.form_code,period:request.period,template:request.template.version,sources,person:userId as string,prefix:`${safeName(client.name,100)} - ${formName(request.template.form_code)} - ${formPeriod(request.period)}`,extension:request.template.mappings.format};
   const {data:reserved,error}=fill ? await admin.rpc("fill_form",work) : await admin.rpc("reserve_form",{...work,choice:reason ? {reason_code:["amendment","software","correction"].includes(reason) ? reason : "other"} : {}});
-  if(error || !reserved) throw new Error(fill ? "This return could not be filled. It may be filed already, or its figures changed. Open it again." : "These figures changed. Check them before preparing the form again.");
+  if(error || !reserved) throw new Error(fill ? "This return could not be filled. It may be filed already, or its figures changed. Open it again." : "These figures changed. Check them before preparing the return again.");
   const saved=z.object({id:z.uuid(),name:z.string(),ready:z.boolean()}).parse(reserved);
   if(saved.ready) return saved.id;
   const drive=await openDrive(request.firm,account);
   const response=itrResponse ?? await workerForm(request),bytes=new Uint8Array(await response.arrayBuffer());
-  if(!bytes.length || bytes.length>25_000_000) throw new Error("This form is too large. Split its registers first.");
+  if(!bytes.length || bytes.length>25_000_000) throw new Error("This return is too large. Split its registers first.");
   const folder=await drive.ensureFolder([workFolder(request.period),workYear(request.period),safeName(client.name),"Prepared"]);
   const file=await drive.save(folder,saved.name,bytes);
   if(file==="taken") {
@@ -58,11 +58,11 @@ export async function savePrepared(request:FormRequest,userId:string|null,permis
       if(done?.drive_file_id) return saved.id;
       await new Promise(resolve=>setTimeout(resolve,500));
     }
-    throw new Error(fill ? "This return is being filled now. Open it again in a moment." : "This form is already being prepared. Open the page again in a moment.");
+    throw new Error(fill ? "This return is being filled now. Open it again in a moment." : "This return is already being prepared. Open the page again in a moment.");
   }
   try {
     const {data:finished,error}=await admin.rpc("finish_form",{target:saved.id,firm:request.firm,person:userId as string,file:file.id,checksum:createHash("sha256").update(bytes).digest("hex"),bytes:bytes.length,...(permission && {permission})});
-    if(error || !finished) throw new Error("The figures or permission changed. Open the latest work and try again.");
+    if(error || !finished) throw new Error("The figures or your permission changed. Open the page again and try again.");
   } catch(error) {await drive.trash(file.id);throw error;}
   return saved.id;
 }
@@ -73,7 +73,7 @@ export async function visibleForm(id:string) {
   const member=await currentWriter();
   if(!member.membership) throw new Error("Sign in to your firm first.");
   const {data}=await member.supabase.from("documents").select("id,firm_id,client_id,name,period_key,size,prepared").eq("firm_id",member.membership.firmId).eq("id",id).neq("status","deleted").maybeSingle();
-  if(!data?.prepared) throw new Error("This form is not available.");
+  if(!data?.prepared) throw new Error("This return file is not available.");
   return {...member,membership:member.membership,document:{...data,prepared:preparedSchema.parse(data.prepared)}};
 }
 
@@ -90,11 +90,11 @@ export async function recordFormDecision(id:string,decision:"approved"|"rejected
 
 export async function fileForm(id:string,number:string,paper?:string,file?:File) {
   const {document,membership,userId,supabase}=await visibleForm(id),admin=supabaseAdmin();
-  if(!membership.may("mark_filed",document.client_id)) throw new Error("Ask your firm's owner to let you record filing.");
+  if(!membership.may("mark_filed",document.client_id)) throw new Error("Ask your firm's owner for permission to mark returns filed.");
   number=number.trim();
   if(number.length>80 || /[\r\n\x00-\x1f]/.test(number) || !number && !paper && !file?.size) throw new Error("Add the acknowledgement or its number.");
   const {data:ready}=await admin.rpc("form_ready",{target:id});
-  if(!ready || document.prepared.status!=="approved") throw new Error("Check and approve this form first.");
+  if(!ready || document.prepared.status!=="approved") throw new Error("Check and approve this return first.");
   if(paper) {
     z.uuid().parse(paper);
     const {data:visible}=await supabase.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",document.client_id).eq("id",paper).in("document_type",document.period_key.length===4 ? ["Acknowledgement","ITR-V"] : ["Acknowledgement"]).eq("period_key",document.period_key).eq("status","filed").maybeSingle();
@@ -109,7 +109,7 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
     if(!extension || !["pdf","png","jpg","jpeg","txt"].includes(extension) || file && file.size>25_000_000) throw new Error("Choose a PDF or picture up to 25 MB.");
     const type=uploaded ? "Acknowledgement" : "Filing record";
     // This is the firm's record of a number, never a made-up portal acknowledgement.
-    const bytes=uploaded ? new Uint8Array(await file!.arrayBuffer()) : new TextEncoder().encode(`Filing details recorded by ${membership.firmName}\nClient: ${client.name}\nForm: ${formName(document.prepared.form)}\nPeriod: ${formPeriod(document.period_key)}\nAcknowledgement number entered by your firm: ${number}\nThis is your firm's record. It is not the portal acknowledgement.\n`);
+    const bytes=uploaded ? new Uint8Array(await file!.arrayBuffer()) : new TextEncoder().encode(`Filing details from ${membership.firmName}\nClient: ${client.name}\nReturn: ${formName(document.prepared.form)}\nPeriod: ${formPeriod(document.period_key)}\nAcknowledgement number: ${number}\nThis is ${membership.firmName}'s record. It is not the acknowledgement from the government portal.\n`);
     const drive=await openDrive(membership.firmId,account);
     // A file the team adds is checked like any other (src/lib/intake.ts).
     const sent=uploaded ? await receive(membership.firmId,userId,{id:document.client_id,name:client.name},{name:file!.name,bytes},drive,false) : null;
@@ -130,7 +130,7 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
     }
   }
   const {data:saved,error}=await admin.rpc("file_prepared_form",{target:id,person:userId,acknowledgement:number,paper});
-  if(error || !saved) throw new Error("The work changed. Open the latest form before marking it filed.");
+  if(error || !saved) throw new Error("This return changed. Open the latest version before marking it filed.");
 }
 
 export async function uploadEditedForm(id:string,file:File) {
@@ -145,7 +145,7 @@ export async function uploadEditedForm(id:string,file:File) {
     supabase.from("client_registrations").select("number_enc").eq("firm_id",membership.firmId).eq("client_id",document.client_id).eq("id",meta.registration).eq("kind",kind).maybeSingle(),
     supabase.from("templates").select("*").eq("form_code",meta.form),
   ]);
-  if(!client || !account || !registration) throw new Error("The form or the firm's drive is not available.");
+  if(!client || !account || !registration) throw new Error("The return file or your firm's drive is not available.");
   const template=chooseTemplate((templates ?? []).map(row=>templateSchema.parse(row)),meta.form,document.period_key,meta.template,"edited outside");
   const number=await serverCrypto().decrypt(membership.firmId,`clients/${document.client_id}/${kind}`,registration.number_enc);
   const bytes=new Uint8Array(await file.arrayBuffer()),sha256=createHash("sha256").update(bytes).digest("hex"),target=randomUUID(),draft=randomUUID();
@@ -163,7 +163,7 @@ export async function uploadEditedForm(id:string,file:File) {
     const lines=result.lines.map(line=>({...line,id:randomUUID(),source:{document:target,sha256,page:line.page,...(itr ? {path:line.path} : {sheet:line.sheet,cell:line.cell})}}));
     if(!await createDraft({id:draft,firm_id:membership.firmId,client_id:document.client_id,form_code:itr ? "ITR" : meta.form,period_key:document.period_key,lines,checks:[],...(itr && {target:{form:z.enum(itrReturns).parse(meta.form),version:meta.template}})},userId,permission)) throw new Error("The figures could not be saved.");
     const {data:created,error:failed}=await admin.rpc("add_edited_form",{target,draft,registration:meta.registration,template:meta.template,person:userId,prefix:`${safeName(client.name,100)} - ${formName(meta.form)} - ${formPeriod(document.period_key)}`});
-    if(failed || !created) throw new Error("The edited form could not be saved.");
+    if(failed || !created) throw new Error("The corrected file could not be saved.");
     attached=true;
     const next=z.object({name:z.string()}).parse(created),moved=await drive.move(saved.id,folder,next.name);
     if(moved!=="taken") {

@@ -40,7 +40,7 @@ export default async function RequestUpload({ params }: { params: Promise<{ toke
       firm={firm}
       band={
         <>
-          <h1>{done ? `Thank you. ${firm} has all ${papers(total)}.` : open ? `${firm} needs ${papers(total)} by ${dueLabel(request.expires_at!.slice(0, 10))}` : "This link has ended"}</h1>
+          <h1>{done ? `Thank you. ${firm} has all ${papers(total)}.` : open ? `${firm} needs ${papers(total)}. This link works until ${dueLabel(request.expires_at!.slice(0, 10))}.` : "This link has ended"}</h1>
           <p className="public-for">
             Papers for {request.clients?.name}
             {details.period ? `, ${periodName(details.period)}` : ""}
@@ -67,7 +67,7 @@ export default async function RequestUpload({ params }: { params: Promise<{ toke
           <span className="public-bar" aria-hidden>
             <span style={{ "--got": got / total } as React.CSSProperties} />
           </span>
-          <p className="hint">{open ? "Add each paper below. It goes straight to your CA's office." : `Ask ${firm} to send a new one.`}</p>
+          <p className="hint">{open ? `Add each paper below. It goes straight to ${firm}.` : `Ask ${firm} to send a new one.`}</p>
         </section>
       )}
       <ul className="public-items" aria-label={done ? "What you sent" : "Papers asked for"}>

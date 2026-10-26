@@ -21,12 +21,14 @@ it("records an entered filing number as the firm's own paper, applies private sh
   mock.rpc.mockResolvedValue({data:true,error:null});
   mock.save.mockImplementation(async(_folder:string,_name:string,bytes:Uint8Array)=>{mock.record=new TextDecoder().decode(bytes);return {id:"invented-record"};});
   await fileForm(ids.form,"INVENTED-ACK-123");
-  expect(mock.record).toContain("Acknowledgement number entered by your firm: INVENTED-ACK-123");
-  expect(mock.record).toContain("It is not the portal acknowledgement");
+  expect(mock.record).toContain("Acknowledgement number: INVENTED-ACK-123");
+  expect(mock.record).toContain("It is not the acknowledgement from the government portal.");
   expect(mock.insert).toHaveBeenCalledWith("documents",expect.objectContaining({document_type:"Filing record",share_policy:null,period_key:"2026-09"}));
   const paper=mock.insert.mock.calls.find(([table])=>table==="documents")![1];
   expect(paperPolicy(paper,{approve_all:true})).toBe("approval");
   expect(paperPolicy(paper,{routine:[]})).toBe("approval");
+  // The firm's own note is never routine: it waits for approval like a private paper.
+  expect(paperPolicy(paper)).toBe("approval");
   expect(mock.rpc).toHaveBeenCalledWith("file_prepared_form",{target:ids.form,person:ids.person,acknowledgement:"INVENTED-ACK-123",paper:ids.paper});
   await expect(fileForm(ids.form,"")).rejects.toThrow("Add the acknowledgement");
 });

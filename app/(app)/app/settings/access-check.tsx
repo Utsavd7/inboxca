@@ -13,7 +13,7 @@ const reasons: Record<string, string> = {
   country: "This connection is not in India, and your firm allows InboxCA only from India.",
   pc_new: "This PC is not approved for your firm yet.",
   pc_refused: "Your firm refused this PC, or took its approval back.",
-  pc_personal: "This device is allowed only for someone else, or its days are over.",
+  pc_personal: "This laptop is approved only for another person, or the last day it was allowed has passed.",
   connection: "This is not one of your office's internet connections.",
 };
 
@@ -55,7 +55,7 @@ export async function AccessCheck({ person }: { person?: string }) {
       </Form>
       {answer && (refused.length
         ? <p className="alert" role="status"><span><strong>No.</strong> {name} cannot use InboxCA now, from here, on this PC. {refused.map((code) => reasons[code]).join(" ")}</span></p>
-        : <p className="notice" role="status"><span><strong>Yes.</strong> {answer.includes("view_only") ? `${name} can use InboxCA now on this device, to view only.` : `${name} can use InboxCA now, from here, on this PC.`}</span></p>)}
+        : <p className="notice" role="status"><span><strong>Yes.</strong> {answer.includes("view_only") ? `${name} can use InboxCA now on this laptop, to view only.` : `${name} can use InboxCA now, from here, on this PC.`}</span></p>)}
     </>
   );
 }

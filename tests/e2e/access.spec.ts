@@ -47,8 +47,8 @@ test("the owner chooses a preset in one step, and it sets the office rules", asy
   await expect(preset.getByRole("radio", { name: /^Standard:/ })).toBeChecked();
   await preset.getByRole("radio", { name: /^Office only:/ }).check();
   await preset.getByLabel("Yes, I am in the office now").check();
-  await preset.getByRole("button", { name: "Use this preset" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Preset saved." })).toBeVisible();
+  await preset.getByRole("button", { name: "Use this choice" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Saved. Your team now works this way." })).toBeVisible();
   await expect(preset.getByRole("radio", { name: /^Office only:/ })).toBeChecked();
   const chosen = await settings();
   expect(chosen.office).toMatchObject({ on: true, away: false, lines: [{ ipv4: "203.0.113.30" }] });
@@ -56,26 +56,26 @@ test("the owner chooses a preset in one step, and it sets the office rules", asy
   expect(Object.keys(chosen.hours).length).toBeGreaterThan(0);
 
   await preset.getByRole("radio", { name: /^Standard:/ }).check();
-  await preset.getByRole("button", { name: "Use this preset" }).click();
+  await preset.getByRole("button", { name: "Use this choice" }).click();
   // The office switch and the access rules are two writes; wait for the second.
   await expect.poll(async () => { const { office, access } = await settings(); return { on: office.on, access }; }).toEqual({ on: false, access: { hours_only: false } });
 });
 
 test("the owner names a co-admin, who changes the access settings but not the owner's", async () => {
   await owner.goto("/app/settings#office");
-  await owner.getByLabel("Co-admin").selectOption({ label: partnerEmail });
-  await owner.getByRole("button", { name: "Save deputies and co-admin" }).click();
+  await owner.getByLabel("Second admin").selectOption({ label: partnerEmail });
+  await owner.getByRole("button", { name: "Save deputies and second admin" }).click();
   await expect(owner.getByLabel(partnerEmail, { exact: true })).toBeChecked();
   expect((await settings()).office).toMatchObject({ deputies: [partnerId], co_admin: partnerId });
 
   await signIn(partner, partnerEmail, partnerKey);
   await partner.goto("/app/settings");
-  await expect(partner.getByRole("heading", { name: "Access preset" })).toBeVisible();
+  await expect(partner.getByRole("heading", { name: "How your team works" })).toBeVisible();
   for (const owners of ["Firm email", "Recovery codes", "Close the firm"]) await expect(partner.getByRole("heading", { name: owners })).toHaveCount(0);
-  await expect(partner.getByLabel("Co-admin")).toHaveCount(0);
+  await expect(partner.getByLabel("Second admin")).toHaveCount(0);
   const preset = partner.locator("section#preset");
   await preset.getByRole("radio", { name: /^Solo CA:/ }).check();
-  await preset.getByRole("button", { name: "Use this preset" }).click();
+  await preset.getByRole("button", { name: "Use this choice" }).click();
   await expect.poll(settings).toMatchObject({ office: { on: true, away: false, co_admin: partnerId }, access: { hours_only: false, idle_minutes: 15 } });
   expect((await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and actor_id = $2 and action = 'office.on'", [firm.firmId, partnerId]))[0].n).toBe(1);
 
@@ -83,7 +83,7 @@ test("the owner names a co-admin, who changes the access settings but not the ow
   const lines = (await settings()).office.lines;
   await partner.goto("/app/settings?group=access#office");
   await partner.getByRole("button", { name: "This is my office" }).click();
-  await expect(partner.getByRole("alert").filter({ hasText: "could not see this connection's address" })).toBeVisible();
+  await expect(partner.getByRole("alert").filter({ hasText: "could not read this internet connection" })).toBeVisible();
   expect((await settings()).office.lines).toEqual(lines);
 });
 
@@ -105,8 +105,8 @@ test("staff are told People and Settings are not theirs, and only see a notice's
     const [{ id: notice }] = await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, due_on, details) values ($1, $2, 'notice', '2026-10-22', '{"authority":"income_tax","notice_type":"Invented notice","reference":"","received_on":"2026-10-20"}') returning id`, [firm.firmId, client]);
     await partner.goto(`/app/notices?notice=${notice}`);
     const panel = partner.getByRole("dialog", { name: "Invented notice" });
-    await expect(panel).toContainText("The owner, a partner or a manager confirms the date");
-    await expect(panel.getByRole("button", { name: "Confirm date" })).toHaveCount(0);
+    await expect(panel).toContainText("The owner, a partner or a manager checks the date");
+    await expect(panel.getByRole("button", { name: "Mark date checked" })).toHaveCount(0);
     await expect(panel.getByRole("button", { name: "Mark replied" })).toHaveCount(0);
 
     // The owner sees the date field ask for the date while it is empty.

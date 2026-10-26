@@ -1,5 +1,6 @@
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
+import { paperType } from "@/src/lib/paper-type";
 import { sendSkip, type BulkSend } from "@/src/lib/records";
 import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lucide-react";
 import Form from "next/form";
@@ -227,12 +228,12 @@ export default async function Clients({
         </Form>
       </div>
 
-      {params.error === "send_permission" && <p className="alert" role="alert">Your owner needs to allow sending papers first.</p>}
-      {params.error === "send" && <p className="alert" role="alert">Choose clients, a paper and a year. If they could not be queued, try again.</p>}
+      {params.error === "send_permission" && <p className="alert" role="alert">You are not allowed to send papers for some of these clients. Ask the owner for permission.</p>}
+      {params.error === "send" && <p className="alert" role="alert">Choose clients, a paper type and a year. If you did all three, InboxCA could not start sending. Try again.</p>}
       {progress && (
         <Card
           id="send-progress"
-          title={`Sending ${progress.type}, ${periodName(progress.period)}`}
+          title={`Sending ${paperType(progress.type)}, ${periodName(progress.period)}`}
           Icon={Send}
           kind="approve"
           end={
@@ -241,7 +242,7 @@ export default async function Clients({
             </Link>
           }
         >
-          <p role="status" className="app-card-none">{batch?.status === "done" ? "Every chosen client has been checked." : "Sending in the background. Refresh to see progress."}</p>
+          <p role="status" className="app-card-none">{batch?.status === "done" ? "Done. Each client below shows what happened." : "InboxCA is sending these now. Choose Refresh to see the latest."}</p>
           <ul className="app-rows">
             {progress.clients.map((client) => {
               const name = clientNames.get(client.id) ?? "Client no longer available";
@@ -265,7 +266,7 @@ export default async function Clients({
               <tr>
                 {canSend && <th scope="col" className="shrink"><span className="sr-only">Choose</span></th>}
                 <th scope="col">Client</th>
-                <th scope="col">GST number</th>
+                <th scope="col">GSTIN</th>
                 <th scope="col">Looked after by</th>
                 <th scope="col">Next return</th>
                 <th scope="col">Status</th>

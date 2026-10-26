@@ -58,7 +58,7 @@ export default async function Status() {
         <h2>Past incidents</h2>
         {past.length ? past.map((incident) => <IncidentCard key={incident.id} incident={incident} />) : <p className="hint">No incidents in the last 90 days.</p>}
       </section>
-      <p className="status-note hint">Your files always stay in your firm&apos;s own drive, and emails wait in your mailbox while InboxCA is down.</p>
+      <p className="status-note hint">Your papers always stay in your firm&apos;s own drive. While InboxCA is not working, new emails wait in your firm email.</p>
     </PublicPage>
   );
 }

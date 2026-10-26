@@ -46,9 +46,9 @@ async function upload(file: { name: string; mimeType: string; buffer: Buffer }, 
   await owner.goto(`/app/clients/${clientId}?tab=files`);
   await owner.getByRole("link", { name: "Upload papers" }).click();
   await owner.getByLabel("Files", { exact: true }).setInputFiles(file);
-  await owner.getByLabel("Type", { exact: true }).selectOption(type);
+  await owner.getByLabel("Paper type", { exact: true }).selectOption(type);
   if (type === "Other") await owner.getByRole("dialog").getByLabel("Name", { exact: true }).fill("Invented paper");
-  await owner.getByLabel("Work", { exact: true }).selectOption("gst");
+  await owner.getByLabel("Type of work", { exact: true }).selectOption("gst");
   await owner.getByLabel("Period", { exact: true }).selectOption({ label: "No period" });
   await owner.getByRole("button", { name: "Upload", exact: true }).click();
 }
@@ -73,7 +73,7 @@ test("a file with a virus is kept out of InboxCA, put in the owner's folder for 
 
 test("a ZIP's papers are each filed and checked; unsafe ZIPs and programs are refused", async () => {
   await upload({ name: "Sep bills.zip", mimeType: "application/zip", buffer: zip([{ name: "Sep/bill 1.pdf", text: pdf("Invented bill 1") }, { name: "bill 2.pdf", text: pdf("Invented bill 2") }, { name: "__MACOSX/._bill 2.pdf", text: "x" }]) }, "Purchase bills");
-  await expect(owner.getByRole("status")).toContainText("2 filed");
+  await expect(owner.getByRole("status")).toContainText("2 saved");
   const filed = await papers();
   expect(filed).toHaveLength(2);
   expect(filed.every((paper: { name: string; scanned_at: Date | null }) => paper.name.includes("Purchase bills") && paper.name.endsWith(".pdf") && paper.scanned_at)).toBe(true);
@@ -126,9 +126,9 @@ test("an email's ZIP is filed paper by paper, its virus is kept out and a progra
   await card.getByLabel("The firm's email address").fill(mailbox);
   await card.getByLabel("Its password").fill(mailbox);
   await card.getByText("Change server settings").click();
-  await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
+  await card.getByLabel("Incoming mail server (IMAP)").fill("127.0.0.1");
   await card.getByLabel("Incoming port").fill("3143");
-  await card.getByLabel("Outgoing (SMTP) server").fill("127.0.0.1");
+  await card.getByLabel("Outgoing mail server (SMTP)").fill("127.0.0.1");
   await card.getByLabel("Outgoing port").fill("3025");
   await card.getByRole("button", { name: "Connect email" }).click();
   await expect(card.getByRole("status")).toHaveText(`Connected: ${mailbox}`);

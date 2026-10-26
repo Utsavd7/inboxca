@@ -18,15 +18,15 @@ import { Pending } from "./pending";
 // button with its own action sends no name and value, so intent rides in a hidden field).
 // Why the last office change was refused, from setOfficeOnly's redirect.
 const refusedNotes: Record<string, string> = {
-  deputies: "Choose up to 2 active partners as deputies, with the co-admin one of them.",
-  no_line: "InboxCA could not see this connection's address. Try again from the office's own network.",
-  closed: "The office has closed for today, so it cannot be opened now.",
+  deputies: "Choose no more than 2 partners as deputies. The second admin must be one of them.",
+  no_line: "InboxCA could not read this internet connection. Try again from a PC on your office internet connection.",
+  closed: "Office hours are over for today, so this connection cannot be allowed for today. Choose This is my office, or decide tomorrow.",
   pc: "That PC is no longer approved.",
-  self: "Ask another approver to decide on your own request.",
+  self: "This is your own connection. Ask the owner or the other deputy to approve it.",
   office: "That change could not be saved. Try again.",
 };
 // What a refusal of the day was about (office_refused's reason); anything else is the connection.
-const refusedWhere: Record<string, string> = { hours: "outside office hours", pc: "on a device you have not approved" };
+const refusedWhere: Record<string, string> = { hours: "outside office hours", pc: "on a computer you have not approved" };
 
 export async function OfficePanel({ compact = false, error = "", inPreset = false, branch = "" }: { compact?: boolean; error?: string; inPreset?: boolean; branch?: string }) {
   const { supabase, userId, membership } = await currentMember();
@@ -71,18 +71,18 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   if (compact && !requests?.length && !refusals.length && (owner || !waiting.length)) return null;
   const line = <p className="hint">{anywhere ? "Staff, managers and front desk use only the PCs and laptops you approve, from anywhere." : "Staff, managers and front desk use approved PCs on your office internet connection."} You and partners can use InboxCA anywhere.</p>;
   const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">{where}
-    {!anywhere && <Pending className="b b-ghost" name="intent" value="forget">Forget office connections</Pending>}<Pending className="b b-secondary" name="intent" value="off">Turn off</Pending>
+    {!anywhere && <Pending className="b b-ghost" name="intent" value="forget">Remove saved office connections</Pending>}<Pending className="b b-secondary" name="intent" value="off">Turn off</Pending>
   </form> : isAdmin && inPreset ? <><input type="hidden" form="preset-form" name="intent" value="on" />{picked && <input type="hidden" form="preset-form" name="branch" value={picked.id} />}<Pending className="b b-primary" form="preset-form" formAction={setOfficeOnly} formNoValidate>Turn on</Pending></>
     : isAdmin && <form action={setOfficeOnly}>{where}
     <fieldset className="fieldset"><legend>Are you in your office right now?</legend>
       <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, this is my office</label>
-      <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it from the office</label>
+      <label className="check"><input type="radio" name="here" value="no" />No, I will approve the office internet connection later, from the office</label>
     </fieldset><Pending className="b b-primary" name="intent" value="on">Turn on</Pending>
   </form>;
   const Box = inPreset ? "div" : "section";
   return (
     <Box className={inPreset ? "office-in-preset" : "panel"} aria-labelledby={inPreset ? undefined : compact ? "office-alerts" : "office-title"} id={compact ? undefined : "office"}>
-      {!inPreset && <h2 id={compact ? "office-alerts" : "office-title"}>{compact ? "Your office today" : anywhere ? "Staff use only the devices you approve" : "Staff can use InboxCA only in the office"}</h2>}
+      {!inPreset && <h2 id={compact ? "office-alerts" : "office-title"}>{compact ? "Your office today" : anywhere ? "Staff use only the computers you approve" : "Staff can use InboxCA only in the office"}</h2>}
       {refusedNotes[error] && <p className="alert" role="alert">{refusedNotes[error]}</p>}
       {!compact && !inPreset && line}
       {!compact && !!branches?.length && <Form action="/app/settings#office">
@@ -96,12 +96,12 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
         </div><button className="sr-only" value="branch">Show</button></div>
         {picked && !ownOffice && <p className="hint">{picked.name} follows the main office until you turn Office only on or off for it here.</p>}
       </Form>}
-      {office.on && !compact && !anywhere && <p className={here ? "notice" : "alert"} role="status">{here ? "On. You are on your office internet connection now." : "On. Waiting for your firm to confirm the office internet connection."}</p>}
+      {office.on && !compact && !anywhere && <p className={here ? "notice" : "alert"} role="status">{here ? "On. You are on your office internet connection now." : "On. You are not on a saved office internet connection now. If you are in the office, choose This is my office."}</p>}
       {anyOn && requests?.map((request) => {
         const details = request.details as { person?: string; day?: string };
         const pc = pcs?.find((pc) => pc.id === request.entity_id);
         if (!pc || pc.status !== "approved") return null;
-        if (!owner && details.person === userId) return <p key={request.id}>Ask the owner or another deputy to check your connection.</p>;
+        if (!owner && details.person === userId) return <p key={request.id}>This is your own connection. Ask the owner or the other deputy to approve it.</p>;
         return <div className="notice" key={request.id}>
           <p>{request.reason_code === "office_changed"
             ? `Your office internet connection changed ${details.day === today ? "today" : `on ${dueLabel(details.day ?? today)}`} (first seen on ${pc.name})`
@@ -110,14 +110,14 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
             <input type="hidden" name="request" value={request.id} />
             {request.reason_code === "office_waiting" && <>
               <Pending className="b b-primary b-small" name="intent" value="confirm">This is my office</Pending>
-              <Pending className="b b-secondary b-small" name="intent" value="today">Allow this network today</Pending>
+              <Pending className="b b-secondary b-small" name="intent" value="today">Allow this connection today</Pending>
             </>}
             <Pending className="b b-ghost b-small" name="intent" value="refuse">Not my office</Pending>
           </form>
         </div>;
       })}
       {refusals.map((entry) => <p className="alert" key={entry.actor_id}>{personName(emails.get(entry.actor_id ?? ""))} tried to use InboxCA {refusedWhere[(entry.details as { reason?: string } | null)?.reason ?? ""] ?? "from outside the office"} today.</p>)}
-      {compact && !owner && !!waiting.length && <p>{waiting.length} PCs are waiting for approval. <Link href="/app/settings#office">Approve PCs</Link></p>}
+      {compact && !owner && !!waiting.length && <p>{waiting.length === 1 ? "1 PC is" : `${waiting.length} PCs are`} waiting for approval. <Link href="/app/settings#office">Approve PCs</Link></p>}
       {!compact && <>
         {anyOn && !!waiting.length && <div className="device-list">
           <h3 className="sub-head">PCs waiting for approval</h3>
@@ -132,22 +132,22 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
                 <input type="hidden" name="device" value={pc.id} />
                 {away ? <>
                   <label className="until">Until <input type="date" name="until" required min={today} max={addDays(today, 90)} defaultValue={addDays(today, 7)} /></label>
-                  <Pending className="b b-primary b-small" name="decision" value="personal">Allow</Pending>
-                </> : anywhere ? <Pending className="b b-primary b-small" name="decision" value="laptop">Allow</Pending> : <>
-                  <Pending className="b b-primary b-small" name="decision" value="office">Stays in the office</Pending>
-                  <Pending className="b b-secondary b-small" name="decision" value="laptop">Laptop</Pending>
+                  <Pending className="b b-primary b-small" name="decision" value="personal">Approve</Pending>
+                </> : anywhere ? <Pending className="b b-primary b-small" name="decision" value="laptop">Approve</Pending> : <>
+                  <Pending className="b b-primary b-small" name="decision" value="office">Approve as office PC</Pending>
+                  <Pending className="b b-secondary b-small" name="decision" value="laptop">Approve as laptop</Pending>
                 </>}
                 <Pending className="b b-ghost b-small" name="decision" value="refuse" formNoValidate>Refuse</Pending>
               </form>
             </li>;
           })}</ul>
           {waiting.length > 1 && <form action={reviewDevice}>{ownOffice && <input type="hidden" name="branch" value={ownOffice} />}
-            <Pending className="b b-secondary" name="decision" value={anywhere ? "laptop" : "office"}>{anywhere ? "Allow all" : "Approve all as staying in the office"}</Pending></form>}
+            <Pending className="b b-secondary" name="decision" value={anywhere ? "laptop" : "office"}>{anywhere ? "Approve all" : "Approve all as office PCs"}</Pending></form>}
         </div>}
         {!!approved.length && <div className="device-list">
-          <h3 className="sub-head">Approved devices</h3>
+          <h3 className="sub-head">Approved computers</h3>
           <ul className="rows">{approved.map((pc) => <li key={pc.id}>
-            <span className="grow"><strong>{pc.name}</strong>, {pc.kind === "office" ? (pc.key_id ? "stays in the office" : "stays in the office, waiting for its key to be set up on it") : pc.kind === "laptop" ? "laptop" : `${personName(emails.get(pc.person_id ?? ""))}'s, away from the office until ${dueLabel(pc.ends_on ?? today)}`}</span>
+            <span className="grow"><strong>{pc.name}</strong>, {pc.kind === "office" ? (pc.key_id ? "office PC" : "office PC. Setup is not finished: on this PC, choose Set up this office PC") : pc.kind === "laptop" ? "laptop" : `${personName(emails.get(pc.person_id ?? ""))}'s own laptop, view only away from the office until ${dueLabel(pc.ends_on ?? today)}`}</span>
             <form action={reviewDevice} className="end">
               <input type="hidden" name="device" value={pc.id} />
               <Pending className="b b-ghost b-small" name="decision" value="withdraw">Withdraw</Pending>
@@ -157,13 +157,13 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
         {office.on && !here && !anywhere && <form action={setOfficeOnly} className="form-row">{where}
           <Pending className="b b-primary" name="intent" value="here">This is my office</Pending>
         </form>}
-        {inPreset && toggle ? <details className="reveal office-switch"><summary>Change details</summary><h3 className="sub-head">{anywhere ? "Approved devices only" : "Office only"} {office.on ? "is on" : "is off"}</h3>{line}{toggle}</details> : toggle}
+        {inPreset && toggle ? <details className="reveal office-switch"><summary>Change details</summary><h3 className="sub-head">{anywhere ? "Approved computers only" : "Office only"} {office.on ? "is on" : "is off"}</h3>{line}{toggle}</details> : toggle}
         {isAdmin && picked && ownOffice && <form action={setOfficeOnly}>{where}
-          <p className="hint">{picked.name} has its own Office only switch, connections and PCs. To check its people against the main office again:</p>
+          <p className="hint">{picked.name} has its own Office only setting, internet connections and PCs. To make it use the main office&apos;s again:</p>
           <Pending className="b b-secondary" name="intent" value="follow">Follow the main office</Pending>
         </form>}
         {suggestFixed && <form action={setOfficeOnly} className="fixed-suggestion">{where}
-          <p><strong>To stop these confirmations, ask your internet provider for a fixed address.</strong> Here is what to say:</p>
+          <p><strong>To stop approving your office connection again and again, ask your internet provider for a fixed internet address.</strong> You can say:</p>
           <blockquote>&ldquo;Please add a fixed internet address to our broadband connection, account number ___. We need it for office software access.&rdquo;</blockquote>
           <p className="hint">When it is done, press Done from a PC in the office.</p>
           <span className="form-row">
@@ -171,33 +171,33 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
             <Pending className="b b-ghost" name="intent" value="no_fixed">My provider doesn&apos;t offer it</Pending>
           </span>
         </form>}
-        {isAdmin && office.on && !anywhere && !suggestFixed && (office as { fixed_declined?: boolean }).fixed_declined && !trustedPc && <p className="hint">Without a fixed connection, mark one desktop in the office as Stays in the office and name a deputy, so a changed connection is confirmed without you.</p>}
+        {isAdmin && office.on && !anywhere && !suggestFixed && (office as { fixed_declined?: boolean }).fixed_declined && !trustedPc && <p className="hint">Without a fixed internet address, approve one office desktop as an office PC and name a deputy. Then a changed connection can be approved without you.</p>}
         {isAdmin && office.on && !anywhere && !suggestFixed && <form action={setOfficeOnly}>{where}
-          <p className="hint">If your internet provider gave your office a fixed connection, confirm it here from the office.</p>
+          <p className="hint">If your internet provider gave your office a fixed internet address, choose Done here from a PC in the office.</p>
           <Pending className="b b-secondary" name="intent" value="fixed">Done</Pending>
         </form>}
         {owner && <form action={setOfficeOnly}>
           <fieldset className="fieldset"><legend>Name up to 2 deputies</legend>
-            <p className="hint">Partners who can approve PCs and office connections when you are away. They keep using their 2 step code.</p>
+            <p className="hint">Partners who can approve PCs and office internet connections when you are away. They keep using their 2 step code.</p>
             {people?.filter((person) => person.role === "partner" && person.status === "active").map((person) => <label className="check" key={person.user_id}>
               <input type="checkbox" name="deputy" value={person.user_id} defaultChecked={office.deputies?.includes(person.user_id)} />{person.email}
             </label>)}
           </fieldset>
           <div className="form-row"><div>
-            <label htmlFor="co-admin">Co-admin</label>
+            <label htmlFor="co-admin">Second admin</label>
             <select id="co-admin" name="co_admin" defaultValue={office.co_admin ?? ""}>
-              <option value="">No co-admin</option>
+              <option value="">No second admin</option>
               {people?.filter((person) => person.role === "partner" && person.status === "active").map((person) => <option key={person.user_id} value={person.user_id}>{person.email}</option>)}
             </select>
           </div></div>
-          <p className="hint">A partner who is also a deputy and changes the access preset, Office only, office hours, signing in and permissions like you. Your email, drive, people, recovery codes and closing the firm stay yours.</p>
-          <Pending className="b b-secondary" name="intent" value="deputies">Save deputies and co-admin</Pending>
+          <p className="hint">The second admin is a deputy who can also change how your team works, Office only, office hours, sign in rules and permissions. Only you can change the firm email, the drive, people and recovery codes, or close the firm.</p>
+          <Pending className="b b-secondary" name="intent" value="deputies">Save deputies and second admin</Pending>
         </form>}
-        {isAdmin && office.on && <div className="side-doors"><h3 className="sub-head">Doors InboxCA cannot close for you</h3><ul>
-          <li>Don&apos;t give staff the firm mailbox&apos;s password; InboxCA does the email work.</li>
+        {isAdmin && office.on && <div className="side-doors"><h3 className="sub-head">Risks InboxCA cannot stop for you</h3><ul>
+          <li>Do not give staff the firm email password. InboxCA does the email work.</li>
           <li>Uninstall remote desktop tools such as AnyDesk and TeamViewer from office PCs.</li>
-          <li>Ask clients to send documents to the firm&apos;s email, not to staff phones.</li>
-          <li>Photos of the screen cannot be blocked; every page InboxCA shows names who viewed it and when.</li>
+          <li>Ask clients to send papers to the firm email, not to staff phones.</li>
+          <li>InboxCA cannot stop photos of the screen. Every page shows who is viewing it and when.</li>
         </ul></div>}
       </>}
     </Box>

@@ -70,7 +70,7 @@ test("the status line says when the drive cannot be reached, and Reconnect keeps
   await query(local.dbUrl, "insert into public.jobs (firm_id, kind, entity_type, entity_id, idempotency_key, state, attempts, last_error_code) values ($1, 'read_document', 'document', gen_random_uuid(), $2, 'failed', 168, 'drive_unreachable')", [firm.firmId, waited]);
 
   // Everyone sees it at the foot of the page; the owner's words open the drive's settings.
-  const away = "Drive cannot be reached, new files wait";
+  const away = "Drive cannot be reached, new papers wait";
   await staff.goto("/app");
   await expect(foot(staff)).toContainText(away);
   await expect(foot(staff).getByRole("link", { name: away })).toHaveCount(0);
@@ -79,7 +79,7 @@ test("the status line says when the drive cannot be reached, and Reconnect keeps
   await expect(card.getByRole("status")).toContainText("Cannot be reached:");
 
   // One click beside the drive: the same drive is checked again at once, and nothing is lost.
-  await card.getByRole("button", { name: "Reconnect" }).click();
+  await card.getByRole("button", { name: "Connect again" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Drive connected again. InboxCA is checking it now." })).toBeVisible();
   expect(await drive()).toEqual([connected]);
   expect(await query(local.dbUrl, "select actor_id, details from public.activity_log where firm_id = $1 and action = 'drive.reconnected'", [firm.firmId])).toEqual([{ actor_id: firm.ownerId, details: { provider: "local" } }]);
@@ -91,7 +91,7 @@ test("the status line says when the drive cannot be reached, and Reconnect keeps
   expect(await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'drive.back'", [firm.firmId])).toEqual([{ details: { jobs: 1 } }]);
   for (const page of [owner, staff]) {
     await page.reload();
-    await expect(foot(page)).toContainText("Drive linked");
+    await expect(foot(page)).toContainText("Drive connected");
   }
   await expect(card.getByRole("status")).toContainText("Connected:");
 });
@@ -99,7 +99,8 @@ test("the status line says when the drive cannot be reached, and Reconnect keeps
 test("Reconnect signs in to the same Dropbox again, and saves its account for change notices", async () => {
   await owner.goto("/app/settings?group=email");
   const card = owner.locator("section#drive");
-  await card.getByRole("button", { name: "Disconnect" }).click();
+  await card.getByRole("link", { name: "Disconnect" }).click();
+  await card.getByRole("button", { name: "Yes, disconnect" }).click();
   await card.getByLabel("Dropbox").check();
   await card.getByLabel(/I have read this and I agree/).check();
   await card.getByRole("button", { name: "Connect drive" }).click();
@@ -110,7 +111,7 @@ test("Reconnect signs in to the same Dropbox again, and saves its account for ch
   // A drive connected before change notices kept no account; Reconnect saves it, and a new
   // sign in, on the same record.
   await query(local.dbUrl, "update public.connected_accounts set settings = settings - 'dropbox_account' where id = $1", [connected.id]);
-  await card.getByRole("button", { name: "Reconnect" }).click();
+  await card.getByRole("button", { name: "Connect again" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Drive connected again." })).toBeVisible();
   const [again] = await drive();
   expect(again).toMatchObject({ id: connected.id, account: connected.account });
@@ -118,7 +119,7 @@ test("Reconnect signs in to the same Dropbox again, and saves its account for ch
 
   // Another Dropbox account is refused, as this drive's papers are not in it.
   account.id = `dbid:AAInventedOther${tag}`;
-  await card.getByRole("button", { name: "Reconnect" }).click();
+  await card.getByRole("button", { name: "Connect again" }).click();
   await expect(card.getByRole("alert")).toHaveText("That is a different Dropbox account. Sign in with the one already connected, or disconnect it first.");
   expect(await drive()).toEqual([again]);
 });

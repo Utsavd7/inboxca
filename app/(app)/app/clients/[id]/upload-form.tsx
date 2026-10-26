@@ -3,6 +3,7 @@ import { FileUp } from "lucide-react";
 import { useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { guessPapers, uploadDocument } from "@/app/(app)/actions";
+import { paperType } from "@/src/lib/paper-type";
 
 type Row = { name: string; type: string; custom: string; work: string; period: string };
 const MAX = 50 * 1024 * 1024;
@@ -62,11 +63,11 @@ export function UploadForm({ clientId, types, typeWork, works, periods, keep, ch
         <fieldset key={`${at}-${row.name}`} className="upload-file fields">
           <legend>{row.name}</legend>
           <div>
-            <label htmlFor={`upload-type-${at}`}>Type</label>
+            <label htmlFor={`upload-type-${at}`}>Paper type</label>
             <select id={`upload-type-${at}`} name="type" required value={row.type} onChange={(event) => change(at, "type", event.target.value)}>
               <option value="">Choose</option>
               {types.map((type) => (
-                <option key={type}>{type}</option>
+                <option key={type} value={type}>{paperType(type)}</option>
               ))}
               <option value="Other">Other, named below</option>
             </select>
@@ -87,7 +88,7 @@ export function UploadForm({ clientId, types, typeWork, works, periods, keep, ch
             <input type="hidden" name="custom" value="" />
           )}
           <div>
-            <label htmlFor={`upload-work-${at}`}>Work</label>
+            <label htmlFor={`upload-work-${at}`}>Type of work</label>
             <select id={`upload-work-${at}`} name="work" required value={row.work} onChange={(event) => change(at, "work", event.target.value)}>
               <option value="">Choose</option>
               {works.map(([value, label]) => (
