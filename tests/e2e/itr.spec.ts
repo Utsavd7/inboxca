@@ -115,7 +115,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await expect.poll(async()=>(await query(local.dbUrl,"select count(*)::int n from public.documents where firm_id=$1 and prepared->>'form'='ITR1' and prepared->>'version'='2' and size>0",[firm.firmId]))[0].n,{timeout:30_000}).toBe(1);
     [prepared]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'='ITR1' and prepared->>'version'='2'",[firm.firmId]);
     await page.goto(`/app/clients/${client}?tab=outputs`);row=page.locator("li").filter({has:page.getByRole("link",{name:prepared.name,exact:true})});
-    await row.getByText("Record filing",{exact:true}).click();await row.getByLabel("Acknowledgement number, if known").fill("INVENTED-ITR-ACK");await row.getByRole("button",{name:"Mark filed",exact:true}).click();
+    await row.locator("summary",{hasText:"Mark filed"}).click();await row.getByLabel("Acknowledgement number, if known").fill("INVENTED-ITR-ACK");await row.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select prepared->>'status' status from public.documents where id=$1",[prepared.id]))[0].status).toBe("filed");
     expect((await query(local.dbUrl,"select status from public.tasks where firm_id=$1 and code='ITR_NA'",[firm.firmId]))[0].status).toBe("filed");
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
@@ -145,7 +145,7 @@ test("ITR-2, ITR-3 and ITR-4 are prepared from checked figures, and a return cor
       // The fallback: a return corrected in another tool is a new version whose figures wait for checks.
       output.ITR.ITR4.Verification.Declaration.FatherName="Invented Edited Father";
       await page.goto(`/app/clients/${client}?tab=outputs`);const row=page.locator("li").filter({has:page.getByRole("link",{name:saved.name,exact:true})});
-      await row.getByText("File corrected outside InboxCA",{exact:true}).click();await row.getByLabel("Official return file",{exact:true}).setInputFiles({name:"invented-correction.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(output))});await row.getByRole("button",{name:"Add corrected version"}).click();await expect(page).toHaveURL(/tab=extraction&draft=/);
+      await row.getByText("Upload a file you corrected outside InboxCA",{exact:true}).click();await row.getByLabel("Official return file",{exact:true}).setInputFiles({name:"invented-correction.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(output))});await row.getByRole("button",{name:"Add corrected version"}).click();await expect(page).toHaveURL(/tab=extraction&draft=/);
       const [external]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'='ITR4' and prepared->>'external'='true'",[firm.firmId]);
       expect(external.prepared.status).toBe("draft");expect(external.prepared.version).toBe(2);
       const [edited]=await query(local.dbUrl,"select data from public.datasets where id=$1",[external.prepared.sources[0].id]);

@@ -31,7 +31,7 @@ test("a client added with only a GSTIN gets its PAN too, and opens with both", a
   await expect(owner.getByLabel("Name", { exact: true })).toHaveAttribute("aria-invalid", "true");
   await expect(owner.locator("#client-name + .field-error")).toHaveText("Enter the client's name.");
   await owner.getByLabel("Name", { exact: true }).fill("Patel Textiles");
-  await owner.getByLabel("Kind", { exact: true }).selectOption("business");
+  await owner.getByLabel("Client type", { exact: true }).selectOption("business");
   await owner.getByLabel("GSTIN", { exact: true }).fill("27aapfu0939f1zv");
   await owner.getByLabel("Email", { exact: true }).fill("Accounts@Patel.example");
   await owner.getByRole("button", { name: "Add client" }).click();
@@ -230,12 +230,12 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await owner.goto("/app/clients");
   await owner.getByRole("link", { name: "Patel Textiles" }).click();
   await owner.getByRole("link", { name: "Change numbers" }).click();
-  await owner.getByLabel("Number", { exact: true }).selectOption("gstin");
-  await owner.getByLabel("Value").fill("29AAGCB7383J1Z4"); // a valid GSTIN with another PAN
+  await owner.getByLabel("Type", { exact: true }).selectOption("gstin");
+  await owner.getByLabel("Number", { exact: true }).fill("29AAGCB7383J1Z4"); // a valid GSTIN with another PAN
   await owner.getByRole("button", { name: "Add number" }).click();
   await expect(owner.getByRole("alert").filter({ hasText: "holds a different PAN" })).toBeVisible();
-  await owner.getByLabel("Number", { exact: true }).selectOption("tan");
-  await owner.getByLabel("Value").fill("muma12345b");
+  await owner.getByLabel("Type", { exact: true }).selectOption("tan");
+  await owner.getByLabel("Number", { exact: true }).fill("muma12345b");
   await owner.getByRole("button", { name: "Add number" }).click();
   await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "TAN" })).toContainText("MUMA12345B");
   await owner.getByRole("dialog").getByRole("link", { name: "Close" }).click();
@@ -348,20 +348,20 @@ test("a contact person can act for several clients, with what they may receive",
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
   await owner.getByRole("link", { name: "Change contacts" }).click();
-  const panel = owner.getByRole("dialog", { name: "Contact people" });
+  const panel = owner.getByRole("dialog", { name: "Contacts" });
   await owner.getByLabel("Contact's name").fill("Ramesh Patel");
   await owner.getByLabel("Contact's email").fill("ramesh@patel.example");
   await owner.getByLabel("Who they are, if known").fill("Director");
   await owner.getByRole("button", { name: "Add contact" }).click();
   const row = panel.getByRole("listitem").filter({ hasText: "Ramesh Patel" });
   await expect(row).toContainText("ramesh@patel.example, Director");
-  await row.getByLabel("Receives documents").check();
+  await row.getByLabel("Receives papers").check();
   await Promise.all([
     owner.waitForResponse((response) => response.request().method() === "POST"),
     row.getByRole("button", { name: "Save", exact: true }).click(),
   ]);
   await owner.reload();
-  await expect(panel.getByRole("listitem").filter({ hasText: "Ramesh Patel" }).getByLabel("Receives documents")).toBeChecked();
+  await expect(panel.getByRole("listitem").filter({ hasText: "Ramesh Patel" }).getByLabel("Receives papers")).toBeChecked();
 
   // The same email on another client links the same person.
   await owner.goto("/app/clients?q=Client 321");
@@ -395,7 +395,7 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
     { name: "GSTR2B_september.json", buffer: other },
   ]);
   await owner.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(owner.getByRole("status")).toContainText("1 filed in its client's folder; 1 not filed");
+  await expect(owner.getByRole("status")).toContainText("1 saved in its client's folder; 1 not saved");
   await owner.goto("/app?panel=portal");
   await drop([{ name: "again.json", buffer: gstr2b }]);
   await owner.getByRole("button", { name: "Add", exact: true }).click();
@@ -420,13 +420,13 @@ test("client tabs show all return pages, notices and recent activity; Today leav
   await expect(owner.locator("section[aria-labelledby=due] li")).toHaveCount(1);
   await owner.getByRole("navigation",{name:"Client",exact:true}).getByRole("link",{name:/^Notices/}).click();
   const notices=owner.locator("section[aria-labelledby=client-notices]");
-  await expect(notices).toContainText("Invented notice");await expect(notices).toContainText("Review by 22 Oct 2026");
+  await expect(notices).toContainText("Invented notice");await expect(notices).toContainText("Check by 22 Oct 2026");
   await expect(notices).not.toContainText("24 Dec 2026");
   await owner.getByRole("navigation",{name:"Client",exact:true}).getByRole("link",{name:"Overview"}).click();
   await owner.getByRole("link",{name:"Activity",exact:true}).click();
   await expect(owner.locator("section[aria-labelledby=client-activity]")).toContainText("Client added");
   await expect(owner.getByRole("link",{name:"Figures",exact:true})).toHaveCount(0);
-  await expect(owner.getByRole("link",{name:"Prepared forms",exact:true})).toHaveCount(0);
+  await expect(owner.getByRole("link",{name:"Return files",exact:true})).toHaveCount(0);
   // The client's oldest late return leads Today's late returns until the client is archived.
   await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR1_M','2026-01',current_date-300)",[firm.firmId,client]);
   await owner.goto("/app");

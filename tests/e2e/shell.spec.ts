@@ -70,7 +70,7 @@ test("the frame remembers the theme and the folded sidebar, and its keys and pan
 
     // The status line says what is connected; the owner gets a link to fix what is not.
     await expect(page.locator(".status-bar")).toContainText("Firm email not connected");
-    await expect(page.locator(".status-bar").getByRole("link", { name: "Drive not linked" })).toHaveAttribute("href", "/app/settings#drive");
+    await expect(page.locator(".status-bar").getByRole("link", { name: "Drive not connected" })).toHaveAttribute("href", "/app/settings#drive");
   } finally {
     await firm.remove();
   }
@@ -132,7 +132,7 @@ test("a slow page shows the loading bar, and a slow save keeps its button busy",
     const turnOn = page.locator('button[form="preset-form"]');
     await expect(turnOn).toHaveAttribute("aria-busy", "true");
     await expect(turnOn).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Use this preset" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Use this choice" })).toBeDisabled();
     await expect(page.getByRole("alert").filter({ hasText: "could not see this connection's address" })).toBeVisible();
     await expect(turnOn).not.toHaveAttribute("aria-busy");
     await expect(turnOn).not.toHaveAttribute("disabled");

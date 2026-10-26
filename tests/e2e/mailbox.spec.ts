@@ -41,10 +41,10 @@ test("the owner connects the firm's mailbox with only its address and password",
     await card.getByLabel("Its password").fill(office);
     await card.getByRole("button", { name: "Connect email" }).click();
     await expect(card.getByRole("alert")).toContainText("could not reach the mail server");
-    await expect(card.getByLabel("Incoming (IMAP) server")).toHaveValue("imap.firm.test");
-    await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
+    await expect(card.getByLabel("Incoming mail server (IMAP)")).toHaveValue("imap.firm.test");
+    await card.getByLabel("Incoming mail server (IMAP)").fill("127.0.0.1");
     await card.getByLabel("Incoming port").fill("3143");
-    await card.getByLabel("Outgoing (SMTP) server").fill("127.0.0.1");
+    await card.getByLabel("Outgoing mail server (SMTP)").fill("127.0.0.1");
     await card.getByLabel("Outgoing port").fill("3025");
     await card.getByLabel("Its password").fill("wrong");
     await card.getByRole("button", { name: "Connect email" }).click();

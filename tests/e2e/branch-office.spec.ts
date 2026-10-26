@@ -132,7 +132,7 @@ test("Remote friendly lets staff in only on approved devices, with the 2 step co
   await owner.goto("/app/settings#preset");
   const preset = owner.locator("section#preset");
   await preset.getByRole("radio", { name: /^Remote friendly:/ }).check();
-  await preset.getByRole("button", { name: "Use this preset" }).click();
+  await preset.getByRole("button", { name: "Use this choice" }).click();
   await expect.poll(async () => (await settingsOf("firms", firm.firmId)).access?.india_only).toBe(true);
   expect((await settingsOf("firms", firm.firmId)).office).toMatchObject({ on: true, anywhere: true, away: false });
   await expect(preset.getByRole("radio", { name: /^Remote friendly:/ })).toBeChecked();
@@ -159,8 +159,8 @@ test("Remote friendly lets staff in only on approved devices, with the 2 step co
   await signIn(laptop, staffEmail, staffKey);
   await expect(laptop.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
   await owner.goto("/app/settings?group=access#office");
-  await expect(owner.locator("#office").getByText("Approved devices only is on")).toBeAttached();
-  await expect(owner.getByRole("button", { name: "Stays in the office" })).toHaveCount(0);
+  await expect(owner.locator("#office").getByText("Approved computers only is on")).toBeAttached();
+  await expect(owner.getByRole("button", { name: "Approve as office PC" })).toHaveCount(0);
   await owner.getByRole("button", { name: "Allow", exact: true }).click();
   await expect(owner.getByRole("heading", { name: "PCs waiting for approval" })).toHaveCount(0);
   expect(await query(local.dbUrl, "select kind from public.devices where firm_id = $1 order by kind", [firm.firmId])).toEqual([{ kind: "laptop" }, { kind: "office" }]);

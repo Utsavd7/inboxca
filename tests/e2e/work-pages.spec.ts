@@ -100,7 +100,7 @@ test("Documents: tick papers to download one ZIP or preview sending them as link
   await sheet.getByLabel("Client name").press("Enter");
   await sheet.getByRole("link", { name: `Choose ${patelName}` }).click();
   const form = owner.getByRole("dialog", { name: `Upload papers for ${patelName}` });
-  await expect(form.getByRole("group", { name: "sales_bills_sep_2026.pdf" }).getByLabel("Type")).toHaveValue("Sales bills");
+  await expect(form.getByRole("group", { name: "sales_bills_sep_2026.pdf" }).getByLabel("Paper type")).toHaveValue("Sales bills");
 
   // With a paper open, the page names its client as where the files go.
   await owner.goto(`/app/documents?file=${papers[0]}`);

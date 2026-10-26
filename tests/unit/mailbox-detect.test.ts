@@ -63,7 +63,7 @@ describe("finding a mailbox's servers", () => {
   });
 
   it("gives plain help for a provider's password", () => {
-    expect(providerFor("imap.gmail.com")?.help).toBe("Gmail needs an app password: Google Account, Security, App passwords.");
+    expect(providerFor("imap.gmail.com")?.help).toBe("Gmail needs an app password, not your usual password. Make one in your Google Account under Security, then App passwords.");
     expect(providerFor("imap.zoho.in")?.help).toContain("App passwords");
     expect(providerFor("127.0.0.1")).toBeUndefined();
   });

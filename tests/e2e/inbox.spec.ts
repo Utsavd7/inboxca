@@ -50,9 +50,9 @@ test.beforeAll(async ({ browser }) => {
   await card.getByLabel("The firm's email address").fill(office);
   await card.getByLabel("Its password").fill(office);
   await card.getByText("Change server settings").click();
-  await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
+  await card.getByLabel("Incoming mail server (IMAP)").fill("127.0.0.1");
   await card.getByLabel("Incoming port").fill("3143");
-  await card.getByLabel("Outgoing (SMTP) server").fill("127.0.0.1");
+  await card.getByLabel("Outgoing mail server (SMTP)").fill("127.0.0.1");
   await card.getByLabel("Outgoing port").fill("3025");
   await card.getByRole("button", { name: "Connect email" }).click();
   await expect(card.getByRole("status")).toHaveText(`Connected: ${office}`);
@@ -192,7 +192,7 @@ test("the team writes a new email to a client, only to the client's known addres
   await panel.getByRole("button", { name: "Send email" }).click();
   const sent = owner.getByRole("status").filter({ hasText: "Email sent" });
   await expect(sent).toBeVisible();
-  await expect(sent).not.toContainText("could not go");
+  await expect(sent).not.toContainText("were not sent");
 
   const received = await mailbox(clientEmail, async (imap) => {
     await imap.mailboxOpen("INBOX");
@@ -209,7 +209,7 @@ test("the team writes a new email to a client, only to the client's known addres
   expect(details).toEqual({ to: 1, files: 1, papers: [paper] });
 });
 
-test("a notice that asks something waits for a reply; No reply needed clears it, with Undo; Esc closes the email", async () => {
+test("a notice that asks something waits for a reply; Mark done clears it, with Undo; Esc closes the email", async () => {
   await smtp.sendMail({ from: clientEmail, to: office, subject: `GST notice ${tag}`, text: "Sir, we received a notice from the GST department. What should we do? Please call." });
   await readMail();
   // Today says why it waits, in plain words, and when it came.
@@ -228,13 +228,13 @@ test("a notice that asks something waits for a reply; No reply needed clears it,
 
   // The e key takes it out of Needs reply; the toast undoes that.
   await owner.keyboard.press("e");
-  const toast = owner.getByRole("status").filter({ hasText: "Moved out of Needs reply." });
+  const toast = owner.getByRole("status").filter({ hasText: "Marked done." });
   await expect(toast).toBeVisible();
   expect(await status()).toBe("done");
   await toast.getByRole("button", { name: "Undo" }).click();
-  await expect(pane().getByRole("button", { name: "No reply needed" })).toBeVisible();
+  await expect(pane().getByRole("button", { name: "Mark done" })).toBeVisible();
   expect(await status()).toBe("pending");
-  await pane().getByRole("button", { name: "No reply needed" }).click();
+  await pane().getByRole("button", { name: "Mark done" }).click();
   await expect(toast).toBeVisible();
   expect(await status()).toBe("done");
 
@@ -312,10 +312,10 @@ test("an email that needs a reply is given to a teammate, snoozed to a day, mark
   await expect(list().getByRole("listitem").filter({ hasText: `Question A ${tag}` })).toContainText("Needs reply");
 
   // Mark all as done: a preview of the list, one button, then Undo brings them all back.
-  await owner.getByRole("link", { name: "Mark all as done" }).click();
-  const panel = owner.getByRole("dialog", { name: "Mark 2 emails as done?" });
+  await owner.getByRole("link", { name: "Mark all done" }).click();
+  const panel = owner.getByRole("dialog", { name: "Mark 2 emails done?" });
   await expect(panel.getByRole("listitem")).toHaveCount(2);
-  await panel.getByRole("button", { name: "Mark 2 emails as done" }).click();
+  await panel.getByRole("button", { name: "Mark 2 emails done" }).click();
   const cleared = owner.getByRole("status").filter({ hasText: "2 emails moved out of Needs reply." });
   await expect(cleared).toBeVisible();
   const waiting = async () => (await query(local.dbUrl, "select id from public.requests where firm_id = $1 and kind = 'team_reply' and status = 'pending'", [firm.firmId])).length;
@@ -329,12 +329,12 @@ test("an email that needs a reply is given to a teammate, snoozed to a day, mark
   await query(local.dbUrl, "update public.email_events set client_id = null where id = $1", [mail]);
   await query(local.dbUrl, "update public.requests set client_id = null, reason_code = 'client_unclear' where id = $1", [b]);
   await owner.goto(`/app/inbox?mail=${mail}`);
-  await pane().getByText("File to a client", { exact: true }).click();
+  await pane().getByText("Save to a client", { exact: true }).click();
   await pane().getByRole("link", { name: clientName }).click();
-  const filing = pane().getByRole("form", { name: "File to a client" });
-  await expect(filing).toContainText(`File this email to ${clientName}?`);
+  const filing = pane().getByRole("form", { name: "Save to a client" });
+  await expect(filing).toContainText(`Save this email to ${clientName}?`);
   await filing.getByRole("button", { name: `File to ${clientName}` }).click();
-  await expect(owner.getByRole("status").filter({ hasText: `Filed to ${clientName}.` })).toBeVisible();
+  await expect(owner.getByRole("status").filter({ hasText: `Saved to ${clientName}.` })).toBeVisible();
   expect(await query(local.dbUrl, "select client_id from public.email_events where id = $1", [mail])).toEqual([{ client_id: clientId }]);
   expect((await query(local.dbUrl, "select status from public.requests where id = $1", [b]))[0].status).toBe("done");
 });

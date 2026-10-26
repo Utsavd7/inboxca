@@ -32,7 +32,7 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
   const year = years.find(([value]) => value === period)?.[1] ?? "";
 
   return (
-    <form id="bulk-send" action={sendClientPapers} className="clients-bulk" aria-label="Send filed papers">
+    <form id="bulk-send" action={sendClientPapers} className="clients-bulk" aria-label="Send papers to the chosen clients">
       {confirming ? (
         <>
           <input type="hidden" name="type" value={type} />
@@ -53,7 +53,7 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
           <button className="b b-ghost" type="button" onClick={clear}>
             Clear
           </button>
-          <span className="bulk-what">Send them a filed paper</span>
+          <span className="bulk-what">Send them a paper</span>
           <select id="bulk-paper" name="type" required aria-label="Paper" value={type} onChange={(event) => setType(event.target.value)}>
             <option value="">Choose a paper</option>
             {types.map((choice) => (

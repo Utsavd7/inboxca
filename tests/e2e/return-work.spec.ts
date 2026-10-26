@@ -89,7 +89,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await page.goto(returns);await expect(row.getByText("Approved. Download it and file on the portal")).toBeVisible();
     await page.goto(`/app/clients/${client}?tab=outputs`);
     const filing=page.locator("li").filter({has:page.getByRole("link",{name:forms[1].name,exact:true})});
-    await filing.getByText("Record filing",{exact:true}).click();await filing.getByLabel("Acknowledgement number, if known").fill("AA2409260012345");await filing.getByRole("button",{name:"Mark filed",exact:true}).click();
+    await filing.locator("summary",{hasText:"Mark filed"}).click();await filing.getByLabel("Acknowledgement number, if known").fill("AA2409260012345");await filing.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select status from public.tasks where firm_id=$1",[firm.firmId]))[0].status,{timeout:30_000}).toBe("filed");
     await page.goto(`${returns}&show=filed`);await expect(page.locator("li").filter({hasText:"GSTR-1 (monthly) Sep 2026"})).toContainText("AA2409260012345");
     await page.goto("/app");await expect(now.getByText(`GSTR-1 for ${name}, Sep 2026`)).toHaveCount(0);

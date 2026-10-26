@@ -29,12 +29,12 @@ it("uses the person's scoped reads and the confirmed-figures gate before signing
 it("refuses hidden work, missing permission and ambiguous registrations",async()=>{
   data.clients=null;await expect(checkedForm(input)).rejects.toThrow("not be found");expect(mocked.figures).not.toHaveBeenCalled();
   data.clients={id:client};data.client_registrations=[{id:registration,number_enc:"invented value"},{id:randomUUID(),number_enc:"invented second value"}];
-  await expect(checkedForm(input)).rejects.toThrow("GST number choice");
+  await expect(checkedForm(input)).rejects.toThrow("GSTIN for each register");
   // With several numbers, a register named for this one is used and one named for another is not.
   data.datasets=[{id,revision:1,data:{registration}}];
   await expect(checkedForm(input)).resolves.toMatchObject({request:{registration}});
   data.datasets=[{id,revision:1,data:{registration:randomUUID()}}];
-  await expect(checkedForm(input)).rejects.toThrow("GST number choice");
+  await expect(checkedForm(input)).rejects.toThrow("GSTIN for each register");
   data.datasets=[{id,revision:1,data:{}}];
   const member=await mocked.member();mocked.member.mockResolvedValue({...member,membership:{firmId:firm,may:()=>false}});
   await expect(checkedForm(input)).rejects.toThrow("permission");

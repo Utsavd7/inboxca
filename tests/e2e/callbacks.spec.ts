@@ -49,7 +49,7 @@ test("Dropbox's return connects nothing unless it answers the owner's own Connec
   const failed = "The drive did not finish connecting. Try again.";
   // The owner pressed Cancel on Dropbox's page.
   await owner.context().addCookies([connectCookie(asConnect("state-one"))]);
-  await back(owner, "?error=access_denied&state=state-one", "The drive was not allowed, so nothing was connected.");
+  await back(owner, "?error=access_denied&state=state-one", "You did not allow InboxCA on your drive's sign in page, so the drive is not connected. Connect again and choose Allow.");
   // No Connect started in this browser.
   await back(owner, "?state=state-one&code=invented-code", failed);
   // Another Connect's state, or no code.
@@ -78,7 +78,7 @@ test("an email opens in the firm's own mailbox, and only the firm's own email op
   // A mailbox with no web page of its own says where to look.
   const here = await open(owner, mail);
   expect(here.status()).toBe(404);
-  expect(await here.text()).toBe("Open this email in your firm's mailbox.");
+  expect(await here.text()).toContain("Open this email in your firm email&#39;s own website or app.");
   // Gmail opens at that one email, in the firm's own account.
   await query(local.dbUrl, "update public.connected_accounts set status = 'needs_reconnect', settings = jsonb_set(settings, '{imap,host}', '\"imap.gmail.com\"') where id = $1", [account]);
   const gmail = await open(staff, mail);

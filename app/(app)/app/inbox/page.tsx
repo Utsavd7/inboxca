@@ -363,7 +363,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         </Empty>
       ) : (
         <Empty Icon={InboxIcon} kind="reply" title={filtered ? "No emails here" : "No client email yet"}>
-          <span>{filtered ? "Nothing matches these filters." : "New mail from your clients shows here, sorted."}</span>
+          <span>{filtered ? "Nothing matches these filters." : "New emails from your clients show here, sorted."}</span>
           {filtered && <Link className="b b-secondary" href="/app/inbox">Show all email</Link>}
         </Empty>
       )}

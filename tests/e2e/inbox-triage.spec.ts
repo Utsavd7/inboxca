@@ -50,7 +50,7 @@ test.beforeAll(async ({ browser }) => {
     await owner.getByLabel("Contact's name").fill("Kiran Mehta");
     await owner.getByLabel("Contact's email").fill(contactEmail);
     await owner.getByRole("button", { name: "Add contact" }).click();
-    await expect(owner.getByRole("dialog", { name: "Contact people" }).getByRole("listitem").filter({ hasText: "Kiran Mehta" })).toBeVisible();
+    await expect(owner.getByRole("dialog", { name: "Contacts" }).getByRole("listitem").filter({ hasText: "Kiran Mehta" })).toBeVisible();
   }
 });
 test.afterAll(() => firm.remove());

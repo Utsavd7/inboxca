@@ -108,7 +108,9 @@ for (const provider of ["gmail", "outlook", "zoho"] as const) {
 
       // Disconnecting takes the token back where the provider allows it.
       await page.goto("/app/settings?group=email");
-      await card.getByRole("button", { name: "Disconnect" }).click();
+      // Disconnecting asks once more first.
+      await card.getByRole("link", { name: "Disconnect" }).click();
+      await card.getByRole("button", { name: "Yes, disconnect" }).click();
       await expect(connect).toBeVisible();
       expect(fake.mailbox.revoked).toHaveLength(provider === "outlook" ? 0 : 1);
 

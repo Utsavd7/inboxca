@@ -50,8 +50,8 @@ test("the owner chooses which papers go at once, and every paper can wait for ap
   await card.getByLabel("Challan", { exact: true }).uncheck();
   await card.getByLabel("Form 16", { exact: true }).check();
   await card.getByLabel("Wait for approval for every paper").check();
-  await card.getByRole("button", { name: "Save papers" }).click();
-  await expect(saved("Papers saved.")).toBeVisible();
+  await card.getByRole("button", { name: "Save paper sending rules" }).click();
+  await expect(saved("Paper sending rules saved.")).toBeVisible();
   const { records } = await settings();
   expect(records.approve_all).toBe(true);
   expect(records.routine).toContain("Form 16");
@@ -77,13 +77,13 @@ test("the owner lowers the firm's email limit for its provider", async () => {
 test("new files are arranged and named the way the owner chose, and the change is logged", async () => {
   await owner.goto("/app/settings?group=email");
   const drive = owner.locator("section#drive");
-  await drive.getByLabel("How new files are arranged").selectOption("work_year_client");
-  await drive.getByLabel("How new files are named").selectOption("period_type_client");
+  await drive.getByLabel("Folder order for new papers").selectOption("work_year_client");
+  await drive.getByLabel("How new papers are named").selectOption("period_type_client");
   await drive.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(async () => (await query(local.dbUrl, "select settings from public.connected_accounts where firm_id = $1 and kind = 'drive'", [firm.firmId]))[0].settings).toMatchObject({ folder_order: "work_year_client", naming: "period_type_client" });
   expect(await query(local.dbUrl, "select actor_id from public.activity_log where firm_id = $1 and action = 'drive.folder_order'", [firm.firmId])).toEqual([{ actor_id: firm.ownerId }]);
   await owner.reload();
-  await expect(drive.getByLabel("How new files are arranged")).toHaveValue("work_year_client");
+  await expect(drive.getByLabel("Folder order for new papers")).toHaveValue("work_year_client");
 
   // A paper uploaded now goes under GST, then the year, then the client, period first in its name.
   const client = `Arranged Client ${tag}`;
@@ -92,7 +92,7 @@ test("new files are arranged and named the way the owner chose, and the change i
   await owner.getByRole("link", { name: "Upload papers" }).click();
   const panel = owner.getByRole("dialog", { name: "Upload papers" });
   await panel.getByLabel("Files", { exact: true }).setInputFiles({ name: "purchase_bills_sep_2026.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf("Invented purchase bills")) });
-  await expect(panel.getByRole("group", { name: "purchase_bills_sep_2026.pdf" }).getByLabel("Type")).toHaveValue("Purchase bills");
+  await expect(panel.getByRole("group", { name: "purchase_bills_sep_2026.pdf" }).getByLabel("Paper type")).toHaveValue("Purchase bills");
   await panel.getByRole("button", { name: /^Upload/ }).click();
   await expect(owner.getByRole("status")).toContainText("Sep 2026 - Purchase bills");
   const file = path.join(TEST_DRIVE, "InboxCA", "GST", "FY 2026-27", client, `Sep 2026 - Purchase bills - ${client}.pdf`);

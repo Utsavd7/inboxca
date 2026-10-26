@@ -130,10 +130,10 @@ test("papers chosen in Documents go from the firm's mailbox as secure links; pri
   await expect(row(itr)).toContainText("Will be emailed");
   await expect(row(balance)).toContainText("Will be emailed");
   await expect(row(noAddress)).toContainText("No email address");
-  await expect(row(unchecked)).toContainText("Not filed yet");
+  await expect(row(unchecked)).toContainText("Not ready to send: still in To check or missing in the drive");
   await expect(row(kept)).toContainText("Kept inside the firm");
   await preview.getByRole("button", { name: "Send 2 links" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "2 papers sent as secure links. 3 were skipped." })).toBeVisible();
+  await expect(owner.getByRole("status").filter({ hasText: "2 papers sent as secure links. 3 were not sent. Choose them again to see why." })).toBeVisible();
 
   // The routine paper opens at once; the private one only after a one-time code.
   await expect.poll(async () => (await lastMail(routine.email))?.text ?? "").toContain(`shared ${itr.name} with you`);
@@ -149,7 +149,7 @@ test("papers chosen in Documents go from the firm's mailbox as secure links; pri
   expect(locked.text).toContain("This paper is private. When you open the link, choose Email me a code.");
   const closed = await request.get(`${locked.text!.match(/Download it here: (http\S+)/)![1]}/file`);
   expect(closed.status()).toBe(403);
-  expect(await closed.text()).toBe("Enter the code from your email first.");
+  expect(await closed.text()).toContain("This paper is private. Enter the code from your email first.");
   // Each sent paper is logged; the skipped ones were never shared.
   expect((await logged("document.shared")).map((line) => line.entity_id).sort()).toEqual([itr.id, balance.id].sort());
   expect(await query(local.dbUrl, "select document_id from public.shares where document_id = any($1)", [[noAddress.id, unchecked.id, kept.id]])).toEqual([]);
@@ -187,7 +187,7 @@ test("Ask to send goes to the team's manager, who allows it once; the paper goes
 
   // The manager answers; only the owner could always allow it.
   const dialog = await answer(manager, "send a paper to the client");
-  await expect(dialog).toContainText(`The file: ${itr.name}`);
+  await expect(dialog).toContainText(`The paper: ${itr.name}`);
   await expect(dialog.getByRole("button", { name: "Always allow Sunil" })).toHaveCount(0);
   await dialog.getByRole("button", { name: "Allow once" }).click();
   await expect(manager.getByRole("status").filter({ hasText: "Sunil may send a paper to the client once, within an hour." })).toBeVisible();
@@ -267,7 +267,7 @@ test("Ask to download expires unanswered; asked again, the manager allows one ma
   const question = await asked("download");
   expect(question.id).not.toBe(stale.id);
   const dialog = await answer(manager, "download a paper");
-  await expect(dialog).toContainText(`The file: ${balance.name}`);
+  await expect(dialog).toContainText(`The paper: ${balance.name}`);
   await dialog.getByRole("button", { name: "Allow once" }).click();
   await expect(manager.getByRole("status").filter({ hasText: "Sunil may download a paper once, within an hour." })).toBeVisible();
 

@@ -164,7 +164,7 @@ async function StatusLine({ owner, reminders }: { owner: boolean; reminders: boo
       </span>
       <span>
         <span className={`foot-dot${drive && away ? " off" : drive ? " on" : ""}`} aria-hidden />
-        {drive && away ? fix("Drive cannot be reached, new files wait", "/app/settings#drive") : drive ? "Drive connected" : fix("Drive not connected", "/app/settings#drive")}
+        {drive && away ? fix("Drive cannot be reached, new papers wait", "/app/settings#drive") : drive ? "Drive connected" : fix("Drive not connected", "/app/settings#drive")}
       </span>
       {reminders && reading && (
         <span>
