@@ -119,3 +119,34 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     await firm.remove();
   }
 });
+
+// With no drive linked no paper can be read, so no page asks for one: no thumbnail, no preview.
+test("with no drive linked, no page asks for a paper's preview", async ({ page }) => {
+  test.setTimeout(90_000);
+  const email = `owner-${randomUUID()}@example.test`;
+  const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+  const firm = await seedFirm("Documents No Drive Firm", email, key);
+  const asked: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/stream")) asked.push(request.url());
+  });
+  try {
+    const [client] = await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, 'Invented Patel Textiles', 'business') returning id", [firm.firmId]);
+    await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, drive_file_id, name, size, sha256) values ($1, $2, 'gst', 'Purchase bills', 'nowhere', 'Invented bills.pdf', 1, $3)", [firm.firmId, client.id, randomUUID()]);
+    await emailStep(page, email);
+    await page.getByLabel("6 digit code from the app").fill(totp(key));
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/app$/);
+    await page.waitForLoadState("networkidle");
+    await page.goto("/app/documents");
+    await expect(page.getByRole("complementary", { name: "Paper" })).toContainText("The firm's drive is not linked yet, so papers cannot be shown.");
+    await page.goto(`/app/clients/${client.id}?tab=documents`);
+    await expect(page.getByRole("link", { name: "Invented bills.pdf", exact: true })).toBeVisible();
+    await page.goto("/app/documents?view=folders");
+    await expect(page.getByText("The firm's drive is not linked yet")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    expect(asked).toEqual([]);
+  } finally {
+    await firm.remove();
+  }
+});

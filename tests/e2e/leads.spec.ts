@@ -67,7 +67,7 @@ test("a lead sent through the public form shows on the board, moves, is followed
   await owner.getByRole("link", { name: "Ways in", exact: true }).click();
   await owner.getByRole("button", { name: "Turn on the form" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Your enquiry form is on." })).toBeVisible();
-  const link = (await owner.locator(".lead-link .num").textContent())!;
+  const link = (await owner.locator(".lead-link .num").first().textContent())!;
   expect(link).toMatch(/\/f\/[A-Za-z0-9_-]{16}$/);
 
   // The form needs no sign in. A bot (the hidden field filled, sent at once) is thanked, and
@@ -169,6 +169,44 @@ test("a lead sent through the public form shows on the board, moves, is followed
   await expect(column("Won").getByRole("listitem").filter({ hasText: meera.name })).toContainText("Now a client");
   const lines = await query(local.dbUrl, "select action from public.activity_log where firm_id = $1 and entity_type = 'client' order by at", [firm.firmId]);
   expect(lines.map((line) => line.action)).toEqual(["lead.added", "lead.moved", "lead.moved", "lead.followed_up", "lead.noted", "lead.won"]);
+});
+
+test("the form shows inside the firm's own websites only, as the owner lists them", async ({ browser }) => {
+  await owner.goto("/app/leads?panel=setup");
+  const link = (await owner.locator(".lead-link .num").first().textContent())!;
+  const embed = `<iframe src="${link}" title="Enquiry form" width="100%" height="760" style="border:0"></iframe>`;
+  await expect(owner.getByRole("region", { name: "On your website" }).locator(".lead-link")).toHaveText(embed);
+  const frames = async () => (await owner.request.get(link)).headers()["content-security-policy"];
+  // Until the owner lists a website, no other site may show the form, as before.
+  expect(await frames()).toBe("frame-ancestors 'none'");
+
+  const sites = owner.getByLabel("Websites that may show the form");
+  await sites.fill("http://sharma-ca.test");
+  await owner.getByRole("button", { name: "Save websites" }).click();
+  await expect(owner.getByRole("alert").filter({ hasText: "like https://yourfirm.in" })).toBeVisible();
+  expect(await frames()).toBe("frame-ancestors 'none'");
+  // A name alone, and a page's address, are kept as the website's secure address.
+  await sites.fill("sharma-ca.test\nhttps://www.sharma-ca.test/contact-us");
+  await owner.getByRole("button", { name: "Save websites" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Websites saved." })).toBeVisible();
+  await expect(sites).toHaveValue("https://sharma-ca.test\nhttps://www.sharma-ca.test");
+  expect(await frames()).toBe("frame-ancestors https://sharma-ca.test https://www.sharma-ca.test");
+  expect((await query(local.dbUrl, "select settings->'enquiry_form'->'sites' as sites from public.firms where id = $1", [firm.firmId]))[0].sites).toEqual(["https://sharma-ca.test", "https://www.sharma-ca.test"]);
+
+  // In a browser: the firm's website shows the form; another website gets nothing. Chrome lets
+  // no website frame this computer itself, so the form is reached by a stand in https name.
+  const site = await (await browser.newContext()).newPage();
+  const app = new URL(link).origin;
+  await site.route(/^https:\/\/inboxca\.test\//, async (route) => route.fulfill({ response: await route.fetch({ url: route.request().url().replace("https://inboxca.test", app) }) }));
+  await site.route(/^https:\/\/(www\.sharma-ca|copycat-ca)\.test\//, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Firm website</title>${embed.replace(app, "https://inboxca.test")}` }));
+  await site.goto("https://www.sharma-ca.test/contact-us");
+  await expect(site.frameLocator("iframe").getByRole("heading", { name: `How can ${firmName} help?` })).toBeVisible();
+  const answered = site.waitForResponse(/^https:\/\/inboxca\.test\/f\//);
+  await site.goto("https://copycat-ca.test/");
+  await answered;
+  await expect.poll(() => site.frames()[1]?.url()).toBe("chrome-error://chromewebdata/");
+  await expect(site.frameLocator("iframe").getByRole("heading", { name: `How can ${firmName} help?` })).toHaveCount(0);
+  await site.context().close();
 });
 
 test("an enquiry email from someone new is offered, and added as a lead in one click", async () => {

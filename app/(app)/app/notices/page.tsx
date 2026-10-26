@@ -1,6 +1,7 @@
 import "../calendar/calendar.css";
 import "./notices.css";
 import { Building2, FileWarning, Landmark, Receipt, Scale, Search, type LucideIcon } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageNotice } from "@/app/(app)/actions";
@@ -355,7 +356,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
           ) : (
             <>
               <p className="hint">Find the client the notice is for.</p>
-              <form className="notices-find" role="search">
+              <Form action="/app/notices" scroll={false} className="notices-find" role="search">
                 {show !== "open" && <input type="hidden" name="show" value={show} />}
                 <input type="hidden" name="add" value="1" />
                 <span className="search">
@@ -363,7 +364,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                   <input name="for" type="search" defaultValue={find} placeholder="Client name" aria-label="Client name" autoFocus />
                 </span>
                 <button className="b b-secondary">Find</button>
-              </form>
+              </Form>
               {picker?.data?.length ? (
                 <>
                   <ul className="app-rows notices-clients">

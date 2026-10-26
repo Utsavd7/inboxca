@@ -3,6 +3,7 @@ import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
 import { DatasetReview } from "./dataset-review";
 import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -577,7 +578,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         {tab === "documents" && (
           <>
             <div className="client-tools">
-              <form role="search" className="clients-find">
+              <Form action={base} role="search" className="clients-find">
                 <input type="hidden" name="tab" value="documents" />
                 <span className="search">
                   <Search size={16} aria-hidden />
@@ -585,7 +586,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 </span>
                 <button className="b b-secondary" type="submit">Find</button>
                 {find && <Link className="b b-ghost" href={`${base}?tab=documents`}>Show all</Link>}
-              </form>
+              </Form>
               {!canUpload && <span className="page-actions">{askButton("upload", "Ask to upload")}</span>}
             </div>
             <DroppedNotice value={dropped} />

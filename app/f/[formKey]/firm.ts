@@ -2,11 +2,11 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { supabaseAdmin } from "@/src/lib/supabase";
 
 // The firm whose enquiry form this key opens, while the owner keeps the form on and the firm
-// is working (PLAN.md 5.12). No one is signed in on the form, so it is looked up with the
-// server's key, by the key alone.
+// is working (PLAN.md 5.12), with the websites the owner lets show it (proxy.ts). No one is
+// signed in on the form, so it is looked up with the server's key, by the key alone.
 export async function formFirm(key: string) {
   if (!/^[A-Za-z0-9_-]{16,40}$/.test(key)) return null;
-  const { data } = await supabaseAdmin().from("firms").select("id, name, status").eq("settings->enquiry_form->>key", key).maybeSingle();
+  const { data } = await supabaseAdmin().from("firms").select("id, name, status, sites:settings->enquiry_form->sites").eq("settings->enquiry_form->>key", key).maybeSingle();
   return data && ["active", "grace"].includes(data.status) ? data : null;
 }
 

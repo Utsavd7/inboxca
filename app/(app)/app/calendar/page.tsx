@@ -1,5 +1,6 @@
 import "./calendar.css";
 import { BellRing, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageTasks, markTasksInProgress, remindClient, reopenTasks, stopSend } from "@/app/(app)/actions";
@@ -146,7 +147,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     <section className="split cal-list" aria-label="Returns">
       <div className="cal-tools">
         <span className="hint">{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "Dates marked * are not yet confirmed by a CA against the official notification." : "Tick returns to mark many at once."}</span>
-        <form>
+        <Form action="/app/calendar">
           <input type="hidden" name="view" value={view} />
           {day && <input type="hidden" name="day" value={day} />}
           {month && <input type="hidden" name="month" value={month} />}
@@ -161,7 +162,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
           <noscript>
             <button className="b b-secondary">Show</button>
           </noscript>
-        </form>
+        </Form>
       </div>
       {tasks?.length ? (
         <div key={close} className={`pane cal-table${compact ? " pane-in" : ""}`}>

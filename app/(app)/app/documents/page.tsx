@@ -185,7 +185,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
       )}
       <div className="split">
         <nav className="pane docs-folders" aria-label="Folders">
-          <form className="docs-year">
+          <Form action="/app/documents" className="docs-year">
             {state.kind && <input type="hidden" name="kind" value={state.kind} />}
             {q && <input type="hidden" name="q" value={q} />}
             <AutoSelect save="year" name="year" defaultValue={state.year || `${Number(years[0]) - 1}-${years[0].slice(2)}`} aria-label="Financial year">
@@ -199,7 +199,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             <button className="sr-only" value="year">
               Show
             </button>
-          </form>
+          </Form>
           {[...counts].map(([work, n]) => (
             <Link key={work} className="docs-folder" href={link({ kind: work, page: "" })} aria-current={kind === work ? "page" : undefined}>
               <FolderOpen size={16} aria-hidden />
@@ -214,13 +214,13 @@ export default async function Documents({ searchParams }: { searchParams: Promis
         </nav>
 
         <section className="docs-list" aria-label="Papers">
-          <form className="docs-find" role="search">
+          <Form action="/app/documents" className="docs-find" role="search">
             {state.year && <input type="hidden" name="year" value={state.year} />}
             {kind && <input type="hidden" name="kind" value={kind} />}
             <Search size={16} aria-hidden />
             {missing && <input type="hidden" name="show" value="missing" />}
             <input name="q" type="search" defaultValue={q} placeholder="Find a paper by its name or words inside it" aria-label="Find papers" />
-          </form>
+          </Form>
           {missing && (
             <p className="docs-only">
               <Badge tone="late">Missing in the drive</Badge>
@@ -327,6 +327,11 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                 <span className="docs-preview-none">
                   <FileTile name={paper.name} />
                   This kind of file cannot be shown here.
+                </span>
+              ) : !drive ? (
+                <span className="docs-preview-none">
+                  <FileTile name={paper.name} />
+                  The firm&apos;s drive is not linked yet, so papers cannot be shown.
                 </span>
               ) : !process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET ? (
                 <span className="docs-preview-none">
