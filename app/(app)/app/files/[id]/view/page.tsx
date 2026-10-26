@@ -7,7 +7,7 @@ import { periodName } from "@/src/lib/documents";
 import { currentMember } from "@/src/lib/member";
 import { Badge, PageHead } from "../../../ui";
 import { Pending } from "../../../pending";
-import {preparedSchema} from "@/src/lib/prepared";
+import {formName,preparedSchema} from "@/src/lib/prepared";
 import {templateSchema} from "@/src/lib/templates";
 import { FileViewer } from "./file-viewer";
 
@@ -43,6 +43,7 @@ export default async function ViewFile({ params,searchParams }: { params: Promis
           <span className="head-meta">
             <span>{[file.document_type, periodName(file.period_key)].filter(Boolean).join(", ")}</span>
             {file.status === "to_check" && <Badge tone="warn">To check</Badge>}
+            {meta && <span className="hint">Made on the official {formName(meta.form)} form, version {meta.template}.</span>}
             <span className="hint">View only. Your email and the time are shown across every page.</span>
             {/* A file InboxCA made itself needs no virus check; any other says when it had none. */}
             {!file.scanned_at && !meta && file.document_type !== "Filing record" && <span className="hint">Not checked for viruses yet.</span>}
