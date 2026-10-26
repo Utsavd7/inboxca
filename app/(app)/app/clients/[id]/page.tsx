@@ -44,6 +44,7 @@ const errors: Record<string, string> = {
   "one-pan": "This client already has a PAN.",
   "gstin-pan": "That GSTIN holds a different PAN from this client's.",
   taken: "Another client in your firm already has that number.",
+  "filed-number": "That number has filed returns, so it stays. To stop its new returns, untick its services and choose Save services.",
   assign: "Choose a person and what they do for this client.",
   assigned: "That person is already assigned to this client.",
   contact: "Enter the contact's name and a valid email address.",

@@ -108,6 +108,26 @@ describe("the client register", () => {
       ]);
     }));
 
+  it("keeps a number with filed returns, removes one without, and still deletes a client whole", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER);
+      await add(FIRM, CLIENT, [...pan("k1"), { kind: "gstin", number_enc: "sealed", number_bidx: "k2", state_code: "27" }]);
+      await asOwner(db);
+      const numbers = Object.fromEntries((await db.query("select kind, id from public.client_registrations where client_id = $1", [CLIENT])).rows.map((row) => [row.kind, row.id]));
+      await db.query(
+        "insert into public.tasks (firm_id, client_id, registration_id, code, period_key, due_on, status, details) values ($1, $2, $3, 'ITR_NA', '2025-03', '2025-07-31', 'filed', '{\"filed_on\": \"2025-07-20\"}'), ($1, $2, $4, 'GSTR3B_M', '2026-09', '2026-10-20', 'upcoming', '{}')",
+        [FIRM, CLIENT, numbers.pan, numbers.gstin],
+      );
+      await actAs(db, OWNER);
+      expect((await db.query("delete from public.client_registrations where id = $1", [numbers.pan])).rowCount).toBe(0);
+      expect((await db.query("delete from public.client_registrations where id = $1", [numbers.gstin])).rowCount).toBe(1);
+      await asOwner(db);
+      expect((await db.query("select code, status from public.tasks where client_id = $1", [CLIENT])).rows).toEqual([{ code: "ITR_NA", status: "filed" }]);
+      await db.query("delete from public.clients where id = $1", [CLIENT]);
+      expect((await db.query("select 1 from public.tasks where client_id = $1", [CLIENT])).rowCount).toBe(0);
+    }));
+
   it("in restricted mode shows staff only their assigned clients; the owner still sees all", () =>
     rollback(db, async () => {
       await seed();
