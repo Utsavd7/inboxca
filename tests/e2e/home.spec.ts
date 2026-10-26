@@ -356,3 +356,12 @@ for (const [name, width, height] of [
       ),
     ).toBe(false);
   });
+
+test("no other website can show InboxCA's pages inside its own", async ({ request }) => {
+  for (const path of ["/", "/sign-in", "/app", "/u/invented-link", "/s/invented-link"]) {
+    const headers = (await request.get(path, { maxRedirects: 0 })).headers();
+    expect(headers["content-security-policy"], path).toBe("frame-ancestors 'self'");
+    expect(headers["x-frame-options"], path).toBe("SAMEORIGIN");
+    expect(headers["x-content-type-options"], path).toBe("nosniff");
+  }
+});
