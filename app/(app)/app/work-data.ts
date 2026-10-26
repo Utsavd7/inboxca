@@ -7,6 +7,7 @@ import { formName, preparedSchema } from "@/src/lib/prepared";
 import { formsWorkItems } from "@/src/lib/work/forms";
 import { governmentUpdates, governmentWorkItems } from "@/src/lib/work/government";
 import { inboxWeek, inboxWorkItems } from "@/src/lib/work/inbox";
+import { itrCheckWorkItems } from "@/src/lib/work/itr-check";
 import { papersWorkItems } from "@/src/lib/work/papers";
 import { isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
 import { firmAccounts } from "./shell-data";
@@ -152,6 +153,7 @@ export async function workFor(ctx: Context, late: number) {
     await Promise.all([
       papers.then(tag("papers")),
       formsWorkItems(ctx).then(tag("returns")),
+      itrCheckWorkItems(ctx).then(tag("returns"), () => []),
       inboxWorkItems(ctx).then((list) => list.map((item): Listed => ({ ...item, area: item.key.startsWith("reply:") ? "emails" : "papers" }))),
       attention(ctx).then(({ lines }) => (lines.includes("gov") ? [] : governmentWorkItems(ctx).then(tag("gov"), () => []))),
       lateRows.then(({ items }) => items),
