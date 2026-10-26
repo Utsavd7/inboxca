@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { connectionRule, ipv6Prefix, lineFor, onOfficeLine, requestLine } from "@/src/lib/office";
+import { connectionRule, ipv6Prefix, lineFor, memberHours, memberOffice, onOfficeLine, requestLine } from "@/src/lib/office";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -53,4 +53,13 @@ describe("the office connection", () => {
     expect(lineFor("made:up", "2026-10-19")).toBeNull();
   });
 
+  // #13: a branch's own office and hours replace the firm's, as private.branch_settings does.
+  it("gives a branch's people its own office and each of its own hours, else the firm's", () => {
+    const firm = { hours: { 1: ["09:00", "18:00"] }, holidays: ["2026-11-01"], office: { on: true, anywhere: true, deputies: ["ravi"] } };
+    expect(memberOffice(firm.office, { kind: "branch", settings: {} })).toBe(firm.office);
+    expect(memberOffice(firm.office, { kind: "branch", settings: { office: { on: true, lines: [] } } })).toEqual({ on: true, anywhere: false, lines: [], deputies: ["ravi"] });
+    expect(memberHours(firm, { kind: "branch", settings: { holidays: [], office: {} } })).toEqual({ ...firm, holidays: [] });
+    expect(memberHours(firm, { kind: "team", settings: { hours: {} } })).toEqual(firm);
+    expect(memberHours(firm, null)).toEqual(firm);
+  });
 });

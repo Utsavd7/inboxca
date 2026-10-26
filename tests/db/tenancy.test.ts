@@ -293,6 +293,7 @@ const refused = (result: Awaited<ReturnType<typeof attempt>>) => !result.ok && [
 // `about` marks calls about firm B, which must answer no.
 const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["accept_invite", "select public.accept_invite($1) r", ["firm"], true],
+  ["access_check", "select public.access_check($1, $2, null, null, null) r", ["firm", "staff"], true],
   ["add_lead", "select public.add_lead($1, gen_random_uuid(), 'Taken', 'individual', '', '', '{}', '') r", ["firm"], true],
   ["activity_feed", "select * from public.activity_feed($1, now() - interval '1 year', false)", ["firm"], true],
   ["add_clients", `select public.add_clients($1, '[{"name": "Taken", "kind": "business"}]') r`, ["firm"], true],

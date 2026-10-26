@@ -53,7 +53,10 @@ export async function verifyCode(_prev: CodeState, form: FormData): Promise<Code
   if (error)
     return { step: "code", email, error: "That code did not work. Check it, or ask for a new one." };
   if (before.session) await supabaseAdmin().auth.admin.signOut(before.session.access_token, "local");
-  if (data.user && (await officeDeviceAccess(data.user.id)).approved) {
+  // The email code alone only on an approved PC on the office connection (D41), never on
+  // Remote friendly's approved devices anywhere.
+  const office = data.user ? await officeDeviceAccess(data.user.id) : null;
+  if (data.user && office?.approved && !office.anywhere) {
     await oneSession(supabase, data.user.id, email);
     redirect("/app");
   }

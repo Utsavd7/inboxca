@@ -221,16 +221,22 @@ isOneToOne: false
                   ]
                 },"devices": {
                   Row: {
-                    "ends_on": string | null,"firm_id": string,"id": string,"key_id": string | null,"key_public": string | null,"kind": string | null,"name": string,"person_id": string | null,"status": string,"token_hash": string
+                    "branch_id": string | null,"ends_on": string | null,"firm_id": string,"id": string,"key_id": string | null,"key_public": string | null,"kind": string | null,"name": string,"person_id": string | null,"status": string,"token_hash": string
                   }
                   Insert: {
-                    "ends_on"?: string | null,"firm_id": string,"id"?: string,"key_id"?: string | null,"key_public"?: string | null,"kind"?: string | null,"name": string,"person_id"?: string | null,"status"?: string,"token_hash": string
+                    "branch_id"?: string | null,"ends_on"?: string | null,"firm_id": string,"id"?: string,"key_id"?: string | null,"key_public"?: string | null,"kind"?: string | null,"name": string,"person_id"?: string | null,"status"?: string,"token_hash": string
                   }
                   Update: {
-                    "ends_on"?: string | null,"firm_id"?: string,"id"?: string,"key_id"?: string | null,"key_public"?: string | null,"kind"?: string | null,"name"?: string,"person_id"?: string | null,"status"?: string,"token_hash"?: string
+                    "branch_id"?: string | null,"ends_on"?: string | null,"firm_id"?: string,"id"?: string,"key_id"?: string | null,"key_public"?: string | null,"kind"?: string | null,"name"?: string,"person_id"?: string | null,"status"?: string,"token_hash"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "devices_firm_id_branch_id_fkey"
+      columns: ["firm_id","branch_id"]
+isOneToOne: false
+      referencedRelation: "groups"
+      referencedColumns: ["firm_id","id"]
+    },{
       foreignKeyName: "devices_firm_id_fkey"
       columns: ["firm_id"]
 isOneToOne: false
@@ -593,6 +599,9 @@ isOneToOne: false
             "accept_invite":
 { Args: { "target_firm": string }; Returns: boolean
                            },
+"access_check":
+{ Args: { "connection": Json,"country": string,"person": string,"target_firm": string,"token_digest": string }; Returns: (string)[]
+                           },
 "access_setting":
 { Args: { "key": string,"person": Json,"role": string,"settings": Json }; Returns: Json
                            },
@@ -695,6 +704,9 @@ isOneToOne: false
                            },
 "assigned_clients":
 { Args: Record<PropertyKey, never>; Returns: string[]
+                           },
+"branch_hours":
+{ Args: { "actor": string,"branch": string,"changes": Json,"target_firm": string }; Returns: undefined
                            },
 "calendar_days":
 { Args: { "first_day": string,"last_day": string,"only_code"?: string,"target_firm": string }; Returns: {
@@ -927,7 +939,7 @@ isOneToOne: false
 { Args: { "person": string,"target_firm": string }; Returns: boolean
                            },
 "review_devices":
-{ Args: { "actor": string,"decision": string,"target_device": string,"target_firm": string,"until_day"?: string }; Returns: undefined
+{ Args: { "actor": string,"branch"?: string,"decision": string,"target_device": string,"target_firm": string,"until_day"?: string }; Returns: undefined
                            },
 "review_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]

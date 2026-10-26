@@ -103,4 +103,83 @@ describe("branch office", () => {
     await db.query("select public.office_housekeeping($1, now() + interval '30 days')", [FIRM]);
     expect((await branchOffice()).lines).toEqual([]);
   }));
+
+  it("keeps a branch's own PCs, which alone confirm its changed connection, and follows the main office again", () => rollback(db, async () => {
+    await seed({ on: true, lines: [MAIN] }, { office: { on: true, lines: [BRANCH_LINE] } });
+    const register = async (person: string, hash: string) => (await db.query("select id from public.register_device($1, $2, $3, 'PC')", [FIRM, person, hash.repeat(64)])).rows[0].id as string;
+    const branchOf = async (pc: string) => (await db.query("select branch_id from public.devices where id = $1", [pc])).rows[0].branch_id;
+    // A PC belongs to the office of the person who first uses it.
+    const [branchPc, branchPc2, mainPc] = [await register(BRANCH_STAFF, "a"), await register(BRANCH_STAFF, "b"), await register(STAFF, "c")];
+    expect([await branchOf(branchPc), await branchOf(mainPc)]).toEqual([BRANCH, null]);
+
+    // Approve all covers the shown office's PCs only.
+    await db.query("select public.review_devices($1, $2, '00000000-0000-0000-0000-000000000000', 'office', branch => $3)", [FIRM, OWNER, BRANCH]);
+    const status = async () => (await db.query("select id, status from public.devices where firm_id = $1", [FIRM])).rows.map((row) => [row.id, row.status]);
+    expect(Object.fromEntries(await status())).toEqual({ [branchPc]: "approved", [branchPc2]: "approved", [mainPc]: "waiting" });
+    await db.query("select public.review_devices($1, $2, '00000000-0000-0000-0000-000000000000', 'laptop')", [FIRM, OWNER]);
+    expect((await db.query("select kind from public.devices where id = $1", [mainPc])).rows[0].kind).toBe("laptop");
+
+    // On a new connection, only a keyed office PC of the person's own office confirms it by itself.
+    await db.query("update public.devices set kind = 'office', key_id = id::text, key_public = 'key' where firm_id = $1", [FIRM]);
+    const observe = async (device: string) => (await db.query("select public.observe_office($1, $2, $3, $4, true) as allowed", [FIRM, BRANCH_STAFF, device, { ipv4: "192.0.2.77" }])).rows[0].allowed;
+    expect(await observe(mainPc)).toBe(false);
+    expect(await observe(branchPc)).toBe(true);
+    expect((await branchOffice()).lines.map((line: { ipv4: string }) => line.ipv4)).toEqual([BRANCH_LINE.ipv4, "192.0.2.77"]);
+
+    // Follow: only an admin; the branch drops its own office, and its PCs and waiting connections go to the main office.
+    await db.query("update public.requests set reason_code = 'office_waiting', status = 'pending' where firm_id = $1", [FIRM]);
+    expect((await attempt(db, "select public.office_control($1, $2, 'follow', branch => $3)", [FIRM, STAFF, BRANCH])).ok).toBe(false);
+    expect((await attempt(db, "select public.office_control($1, $2, 'follow')", [FIRM, OWNER])).ok).toBe(false);
+    await db.query("select public.office_control($1, $2, 'follow', branch => $3)", [FIRM, OWNER, BRANCH]);
+    expect(await branchOffice()).toBeNull();
+    expect([await branchOf(branchPc), await branchOf(branchPc2)]).toEqual([null, null]);
+    expect((await db.query("select count(*)::int as n from public.requests where firm_id = $1 and status = 'pending'", [FIRM])).rows[0].n).toBe(0);
+    expect((await db.query("select details from public.activity_log where firm_id = $1 and action = 'office.follow'", [FIRM])).rows).toEqual([{ details: { branch: BRANCH } }]);
+    expect(await role(BRANCH_STAFF)).toBeNull();
+    expect(await register(BRANCH_STAFF, "d").then(branchOf)).toBeNull();
+  }));
+
+  it("keeps a branch's own hours, holidays and special hours for its people, changed only by an admin", () => rollback(db, async () => {
+    const allWeek = (open: string, close: string) => Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((day) => [String(day), [open, close]]));
+    await seed({ on: false }, {});
+    await db.query("update public.firms set settings = $2 where id = $1", [FIRM, { hours: allWeek("00:00", "23:59"), access: { hours_only: true } }]);
+    const change = (actor: string, changes: object, branch = BRANCH) => attempt(db, "select public.branch_hours($1, $2, $3, $4)", [FIRM, actor, branch, changes]);
+    expect(await role(BRANCH_STAFF)).toBe("staff");
+
+    // The branch closes every day: its people are refused, the main office's are not.
+    expect((await change(STAFF, { hours: {} })).ok).toBe(false);
+    expect((await change(OWNER, { office: null })).ok).toBe(false);
+    expect((await change(OWNER, { hours: {} }, TEAM)).ok).toBe(false);
+    expect((await change(OWNER, { hours: {} })).ok).toBe(true);
+    expect(await role(BRANCH_STAFF)).toBeNull();
+    expect(await role(STAFF)).toBe("staff");
+    await actAs(db, BRANCH_STAFF, "aal2", SESSION(BRANCH_STAFF));
+    expect((await db.query("select hours, reason from public.closed_firms()")).rows).toEqual([{ hours: {}, reason: "hours" }]);
+    await asOwner(db);
+    expect((await db.query("select actor_id, entity_id, details from public.activity_log where firm_id = $1 and action = 'branch.hours'", [FIRM])).rows)
+      .toEqual([{ actor_id: OWNER, entity_id: BRANCH, details: { settings: ["hours"] } }]);
+
+    // Its own holiday and special hours apply to it alone; null goes back to the main office's.
+    const today = (await db.query("select to_char(now() at time zone 'Asia/Kolkata', 'YYYY-MM-DD') as day")).rows[0].day as string;
+    await change(OWNER, { hours: null, holidays: [today] });
+    expect(await role(BRANCH_STAFF)).toBeNull();
+    await change(OWNER, { holidays: null, special_hours: [{ from: today, to: today, open: "00:00", close: "00:00" }] });
+    expect(await role(BRANCH_STAFF)).toBeNull();
+    expect(await role(STAFF)).toBe("staff");
+    await change(OWNER, { special_hours: null });
+    expect(await role(BRANCH_STAFF)).toBe("staff");
+    expect((await db.query("select settings from public.groups where id = $1", [BRANCH])).rows[0].settings).toEqual({});
+
+    // Allow this network today lasts to the closing time of the person's own office.
+    await db.query("update public.firms set settings = settings || $2 where id = $1", [FIRM, { hours: allWeek("00:00", "00:01"), office: { on: true, lines: [MAIN] } }]);
+    await change(OWNER, { hours: allWeek("00:00", "23:59") });
+    await db.query("update public.groups set settings = settings || $2 where id = $1", [BRANCH, { office: { on: true, lines: [] } }]);
+    const [{ id: pc }] = (await db.query("insert into public.devices (firm_id, token_hash, name, kind, status, branch_id) values ($1, $2, 'PC', 'laptop', 'approved', $3) returning id", [FIRM, "e".repeat(64), BRANCH])).rows;
+    await db.query("select public.observe_office($1, $2, $3, $4)", [FIRM, BRANCH_STAFF, pc, BRANCH_LINE]);
+    const [request] = (await db.query("select id from public.requests where firm_id = $1 and entity_id = $2 and status = 'pending'", [FIRM, pc])).rows;
+    await db.query("select public.office_control($1, $2, 'today', request_id => $3)", [FIRM, OWNER, request.id]);
+    const [line] = (await branchOffice()).lines;
+    const [{ at }] = (await db.query("select ((now() at time zone 'Asia/Kolkata')::date + time '23:59') at time zone 'Asia/Kolkata' as at")).rows;
+    expect(Date.parse(line.until)).toBe(at.getTime());
+  }));
 });
