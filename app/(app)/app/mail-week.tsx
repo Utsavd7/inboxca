@@ -8,7 +8,7 @@ import { Card } from "./ui";
 export async function MailWeek({ week }: { week: ReturnType<typeof inboxWeek> }) {
   const { read, answered, replied, waiting } = await week;
   const figures = [
-    { key: "read", filter: "show=in", label: "Read", value: read },
+    { key: "read", filter: "show=in", label: "Emails read", value: read },
     { key: "answered", filter: "status=answered", label: "Answered by InboxCA", value: answered },
     { key: "replied", filter: "status=replied", label: "Answered by your team", value: replied },
     { key: "reply", filter: "status=reply", label: "Waiting for a reply", value: waiting },

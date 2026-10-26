@@ -411,11 +411,11 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const paperLink: [string, string] | undefined = shared ? [`/app/files/${shared.document_id}/view`, "View the paper"] : undefined;
     const did = event && ({
       snoozed: { text: `Snoozed. It comes back to Needs reply on ${dayName(snoozedTill(event.id) ?? today)}.` },
-      reply: { text: `${replyReasons[request?.reason_code ?? ""] ?? "Waits for your team"}.${openAsk.assignee ? ` Given to ${whoWords(openAsk.assignee)}.` : ""}` },
+      reply: { text: `${replyReasons[request?.reason_code ?? ""] ?? "Waits for your team"}${openAsk.assignee ? `. Given to ${whoWords(openAsk.assignee)}` : ""}` },
       approval: { text: `InboxCA found ${shared?.documents?.name ?? "the paper"}. It goes to the client once someone approves it.`, link: paperLink },
       check: { text: "InboxCA saved its papers under To check. Check their type and period.", link: event.client_id ? [`/app/clients/${event.client_id}?tab=files`, "Check them"] : undefined },
-      unanswered: { text: "InboxCA has not answered this request for a paper yet." },
-      answered: { text: shared ? `InboxCA answered with ${shared.documents?.name ?? "the paper"}, as a secure link.` : "InboxCA told the client their papers arrived.", link: paperLink },
+      unanswered: { text: "The client asked for a paper. InboxCA has not sent it yet." },
+      answered: { text: shared ? `InboxCA sent ${shared.documents?.name ?? "the paper"} as a secure link.` : "InboxCA told the client their papers arrived.", link: paperLink },
       replied: { text: "Your team answered it." },
       notice: { text: "InboxCA recorded the notice. Confirm its dates.", link: notice ? [`/app/notices?notice=${notice.id}`, "Open the notice"] : undefined },
       filed: { text: `InboxCA filed ${filedHere === 1 ? "its paper" : `its ${filedHere} papers`} into ${open.client?.name ?? "the client"}'s folders.` },

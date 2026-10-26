@@ -119,7 +119,7 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   // The open email says the same, with a link to what was sent or recorded.
   await owner.goto("/app/inbox?status=answered");
   await row(owner, `ITR copy ${tag}`).getByText(`ITR copy ${tag}`).click();
-  await expect(pane(owner)).toContainText("InboxCA answered with Shah ITR-V FY 2025-26.pdf, as a secure link.");
+  await expect(pane(owner)).toContainText("InboxCA sent Shah ITR-V FY 2025-26.pdf as a secure link.");
   await expect(pane(owner).getByRole("link", { name: "View the paper" })).toHaveAttribute("href", /^\/app\/files\/[0-9a-f-]{36}\/view$/);
   await owner.goto("/app/inbox?status=approval");
   await row(owner, `Statements ${tag}`).getByText(`Statements ${tag}`).click();
@@ -133,20 +133,20 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   await expect(pane(owner)).toContainText(`InboxCA filed its paper into ${shah.name}'s folders.`);
   await owner.goto("/app/inbox?status=reply");
   await row(owner, `Meeting ${tag}`).getByText(`Meeting ${tag}`).click();
-  await expect(pane(owner)).toContainText("Asks something InboxCA could not answer.");
+  await expect(pane(owner)).toContainText("Asks something InboxCA could not answer");
 });
 
 test("Today counts the week's email, each figure opening its list in the Inbox", async () => {
   await owner.goto("/app");
   const week = owner.locator("section[aria-labelledby=t-mail]");
-  for (const [label, count] of [["Read", 8], ["Answered by InboxCA", 1], ["Answered by your team", 1], ["Waiting for a reply", 2]] as const)
+  for (const [label, count] of [["Emails read", 8], ["Answered by InboxCA", 1], ["Answered by your team", 1], ["Waiting for a reply", 2]] as const)
     await expect(week.getByRole("link", { name: label })).toContainText(String(count));
   await week.getByRole("link", { name: "Answered by InboxCA" }).click();
   await expect(owner).toHaveURL(/\/app\/inbox\?when=week&status=answered$/);
   await expect(list(owner).getByRole("listitem")).toHaveCount(1);
   await expect(row(owner, `ITR copy ${tag}`)).toContainText("Answered by InboxCA");
   await owner.goto("/app");
-  await week.getByRole("link", { name: "Read" }).click();
+  await week.getByRole("link", { name: "Emails read" }).click();
   await expect(owner).toHaveURL(/\/app\/inbox\?when=week&show=in$/);
   await expect(list(owner).getByRole("listitem")).toHaveCount(8);
 });
@@ -154,7 +154,7 @@ test("Today counts the week's email, each figure opening its list in the Inbox",
 test("a person sees only the email of clients they may see, everywhere", async () => {
   await staff.goto("/app");
   const week = staff.locator("section[aria-labelledby=t-mail]");
-  await expect(week.getByRole("link", { name: "Read" })).toContainText("7");
+  await expect(week.getByRole("link", { name: "Emails read" })).toContainText("7");
   await expect(week.getByRole("link", { name: "Waiting for a reply" })).toContainText("1");
   for (const path of ["/app/inbox", "/app/inbox?status=reply", "/app/inbox?status=none", "/app/inbox?when=week"]) {
     await staff.goto(path);

@@ -31,7 +31,7 @@ it("lists emails waiting for a person, the longest waiting first, then papers to
   expect(await inboxWorkItems(context)).toEqual([
     { key: "reply:mail-old", title: "Reply to a contact", why: "Writes for several clients. Pick which one. Waiting 3 days", action: { label: "Reply", href: "/app/inbox?mail=mail-old" }, audience: "firm" },
     { key: "reply:mail-new", title: "Reply to Shah Traders", why: "Asks something InboxCA could not answer", client: { id: "c1", name: "Shah Traders" }, action: { label: "Reply", href: "/app/inbox?mail=mail-new" }, audience: "assigned" },
-    { key: "approve:s1", title: "Approve Balance sheet.pdf", why: "A private paper was asked for. It goes as a secure link once approved", client: { id: "c1", name: "Shah Traders" }, action: { label: "Approve", href: "/app/inbox#papers" }, audience: "approver" },
+    { key: "approve:s1", title: "Approve Balance sheet.pdf", why: "The client asked for a private paper. It goes as a secure link once you approve it", client: { id: "c1", name: "Shah Traders" }, action: { label: "Approve", href: "/app/inbox#papers" }, audience: "approver" },
   ]);
 });
 

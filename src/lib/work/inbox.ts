@@ -47,7 +47,7 @@ export async function inboxWorkItems({ supabase, membership }: Context): Promise
   const approvals = (papers ?? []).map((share): WorkItem => ({
     key: `approve:${share.id}`,
     title: `Approve ${share.documents?.name ?? "a paper"}`,
-    why: "A private paper was asked for. It goes as a secure link once approved",
+    why: "The client asked for a private paper. It goes as a secure link once you approve it",
     ...(share.documents?.clients && { client: { id: share.documents.client_id, name: share.documents.clients.name } }),
     action: { label: "Approve", href: "/app/inbox#papers" },
     audience: "approver",
