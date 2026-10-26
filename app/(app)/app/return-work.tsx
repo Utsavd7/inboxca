@@ -1,12 +1,8 @@
 import "./return-work.css";
 import Link from "next/link";
-import {FileCheck2,TriangleAlert} from "lucide-react";
 import {currentMember} from "@/src/lib/member";
 import {draftSchema,openFigures} from "@/src/lib/datasets";
 import {returnOf,stageLine,stepOf,steps,type Work} from "@/src/lib/return-work";
-import type {WorkItem} from "@/src/lib/work/forms";
-import {Fill} from "./fill";
-import {IconTile,Row} from "./ui";
 
 type Db=Awaited<ReturnType<typeof currentMember>>["supabase"];
 
@@ -19,16 +15,6 @@ export function StageLine({code,work}:{code:string|null;work?:Work}) {
   if(!work || work.stage==="filed" || !returnOf(code) && work.stage==="none") return null;
   const at=stepOf(work.stage);
   return <span className="sub stage-line"><span className="stage-steps" role="img" aria-label={`${at} of ${steps.length} steps done`}>{steps.map((step,n)=><i key={step} className={n<at ? "on" : undefined}/>)}</span>{stageLine(work)}</span>;
-}
-
-// Today's pinned returns (src/lib/work/forms.ts), in the Needs you now list until Today's one
-// list per role takes them: red when held up, Fill when the return is not filled yet.
-export function workRows(items:WorkItem[],prepares:(client:string)=>boolean) {
-  return items.slice(0,6).map(item=>{
-    const task=item.key.startsWith("fill:") ? item.key.slice(5) : null;
-    return <Row key={item.key} lead={<IconTile Icon={item.urgent ? TriangleAlert : FileCheck2} kind={item.urgent ? "late" : "approve"}/>} title={item.title} meta={item.why}
-      action={task && item.client && prepares(item.client.id) ? <Fill task={task} label={item.title}/> : <Link className="b b-secondary" href={item.action.href} aria-label={`${item.action.label}: ${item.title}`}>{item.action.label}</Link>}/>;
-  });
 }
 
 // A filled draft's figures still to check, each highlighted with a link to check it. Approving

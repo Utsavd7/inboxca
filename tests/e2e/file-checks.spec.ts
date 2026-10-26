@@ -63,10 +63,10 @@ test("a file with a virus is kept out of InboxCA, put in the owner's folder for 
   expect(alert).toMatchObject({ status: "pending", details: { name: `${clientName} - statement.txt`, found: "Eicar-Test-Signature" } });
   expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id = $1 and action = 'document.virus' and entity_id = $2", [firm.firmId, alert.id]))[0].n).toBe(1);
   await owner.goto("/app");
-  const card = owner.locator("section[aria-labelledby=t-now]");
-  await expect(card).toContainText(`${clientName} - statement.txt had a virus.`);
+  const card = owner.locator("section[aria-labelledby=t-list]");
+  await expect(card).toContainText(`${clientName} - statement.txt had a virus`);
   await card.getByRole("button", { name: "Got it" }).click();
-  await expect(owner.locator("section[aria-labelledby=t-now]")).not.toContainText("had a virus");
+  await expect(owner.locator("section[aria-labelledby=t-list]")).not.toContainText("had a virus");
   expect((await query(local.dbUrl, "select status from public.requests where id = $1", [alert.id]))[0].status).toBe("done");
   expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where entity_id = $1 and action = 'request.changed' and actor_id = $2", [alert.id, firm.ownerId]))[0].n).toBe(1);
 });

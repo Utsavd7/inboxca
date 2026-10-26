@@ -208,7 +208,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   await expect(person.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
 
   await owner.goto("/app");
-  await expect(owner.getByText("1 PC signed in from your office today.")).toBeVisible();
+  await expect(owner.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Approve 1 PC" })).toContainText("Signed in from your office today");
   await owner.goto("/app/settings#office");
   await expect(owner.getByText(/New on Chrome on Windows, first seen today/)).toBeVisible();
   await owner.getByRole("button", { name: "Stays in the office" }).click();
@@ -690,7 +690,8 @@ test("in restricted mode a person sees only clients assigned to them or their te
   // Today's late returns are those of the clients the person can see: none yet.
   await query(local.dbUrl, "insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR1_M','2026-01',current_date-30)", [firm.firmId, client.split("/").at(-1)]);
   await person.goto("/app");
-  await expect(person.locator("section[aria-labelledby=t-late]")).toContainText("No return is late.");
+  await expect(person.locator("section[aria-labelledby=t-list]")).toBeVisible();
+  await expect(person.locator("section[aria-labelledby=t-list]")).not.toContainText("Shared Client");
 
   // A team: the person joins it, and the client is assigned to the whole team.
   await owner.goto("/app/people?panel=groups");
@@ -710,7 +711,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.getByRole("button", { name: "Assign" }).click();
   await expect(owner.getByRole("dialog", { name: "Looked after by" }).getByRole("listitem").filter({ hasText: "Team: GST team" })).toContainText("Staff");
   await person.reload();
-  await expect(person.locator("section[aria-labelledby=t-late] li").filter({ hasText: "Shared Client" }).filter({ visible: true })).toContainText("GSTR-1 (monthly) for Jan 2026");
+  await expect(person.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Shared Client" }).filter({ hasText: /days? late/ }).filter({ visible: true })).toContainText("GSTR-1 (monthly) for Jan 2026");
   await person.goto("/app/clients");
   await expect(person.getByRole("link", { name: "Shared Client" })).toBeVisible();
   await expect(person.locator(".page-head")).toContainText("1 client.");
@@ -955,8 +956,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
     expect(await readFile(path.join(gst, `${mailClient} - HDFC loan sanction letter.pdf`), "utf8")).toBe("%PDF-1.4 invented scan");
     if (attempt === 1) {
       const back = owner.url();
-      await owner.goto("/app");
-      await expect(owner.getByRole("alert").filter({ hasText: `${ownerEmail} renamed 3 files today.` })).toBeVisible();
+      await owner.goto("/app/work");
+      await expect(owner.locator("section[aria-labelledby=w-list] li").filter({ hasText: `Check what ${ownerEmail} renamed` })).toContainText("Renamed 3 files today");
       await owner.goto(back);
     }
     await owner.getByRole("button", { name: "Undo" }).click();
@@ -1132,8 +1133,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await runJobs(request, firm.firmId);
   await owner.reload();
   await expect(rows.filter({ hasText: "Form 16" })).toContainText("Missing in the drive");
-  await owner.goto("/app");
-  await expect(owner.getByRole("alert").filter({ hasText: "1 paper is missing from your drive." })).toBeVisible();
+  await owner.goto("/app/work");
+  await expect(owner.locator("section[aria-labelledby=w-list] li").filter({ hasText: "1 paper is missing from your drive" })).toBeVisible();
   // It opens the Documents page with only the missing papers.
   await owner.getByRole("link", { name: "See missing papers" }).click();
   await expect(owner).toHaveURL(/\/app\/documents\?year=all&show=missing$/);
@@ -1183,8 +1184,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(noticeFile.drive_file_id).toContain("/Income tax/");
   const [support] = await query(local.dbUrl, "select document_type,work_type from public.documents where firm_id=$1 and name like '%Jan 2025.csv'", [firm.firmId]);
   expect(support).toMatchObject({ document_type: "Purchase bills", work_type: "income_tax" });
-  await owner.goto("/app");
-  await expect(owner.getByRole("alert").filter({ hasText: `${mailClient}: a notice's review deadline` })).toBeVisible();
+  await owner.goto("/app/work");
+  await expect(owner.locator("section[aria-labelledby=w-list] li").filter({ hasText: `Review the notice for ${mailClient}` })).toContainText("review deadline");
   await owner.goto("/app/notices");
   const notice = owner.locator("section[aria-label=Notices] tbody tr").filter({ hasText: mailClient });
   await expect(notice).toContainText("Notice u/s 148");
@@ -1233,10 +1234,10 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const [{ details }] = await query(local.dbUrl, "select details from public.tasks where client_id = $1 and code = $2", [clientId, code]);
   expect(details.reminded).toHaveLength(1);
   await query(local.dbUrl, "update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-3 where client_id=$1 and code=$2", [clientId,code]);
-  await owner.goto("/app");
+  await owner.goto("/app/work?show=late");
   // This file makes more than one client with this name, so the row is found by the client's link.
   // While the page streams in, a hidden copy of the row can exist for a moment; only the shown one counts.
-  const late = owner.locator("section[aria-labelledby=t-late] li").filter({ has: owner.locator(`a[href="/app/clients/${clientId}?tab=due"]`) }).filter({ visible: true });
+  const late = owner.locator("section[aria-labelledby=w-list] li").filter({ has: owner.locator(`a[href="/app/clients/${clientId}?tab=due"]`) }).filter({ visible: true });
   await expect(late).toBeVisible();
   // M5 acceptance: filing removes this return from the pending firm's reminder run.
   await query(local.dbUrl, "update public.tasks set status='filed',details=(details-'reminder') || jsonb_build_object('filed_on',current_date) where client_id=$1 and code=$2", [clientId,code]);
@@ -1245,7 +1246,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await runJobs(request, firm.firmId);
   const [filedReminder] = await query(local.dbUrl, "select details from public.tasks where client_id=$1 and code=$2", [clientId,code]);
   expect(filedReminder.details.reminder).toBeUndefined();
-  await owner.goto("/app");
+  await owner.goto("/app/work?show=late");
+  await expect(owner.locator("section[aria-labelledby=w-list]")).toBeVisible();
   await expect(late).toHaveCount(0);
   await query(local.dbUrl, "delete from public.tasks where code = $1", [code]);
   await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
@@ -1430,9 +1432,11 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await boss.getByLabel("6 digit code from the app").fill(totp(ownerKey));
     await boss.getByRole("button", { name: "Continue" }).click();
     await expect(boss).toHaveURL(/\/app$/);
+    // Notices on this computer are a choice in Settings, off until turned on.
+    await boss.goto("/app/settings?group=access#notices");
     await boss.evaluate(() => Reflect.deleteProperty(window, "PushManager"));
-    await boss.getByRole("button", { name: "Turn on notifications on this device" }).click();
-    await expect(boss.getByText(/On an iPhone, add InboxCA to the home screen first/)).toBeVisible();
+    await boss.getByRole("button", { name: "Turn on notices on this computer" }).click();
+    await expect(boss.getByText("This browser cannot show notices.", { exact: false })).toBeVisible();
     await boss.goto("/app/settings#office");
     await officeSwitch(boss);
     await boss.getByLabel("Yes, I am in the office now").check();
@@ -1466,8 +1470,8 @@ test("five office PCs need one batch approval, and managers cannot forge office 
       if (n === 0) expect((await admin.auth.verifyOtp({ email: address, token: code, type: "email" })).error).not.toBeNull();
     }
     await boss.goto("/app");
-    await expect(boss.getByRole("alert").filter({ hasText: "5 PCs signed in from your office today." })).toHaveCount(1);
-    await boss.getByRole("link", { name: "Approve", exact: true }).click();
+    await expect(boss.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Approve 5 PCs" })).toContainText("Signed in from your office today");
+    await boss.getByRole("link", { name: "Approve 5 PCs" }).click();
     await boss.getByRole("button", { name: "Approve all as staying in the office" }).click();
     await expect(boss.getByRole("heading", { name: "PCs waiting for approval" })).toHaveCount(0);
     expect((await query(local.dbUrl, "select count(*)::int n from public.devices where firm_id=$1 and status='approved'", [batch.firmId]))[0].n).toBe(5);
