@@ -464,8 +464,8 @@ export async function manageClient(form: FormData) {
   const id = String(form.get("client") ?? "");
   const tab = String(form.get("tab") ?? "").replace(/[^a-z]/g, "");
   const back = (error?: string) => {
-    // Assign to me on Today goes back to Today.
-    if (form.get("from") === "today") return redirect(error ? "/app?error=assign" : "/app?assigned=1");
+    // Assign to me on the full list of a person's work goes back to its late returns.
+    if (form.get("from") === "work") return redirect(error ? "/app/work?show=late&error=assign" : "/app/work?show=late&assigned=1");
     // The details panel closes once its change is saved; other panels stay open for the next one.
     const query = new URLSearchParams({ ...(tab && tab !== "overview" && (error || tab !== "details") && { tab }), ...(error && { error }) }).toString();
     return redirect(`/app/clients/${id}${query ? `?${query}` : ""}`);
@@ -671,8 +671,8 @@ export async function manageTasks(form: FormData) {
   revalidatePath("/app", "layout");
   // From the Calendar: back to the same view, with a note of what changed and an Undo.
   if (form.has("view")) redirect(calendarBack(form, ["saved", String(intent)], ["t", ids.join(".")]));
-  // From Today's late returns: back to Today, the same way.
-  if (form.get("from") === "today") redirect(`/app?marked=${intent}&t=${ids.join(".")}`);
+  // From the late returns of a person's full list: back to them, the same way.
+  if (form.get("from") === "work") redirect(`/app/work?show=late&marked=${intent}&t=${ids.join(".")}`);
   // From a client's Returns tab: back to it, the same way.
   const client = String(form.get("client") ?? "");
   if (z.uuid().safeParse(client).success) {
@@ -2189,18 +2189,19 @@ export async function saveReplies(form:FormData) {
   redirect("/app/settings?group=email&saved=replies#replies");
 }
 
-// Today: "Remind all late clients" or "Chase missing papers", after their preview. The daily
-// reminder job sends them, from the firm's mailbox, at most one email a client a day; it waits
-// 20 seconds so Undo can stop it. Owners and partners only, as they see every client.
+// The full list (/app/work): "Remind all late clients" or "Remind about missing papers", after
+// their preview. The daily reminder job sends them, from the firm's mailbox, at most one email a
+// client a day; it waits 20 seconds so Undo can stop it. Owners and partners only, as they see
+// every client.
 export async function sendNow(form: FormData) {
   const { userId, membership } = await currentWriter();
   if (!membership || !["owner", "partner"].includes(membership.role)) redirect("/app");
   const what = form.get("what") === "papers" ? "papers" : "late";
   const admin = supabaseAdmin();
   const { data: job, error } = await admin.from("jobs").insert({ firm_id: membership.firmId, kind: "reminders", entity_type: what, entity_id: membership.firmId, idempotency_key: `reminders:${what}:${membership.firmId}:${randomUUID()}`, run_at: new Date(Date.now() + 20_000).toISOString() }).select("id").single();
-  if (error) redirect("/app?error=send");
+  if (error) redirect("/app/work?error=send");
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: `reminders.asked`, entity_type: "firm", entity_id: membership.firmId, details: { what } });
-  redirect(`/app?sending=${what}&job=${job.id}`);
+  redirect(`/app/work?show=${what}&sending=${what}&job=${job.id}`);
 }
 
 // Undo on the toast: the send stops if it has not started yet. One client's reminder (the
@@ -2216,7 +2217,7 @@ export async function stopSend(form: FormData) {
   if (one) jobs = jobs.eq("entity_type", "client").eq("entity_id", client!.id);
   const { data } = await jobs.select("id");
   if (one) redirect(remindBack(form, data?.length ? ["stopped", "1"] : ["error", "started"]));
-  redirect(data?.length ? "/app?stopped=1" : "/app?error=started");
+  redirect(data?.length ? "/app/work?stopped=1" : "/app/work?error=started");
 }
 
 // The notifications: the questions this person answers, then what others did on their

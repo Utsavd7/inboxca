@@ -114,7 +114,7 @@ test("PDFs, spreadsheets and photos arrive as personal page images, with no file
     }
     await expect.poll(async () => (await query(local.dbUrl, "select (details->>'count')::int n from public.requests where firm_id=$1 and reason_code='captures'", [firm.firmId]))[0]?.n).toBe(5);
     await page.goto("/app");
-    await expect(page.getByRole("alert").filter({ hasText: `${email} tried to capture a document's screen 5 times today.` })).toBeVisible();
+    await expect(page.locator("section[aria-labelledby=t-list] li").filter({ hasText: `Ask ${email} about screen captures` })).toContainText("Tried to capture a paper's screen 5 times today");
     await expect.poll(async () => (await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id=$1 and action='document.viewed'", [firm.firmId]))[0].n).toBe(12);
     // With no drive linked a paper says so, not that it was moved or removed.
     const [paper] = await query(local.dbUrl, "select id from public.documents where firm_id = $1 limit 1", [firm.firmId]);

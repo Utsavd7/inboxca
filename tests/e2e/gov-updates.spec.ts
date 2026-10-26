@@ -27,6 +27,8 @@ test("Today shows what is new from the government only to a firm with that work,
     await expect(open).toHaveAttribute("rel", /noopener/);
     await expect(line.getByRole("link", { name: /^and \d+ more$/ })).toHaveAttribute("href", "/app/government");
     await line.getByRole("button", { name: "Dismiss" }).click();
+    // The dismissed line slides out as the next one comes in.
+    await expect(line.filter({ hasText: `Invented notification ${tag}` })).toHaveCount(0);
     await expect(line).toContainText(`New from the government: Invented advisory on GSTR-1 ${tag}. GST portal news, 16 Oct 2026.`);
     await gst.page.reload();
     await expect(gst.page.locator(".gov-line")).toContainText(`Invented advisory on GSTR-1 ${tag}`);

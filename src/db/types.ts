@@ -927,7 +927,7 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
 "late_clients":
-{ Args: { "target_firm": string }; Returns: {
+{ Args: { "mine"?: boolean,"target_firm": string }; Returns: {
               "client_id": string,"client_name": string,"code": string,"due_on": string,"period_key": string,"returns": number
             }[]
                            },
@@ -935,6 +935,9 @@ isOneToOne: false
 { Args: { "target_firm": string }; Returns: {
               "client_name": string,"due_on": string,"id": string
             }[]
+                           },
+"looked_after":
+{ Args: { "clients": (string)[],"target_firm": string }; Returns: string[]
                            },
 "looks_after":
 { Args: { "client": string,"target_firm": string }; Returns: boolean
@@ -960,6 +963,9 @@ isOneToOne: false
 { Args: { "first_day": string }; Returns: {
               "codes": (string)[],"due": number,"due_on": string,"filed": number
             }[]
+                           },
+"my_clients":
+{ Args: { "target_firm": string }; Returns: string[]
                            },
 "my_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]
@@ -1077,6 +1083,11 @@ isOneToOne: false
 "take_form_download":
 { Args: { "person": string,"ticket": string,"token_hash": string }; Returns: string
                            },
+"team_load":
+{ Args: { "target_firm": string,"until": string }; Returns: {
+              "returns": number,"user_id": string
+            }[]
+                           },
 "team_replies":
 { Args: { "target_firm": string }; Returns: {
               "assignee": string,"client_id": string,"client_name": string,"days": number,"email_id": string,"id": string,"late": boolean,"reason_code": string,"received_at": string
@@ -1092,6 +1103,11 @@ isOneToOne: false
                            },
 "user_id_for_email":
 { Args: { "address": string }; Returns: string
+                           },
+"work_numbers":
+{ Args: { "mine"?: boolean,"since": string,"target_firm": string,"until": string }; Returns: {
+              "due": number,"filed": number,"waiting": number
+            }[]
                            }
           }
           Enums: {

@@ -43,7 +43,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await query(local.dbUrl,"insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values($1,$2,$3,'GSTR1','2026-09',$4)",[draft,firm.firmId,client,{lines,checks:[]}]);
 
     await signIn(page,email,key);
-    const now=page.getByRole("region",{name:"Needs you now"});
+    const now=page.getByRole("region",{name:"Your list"});
     await expect(now.getByText(`GSTR-1 for ${name}, Sep 2026`)).toHaveCount(0);
     await page.goto("/app/calendar?view=month");await expect(page.getByRole("button",{name:`Fill ${name} GSTR-1 (monthly)`})).toBeVisible();
     // Fill by hand, pressed twice: one draft, made from the figures read so far.
@@ -78,7 +78,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await page.goto("/app");await expect(now.getByText("Checked and ready for your approval")).toHaveCount(0);
     // The manager approves from Today.
     const other=await managerContext.newPage();await signIn(other,managerEmail,managerKey);
-    const managerNow=other.getByRole("region",{name:"Needs you now"});
+    const managerNow=other.getByRole("region",{name:"Your list"});
     await expect(managerNow.getByText("Checked and ready for your approval")).toBeVisible();
     await managerNow.getByRole("link",{name:/Review and approve/}).click();await expect(other).toHaveURL(/tab=outputs/);
     await other.getByRole("button",{name:"Give second approval"}).click();

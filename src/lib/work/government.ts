@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { sources, type Area } from "@/src/jobs/forms-watch";
 import { dueLabel } from "@/src/lib/calendar";
 import type { currentMember } from "@/src/lib/member";
@@ -10,7 +11,8 @@ type Db = Awaited<ReturnType<typeof currentMember>>["supabase"];
 export type GovUpdate = { id: string; source: string; area: Area; title: string; date?: string; link: string; seen: string; note?: { uses?: string; keeps?: string }; dismissed: boolean; from: string };
 const names = new Map(sources.map((source) => [source.key, source.name]));
 
-export async function governmentUpdates(supabase: Db, firmId: string) {
+// Read once a request: Today's line and its list both ask.
+export const governmentUpdates = cache(async (supabase: Db, firmId: string) => {
   const { data, error } = await supabase.rpc("gov_updates", { target_firm: firmId });
   if (error) throw new Error(`Government updates failed: ${error.code}`);
   const found = data as { areas: Area[]; failing: string[]; items: Omit<GovUpdate, "from">[] };
@@ -20,7 +22,7 @@ export async function governmentUpdates(supabase: Db, firmId: string) {
     // those that block readers, and any the check has not read for two days.
     unread: sources.filter((source) => (source.kind === "manual" || found.failing.includes(source.key)) && found.areas.includes(source.area)),
   };
-}
+});
 
 // "12 Oct 2026" as published, or the day InboxCA first saw it.
 export const govWhen = (item: GovUpdate) => (item.date ? dueLabel(item.date) : `seen on ${dueLabel(item.seen)}`);

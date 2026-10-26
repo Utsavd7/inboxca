@@ -30,6 +30,7 @@ import { MailboxForm } from "./mailbox-form";
 import { GroupAnchor } from "./group-anchor";
 import { saveReplies } from "@/app/(app)/actions";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
+import { PushSwitch } from "../push-switch";
 import "./settings.css";
 
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
@@ -55,7 +56,7 @@ const savedNames: Record<string, string> = { preset: "Preset saved.", visibility
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "replies", "drive"]],
-  ["access", "Office and sign in", ["preset", "office", "limits", "tester", "recovery"]],
+  ["access", "Office and sign in", ["preset", "office", "limits", "tester", "notices", "recovery"]],
   ["hours", "Hours and holidays", ["hours", "special", "holidays"]],
   ["people", "People's access", ["permissions", "always", "visibility"]],
   ["reminders", "Reminders and papers", ["reminders", "answers", "records"]],
@@ -64,7 +65,7 @@ const groups = [
 const groupIcons: Record<string, LucideIcon> = { email: Mail, access: ShieldCheck, hours: Clock, people: Users, reminders: BellRing, data: Database };
 // Each card's tile: what it is about, in the colour of its kind.
 const cardIcons: Record<string, [LucideIcon, Kind]> = {
-  mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], tester: [UserCheck, "approve"], recovery: [LifeBuoy, "approve"],
+  mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], tester: [UserCheck, "approve"], notices: [BellRing, "approve"], recovery: [LifeBuoy, "approve"],
   hours: [Clock, "week"], special: [CalendarClock, "week"], holidays: [CalendarOff, "week"],
   permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"],
   reminders: [BellRing, "notice"], answers: [MailCheck, "notice"], records: [FileCheck2, "notice"],
@@ -424,6 +425,9 @@ export default async function Settings({
           </Card>
           <Card id="tester" title="Check someone's access" line="Can a person use InboxCA now, from here, on this PC? InboxCA answers with the same checks it makes on every page.">
             <AccessCheck person={check} />
+          </Card>
+          <Card id="notices" title="Notices on this computer" line="Show a notice on this computer when someone needs your approval. Off until you turn it on here.">
+            {process.env.VAPID_PUBLIC_KEY ? <PushSwitch publicKey={process.env.VAPID_PUBLIC_KEY} /> : <p className="hint">Not set up yet.</p>}
           </Card>
           {owner && <Card id="recovery" title="Recovery codes" line="If you lose the phone with your 2 step code, one of these codes lets you set it up again after the email code. Each code works once, and new codes stop the old ones. Keep them away from your phone.">
             <form action="/app/settings/recovery-codes" method="post" className="set-foot"><button className="b b-secondary" type="submit">Download 10 new codes</button></form>

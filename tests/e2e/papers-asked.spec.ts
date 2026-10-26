@@ -106,7 +106,7 @@ test("after two reminders with nothing back, the person who looks after the clie
   await signIn(staff, staffEmail, staffKey);
   const call = staff.getByRole("listitem").filter({ hasText: `Call ${client.name}` });
   await expect(call).toContainText("Asked twice, still missing Sales bills, Purchase bills, Bank statement for Oct 2026");
-  await staff.locator("section.today-now").screenshot({ path: test.info().outputPath("call-on-today.png") });
+  await staff.locator("section.today-list").screenshot({ path: test.info().outputPath("call-on-today.png") });
   await call.getByRole("link", { name: `See papers: ${client.name}` }).click();
   await expect(staff.getByRole("heading", { name: "Papers asked for", level: 1 })).toBeVisible();
 
@@ -125,7 +125,7 @@ test("after two reminders with nothing back, the person who looks after the clie
   // The third reminder tells the owner too; the call is off the person's list once they chased it.
   expect(await query(local.dbUrl, "select 1 from public.requests where entity_id = $1 and entity_type = 'request_stalled' and status = 'pending'", [request.id])).toHaveLength(1);
   await staff.goto("/app");
-  await expect(staff.getByRole("heading", { name: "Needs you now" })).toBeVisible();
+  await expect(staff.locator("section[aria-labelledby=t-list]")).toBeVisible();
   await expect(call).toHaveCount(0);
 
   // A call after the email: marked, and logged.
@@ -155,7 +155,7 @@ test("once the client uploads every paper, the person is told to check the figur
   await staff.goto("/app");
   const done = staff.getByRole("listitem").filter({ hasText: `All papers in for ${client.name}` });
   await expect(done).toContainText("Check the figures for GSTR-1 test return for Oct 2026");
-  await staff.locator("section.today-now").screenshot({ path: test.info().outputPath("papers-in-on-today.png") });
+  await staff.locator("section.today-list").screenshot({ path: test.info().outputPath("papers-in-on-today.png") });
   await done.getByRole("link", { name: `See papers: ${client.name}` }).click();
   await expect(staff.getByText("Every paper is in, so the reminders have stopped.")).toBeVisible();
   await staff.reload();
@@ -163,6 +163,6 @@ test("once the client uploads every paper, the person is told to check the figur
   await staff.getByRole("button", { name: "Check the figures" }).click();
   await expect(staff).toHaveURL(new RegExp(`/app/clients/${client.id}\\?tab=extraction`));
   await staff.goto("/app");
-  await expect(staff.getByRole("heading", { name: "Needs you now" })).toBeVisible();
+  await expect(staff.locator("section[aria-labelledby=t-list]")).toBeVisible();
   await expect(done).toHaveCount(0);
 });
