@@ -59,7 +59,7 @@ export default async function Papers({ params, searchParams }: { params: Promise
     <div className="papers">
       <PageHead
         crumbs={[["/app", "Today"], [`/app/clients/${request.client_id}?tab=documents`, client.name]]}
-        title={`Papers from ${client.name}`}
+        title="Papers asked for"
         sub={
           <p className="hint">
             {what || "Papers"}{details.period ? ` for ${periodName(details.period)}` : ""}.{" "}
@@ -95,7 +95,7 @@ export default async function Papers({ params, searchParams }: { params: Promise
       />
       {acts && live && missing.length > 0 && stop && <p className="hint" role="note">{stop}</p>}
       {query.error && notes[query.error] && <p className="alert" role="alert">{notes[query.error]}</p>}
-      <Card id="papers-asked" title="Papers asked for" Icon={missing.length ? FileClock : FileCheck2} kind={missing.length ? "papers" : "done"} count={details.items.length}>
+      <Card id="papers-asked" title="Papers" Icon={missing.length ? FileClock : FileCheck2} kind={missing.length ? "papers" : "done"} count={details.items.length}>
         <ul className="app-rows">
           {details.items.map((item) => (
             <Row

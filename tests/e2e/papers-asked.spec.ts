@@ -69,6 +69,7 @@ test("the owner chooses how early InboxCA asks for papers, and the client gets t
   await owner.getByLabel("Yearly returns").selectOption("0");
   await owner.getByRole("button", { name: "Save reminders" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Reminders saved." })).toBeVisible();
+  await owner.locator("section#reminders").screenshot({ path: test.info().outputPath("ask-settings.png") });
   const [{ settings }] = await query(local.dbUrl, "select settings from public.firms where id = $1", [firm.firmId]);
   expect([settings.reminders, settings.ask_days]).toEqual([true, { monthly: 10, quarterly: 15, yearly: 0 }]);
 
@@ -105,8 +106,9 @@ test("after two reminders with nothing back, the person who looks after the clie
   await signIn(staff, staffEmail, staffKey);
   const call = staff.getByRole("listitem").filter({ hasText: `Call ${client.name}` });
   await expect(call).toContainText("Asked twice, still missing Sales bills, Purchase bills, Bank statement for Oct 2026");
+  await staff.locator("section.today-now").screenshot({ path: test.info().outputPath("call-on-today.png") });
   await call.getByRole("link", { name: `See papers: ${client.name}` }).click();
-  await expect(staff.getByRole("heading", { name: `Papers from ${client.name}` })).toBeVisible();
+  await expect(staff.getByRole("heading", { name: "Papers asked for", level: 1 })).toBeVisible();
 
   // Send reminder now, stopped by Undo, then sent.
   const toast = (text: string) => staff.getByRole("status").filter({ hasText: text });
@@ -130,6 +132,8 @@ test("after two reminders with nothing back, the person who looks after the clie
   await staff.goto(`/app/papers/${request.id}`);
   await expect(staff.getByRole("button", { name: "Send reminder now" })).toBeDisabled();
   await expect(staff.getByRole("note")).toHaveText("Already emailed today. The next reminder can go tomorrow.");
+  await staff.screenshot({ path: test.info().outputPath("papers-page.png") });
+  expect(await staff.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await staff.getByRole("button", { name: "Mark as asked by phone" }).click();
   await expect(toast("Marked as asked by phone.")).toBeVisible();
   expect(await query(local.dbUrl, "select 1 from public.activity_log where entity_id = $1 and action = 'request.phoned'", [request.id])).toHaveLength(1);
@@ -151,8 +155,11 @@ test("once the client uploads every paper, the person is told to check the figur
   await staff.goto("/app");
   const done = staff.getByRole("listitem").filter({ hasText: `All papers in for ${client.name}` });
   await expect(done).toContainText("Check the figures for GSTR-1 test return for Oct 2026");
+  await staff.locator("section.today-now").screenshot({ path: test.info().outputPath("papers-in-on-today.png") });
   await done.getByRole("link", { name: `See papers: ${client.name}` }).click();
   await expect(staff.getByText("Every paper is in, so the reminders have stopped.")).toBeVisible();
+  await staff.reload();
+  await staff.screenshot({ path: test.info().outputPath("papers-all-in.png") });
   await staff.getByRole("button", { name: "Check the figures" }).click();
   await expect(staff).toHaveURL(new RegExp(`/app/clients/${client.id}\\?tab=extraction`));
   await staff.goto("/app");

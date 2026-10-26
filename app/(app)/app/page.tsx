@@ -404,8 +404,8 @@ const waitFor = (ms: number) => (ms < 3_600_000 ? `${Math.max(1, Math.round(ms /
 
 // The greeting's line: how many things need this person today.
 async function Things({ data }: { data: Data }) {
-  const [replies, toApprove, late, looks] = await Promise.all([data.replies, data.toApprove, data.late, data.looks]);
-  const things = (replies.count ?? 0) + toApprove.length + (late.count ?? late.data?.length ?? 0) + looks.length;
+  const [replies, toApprove, late, looks, paperItems] = await Promise.all([data.replies, data.toApprove, data.late, data.looks, data.paperItems]);
+  const things = (replies.count ?? 0) + toApprove.length + (late.count ?? late.data?.length ?? 0) + looks.length + paperItems.length;
   return <span>{things ? `${plural(things, "thing needs", "things need")} you today.` : "Nothing needs you today."}</span>;
 }
 
