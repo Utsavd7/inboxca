@@ -910,13 +910,13 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
   // Each paper says how it came in; the unclear one says why it waits, and its email opens in the Inbox.
-  await expect(rows.filter({ hasText: "Purchase bills" })).toContainText(`Filed by InboxCA from ${mailClient}'s email, `);
+  await expect(rows.filter({ hasText: "Purchase bills" })).toContainText(`Saved by InboxCA from ${mailClient}'s email, `);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
   const docsTab = owner.url();
   await owner.goto("/app/documents");
   await owner.getByRole("navigation", { name: "Folders" }).getByRole("link", { name: /To check/ }).click();
   const waiting = owner.getByRole("complementary", { name: "Paper" });
-  await expect(waiting).toContainText(`Filed by InboxCA from ${mailClient}'s email, `);
+  await expect(waiting).toContainText(`Saved by InboxCA from ${mailClient}'s email, `);
   await expect(waiting).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
   await waiting.getByRole("link", { name: "Open the email" }).click();
   await expect(owner.getByRole("heading", { name: "GST data" })).toBeVisible();

@@ -86,7 +86,7 @@ test("the drive's folders as the drive shows them: a hand placed file is filed i
     await expect(main.getByRole("row", { name: new RegExp(sales) })).toContainText("Sales bills, GST, Sep 2026");
     // Chosen, it says who filed it from the drive, and when, beside its path.
     await main.getByRole("row", { name: new RegExp(sales) }).getByRole("button").click();
-    await expect(details).toContainText(/Found in the drive and filed by Folders, \d{1,2} \w{3}, \d\d:\d\d/);
+    await expect(details).toContainText(/Found in the drive and saved by Folders, \d{1,2} \w{3}, \d\d:\d\d/);
     await expect(details).toContainText(`/InboxCA/FY 2026-27/${patel}/GST/${sales}`);
     const [filed] = await query(local.dbUrl, "select status, drive_file_id from public.documents where firm_id = $1 and name = $2", [firm.firmId, sales]);
     expect(filed).toEqual({ status: "filed", drive_file_id: path.join("InboxCA", "FY 2026-27", patel, "GST", sales) });

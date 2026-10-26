@@ -8,8 +8,8 @@ describe("where a paper came from", () => {
 
   it("names the email's sender, or the client, and links the email only for those who may open it", () => {
     const mailed = { ...paper, email_event_id: "e" };
-    expect(originOf(mailed, { sender: "Rajesh Desai", mail: true })).toMatchObject({ short: "Email from Rajesh Desai", how: "Filed by InboxCA from Rajesh Desai's email", mail: "e" });
-    expect(originOf(mailed, {})).toMatchObject({ how: "Filed by InboxCA from Mehta Traders' email" });
+    expect(originOf(mailed, { sender: "Rajesh Desai", mail: true })).toMatchObject({ short: "Email from Rajesh Desai", how: "Saved by InboxCA from Rajesh Desai's email", mail: "e" });
+    expect(originOf(mailed, {})).toMatchObject({ how: "Saved by InboxCA from Mehta Traders' email" });
     expect(originOf(mailed, {}).mail).toBeUndefined();
   });
 
@@ -18,7 +18,7 @@ describe("where a paper came from", () => {
     expect(originOf(paper, { line: line("document.uploaded", "u", { from: "portal" }), by: "Anita" }).how).toBe("Added as a portal file by Anita");
     expect(originOf({ ...paper, document_type: "GSTR-2B", name: "x.json" }, { line: line("document.uploaded", "u"), by: "Anita" }).how).toBe("Added as a portal file by Anita");
     expect(originOf(paper, { line: line("document.uploaded", null) }).how).toBe("Sent by the client through their upload link");
-    expect(originOf(paper, { line: line("document.filed", "u", { from: "drive" }), by: "Anita" }).how).toBe("Found in the drive and filed by Anita");
+    expect(originOf(paper, { line: line("document.filed", "u", { from: "drive" }), by: "Anita" }).how).toBe("Found in the drive and saved by Anita");
     expect(originOf(paper, { line: line("document.added", "u", { kind: "acknowledgement" }), by: "Anita" }).how).toBe("Acknowledgement added by Anita");
     expect(originOf({ ...paper, prepared: "GSTR1" }, {}).how).toBe("Prepared in InboxCA");
   });

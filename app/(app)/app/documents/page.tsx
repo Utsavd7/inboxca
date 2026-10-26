@@ -398,7 +398,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             <div className="docs-actions">
               {mayCheck(paper) && (
                 <Link className="b b-primary" href={`/app/clients/${paper.client_id}?tab=documents&edit=${paper.id}`}>
-                  Check and file
+                  Check and save
                 </Link>
               )}
               <Link className={`b ${mayCheck(paper) ? "b-secondary" : "b-primary"}`} href={`/app/files/${paper.id}/view`}>

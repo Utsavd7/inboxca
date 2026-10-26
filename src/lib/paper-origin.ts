@@ -31,7 +31,7 @@ export function originOf(paper: Arrived, seen: { sender?: string; mail?: boolean
   const portal = (line?.details as { from?: string } | null)?.from === "portal" || (paper.work_type === "gst" && /^GSTR-2[AB]$/.test(paper.document_type) && /\.json$/i.test(paper.name));
   const sender = seen.sender || paper.clients?.name || "the client";
   const [short, how] = paper.email_event_id
-    ? [`Email from ${sender}`, `Filed by InboxCA from ${whose(sender)} email`]
+    ? [`Email from ${sender}`, `Saved by InboxCA from ${whose(sender)} email`]
     : paper.prepared
       ? ["Prepared in InboxCA", "Prepared in InboxCA"]
       : line?.action === "document.uploaded"
@@ -39,7 +39,7 @@ export function originOf(paper: Arrived, seen: { sender?: string; mail?: boolean
           ? ["Client's upload link", "Sent by the client through their upload link"]
           : portal ? [`Portal file, added by ${by}`, `Added as a portal file by ${by}`] : [`Uploaded by ${by}`, `Uploaded by ${by}`]
         : line?.action === "document.filed"
-          ? [`Filed from the drive by ${by}`, `Found in the drive and filed by ${by}`]
+          ? [`Saved from the drive by ${by}`, `Found in the drive and saved by ${by}`]
           : line?.action === "document.added"
             ? [`Added by ${by}`, `${(line.details as { kind?: string } | null)?.kind === "acknowledgement" ? "Acknowledgement added" : "Filing record written"} by ${by}`]
             : seen.imported ? ["From your old files", "Moved here from your old files"] : ["From the drive", "From the drive"];

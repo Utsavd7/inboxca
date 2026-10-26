@@ -167,7 +167,7 @@ test("each paper says how it came in and when, papers to check say why, and anot
     await expect(row("Purchase bills")).toContainText("Uploaded by Owner");
     await expect(row("GSTR-2B")).toContainText("Portal file, added by Owner");
     await expect(row("Bank statement")).toContainText("Client's upload link");
-    await expect(row("Ledger")).toContainText("Filed from the drive by Owner");
+    await expect(row("Ledger")).toContainText("Saved from the drive by Owner");
     await expect(row("Trial balance")).toContainText("From your old files");
     await expect(row("Document")).toContainText("To checkInboxCA could not tell its type and period");
 
@@ -180,7 +180,7 @@ test("each paper says how it came in and when, papers to check say why, and anot
     await row("Bank statement").getByRole("link").click();
     await expect(detail).toContainText("Sent by the client through their upload link, ");
     await row("Sales bills").getByRole("link").click();
-    await expect(detail).toContainText(new RegExp(`Filed by InboxCA from ${name}'s email, \\d{1,2} \\w{3}, \\d\\d:\\d\\d`));
+    await expect(detail).toContainText(new RegExp(`Saved by InboxCA from ${name}'s email, \\d{1,2} \\w{3}, \\d\\d:\\d\\d`));
     await detail.getByRole("link", { name: "Open the email" }).click();
     await expect(page).toHaveURL(new RegExp(`/app/inbox\\?mail=${mail}$`));
 
@@ -193,7 +193,7 @@ test("each paper says how it came in and when, papers to check say why, and anot
     await expect(papers.getByRole("row")).toHaveCount(2);
     await expect(detail).toContainText("Uploaded by Owner, ");
     await expect(detail).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
-    await detail.getByRole("link", { name: "Check and file" }).click();
+    await detail.getByRole("link", { name: "Check and save" }).click();
     await expect(page).toHaveURL(new RegExp(`/app/clients/${client.id}\\?tab=documents&edit=${waiting}$`));
     await expect(page.getByRole("dialog")).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
     await expect(page.getByRole("dialog").getByRole("button", { name: "Save", exact: true })).toBeVisible();
@@ -202,7 +202,7 @@ test("each paper says how it came in and when, papers to check say why, and anot
     await page.goto(`/app/clients/${client.id}?tab=documents`);
     const rows = page.locator("section[aria-labelledby=files] tbody tr");
     await expect(rows.filter({ hasText: "GSTR-2B" })).toContainText("Added as a portal file by Owner, ");
-    await expect(rows.filter({ hasText: "Ledger" })).toContainText("Found in the drive and filed by Owner, ");
+    await expect(rows.filter({ hasText: "Ledger" })).toContainText("Found in the drive and saved by Owner, ");
     await expect(rows.filter({ hasText: "Trial balance" })).toContainText("Moved here from your old files, ");
     await expect(rows.filter({ hasText: "Sales bills" }).getByRole("link", { name: "Open the email" })).toHaveAttribute("href", `/app/inbox?mail=${mail}`);
   } finally {
