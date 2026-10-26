@@ -22,7 +22,7 @@ import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
 import { Badge, IconTile, NotForYou, PageHead, storage, Toast, type Kind } from "../ui";
 import { Item, List } from "../motion";
 import { Pending } from "../pending";
-import { STAGES, stageNames, reminderStages } from "@/src/lib/reminders";
+import { STAGES, askChoices, askDays, stageNames, reminderStages } from "@/src/lib/reminders";
 import { isMailApi, mailSignInReady, signInNames, signInNotReady } from "@/src/lib/mail-oauth";
 import { mailApis, type MailApi } from "@/src/lib/mail-view";
 import { MailboxForm } from "./mailbox-form";
@@ -608,6 +608,18 @@ export default async function Settings({
               <fieldset>
                 <legend>When to remind</legend>
                 <div className="set-grid">{STAGES.map((day) => <label className="check" key={day}><input type="checkbox" name="stage" value={day} defaultChecked={reminderStages(settings).includes(day)} />{stageNames[day]}</label>)}</div>
+              </fieldset>
+              <fieldset>
+                <legend>Ask for papers before the due date</legend>
+                <p className="hint">InboxCA emails the client a list of the papers each return needs, with a private link to upload them. It leaves out papers you already have. If nothing comes back, it emails again every 3 days. After two of these, the person who looks after the client is asked to call.</p>
+                <div className="set-fields">{Object.entries({ monthly: "Monthly returns", quarterly: "Quarterly returns", yearly: "Yearly returns" }).map(([often, label]) => (
+                  <div key={often}>
+                    <label htmlFor={`ask-${often}`}>{label}</label>
+                    <select id={`ask-${often}`} name={`ask_${often}`} defaultValue={askDays(settings)[often]}>
+                      {askChoices.map((days) => <option key={days} value={days}>{days ? `${days} days before` : "Off"}</option>)}
+                    </select>
+                  </div>
+                ))}</div>
               </fieldset>
               <label className="check">
                 <input className="toggle" type="checkbox" name="acknowledge" defaultChecked={settings.acknowledge === true} />

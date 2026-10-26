@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { STAGES } from "@/src/lib/reminders";
+import { ASK_DAYS, askChoices, STAGES } from "@/src/lib/reminders";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
@@ -592,7 +592,12 @@ export async function manageClient(form: FormData) {
 export async function saveReminders(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
-  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", acknowledge: form.get("acknowledge") === "on", reminder_stages: STAGES.filter((day) => form.getAll("stage").includes(String(day))) } }).eq("id", membership.firmId);
+  // Days before the due date to ask for papers, by how often the return comes; 0 is Off.
+  const ask_days = Object.fromEntries(Object.entries(ASK_DAYS).map(([often, usual]) => {
+    const days = Number(form.get(`ask_${often}`) ?? usual);
+    return [often, askChoices.includes(days) ? days : usual];
+  }));
+  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", acknowledge: form.get("acknowledge") === "on", reminder_stages: STAGES.filter((day) => form.getAll("stage").includes(String(day))), ask_days } }).eq("id", membership.firmId);
   redirect("/app/settings?group=reminders&saved=reminders#reminders");
 }
 
@@ -669,19 +674,58 @@ export async function manageTasks(form: FormData) {
 const calendarBack = (form: FormData, ...notes: [string, string][]) =>
   `/app/calendar?${new URLSearchParams([...["view", "day", "code", "page", "month"].map((key) => [key, String(form.get(key) ?? "")]), ...notes].filter(([, value]) => value))}`;
 
-// Calendar: Remind client, after its preview. The reminder job emails the client once, from
-// the firm's mailbox, about its returns due within 7 days, the same email as the daily
-// reminders; it waits 20 seconds so Undo can stop it. For those who manage clients.
+// Where Send reminder now came from, to go back to: a paper item's page, the client's Returns
+// tab, or the Calendar view.
+const remindBack = (form: FormData, ...notes: [string, string][]) => {
+  const [from, client, request] = ["from", "client", "request"].map((key) => String(form.get(key) ?? ""));
+  if (from === "papers" && z.uuid().safeParse(request).success) return `/app/papers/${request}?${new URLSearchParams(notes)}`;
+  if (from === "client" && z.uuid().safeParse(client).success) return `/app/clients/${client}?${new URLSearchParams([["tab", "returns"], ...notes])}`;
+  return calendarBack(form, ...notes);
+};
+
+// Send reminder now: the Calendar's Remind client (after its preview), the client's Returns tab
+// and a paper item. The reminder job emails the client once, from the firm's mailbox, about its
+// returns late or due within 7 days and the papers still missing, the same email as the daily
+// reminders; it waits 20 seconds so Undo can stop it. For those who manage clients and those who
+// look after this client; never a second email to the client in a day.
 export async function remindClient(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
-  if (!membership || !canManageClients(membership.role)) redirect("/app/calendar");
+  if (!membership) redirect("/app");
   const { data: client } = await supabase.from("clients").select("id").eq("firm_id", membership.firmId).eq("id", String(form.get("client") ?? "")).is("archived_at", null).maybeSingle();
-  if (!client) redirect(calendarBack(form));
+  if (!client || !(canManageClients(membership.role) || (await supabase.rpc("looks_after", { target_firm: membership.firmId, client: client.id })).data)) redirect(remindBack(form));
   const admin = supabaseAdmin();
+  const { count: sent } = await admin.from("activity_log").select("at", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("entity_id", client.id).eq("action", "reminder.sent").gte("at", `${todayInIndia()}T00:00:00+05:30`);
+  if (sent) redirect(remindBack(form, ["error", "reminded"]));
   const { data: job, error } = await admin.from("jobs").insert({ firm_id: membership.firmId, kind: "reminders", entity_type: "client", entity_id: client.id, idempotency_key: `reminders:client:${client.id}:${randomUUID()}`, run_at: new Date(Date.now() + 20_000).toISOString() }).select("id").single();
-  if (error) redirect(calendarBack(form, ["error", "send"]));
+  if (error) redirect(remindBack(form, ["error", "send"]));
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "reminders.asked", entity_type: "client", entity_id: client.id, details: { what: "soon" } });
-  redirect(calendarBack(form, ["reminding", client.id], ["job", String(job.id)]));
+  redirect(remindBack(form, ["reminding", client.id], ["job", String(job.id)]));
+}
+
+// A paper item: the person asked the client for the missing papers by phone. It counts as an
+// ask, so the next follow up waits 3 days, and the item leaves until one more goes unanswered.
+export async function askedByPhone(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const { data: request } = await supabase.from("requests").select("id, client_id, details").eq("firm_id", membership.firmId).eq("kind", "documents").eq("status", "pending").eq("id", String(form.get("request") ?? "")).maybeSingle();
+  if (!request?.client_id || !(canManageClients(membership.role) || (await supabase.rpc("looks_after", { target_firm: membership.firmId, client: request.client_id })).data)) redirect("/app");
+  const admin = supabaseAdmin();
+  await admin.from("requests").update({ details: { ...(request.details as Record<string, unknown>), chased: todayInIndia() } as unknown as NonNullable<Json> }).eq("id", request.id);
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.phoned", entity_type: "request", entity_id: request.id });
+  revalidatePath("/app", "layout");
+  redirect(`/app/papers/${request.id}?phoned=1`);
+}
+
+// A paper item: every paper is in; opening the figures to check them takes it off the list.
+export async function checkFigures(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const { data: item } = await supabase.from("requests").select("id, client_id").eq("firm_id", membership.firmId).eq("kind", "alert").eq("entity_type", "papers_in").eq("entity_id", String(form.get("request") ?? "")).maybeSingle();
+  if (!item?.client_id) redirect("/app");
+  const { data: seen } = await supabaseAdmin().from("requests").update({ status: "done" }).eq("id", item.id).eq("status", "pending").select("id").maybeSingle();
+  if (seen) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.changed", entity_type: "request", entity_id: item.id });
+  revalidatePath("/app", "layout");
+  redirect(`/app/clients/${item.client_id}?tab=extraction`);
 }
 
 export type MailboxState = { error?: string; values?: Record<string, string> };
@@ -1429,6 +1473,7 @@ export async function uploadToRequest(form: FormData): Promise<"got" | "file" | 
   const sent = await receive(request.firm_id, null, request.clients, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, opened.drive).catch(() => null);
   if (!sent) return "later";
   if ("unsafe" in sent) return "unsafe";
+  const before = item.received.length;
   for await (const paper of sent.papers) {
     if (details.items.reduce((sum, entry) => sum + entry.received.length, 0) >= 100) break;
     const saved = await saveForClient(
@@ -1443,6 +1488,8 @@ export async function uploadToRequest(form: FormData): Promise<"got" | "file" | 
     if (saved === "drive") return "later";
     if (saved !== "twin") item.received.push(saved.id);
   }
+  // A paper from the client answers the asking: its follow ups count again from today.
+  if (item.received.length > before && details.followups?.length) Object.assign(details, { followups: [], since: todayInIndia() });
   const done = !form.get("more") && details.items.every((entry) => entry.received.length > 0);
   await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: done ? "done" : "pending" }).eq("id", request.id);
   // One emailed receipt a sitting: each file moves the waiting receipt 10 minutes on, and the
@@ -2132,19 +2179,19 @@ export async function sendNow(form: FormData) {
   redirect(`/app?sending=${what}&job=${job.id}`);
 }
 
-// Undo on the toast: the send stops if it has not started yet. From the Calendar it is one
-// client's reminder, which those who manage that client may stop.
+// Undo on the toast: the send stops if it has not started yet. One client's reminder (the
+// Calendar, the client's Returns tab, a paper item) may be stopped by whoever may send it.
 export async function stopSend(form: FormData) {
   const { supabase, membership } = await currentWriter();
-  const calendar = form.has("view");
-  if (!membership || !(["owner", "partner"].includes(membership.role) || (calendar && canManageClients(membership.role)))) redirect("/app");
+  const one = form.has("client");
+  if (!membership) redirect("/app");
+  const { data: client } = one ? await supabase.from("clients").select("id").eq("firm_id", membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle() : { data: null };
+  const mayStop = one ? !!client && (canManageClients(membership.role) || !!(await supabase.rpc("looks_after", { target_firm: membership.firmId, client: client.id })).data) : ["owner", "partner"].includes(membership.role);
+  if (!mayStop) redirect("/app");
   let jobs = supabaseAdmin().from("jobs").update({ state: "cancelled" }).eq("firm_id", membership.firmId).eq("kind", "reminders").eq("state", "pending").eq("id", Number(form.get("job")));
-  if (calendar) {
-    const { data: client } = await supabase.from("clients").select("id").eq("firm_id", membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
-    jobs = jobs.eq("entity_type", "client").eq("entity_id", client?.id ?? "00000000-0000-0000-0000-000000000000");
-  }
+  if (one) jobs = jobs.eq("entity_type", "client").eq("entity_id", client!.id);
   const { data } = await jobs.select("id");
-  if (calendar) redirect(calendarBack(form, data?.length ? ["stopped", "1"] : ["error", "started"]));
+  if (one) redirect(remindBack(form, data?.length ? ["stopped", "1"] : ["error", "started"]));
   redirect(data?.length ? "/app?stopped=1" : "/app?error=started");
 }
 

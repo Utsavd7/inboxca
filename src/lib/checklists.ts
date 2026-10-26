@@ -1,3 +1,4 @@
+import { todayInIndia } from "./calendar";
 import type { ClientKind } from "./clients";
 import type { WorkType } from "./drive";
 import type { Json } from "@/src/db/types";
@@ -37,7 +38,10 @@ export function workOfService(code: string): WorkType | null {
 }
 
 export type RequestItem = { type: string; work: WorkType; received: string[]; checked?: boolean };
-export type DocumentRequest = { period: string; items: RequestItem[]; link_hash: string; link_enc?: string; followups?: string[]; registration?: string };
+// returns: the return codes a request InboxCA opened itself is for. since: the day the current
+// round of asking began (its first email, or the client's latest paper). chased: the last day a
+// person chased the papers, by phone or by a reminder sent by hand.
+export type DocumentRequest = { period: string; items: RequestItem[]; link_hash: string; link_enc?: string; followups?: string[]; registration?: string; returns?: string[]; since?: string; chased?: string };
 
 // A portal file dropped in (PLAN.md 5.3.1) is received against the open item asked for by its
 // name, however it was spelled ("GSTR-2B", "gstr 2b"), when the request is for its month or
@@ -60,5 +64,15 @@ export async function receiveAsked(admin: ReturnType<typeof supabaseAdmin>, clie
     const details = ask.details as unknown as DocumentRequest;
     if (receiveItem(details, type, period, documentId))
       await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: details.items.every((entry) => entry.received.length) ? "done" : "pending" }).eq("id", ask.id);
+  }
+}
+
+// A paper from the client answers the asking: each of its open requests already followed up
+// counts its follow ups again from today, so a person is asked to call only after two more.
+export async function clientReplied(admin: ReturnType<typeof supabaseAdmin>, clientId: string) {
+  const { data: asks } = await admin.from("requests").select("id, details").eq("client_id", clientId).eq("kind", "documents").eq("status", "pending");
+  for (const ask of asks ?? []) {
+    const details = ask.details as unknown as DocumentRequest;
+    if (details.followups?.length) await admin.from("requests").update({ details: { ...details, followups: [], since: todayInIndia() } as unknown as NonNullable<Json> }).eq("id", ask.id);
   }
 }

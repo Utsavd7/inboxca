@@ -24,6 +24,8 @@ import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
 import { MailWeek } from "./mail-week";
 import { MarkFiled } from "./mark-filed";
 import { Count, Draw, List, Presence, Press } from "./motion";
+import { PaperRows } from "./paper-items";
+import { papersWorkItems } from "@/src/lib/work/papers";
 import { Pending } from "./pending";
 import { firmAccounts } from "./shell-data";
 import { Celebrate } from "./today-client";
@@ -260,7 +262,7 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
     owner ? accounts : null,
     owner ? Promise.resolve(supabase.from("devices").select("id").eq("firm_id", firm).eq("status", "waiting")) : null,
     Promise.resolve(supabase.rpc("notice_alerts", { target_firm: firm }).limit(10)),
-    lead ? Promise.resolve(supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending").limit(20)) : null,
+    lead ? Promise.resolve(supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").neq("entity_type", "papers_in").eq("status", "pending").limit(20)) : null,
   ]).then(async ([asks, mailboxes, devices, noticeAlerts, alerts]) => {
     const waitingIds = devices?.data?.map((device) => device.id) ?? [];
     const waitingToday = waitingIds.length
@@ -387,7 +389,8 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
       : Promise.resolve(null);
   const preview = sends && (params.confirm === "late" || params.confirm === "papers") ? sendPreview(supabase, firm, params.confirm) : Promise.resolve(null);
 
-  return { today, owner, sends, membership, userId, replies, waits, papers, late, week, rules, toApprove, looks, month, lateTrend, papersWeek, mailWeek, feed, setup, assigned, askPush, pushKey, marking, preview, confirm: params.confirm };
+  const paperItems = papersWorkItems({ supabase, membership, userId });
+  return { today, owner, sends, membership, userId, replies, waits, papers, late, week, rules, toApprove, looks, month, lateTrend, papersWeek, mailWeek, feed, setup, assigned, askPush, pushKey, marking, preview, confirm: params.confirm, paperItems };
 }
 
 const returnName = (rule: Map<string, { name: string | null; frequency: string | null }>, code: string | null, period: string | null) => `${rule.get(code ?? "")?.name ?? code ?? ""} for ${periodLabel(rule.get(code ?? "")?.frequency ?? null, period)}`;
@@ -500,12 +503,12 @@ function Sparkline({ points }: { points: number[] }) {
 // Needs you now: what the owner must look at, clients waiting for a reply, and returns to
 // approve, most urgent first, each with one action.
 async function NeedsNow({ data }: { data: Data }) {
-  const [looks, replies, waits, toApprove] = await Promise.all([data.looks, data.replies, data.waits, data.toApprove]);
+  const [looks, replies, waits, toApprove, paperItems] = await Promise.all([data.looks, data.replies, data.waits, data.toApprove, data.paperItems]);
   const replyCount = replies.count ?? 0;
   const replyRows = (replies.data ?? [])
     .map((request) => ({ request, at: waits.at.get(request.entity_id) }))
     .sort((a, b) => (a.at ?? "").localeCompare(b.at ?? ""));
-  const total = looks.length + replyCount + toApprove.length;
+  const total = looks.length + replyCount + toApprove.length + paperItems.length;
   return (
     <Card id="t-now" title="Needs you now" Icon={Inbox} kind="reply" count={total} countTone={looks.some((look) => look.urgent) ? "late" : "warn"} className="today-now">
       {total ? (
@@ -529,6 +532,7 @@ async function NeedsNow({ data }: { data: Data }) {
               }
             />
           ))}
+          <PaperRows items={paperItems} />
           {replyRows.map(({ request, at }) => {
             const client = request.clients?.name ?? "A contact";
             return (
