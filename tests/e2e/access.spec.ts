@@ -57,8 +57,8 @@ test("the owner chooses a preset in one step, and it sets the office rules", asy
 
   await preset.getByRole("radio", { name: /^Standard:/ }).check();
   await preset.getByRole("button", { name: "Use this preset" }).click();
-  await expect.poll(async () => (await settings()).office.on).toBe(false);
-  expect((await settings()).access).toEqual({ hours_only: false });
+  // The office switch and the access rules are two writes; wait for the second.
+  await expect.poll(async () => { const { office, access } = await settings(); return { on: office.on, access }; }).toEqual({ on: false, access: { hours_only: false } });
 });
 
 test("the owner names a co-admin, who changes the access settings but not the owner's", async () => {
@@ -76,7 +76,7 @@ test("the owner names a co-admin, who changes the access settings but not the ow
   const preset = partner.locator("section#preset");
   await preset.getByRole("radio", { name: /^Solo CA:/ }).check();
   await preset.getByRole("button", { name: "Use this preset" }).click();
-  await expect.poll(async () => (await settings()).office).toMatchObject({ on: true, away: false, co_admin: partnerId });
+  await expect.poll(settings).toMatchObject({ office: { on: true, away: false, co_admin: partnerId }, access: { hours_only: false, idle_minutes: 15 } });
   expect((await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and actor_id = $2 and action = 'office.on'", [firm.firmId, partnerId]))[0].n).toBe(1);
 
   // A connection InboxCA cannot see (this browser sends no address) is refused with a note.

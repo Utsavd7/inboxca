@@ -124,8 +124,9 @@ describe("the compliance calendar", () => {
   it("plans a service only for its kinds of client and keeps tasks already made", () =>
     rollback(db, async () => {
       await seed();
-      // Each kind list is in 20261028300000_services_by_kind.sql with the rule behind it.
-      const kinds = await db.query("select code, client_kinds from public.compliance_types where period_key = '' and client_kinds is not null order by code");
+      // Each kind list is in 20261028300000_services_by_kind.sql with the rule behind it; other
+      // branches' return types in the shared database are not this test's.
+      const kinds = await db.query("select code, client_kinds from public.compliance_types where period_key = '' and client_kinds is not null and code = any($1) order by code", [["DIR3KYC", "ITR_NA", "LLP11", "LLP8", "TAX_AUDIT"]]);
       expect(kinds.rows).toEqual([
         { code: "DIR3KYC", client_kinds: ["individual", "business", "tax_audit"] },
         { code: "ITR_NA", client_kinds: ["individual", "business", "llp", "trust"] },
@@ -136,7 +137,7 @@ describe("the compliance calendar", () => {
       expect((await setServices("pan", ["ITR_NA", "ADV_TAX"])).ok).toBe(true);
       await planAsOf("2026-04-01");
       await db.query("update public.clients set kind = 'company' where id = $1", [CLIENT]);
-      await db.query("select private.plan_tasks(null, '2026-04-01')");
+      await db.query("select private.plan_tasks_for(null, $1, '2026-04-01')", [FIRM]);
       expect(await due("ITR_NA")).toEqual([{ period_key: "2026-03", due_on: "2026-07-31" }]);
       await planAsOf("2026-04-01");
       expect(await due("ITR_NA")).toEqual([]);

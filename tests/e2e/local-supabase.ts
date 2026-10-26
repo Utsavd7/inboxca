@@ -1,8 +1,9 @@
-import { createHmac } from "node:crypto";
-import { expect, type Page } from "@playwright/test";
+import { createHmac, randomBytes } from "node:crypto";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import nodemailer from "nodemailer";
 import { Client } from "pg";
 import { localSupabase } from "../local-env";
 
@@ -116,6 +117,85 @@ export async function emailStep(page: Page, email: string) {
   const { code } = await askForCode(page, email);
   await page.getByLabel("Code from the email").fill(code);
   await page.getByRole("button", { name: "Continue" }).click();
+}
+
+// A base32 key for a person's authenticator app, for seedFirm and signIn.
+export const appKey = () => Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+
+// Another active member of a seeded firm, with their authenticator app set up. The firm's
+// remove() deletes them when given their email.
+export async function addPerson(firmId: string, email: string, role: string, key: string) {
+  const local = localSupabase();
+  const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
+  const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true });
+  if (error) throw error;
+  await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, $3, 'active')", [firmId, data.user.id, role]);
+  await query(local.dbUrl, "insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, secret, created_at, updated_at) values (gen_random_uuid(), $1, 'Test app', 'totp', 'verified', $2, now(), now())", [data.user.id, key]);
+  return data.user.id;
+}
+
+// The whole sign in, for someone whose authenticator app is already set up.
+export async function signIn(page: Page, email: string, key: string) {
+  await emailStep(page, email);
+  await page.getByLabel("6 digit code from the app").fill(totp(key));
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(/\/app$/);
+}
+
+// The local GreenMail server makes a mailbox (its password the address) for every address it
+// receives mail for, so a first email makes one.
+export const testSmtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
+export const makeMailbox = (address: string) => testSmtp.sendMail({ from: "setup@invented.test", to: address, subject: "Invented test setup", text: "Makes the test mailbox" });
+
+// The text of every email in a GreenMail mailbox but the one that made it, oldest first.
+export async function mailTexts(address: string) {
+  const imap = new ImapFlow({ host: "127.0.0.1", port: 3143, secure: false, auth: { user: address, pass: address }, logger: false });
+  await imap.connect();
+  try {
+    const texts: string[] = [];
+    if ((await imap.mailboxOpen("INBOX")).exists) for await (const message of imap.fetch("1:*", { source: true })) texts.push((await simpleParser(message.source!)).text ?? "");
+    return texts.filter((text) => !text.includes("Makes the test mailbox"));
+  } finally {
+    await imap.logout();
+  }
+}
+
+// Connects the firm's email to a GreenMail mailbox.
+export async function connectTestMailbox(page: Page, address: string) {
+  await makeMailbox(address);
+  await page.goto("/app/settings?group=email");
+  const card = page.locator("section#mailbox");
+  await card.getByLabel("The firm's email address").fill(address);
+  await card.getByLabel("Its password").fill(address);
+  await card.getByText("Change server settings").click();
+  await card.getByLabel("Incoming (IMAP) server").fill("127.0.0.1");
+  await card.getByLabel("Incoming port").fill("3143");
+  await card.getByLabel("Outgoing (SMTP) server").fill("127.0.0.1");
+  await card.getByLabel("Outgoing port").fill("3025");
+  await card.getByRole("button", { name: "Connect email" }).click();
+  await expect(card.getByRole("status")).toHaveText(`Connected: ${address}`);
+}
+
+// Runs the test server's job worker until the firm has no due or running job. Every worker of
+// a run shares that server, and another worker's sweep may be holding this firm's job, so a
+// fixed number of sweeps can return before the work is done.
+export async function runJobs(request: APIRequestContext, firmId: string) {
+  const { TEST_WORKER_SECRET } = await import("../../playwright.config");
+  const left = "select count(*)::int as n from public.jobs where firm_id = $1 and (state = 'claimed' or state = 'pending' and run_at <= now())";
+  await expect.poll(async () => {
+    await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+    return (await query(localSupabase().dbUrl, left, [firmId]))[0].n;
+  }, { timeout: 60_000 }).toBe(0);
+}
+
+// Reads the firm's mailbox now, with every job that starts. private.queue_mail_polls() queues
+// at most one poll an account a minute, for every firm in the shared database, so another
+// run's call can leave this firm's poll already done (or held by another sweep) before the
+// mail arrived. This waits for any poll under way, then runs one of the firm's own.
+export async function pollFirmMail(request: APIRequestContext, firmId: string) {
+  await runJobs(request, firmId);
+  await query(localSupabase().dbUrl, "insert into public.jobs (firm_id, kind, entity_type, entity_id, idempotency_key) select firm_id, 'mail_poll', 'account', id, 'mail_poll:test:' || gen_random_uuid() from public.connected_accounts where firm_id = $1 and kind = 'mail' and status = 'connected'", [firmId]);
+  await runJobs(request, firmId);
 }
 
 // Use the server's form before browser hydration removes its action fields.

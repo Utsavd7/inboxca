@@ -226,8 +226,9 @@ it("opens a support session only after the owner approves it, for an hour, to th
     await asAdmin(admin);
     const look = (await db.query("select public.admin_support_view($1) v", [firm])).rows[0].v;
     expect(look).toMatchObject({ people: [{ email: "owner@admin-console.test", role: "owner", status: "active" }], clients: 1, names: ["Invented Secret Client"] });
-    expect(Date.parse(look.until) - Date.now()).toBeGreaterThan(55 * 60_000);
-    expect(Date.parse(look.until) - Date.now()).toBeLessThanOrEqual(3600_000);
+    // An hour by the database's clock (this transaction's now(), when it was approved); the
+    // test machine's clock can differ from it by tens of milliseconds.
+    expect((await db.query("select $1::timestamptz - now() = interval '1 hour' as hour", [look.until])).rows[0].hour).toBe(true);
 
     await actAs(db, owner, "aal2", session(owner));
     expect((await db.query("select public.answer_support($1, 'end') ok", [firm])).rows[0].ok).toBe(true);

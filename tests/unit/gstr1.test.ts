@@ -8,6 +8,10 @@ import {xlsxEntries} from "@/src/lib/sheet";
 import type {Figure} from "@/src/lib/datasets";
 import {inventedGstin} from "../fixtures/portal";
 
+// Each fill rewrites the 7 MB official workbook: its 60 MB of sheets are compressed again
+// (worker/workbook.ts), about 0.6 s a call on an idle laptop and several times that when
+// other runs load the machine. A test makes up to 20 calls.
+const slow=120_000;
 // Columns and choices: the blank official workbooks. JSON checks: the pinned GSTN schemas.
 const templates=catalog.filter(row=>row.form_code==="GSTR1").map(row=>templateSchema.parse(row));
 const rows=(section:string,values:string[]):Map<string,Figure>=>new Map(values.flatMap((value,column)=>value==="" ? [] : [[`${section}.r2.c${column}`,{label:"Invented register field",value,kind:"text"} as Figure] as const]));
@@ -26,7 +30,7 @@ it("fills current and older official workbooks without changing their headings, 
     const hsn=rows(template.version==="2.0" ? "hsn" : "hsn_b2b",["1001","Invented goods","NOS-NUMBERS","1.25","118","18","100","0","9","9","0"]);
     expect(gstr1Workbook(template,period,inventedGstin(),[hsn]).length).toBeGreaterThan(1000);
   }
-},30_000);
+},slow);
 it("checks B2CS and notes against official keys, required fields and code lists",()=>{
   const template=templates[1];
   const small=rows("b2cs",["OE","24-Gujarat","65","18","100","0",""]);
@@ -51,7 +55,7 @@ it("checks B2CS and notes against official keys, required fields and code lists"
   const badCheck=b2b(),taxNumber=badCheck.get("b2b.r2.c0")!.value;
   badCheck.get("b2b.r2.c0")!.value=taxNumber.slice(0,-1)+(taxNumber.endsWith("0") ? "1" : "0");
   expect(()=>gstr1Workbook(template,"2026-09",inventedGstin(),[badCheck])).toThrow("last character");
-},30_000);
+},slow);
 
 it("reads an edited official workbook into fresh source cells and rejects changed headings and unsupported work",async()=>{
   const {editedForm}=await import("../../worker/edited-form"),{writeWorkbook}=await import("../../worker/workbook");
@@ -63,7 +67,7 @@ it("reads an edited official workbook into fresh source cells and rejects change
     const changed=writeWorkbook(bytes,new Map([[path,new Map([[ref,{value,number:false}]])]]));
     expect(()=>editedForm(changed,context)).toThrow();
   }
-},30_000);
+},slow);
 
 it("refuses a formula in a data cell even when its cached value is blank",async()=>{
   const {editedForm}=await import("../../worker/edited-form"),sheets=await import("@/src/lib/sheet");
@@ -72,7 +76,7 @@ it("refuses a formula in a data cell even when its cached value is blank",async(
   parts.set(path,()=>Buffer.from(xml.replace(/<c\b[^>]*r="L5"[^>]*>[\s\S]*?<\/c>/,'<c r="L5"><f>100+1</f><v></v></c>')));
   const spy=vi.spyOn(sheets,"xlsxEntries").mockImplementation(input=>input===bytes ? parts : original(input));
   try {expect(()=>editedForm(bytes,context)).toThrow("Use values");} finally {spy.mockRestore();}
-},30_000);
+},slow);
 
 // The supplier is in Gujarat (24); Maharashtra (27) is another State.
 it("fills large B2C sales, unregistered notes, exports, advances and documents issued in both workbooks",()=>{
@@ -94,7 +98,7 @@ it("fills large B2C sales, unregistered notes, exports, advances and documents i
     expect(files.get(`xl/worksheets/sheet${template.mappings.sheets!.at}.xml`)!().toString()).toContain("<v>50000</v>");
     expect(files.get(`xl/worksheets/sheet${template.mappings.sheets!.exemp}.xml`)!().toString()).toContain("<v>350.50</v>");
   }
-},30_000);
+},slow);
 
 it("refuses rows the official rules put elsewhere or leave out",()=>{
   const template=templates[1],day="2026-09-10",gstin=inventedGstin();
@@ -116,7 +120,7 @@ it("refuses rows the official rules put elsewhere or leave out",()=>{
   // A shipping bill dated after the month is allowed; the invoice is not.
   expect(gstr1Workbook(template,"2026-09",gstin,[rows("exp",["WOPAY","EXP/2",day,"100000","","","2026-10-02","0","100000",""])]).length).toBeGreaterThan(1000);
   expect(()=>gstr1Workbook(template,"2026-09",gstin,[rows("exp",["WOPAY","EXP/2","2026-10-02","100000","","","","0","100000",""])])).toThrow("after");
-},30_000);
+},slow);
 
 // Amendments of earlier months and supplies through e-commerce operators (tables 14, 14A, 15, 15A).
 it("fills the amendment sheets of both workbooks and the e-commerce sheets of v2.2, each row passing the official schema",async()=>{
@@ -154,7 +158,7 @@ it("fills the amendment sheets of both workbooks and the e-commerce sheets of v2
     // The filled workbook reads back, as an edited one does, into the same rows.
     expect(editedForm(bytes,{template,period,gstin:inventedGstin()}).lines.find(line=>line.field===(v2 ? "b2ba.r5.c4" : "ecoab2b.r5.c6"))?.value).toBe(v2 ? "INV/1A" : "DOC/1A");
   }
-},30_000);
+},slow);
 
 it("refuses amendments of this month, choices outside the workbook's lists and an operator from another State",()=>{
   const template=templates[1],day="2026-09-10",gstin=inventedGstin(),buyer=inventedGstin("ZZZPZ0002Z");
@@ -174,4 +178,4 @@ it("refuses amendments of this month, choices outside the workbook's lists and a
   // An amendment must be of an earlier month: 2025-26 SEPTEMBER is September 2025.
   expect(()=>gstr1Workbook(template,"2025-09",gstin,[rows("b2csa",["2025-26","SEPTEMBER","27-Maharashtra","OE","","18","10000","",""])])).toThrow("earlier month");
   expect(gstr1Workbook(template,"2026-09",gstin,[rows("b2csa",["2025-26","SEPTEMBER","27-Maharashtra","OE","","18","10000","",""])]).length).toBeGreaterThan(1000);
-},30_000);
+},slow);
