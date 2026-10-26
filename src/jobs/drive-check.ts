@@ -1,10 +1,17 @@
 import { settleVersions } from "@/src/lib/documents";
 import { openDrive } from "@/src/lib/drive-account";
+import { intakeLimits } from "@/src/lib/file-worker";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { MAX_ATTEMPTS, type Handler } from "./runner";
 
-// Under this much free space the owner is told the drive is nearly full.
-export const LOW_SPACE = 1024 ** 3;
+// Under this much free space the owner is told the drive is nearly full: about a year of the
+// firm's files (PLAN.md 5.5.1), measured as the papers it added in the last 12 months
+// (drive_year_bytes, from its usage ledger). A new firm with little yet is still warned below
+// the most one upload can add, a ZIP of 500 MB unpacked (intakeLimits, 5.15).
+export const lowSpace = async (firm: string) => {
+  const { data } = await supabaseAdmin().rpc("drive_year_bytes", { target_firm: firm });
+  return Math.max(Number(data ?? 0), intakeLimits.unpacked);
+};
 
 // The daily drive check (PLAN.md 5.5.1). Reads InboxCA's folder in the firm's drive once:
 // a filed document whose file is gone is marked missing, one found again is put back, and
@@ -50,9 +57,11 @@ export const driveCheck: Handler = async (job) => {
     }
   }
 
+  // Reached again after being away: the jobs that ran out of tries meanwhile go once more.
+  await admin.rpc("requeue_drive_jobs", { target_firm: firm });
   const alerts = {
     drive_shared: seen.shared ? {} : null,
-    drive_full: seen.freeBytes !== null && seen.freeBytes < LOW_SPACE ? { free_bytes: seen.freeBytes } : null,
+    drive_full: seen.freeBytes !== null && seen.freeBytes < (await lowSpace(firm)) ? { free_bytes: seen.freeBytes } : null,
     drive_missing: missing ? { files: missing } : null,
     drive_away: null,
   };

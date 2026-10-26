@@ -140,10 +140,15 @@ async function Usage({ firm }: { firm: string }) {
   );
 }
 
-// The status line: is the firm's email being read, is the drive linked, when the next
-// reminders go, and the shortcuts key. One small query, shared with Today.
+// The status line: is the firm's email being read, is the drive linked (or away, while the
+// drive check's alert is open), when the next reminders go, and the shortcuts key. One small
+// query shared with Today, and one for the alert.
 async function StatusLine({ owner, reminders }: { owner: boolean; reminders: boolean }) {
-  const accounts = await firmAccounts();
+  const { supabase, membership } = await currentMember();
+  const [accounts, { count: away }] = await Promise.all([
+    firmAccounts(),
+    supabase.from("requests").select("id", { count: "exact", head: true }).eq("firm_id", membership?.firmId ?? "").eq("kind", "alert").eq("entity_type", "drive_away").eq("status", "pending"),
+  ]);
   const mail = accounts.find((account) => account.kind === "mail");
   const drive = accounts.find((account) => account.kind === "drive");
   const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric", hourCycle: "h23" }));
@@ -157,8 +162,8 @@ async function StatusLine({ owner, reminders }: { owner: boolean; reminders: boo
         {reading ? "Firm email connected, read every 2 minutes" : fix(mail ? "Firm email needs connecting again" : "Firm email not connected", "/app/settings#mailbox")}
       </span>
       <span>
-        <span className={`foot-dot${drive ? " on" : ""}`} aria-hidden />
-        {drive ? "Drive linked" : fix("Drive not linked", "/app/settings#drive")}
+        <span className={`foot-dot${drive && away ? " off" : drive ? " on" : ""}`} aria-hidden />
+        {drive && away ? fix("Drive cannot be reached, new files wait", "/app/settings#drive") : drive ? "Drive linked" : fix("Drive not linked", "/app/settings#drive")}
       </span>
       {reminders && reading && (
         <span>

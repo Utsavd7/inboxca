@@ -8,6 +8,9 @@ import { INCOMING, type Drive } from "./drive";
 // New files go under /InboxCA; nothing else is touched except the folders the owner ticks.
 const ROOT = "/InboxCA";
 const appKey = () => process.env.DROPBOX_APP_KEY ?? "";
+// Tests send every Dropbox call to a fake on this machine, only with MAIL_ALLOW_LOCAL, as
+// the mail providers' (mail-api.ts).
+const at = (url: string) => (process.env.MAIL_ALLOW_LOCAL === "1" && process.env.DROPBOX_TEST_URL ? url.replace("https://", `${process.env.DROPBOX_TEST_URL}/`) : url);
 
 // The PKCE pair: the verifier stays with the owner's browser, the challenge goes to Dropbox.
 export function pkce() {
@@ -16,7 +19,7 @@ export function pkce() {
 }
 
 export function dropboxSignIn(state: string, challenge: string, redirectUri: string) {
-  const url = new URL("https://www.dropbox.com/oauth2/authorize");
+  const url = new URL(at("https://www.dropbox.com/oauth2/authorize"));
   for (const [key, value] of Object.entries({
     client_id: appKey(),
     response_type: "code",
@@ -31,7 +34,7 @@ export function dropboxSignIn(state: string, challenge: string, redirectUri: str
 }
 
 async function token(body: Record<string, string>) {
-  const response = await fetch("https://api.dropboxapi.com/oauth2/token", {
+  const response = await fetch(at("https://api.dropboxapi.com/oauth2/token"), {
     method: "POST",
     body: new URLSearchParams({ client_id: appKey(), ...body }),
     signal: AbortSignal.timeout(15_000),
@@ -70,7 +73,7 @@ export function dropboxNotice(body: Uint8Array, signature: string | null, secret
 }
 
 async function call(accessToken: string, route: string, body: unknown) {
-  const response = await fetch(`https://api.dropboxapi.com/2/${route}`, {
+  const response = await fetch(at(`https://api.dropboxapi.com/2/${route}`), {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, ...(body === null ? {} : { "Content-Type": "application/json" }) },
     body: body === null ? undefined : JSON.stringify(body),
@@ -100,7 +103,7 @@ export function dropboxDrive(refreshToken: string): Drive {
       return path;
     },
     async save(folderId, name, bytes) {
-      const response = await fetch("https://content.dropboxapi.com/2/files/upload", {
+      const response = await fetch(at("https://content.dropboxapi.com/2/files/upload"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${await accessToken()}`,
@@ -192,7 +195,7 @@ export function dropboxDrive(refreshToken: string): Drive {
       if ("error" in removed && !String(removed.error).startsWith("path_lookup/not_found")) throw new Error("dropbox_delete");
     },
     async read(fileId) {
-      const response = await fetch("https://content.dropboxapi.com/2/files/download", {
+      const response = await fetch(at("https://content.dropboxapi.com/2/files/download"), {
         method: "POST",
         headers: { Authorization: `Bearer ${await accessToken()}`, "Dropbox-API-Arg": apiArg({ path: fileId }) },
         signal: AbortSignal.timeout(120_000),

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import Form from "next/form";
 import Link from "next/link";
-import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
+import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
 import { firmAdmin, HOURS_KEYS, memberHours, officeApprover, type Office } from "@/src/lib/office";
 import { presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
@@ -13,7 +13,7 @@ import { documentTypes } from "@/src/lib/documents";
 import { switchable, defaults, type Permissions, type Standing } from "@/src/lib/rights";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { folderOrderNames, namings } from "@/src/lib/drive";
-import { LOW_SPACE } from "@/src/jobs/drive-check";
+import { lowSpace } from "@/src/jobs/drive-check";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
@@ -43,11 +43,12 @@ const problems: Record<string, [string, string]> = {
   drive_taken: ["drive", "A drive is already connected. Disconnect it first."],
   drive_denied: ["drive", "The drive was not allowed, so nothing was connected."],
   drive_failed: ["drive", "The drive did not finish connecting. Try again."],
+  drive_other: ["drive", "That is a different Dropbox account. Sign in with the one already connected, or disconnect it first."],
   close_name: ["close", "Type the firm name exactly as it is shown."],
   special: ["special", "The dates must run forward and the closing time must be after the opening time."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { preset: "Preset saved.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Papers saved.", permissions: "Permissions saved.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft." };
+const savedNames: Record<string, string> = { preset: "Preset saved.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Papers saved.", permissions: "Permissions saved.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now." };
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "drive"]],
@@ -136,7 +137,7 @@ export default async function Settings({
   });
   const scopeIds=group === "people" ? [...new Set([...Object.values(permissions).flatMap(column=>column?.scope?.clients ?? []),...always.flatMap(person=>person.rights.flatMap(grant=>"clients" in grant ? grant.clients ?? [] : []))])] : [];
   // Only the server reads a drive's settings; this page is the owner's.
-  const [{ data: driveSettings }, { data: driveSetup }, { data: mailServers }, driveAddress, mailAddress, { data: scopeClients }] = await Promise.all([
+  const [{ data: driveSettings }, { data: driveSetup }, { data: mailServers }, driveAddress, mailAddress, { data: scopeClients }, { data: driveAway }, low] = await Promise.all([
     drive ? admin.from("connected_accounts").select("settings").eq("id", drive.id).single() : Promise.resolve({ data: null }),
     // What InboxCA set up in the drive after Connect (the drive_setup job).
     drive ? supabase.from("activity_log").select("details").eq("firm_id", membership.firmId).eq("action", "drive.setup").eq("entity_id", drive.id).order("at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
@@ -144,6 +145,9 @@ export default async function Settings({
     drive && crypto.decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc),
     mailbox && crypto.decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc),
     scopeIds.length ? supabase.from("clients").select("id,name").eq("firm_id", membership.firmId).in("id", scopeIds) : Promise.resolve({ data: [] }),
+    // The daily check could not reach the drive (drive_check), and how much space a year needs.
+    drive ? supabase.from("requests").select("id").eq("firm_id", membership.firmId).eq("kind", "alert").eq("entity_type", "drive_away").eq("status", "pending").maybeSingle() : Promise.resolve({ data: null }),
+    drive ? lowSpace(membership.firmId) : 0,
   ]);
   const folderOrder = (driveSettings?.settings as { folder_order?: string } | undefined)?.folder_order ?? "year_client_work";
   const naming = (driveSettings?.settings as { naming?: string } | undefined)?.naming ?? "client_type_period";
@@ -155,7 +159,7 @@ export default async function Settings({
     [true, !clientFolders ? "Each client gets a folder when their first paper arrives" : clientFolders === 1 ? "Made this year's folder for your client" : `Made this year's folder for each of your ${clientFolders} clients`],
     [!!setup.test_file, setup.test_file ? "Saved a test file, read it back and removed it" : "Could not read back a test file. Disconnect the drive and connect it again."],
     [!setup.shared, setup.shared ? "The InboxCA folder is shared or has a link. Stop the sharing in your drive." : "The InboxCA folder is shared with nobody"],
-    [setup.free_bytes == null || setup.free_bytes >= LOW_SPACE, setup.free_bytes == null ? "Your drive does not say how much space is left" : `${(setup.free_bytes / 1024 ** 3).toFixed(1)} GB free in your drive`],
+    [setup.free_bytes == null || setup.free_bytes >= low, setup.free_bytes == null ? "Your drive does not say how much space is left" : `${(setup.free_bytes / 1024 ** 3).toFixed(1)} GB free in your drive`],
     [true, setup.notices ? "Changes made in the drive show here within minutes" : "Changes made in the drive show here the next morning"],
   ];
   const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
@@ -246,15 +250,22 @@ export default async function Settings({
               <form action={disconnectDrive} className="connection">
                 <HardDrive size={16} aria-hidden />
                 <p className="grow" role="status">
-                  <Badge tone="done">Connected</Badge>
+                  <Badge tone={driveAway ? "late" : "done"}>{driveAway ? "Cannot be reached" : "Connected"}</Badge>
                   <span className="sr-only">: </span>
                   <strong>{driveAddress}</strong>
                 </p>
+                {/* Signs in to the same drive again, keeping its folders and papers. */}
+                {ready[drive.provider] && (
+                  <Pending className={`b ${driveAway ? "b-primary" : "b-secondary"}`} type="submit" formAction={reconnectDrive} busy="Reconnecting">
+                    Reconnect
+                  </Pending>
+                )}
                 <Pending className="b b-secondary" type="submit">
                   Disconnect
                 </Pending>
               </form>
             )}
+            {drive && problem("drive")}
             {drive && (
               <List className="set-rows set-ticks" label="What InboxCA set up">
                 {ticks ? (

@@ -789,6 +789,9 @@ isOneToOne: false
 "dismiss_enquiry":
 { Args: { "enquiry": string,"target_firm": string }; Returns: boolean
                            },
+"drive_year_bytes":
+{ Args: { "target_firm": string }; Returns: number
+                           },
 "due_soon":
 { Args: { "target_firm": string }; Returns: {
               "clients": number,"code": string,"due_on": string,"filed": number
@@ -928,6 +931,9 @@ isOneToOne: false
                            },
 "rename_document":
 { Args: { "actor": string,"new_file": string,"new_name": string,"new_period": string,"new_status": string,"new_type": string,"new_work": string,"target": string }; Returns: undefined
+                           },
+"requeue_drive_jobs":
+{ Args: { "target_firm": string }; Returns: number
                            },
 "reserve_form":
 { Args: { "choice"?: Json,"client": string,"extension": string,"firm": string,"form": string,"period": string,"person": string,"prefix": string,"registration": string,"sources": Json,"template": string }; Returns: Json
