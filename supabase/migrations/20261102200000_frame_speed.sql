@@ -2,7 +2,7 @@
 -- activity_feed asked public.can_access_client (two member_role checks) for every client and
 -- every log line of the fortnight before keeping the newest 20. The same rules now read the
 -- person once, so the newest lines are read first and the reading stops at 20. Who sees which
--- line is unchanged.
+-- line is unchanged. InboxCA's answers by rules (email.answered, 20261101200000) show too.
 create or replace function public.activity_feed(target_firm uuid, since timestamptz, mine boolean default false)
 returns table (at timestamptz, action text, client_id uuid, client_name text)
 language sql stable security definer set search_path = '' as $$
@@ -22,9 +22,9 @@ language sql stable security definer set search_path = '' as $$
     from public.activity_log l
     where l.firm_id = target_firm and l.at >= since and (select role from me) is not null
       and case when mine
-        then l.actor_id is distinct from (select auth.uid()) and l.action in ('reminder.sent', 'email.acknowledged', 'email.replied', 'email.written',
+        then l.actor_id is distinct from (select auth.uid()) and l.action in ('reminder.sent', 'email.acknowledged', 'email.answered', 'email.replied', 'email.written',
           'request.created', 'task.changed', 'notice.added', 'assignment.added', 'document.uploaded', 'form.prepared', 'form.approved', 'form.rejected', 'form.filed')
-        else l.actor_id is null and l.action in ('reminder.sent', 'email.acknowledged', 'form.prepared') end
+        else l.actor_id is null and l.action in ('reminder.sent', 'email.acknowledged', 'email.answered', 'form.prepared') end
   ), assigned as materialized (select public.assigned_clients() as id)
   select x.at, x.action, c.id, c.name
   from lines x join public.clients c on c.id = x.client_id and c.firm_id = target_firm

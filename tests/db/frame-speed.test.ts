@@ -3,7 +3,7 @@ import type { Client } from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { actAs, asOwner, connect, rollback } from "./db";
 
-// The frame's speed (20261101900000_frame_speed.sql): the bell and the owner's log reads check
+// The frame's speed (20261102200000_frame_speed.sql): the bell and the owner's log reads check
 // the person once a read, not once a line, with the same rules. Invented firms and people;
 // everything rolls back.
 let db: Client;
