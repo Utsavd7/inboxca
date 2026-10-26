@@ -2,7 +2,8 @@ import { mailHealth, openMail } from "@/src/lib/firm-mail";
 import { serverCrypto } from "@/src/lib/crypto";
 import type { NewMail } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
-import { classify } from "@/src/lib/triage";
+import { askedAbout } from "@/src/lib/answers";
+import { classify, statusLabels, type Label } from "@/src/lib/triage";
 import { todayInIndia } from "@/src/lib/calendar";
 import type { Handler } from "./runner";
 
@@ -65,6 +66,8 @@ export const mailPoll: Handler = async (job) => {
       label,
       decision_source: "rule",
       reason_code: reason,
+      // Which return and period a status question names, for its answer; never its words.
+      delivery: statusLabels.includes(label) ? { asked: askedAbout(mail.content.subject, mail.content.text) } : {},
     };
   });
   if (events.length) {
@@ -87,7 +90,11 @@ export const mailPoll: Handler = async (job) => {
     const notices = (saved ?? [])
       .filter((event) => event.client_id && event.label === "notice_received")
       .map((event) => ({ firm_id: firm, kind: "notice_from_mail", entity_type: "email", entity_id: event.id, idempotency_key: `notice_from_mail:${event.id}` }));
-    const queued = [...filing, ...asking, ...notices];
+    // A known client's question about where things stand is answered by rules (Inbox, answered B).
+    const status = (saved ?? [])
+      .filter((event) => event.client_id && statusLabels.includes(event.label as Label))
+      .map((event) => ({ firm_id: firm, kind: "answer_mail", entity_type: "email", entity_id: event.id, idempotency_key: `answer_mail:${event.id}` }));
+    const queued = [...filing, ...asking, ...notices, ...status];
     if (queued.length) await admin.from("jobs").upsert(queued, { onConflict: "idempotency_key", ignoreDuplicates: true });
     // Unclear mail, a notice that asks something, or mail whose client is not known yet,
     // waits for the team.

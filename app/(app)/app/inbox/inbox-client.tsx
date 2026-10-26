@@ -183,8 +183,8 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
 }
 
 // The reply under an open conversation: quick replies, plain text, papers and files, and an
-// AI draft only once AI is set up.
-export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string }) {
+// AI draft only once AI is set up. It starts from InboxCA's own answer when a person edits it.
+export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, start }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; start?: string }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const text = useRef<HTMLTextAreaElement>(null);
   const [draft, ask, drafting] = useActionState<Draft, FormData>(async (previous, form) => {
@@ -197,7 +197,7 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm }:
     <form action={sendReply} className="ib-reply" aria-label="Reply">
       <input type="hidden" name="mail" value={mail} />
       <Templates name={name} firm={firm} />
-      <textarea id="reply-text" ref={text} name="text" rows={4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." onKeyDown={sendKey} />
+      <textarea id="reply-text" ref={text} name="text" rows={start ? 10 : 4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." onKeyDown={sendKey} defaultValue={start} />
       {mayAttach && <Attach papers={papers} chosen={chosen} setChosen={setChosen} offered={[...suggested, ...(draft.papers ?? [])]} />}
       <div className="ib-reply-foot">
         {draft.error && <span className="ib-note" role="status">{draft.error}</span>}

@@ -153,6 +153,10 @@
 
 /* The reply stays at the foot of the conversation, quick replies above the text. */
 .ib-reply { position: sticky; bottom: 0; display: grid; gap: var(--s2); margin-top: auto; padding: var(--s3) 0 var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
+/* InboxCA's own reply from the firm's records, in the reply's place until a person sends,
+   changes or stops it, or while its Undo minutes run. */
+.ib-drafted { position: sticky; bottom: 0; display: grid; gap: var(--s2); margin-top: auto; padding: var(--s3) 0 var(--s4); border-top: 1px solid var(--line); background: var(--surface); animation: rise var(--slow) var(--out); }
+.ib-draft-text { max-height: 40vh; margin: 0; overflow: auto; padding: var(--s3); border-radius: var(--r2); background: var(--accent-soft); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ib :is(.ib-reply, .ib-compose) textarea { width: 100%; min-height: 96px; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.5; resize: vertical; transition: border-color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
 .ib :is(.ib-reply, .ib-compose) textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-glow); outline: none; }
 .ib-templates { display: flex; flex-wrap: wrap; gap: var(--s2); }
@@ -203,7 +207,7 @@
   .ib-search { flex: 1 1 100%; max-width: none; margin-left: 0; }
   .ib .split { flex: none; flex-direction: column; }
   .ib .pane { overflow: visible; }
-  .ib-reply { position: static; }
+  :is(.ib-reply, .ib-drafted) { position: static; }
   .ib-list { flex: none; min-width: 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .ib-convo { padding: var(--s4) var(--s4) 0; }
   .ib-thread > li > :not(.ib-who) { margin-left: 0; }

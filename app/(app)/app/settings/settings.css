@@ -79,6 +79,15 @@
 .set-rows li:first-child { border-top: 0; }
 .set-rows .grow { flex: 1; min-width: 0; }
 .set-rows + form { margin-top: 16px; }
+/* Replies by InboxCA: what each answers, and Auto, Ask me first or Off beside it. */
+.set-answers { margin: 0; }
+.set-answers .grow { display: grid; gap: 2px; padding-block: 4px; }
+.set-answers label { font-weight: 600; }
+.ui .set-answers select { flex: none; width: 160px; }
+@media (max-width: 720px) {
+  .set-answers li { flex-wrap: wrap; }
+  .ui .set-answers select { width: 100%; }
+}
 .set-ticks li > svg { flex: none; color: var(--done-fg); }
 .set-ticks li.warn > svg { color: var(--wait-fg); }
 

@@ -1210,16 +1210,19 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, $3, '2026-09', (now() at time zone 'Asia/Kolkata')::date + 3)", [firm.firmId, clientId, code]);
   await owner.goto("/app/settings?group=reminders");
   await owner.getByLabel("Email clients before their returns are due").check();
-  await owner.getByLabel("Reply to clients when their files arrive, saying what was received").check();
   await owner.getByLabel("1 day before", { exact: true }).uncheck();
   await owner.getByRole("button", { name: "Save reminders" }).click();
   await expect(owner.getByLabel("1 day before", { exact: true })).not.toBeChecked();
-  await expect(owner.getByLabel("Reply to clients when their files arrive, saying what was received")).toBeChecked();
-  // Files that arrive now get a short reply saying what was received.
+  await owner.getByLabel("Papers received").selectOption("auto");
+  await owner.getByRole("button", { name: "Save replies" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Replies saved." })).toBeVisible();
+  // Files that arrive now get a short reply saying what was received, once its 5 minutes for Undo pass.
   await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "August sales", text: "Attached.", attachments: [{ filename: "sales_bills_aug_2026.pdf", content: "%PDF-1.4 invented sales" }] });
   await pollFirmMail(request, firm.firmId);
+  await query(local.dbUrl, "update public.jobs set run_at = now() where firm_id = $1 and kind = 'answer_mail' and state = 'pending'", [firm.firmId]);
+  await runJobs(request, firm.firmId);
   const thanks = await lastMail(`client-${tag}@patel.test`);
-  expect(thanks).toContain("Thank you. We have received:\n- Sales bills, Aug 2026");
+  expect(thanks).toContain("Thank you. We received these papers:\n- Sales bills: saved under GST, Aug 2026");
   // The files asked for earlier were asked 3 days ago now, so the same email follows them up.
   await query(local.dbUrl, "update public.requests set expires_at = now() + interval '27 days' where firm_id = $1 and kind = 'documents'", [firm.firmId]);
   for (let run = 0; run < 2; run++) {

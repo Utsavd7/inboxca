@@ -10,6 +10,7 @@ const types: [RegExp, string, WorkType][] = [
   [/itr[\s-]?v\b/, "ITR-V", "income_tax"],
   [/acknowledg/, "Acknowledgement", "other"],
   [/audit report|\b3c[abd]\b/, "Audit report", "tax_audit"],
+  [/computation/, "Computation", "income_tax"],
   [/gstr[\s-]?2b/, "GSTR-2B", "gst"],
   [/gstr[\s-]?2a/, "GSTR-2A", "gst"],
   [/gstr[\s-]?3b/, "GSTR-3B", "gst"],
@@ -45,7 +46,7 @@ const types: [RegExp, string, WorkType][] = [
 
 // Final papers: what clients ask for in later years, and what the first import brings by
 // default (PLAN.md 5.16).
-export const finalPapers = new Set(["ITR-V", "Acknowledgement", "Audit report", "GSTR-1", "GSTR-3B", "Notice", "Order", "Certificate", "Challan", "Form 16", "Form 130", "Balance sheet"]);
+export const finalPapers = new Set(["ITR-V", "Acknowledgement", "Audit report", "GSTR-1", "GSTR-3B", "Notice", "Order", "Certificate", "Challan", "Form 16", "Form 130", "Balance sheet", "Computation"]);
 const labelWork: Partial<Record<Label, WorkType>> = { data_gst: "gst", data_income_tax: "income_tax", data_tax_audit: "tax_audit" };
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const monthNames = months.map((month) => month[0].toUpperCase() + month.slice(1));
