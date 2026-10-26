@@ -18,7 +18,8 @@ test("the frame remembers the theme and the folded sidebar, and its keys and pan
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(page).toHaveURL(/\/app$/);
     const frame = page.locator(".ui");
-    await expect(frame).toHaveAttribute("data-theme", "system");
+    // Light by default, whatever the computer's own setting.
+    await expect(frame).toHaveAttribute("data-theme", "light");
 
     // Dark, from the account menu; the server draws it dark on the next load, with no flash.
     await page.locator(".rail-me").click();
@@ -28,6 +29,13 @@ test("the frame remembers the theme and the folded sidebar, and its keys and pan
     await page.reload();
     await expect(frame).toHaveAttribute("data-theme", "dark");
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
+
+    // System follows the computer, and stays chosen.
+    await page.locator(".rail-me").click();
+    await page.getByRole("menuitemradio", { name: "System" }).click();
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await expect(frame).toHaveAttribute("data-theme", "system");
 
     // [ folds the sidebar to icons; the fold is remembered too.
     await page.keyboard.press("[");
