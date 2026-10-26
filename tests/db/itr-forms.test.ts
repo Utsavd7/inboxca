@@ -29,13 +29,14 @@ it("uses a PAN and assessment year, keeps corrections checked, and closes only t
   expect(await reserve(3)).toBeNull();
   body.lines[0].state="confirmed";await db.query("update public.datasets set revision=4,data=$2 where id=$1",[draft,body]);
   const second=await reserve(4);expect(second.name).toContain("v2.json");expect(await finish(second.id)).toBe(true);
-  const acknowledgement=randomUUID(),task=randomUUID(),otherTask=randomUUID();
-  await db.query("insert into public.tasks(id,firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,$4,'ITR_NA','2026-03','2026-07-31'),($5,$2,$3,$4,'ADV_TAX','2026-03','2026-03-15')",[task,firm,client,pan,otherTask]);
+  const acknowledgement=randomUUID(),task=randomUUID(),otherTask=randomUUID(),businessTask=randomUUID();
+  await db.query("insert into public.tasks(id,firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,$4,'ITR_NA','2026-03','2026-07-31'),($5,$2,$3,$4,'ADV_TAX','2026-03','2026-03-15'),($6,$2,$3,$4,'ITR_BIZ','2026-03','2026-08-31')",[task,firm,client,pan,otherTask,businessTask]);
   await db.query("insert into public.jobs(firm_id,kind,entity_type,entity_id,idempotency_key) values($1,'reminder','task',$2,$3)",[firm,task,randomUUID()]);
   await db.query("insert into public.documents(id,firm_id,client_id,work_type,document_type,period_key,name,size,sha256,drive_file_id) values($1,$2,$3,'income_tax','ITR-V','2026','Invented ITR-V.pdf',100,$4,'invented-ack')",[acknowledgement,firm,client,"b".repeat(64)]); // ggignore: invented acknowledgement checksum.
   expect((await db.query("select details->>'paper' paper from public.requests where kind='form_confirmation' and entity_id=$1",[second.id])).rows).toEqual([{paper:acknowledgement}]);
   expect((await db.query("select public.file_prepared_form($1,$2,'INVENTED-ACK',$3) saved",[second.id,person,acknowledgement])).rows[0].saved).toBe(true);
   expect((await db.query("select status from public.tasks where id=$1",[task])).rows[0].status).toBe("filed");
+  expect((await db.query("select status from public.tasks where id=$1",[businessTask])).rows[0].status).toBe("filed");
   expect((await db.query("select status from public.tasks where id=$1",[otherTask])).rows[0].status).toBe("upcoming");
   expect((await db.query("select state from public.jobs where entity_id=$1",[task])).rows[0].state).toBe("cancelled");
   expect((await db.query("select state from public.jobs where kind='form_ack' and entity_id=$1",[second.id])).rows[0].state).toBe("pending");

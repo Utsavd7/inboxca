@@ -48,17 +48,17 @@ const due = async (code: string) =>
   (await db.query("select period_key, to_char(due_on, 'YYYY-MM-DD') as due_on from public.tasks where firm_id = $2 and code = $1 order by due_on", [code, FIRM])).rows;
 
 describe("the compliance calendar", () => {
-  it("gives a client with monthly GST, TDS and a non-audit ITR the right 12 months of tasks", () =>
+  it("gives a business with monthly GST, TDS and a non-audit ITR the right 12 months of tasks", () =>
     rollback(db, async () => {
       await seed();
-      for (const [kind, services] of [["gstin", ["GSTR1_M", "GSTR3B_M"]], ["tan", ["TDS_PAY", "TDS_RET"]], ["pan", ["ITR_NA"]]] as const)
+      for (const [kind, services] of [["gstin", ["GSTR1_M", "GSTR3B_M"]], ["tan", ["TDS_PAY", "TDS_RET"]], ["pan", ["ITR_BIZ"]]] as const)
         expect((await setServices(kind, [...services])).ok).toBe(true);
       await planAsOf("2026-04-01");
       const counts = await db.query("select code, count(*)::int as n from public.tasks where firm_id = $1 group by code order by code", [FIRM]);
       expect(counts.rows).toEqual([
         { code: "GSTR1_M", n: 12 },
         { code: "GSTR3B_M", n: 12 },
-        { code: "ITR_NA", n: 1 },
+        { code: "ITR_BIZ", n: 1 },
         { code: "TDS_PAY", n: 12 },
         { code: "TDS_RET", n: 4 },
       ]);
@@ -70,7 +70,8 @@ describe("the compliance calendar", () => {
         { period_key: "2026-09", due_on: "2026-10-31" },
         { period_key: "2026-12", due_on: "2027-01-31" },
       ]);
-      expect(await due("ITR_NA")).toEqual([{ period_key: "2026-03", due_on: "2026-07-31" }]);
+      // A business whose accounts need no audit files by 31 August (Finance Act, 2026, s.5 and s.66).
+      expect(await due("ITR_BIZ")).toEqual([{ period_key: "2026-03", due_on: "2026-08-31" }]);
     }));
 
   it("refuses services on the wrong number or that exclude each other, and dates QRMP GSTR-3B by state", () =>
@@ -126,16 +127,22 @@ describe("the compliance calendar", () => {
       await seed();
       // Each kind list is in 20261028300000_services_by_kind.sql with the rule behind it; other
       // branches' return types in the shared database are not this test's.
-      const kinds = await db.query("select code, client_kinds from public.compliance_types where period_key = '' and client_kinds is not null and code = any($1) order by code", [["DIR3KYC", "ITR_NA", "LLP11", "LLP8", "TAX_AUDIT"]]);
+      const kinds = await db.query("select code, client_kinds from public.compliance_types where period_key = '' and client_kinds is not null and code = any($1) order by code", [["DIR3KYC", "ITR_BIZ", "ITR_NA", "LLP11", "LLP8", "TAX_AUDIT"]]);
       expect(kinds.rows).toEqual([
         { code: "DIR3KYC", client_kinds: ["individual", "business", "tax_audit"] },
-        { code: "ITR_NA", client_kinds: ["individual", "business", "llp", "trust"] },
+        { code: "ITR_BIZ", client_kinds: ["individual", "business", "llp"] },
+        { code: "ITR_NA", client_kinds: ["individual", "trust"] },
         { code: "LLP11", client_kinds: ["llp"] },
         { code: "LLP8", client_kinds: ["llp"] },
         { code: "TAX_AUDIT", client_kinds: ["individual", "tax_audit", "company", "llp", "trust"] },
       ]);
+      // A business is not planned the 31 July return; an individual is.
       expect((await setServices("pan", ["ITR_NA", "ADV_TAX"])).ok).toBe(true);
       await planAsOf("2026-04-01");
+      expect(await due("ITR_NA")).toEqual([]);
+      await db.query("update public.clients set kind = 'individual' where id = $1", [CLIENT]);
+      await planAsOf("2026-04-01");
+      expect(await due("ITR_NA")).toEqual([{ period_key: "2026-03", due_on: "2026-07-31" }]);
       await db.query("update public.clients set kind = 'company' where id = $1", [CLIENT]);
       await db.query("select private.plan_tasks_for(null, $1, '2026-04-01')", [FIRM]);
       expect(await due("ITR_NA")).toEqual([{ period_key: "2026-03", due_on: "2026-07-31" }]);

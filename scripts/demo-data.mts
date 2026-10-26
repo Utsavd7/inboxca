@@ -30,10 +30,10 @@ const clients: Client[] = [
   { name: "Rajesh Desai", kind: "individual", email: "rajesh.desai@example.in", pan: "ABCPD5678P", panServices: ["ITR_NA", "ADV_TAX"], group: "Desai family", branch: "Ahmedabad" },
   { name: "Meena Desai", kind: "individual", email: "meena.desai@example.in", pan: "ABCPD6789Q", panServices: ["ITR_NA"], group: "Desai family", branch: "Ahmedabad" },
   { name: "Kapoor Enterprises", kind: "tax_audit", email: "kapoor.ent@example.in", pan: "AAGFK7890R", gst: ["27", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], panServices: ["TAX_AUDIT", "ITR_AUDIT"], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
-  { name: "Iyer Consultants", kind: "individual", email: "iyer.consult@example.in", pan: "ABDPI8901S", panServices: ["ITR_NA", "ADV_TAX"], gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
+  { name: "Iyer Consultants", kind: "individual", email: "iyer.consult@example.in", pan: "ABDPI8901S", panServices: ["ITR_BIZ", "ADV_TAX"], gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
   { name: "S.K. Builders", kind: "business", email: "skbuilders@example.in", pan: "AAHFS9012T", gst: ["24", ["GSTR1_M", "GSTR3B_M"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Surat" },
   { name: "Trivedi Foods", kind: "business", email: "trivedi.foods@example.in", pan: "AAIFT0123U", gst: ["24", ["CMP08", "GSTR4"]], branch: "Surat" },
-  { name: "Bhatt Dental Clinic", kind: "individual", email: "dr.bhatt@example.in", pan: "ABEPB1234V", panServices: ["ITR_NA", "ADV_TAX"], branch: "Ahmedabad" },
+  { name: "Bhatt Dental Clinic", kind: "individual", email: "dr.bhatt@example.in", pan: "ABEPB1234V", panServices: ["ITR_BIZ", "ADV_TAX"], branch: "Ahmedabad" },
   { name: "Rao Exports Pvt Ltd", kind: "company", email: "accounts@raoexports.example", pan: "AADCR2345W", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
   { name: "Nair Charitable Trust", kind: "trust", email: "trustee@nairtrust.example", pan: "AAATN3456X", panServices: ["ITR_NA"], branch: "Ahmedabad" },
 ];
