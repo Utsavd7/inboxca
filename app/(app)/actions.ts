@@ -7,6 +7,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { ASK_DAYS, askChoices, STAGES } from "@/src/lib/reminders";
+import { answerKinds, answerModes } from "@/src/lib/answers";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
@@ -598,8 +599,17 @@ export async function saveReminders(form: FormData) {
     const days = Number(form.get(`ask_${often}`) ?? usual);
     return [often, askChoices.includes(days) ? days : usual];
   }));
-  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", acknowledge: form.get("acknowledge") === "on", reminder_stages: STAGES.filter((day) => form.getAll("stage").includes(String(day))), ask_days } }).eq("id", membership.firmId);
+  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", reminder_stages: STAGES.filter((day) => form.getAll("stage").includes(String(day))), ask_days } }).eq("id", membership.firmId);
   redirect("/app/settings?group=reminders&saved=reminders#reminders");
+}
+
+// Settings → Replies by InboxCA: Auto, Ask me first or Off for each kind of answer.
+export async function saveAnswers(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  if (membership?.role !== "owner") redirect("/app");
+  const answers = Object.fromEntries(Object.keys(answerKinds).map((kind) => [kind, Object.hasOwn(answerModes, String(form.get(kind))) ? String(form.get(kind)) : "ask"]));
+  await supabase.from("firms").update({ settings: { ...membership.settings, answers } }).eq("id", membership.firmId);
+  redirect("/app/settings?group=reminders&saved=answers#answers");
 }
 
 // A client's page → Details: pause or resume reminders for this client.

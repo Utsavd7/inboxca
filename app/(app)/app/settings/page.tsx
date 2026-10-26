@@ -1,9 +1,9 @@
-import { BellRing, CalendarClock, CalendarOff, Check, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, Headset, KeyRound, LifeBuoy, LogIn, Mail, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
+import { BellRing, CalendarClock, CalendarOff, Check, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, Headset, KeyRound, LifeBuoy, LogIn, Mail, MailCheck, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import Form from "next/form";
 import Link from "next/link";
-import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
+import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveAnswers, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
 import { firmAdmin, HOURS_KEYS, memberHours, officeApprover, type Office } from "@/src/lib/office";
 import { presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
@@ -12,6 +12,7 @@ import { AccessCheck } from "./access-check";
 import { documentTypes } from "@/src/lib/documents";
 import { switchable, defaults, type Permissions, type Standing } from "@/src/lib/rights";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
+import { answerKinds, answerMode, answerModes, UNDO_MINUTES, type AnswerKind } from "@/src/lib/answers";
 import { folderOrderNames, namings } from "@/src/lib/drive";
 import { lowSpace } from "@/src/jobs/drive-check";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -50,14 +51,14 @@ const problems: Record<string, [string, string]> = {
   special: ["special", "The dates must run forward and the closing time must be after the opening time."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { preset: "Preset saved.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Papers saved.", permissions: "Permissions saved.", mail_limit: "Email limit saved.", replies: "Reply time saved.",mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now." };
+const savedNames: Record<string, string> = { preset: "Preset saved.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", answers: "Replies saved.", records: "Papers saved.", permissions: "Permissions saved.", mail_limit: "Email limit saved.", replies: "Reply time saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now." };
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "replies", "drive"]],
   ["access", "Office and sign in", ["preset", "office", "limits", "tester", "recovery"]],
   ["hours", "Hours and holidays", ["hours", "special", "holidays"]],
   ["people", "People's access", ["permissions", "always", "visibility"]],
-  ["reminders", "Reminders and papers", ["reminders", "records"]],
+  ["reminders", "Reminders and papers", ["reminders", "answers", "records"]],
   ["data", "Your data", ["use", "data", "support", "close"]],
 ] as const;
 const groupIcons: Record<string, LucideIcon> = { email: Mail, access: ShieldCheck, hours: Clock, people: Users, reminders: BellRing, data: Database };
@@ -66,11 +67,11 @@ const cardIcons: Record<string, [LucideIcon, Kind]> = {
   mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], tester: [UserCheck, "approve"], recovery: [LifeBuoy, "approve"],
   hours: [Clock, "week"], special: [CalendarClock, "week"], holidays: [CalendarOff, "week"],
   permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"],
-  reminders: [BellRing, "notice"], records: [FileCheck2, "notice"],
+  reminders: [BellRing, "notice"], answers: [MailCheck, "notice"], records: [FileCheck2, "notice"],
   replies: [Clock, "reply"],
   use: [Gauge, "docs"], data: [Download, "docs"], support: [Headset, "approve"], close: [TriangleAlert, "late"],
 };
-const ownerOnly = ["mailbox", "replies", "drive", "recovery", "visibility", "reminders", "records", "use", "data", "support", "close"];
+const ownerOnly = ["mailbox", "replies", "drive", "recovery", "visibility", "reminders", "answers", "records", "use", "data", "support", "close"];
 const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
 
 function Card({ id, title, line, danger, children }: { id: string; title: string; line?: React.ReactNode; danger?: boolean; children: React.ReactNode }) {
@@ -644,12 +645,26 @@ export default async function Settings({
                   </div>
                 ))}</div>
               </fieldset>
-              <label className="check">
-                <input className="toggle" type="checkbox" name="acknowledge" defaultChecked={settings.acknowledge === true} />
-                Reply to clients when their files arrive, saying what was received
-              </label>
               <p className="hint">A reminder is skipped when the return is filed, the client already sent files for it, or your team is replying to them.</p>
               <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save reminders</Pending></div>
+            </form>
+          </Card>
+
+          <Card id="answers" title="Replies by InboxCA" line="InboxCA answers these emails from your records only, in English, to the client's own address or a contact allowed to receive papers. Questions about advice, fees or what a notice means always wait for your team.">
+            <form action={saveAnswers} className="set-stack">
+              <ul className="set-rows set-answers">{(Object.entries(answerKinds) as [AnswerKind, readonly [string, string]][]).map(([kind, [label, hint]]) => (
+                <li key={kind}>
+                  <span className="grow">
+                    <label htmlFor={`answer-${kind}`}>{label}</label>
+                    <span className="hint" id={`answer-${kind}-hint`}>{hint}</span>
+                  </span>
+                  <select id={`answer-${kind}`} name={kind} defaultValue={answerMode(settings, kind)} aria-describedby={`answer-${kind}-hint`}>
+                    {Object.entries(answerModes).map(([mode, name]) => <option key={mode} value={mode}>{name}</option>)}
+                  </select>
+                </li>
+              ))}</ul>
+              <p className="hint">Auto sends {UNDO_MINUTES} minutes after the email arrives. Until then, Undo in the Inbox stops it. Ask me first keeps the reply in the Inbox for you to send or change. Off sends nothing, and a question waits in Needs reply.</p>
+              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save replies</Pending></div>
             </form>
           </Card>
 

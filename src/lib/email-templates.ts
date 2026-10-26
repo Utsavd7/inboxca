@@ -1,3 +1,4 @@
+import type { AnswerKind } from "./answers";
 import { periodName } from "./documents";
 import { reminderEmail } from "./reminders";
 import { CODE_MINUTES } from "./share-codes";
@@ -6,10 +7,16 @@ import { CODE_MINUTES } from "./share-codes";
 export const TEMPLATE_VERSION=1;
 export const emailTemplates={
   reminder:reminderEmail,
-  received(client:string,firm:string,files:{type:string;period:string;toCheck:boolean}[]) {
-    const named=files.filter((file)=>!file.toCheck).map((file)=>`- ${[file.type,periodName(file.period)].filter(Boolean).join(", ")}`);
-    const unclear=files.filter((file)=>file.toCheck).length;
-    return {subject:"We have received your files",text:[`Dear ${client},`,"","Thank you. We have received:",...named,...(unclear ? [`- ${unclear===1 ? "1 file" : `${unclear} files`} our team will check`] : []),"",firm].join("\n")};
+  // InboxCA's answer to a client's email (src/lib/answers.ts), its lines built from the firm's records.
+  answer(kind:AnswerKind,client:string,firm:string,lines:string[]) {
+    const [subject,opening]=({
+      filed:["Returns filed","Thank you for your email. As per our records:"],
+      papers:["Papers still needed","Thank you for your email.\n"],
+      due:["What is due","Thank you for your email. As per our records, these are due:"],
+      received:["We received your papers","Thank you. We received these papers:"],
+      notice:["We received your notice","We received your notice. Your CA will look at it."],
+    } as const)[kind];
+    return {subject,text:[`Dear ${client},`,"",opening,...lines,"",firm].join("\n")};
   },
   paper(client:string,firm:string,name:string,link:string,privatePaper:boolean,reply:boolean) {
     return {subject:reply ? `Re: your request for ${name}` : name,text:[`Dear ${client},`,"",`${firm} has shared ${name} with you.`,"",`Download it here: ${link}`,privatePaper ? "It is private: the page emails a one-time code to this address before it opens. The link works for 7 days and up to 5 downloads." : "The link works for 7 days and up to 5 downloads.","",firm].join("\n")};

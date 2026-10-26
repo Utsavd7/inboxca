@@ -184,9 +184,10 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
 }
 
 // The reply under an open conversation: quick replies, plain text, papers and files, and an
-// AI draft only once AI is set up. An email waiting for a person opens with a suggested reply
-// written in, and, for a paper not in the drive, a way to ask the client for papers.
-export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, suggestion, askPapers }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; suggestion?: string; askPapers?: string }) {
+// AI draft only once AI is set up. It starts from InboxCA's own answer when a person edits it;
+// an email waiting for a person opens with a suggested reply written in, and, for a paper not
+// in the drive, a way to ask the client for papers.
+export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, start, suggestion, askPapers }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; start?: string; suggestion?: string; askPapers?: string }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const text = useRef<HTMLTextAreaElement>(null);
   const [draft, ask, drafting] = useActionState<Draft, FormData>(async (previous, form) => {
@@ -199,13 +200,13 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, s
     <form action={sendReply} className="ib-reply" aria-label="Reply">
       <input type="hidden" name="mail" value={mail} />
       <Templates name={name} firm={firm} />
-      {suggestion && (
+      {suggestion && !start && (
         <p className="ib-note ib-suggest">
           <span className="grow">A suggested reply is written in. Change what you need, then send it.</span>
           {askPapers && <Link className="ib-chip" href={askPapers}>Ask for papers</Link>}
         </p>
       )}
-      <textarea id="reply-text" ref={text} name="text" rows={suggestion ? 7 : 4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." defaultValue={suggestion} onKeyDown={sendKey} />
+      <textarea id="reply-text" ref={text} name="text" rows={start ? 10 : suggestion ? 7 : 4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." defaultValue={start ?? suggestion} onKeyDown={sendKey} />
       {mayAttach && <Attach papers={papers} chosen={chosen} setChosen={setChosen} offered={[...suggested, ...(draft.papers ?? [])]} />}
       <div className="ib-reply-foot">
         {draft.error && <span className="ib-note" role="status">{draft.error}</span>}

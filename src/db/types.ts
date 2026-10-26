@@ -856,14 +856,14 @@ isOneToOne: false
 "fill_form":
 { Args: { "client": string,"extension": string,"firm": string,"form": string,"period": string,"person": string,"prefix": string,"registration": string,"sources": Json,"template": string }; Returns: Json
                            },
+"finish_answer":
+{ Args: { "actor"?: string,"event_id": string,"template": string }; Returns: undefined
+                           },
 "finish_form":
 { Args: { "bytes": number,"checksum": string,"file": string,"firm": string,"permission"?: string,"person": string,"target": string }; Returns: boolean
                            },
 "finish_job":
 { Args: { "error_code"?: string,"job_id": number,"outcome": string,"retry_at"?: string }; Returns: boolean
-                           },
-"finish_mail_ack":
-{ Args: { "event_id": string,"template_version": number }; Returns: undefined
                            },
 "finish_share":
 { Args: { "actor"?: string,"share_id": string }; Returns: undefined
