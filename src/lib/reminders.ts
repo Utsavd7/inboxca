@@ -1,6 +1,6 @@
 import { dueLabel, periodLabel } from "./calendar";
 import { checklists, workOfService } from "./checklists";
-import { periodName } from "./documents";
+import { periodName, workOfType } from "./documents";
 import type { WorkType } from "./drive";
 
 // Smart reminders (PLAN.md 5.2, 5.2.1, D25): which of a firm's open returns are reminded
@@ -72,15 +72,69 @@ export function planReminders(tasks: ReminderTask[], today: string, filed: Set<s
 
 // A document request still waiting for files (PLAN.md 5.2): followed up every 3 days, up to
 // 4 times, asking only for what has not arrived. `now` (Chase missing papers on Today) skips the wait.
-export type FollowUp = { requestId: string; client_id: string; period: string; missing: string[]; link: string; count: number };
+// A request InboxCA opened itself goes first in the next email it may send (first); the wait
+// counts from the latest ask: a follow up, the first email, the client's latest paper, or a call.
+export type FollowUp = { requestId: string; client_id: string; period: string; missing: string[]; link: string; count: number; first?: boolean; returns?: string[] };
 export const FOLLOW_UP_DAYS = 3;
 export const MAX_FOLLOW_UPS = 4;
-export function followUpDue(request: { expires_at: string; details: { items: { type: string; received: string[] }[]; followups?: string[] } }, today: string, now = false) {
+type Asking = { items: { type: string; received: string[] }[]; followups?: string[]; returns?: string[]; since?: string; chased?: string };
+export const firstAsk = (details: Asking) => !!details.returns && !details.since && !details.followups?.length;
+export function followUpDue(request: { expires_at: string; details: Asking }, today: string, now = false) {
   const missing = request.details.items.filter((item) => !item.received.length).map((item) => item.type);
   const asked = new Date(Date.parse(request.expires_at) - 30 * DAY).toISOString().slice(0, 10);
-  const last = request.details.followups?.at(-1) ?? asked;
+  const last = [request.details.followups?.at(-1), request.details.since, request.details.chased].filter((day): day is string => !!day).sort().at(-1) ?? asked;
   const count = request.details.followups?.length ?? 0;
-  return missing.length && count < MAX_FOLLOW_UPS && (now || -daysUntil(last, today) >= FOLLOW_UP_DAYS) ? missing : null;
+  return missing.length && count < MAX_FOLLOW_UPS && (now || firstAsk(request.details) || -daysUntil(last, today) >= FOLLOW_UP_DAYS) ? missing : null;
+}
+
+// Ask early (user, 26 Oct 2026): InboxCA itself asks a client for a return's papers this many
+// days before the return is due, by how often it comes; 0 is Off. A firm sets its own in
+// Settings (firms.settings.ask_days).
+export const ASK_DAYS = { monthly: 10, quarterly: 15, yearly: 45 };
+export const askChoices = [0, 5, 7, 10, 15, 20, 30, 45, 60];
+export const askDays = (settings: { ask_days?: unknown }): Record<string, number> => ({ ...ASK_DAYS, ...(settings.ask_days as Partial<typeof ASK_DAYS> | undefined) });
+
+// Papers staff fetch from the portals themselves (PLAN.md 5.3.1), never asked of a client.
+const portalPapers = new Set(["AIS", "TIS", "Form 26AS", "Form 168", "GSTR-2B", "GSTR-2A"]);
+// What a return's work needs from a kind of client: the firm's list for the kind, kept to that
+// work's papers, or the work's own list when the kind's list has none of them.
+export function papersFor(kindList: string[], work: WorkType) {
+  const fits = kindList.filter((type) => !portalPapers.has(type) && (checklists[work]?.includes(type) || workOfType(type) === work));
+  return fits.length ? fits : (checklists[work] ?? []);
+}
+
+// The requests InboxCA opens today: one a client, work and period (a client's GSTR-1 and GSTR-3B
+// for a month share one), from the day to ask for any of its returns up to its due date. Only
+// returns whose work needs papers and whose date a CA confirmed, for clients with an email and
+// reminders on; advance tax is worked out from an estimate, so it is left out. A key already
+// asked for (`taken`, "<client>:<work>:<period>") is skipped. Papers already in for the period
+// (`received`, "<client>:<period>:<TYPE>") are not asked for, and nothing is opened when none
+// is left. A yearly return's papers are for its financial year ("2027" for FY 2026-27).
+export function planAsks(tasks: (ReminderTask & { kind: string })[], today: string, days: Record<string, number>, listFor: (kind: string, work: WorkType) => string[], taken: Set<string>, received: Set<string>) {
+  const plain = (name: string) => name.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const keyOf = (task: ReminderTask) => {
+    const work = workOfService(task.code);
+    return work && !task.code.startsWith("ADV") ? { work, period: task.rule.frequency === "yearly" ? task.period_key.slice(0, 4) : task.period_key } : null;
+  };
+  const asks = new Map<string, { client_id: string; work: WorkType; period: string; periods: string[]; kind: string; returns: string[] }>();
+  for (const task of tasks) {
+    const of = keyOf(task);
+    const ahead = days[task.rule.frequency ?? ""] ?? 0;
+    const left = daysUntil(task.due_on, today);
+    const key = of && `${task.client_id}:${of.work}:${of.period}`;
+    if (of && key && ahead && left >= 0 && left <= ahead && task.rule.verified && !task.client.paused && task.client.hasEmail && !taken.has(key))
+      asks.set(key, { client_id: task.client_id, work: of.work, period: of.period, periods: periodsOf(task.rule.frequency, task.period_key), kind: task.kind, returns: [] });
+  }
+  // Every open return of that work and period is named on it.
+  for (const task of tasks) {
+    const of = keyOf(task);
+    const ask = of && asks.get(`${task.client_id}:${of.work}:${of.period}`);
+    if (ask && !ask.returns.includes(task.code)) ask.returns.push(task.code);
+  }
+  return [...asks.values()].flatMap(({ periods, kind, ...ask }) => {
+    const items = listFor(kind, ask.work).filter((type) => ![type, ...(type === "Form 16" ? ["Form 130"] : [])].some((name) => periods.some((period) => received.has(`${ask.client_id}:${period}:${plain(name)}`))));
+    return items.length ? [{ ...ask, items }] : [];
+  });
 }
 
 // The one email a client gets today, in English (InboxCA writes in English only): returns
@@ -94,13 +148,15 @@ export function reminderEmail(client: string, firm: string, tasks: ReminderTask[
   const asks = [...new Set(tasks.flatMap((task) => checklists[workOfService(task.code) as WorkType] ?? []))];
   const late = tasks.some((task) => daysUntil(task.due_on, today) < 0);
   const waiting = followUps.flatMap((followUp) => [
-    `We are still waiting for these documents${followUp.period ? ` for ${periodName(followUp.period)}` : ""}: ${followUp.missing.join(", ")}.`,
+    followUp.first
+      ? `${followUp.returns?.length ? `To prepare your ${followUp.returns.join(" and ")}${followUp.period ? ` for ${periodName(followUp.period)}` : ""}, please` : "Please"} send these documents: ${followUp.missing.join(", ")}.`
+      : `We are still waiting for these documents${followUp.period ? ` for ${periodName(followUp.period)}` : ""}: ${followUp.missing.join(", ")}.`,
     `Upload them here, no sign in needed: ${followUp.link}`,
     "",
   ]);
   return {
     subject: !tasks.length
-      ? "Documents still needed"
+      ? followUps.every((followUp) => followUp.first) ? "Documents needed" : "Documents still needed"
       : tasks.length === 1
         ? `${late ? "Overdue" : "Reminder"}: ${tasks[0].rule.name} due ${dueLabel(tasks[0].due_on)}`
         : `${late ? "Overdue returns" : "Returns due soon"}: ${tasks.length} returns`,
