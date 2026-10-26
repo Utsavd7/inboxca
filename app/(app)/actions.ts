@@ -509,7 +509,9 @@ export async function manageClient(form: FormData) {
       if (error) back("services");
     }
   } else if (intent === "remove-number") {
-    await supabase.from("client_registrations").delete().eq("id", String(form.get("registration") ?? ""));
+    // Row level security keeps a number with filed returns, which would go with it.
+    const { data: removed } = await supabase.from("client_registrations").delete().eq("id", String(form.get("registration") ?? "")).eq("client_id", id).select("id");
+    if (!removed?.length) back("filed-number");
   } else if (intent === "add-number") {
     const kind = String(form.get("kind") ?? "") as NumberKind;
     const number = cleanNumber(String(form.get("number") ?? ""));
