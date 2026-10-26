@@ -24,7 +24,7 @@ export const driveSetup: Handler = async (job) => {
     // At Connect the folder order is always the first one: year, client, work.
     const year = financialYear(todayInIndia().slice(0, 7));
     // The test drive is shared by every firm on this computer, so it gets no client folders.
-    const { data: clients } = account.provider === "local" ? { data: [] } : await admin.from("clients").select("name").eq("firm_id", firm).eq("stage", "client").is("archived_at", null);
+    const { data: clients } = account.provider === "local" ? { data: [] } : await admin.from("clients").select("name").eq("firm_id", firm).is("archived_at", null);
     const made = new Set<string>();
     if (clients?.length) {
       let cursor: string | undefined;

@@ -15,8 +15,6 @@ export const activityNames: Record<string, string> = {
   "email.acknowledged": "Files received reply sent", "request.changed": "Request updated", "request.receipt_sent": "Receipt emailed for uploaded papers",
   "email.replied": "Reply sent", "email.written": "Email written to the client",
   "document.added": "Filing record added", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "notice.added": "Notice added",
-  "lead.added": "Enquiry received", "lead.moved": "Lead moved", "lead.lost": "Lead marked lost", "lead.won": "Lead turned into a client",
-  "lead.follow_up_set": "Follow up day set", "lead.followed_up": "Follow up email sent", "lead.noted": "Lead notes changed",
 };
 
 // Every action written to activity_log and the details it may carry (PLAN.md 8.0, 8.9): ids,
@@ -55,9 +53,6 @@ export const activityDetails: Record<string, readonly string[]> = {
   "share.code_sent": [], "share.approved": [], "share.refused": [], "bulk_send.asked": ["clients", "type", "period"],
   "request.created": [], "request.receipt_sent": [], "import.started": ["files", "scope"], "import.finished": ["files"], "import.undo_asked": [], "import.undone": [],
   "email.acknowledged": ["template"], "email.replied": ["files", "papers"], "email.written": ["to", "files", "papers"],
-  // Leads (5.12); ip is the enquiry form sender's keyed digest, never the address.
-  "lead.added": ["source", "ip"], "lead.moved": ["stage"], "lead.lost": ["reason"], "lead.won": [], "lead.follow_up_set": ["on"], "lead.followed_up": ["next"],
-  "lead.noted": [], "enquiry.dismissed": [], "enquiries.capture": ["on"],
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"],
   "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state"], "dataset.edit_saved": ["dataset", "line"],
   "dataset.changed": ["dataset", "revision", "line", "state", "before", "after", "reason_enc", "registration", "entered", "zeroed"], // before, after and reason encrypted

@@ -44,7 +44,6 @@ const shortTime = (at: string, today: string) => {
 const longTime = (at: string) => india(at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const dayName = (day: string) => india(`${day}T12:00:00+05:30`, { weekday: "short", day: "numeric", month: "short" });
 const uuid = /^[0-9a-f-]{36}$/;
-const notEnquiry = "reason_code.is.null,reason_code.neq.enquiry";
 
 type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "compose" | "approved" | "error" | "replied" | "written" | "unsent" | "answer" | "decided" | "cleared" | "confirm" | "file" | "snoozed" | "assigned" | "filed", string | undefined>;
 
@@ -99,19 +98,18 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const wantOut = !["reply", "mine", "in"].includes(show) && !["reply", "snoozed", "filed", "check"].includes(status);
   const range = whenRange(when, today);
   const until = [range.until, before].filter(Boolean).sort()[0];
-  // An email offered as a possible lead waits on the Leads page, not here.
-  let events = supabase.from("email_events").select("id, client_id, contact_id, received_at, label, decision_source, provider_message_id, clients(name), contacts(name_enc)").eq("firm_id", firm).or(notEnquiry);
+  let events = supabase.from("email_events").select("id, client_id, contact_id, received_at, label, decision_source, provider_message_id, clients(name), contacts(name_enc)").eq("firm_id", firm);
   if (chosenClient) events = events.eq("client_id", chosenClient.id);
   if (range.from) events = events.gte("received_at", range.from);
   if (until) events = events.lt("received_at", until);
   if (only) events = events.in("id", only);
   let needsCount = supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending").or(awake(today));
   let mineCount = supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending").or(awake(today)).eq("details->>assignee", userId);
-  let inCount = supabase.from("email_events").select("id", { count: "exact", head: true }).eq("firm_id", firm).or(notEnquiry);
+  let inCount = supabase.from("email_events").select("id", { count: "exact", head: true }).eq("firm_id", firm);
   if (chosenClient) [needsCount, mineCount, inCount] = [needsCount.eq("client_id", chosenClient.id), mineCount.eq("client_id", chosenClient.id), inCount.eq("client_id", chosenClient.id)];
   const cq = (sp.cq ?? "").trim().slice(0, 80);
   const cpage = Math.min(Math.max(0, Number(sp.cpage) || 0), 500);
-  let pick = supabase.from("clients").select("id, name").eq("stage", "client").is("archived_at", null).order("name").range(cpage * 8, cpage * 8 + 8);
+  let pick = supabase.from("clients").select("id, name").is("archived_at", null).order("name").range(cpage * 8, cpage * 8 + 8);
   if (cq) pick = pick.ilike("name", `%${cq.replace(/[\\%_]/g, "\\$&")}%`);
   const owner = membership.role === "owner";
   const [{ data: rows }, { count: needs }, { count: mine }, { count: fromClients }, { data: pickList }, { data: waiting }, { data: toCheck }, { data: papers }, toAnswer, { data: people }, { data: accounts }, { data: decided }, { data: week }] = await Promise.all([

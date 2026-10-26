@@ -43,7 +43,7 @@ describe("the first import", () => {
   });
   it("matches against every client, past the 1,000 rows one request returns", async () => {
     const firm = Array.from({ length: 2500 }, (_, at) => ({ id: String(at), name: `Client ${at}` }));
-    const query = { select: () => query, eq: () => query, is: () => query, order: () => query, range: async (from: number, to: number) => ({ data: firm.slice(from, Math.min(to + 1, from + 1000)) }) };
+    const query = { select: () => query, is: () => query, order: () => query, range: async (from: number, to: number) => ({ data: firm.slice(from, Math.min(to + 1, from + 1000)) }) };
     const all = await activeClients({ from: () => query } as unknown as Parameters<typeof activeClients>[0]);
     expect(all).toHaveLength(2500);
     expect(matchClient("Clients/Client 2499/notice.pdf", all)?.id).toBe("2499");

@@ -70,7 +70,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
   };
   // Adding a notice: the client is found by name, a few at a time, never the whole list.
   const findClients = () => {
-    const query = supabase.from("clients").select("id, name", { count: "exact" }).eq("firm_id", firm).eq("stage", "client").is("archived_at", null);
+    const query = supabase.from("clients").select("id, name", { count: "exact" }).eq("firm_id", firm).is("archived_at", null);
     return (find ? query.ilike("name", `%${find.replace(/[\\%_]/g, "\\$&")}%`) : query).order("name").order("id").range(at, at + PICK - 1);
   };
   const chosenId = add && uuid.test(params.client ?? "") ? params.client! : "";

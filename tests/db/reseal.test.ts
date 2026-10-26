@@ -23,9 +23,8 @@ async function seed() {
   const crypto = firmCrypto(kek, pgKeyStore(db, true));
   const seal = (place: string, text: string) => crypto.encrypt(FIRM, place, text);
   const [client, dataset, line, document, person] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
-  await db.query("insert into public.clients (id, firm_id, name, kind, email_enc, email_bidx, notes_enc, details) values ($1, $2, 'Invented Mills', 'company', $3, $4, $5, $6)", [
+  await db.query("insert into public.clients (id, firm_id, name, kind, email_enc, email_bidx) values ($1, $2, 'Invented Mills', 'company', $3, $4)", [
     client, FIRM, await seal(`clients/${client}/email`, "a@mills.test"), await crypto.blindIndex(FIRM, "email", "a@mills.test"),
-    await seal(`clients/${client}/notes`, "Invented note"), { phone_enc: await seal(`clients/${client}/phone`, "9000000001") },
   ]);
   await db.query("insert into public.client_registrations (firm_id, client_id, kind, number_enc, number_bidx) values ($1, $2, 'pan', $3, $4)",
     [FIRM, client, await seal(`clients/${client}/pan`, "ABCDE1234F"), await crypto.blindIndex(FIRM, "pan", "ABCDE1234F")]);
@@ -58,10 +57,10 @@ describe("sealing older values again after a key rotation", () => {
       const before = await open();
       await crypto.rotate(FIRM);
       const older = await staleCounts(db, FIRM, 1);
-      expect(total(older)).toBe(15);
+      expect(total(older)).toBe(13);
       // Small batches, so each table takes several.
       const counts = await reseal(db, firmCrypto(kek, pgKeyStore(db)), FIRM, 2);
-      expect(Object.values(counts).reduce((sum, count) => sum + count.sealed, 0)).toBe(15);
+      expect(Object.values(counts).reduce((sum, count) => sum + count.sealed, 0)).toBe(13);
       expect(Object.values(counts).every((count) => count.failed === 0)).toBe(true);
       expect(total(await staleCounts(db, FIRM, 1))).toBe(0);
       // The same text in the same place, blind indexes unchanged.
@@ -71,7 +70,7 @@ describe("sealing older values again after a key rotation", () => {
       expect(data.base).toBe(data.figure);
       expect(Buffer.from(data.figure, "base64url")[1]).toBe(1);
       const { rows: log } = await db.query("select action, details from public.activity_log where firm_id = $1 and action in ('keys.resealed', 'client.changed')", [FIRM]);
-      expect(log).toEqual([{ action: "keys.resealed", details: { values: 15, key_number: 1 } }]);
+      expect(log).toEqual([{ action: "keys.resealed", details: { values: 13, key_number: 1 } }]);
     }));
 
   it("carries on where a stopped run left off, and leaves a value that does not open", () =>
@@ -80,12 +79,12 @@ describe("sealing older values again after a key rotation", () => {
       await crypto.rotate(FIRM);
       // One value sealed again by an earlier run that stopped, and one moved from another place.
       const done = (await crypto.reseal(FIRM, `clients/${client}/email`, (await db.query("select email_enc from public.clients where id = $1", [client])).rows[0].email_enc))!;
-      await db.query("update public.clients set email_enc = $2, notes_enc = (select number_enc from public.client_registrations where client_id = $1) where id = $1", [client, done]);
+      await db.query("update public.clients set email_enc = $2, sales_mapping_enc = (select number_enc from public.client_registrations where client_id = $1) where id = $1", [client, done]);
       const counts = await reseal(db, firmCrypto(kek, pgKeyStore(db)), FIRM);
       expect(counts["clients.email"]).toEqual({ sealed: 0, failed: 0 });
-      expect(counts["clients.notes"]).toEqual({ sealed: 0, failed: 1 });
+      expect(counts["clients.sales_mapping"]).toEqual({ sealed: 0, failed: 1 });
       expect((await db.query("select email_enc from public.clients where id = $1", [client])).rows[0].email_enc).toBe(done);
-      expect(await staleCounts(db, FIRM, 1)).toMatchObject({ "clients.notes": 1, "clients.email": 0, "client_registrations.number": 0 });
+      expect(await staleCounts(db, FIRM, 1)).toMatchObject({ "clients.sales_mapping": 1, "clients.email": 0, "client_registrations.number": 0 });
     }));
 
   it("has a statement for every encrypted place, and each runs", () =>

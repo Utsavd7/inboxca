@@ -1,12 +1,12 @@
 "use client";
-import { CalendarDays, FolderOpen, Handshake, House, Inbox, Scale, Settings, Users, UsersRound } from "lucide-react";
+import { CalendarDays, FolderOpen, House, Inbox, Scale, Settings, Users, UsersRound } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, use, useState } from "react";
 import { pagesFor } from "@/src/lib/roles";
 import { Indicator } from "./motion";
 
-const icons: Record<string, typeof House> = { Today: House, Inbox, Clients: UsersRound, Documents: FolderOpen, Calendar: CalendarDays, Notices: Scale, Leads: Handshake, People: Users, Settings };
+const icons: Record<string, typeof House> = { Today: House, Inbox, Clients: UsersRound, Documents: FolderOpen, Calendar: CalendarDays, Notices: Scale, People: Users, Settings };
 
 // The sidebar's links; the current page is marked for sight and for screen readers, and its
 // tint glides from the page before (motion.tsx Indicator). A link fetches its page as soon as
