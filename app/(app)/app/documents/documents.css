@@ -8,6 +8,8 @@
 .docs-folder:active { transform: scale(0.98); }
 .docs-folder[aria-current] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--edge), var(--shadow-button); }
 .docs-folder[aria-current] svg { color: var(--k-docs); }
+/* Papers waiting under To check, apart from the folders. */
+.docs-check { margin-top: var(--s3); }
 .docs-n { margin-left: auto; color: var(--ink-3); font: 500 12px var(--font-plex), ui-monospace, monospace; }
 /* A count still on its way: a small shimmer in its place. */
 .docs-wait { display: inline-block; width: 18px; height: 10px; border-radius: var(--round); background: var(--sheen) 100% 0 / 300% 100%; vertical-align: middle; animation: shimmer 1.4s linear infinite; }
@@ -23,33 +25,31 @@
 .docs-find svg { position: absolute; left: var(--s5); color: var(--ink-3); pointer-events: none; }
 .ui .docs-find input[type="search"] { padding-left: var(--s6); font-size: 14px; }
 .docs-table { flex: 1; overflow-x: auto; }
-.docs-table table { width: 100%; min-width: 600px; table-layout: fixed; border-collapse: collapse; }
-/* The paper's name gets most of the width; its work and any tag sit on a second line. */
-.docs-table th:nth-child(1 of :not(.docs-pick)) { width: 36%; }
-.docs-table th:nth-child(2 of :not(.docs-pick)) { width: 24%; }
-.docs-table th:nth-child(3 of :not(.docs-pick)) { width: 88px; }
+.docs-table table { width: 100%; min-width: 520px; table-layout: fixed; border-collapse: collapse; }
+/* The paper's name gets most of the width, on up to two lines; how it came in sits below it. */
+.docs-table th:nth-child(2 of :not(.docs-pick)) { width: 30%; }
+.docs-table th:nth-child(3 of :not(.docs-pick)) { width: 108px; }
 .docs-table .docs-pick { width: 44px; padding-right: 0; }
 .docs-table th { position: sticky; top: 0; z-index: 2; height: 40px; padding: 0 var(--s3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(8px); color: var(--ink-3); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; }
-.docs-table td { height: 56px; padding: 0 var(--s3); overflow: hidden; border-bottom: 1px solid var(--line); font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
+.docs-table td { height: 56px; padding: var(--s2) var(--s3); overflow: hidden; border-bottom: 1px solid var(--line); font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
 .docs-table :is(th, td):first-child { padding-left: var(--s4); }
 .docs-table tbody tr { position: relative; transition: background var(--fast) var(--out); }
 .docs-table tbody tr:hover { background: var(--hover); }
 .docs-table tbody tr:has(.pick:checked) { background: var(--accent-soft); }
 .docs-table tbody tr.on { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--select); }
-/* Who a paper came from wraps; a long client name ends in an ellipsis on one line. */
-.docs-table td:last-child { font-size: 13px; line-height: 1.35; white-space: normal; }
+/* A long client name ends in an ellipsis on one line. */
 .docs-table .who { gap: var(--s2); font-weight: 500; }
 .docs-table .who > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .docs-table .who .avatar { width: 24px; height: 24px; font-size: 11px; }
 .docs-paper { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
-.docs-paper .grow { display: grid; min-width: 0; }
-.docs-name { display: block; overflow: hidden; color: var(--ink); font-weight: 600; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.docs-paper .grow { display: grid; gap: 2px; min-width: 0; }
+.docs-name { display: -webkit-box; overflow: hidden; color: var(--ink); font-weight: 600; line-height: 1.35; text-decoration: none; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .docs-tag { display: flex; align-items: center; gap: var(--s2); color: var(--ink-3); font-size: 12px; font-weight: 500; }
+.docs-tag > span:last-child { min-width: 0; line-height: 1.35; white-space: normal; }
 /* The whole row chooses the paper; its tick box sits above. */
 .docs-table td a::after { content: ""; position: absolute; inset: 0; }
 .docs-table .pick { position: relative; z-index: 1; }
 .docs-faint { color: var(--ink-3); }
-.docs-table td.docs-from { max-width: 11rem; white-space: nowrap; text-overflow: ellipsis; }
 .docs-pages { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3) var(--s2) var(--s4); border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
 .docs-pages span { margin-right: auto; }
 .docs-list > .empty { margin: var(--s4); }
@@ -96,7 +96,7 @@
 @media (max-width: 1360px) {
   .docs-folders { flex-basis: 176px; }
   .docs-detail { flex-basis: 264px; }
-  .docs-table table { min-width: 480px; }
+  .docs-table table { min-width: 420px; }
   .docs-table :is(th, td):nth-child(3 of :not(.docs-pick)) { display: none; }
 }
 @media (max-width: 1100px) {

@@ -112,6 +112,9 @@ test("a Form 26AS text file and a Form 16 added on Documents are filed under the
     { document_type: "Form 26AS", period_key: "2026", work_type: "income_tax", name: `${name} - Form 26AS - FY 2025-26.txt` },
   ]);
   expect(await readFile(path.join(drive, "InboxCA", "FY 2025-26", name, "Income tax", `${name} - Form 26AS - FY 2025-26.txt`))).toEqual(form26asText());
+  // Each says it was added as a portal file, by whom and when.
+  await owner.goto(`/app/clients/${client}?tab=documents`);
+  await expect(owner.locator("section[aria-labelledby=files] tbody tr").filter({ hasText: "Form 16" })).toContainText("Added as a portal file by Import, ");
   await runJobs(request, firm.firmId);
   // Each paper's figures wait in a draft of its own for the year, every one to be checked.
   const drafts = await query(local.dbUrl, "select id, form_code, period_key, data from public.datasets where client_id = $1 order by id", [client]);
@@ -211,4 +214,10 @@ test("old files on a disk go into Incoming by checksum, and a folder's client is
   const gst = path.join(drive, "InboxCA", "FY 2026-27", clientName, "GST");
   expect(await readFile(path.join(gst, `${clientName} - GSTR-3B - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented return");
   expect(await readFile(path.join(gst, `${clientName} - GSTR-1 - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented return");
+  // Each moved paper says it came from the old files, and where it used to be.
+  await owner.goto("/app/documents");
+  const moved = owner.getByRole("region", { name: "Papers" }).getByRole("row", { name: /GSTR-1 - Sep 2026/ });
+  await expect(moved).toContainText("From your old files");
+  await moved.getByRole("link").click();
+  await expect(owner.getByRole("complementary", { name: "Paper" })).toContainText(`It used to be at ${unknown}/GSTR-1 Sep 2026.pdf`);
 });

@@ -1,7 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
+import { loadEnvConfig } from "@next/env";
 import { test, expect } from "@playwright/test";
 import { TEST_DRIVE } from "../../playwright.config";
+import { serverCrypto } from "@/src/lib/crypto";
 import { pdf } from "../fixtures/pdf";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
@@ -117,6 +119,95 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     expect((await query(local.dbUrl, "select settings->'document_types' as types from public.firms where id = $1", [firm.firmId]))[0].types).toEqual(["Loan sanction letter"]);
   } finally {
     await firm.remove();
+  }
+});
+
+// Each paper says how it got into the drive and when, from what InboxCA recorded: the email (which
+// opens in the Inbox), who uploaded, added or filed it, the client's upload link, or the old
+// files sorted in the first import. Papers waiting under To check are counted, say why, and open where they are checked.
+test("each paper says how it came in and when, papers to check say why, and another firm's log never shows", async ({ page }) => {
+  test.setTimeout(90_000);
+  const email = `owner-${randomUUID()}@example.test`;
+  const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+  const firm = await seedFirm("Documents Origin Firm", email, key);
+  const other = await seedFirm("Documents Other Firm", `other-${randomUUID()}@example.test`);
+  try {
+    const tag = randomUUID().slice(0, 8);
+    const name = `Kapoor Enterprises ${tag}`;
+    const [client] = await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, $2, 'business') returning id", [firm.firmId, name]);
+    const paper = async (type: string, period: string, status = "filed", mail: string | null = null) =>
+      (await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, period_key, status, email_event_id, drive_file_id, name, size, sha256) values ($1, $2, 'gst', $3, $4, $5, $6, 'nowhere', $7, 1, $8) returning id", [firm.firmId, client.id, type, period, status, mail, `${name} - ${type}.pdf`, randomUUID()]))[0].id as string;
+    const log = (firmId: string, actor: string | null, action: string, entity: string, details = {}) =>
+      query(local.dbUrl, "insert into public.activity_log (firm_id, actor_id, action, entity_type, entity_id, details) values ($1, $2, $3, 'document', $4, $5)", [firmId, actor, action, entity, details]);
+    loadEnvConfig(process.cwd());
+    const crypto = serverCrypto();
+    const account = randomUUID();
+    await query(local.dbUrl, "insert into public.connected_accounts (id, firm_id, kind, provider, address_enc, credentials_enc, status) values ($1, $2, 'mail', 'imap', $3, $4, 'needs_reconnect')", [account, firm.firmId, await crypto.encrypt(firm.firmId, `accounts/${account}/address`, "office@invented.test"), await crypto.encrypt(firm.firmId, `accounts/${account}/credentials`, "{}")]);
+    const [{ id: mail }] = await query(local.dbUrl, "insert into public.email_events (firm_id, account_id, client_id, provider_message_id, sender_bidx, received_at) values ($1, $2, $3, $4, 'invented', now()) returning id", [firm.firmId, account, client.id, `<${tag}@client.test>`]);
+    await paper("Sales bills", "2026-09", "filed", mail);
+    await log(firm.firmId, firm.ownerId, "document.uploaded", await paper("Purchase bills", "2026-09"));
+    await log(firm.firmId, firm.ownerId, "document.uploaded", await paper("GSTR-2B", "2026-09"), { from: "portal" });
+    await log(firm.firmId, null, "document.uploaded", await paper("Bank statement", "2026-09"));
+    await log(firm.firmId, firm.ownerId, "document.filed", await paper("Ledger", "2026-09"), { from: "drive" });
+    const waiting = await paper("Document", "", "to_check");
+    await log(firm.firmId, firm.ownerId, "document.uploaded", waiting);
+    const moved = await paper("Trial balance", "2026");
+    await query(local.dbUrl, "insert into public.requests (firm_id, kind, entity_type, entity_id, status, details) values ($1, 'import', 'import', gen_random_uuid(), 'done', $2)", [firm.firmId, { files: [], done: 1, moved: [{ document: moved, from: `Old files/${name}/TB 2025-26.pdf` }] }]);
+    // Another firm's line about the same paper is never read as this firm's.
+    await log(other.firmId, other.ownerId, "document.uploaded", moved, { from: "portal" });
+
+    await emailStep(page, email);
+    await page.getByLabel("6 digit code from the app").fill(totp(key));
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/app$/);
+    await page.goto("/app/documents?year=all");
+    const papers = page.getByRole("region", { name: "Papers" });
+    const row = (type: string) => papers.getByRole("row", { name: new RegExp(type) });
+    await expect(row("Sales bills")).toContainText(`Email from ${name}`);
+    await expect(row("Purchase bills")).toContainText("Uploaded by Owner");
+    await expect(row("GSTR-2B")).toContainText("Portal file, added by Owner");
+    await expect(row("Bank statement")).toContainText("Client's upload link");
+    await expect(row("Ledger")).toContainText("Saved from the drive by Owner");
+    await expect(row("Trial balance")).toContainText("From your old files");
+    await expect(row("Document")).toContainText("To checkInboxCA could not tell its type and period");
+
+    // The paper's panel says it whole, and when; an email opens in the Inbox.
+    const detail = page.getByRole("complementary", { name: "Paper" });
+    await row("Trial balance").getByRole("link").click();
+    await expect(detail).toContainText("Moved here from your old files, ");
+    await expect(detail).toContainText(`It used to be at Old files/${name}/TB 2025-26.pdf`);
+    await expect(detail).not.toContainText("Other");
+    await row("Bank statement").getByRole("link").click();
+    await expect(detail).toContainText("Sent by the client through their upload link, ");
+    await row("Sales bills").getByRole("link").click();
+    await expect(detail).toContainText(new RegExp(`Saved by InboxCA from ${name}'s email, \\d{1,2} \\w{3}, \\d\\d:\\d\\d`));
+    await detail.getByRole("link", { name: "Open the email" }).click();
+    await expect(page).toHaveURL(new RegExp(`/app/inbox\\?mail=${mail}$`));
+
+    // To check: counted beside the folders, each with why it waits, checked on the client's page.
+    await page.goto("/app/documents");
+    const check = page.getByRole("navigation", { name: "Folders" }).getByRole("link", { name: /To check/ });
+    await expect(check).toContainText("1");
+    await check.click();
+    await expect(page).toHaveURL(/show=check/);
+    await expect(papers.getByRole("row")).toHaveCount(2);
+    await expect(detail).toContainText("Uploaded by Owner, ");
+    await expect(detail).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
+    await detail.getByRole("link", { name: "Check and save" }).click();
+    await expect(page).toHaveURL(new RegExp(`/app/clients/${client.id}\\?tab=documents&edit=${waiting}$`));
+    await expect(page.getByRole("dialog")).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
+    await expect(page.getByRole("dialog").getByRole("button", { name: "Save", exact: true })).toBeVisible();
+
+    // The client's Documents tab says the same, whole.
+    await page.goto(`/app/clients/${client.id}?tab=documents`);
+    const rows = page.locator("section[aria-labelledby=files] tbody tr");
+    await expect(rows.filter({ hasText: "GSTR-2B" })).toContainText("Added as a portal file by Owner, ");
+    await expect(rows.filter({ hasText: "Ledger" })).toContainText("Found in the drive and saved by Owner, ");
+    await expect(rows.filter({ hasText: "Trial balance" })).toContainText("Moved here from your old files, ");
+    await expect(rows.filter({ hasText: "Sales bills" }).getByRole("link", { name: "Open the email" })).toHaveAttribute("href", `/app/inbox?mail=${mail}`);
+  } finally {
+    await firm.remove();
+    await other.remove();
   }
 });
 

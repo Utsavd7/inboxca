@@ -407,6 +407,11 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .row-link:hover { text-decoration: underline; text-decoration-color: var(--line-2); }
 .sub { display: block; color: var(--ink-3); font-size: 13px; }
 .sub-inline { margin-left: var(--s2); color: var(--ink-3); font-weight: 500; }
+/* Where a paper came from (documents/came-from.tsx): the line, the email it came in, why it waits. */
+.came-from { display: grid; gap: 2px; justify-items: start; line-height: 1.4; overflow-wrap: anywhere; }
+.came-from-mail { position: relative; z-index: 1; color: var(--accent); font-weight: 600; text-decoration: none; }
+.came-from-mail:hover { text-decoration: underline; }
+.came-from-why { color: var(--wait-fg); font-weight: 500; }
 
 /* Lists */
 .rows { display: grid; margin-inline: calc(var(--s2) * -1); }

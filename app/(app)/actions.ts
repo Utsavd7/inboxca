@@ -1065,9 +1065,9 @@ export async function manageDocument(form: FormData) {
 }
 
 // Saves a file a person brought into the client's folder in the drive and records it,
-// logged with who did it. Refuses a file the client already has. A GST paper gets the
-// client's GSTIN, or the one chosen; a filed one may become the current version. Scanned
-// says the file worker's virus check passed it (src/lib/intake.ts).
+// logged with who did it, and whether it was a portal file. Refuses a file the client already
+// has. A GST paper gets the client's GSTIN, or the one chosen; a filed one may become the
+// current version. Scanned says the file worker's virus check passed it (src/lib/intake.ts).
 async function saveForClient(
   membership: { firmId: string },
   userId: string | null,
@@ -1076,6 +1076,7 @@ async function saveForClient(
   file: { name: string; bytes: Uint8Array },
   opened: NonNullable<Awaited<ReturnType<typeof firmDrive>>>,
   scanned: boolean,
+  portal = false,
 ) {
   const admin = supabaseAdmin();
   const sha256 = createHash("sha256").update(file.bytes).digest("hex");
@@ -1107,7 +1108,7 @@ async function saveForClient(
     received_at: now,
     scanned_at: scanned ? now : null,
   });
-  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.uploaded", entity_type: "document", entity_id: id });
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.uploaded", entity_type: "document", entity_id: id, ...(portal && { details: { from: "portal" } }) });
   if (values.status === "filed") await settleVersions(admin, { client_id: client.id, ...values, registration_id });
   await queueRead(membership.firmId, id);
   return { id };
@@ -1215,7 +1216,7 @@ export async function dropPortalFiles(form: FormData) {
         : { data: null };
       let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
       if (portal && registration?.clients && membership.may("portal_files",registration.client_id)) {
-        saved = await saveForClient(membership, userId, registration.clients, { work_type: kind === "gstin" ? "gst" : "income_tax", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: kind === "gstin" ? registration.id : null }, file, opened, sent.scanned);
+        saved = await saveForClient(membership, userId, registration.clients, { work_type: kind === "gstin" ? "gst" : "income_tax", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: kind === "gstin" ? registration.id : null }, file, opened, sent.scanned, true);
         // The "still missing" item asked for by this file's name closes; a request with every item in closes, and its reminders stop.
         if (typeof saved === "object") await receiveAsked(supabaseAdmin(), registration.client_id, portal.type, portal.period, saved.id);
       } else if (!portal && client && membership.may("upload", client.id)) {
