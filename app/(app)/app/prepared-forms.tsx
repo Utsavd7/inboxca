@@ -11,6 +11,7 @@ import {grantFor} from "@/src/lib/permission-grants";
 import {askPermission} from "@/app/(app)/actions";
 import {Pending} from "./pending";
 import {keptReason} from "@/src/lib/reason";
+import {Toast} from "./ui";
 import {addEditedForm,decideForm,markFormFiled,prepareForm,setDraftRegistration} from "./form-actions";
 
 export async function PreparedForms({client,message}:{client?:string;message?:string}) {
@@ -55,7 +56,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   const reason=message ? await keptReason() : undefined;
   return <section className="panel" aria-labelledby="prepared-title"><h2 id="prepared-title">Return files</h2>
     <p className="hint">Check every figure first. After approval, download the file and file it on the portal with your own code or signature.</p>
-    {message && <p className="alert" role="status">{reason ?? (message==="edited" ? "InboxCA could not use this file. Choose the official workbook or return file you filled, with its headings unchanged. You also need permission to edit figures." : message==="ack" ? "The return was not marked filed. Choose or upload the acknowledgement, or type its number, then try again." : message==="approval" ? "The approval was not saved. Someone other than the person who checked the figures must approve. To reject, choose a reason and say what must change." : "InboxCA could not prepare this return. Check that every figure is checked and that your firm's drive is connected, then try again.")}</p>}
+    {message==="gstin" ? <Toast>GSTIN saved for this register.</Toast> : message && <p className="alert" role="status">{reason ?? (message==="edited" ? "InboxCA could not use this file. Choose the official workbook or return file you filled, with its headings unchanged. You also need permission to edit figures." : message==="ack" ? "The return was not marked filed. Choose or upload the acknowledgement, or type its number, then try again." : message==="approval" ? "The approval was not saved. Someone other than the person who checked the figures must approve. To reject, choose a reason and say what must change." : "InboxCA could not prepare this return. Check that every figure is checked and that your firm's drive is connected, then try again.")}</p>}
     {!!forms?.length && <ul className="rows">{forms.filter(file=>file.status!=="deleted").map(file=>{
       const meta=preparedSchema.parse(file.prepared),active=latest.has(file.id) && !membership.viewOnlyUntil && file.size>0;
       return <li key={file.id}><div className="grow">

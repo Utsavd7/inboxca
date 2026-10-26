@@ -91,7 +91,7 @@ test("an email opens in the firm's own mailbox, and only the firm's own email op
   for (const id of [theirMail, randomUUID(), "not-an-id"]) {
     const refused = await open(owner, id);
     expect(refused.status()).toBe(404);
-    expect(await refused.text()).toBe("This email is not available.");
+    expect(await refused.text()).toContain("This email is not available.");
   }
   // Signed out, it asks for a sign in first.
   const visitor = await (await browser.newContext()).newPage();

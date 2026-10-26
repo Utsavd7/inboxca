@@ -93,7 +93,7 @@ test("the owner turns Office only on for one branch, and its staff are checked a
 
 test("a branch follows the main office again in one press", async () => {
   await owner.goto(`/app/settings?group=access&branch=${branchId}#office`);
-  await expect(owner.getByText("Pune has its own Office only switch, connections and PCs.")).toBeVisible();
+  await expect(owner.getByText("Pune has its own Office only setting, internet connections and PCs.")).toBeVisible();
   await owner.getByRole("button", { name: "Follow the main office" }).click();
   await expect(owner.getByText("Pune follows the main office")).toBeVisible();
   expect((await settingsOf("groups", branchId)).office).toBeUndefined();

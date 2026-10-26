@@ -103,7 +103,7 @@ test("staff see the closed notice but cannot move it on", async () => {
   const { id } = await notice();
   await staff.goto(`/app/notices?show=all&notice=${id}`);
   const panel = staff.getByRole("dialog", { name: "Notice u/s 143(2)" });
-  await expect(panel).toContainText("The owner, a partner or a manager confirms the date");
+  await expect(panel).toContainText("The owner, a partner or a manager checks the date");
   await expect(panel.getByRole("button", { name: "Mark open" })).toHaveCount(0);
 });
 

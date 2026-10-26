@@ -106,7 +106,7 @@ const taskChanges: Record<string, string> = { filed: "marked filed", in_progress
 // What a save on this page says once it is done (?changed=).
 const changes: Record<string, string> = {
   details: "Details saved.", services: "Services saved.", "contact-rights": "Contact saved.", "add-contact": "Contact added.", "unlink-contact": "Contact removed.",
-  "add-number": "Number added.", "remove-number": "Number removed.", assign: "Assigned.", unassign: "Unassigned.", archive: "Client archived.", restore: "Client restored.",
+  "add-number": "Tax number added.", "remove-number": "Tax number removed.", assign: "Assigned.", unassign: "Unassigned.", archive: "Client archived.", restore: "Client restored.",
   reminders: "Reminders saved.", list: "List saved.", sharing: "Sending choice saved.",
 };
 

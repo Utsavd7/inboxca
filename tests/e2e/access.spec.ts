@@ -83,7 +83,7 @@ test("the owner names a co-admin, who changes the access settings but not the ow
   const lines = (await settings()).office.lines;
   await partner.goto("/app/settings?group=access#office");
   await partner.getByRole("button", { name: "This is my office" }).click();
-  await expect(partner.getByRole("alert").filter({ hasText: "could not see this connection's address" })).toBeVisible();
+  await expect(partner.getByRole("alert").filter({ hasText: "could not read this internet connection" })).toBeVisible();
   expect((await settings()).office.lines).toEqual(lines);
 });
 

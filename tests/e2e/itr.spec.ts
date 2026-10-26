@@ -58,7 +58,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await expect(page.getByRole("heading",{name:"Income tax return"})).toBeVisible();
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${paper}`);
     await expect(page.getByRole("link",{name:"Income tax AY 2026-27"})).toHaveAttribute("aria-current","page");
-    for(let n=0;n<fromForm16.length;n++) {await expect(page.getByText("Invented Form 16.pdf. Page 1")).toBeVisible();await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${n+1} of ${fromForm16.length} confirmed`)).toBeVisible();}
+    for(let n=0;n<fromForm16.length;n++) {await expect(page.getByText("Invented Form 16.pdf. Page 1")).toBeVisible();await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${n+1} of ${fromForm16.length} checked`)).toBeVisible();}
     // The return: PAN and Form 16 are already filled; the rest is listed to fill.
     await page.goto(`/app/clients/${client}/itr`);
     const held=page.getByRole("region",{name:"Already filled"});await expect(held).toContainText(`PAN ${pan}`);await expect(held).toContainText("Invented Form 16.pdf");await expect(held).toContainText("8 figures, 8 checked");
@@ -68,7 +68,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await expect(page.getByLabel(/^Email address/)).toHaveValue("invented.person@invented.test");
     await page.getByRole("button",{name:"Save for checking",exact:true}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
     await page.getByRole("link",{name:/^Taxes paid: \d+$/}).click();
-    await page.getByLabel(/^Total TDS claimed/).fill("5000");await page.getByLabel(/^Taxes Paid · Total Taxes Paid/).fill("5000");
+    await page.getByLabel(/^Total TDS claimed/).fill("5000");await page.getByLabel(/^Tax paid details, detail 1/).fill("5000");
     await page.getByRole("button",{name:"Save, putting 0 in the 6 empty amounts",exact:true}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
     // The 4 amounts left empty were saved as 0, and the log says so.
     expect((await query(local.dbUrl,"select details->>'zeroed' zeroed from public.activity_log where firm_id=$1 and action='dataset.changed' and details ? 'zeroed'",[firm.firmId])).map(row=>row.zeroed)).toEqual(["4"]);
@@ -82,7 +82,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${own.id}`);
     await expect(page.getByText(/^Entered by /)).toBeVisible();
     const pending=own.data.lines.length;expect(pending).toBe(7);
-    for(let n=0;n<pending;n++) {await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${rest.length+n+1} of ${rest.length+pending} confirmed`)).toBeVisible();}
+    for(let n=0;n<pending;n++) {await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${rest.length+n+1} of ${rest.length+pending} checked`)).toBeVisible();}
     await page.goto(`/app/clients/${client}/itr`);await expect(page.getByText("Nothing left to fill.")).toBeVisible();
     // Prepared forms: the approved file is in Prepared, downloaded once and logged.
     await page.goto(`/app/clients/${client}?tab=outputs`);

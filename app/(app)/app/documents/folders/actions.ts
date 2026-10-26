@@ -15,7 +15,7 @@ async function writable(form: FormData): Promise<{ ctx: Context; parts: string[]
   const ctx = await browseContext();
   const parts = parsePath(String(form.get("path") ?? ""));
   if (!ctx || !parts) return { error: "That folder is not open to you." };
-  if (ctx.membership.viewOnlyUntil) return { error: "This device can only view papers." };
+  if (ctx.membership.viewOnlyUntil) return { error: "This laptop can only view papers away from the office." };
   if (!ctx.drive || !ctx.account) return { error: "Connect the firm's drive in Settings first." };
   return { ctx, parts };
 }

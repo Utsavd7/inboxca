@@ -124,7 +124,7 @@ test("the owner invites a new person, who appears as invited", async () => {
   await expect(row).toContainText("Invited");
   // Orelu's system email names the firm; the sign in code comes separately.
   await expect.poll(() => lastMail(newEmail), { timeout: 15_000 }).toContain("It has invited you to join its team.");
-  expect(await lastMail(newEmail)).toMatch(/Sign in at http\S+\/sign-in with this email address/);
+  expect(await lastMail(newEmail)).toMatch(/To join, go to http\S+\/sign-in and enter this email address/);
 
   await owner.getByLabel("Their work email").fill(newEmail);
   await owner.getByRole("button", { name: "Send invite" }).click();
@@ -472,7 +472,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload papers" })).toHaveCount(0);
   await person.getByRole("button", { name: "Ask to upload" }).click();
-  await expect(person.getByRole("status")).toContainText("Asked.");
+  await expect(person.getByRole("status")).toContainText("Permission asked.");
   // Within seconds the owner's browser gets it, sealed for that browser alone, naming no client.
   // Only the question counts: the note about the PCs added above, a minute after the first of
   // them, can fall due in the same sweep.
@@ -1165,7 +1165,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   };
   await ask("ITR copy", "Please send my ITR for AY 2025-26 for the loan.");
   const reply = await lastMail(`client-${tag}@patel.test`);
-  expect(reply).toContain(`shared ${mailClient} - ITR-V - FY 2024-25.pdf with you`);
+  expect(reply).toContain("shared ITR-V for FY 2024-25 with you");
   expect(reply).toMatch(/Download it here: http\S+\/s\//);
   const routineLink=reply.match(/Download it here: (http\S+)/)![1];
   const opened=await request.get(routineLink);
@@ -1177,7 +1177,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(papers).toContainText(`${mailClient} - Balance sheet - FY 2025-26.pdf`);
   await papers.getByRole("button", { name: "Approve and send" }).click();
   await expect(owner.getByRole("status")).toContainText("Sent");
-  expect(await lastMail(`client-${tag}@patel.test`)).toContain(`shared ${mailClient} - Balance sheet - FY 2025-26.pdf with you`);
+  expect(await lastMail(`client-${tag}@patel.test`)).toContain("shared Balance sheet for FY 2025-26 with you");
 
   // A notice a client emails is recorded with what the rules found; its date is only a
   // suggestion until a person confirms it.

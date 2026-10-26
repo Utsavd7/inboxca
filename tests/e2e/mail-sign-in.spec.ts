@@ -48,7 +48,7 @@ for (const provider of ["gmail", "outlook", "zoho"] as const) {
       // Not allowed at the provider: nothing is connected. Microsoft 365's admin can allow it.
       fake.mailbox.answer = "deny";
       await connect.click();
-      await expect(card.getByRole("alert")).toContainText(provider === "outlook" ? "its admin may need to allow InboxCA once" : "The sign in was not allowed");
+      await expect(card.getByRole("alert")).toContainText(provider === "outlook" ? "may need to allow InboxCA once for the whole firm" : "The sign in was not allowed");
       if (provider === "outlook") {
         await card.getByRole("button", { name: "Allow for the whole firm" }).click();
         await expect(page.getByText("Your admin allowed InboxCA. Now connect with Microsoft.")).toBeVisible();
@@ -101,7 +101,7 @@ for (const provider of ["gmail", "outlook", "zoho"] as const) {
       const [before] = await query(local.dbUrl, "select id, sync_cursor from public.connected_accounts where firm_id = $1 and kind = 'mail'", [firm.firmId]);
       await query(local.dbUrl, "update public.connected_accounts set status = 'needs_reconnect' where id = $1", [before.id]);
       await page.goto("/app/settings?group=email");
-      await expect(card.getByRole("alert")).toContainText("Connect your firm's email again");
+      await expect(card.getByRole("alert")).toContainText("Connect the firm email again");
       await card.getByRole("button", { name: `Connect again with ${names[provider]}` }).click();
       await expect(card.getByRole("status")).toHaveText(`Connected: ${office}`);
       expect(await query(local.dbUrl, "select id, status, sync_cursor from public.connected_accounts where firm_id = $1 and kind = 'mail'", [firm.firmId])).toEqual([{ ...before, status: "connected" }]);

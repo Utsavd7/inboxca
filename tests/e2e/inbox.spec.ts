@@ -316,7 +316,7 @@ test("an email that needs a reply is given to a teammate, snoozed to a day, mark
   const panel = owner.getByRole("dialog", { name: "Mark 2 emails done?" });
   await expect(panel.getByRole("listitem")).toHaveCount(2);
   await panel.getByRole("button", { name: "Mark 2 emails done" }).click();
-  const cleared = owner.getByRole("status").filter({ hasText: "2 emails moved out of Needs reply." });
+  const cleared = owner.getByRole("status").filter({ hasText: "2 emails marked done." });
   await expect(cleared).toBeVisible();
   const waiting = async () => (await query(local.dbUrl, "select id from public.requests where firm_id = $1 and kind = 'team_reply' and status = 'pending'", [firm.firmId])).length;
   expect(await waiting()).toBe(0);
@@ -333,7 +333,7 @@ test("an email that needs a reply is given to a teammate, snoozed to a day, mark
   await pane().getByRole("link", { name: clientName }).click();
   const filing = pane().getByRole("form", { name: "Save to a client" });
   await expect(filing).toContainText(`Save this email to ${clientName}?`);
-  await filing.getByRole("button", { name: `File to ${clientName}` }).click();
+  await filing.getByRole("button", { name: `Save to ${clientName}` }).click();
   await expect(owner.getByRole("status").filter({ hasText: `Saved to ${clientName}.` })).toBeVisible();
   expect(await query(local.dbUrl, "select client_id from public.email_events where id = $1", [mail])).toEqual([{ client_id: clientId }]);
   expect((await query(local.dbUrl, "select status from public.requests where id = $1", [b]))[0].status).toBe("done");

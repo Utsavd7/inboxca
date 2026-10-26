@@ -131,7 +131,7 @@ test("Today's late returns: the month's numbers, a preview before reminding, Mar
   const preview = owner.getByRole("dialog", { name: "Remind 2 late clients" });
   await expect(preview.getByRole("listitem").filter({ hasText: "Patel Textiles" })).toContainText("Will be emailed");
   await expect(preview.getByRole("listitem").filter({ hasText: "Anand Late" })).toContainText("No email address");
-  await expect(preview.getByRole("alert")).toContainText("Connect the firm's email");
+  await expect(preview.getByRole("alert")).toContainText("The firm email is not connected");
   await expect(preview.getByRole("button", { name: "Send 1 reminder" })).toBeDisabled();
   await preview.getByRole("link", { name: "Cancel" }).click();
   await expect(preview).toHaveCount(0);
@@ -276,7 +276,7 @@ test("importing 500 clients with emails adds them all and reports every bad row"
   await expect(first.locator("tbody tr")).toHaveCount(5);
   await expect(first.locator("tbody tr").nth(1)).toContainText("Client 1Business");
   const problems = owner.locator("section[aria-labelledby=import]").getByRole("table").last();
-  for (const text of ["PAN is not valid", "not a kind InboxCA knows", "on an earlier row", "Enter the client's name", "already in your firm", "email address is not valid"])
+  for (const text of ["PAN is not valid", "not a client type InboxCA knows", "on an earlier row", "Enter the client's name", "already in your firm", "email address is not valid"])
     await expect(problems).toContainText(text);
 
   await owner.getByRole("button", { name: "Import 500 clients" }).click();

@@ -73,7 +73,7 @@ test("a file with a virus is kept out of InboxCA, put in the owner's folder for 
 
 test("a ZIP's papers are each filed and checked; unsafe ZIPs and programs are refused", async () => {
   await upload({ name: "Sep bills.zip", mimeType: "application/zip", buffer: zip([{ name: "Sep/bill 1.pdf", text: pdf("Invented bill 1") }, { name: "bill 2.pdf", text: pdf("Invented bill 2") }, { name: "__MACOSX/._bill 2.pdf", text: "x" }]) }, "Purchase bills");
-  await expect(owner.getByRole("status")).toContainText("2 filed");
+  await expect(owner.getByRole("status")).toContainText("2 saved");
   const filed = await papers();
   expect(filed).toHaveLength(2);
   expect(filed.every((paper: { name: string; scanned_at: Date | null }) => paper.name.includes("Purchase bills") && paper.name.endsWith(".pdf") && paper.scanned_at)).toBe(true);

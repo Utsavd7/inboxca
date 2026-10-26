@@ -130,7 +130,7 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   await expect(pane(owner).getByRole("link", { name: "Open the notice" })).toHaveAttribute("href", `/app/notices?notice=${notice}`);
   await owner.goto("/app/inbox?status=filed");
   await row(owner, `Bills ${tag}`).getByText(`Bills ${tag}`).click();
-  await expect(pane(owner)).toContainText(`InboxCA filed its paper into ${shah.name}'s folders.`);
+  await expect(pane(owner)).toContainText(`InboxCA saved its paper in ${shah.name}'s folders.`);
   await owner.goto("/app/inbox?status=reply");
   await row(owner, `Meeting ${tag}`).getByText(`Meeting ${tag}`).click();
   await expect(pane(owner)).toContainText("Asks something InboxCA could not answer");

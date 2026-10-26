@@ -29,7 +29,7 @@ test("the owner connects the firm's mailbox with only its address and password",
 
     await address.fill("shah.associates@gmail.com");
     await address.blur();
-    await expect(card.getByText("Found Gmail. Gmail needs an app password: Google Account, Security, App passwords.")).toBeVisible();
+    await expect(card.getByText("Found Gmail. Gmail needs an app password, not your usual password. Make one in your Google Account under Security, then App passwords.")).toBeVisible();
     await address.fill("shah.associates@outlook.com");
     await address.blur();
     // The test server has Microsoft sign in set up (the fake in tests/fake-mail.ts).

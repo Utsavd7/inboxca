@@ -109,7 +109,7 @@ test("the drive's folders as the drive shows them: a hand placed file is filed i
     await main.dispatchEvent("dragover", { dataTransfer: dropped });
     await expect(main.locator(".fb-drop")).toHaveText("Drop to upload to GST");
     await main.dispatchEvent("drop", { dataTransfer: dropped });
-    await expect(page.getByRole("status").filter({ hasText: `1 paper filed for ${patel}.` })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: `1 paper saved for ${patel}.` })).toBeVisible();
     await expect(main.getByRole("row", { name: new RegExp(`${patel} - GSTR-3B - Sep 2026\\.pdf`) })).toContainText("GSTR-3B, GST, Sep 2026");
 
     // Restricted staff see their own client's folder only, and cannot ask for another's.

@@ -65,7 +65,7 @@ test("the frame remembers the theme and the folded sidebar, and its keys and pan
     await page.locator(".topbar").getByRole("button", { name: "Help" }).click();
     const help = page.getByRole("dialog", { name: "Help" });
     await help.getByText("How do reminders work?").click();
-    await expect(help.getByText(/Once a day at most, at 10:00/)).toBeVisible();
+    await expect(help.getByText(/At 10:00 each day/)).toBeVisible();
     await page.keyboard.press("Escape");
 
     // The status line says what is connected; the owner gets a link to fix what is not.
@@ -133,7 +133,7 @@ test("a slow page shows the loading bar, and a slow save keeps its button busy",
     await expect(turnOn).toHaveAttribute("aria-busy", "true");
     await expect(turnOn).toBeDisabled();
     await expect(page.getByRole("button", { name: "Use this choice" })).toBeDisabled();
-    await expect(page.getByRole("alert").filter({ hasText: "could not see this connection's address" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "could not read this internet connection" })).toBeVisible();
     await expect(turnOn).not.toHaveAttribute("aria-busy");
     await expect(turnOn).not.toHaveAttribute("disabled");
   } finally {

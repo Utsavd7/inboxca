@@ -80,5 +80,5 @@ export async function setDraftRegistration(form:FormData) {
   if(!row || !number) redirect(`${back}&form=check`);
   const data=draftSchema.parse(row.data);
   if(data.registration!==registration && !await saveDraft(row,{...data,registration},userId,"dataset.changed",{registration},permission)) redirect(`${back}&form=check`);
-  revalidatePath("/app","layout");redirect(back);
+  revalidatePath("/app","layout");redirect(`${back}&form=gstin`);
 }
