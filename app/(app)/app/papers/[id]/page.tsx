@@ -63,9 +63,9 @@ export default async function Papers({ params, searchParams }: { params: Promise
         sub={
           <p className="hint">
             {what || "Papers"}{details.period ? ` for ${periodName(details.period)}` : ""}.{" "}
-            {missing.length ? `${details.items.length - missing.length} of ${details.items.length} in.` : "Every paper is in."}{" "}
+            {missing.length ? `${details.items.length - missing.length} of ${details.items.length} papers in.` : "Every paper is in."}{" "}
             {asked ? `Reminded ${times(asked)}, last on ${dueLabel(details.followups!.at(-1)!)}.` : ""}
-            {details.chased && details.chased >= (details.followups?.at(-1) ?? "") ? ` Asked by phone on ${dueLabel(details.chased)}.` : ""}
+            {details.chased ? ` Your team last asked the client on ${dueLabel(details.chased)}.` : ""}
           </p>
         }
         actions={
