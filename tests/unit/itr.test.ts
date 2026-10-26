@@ -1,6 +1,6 @@
 import {afterEach,expect,it,vi} from "vitest";
 import {itrRequest} from "../fixtures/itr";
-import {editedItr,itrBody,itrCreation,itrEntries,itrEntry,itrReview} from "../../worker/itr";
+import {editedItr,itrBody,itrCreation,itrEntries,itrEntry,itrReview,itrValue} from "../../worker/itr";
 import {itrChecks} from "../../worker/itr-rules";
 import {prepare} from "../../worker/prepare";
 import {officialSchema} from "../../worker/schema";
@@ -118,4 +118,14 @@ it.each(itrReturns)("reads an edited %s into unchecked source positions and refu
   const wrong=JSON.parse(output.bytes.toString()),paid=form==="ITR2" || form==="ITR3" ? wrong.ITR[form].PartB_TTI : wrong.ITR[form];
   paid.TaxPaid.TaxesPaid.TotalTaxesPaid=1;
   expect(()=>editedItr(Buffer.from(JSON.stringify(wrong)),context)).toThrow("checked");
+});
+
+it("takes a whole rupee amount read with paise, and asks a person to round real paise",()=>{
+  const whole={primitive:"integer"} as Parameters<typeof itrValue>[0];
+  expect(itrValue(whole,"1200000.00")).toBe(1200000);
+  expect(itrValue(whole,"1200000.0")).toBe(1200000);
+  expect(itrValue(whole,"-500.00")).toBe(-500);
+  expect(()=>itrValue(whole,"1200000.50")).toThrow("Round this amount to whole rupees");
+  expect(()=>itrValue(whole,"12,00,000")).toThrow("Enter a valid amount");
+  expect(itrValue({primitive:"number"} as Parameters<typeof itrValue>[0],"1200.50")).toBe(1200.5);
 });

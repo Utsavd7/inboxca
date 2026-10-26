@@ -88,6 +88,12 @@ function put(root:Values,path:string,value:unknown) {
 const read=(root:unknown,path:string)=>path.split(".").reduce<unknown>((at,key)=>at && typeof at==="object" ? (at as Values)[key] : undefined,root);
 
 export function itrValue(entry:ItrEntry,value:string) {
+  // A whole rupee amount read with paise, as Form 16 prints it ("1200000.00"), is that many
+  // rupees; real paise in a whole rupee field are for a person to round, never guessed.
+  if(entry.primitive==="integer" && /^-?\d{1,14}\.\d{1,2}$/.test(value)) {
+    if(!/\.0{1,2}$/.test(value)) throw new Error("Round this amount to whole rupees");
+    value=value.replace(/\.0{1,2}$/,"");
+  }
   if(entry.primitive==="integer" && !/^-?\d{1,14}$/.test(value) || entry.primitive==="number" && !/^-?\d{1,13}(\.\d{1,2})?$/.test(value)) throw new Error("Enter a valid amount");
   if(entry.primitive==="boolean") {if(!["true","false"].includes(value)) throw new Error("Choose yes or no");return value==="true";}
   return entry.primitive==="integer" || entry.primitive==="number" ? Number(value) : value;
