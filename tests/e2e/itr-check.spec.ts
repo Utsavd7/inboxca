@@ -96,6 +96,16 @@ test("an ITR that differs from Form 26AS shows each difference and is approved o
     // Never a block on filing: the approved return downloads as usual.
     await expect(page.locator("li").filter({has:page.getByRole("link",{name:prepared.name,exact:true})}).getByRole("button",{name:"Download for filing"})).toBeEnabled();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+
+    // A correction later, with no second approval: InboxCA makes the next version from the corrected
+    // figures by itself, and it still waits for a person to look at the differences and approve.
+    await query(local.dbUrl,"update public.firms set settings=settings-'second_form_approval' where id=$1",[firm.firmId]);
+    const [mine]=await query(local.dbUrl,"select revision,data from public.datasets where id=$1",[own]);
+    const corrected=await Promise.all((mine.data.lines as Draft["lines"]).map(async line=>line.field!=="itr.tds.salary.0.name" ? line : {...line,value_enc:await crypto.encrypt(firm.firmId,place(own,line.id),JSON.stringify({label:"Employer's name",value:"INVENTED SOFTWARE LIMITED",kind:"text"}))}));
+    await query(local.dbUrl,"update public.datasets set revision=revision+1,data=jsonb_set(data,'{lines}',$2::jsonb) where id=$1",[own,JSON.stringify(corrected)]);
+    await query(local.dbUrl,"insert into public.jobs(firm_id,kind,entity_type,entity_id,idempotency_key) values($1,'regenerate_form','document',$2,$3)",[firm.firmId,prepared.id,`regenerate:${prepared.id}:${own}:${mine.revision+1}`]);
+    await runJobs(request,firm.firmId);
+    await expect.poll(async()=>(await query(local.dbUrl,"select prepared->>'status' status from public.documents where firm_id=$1 and prepared->>'form'='ITR1' and (prepared->>'version')::int=2",[firm.firmId]))[0]?.status).toBe("draft");
   } finally {
     await firm.remove();
   }
