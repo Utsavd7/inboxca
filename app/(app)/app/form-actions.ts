@@ -2,10 +2,12 @@
 import {redirect} from "next/navigation";
 import {revalidatePath} from "next/cache";
 import {z} from "zod";
-import {fileForm,prepareDocument,recordFormDecision,uploadEditedForm,visibleForm} from "@/src/lib/prepared";
+import {fileForm,prepareDocument,recordFormDecision,savePrepared,uploadEditedForm,visibleForm} from "@/src/lib/prepared";
+import {formContext,requestFor} from "@/src/lib/prepare-form";
+import {fillWork} from "@/src/lib/fill";
 import {runJobsSoon} from "@/src/jobs/run-soon";
 import {draftSchema,saveDraft} from "@/src/lib/datasets";
-import {currentWriter} from "@/src/lib/member";
+import {currentMember,currentWriter} from "@/src/lib/member";
 import {grantFor} from "@/src/lib/permission-grants";
 import {itrReturns} from "@/src/lib/itr-fields";
 
@@ -15,6 +17,25 @@ export async function prepareForm(form:FormData) {
   try {
     id=await prepareDocument({client,registration:String(form.get("registration")),form:z.enum(["GSTR1","GSTR3B",...itrReturns]).parse(form.get("form") ?? "GSTR1"),period:String(form.get("period")),drafts:form.getAll("draft").map(String),version:String(form.get("version") ?? "") || undefined,reason:String(form.get("reason") ?? "") || undefined});
   } catch {redirect(`${back}&form=check`);}
+  revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
+}
+
+// Fill, for one return from its row or its pin: InboxCA fills it from every figure it has read,
+// checked or not, through the same database path as the automatic fill, so pressing twice or
+// racing it makes one draft. The draft opens with the figures still to check.
+export type FillState={error?:string};
+export async function fillNow(_:FillState,form:FormData):Promise<FillState> {
+  const task=z.uuid().safeParse(form.get("task"));
+  const {supabase,membership,userId}=await currentMember();
+  if(!task.success || !membership) return {error:"Open the page again."};
+  const work=await fillWork(supabase,membership.firmId,task.data);
+  if("refusal" in work) return {error:work.refusal};
+  if(!membership.may("edit_figures",work.client) && !await grantFor(membership.firmId,userId,"edit_figures",work.client)) return {error:"Ask your owner for permission to fill returns."};
+  let id:string;
+  try {
+    const context=await formContext({client:work.client,registration:work.registration,form:work.form,period:work.period});
+    id=await savePrepared(requestFor(context,work.drafts),context.userId,context.permission,undefined,true);
+  } catch(error) {return {error:error instanceof Error && error.name==="Error" ? error.message : "The return could not be filled. Try again in a moment."};}
   revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
 }
 

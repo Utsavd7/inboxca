@@ -31,13 +31,14 @@ export const activityDetails: Record<string, readonly string[]> = {
   "admin.passkey_added": [], "admin.passkey_copied": [], "admin.passkey_used": [], "admin.passkeys_removed": ["removed"], "admin.job_retried": ["job"],
   "admin.incident_posted": ["parts", "level"], "admin.incident_updated": [], "admin.incident_closed": [], "admin.incident_emailed": ["firms"],
   "admin.rule_verified": ["code", "period", "by"], "admin.extension_added": ["code", "period", "on"], "admin.office_thresholds": ["taps", "days"], "admin.change_reviewed": ["source", "at"],
+  "admin.update_noted": ["item", "uses", "keeps"], "admin.template_ended": ["form", "version", "until", "link"],
   "support.asked": [], "support.approved": [], "support.refused": [], "support.ended": [], "support.viewed": [],
   "office.learned": [], "office.refused": ["reason"], "office.no_fixed": [], "branch.hours": ["settings"],
   ...Object.fromEntries(["on", "off", "forget", "fixed", "here", "confirm", "today", "refuse", "deputies", "follow"].map((decision) => [`office.${decision}`, ["deputies", "co_admin", "branch"]])),
   "device.first_seen": [], "device.approved": ["kind", "until"], "device.refused": [], "device.withdrawn": [], "device.key_added": [], "device.key_synced": [],
   "approval.denied": ["kind"], "capture_attempt": [],
   "permission.asked": ["right", "until"], "permission.allowed": ["right", "for"], "permission.refused": ["right", "for"], "permission.always": ["right", "for", "clients", "until"],
-  "permission.undone": ["right", "for"], "permission.withdrawn": [], "permissions.changed": ["permissions"],
+  "permission.undone": ["right", "for"], "permission.withdrawn": [], "permissions.changed": ["permissions", "pin_days"],
   "mailbox.connected": ["provider"], "mailbox.reconnected": ["provider"],
   // Each use and save of a mailbox's sign in token (8.7): never the token itself.
   "mailbox.token_read": ["provider", "why"], "mailbox.token_saved": ["provider", "why"], "mailbox.token_deleted": ["provider", "revoked"], "drive.consent": ["provider", "level", "terms_version"], "drive.folder_order": ["order", "naming"],
@@ -56,7 +57,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"],
   "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state"], "dataset.edit_saved": ["dataset", "line"],
   "dataset.changed": ["dataset", "revision", "line", "state", "before", "after", "reason_enc", "registration", "entered", "zeroed"], // before, after and reason encrypted
-  "form.started": ["version", "template", "reason_code"], "form.prepared": [], "form.edited_outside": ["version", "template"], "form.approved": [],
+  "form.started": ["version", "template", "reason_code", "filled"], "form.prepared": [], "form.edited_outside": ["version", "template"], "form.approved": [],
   "form.rejected": ["code", "text_enc"], // the reason's code, and its words encrypted
   "form.downloaded": [], "form.filed": ["ack", "paper"],
 };

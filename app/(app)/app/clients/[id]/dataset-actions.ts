@@ -82,7 +82,8 @@ export async function reviewFigure(form:FormData) {
       const {error}=await admin.from("jobs").upsert({firm_id:membership.firmId,kind:"regenerate_form",entity_type:"document",entity_id:form.id,idempotency_key:`regenerate:${form.id}:${id}:${revision+1}`},{onConflict:"idempotency_key",ignoreDuplicates:true});
       if(error) throw new Error("The corrected form could not be queued.");
     }
-    if(forms?.length) runJobsSoon();
+    // Also a return whose last figure this was: InboxCA prepares it (prepare_return).
+    runJobsSoon();
   }
   revalidatePath("/app","layout");
   redirect(`${back}&check=saved`);

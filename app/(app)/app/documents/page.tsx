@@ -43,7 +43,10 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
-  if (params.view === "folders") return <FoldersView path={params.path} />;
+  // Folders first (user, 26 Oct 2026: "keep always on folder"): the list opens when asked for
+  // (All papers) or when a link asks for something in it (a search, a year, To check, a panel).
+  const asksList = params.view === "papers" || Object.entries(params).some(([key, value]) => !["view", "path"].includes(key) && value);
+  if (params.view === "folders" || !asksList) return <FoldersView path={params.path} portal={membership.may("portal_files")} upload={!membership.viewOnlyUntil} />;
   // Financial years by the key of their last month's year: "2027" is FY 2026-27.
   const years = periodChoices(todayInIndia()).filter((key) => key.length === 4);
   const asked = /^(20\d\d)-(\d\d)$/.exec(params.year ?? "");
@@ -59,7 +62,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const typed = words(q, 8);
   const tokens = typed.length ? await searchTokens(membership.firmId, typed) : null;
 
-  const state = { year: year === years[0] ? "" : year ? `${Number(year) - 1}-${year.slice(2)}` : "all", kind, q, page: page > 1 ? String(page) : "", file: "", upload: "", client: "", portal: "", show: missing ? "missing" : checking ? "check" : "" };
+  const state = { view: "papers", year: year === years[0] ? "" : year ? `${Number(year) - 1}-${year.slice(2)}` : "all", kind, q, page: page > 1 ? String(page) : "", file: "", upload: "", client: "", portal: "", show: missing ? "missing" : checking ? "check" : "" };
   const link = (next: Partial<typeof state>) => {
     const search = new URLSearchParams(Object.entries({ ...state, ...next }).filter(([, value]) => value));
     return `/app/documents${search.size ? `?${search}` : ""}`;
@@ -174,6 +177,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
       <div className="split">
         <nav className="pane docs-folders" aria-label="Folders">
           <Form action="/app/documents" className="docs-year">
+            <input type="hidden" name="view" value="papers" />
             {state.kind && <input type="hidden" name="kind" value={state.kind} />}
             {q && <input type="hidden" name="q" value={q} />}
             <AutoSelect save="year" name="year" defaultValue={state.year || `${Number(years[0]) - 1}-${years[0].slice(2)}`} aria-label="Financial year">
@@ -212,6 +216,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
 
         <section className="docs-list" aria-label="Papers">
           <Form action="/app/documents" className="docs-find" role="search">
+            <input type="hidden" name="view" value="papers" />
             {state.year && <input type="hidden" name="year" value={state.year} />}
             {kind && <input type="hidden" name="kind" value={kind} />}
             <Search size={16} aria-hidden />
@@ -316,7 +321,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
           ) : filtered ? (
             <Empty Icon={FolderOpen} kind="docs" title="No papers match">
               <span>Try All papers, another year, or other words.</span>
-              <Link className="b b-secondary" href="/app/documents?year=all">
+              <Link className="b b-secondary" href="/app/documents?view=papers&year=all">
                 Show every paper
               </Link>
             </Empty>
@@ -324,7 +329,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             <Empty Icon={FolderOpen} kind="docs" title="No papers yet">
               <span>Papers your clients email are filed here once the email and the drive are connected. Upload papers, or drop files on this page, to add one now.</span>
               {canUpload && (
-                <Link className="b b-primary" href="/app/documents?upload=1" scroll={false}>
+                <Link className="b b-primary" href="/app/documents?view=papers&upload=1" scroll={false}>
                   Upload papers
                 </Link>
               )}
@@ -474,6 +479,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               <HeldFiles />
               <p className="hint">Choose the client. Their upload form opens, where you pick the paper&apos;s type, work and period.</p>
               <Form action="/app/documents" scroll={false} className="docs-find" role="search">
+            <input type="hidden" name="view" value="papers" />
                 {Object.entries({ ...state, ...here, upload: "1" }).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
                 <Search size={16} aria-hidden />
                 <input name="for" type="search" defaultValue={find} placeholder="Client name" aria-label="Client name" autoFocus />

@@ -133,7 +133,8 @@ export function planAsks(tasks: (ReminderTask & { kind: string })[], today: stri
   }
   return [...asks.values()].flatMap(({ periods, kind, ...ask }) => {
     const items = listFor(kind, ask.work).filter((type) => ![type, ...(type === "Form 16" ? ["Form 130"] : [])].some((name) => periods.some((period) => received.has(`${ask.client_id}:${period}:${plain(name)}`))));
-    return items.length ? [{ ...ask, items }] : [];
+    // Returns in a fixed order (GSTR-1 before GSTR-3B), so the client's email always reads the same.
+    return items.length ? [{ ...ask, returns: [...ask.returns].sort(), items }] : [];
   });
 }
 
