@@ -387,7 +387,8 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               <Link className="b b-primary" href={`/app/files/${paper.id}/view`}>
                 View
               </Link>
-              {owner && !paper.form && (
+              {/* With no drive linked there is nothing to download; the preview says why. */}
+              {owner && !paper.form && drive && (
                 <a className="b b-secondary" href={`/app/files/${paper.id}`}>
                   Download
                 </a>
