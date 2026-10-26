@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {chooseTemplate,untilAfter,type Template} from "@/src/lib/templates";
+import {chooseTemplate,startOf,untilAfter,type Template} from "@/src/lib/templates";
 
 // These dates test library selection, not government applicability.
 const template=(version:string,from:string,until:string|null,status:Template["status"]="active"):Template=>({form_code:"GSTR1",version,valid_from:from,valid_until:until,status,source:{file:"invented.xlsx",url:"https://tutorial.gst.gov.in/",sha256:"a".repeat(64)},mappings:{format:"xlsx",sheets:{b2b:2}}}); // ggignore: invented source checksum.
@@ -27,4 +27,14 @@ it("ends a version after its last period and keeps it for that period and before
   expect(chooseTemplate([ended,newer],"GSTR1","2026-03").version).toBe("2.0");
   expect(chooseTemplate([ended,newer],"GSTR1","2026-04").version).toBe("3.0");
   expect(()=>chooseTemplate([ended,newer],"GSTR1","2026-04","2.0","Older software")).toThrow("not ready");
+});
+it("starts a version used from a period on that period's first day; the older one keeps its periods and stays a choice",()=>{
+  expect(startOf("GSTR1","2026-11")).toBe("2026-11-01");
+  expect(startOf("ITR1","2026")).toBe("2026-04-01");
+  expect(startOf("ITR1","2026-04")).toBeNull();
+  expect(startOf("GSTR1","2026")).toBeNull();
+  const current=template("2.2","2025-05-01",null),added=template("2.3",startOf("GSTR1","2026-11")!,null);
+  expect(chooseTemplate([current,added],"GSTR1","2026-10").version).toBe("2.2");
+  expect(chooseTemplate([current,added],"GSTR1","2026-11").version).toBe("2.3");
+  expect(chooseTemplate([current,added],"GSTR1","2026-11","2.2","Filing software needs this form").version).toBe("2.2");
 });

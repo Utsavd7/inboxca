@@ -6,6 +6,7 @@ import {grantFor} from "./permission-grants";
 import {chooseTemplate,templateSchema} from "./templates";
 import {formLimit,formRequest,type FormRequest} from "./form-worker";
 import {signView} from "./file-worker";
+import {officialLink} from "./official-files";
 
 type Work={client:string;registration?:string;form:string;period:string;version?:string;reason?:string};
 export async function formContext(input:Work,edit=true) {
@@ -54,7 +55,7 @@ export async function checkedForm(input:Work & {registration:string;drafts:strin
 
 export async function workerForm(request:FormRequest) {
   if(!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) throw new Error("The form maker is not ready yet.");
-  const body=JSON.stringify(formRequest.parse(request));
+  const body=JSON.stringify(formRequest.parse({...request,official:await officialLink(request.template.source)}));
   if(body.length>formLimit) throw new Error("Split this work into smaller registers.");
   const response=await fetch(`${process.env.FILE_WORKER_URL.replace(/\/$/,"")}/prepare/${request.template.form_code}`,{method:"POST",headers:{Authorization:await signView(body,process.env.FILE_WORKER_SECRET),"Content-Type":"application/json"},body,cache:"no-store",signal:AbortSignal.timeout(120_000)});
   if(!response.ok || !response.body) throw new Error("The figures do not pass the official form's checks.");

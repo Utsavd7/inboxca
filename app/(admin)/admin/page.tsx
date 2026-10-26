@@ -2,27 +2,44 @@ import Link from "next/link";
 import { PageHead } from "@/app/(app)/app/ui";
 import { sources } from "@/src/jobs/forms-watch";
 import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
-import { noteUpdate, reviewChange } from "./actions";
+import { addVersion, noteUpdate, reviewChange } from "./actions";
 import { currentAdmin, when } from "./admin";
 import { Submit } from "./parts";
 
-type Compared = { file: string; with?: string; same?: true; differences?: string[]; more?: number; error?: string };
+type Compared = { file: string; with?: string; same?: true; differences?: string[]; more?: number; error?: string; template?: { form_code: string; version: string } };
 type Change = { source: string; name: string; url: string; at: string; added?: string[]; removed?: string[]; status: string; compared?: Compared[] };
 type Alert = { source: string; name: string; url: string; at: string; reason: string };
 type Update = { id: string; source: string; area: string; title: string; date?: string; link: string; seen: string; note?: { uses?: string; keeps?: string } };
 type Watch = { sources?: Record<string, { checked?: string }>; changes?: Change[]; alerts?: Alert[]; items?: Update[] };
 const areas: Record<string, string> = { gst: "GST", income_tax: "Income tax", tds: "TDS", company_law: "Company law" };
 
-// A new official file beside the copy InboxCA fills today.
-function Comparison({ compared }: { compared: Compared }) {
+// A new official file beside the copy InboxCA fills today. One with the same layout, kept in
+// the store, is used from a period in one click; one with a changed layout never is.
+function Comparison({ compared, change, used }: { compared: Compared; change: Change; used?: { valid_from: string | null } }) {
   if (compared.error) return <span className="sub">{compared.file}: could not compare ({compared.error}).</span>;
+  const next = compared.template;
+  if (compared.same && next && used) return <span className="sub">{compared.file}: same layout as {compared.with}. In use as version {next.version}{used.valid_from && ` from ${dueLabel(used.valid_from)}`}.</span>;
+  if (compared.same && next) return (
+    <form action={addVersion} className="admin-form">
+      <input type="hidden" name="source" value={change.source} />
+      <input type="hidden" name="at" value={change.at} />
+      <input type="hidden" name="file" value={compared.file} />
+      <input type="hidden" name="form" value={next.form_code} />
+      <span className="sub">{compared.file}: same layout as {compared.with}. InboxCA has kept the file, so it can be used without an app update.</span>
+      <label>Use this version from {/^ITR/.test(next.form_code) ? <input name="from" inputMode="numeric" pattern="20[0-9]{2}" placeholder="2026 for AY 2026-27" required /> : <input name="from" type="month" required />}</label>
+      <Submit>Use this version</Submit>
+    </form>
+  );
   if (compared.same) return <span className="sub">{compared.file}: same layout as {compared.with}.</span>;
   return (
-    <details className="sub">
-      <summary>{compared.file}: {(compared.differences?.length ?? 0) + (compared.more ?? 0)} differences from {compared.with}</summary>
-      <ul>{compared.differences?.map((line) => <li key={line}>{line}</li>)}</ul>
-      {!!compared.more && <span>And {compared.more} more.</span>}
-    </details>
+    <>
+      <details className="sub">
+        <summary>{compared.file}: {(compared.differences?.length ?? 0) + (compared.more ?? 0)} differences from {compared.with}</summary>
+        <ul>{compared.differences?.map((line) => <li key={line}>{line}</li>)}</ul>
+        {!!compared.more && <span>And {compared.more} more.</span>}
+      </details>
+      <span className="sub">The layout changed, so this needs mapping by Orelu before InboxCA can use it.</span>
+    </>
   );
 }
 
@@ -38,9 +55,10 @@ function Touches({ reach }: { reach: { firm: string; returns: number }[] }) {
 // unreadable two days running is an alert; a due date change waits for a CA's check.
 export default async function AdminToday({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { supabase } = await currentAdmin();
-  const [{ data, error }, { data: extensions }, { error: problem }] = await Promise.all([
+  const [{ data, error }, { data: extensions }, { data: templates }, { error: problem }] = await Promise.all([
     supabase.rpc("admin_watch"),
     supabase.from("compliance_types").select("code, period_key, due_rule, source_url").neq("period_key", "").is("verified_on", null).order("code"),
+    supabase.from("templates").select("form_code, version, valid_from"),
     searchParams,
   ]);
   if (error) throw new Error(`Admin watch failed: ${error.code}`);
@@ -61,6 +79,7 @@ export default async function AdminToday({ searchParams }: { searchParams: Promi
     <>
       <PageHead title="Today's changes" sub={checked ? `The daily check of official forms. ${Object.keys(watch.sources ?? {}).length} sources, last checked ${when(checked)}.` : "The daily check of official forms has not run yet."} />
       {problem === "line" && <p className="alert" role="alert">Give either the date InboxCA uses it from or the periods it keeps the earlier version for (3 to 80 letters).</p>}
+      {problem === "use" && <p className="alert" role="alert">Give a month (an assessment year for ITR) within the periods of the version it matches. A version already in the list of forms is not added again.</p>}
       <section className="admin-card" aria-label="Changes to review">
         <h2>Changes to review</h2>
         {changes.length ? (
@@ -74,8 +93,7 @@ export default async function AdminToday({ searchParams }: { searchParams: Promi
                   {!!change.removed?.length && `, ${change.removed.length} files removed`}
                 </span>
                 <Touches reach={changeReach[at]} />
-                {change.compared?.map((compared) => <Comparison key={compared.file} compared={compared} />)}
-                {!!change.compared?.length && <span className="sub">Not used yet. InboxCA has no store for official files yet, so a new version is added to its list of forms by hand.</span>}
+                {change.compared?.map((compared) => <Comparison key={compared.file} compared={compared} change={change} used={templates?.find((row) => row.form_code === compared.template?.form_code && row.version === compared.template?.version)} />)}
               </div>
               <a href={change.url} target="_blank" rel="noreferrer">Open the source</a>
               <form action={reviewChange}>

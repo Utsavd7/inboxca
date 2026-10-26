@@ -5,7 +5,7 @@ import {templateSchema} from "./templates.ts";
 export const formLimit=3_000_000;
 export const formRequest=z.object({
   purpose:z.enum(["prepare","fields","check"]),firm:z.uuid(),client:z.uuid(),registration:z.uuid(),gstin:z.string().length(15).optional(),pan:z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/).optional(),
-  period:z.string().regex(/^20\d{2}(-(0[1-9]|1[0-2]))?$/),expires:z.number().int(),template:templateSchema,
+  period:z.string().regex(/^20\d{2}(-(0[1-9]|1[0-2]))?$/),expires:z.number().int(),template:templateSchema,official:z.url().max(1000).optional(),
   drafts:z.array(z.object({id:z.uuid(),revision:z.number().int().positive(),figures:z.array(z.tuple([z.string().regex(/^[a-z][a-z0-9_.]{0,99}$/),z.object({label:z.string().min(1).max(120),value:z.string().max(2000),kind:z.enum(["number","date","text"]).optional()})])).min(1).max(10000)})).max(25),
 }).refine(r=>/^ITR[1-6]$/.test(r.template.form_code) ? !!r.pan && !r.gstin && r.period.length===4 && (r.purpose==="fields" ? !r.drafts.length : r.purpose==="check" || !!r.drafts.length) : r.purpose==="prepare" && !!r.gstin && !r.pan && r.period.length===7 && !!r.drafts.length);
 

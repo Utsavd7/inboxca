@@ -438,6 +438,19 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"official_files": {
+                  Row: {
+                    "bytes": string,"sha256": string
+                  }
+                  Insert: {
+                    "bytes": string,"sha256": string
+                  }
+                  Update: {
+                    "bytes"?: string,"sha256"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"orelu_admins": {
                   Row: {
                     "user_id": string
@@ -660,6 +673,9 @@ isOneToOne: false
                            },
 "admin_add_extension":
 { Args: { "link": string,"new_date": string,"rule_code": string,"rule_period": string }; Returns: boolean
+                           },
+"admin_add_template":
+{ Args: { "change_at": string,"change_source": string,"file": string,"starts": string }; Returns: boolean
                            },
 "admin_ask_support":
 { Args: { "target": string }; Returns: boolean
