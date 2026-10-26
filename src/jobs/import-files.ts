@@ -34,14 +34,14 @@ export const importFiles: Handler = async (job) => {
   const names = new Map(clients?.map((client) => [client.id, client.name]));
   const now = new Date().toISOString();
   try {
+    // A file counts as done once it is handled, so one the drive could not give is tried again.
     for (const file of plan.files.slice(plan.done, plan.done + BATCH)) {
-      plan.done++;
       const client = names.get(file.client);
-      if (!client) continue;
+      if (!client) { plan.done++; continue; }
       const bytes = await drive.read(file.id);
       const folder = await drive.ensureFolder(folderFor(order, client, { work: file.work as WorkType, period: file.period, receivedAt: now, toCheck: file.toCheck }));
       const placed = await placeUnderFreeName({ client, type: file.type, period: periodName(file.period), extension: path.extname(file.from) }, receivedLabel(now), (name) => drive.move(file.id, folder, name), naming);
-      if (placed === "taken") continue;
+      if (placed === "taken") { plan.done++; continue; }
       const id = randomUUID();
       // The first import stays outside InboxCA storage (PLAN.md 5.14): entered at 0 bytes first.
       await admin.from("usage_ledger").insert({ firm_id: firm, due_on: now.slice(0, 10), bytes: 0, ref: id });
@@ -61,6 +61,7 @@ export const importFiles: Handler = async (job) => {
         received_at: now,
       });
       plan.moved.push({ document: id, from: file.from });
+      plan.done++;
       await queueRead(firm, id);
     }
   } catch {
