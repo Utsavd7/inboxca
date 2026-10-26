@@ -42,6 +42,8 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
 
     await page.getByRole("link", { name: "Documents", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Documents", level: 1 })).toBeVisible();
+    // Documents opens on the folders; every paper is one click away.
+    await page.getByRole("navigation", { name: "Show papers as" }).getByRole("link", { name: "All papers" }).click();
     const papers = page.getByRole("region", { name: "Papers" });
     await expect(papers.getByRole("row")).toHaveCount(3);
     await expect(papers.getByRole("row", { name: /Form 16/ })).toContainText("From the drive");
@@ -185,7 +187,7 @@ test("each paper says how it came in and when, papers to check say why, and anot
     await expect(page).toHaveURL(new RegExp(`/app/inbox\\?mail=${mail}$`));
 
     // To check: counted beside the folders, each with why it waits, checked on the client's page.
-    await page.goto("/app/documents");
+    await page.goto("/app/documents?view=papers");
     const check = page.getByRole("navigation", { name: "Folders" }).getByRole("link", { name: /To check/ });
     await expect(check).toContainText("1");
     await check.click();
@@ -229,7 +231,7 @@ test("with no drive linked, no page asks for a paper's preview or offers its dow
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(page).toHaveURL(/\/app$/);
     await page.waitForLoadState("networkidle");
-    await page.goto("/app/documents");
+    await page.goto("/app/documents?view=papers");
     await expect(page.getByRole("complementary", { name: "Paper" })).toContainText("The firm's drive is not linked yet, so papers cannot be shown.");
     // Nor is Download offered, which would leave the app for a bare error.
     await expect(page.getByRole("complementary", { name: "Paper" }).getByRole("link", { name: "Download" })).toHaveCount(0);
@@ -239,6 +241,27 @@ test("with no drive linked, no page asks for a paper's preview or offers its dow
     await expect(page.getByText("The firm's drive is not linked yet")).toBeVisible();
     await page.waitForLoadState("networkidle");
     expect(asked).toEqual([]);
+  } finally {
+    await firm.remove();
+  }
+});
+
+test("Documents opens on the firm's folders; All papers is one click away", async ({ page }) => {
+  const email = `owner-${randomUUID()}@example.test`;
+  const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+  const firm = await seedFirm("Documents Folders First Firm", email, key);
+  try {
+    await emailStep(page, email);
+    await page.getByLabel("6 digit code from the app").fill(totp(key));
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/app$/);
+    await page.goto("/app/documents");
+    const views = page.getByRole("navigation", { name: "Show papers as" });
+    await expect(views.getByRole("link", { name: "Folders" })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("link", { name: "Upload papers" })).toBeVisible();
+    await views.getByRole("link", { name: "All papers" }).click();
+    await expect(page).toHaveURL(/\/app\/documents\?view=papers$/);
+    await expect(views.getByRole("link", { name: "All papers" })).toHaveAttribute("aria-current", "page");
   } finally {
     await firm.remove();
   }

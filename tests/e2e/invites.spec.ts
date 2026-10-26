@@ -913,7 +913,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows.filter({ hasText: "Purchase bills" })).toContainText(`Saved by InboxCA from ${mailClient}'s email, `);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
   const docsTab = owner.url();
-  await owner.goto("/app/documents");
+  await owner.goto("/app/documents?view=papers");
   await owner.getByRole("navigation", { name: "Folders" }).getByRole("link", { name: /To check/ }).click();
   const waiting = owner.getByRole("complementary", { name: "Paper" });
   await expect(waiting).toContainText(`Saved by InboxCA from ${mailClient}'s email, `);
