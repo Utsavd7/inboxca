@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
-import { MAIL_API_URL, TEST_WORKER_SECRET } from "../../playwright.config";
+import { MAIL_API_URL } from "../../playwright.config";
 import { fakeMail } from "../fake-mail";
-import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
+import { emailStep, localSupabase, pollFirmMail, query, seedFirm, totp } from "./local-supabase";
 
 // The firm's email connected with Google, Microsoft or Zoho sign in, against the fake
 // providers in tests/fake-mail.ts (no internet): connect, new client mail read by the poll,
@@ -20,10 +20,7 @@ test.beforeAll(async () => {
 test.afterAll(() => fake.close());
 
 const names = { gmail: "Google", outlook: "Microsoft", zoho: "Zoho" } as const;
-const readMail = async (page: Page) => {
-  await query(local.dbUrl, "select private.queue_mail_polls()");
-  await page.request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
-};
+const readMail = (page: Page, firmId: string) => pollFirmMail(page.request, firmId);
 
 for (const provider of ["gmail", "outlook", "zoho"] as const) {
   test(`the owner connects the firm's email with ${names[provider]} sign in, and the team reads and replies`, async ({ browser }) => {
@@ -73,7 +70,7 @@ for (const provider of ["gmail", "outlook", "zoho"] as const) {
       await fake.deliver({ from: `stranger-${tag}@else.test`, subject: `Offer ${tag}`, text: "Not a client" });
       await fake.deliver({ from: clientEmail, subject: `Meeting ${tag}`, text: "Dear Sir,\n\nCan we meet next week about the audit?\n\nRegards, Meera" });
       await expect(async () => {
-        await readMail(page);
+        await readMail(page, firm.firmId);
         expect(await query(local.dbUrl, "select label from public.email_events where firm_id = $1", [firm.firmId])).toEqual([{ label: "other" }]);
       }).toPass({ timeout: 30_000 });
 

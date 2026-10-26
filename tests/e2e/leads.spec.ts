@@ -3,8 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
-import { TEST_WORKER_SECRET } from "../../playwright.config";
-import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
+import { emailStep, localSupabase, pollFirmMail, query, seedFirm, totp } from "./local-supabase";
 
 // Leads (PLAN.md 5.12): the firm's public enquiry form, enquiries spotted in its email, the
 // board, follow ups from its own mailbox (the local GreenMail server) and turning a lead into
@@ -33,10 +32,7 @@ const signIn = async (page: Page, email: string) => {
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/app$/);
 };
-const readMail = async () => {
-  await query(local.dbUrl, "select private.queue_mail_polls()");
-  await owner.request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
-};
+const readMail = () => pollFirmMail(owner.request, firm.firmId);
 const stageOf = async (name: string) => (await query(local.dbUrl, "select stage from public.clients where firm_id = $1 and name = $2", [firm.firmId, name]))[0]?.stage;
 const column = (title: string) => owner.getByRole("list", { name: `${title} leads` });
 

@@ -18,4 +18,6 @@ it("makes demo papers InboxCA files, reads and checks like real ones", () => {
   const twoB = files.find((file) => file.original.endsWith(".json"))!;
   expect(portalParsers[0].read(JSON.parse(new TextDecoder().decode(twoB.bytes)))?.gstin).toMatch(/^24AAPFM1234K1Z/);
   for (const file of files.filter((file) => file.original.endsWith(".pdf"))) expect(new TextDecoder("latin1").decode(file.bytes)).toContain("(Demo) Tj");
-});
+  // The sales register is the official GSTR-1 workbook filled in (worker/workbook.ts), which
+  // compresses its 60 MB of sheets again: over 5 seconds when other runs load the machine.
+}, 60_000);

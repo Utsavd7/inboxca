@@ -2,6 +2,9 @@ import type { Client } from "pg";
 import { beforeAll, afterAll, expect, it } from "vitest";
 import { actAs, asOwner, attempt, connect, rollback } from "./db";
 const FIRM = "00000000-0000-4000-8000-000000000cc0", OWNER = "00000000-0000-4000-8000-000000000cc1", STAFF = "00000000-0000-4000-8000-000000000cc2", CLIENT = "00000000-0000-4000-8000-000000000cc3";
+// India's date, as the app's due dates are; the database's own current_date is UTC's, a day
+// behind for five and a half hours after India's midnight.
+const TODAY = "(now() at time zone 'Asia/Kolkata')::date";
 let db: Client;
 beforeAll(async () => { db = await connect(); });
 afterAll(async () => { await db.end(); });
@@ -11,7 +14,7 @@ async function seed() {
   await db.query("insert into public.firms(id,name,state_code,status) values ($1,'Notice Test Firm','24','active')", [FIRM]);
   await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active'),($1,$3,'staff','active')", [FIRM, OWNER, STAFF]);
   await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Client','individual')", [CLIENT, FIRM]);
-  return (await db.query("insert into public.tasks(firm_id,client_id,kind,due_on) values ($1,$2,'notice',current_date+2) returning id", [FIRM, CLIENT])).rows[0].id as string;
+  return (await db.query(`insert into public.tasks(firm_id,client_id,kind,due_on) values ($1,$2,'notice',${TODAY}+2) returning id`, [FIRM, CLIENT])).rows[0].id as string;
 }
 
 // M5 notices: each near, due and overdue review or confirmed date is told once, even after job cleanup.
@@ -39,7 +42,7 @@ it("shows Home alerts only to the owner, partners and the assigned people or tea
   await db.query("insert into public.firms(id,name,state_code,status) values ('00000000-0000-4000-8000-000000000cc8','Another Firm','24','active')");
   await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ('00000000-0000-4000-8000-000000000cc8',$1,'partner','active')", [OWNER]);
   await db.query("insert into public.clients(firm_id,name,kind) values ('00000000-0000-4000-8000-000000000cc8','Other client','individual')");
-  await db.query("insert into public.tasks(firm_id,client_id,kind,due_on) select firm_id,id,'notice',current_date from public.clients where firm_id='00000000-0000-4000-8000-000000000cc8'");
+  await db.query(`insert into public.tasks(firm_id,client_id,kind,due_on) select firm_id,id,'notice',${TODAY} from public.clients where firm_id='00000000-0000-4000-8000-000000000cc8'`);
   await actAs(db, OWNER);
   expect((await db.query("select id from public.notice_alerts($1)", [FIRM])).rows).toEqual([{ id }]);
   expect((await attempt(db,"select public.claim_notice_alert($1,'review_near')",[id])).ok).toBe(false);

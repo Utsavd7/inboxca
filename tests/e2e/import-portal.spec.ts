@@ -3,8 +3,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
-import { TEST_DRIVE, TEST_WORKER_SECRET } from "../../playwright.config";
-import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
+import { TEST_DRIVE } from "../../playwright.config";
+import { emailStep, localSupabase, query, runJobs, seedFirm, totp } from "./local-supabase";
 import { gstr2a, inventedGstin } from "../fixtures/portal";
 
 // Portal files dropped in from Documents and from a client's Returns, and old files sent from
@@ -146,7 +146,7 @@ test("old files on a disk go into Incoming by checksum, and a folder's client is
   await expect(owner.locator(".import-map").filter({ hasText: unknown })).toContainText(clientName);
   await owner.getByRole("button", { name: "Move these files" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Moving your files now" })).toBeVisible();
-  await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
+  await runJobs(request, firm.firmId);
   const gst = path.join(drive, "InboxCA", "FY 2026-27", clientName, "GST");
   expect(await readFile(path.join(gst, `${clientName} - GSTR-3B - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented return");
   expect(await readFile(path.join(gst, `${clientName} - GSTR-1 - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented return");

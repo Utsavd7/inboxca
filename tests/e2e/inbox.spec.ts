@@ -3,8 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
-import { TEST_WORKER_SECRET } from "../../playwright.config";
-import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
+import { emailStep, localSupabase, pollFirmMail, query, seedFirm, totp } from "./local-supabase";
 
 // The Inbox reads mail live from the firm's mailbox (the local GreenMail server) and keeps
 // none of it; the team answers from the open conversation. Skipped without local Supabase.
@@ -34,10 +33,7 @@ const intoSent = (raw: string) => mailbox(office, async (imap) => {
   if (!(await imap.list()).some((box) => box.path === "Sent")) await imap.mailboxCreate("Sent");
   await imap.append("Sent", raw, ["\\Seen"]);
 });
-const readMail = async () => {
-  await query(local.dbUrl, "select private.queue_mail_polls()");
-  await owner.request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } });
-};
+const readMail = () => pollFirmMail(owner.request, firm.firmId);
 const list = () => owner.getByRole("list", { name: "Emails" });
 const pane = () => owner.getByRole("article", { name: "Open email" });
 
