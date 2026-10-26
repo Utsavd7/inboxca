@@ -68,7 +68,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await expect(page.getByLabel(/^Email address/)).toHaveValue("invented.person@invented.test");
     await page.getByRole("button",{name:"Save for checking",exact:true}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
     await page.getByRole("link",{name:/^Taxes paid: \d+$/}).click();
-    await page.getByLabel(/^Total TDS claimed/).fill("5000");await page.getByLabel(/^Tax paid details, detail 1/).fill("5000");
+    await page.getByLabel(/^Total TDS claimed/).fill("5000");await page.getByLabel(/^Taxes Paid, Total Taxes Paid/).fill("5000");
     await page.getByRole("button",{name:"Save, putting 0 in the 6 empty amounts",exact:true}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
     // The 4 amounts left empty were saved as 0, and the log says so.
     expect((await query(local.dbUrl,"select details->>'zeroed' zeroed from public.activity_log where firm_id=$1 and action='dataset.changed' and details ? 'zeroed'",[firm.firmId])).map(row=>row.zeroed)).toEqual(["4"]);

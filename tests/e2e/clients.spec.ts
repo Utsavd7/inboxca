@@ -148,7 +148,9 @@ test("late returns: the week's numbers, a preview before reminding, Mark filed w
   await owner.getByRole("status").getByRole("button", { name: "Undo" }).click();
   await expect(owner.getByRole("status").filter({ hasText: `${n} returns marked not filed.` })).toBeVisible();
   await expect(late.getByRole("listitem").filter({ hasText: "Patel Textiles" })).toBeVisible();
-  // A late client nobody looks after can be taken on in one click.
+  // A late client nobody looks after can be taken on in one click (once the redraw after Undo
+  // has faded its earlier row out).
+  await expect(late.getByRole("listitem").filter({ hasText: "Anand Late" })).toHaveCount(1);
   await late.getByRole("listitem").filter({ hasText: "Anand Late" }).hover();
   await late.getByRole("button", { name: "Assign Anand Late to me" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Assigned to you." })).toBeVisible();

@@ -440,7 +440,7 @@ test("an admin uses a same layout GSTR-1 workbook from a period in one click, an
     expect(prepared).toMatchObject({ prepared: { form: "GSTR1", registration, template: version } });
     expect(Number(prepared.size)).toBeGreaterThan(0);
     await owner.page.goto(`/app/clients/${client}?tab=outputs`);
-    await expect(owner.page.getByRole("region", { name: "Prepared forms" })).toContainText(`Official form ${version}.`);
+    await expect(owner.page.getByRole("region", { name: "Return files" })).toContainText(`Official version ${version}.`);
   } finally {
     for (const id of files) await drive.trash(id).catch(() => {});
     await query(local.dbUrl, "delete from public.templates where form_code = 'GSTR1' and version = $1", [version]);
