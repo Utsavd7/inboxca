@@ -1,0 +1,16 @@
+/* Each return's line of where it stands, and Fill with why it cannot fill. */
+.stage-line { display: flex; align-items: center; gap: var(--s2); }
+.stage-steps { display: inline-flex; flex: none; gap: 3px; }
+.stage-steps i { width: 12px; height: 4px; border-radius: var(--round); background: var(--line-2); transition: background var(--fast) var(--out); }
+.stage-steps i.on { background: var(--accent); }
+.fill-now { display: grid; justify-items: end; gap: 4px; }
+.fill-now-why { max-width: 300px; color: var(--late-fg); font-size: 13px; text-align: right; white-space: normal; }
+td .fill-now-why { max-width: 220px; }
+.cal-act .fill-now { display: inline-grid; margin-right: var(--s1); }
+.fill-checks { display: grid; gap: var(--s2); margin-bottom: var(--s4); padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r3); background: var(--surface); }
+.fill-checks ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.fill-checks li { display: flex; align-items: center; gap: var(--s3); min-height: 36px; padding: 2px var(--s2); border-radius: var(--r2); background: var(--wait-bg); }
+.fill-checks li.is-wrong { background: var(--late-bg); }
+.fill-checks .grow { flex: 1; min-width: 0; }
+.fill-checks .num { color: var(--wait-fg); font-weight: 600; }
+.fill-checks li.is-wrong .num { color: var(--late-fg); }

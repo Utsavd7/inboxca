@@ -48,6 +48,8 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   const gstins=await Promise.all((registrations ?? []).map(async reg=>({id:reg.id,number:await serverCrypto().decrypt(membership.firmId,`clients/${client}/gstin`,reg.number_enc)})));
   const registrationOf=(row:{data:unknown})=>(row.data as {registration?:string}).registration ?? (gstins.length===1 ? gstins[0].id : undefined);
   const unassigned=(rows ?? []).filter(row=>row.form_code==="GSTR1" && !registrationOf(row));
+  // A fill's figures still to check: approving and downloading wait for every one.
+  const unchecked=(meta:{sources:{id:string}[]})=>meta.sources.reduce((sum,source)=>sum+((([...(rows ?? []),...itrDrafts].find(row=>row.id===source.id)?.data ?? {}) as {lines?:{state:string}[]}).lines ?? []).filter(line=>line.state!=="confirmed").length,0);
   const label=(row:{form_code:string;data:unknown})=>{const data=draftSchema.parse(row.data);return `${row.form_code==="GSTR3B" ? "GSTR-2B credit" : sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Source file"}, ${data.lines.length} figures${data.lines.every(line=>line.state==="confirmed") ? ", checked" : ", check these first"}`;};
   return <section className="panel" aria-labelledby="prepared-title"><h2 id="prepared-title">Prepared forms</h2>
     <p className="hint">Check every figure first. Your firm files the approved file on the portal with its own code or signature.</p>
@@ -61,9 +63,11 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         {meta.form==="GSTR1" && meta.template==="2.0" && <p className="hint">This older official workbook comes with sample rows in its e-commerce sheets, so this file does not include supplies through e-commerce operators (tables 14 and 15). Add them in the offline tool or on the portal before filing.</p>}
         <div className="form-row">{meta.sources.map((source,n)=><Link key={source.id} href={`?tab=extraction&draft=${source.id}`}>Check source figures{meta.sources.length>1 ? ` ${n+1}` : ""}</Link>)}
           {active && ["approved","filed"].includes(meta.status) && <form action={`/app/files/${file.id}/filing`} method="post"><button className="b b-secondary b-small">Download for filing</button></form>}
-          {active && meta.status==="draft" && ["owner","partner","manager"].includes(membership.role) && <form action={decideForm}><input type="hidden" name="document" value={file.id}/><Pending className="b b-secondary b-small" name="decision" value="approved">Give second approval</Pending></form>}
+          {active && meta.status==="draft" && !meta.filled && ["owner","partner","manager"].includes(membership.role) && <form action={decideForm}><input type="hidden" name="document" value={file.id}/><Pending className="b b-secondary b-small" name="decision" value="approved">Give second approval</Pending></form>}
+          {active && meta.filled && meta.status==="draft" && <><button className="b b-secondary b-small" disabled>Download for filing</button>{membership.settings.second_form_approval===true && ["owner","partner","manager"].includes(membership.role) && <button className="b b-secondary b-small" disabled>Give second approval</button>}
+            <span className="hint">{unchecked(meta) ? `${unchecked(meta)} ${unchecked(meta)===1 ? "figure" : "figures"} not checked yet. ` : "Every figure is checked. InboxCA is making the checked draft now. "}<Link href={`/app/files/${file.id}/view`}>Check figures</Link></span></>}
         </div>
-        {active && meta.status==="draft" && ["owner","partner","manager"].includes(membership.role) && <details><summary>Reject this version</summary><form action={decideForm} className="fields">
+        {active && meta.status==="draft" && !meta.filled && ["owner","partner","manager"].includes(membership.role) && <details><summary>Reject this version</summary><form action={decideForm} className="fields">
           <input type="hidden" name="document" value={file.id}/>
           <div><label htmlFor={`reason-${file.id}`}>Reason</label><select id={`reason-${file.id}`} name="reason"><option value="figures">Figures need checking</option><option value="source">Source needs checking</option><option value="other">Other reason</option></select></div>
           <div><label htmlFor={`why-${file.id}`}>What needs to change</label><input id={`why-${file.id}`} name="explanation" minLength={3} maxLength={300} required/></div>

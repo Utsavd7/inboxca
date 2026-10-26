@@ -545,6 +545,7 @@ export default async function Settings({
                 Hide documents when InboxCA is not the active window (staff often read a document while typing in the portal beside it, so this is off unless you need it)
               </label>
               <label className="check"><input className="toggle" type="checkbox" name="second_form_approval" defaultChecked={settings.second_form_approval===true}/>Second approval before filing. Another person must approve after the figures are checked.</label>
+              <div className="set-days"><label htmlFor="pin-days">Days before the due date to fill each GST return, and show it in red if it still needs papers or checks</label><input id="pin-days" name="pin_days" type="number" min="1" max="30" step="1" className="num" defaultValue={Number(settings.pin_days) || 5} /></div>
               {problem("permissions")}
               <div className="set-foot">
                 <Pending busy="Saving" className="b b-primary" name="intent" value="save">

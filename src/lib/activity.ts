@@ -38,7 +38,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "device.first_seen": [], "device.approved": ["kind", "until"], "device.refused": [], "device.withdrawn": [], "device.key_added": [], "device.key_synced": [],
   "approval.denied": ["kind"], "capture_attempt": [],
   "permission.asked": ["right", "until"], "permission.allowed": ["right", "for"], "permission.refused": ["right", "for"], "permission.always": ["right", "for", "clients", "until"],
-  "permission.undone": ["right", "for"], "permission.withdrawn": [], "permissions.changed": ["permissions"],
+  "permission.undone": ["right", "for"], "permission.withdrawn": [], "permissions.changed": ["permissions", "pin_days"],
   "mailbox.connected": ["provider"], "mailbox.reconnected": ["provider"],
   // Each use and save of a mailbox's sign in token (8.7): never the token itself.
   "mailbox.token_read": ["provider", "why"], "mailbox.token_saved": ["provider", "why"], "mailbox.token_deleted": ["provider", "revoked"], "drive.consent": ["provider", "level", "terms_version"], "drive.folder_order": ["order", "naming"],
@@ -57,7 +57,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"],
   "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state"], "dataset.edit_saved": ["dataset", "line"],
   "dataset.changed": ["dataset", "revision", "line", "state", "before", "after", "reason_enc", "registration", "entered", "zeroed"], // before, after and reason encrypted
-  "form.started": ["version", "template", "reason_code"], "form.prepared": [], "form.edited_outside": ["version", "template"], "form.approved": [],
+  "form.started": ["version", "template", "reason_code", "filled"], "form.prepared": [], "form.edited_outside": ["version", "template"], "form.approved": [],
   "form.rejected": ["code", "text_enc"], // the reason's code, and its words encrypted
   "form.downloaded": [], "form.filed": ["ack", "paper"],
 };

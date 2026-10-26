@@ -135,3 +135,5 @@
 .ui input[type="checkbox"].toggle:focus-visible { border-radius: var(--round); }
 .ui input[type="checkbox"].toggle:active::before { width: 16px; }
 .ui input[type="checkbox"].toggle:checked:active::before { transform: translateX(12px); }
+.set-days { display: grid; gap: 4px; justify-items: start; }
+.set-days input { width: 96px; }

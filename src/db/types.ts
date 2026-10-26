@@ -837,6 +837,9 @@ isOneToOne: false
 "file_prepared_form":
 { Args: { "acknowledgement": string,"paper"?: string,"person": string,"target": string }; Returns: boolean
                            },
+"fill_form":
+{ Args: { "client": string,"extension": string,"firm": string,"form": string,"period": string,"person": string,"prefix": string,"registration": string,"sources": Json,"template": string }; Returns: Json
+                           },
 "finish_form":
 { Args: { "bytes": number,"checksum": string,"file": string,"firm": string,"permission"?: string,"person": string,"target": string }; Returns: boolean
                            },
@@ -985,6 +988,21 @@ isOneToOne: false
                            },
 "restore_member":
 { Args: { "person": string,"target_firm": string }; Returns: boolean
+                           },
+"return_drafts":
+{ Args: { "task_id": string }; Returns: {
+              "document": string,"form_code": string,"id": string,"open": number,"revision": number,"target": string,"wrong": number
+            }[]
+                           },
+"return_pins":
+{ Args: { "target_firm": string }; Returns: {
+              "client": string,"client_name": string,"code": string,"due_on": string,"form": string,"kind": string,"missing": string,"open": number,"period_key": string,"stage": string,"task": string
+            }[]
+                           },
+"return_stages":
+{ Args: { "target_firm": string,"task_ids": (string)[] }; Returns: {
+              "form": string,"missing": string,"open": number,"stage": string,"task": string
+            }[]
                            },
 "review_devices":
 { Args: { "actor": string,"branch"?: string,"decision": string,"target_device": string,"target_firm": string,"until_day"?: string }; Returns: undefined
