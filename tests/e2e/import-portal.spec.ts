@@ -55,7 +55,7 @@ test("a GSTR-2B added on Documents comes back to Documents and closes what was a
      values ($1, 'documents', $2, 'checklist', gen_random_uuid(), now() + interval '30 days', '{"period": "2026-09", "items": [{"type": "GSTR 2B", "work": "other", "received": []}], "link_hash": "invented"}') returning id`,
     [firm.firmId, clientId],
   );
-  await owner.goto("/app/documents");
+  await owner.goto("/app/documents?view=papers");
   await owner.getByRole("link", { name: "Add portal files" }).click();
   await owner.getByLabel("Add portal files").setInputFiles({ name: "download.json", mimeType: "application/json", buffer: statement("092026") });
   await owner.getByRole("button", { name: "Add", exact: true }).click();
@@ -81,7 +81,7 @@ test("a GSTR-2A added on Documents closes the GSTR-2A asked for", async () => {
      values ($1, 'documents', $2, 'checklist', gen_random_uuid(), now() + interval '30 days', '{"period": "2026-09", "items": [{"type": "GSTR 2A", "work": "other", "received": []}], "link_hash": "invented-2a"}') returning id`,
     [firm.firmId, client],
   );
-  await owner.goto("/app/documents");
+  await owner.goto("/app/documents?view=papers");
   await owner.getByRole("link", { name: "Add portal files" }).click();
   await owner.getByLabel("Add portal files").setInputFiles({ name: "download.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(gstr2a())) });
   await owner.getByRole("button", { name: "Add", exact: true }).click();
@@ -101,7 +101,7 @@ test("a Form 26AS text file and a Form 16 added on Documents are filed under the
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText(name);
   const [{ id: client }] = await query(local.dbUrl, "select id from public.clients where firm_id = $1 and name = $2", [firm.firmId, name]);
-  await owner.goto("/app/documents");
+  await owner.goto("/app/documents?view=papers");
   await owner.getByRole("link", { name: "Add portal files" }).click();
   await owner.getByLabel("Add portal files").setInputFiles([{ name: "download.txt", mimeType: "text/plain", buffer: form26asText() }, { name: "certificate.pdf", mimeType: "application/pdf", buffer: Buffer.from(form16()) }]);
   await owner.getByRole("button", { name: "Add", exact: true }).click();
@@ -215,7 +215,7 @@ test("old files on a disk go into Incoming by checksum, and a folder's client is
   expect(await readFile(path.join(gst, `${clientName} - GSTR-3B - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented return");
   expect(await readFile(path.join(gst, `${clientName} - GSTR-1 - Sep 2026.pdf`), "utf8")).toBe("%PDF-1.4 invented return");
   // Each moved paper says it came from the old files, and where it used to be.
-  await owner.goto("/app/documents");
+  await owner.goto("/app/documents?view=papers");
   const moved = owner.getByRole("region", { name: "Papers" }).getByRole("row", { name: /GSTR-1 - Sep 2026/ });
   await expect(moved).toContainText("From your old files");
   await moved.getByRole("link").click();

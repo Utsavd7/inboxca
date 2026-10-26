@@ -1,5 +1,5 @@
 import "./folders.css";
-import { Files, FolderOpen, FolderTree, HardDrive } from "lucide-react";
+import { Files, FolderOpen, FolderTree, HardDrive, Upload } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -15,11 +15,11 @@ import { browseContext, listing, type Listing } from "./data";
 export function ViewSwitch({ folders }: { folders: boolean }) {
   return (
     <nav className="fb-switch" aria-label="Show papers as">
-      <Link href="/app/documents?view=folders" aria-current={folders ? "page" : undefined}>
+      <Link href="/app/documents" aria-current={folders ? "page" : undefined}>
         <FolderTree size={16} aria-hidden />
         Folders
       </Link>
-      <Link href="/app/documents" aria-current={folders ? undefined : "page"}>
+      <Link href="/app/documents?view=papers" aria-current={folders ? undefined : "page"}>
         <Files size={16} aria-hidden />
         All papers
       </Link>
@@ -100,11 +100,25 @@ async function Loaded({ parts }: { parts: string[] }) {
 
 // Documents as the firm's drive shows them (?view=folders, &path= the open folder, &name= the
 // chosen file): the folder tree, the open folder's contents and the chosen file's details.
-export function FoldersView({ path }: { path?: string }) {
+export function FoldersView({ path, portal, upload }: { path?: string; portal: boolean; upload: boolean }) {
   const parts = parsePath(path) ?? [];
   return (
     <div className="fill docs fb">
-      <PageHead title="Documents" sub="Your firm's drive, folder by folder, as InboxCA files it." />
+      <PageHead
+        title="Documents"
+        sub="Your firm's drive, folder by folder, as InboxCA saves it."
+        actions={
+          <>
+            {portal && <Link className="b b-secondary" href="/app/documents?view=papers&portal=1" scroll={false}>Add portal files</Link>}
+            {upload && (
+              <Link className="b b-primary" href="/app/documents?view=papers&upload=1" scroll={false}>
+                <Upload size={16} aria-hidden />
+                Upload papers
+              </Link>
+            )}
+          </>
+        }
+      />
       <ViewSwitch folders />
       <Suspense fallback={<Frame parts={parts} />}>
         <Loaded parts={parts} />

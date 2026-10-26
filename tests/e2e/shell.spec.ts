@@ -169,10 +169,10 @@ test("a search moves to its results without reloading the page, shows the bar, a
     expect(await page.evaluate(() => "kept" in window)).toBe(true);
 
     // A picker applies by itself, the same way: Documents' year.
-    await page.goto("/app/documents");
+    await page.goto("/app/documents?view=papers");
     await page.evaluate(() => Object.assign(window, { kept: true }));
     await page.getByLabel("Financial year").selectOption("all");
-    await expect(page).toHaveURL(/\/app\/documents\?year=all$/);
+    await expect(page).toHaveURL(/\/app\/documents\?view=papers&year=all$/);
     expect(await page.evaluate(() => "kept" in window)).toBe(true);
 
     // Without JavaScript the same forms still find, by a plain page load.

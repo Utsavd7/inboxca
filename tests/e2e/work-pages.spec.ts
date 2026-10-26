@@ -51,7 +51,7 @@ test("Documents: tick papers to download one ZIP or preview sending them as link
     papers.push((await query(local.dbUrl, insert, [firm.firmId, client, "gst", type, file, name, randomUUID()]))[0].id);
   }
 
-  await owner.goto("/app/documents");
+  await owner.goto("/app/documents?view=papers");
   const list = owner.getByRole("region", { name: "Papers" });
   await list.getByLabel(`Choose ${patelName} - Purchase bills.pdf`).check();
   await list.getByLabel(`Choose Mehta Traders ${tag} - Form 16.pdf`).check();
@@ -76,7 +76,7 @@ test("Documents: tick papers to download one ZIP or preview sending them as link
   await expect(preview).toHaveCount(0);
 
   // Files dropped with no client chosen wait while the client is picked, then fill its form.
-  await owner.goto("/app/documents");
+  await owner.goto("/app/documents?view=papers");
   const drag = (type: string) =>
     owner.evaluate((type) => {
       const holder = window as unknown as { transfer?: DataTransfer };
