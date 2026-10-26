@@ -3,6 +3,7 @@
 export const activityNames: Record<string, string> = {
   "dataset.edit_saved":"Unfinished correction kept", "form.started":"Form preparation started", "form.prepared":"Form prepared", "form.edited_outside":"Corrected form added", "form.downloaded":"Form downloaded for filing", "form.filed":"Form marked filed", "form.approved":"Form approved", "form.rejected":"Form needs a correction",
   "dataset.created": "Figures ready to check", "dataset.checked": "Figure checked", "dataset.changed": "Figure corrected",
+  "gst_match.made": "Purchase register matched with GSTR-2B", "gst_match.downloaded": "GSTR-2B differences downloaded",
   "client.added": "Client added", "client.changed": "Client details changed",
   "registration.added": "Number added", "registration.changed": "Services changed", "registration.removed": "Number removed",
   "assignment.added": "Person or team assigned", "assignment.removed": "Assignment removed",
@@ -60,4 +61,6 @@ export const activityDetails: Record<string, readonly string[]> = {
   "form.started": ["version", "template", "reason_code", "filled"], "form.prepared": [], "form.edited_outside": ["version", "template"], "form.approved": [],
   "form.rejected": ["code", "text_enc"], // the reason's code, and its words encrypted
   "form.downloaded": [], "form.filed": ["ack", "paper"],
+  // The purchase register and GSTR-2B papers, and how many bills differ; never a GSTIN or an invoice.
+  "gst_match.made": ["register", "statement", "differences"], "gst_match.downloaded": ["register"],
 };

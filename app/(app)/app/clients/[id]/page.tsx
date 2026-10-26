@@ -1,6 +1,7 @@
 import {PreparedForms} from "../../prepared-forms";
 import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
+import { PurchaseMatch } from "./purchase-match";
 import { DatasetReview } from "./dataset-review";
 import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
 import Form from "next/form";
@@ -846,6 +847,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           </>
         )}
         {sub === "extraction" && <>{pan && <Card id="itr-return" title="Income tax return" Icon={FileText} kind="docs" end={<Link className="b b-secondary b-small" href={`${base}/itr`}>Open the return</Link>}><p className="app-card-none">ITR-1 to ITR-4, filled with the client&apos;s PAN and the figures InboxCA already holds for the year. The rest is listed for you to fill.</p></Card>}<PortalInput clientId={id} message={portal}/><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
+        {sub === "extraction" && <PurchaseMatch clientId={id} searchParams={searchParams}/>}
         {sub === "outputs" && <PreparedForms client={id} message={formMessage}/>}
 
         {tab === "notices" && (

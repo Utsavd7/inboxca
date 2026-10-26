@@ -95,13 +95,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"reminders_paused": boolean,"sales_mapping_enc": string | null
+                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"purchase_mapping_enc": string | null,"reminders_paused": boolean,"sales_mapping_enc": string | null
                   }
                   Insert: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
                   }
                   Update: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
                   }
                   Relationships: [
                     {
@@ -404,6 +404,31 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "firms"
       referencedColumns: ["id"]
+    }
+                  ]
+                },"gst_matches": {
+                  Row: {
+                    "counts": NonNullable<Json>,"firm_id": string,"register_id": string,"result_enc": string,"statement_id": string
+                  }
+                  Insert: {
+                    "counts": NonNullable<Json>,"firm_id": string,"register_id": string,"result_enc": string,"statement_id": string
+                  }
+                  Update: {
+                    "counts"?: NonNullable<Json>,"firm_id"?: string,"register_id"?: string,"result_enc"?: string,"statement_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "gst_matches_register_fkey"
+      columns: ["firm_id","register_id"]
+isOneToOne: false
+      referencedRelation: "documents"
+      referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "gst_matches_statement_fkey"
+      columns: ["firm_id","statement_id"]
+isOneToOne: false
+      referencedRelation: "documents"
+      referencedColumns: ["firm_id","id"]
     }
                   ]
                 },"incidents": {
@@ -873,6 +898,11 @@ isOneToOne: false
                            },
 "gov_updates":
 { Args: { "target_firm": string }; Returns: Json
+                           },
+"gst_match_items":
+{ Args: { "target_firm": string }; Returns: {
+              "client_id": string,"client_name": string,"counts": Json,"due_on": string,"period_key": string,"register_id": string
+            }[]
                            },
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
