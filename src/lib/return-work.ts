@@ -53,3 +53,13 @@ export function pinWords(pin:Pin,today:string) {
   const held=pin.stage==="filled" ? `filled, ${figures(pin.open ?? 0)} not checked yet` : pin.stage==="rejected" ? "draft sent back" : pin.missing ? missingWords[pin.missing] : pin.kind==="fill" ? "not filled yet" : pin.stage==="in" ? "papers in, figures not read yet" : "papers still missing";
   return {title,meta:`${due[0].toUpperCase()}${due.slice(1)}. ${held[0].toUpperCase()}${held.slice(1)}`};
 }
+
+// A return in Fill all's preview (/app/work, public.due_fills): it is filled now when ready and
+// not filled or being filled already; otherwise the line says why not.
+export type DueFill=Work & {code:string;period_key:string;due_on:string;wrong:number;ready:boolean;filling:boolean};
+export function fillLine(row:DueFill,today:string) {
+  const go=row.ready && !row.filling;
+  const why=row.wrong ? `${figures(row.wrong)} marked wrong` : !row.ready && row.stage==="figures" && !row.missing ? "Corrected file to check first" : stageLine(row);
+  return {go,status:go ? "Will be filled" : ["filled","draft","approved"].includes(row.stage) ? "Filled already" : row.filling ? "Being filled" : "Not ready",
+    what:`${returnOf(row.code)} for ${returnPeriod(row.code,row.period_key)}, ${dueWords(row.due_on,today)}. ${go ? (row.open ? `${figures(row.open)} to check` : "Every figure checked") : why}`};
+}

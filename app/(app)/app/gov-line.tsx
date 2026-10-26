@@ -16,7 +16,7 @@ export async function GovLine() {
   const items = await governmentUpdates(supabase, membership.firmId).then(({ items }) => items.filter((item) => !item.dismissed), () => []);
   const [item] = items, note = item && govNote(item);
   return (
-    <List name="gov-line" className="gov-lines" rise={false}>
+    <List name="gov-line" className="gov-lines" rise={false} one>
       {item && (
         <Item key={item.id} className="today-line gov-line">
           <Landmark size={16} aria-hidden />

@@ -35,6 +35,14 @@ describe("office hours", () => {
     expect(await open("staff", "2026-10-18T05:00:00Z")).toBe(false); // Sunday has no hours
   });
 
+  // Closing at 23:59, the latest time Settings offers, is open to the end of the day.
+  it("keep a day that closes at 23:59 open in its last minute", async () => {
+    const allDay = { ...settings, hours: { "3": ["00:00", "23:59"] } };
+    expect(await open("staff", "2026-10-14T18:29:30Z", null, allDay)).toBe(true); // Wednesday 23:59:30
+    expect(await open("staff", "2026-10-14T18:30:30Z", null, allDay)).toBe(false); // Thursday 00:00:30, no hours
+    expect(await open("staff", "2026-10-14T12:30:30Z")).toBe(false); // any other close still closes on time: 18:00:30
+  });
+
   // #16: season dates still respect holidays.
   it("follow special hours within their dates, and still close on holidays", async () => {
     const season = { ...settings, special_hours: [{ from: "2026-10-14", to: "2026-10-18", open: "09:00", close: "21:00" }] };

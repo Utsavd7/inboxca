@@ -22,6 +22,7 @@ export const activityNames: Record<string, string> = {
   "email.answered": "Reply sent by InboxCA", "email.answer_stopped": "Reply by InboxCA stopped",
   "document.added": "Acknowledgement saved", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked",
   "contact.added": "Contact added", "contact.changed": "Contact changed",
+  "fills.asked": "Fill asked for returns late or due in the next 7 days", "fills.stopped": "Fill stopped before it started",
 };
 
 // Every action written to activity_log and the details it may carry (PLAN.md 8.0, 8.9): ids,
@@ -64,6 +65,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "email.assigned": ["person"], "replies.waiting_sent": ["emails", "people", "from"],
   // InboxCA's answer by rules (Inbox, answered B and C): its template, or the kind a person stopped.
   "email.answered": ["template"], "email.answer_stopped": ["kind"],
+  "fills.asked": ["returns", "clients", "batch"], "fills.stopped": ["returns", "batch"],
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"],
   "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state"], "dataset.edit_saved": ["dataset", "line"],
   "dataset.changed": ["dataset", "revision", "line", "state", "before", "after", "reason_enc", "registration", "entered", "zeroed"], // before, after and reason encrypted

@@ -124,12 +124,13 @@ export function ToastMotion({ children }: { children: React.ReactNode }) {
 // of fading up again, and only the truly new ones fade up.
 const InList = createContext("");
 const shownRows = new Map<string, HTMLElement>();
-export function List({ as: Tag = "ul", name, className = "", label, rise = true, children }: { as?: "ul" | "tbody"; name?: string; className?: string; label?: string; rise?: boolean; children: React.ReactNode }) {
+// one: a slot that holds one row at a time, so a leaving row goes before the next one comes.
+export function List({ as: Tag = "ul", name, className = "", label, rise = true, one = false, children }: { as?: "ul" | "tbody"; name?: string; className?: string; label?: string; rise?: boolean; one?: boolean; children: React.ReactNode }) {
   const scope = `${usePathname()}|${name ?? label ?? Tag}`;
   return (
     <Tag className={`${className}${rise ? " stagger" : ""}`.trim() || undefined} aria-label={label}>
       <InList value={scope}>
-        <AnimatePresence mode={Tag === "tbody" ? "sync" : "popLayout"} initial={false}>
+        <AnimatePresence mode={one ? "wait" : Tag === "tbody" ? "sync" : "popLayout"} initial={false}>
           {Children.map(children, (child) => (isValidElement(child) && typeof child.type !== "string" && child.type !== Fragment ? cloneElement(child as React.ReactElement<{ row?: string }>, { row: String(child.key) }) : child))}
         </AnimatePresence>
       </InList>

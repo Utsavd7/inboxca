@@ -16,7 +16,10 @@ export async function fillWork(db:SupabaseClient<Database>,firm:string,task:stri
   if(!row?.registration_id || !row.period_key || !row.code || !stages?.[0] || !fills(row.code)) return {refusal:"InboxCA cannot fill this return here."};
   const papers=(drafts ?? []).map(draft=>draft.document).filter((id):id is string=>!!id);
   const {data:names}=papers.length ? await db.from("documents").select("id,name").eq("firm_id",firm).in("id",papers) : {data:[]};
-  const refusal=notReady(stages[0],(drafts ?? []).map(draft=>({wrong:draft.wrong,name:draft.form_code==="GSTR3B" ? "the GSTR-2B" : names?.find(paper=>paper.id===draft.document)?.name ?? "the sales register"})),returnPeriod(row.code,row.period_key));
+  // Only a file corrected outside InboxCA has to be checked first: an earlier fill whose figures
+  // changed since is filled again, as its next version.
+  const {data:latest}=stages[0].stage==="figures" && stages[0].form ? await db.from("documents").select("prepared").eq("firm_id",firm).eq("id",stages[0].form).maybeSingle() : {data:null};
+  const refusal=notReady({...stages[0],form:(latest?.prepared as {external?:boolean} | null)?.external ? stages[0].form : null},(drafts ?? []).map(draft=>({wrong:draft.wrong,name:draft.form_code==="GSTR3B" ? "the GSTR-2B" : names?.find(paper=>paper.id===draft.document)?.name ?? "the sales register"})),returnPeriod(row.code,row.period_key));
   if(refusal) return {refusal};
   const {data:rows}=await db.from("datasets").select("id,revision,data").eq("firm_id",firm).eq("client_id",row.client_id).in("id",drafts!.map(draft=>draft.id));
   if(rows?.length!==drafts!.length || rows.length>25) return {refusal:"The figures changed. Open the return again."};

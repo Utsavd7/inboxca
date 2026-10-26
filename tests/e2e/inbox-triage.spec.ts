@@ -66,11 +66,25 @@ test("mail from a contact of two clients waits for the team to say which, then i
   await pane().getByRole("button", { name: "It is for this client" }).click();
   await expect(pane().getByRole("link", { name: `Open ${names[1]}` })).toBeVisible();
   expect(await query(local.dbUrl, "select client_id from public.email_events where id = $1", [mail])).toEqual([{ client_id: ids[1] }]);
-  expect(await query(local.dbUrl, "select status from public.requests where entity_id = $1", [mail])).toEqual([{ status: "done" }]);
+  // Filing its attachment is all it needed, so it no longer waits for anyone.
+  expect(await query(local.dbUrl, "select status from public.requests where entity_id = $1", [mail])).toEqual([]);
   await runJobs(owner.request, firm.firmId);
   const filed = path.join(TEST_DRIVE, "InboxCA", "FY 2026-27", names[1], "GST", `${names[1]} - Purchase bills - Sep 2026.pdf`);
   expect(await readFile(filed, "utf8")).toBe("%PDF-1.4 invented purchase bills");
   expect(await query(local.dbUrl, "select client_id from public.documents where firm_id = $1", [firm.firmId])).toEqual([{ client_id: ids[1] }]);
+});
+
+test("once a person picks the client, a request for a paper goes through InboxCA's rules as a known client's does", async () => {
+  await smtp.sendMail({ from: contactEmail, to: office, subject: `Last year's ITR ${tag}`, text: "Please send last year's ITR" });
+  await readMail();
+  const mail = await open(`Last year's ITR ${tag}`);
+  expect(await query(local.dbUrl, "select label, client_id from public.email_events where id = $1", [mail])).toEqual([{ label: "records_past", client_id: null }]);
+  await pane().getByLabel("Which client the email from Kiran Mehta is for").selectOption({ label: names[0] });
+  await pane().getByRole("button", { name: "It is for this client" }).click();
+  await expect(pane().getByRole("link", { name: `Open ${names[0]}` })).toBeVisible();
+  await runJobs(owner.request, firm.firmId);
+  // Kiran may not receive this client's papers, so the rules hand it back to the team, saying why.
+  await expect.poll(async () => await query(local.dbUrl, "select client_id, reason_code, status from public.requests where entity_id = $1", [mail])).toEqual([{ client_id: ids[0], reason_code: "not_allowed", status: "pending" }]);
 });
 
 test("a snoozed email is brought back to Needs reply at once", async () => {

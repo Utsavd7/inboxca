@@ -7,7 +7,9 @@ import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { currentMember } from "@/src/lib/member";
 import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
+import { fillLine } from "@/src/lib/return-work";
 import { inFilter, isLead, workFilters, type Listed, type WorkFilter } from "@/src/lib/work/today";
+import { fillAll, stopFills } from "../form-actions";
 import { LinkTabs } from "../link-tabs";
 import { MarkFiled } from "../mark-filed";
 import { Presence } from "../motion";
@@ -17,7 +19,7 @@ import { WorkRows } from "../work-rows";
 import { Avatar, Badge, Card, Empty, PageHead, Row, SidePanel, Toast } from "../ui";
 import "../work.css";
 
-type Params = { show?: string; page?: string; panel?: string; client?: string; confirm?: string; sending?: string; job?: string; stopped?: string; assigned?: string; marked?: string; t?: string; error?: string };
+type Params = { show?: string; page?: string; panel?: string; client?: string; confirm?: string; sending?: string; job?: string; stopped?: string; assigned?: string; marked?: string; t?: string; error?: string; filling?: string; clients?: string; batch?: string };
 type Db = Awaited<ReturnType<typeof currentMember>>["supabase"];
 const PAGE = 25;
 // Late clients read at once; the Calendar lists every late return beyond them.
@@ -27,12 +29,15 @@ const errors: Record<string, string> = {
   assign: "That client could not be assigned to you. Try again from the client's page.",
   send: "The send could not start. Try again.",
   started: "The send had already started, so it could not be stopped.",
+  fill: "Fill could not start. Try again.",
+  fill_none: "Nothing new to fill. These returns are filled already, being filled or not ready yet.",
+  fill_started: "Filling had already started, so it could not be stopped.",
 };
 
 // The person's whole list, the one Today shows the first 7 of: the same items for the same
 // person, filtered and a page at a time. Late returns have Mark filed and Assign to me here,
 // and the owner and partners remind every late client, or every client still missing papers,
-// after a preview.
+// after a preview. On Returns, whoever may fill returns fills every one late or due in the next 7 days.
 export default async function Work({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const { supabase, userId, membership } = await currentMember();
@@ -69,6 +74,9 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
   const lookedAfter = new Set(looked?.map((row) => row.client_id));
   const assignAs = membership.role === "manager" ? "manager" : "partner_in_charge";
   const write = !membership.viewOnlyUntil;
+  // Fill all: the owner, partners and managers, and anyone who may edit figures (the firm's
+  // settings, or an approved permission request), as Fill allows. public.due_fills picks the returns.
+  const fills = write && show === "returns" && (["owner", "partner", "manager"].includes(membership.role) || membership.may("edit_figures") || !!(await supabase.from("requests").select("id").eq("firm_id", firm).eq("kind", "permission").eq("status", "approved").eq("reason_code", "edit_figures").eq("details->>by", userId).gt("expires_at", new Date().toISOString()).limit(1)).data?.length);
   const more = (item: Listed) => {
     if (!item.key.startsWith("late:") || !item.client || !write) return null;
     const client = item.client;
@@ -95,9 +103,10 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
     );
   };
 
-  const [marking, preview] = await Promise.all([
+  const [marking, preview, filling] = await Promise.all([
     params.panel === "filed" && params.client && /^[0-9a-f-]{36}$/.test(params.client) && write ? marked(supabase, params.client, today) : null,
     sends && (params.confirm === "late" || params.confirm === "papers") ? sendPreview(supabase, firm, params.confirm) : null,
+    fills && params.confirm === "fill" ? fillPreview(supabase, firm, today) : null,
   ]);
   const markedCount = params.t?.split(".").filter(Boolean).length ?? 0;
 
@@ -116,11 +125,30 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
             <Link className="b b-secondary" href={href({ extra: "confirm=papers" })} scroll={false}>
               Remind about missing papers
             </Link>
+          ) : fills ? (
+            <Link className="b b-secondary" href={href({ extra: "confirm=fill" })} scroll={false}>
+              Fill all returns late or due in the next 7 days
+            </Link>
           ) : null
         }
       />
       {params.assigned && <Toast>Assigned to you. The client is now on your list.</Toast>}
-      {params.stopped && <Toast>Stopped. Nothing was sent.</Toast>}
+      {params.stopped && <Toast>{params.stopped === "fill" ? "Stopped. No return will be filled." : "Stopped. Nothing was sent."}</Toast>}
+      {params.filling && params.batch && params.job && (
+        <Toast
+          undo={
+            <form action={stopFills}>
+              <input type="hidden" name="batch" value={params.batch} />
+              <input type="hidden" name="job" value={params.job} />
+              <Pending className="b" busy="Stopping">
+                Undo
+              </Pending>
+            </form>
+          }
+        >
+          {plural(Number(params.filling), "return", "returns")} for {plural(Number(params.clients), "client", "clients")} will be filled in a minute. Your team still checks each one.
+        </Toast>
+      )}
       {params.sending && params.job && (
         <Toast
           undo={
@@ -221,6 +249,32 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
             </form>
           </SidePanel>
         )}
+        {filling && (
+          <SidePanel key="fill" id="fill-title" title="Fill returns late or due in the next 7 days" close={back}>
+            <p className="hint">InboxCA fills each GSTR-1 and GSTR-3B from the figures it has read, as it does by itself before the due date. A person still checks every figure before a return can be approved, downloaded or filed. Returns filled already or being filled are not filled again.</p>
+            <p>
+              <strong>
+                {plural(filling.count, "return", "returns")} for {plural(filling.clients, "client", "clients")}.
+              </strong>{" "}
+              {filling.toCheck ? `${filling.toCheck} ${filling.toCheck === 1 ? "has" : "have"} figures still to check.` : ""}
+            </p>
+            {!filling.rows.length && <p className="hint">No GSTR-1 or GSTR-3B of your clients is late or due in the next 7 days.</p>}
+            <ul className="app-rows work-preview">
+              {filling.rows.slice(0, 200).map((row) => (
+                <Row key={row.key} lead={<Avatar name={row.name} />} title={row.name} meta={row.what} status={row.go ? <Badge tone="blue">Will be filled</Badge> : <Badge plain>{row.status}</Badge>} />
+              ))}
+            </ul>
+            {filling.rows.length > 200 && <p className="hint">The first 200 are listed.</p>}
+            <form action={fillAll} className="mark-filed-actions work-send">
+              <Pending className="b b-primary" busy="Filling" disabled={!filling.count}>
+                Fill {plural(filling.count, "return", "returns")}
+              </Pending>
+              <Link className="b b-secondary" href={back} scroll={false}>
+                Cancel
+              </Link>
+            </form>
+          </SidePanel>
+        )}
       </Presence>
     </>
   );
@@ -271,4 +325,13 @@ async function sendPreview(supabase: Db, firm: string, what: "late" | "papers") 
         : "Each client gets one email from your firm's address listing the papers still missing, with their upload link. Anyone already reminded today is skipped.",
     button: `Send ${plural(count, "reminder", "reminders")}`,
   };
+}
+
+// What Fill all would do, for its preview: each GSTR-1 and GSTR-3B late or due in the next 7 days that
+// this person may fill (public.due_fills), and why any is left out. The fill job decides the same.
+async function fillPreview(supabase: Db, firm: string, today: string) {
+  const { data } = await supabase.rpc("due_fills", { target_firm: firm });
+  const rows = (data ?? []).map((row) => ({ key: row.task, client: row.client, name: row.client_name, toCheck: row.open > 0, ...fillLine(row, today) }));
+  const ready = rows.filter((row) => row.go);
+  return { rows, count: ready.length, clients: new Set(ready.map((row) => row.client)).size, toCheck: ready.filter((row) => row.toCheck).length };
 }
