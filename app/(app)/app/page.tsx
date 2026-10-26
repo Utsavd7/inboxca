@@ -9,7 +9,7 @@ import { PushSwitch } from "./push-switch";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { canManageClients } from "@/src/lib/clients";
 import { addDays, dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
-import { whenRange } from "@/src/lib/mail-view";
+import { inboxWeek } from "@/src/lib/work/inbox";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { periodName } from "@/src/lib/documents";
 import { describeHours, type Hours } from "@/src/lib/hours";
@@ -21,6 +21,7 @@ import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { awake, replyReasons } from "@/src/lib/triage";
 import { activityNames } from "@/src/lib/activity";
 import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
+import { MailWeek } from "./mail-week";
 import { MarkFiled } from "./mark-filed";
 import { Count, Draw, List, Presence, Press } from "./motion";
 import { Pending } from "./pending";
@@ -180,7 +181,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
             </Suspense>
           )}
           <Suspense fallback={<CardSkeleton title="Email this week" rows={1} />}>
-            <MailWeek data={data} />
+            <MailWeek week={data.mailWeek} />
           </Suspense>
           <Suspense fallback={<CardSkeleton title="Due this week" rows={2} />}>
             <ThisWeek data={data} />
@@ -330,12 +331,8 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
     };
   });
 
-  // This week's email, from Monday as the Inbox's This week: read, answered by InboxCA,
-  // answered by the team, and still waiting for a reply (email_outcomes).
-  const mailWeek = Promise.all(["", "answered", "replied", "reply"].map((outcome) => {
-    const read = supabase.from("email_outcomes").select("id", { count: "exact", head: true }).eq("firm_id", firm).gte("received_at", whenRange("week", today).from!);
-    return count(outcome ? read.contains("outcomes", [outcome]) : read);
-  }));
+  // This week's email: read, answered by InboxCA, answered by the team, waiting.
+  const mailWeek = inboxWeek({ supabase, membership, userId });
 
   // What InboxCA did by itself today (papers filed from email come from the papers themselves).
   const feed = Promise.all([
@@ -798,31 +795,6 @@ async function Missing({ data }: { data: Data }) {
           </Link>
         </p>
       )}
-    </Card>
-  );
-}
-
-// The week's email in four figures, each opening that list in the Inbox.
-async function MailWeek({ data }: { data: Data }) {
-  const [read, answered, replied, waiting] = await data.mailWeek;
-  const figures = [
-    { key: "read", filter: "show=in", label: "Read", value: read },
-    { key: "answered", filter: "status=answered", label: "Answered by InboxCA", value: answered },
-    { key: "replied", filter: "status=replied", label: "Answered by your team", value: replied },
-    { key: "reply", filter: "status=reply", label: "Waiting for a reply", value: waiting },
-  ];
-  return (
-    <Card id="t-mail" title="Email this week" Icon={Inbox} kind="reply">
-      <ul className="mail-week">
-        {figures.map((figure) => (
-          <li key={figure.key}>
-            <Link href={`/app/inbox?when=week&${figure.filter}`}>
-              <strong><Count id={`mail-${figure.key}`} value={figure.value} /></strong>
-              <span>{figure.label}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
     </Card>
   );
 }
