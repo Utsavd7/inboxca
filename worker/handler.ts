@@ -4,7 +4,7 @@ import { openView } from "./render.ts";
 import { readSheet } from "../src/lib/sheet.ts";
 import { exactMapping } from "../src/lib/sales-register.ts";
 import { createHash } from "node:crypto";
-import { readPortal } from "./portal.ts";
+import { readPortal, readTaxPdf, readTaxText } from "./portal.ts";
 import {verifyForm} from "../src/lib/form-worker.ts";
 import {editedForm} from "./edited-form.ts";
 import {templateSchema} from "../src/lib/templates.ts";
@@ -94,8 +94,9 @@ export async function handle(request: Request): Promise<Response> {
       return Response.json({...editedForm(Buffer.from(data.buffer,data.byteOffset,data.byteLength),context),sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
     }
     if(portal) {
-      if(!/\.json$/i.test(view.name)) return Response.json({read:null});
-      return Response.json({read:readPortal(data),sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
+      // A locked PDF opens only with the password a person typed for it.
+      const read=/\.json$/i.test(view.name) ? readPortal(data) : /\.txt$/i.test(view.name) ? readTaxText(data) : /\.pdf$/i.test(view.name) ? await readTaxPdf(data,view.password) : null;
+      return Response.json({read,sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
     }
     if(sheet) {
       if(!/\.(xlsx?|csv)$/i.test(view.name)) throw new Error("Not a sheet");

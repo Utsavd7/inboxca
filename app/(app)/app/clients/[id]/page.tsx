@@ -1159,7 +1159,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           </UploadForm>
           {membership.may("portal_files", client.id) && (
             <p className="hint upload-portal">
-              GSTR-2B or GSTR-2A from the GST portal? <Link href="/app?panel=portal">Add portal files</Link>, and InboxCA finds the client and month inside each.
+              A file from the GST or income tax portal? <Link href="/app?panel=portal">Add portal files</Link>, and InboxCA finds the client and period inside each.
             </p>
           )}
         </SidePanel>

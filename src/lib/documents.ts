@@ -19,8 +19,12 @@ const types: [RegExp, string, WorkType][] = [
   [/e[\s-]?way/, "E-way bills", "gst"],
   [/invoice/, "Invoices", "gst"],
   [/form[\s-]?16a?\b/, "Form 16", "income_tax"],
+  // Form No. 130 and Form No. 168 replace Form 16 and Form 26AS from tax year 2026-27.
+  [/form[\s-]?(no\s?)?130\b/, "Form 130", "income_tax"],
   [/26\s?as/, "Form 26AS", "income_tax"],
+  [/form[\s-]?(no\s?)?168\b/, "Form 168", "income_tax"],
   [/\bais\b/, "AIS", "income_tax"],
+  [/\btis\b/, "TIS", "income_tax"],
   [/salary|pay\s?slip/, "Salary slips", "income_tax"],
   [/interest cert/, "Interest certificate", "income_tax"],
   [/capital gain/, "Capital gains statement", "income_tax"],
@@ -41,7 +45,7 @@ const types: [RegExp, string, WorkType][] = [
 
 // Final papers: what clients ask for in later years, and what the first import brings by
 // default (PLAN.md 5.16).
-export const finalPapers = new Set(["ITR-V", "Acknowledgement", "Audit report", "GSTR-1", "GSTR-3B", "Notice", "Order", "Certificate", "Challan", "Form 16", "Balance sheet"]);
+export const finalPapers = new Set(["ITR-V", "Acknowledgement", "Audit report", "GSTR-1", "GSTR-3B", "Notice", "Order", "Certificate", "Challan", "Form 16", "Form 130", "Balance sheet"]);
 const labelWork: Partial<Record<Label, WorkType>> = { data_gst: "gst", data_income_tax: "income_tax", data_tax_audit: "tax_audit" };
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const monthNames = months.map((month) => month[0].toUpperCase() + month.slice(1));
@@ -80,8 +84,10 @@ export const workOfType = (type: string): WorkType => types.find(([pattern]) => 
 export const gstinFor = (work: string, gstins: string[], chosen?: string | null) =>
   work !== "gst" ? null : gstins.length === 1 ? gstins[0] : chosen && gstins.includes(chosen) ? chosen : null;
 
-// Papers a client often sends several of in one period, each its own paper, never versions.
-const manyAPeriod = new Set(["Acknowledgement", "Challan", "Notice", "Order", "Certificate", "Document"]);
+// Papers a client often sends several of in one period, each its own paper, never versions:
+// a Form 16 for each employer and often its Part A and Part B apart, and Form 26AS as both
+// its PDF and its text file.
+const manyAPeriod = new Set(["Acknowledgement", "Challan", "Notice", "Order", "Certificate", "Document", "Form 16", "Form 130", "Form 26AS"]);
 
 // Versions (decided 24 Oct 2026): of a client's filed papers of one type, period and GSTIN,
 // the latest to arrive is current and the others are kept as earlier versions, their files

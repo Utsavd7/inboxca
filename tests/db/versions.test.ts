@@ -78,6 +78,10 @@ it("keeps the latest paper of a type, period and GSTIN current and the others as
     const [n1, n2] = [await add(one, "Notice", "2026-10-01", null, "other"), await add(one, "Notice", "2026-10-02", null, "other")];
     await settleVersions(admin, { ...group, work_type: "other", document_type: "Notice", registration_id: null });
     expect(await status(n1, n2)).toEqual({ [n1]: "filed", [n2]: "filed" });
+    // So does Form 16: one an employer, and often its Part A and Part B apart.
+    const [f1, f2] = [await add(one, "Form 16", "2026-10-01", null, "income_tax"), await add(one, "Form 16", "2026-10-02", null, "income_tax")];
+    await settleVersions(admin, { ...group, work_type: "income_tax", document_type: "Form 16", registration_id: null });
+    expect(await status(f1, f2)).toEqual({ [f1]: "filed", [f2]: "filed" });
   } finally {
     await db.query("begin");
     await db.query("select set_config('app.log_purge', 'on', true)");

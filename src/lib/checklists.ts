@@ -1,5 +1,7 @@
 import type { ClientKind } from "./clients";
 import type { WorkType } from "./drive";
+import type { Json } from "@/src/db/types";
+import type { supabaseAdmin } from "./supabase";
 
 // What a firm usually asks a client for, by work (PLAN.md 5.3.1). The client page ticks the
 // lists for the work the client's services need; a person adds anything else by name.
@@ -39,11 +41,24 @@ export type DocumentRequest = { period: string; items: RequestItem[]; link_hash:
 
 // A portal file dropped in (PLAN.md 5.3.1) is received against the open item asked for by its
 // name, however it was spelled ("GSTR-2B", "gstr 2b"), when the request is for its month or
-// for no month. Returns whether an item was received.
+// for no month. Form No. 130 replaces Form 16 from tax year 2026-27 (Income-tax Rules 2026,
+// rule 215), so it answers a Form 16 asked for. Returns whether an item was received.
 export function receiveItem(request: DocumentRequest, type: string, period: string, documentId: string) {
   const plain = (name: string) => name.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const item = request.items.find((entry) => !entry.received.length && plain(entry.type) === plain(type));
+  const names = [type, ...(type === "Form 130" ? ["Form 16"] : [])].map(plain);
+  const item = request.items.find((entry) => !entry.received.length && names.includes(plain(entry.type)));
   if (!item || (request.period && request.period !== period)) return false;
   item.received.push(documentId);
   return true;
+}
+
+// The client's open requests for papers each receive the portal file; a request with every
+// item in closes, and its reminders stop.
+export async function receiveAsked(admin: ReturnType<typeof supabaseAdmin>, clientId: string, type: string, period: string, documentId: string) {
+  const { data: asks } = await admin.from("requests").select("id, details").eq("client_id", clientId).eq("kind", "documents").eq("status", "pending");
+  for (const ask of asks ?? []) {
+    const details = ask.details as unknown as DocumentRequest;
+    if (receiveItem(details, type, period, documentId))
+      await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: details.items.every((entry) => entry.received.length) ? "done" : "pending" }).eq("id", ask.id);
+  }
 }
