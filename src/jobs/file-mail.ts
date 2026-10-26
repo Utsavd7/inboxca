@@ -2,6 +2,7 @@ import { emailTemplates, TEMPLATE_VERSION } from "@/src/lib/email-templates";
 import type { Json } from "@/src/db/types";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
+import { clientReplied, receiveAsked } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
 import { describeFile, folderFor, gstinFor, periodName, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
 import type { FolderOrder, Naming } from "@/src/lib/drive";
@@ -86,6 +87,7 @@ async function fileAttachments(
 ): Promise<{ type: string; period: string; toCheck: boolean }[]> {
   const firm = event.firm_id;
   const filed: { type: string; period: string; toCheck: boolean }[] = [];
+  let fresh = false;
   const drive = await openDrive(firm, driveAccount);
   const order = ((driveAccount.settings as { folder_order?: FolderOrder }).folder_order ?? "year_client_work") as FolderOrder;
   const naming = (driveAccount.settings as { naming?: Naming }).naming;
@@ -138,11 +140,15 @@ async function fileAttachments(
       });
       if (error) throw new Error("document_not_saved");
       if (!toCheck) await settleVersions(admin, { client_id: event.client_id, work_type: about.work, document_type: about.type, period_key: about.period, registration_id: registration });
+      // A paper the client emailed answers what was asked for, as an upload does.
+      if (!toCheck) await receiveAsked(admin, event.client_id, about.type, about.period, id);
       await queueRead(firm, id);
       if(about.work==="gst" && !toCheck && /\.(xlsx?|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,id);if(error) throw new Error("sales_not_queued");}
       filed.push({ type: about.type, period: about.period, toCheck });
       known.push({ id, email_event_id: event.id, sha256, document_type: about.type, period_key: about.period, status:toCheck ? "to_check" : "filed" });
+      fresh = true;
     }
   }
+  if (fresh) await clientReplied(admin, event.client_id);
   return filed;
 }

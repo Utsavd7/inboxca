@@ -37,6 +37,8 @@ import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, 
 import { CopyButton } from "../../ui-client";
 import { CameFrom } from "../../documents/came-from";
 import { UploadForm } from "./upload-form";
+import { remindClient } from "@/app/(app)/actions";
+import { RemindToast } from "../../remind-toast";
 import { unsafeText } from "@/src/lib/intake";
 import "../clients.css";
 import "../../today.css";
@@ -181,6 +183,8 @@ export default async function Client({ params, searchParams }: { params: Promise
     openAsk && (async () => `${process.env.APP_BASE_URL ?? `${(await headers()).get("x-forwarded-proto") ?? "http"}://${(await headers()).get("host")}`}/u/${await crypto.decrypt(firm, `requests/${openAsk.id}/link`, (openAsk.details as unknown as DocumentRequest).link_enc!)}`)(),
   ]);
   const manage = canManageClients(membership.role);
+  // Send reminder now on the Returns tab: those who manage clients and those who look after this one.
+  const reminds = sub === "returns" && !viewOnly && !!client.email_enc && !client.reminders_paused && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
   const confirmedBy = new Map([...confirmers(confirms ?? [])].map(([notice, by]) => [notice, personName(people?.find((person) => person.user_id === by)?.email)]));
   // The lists for the work this client's services need are ticked when asking for files.
   const usualWork = new Set(client.client_registrations.flatMap((registration) => (registration.services ?? []).map(workOfService)));
@@ -758,6 +762,9 @@ export default async function Client({ params, searchParams }: { params: Promise
         {sub === "returns" && (
           <>
             <DroppedNotice value={dropped} />
+            <Suspense fallback={null}>
+              <RemindToast />
+            </Suspense>
             <Card
               id="due"
               title={show === "filed" ? "Filed returns" : "Returns to file"}
@@ -794,6 +801,15 @@ export default async function Client({ params, searchParams }: { params: Promise
                           <Badge tone={task.status === "filed" ? "done" : overdue ? "late" : task.status === "in_progress" ? "blue" : ""}>
                             {overdue ? "Late" : taskStatuses[task.status as keyof typeof taskStatuses]}
                           </Badge>
+                        }
+                        more={
+                          reminds && task.status !== "filed" && task.due_on <= addDays(today, 7) && (
+                            <form action={remindClient}>
+                              {returnsState}
+                              <input type="hidden" name="from" value="client" />
+                              <Pending className="b b-ghost" busy="Sending" aria-label={`Send ${client.name} a reminder now`}>Send reminder now</Pending>
+                            </form>
+                          )
                         }
                         action={
                           canFile && task.status !== "filed" ? (

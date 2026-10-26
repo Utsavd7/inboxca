@@ -875,6 +875,9 @@ isOneToOne: false
               "client_name": string,"due_on": string,"id": string
             }[]
                            },
+"looks_after":
+{ Args: { "client": string,"target_firm": string }; Returns: boolean
+                           },
 "mail_health":
 { Args: { "account_id": string,"expected": string,"failed": boolean,"phase": string }; Returns: number
                            },
@@ -936,6 +939,11 @@ isOneToOne: false
                            },
 "open_to":
 { Args: { "at"?: string,"person": Json,"role": string,"settings": Json }; Returns: boolean
+                           },
+"paper_items":
+{ Args: { "target_firm": string }; Returns: {
+              "client_id": string,"client_name": string,"details": Json,"id": string,"kind": string
+            }[]
                            },
 "rate_limit":
 { Args: { "bucket": string,"most": number,"seconds": number }; Returns: boolean

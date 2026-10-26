@@ -5,7 +5,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageTasks, markTasksInProgress, remindClient, reopenTasks, stopSend } from "@/app/(app)/actions";
 import { addDays, calendarViews, dueLabel, periodLabel, todayInIndia, type CalendarView } from "@/src/lib/calendar";
+import type { DocumentRequest } from "@/src/lib/checklists";
 import { canManageClients } from "@/src/lib/clients";
+import { periodName } from "@/src/lib/documents";
+import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
 import { currentMember } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { AutoSelect } from "../auto-select";
@@ -68,7 +71,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     picked.length ? supabase.from("tasks").select("id, code, period_key, due_on, clients(name)").eq("firm_id", membership.firmId).eq("kind", "compliance").neq("status", "filed").in("id", picked).order("due_on") : Promise.resolve({ data: null }),
     // Remind client: the client, its returns due within 7 days, and whether the email can go.
     remindId ? supabase.from("clients").select("id, name, email_enc, reminders_paused").eq("firm_id", membership.firmId).eq("id", remindId).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
-    remindId ? supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", membership.firmId).eq("kind", "compliance").eq("client_id", remindId).neq("status", "filed").gte("due_on", today).lte("due_on", addDays(today, 7)).order("due_on") : Promise.resolve({ data: null }),
+    remindId ? supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", membership.firmId).eq("kind", "compliance").eq("client_id", remindId).neq("status", "filed").gte("due_on", addDays(today, -366)).lte("due_on", addDays(today, 7)).order("due_on") : Promise.resolve({ data: null }),
     remindId ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : Promise.resolve({ data: null }),
     remindId ? supabaseAdmin().from("activity_log").select("at", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("entity_id", remindId).eq("action", "reminder.sent").gte("at", `${today}T00:00:00+05:30`) : Promise.resolve({ count: 0 }),
     Promise.all(views.map((shown) => returns(shown, counted, true))),
@@ -108,9 +111,16 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const onDay = new Map(perDay?.map((row) => [row.due_on, row]));
   const most = Math.max(1, ...[...onDay.values()].map((row) => row.returns));
 
-  // Remind client: anything that stops the email.
-  const soon = (due: string) => due >= today && due <= addDays(today, 7);
+  // Remind client: anything that stops the email. It names the returns late or due within 7
+  // days and the papers still missing (src/jobs/reminders.ts).
+  const soon = (due: string) => due >= addDays(today, -366) && due <= addDays(today, 7);
   const remindable = remindTasks?.filter((task) => rule.get(task.code ?? "")?.verified_on) ?? [];
+  const { data: asking } = remindId ? await supabase.from("requests").select("id, details").eq("kind", "documents").eq("client_id", remindId).eq("status", "pending").gt("expires_at", new Date().toISOString()) : { data: null };
+  const stillMissing = (asking ?? []).flatMap((request) => {
+    const details = request.details as unknown as DocumentRequest;
+    const missing = details.items.filter((item) => !item.received.length).map((item) => item.type);
+    return missing.length && (details.followups?.length ?? 0) < MAX_FOLLOW_UPS ? [{ id: request.id, what: `${missing.join(", ")}${details.period ? ` for ${periodName(details.period)}` : ""}` }] : [];
+  });
   const stops = reminding && [
     mailbox?.status !== "connected" && "Connect the firm's email in Settings first. Reminders go from the firm's own address.",
     !reminding.email_enc && "This client has no email address. Add one on the client's page.",
@@ -445,7 +455,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
 
       {reminding && stops && (
         <SidePanel key="remind" id="remind-title" title={`Remind ${reminding.name}`} close={close}>
-          <p className="hint">One email from your firm&apos;s address listing these returns and their due dates, the same as the daily reminders. Returns whose papers already arrived are left out.</p>
+          <p className="hint">One email from your firm&apos;s address listing these returns and their due dates, and the papers still missing, the same as the daily reminders. Returns whose papers already arrived are left out.</p>
           {stops.map((stop) => (
             <p key={stop} className="alert" role="alert">
               {stop}
@@ -459,12 +469,17 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
               })}
             </ul>
           ) : (
-            <p className="hint">This client has no return due in the next 7 days.</p>
+            <p className="hint">This client has no return late or due in the next 7 days.</p>
+          )}
+          {!!stillMissing.length && (
+            <ul className="app-rows cal-remind">
+              {stillMissing.map((ask) => <Row key={ask.id} lead={<Avatar name={reminding.name} />} title="Papers still missing" meta={ask.what} status={<Badge tone="blue">In the email</Badge>} />)}
+            </ul>
           )}
           <form action={remindClient} className="cal-remind-foot">
             {state}
             <input type="hidden" name="client" value={reminding.id} />
-            <Pending className="b b-primary" busy="Sending" disabled={!!stops.length || !remindable.length}>
+            <Pending className="b b-primary" busy="Sending" disabled={!!stops.length || (!remindable.length && !stillMissing.length)}>
               Send reminder
             </Pending>
             <Link className="b b-secondary" href={close} scroll={false}>
