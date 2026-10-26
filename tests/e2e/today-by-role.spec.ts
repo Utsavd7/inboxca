@@ -115,16 +115,17 @@ test("the manager sees their team's clients and the team's numbers", async () =>
   const manager = pages.manager!;
   await manager.goto("/app");
   const rows = list(manager).getByRole("listitem");
-  // Mehta's late return, the call and the reply; returns due soon are pinned to the people the
-  // client is assigned to, or their team (return_pins).
-  await expect(rows.filter({ hasText: mehta })).toHaveCount(3);
+  // Mehta's late return, the call, the reply, and the GSTR-3B due today: returns due soon are
+  // pinned to whoever looks after the client, so to a manager for their team's people (return_pins).
+  await expect(rows.filter({ hasText: mehta })).toHaveCount(4);
+  await expect(rows.filter({ hasText: `GSTR-3B for ${mehta}` })).toHaveCount(1);
   await expect(list(manager)).not.toContainText(shah);
   await expect(list(manager)).not.toContainText("Invented Bulk Client");
   await expect(rows.filter({ hasText: `Call ${mehta}` })).toContainText("Asked twice, still missing Sales bills for Sep 2026");
   await expect(week(manager).getByRole("link", { name: /^Team returns this week 1 of 2 filed/ })).toHaveAttribute("href", "/app/calendar?view=week");
   await expect(week(manager).getByRole("link", { name: /^Drafts to approve 0/ })).toHaveAttribute("href", "/app/work?show=approvals");
-  // Stuck: the call.
-  await expect(week(manager).getByRole("link", { name: /^Stuck 1/ })).toBeVisible();
+  // Stuck: the call, and the GSTR-3B due today still waiting for its papers.
+  await expect(week(manager).getByRole("link", { name: /^Stuck 2/ })).toBeVisible();
   await expect(week(manager).getByRole("listitem")).toHaveText([/^Today\s*2 returns$/]);
   expect(await oneScreen(manager)).toBe(true);
   await shoot(manager, "manager");
