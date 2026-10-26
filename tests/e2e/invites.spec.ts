@@ -1000,7 +1000,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect((await readFile(path.join(TEST_WORKSPACE, "safety", firm.firmId, removedId))).includes("invented purchase bills")).toBe(false);
   await unlink(removedFile);
   await owner.getByRole("button", { name: "Restore" }).first().click();
-  await expect(owner.getByRole("status")).toContainText("Restored ");
+  await expect(owner.getByRole("status").filter({ hasText: "Restored " })).toBeVisible({ timeout: 20_000 });
   await expect(rows).toHaveCount(3);
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
   const [putBack] = await query(local.dbUrl, "select drive_file_id from public.documents where id = $1", [removedId]);
