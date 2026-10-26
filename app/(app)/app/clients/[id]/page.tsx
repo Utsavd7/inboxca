@@ -127,7 +127,6 @@ export default async function Client({ params, searchParams }: { params: Promise
       )
       .eq("id", id)
       .eq("firm_id", firm)
-      .eq("stage", "client")
       .maybeSingle(),
     supabase.rpc("firm_people", { target_firm: firm }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),

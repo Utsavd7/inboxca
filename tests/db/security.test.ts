@@ -80,19 +80,13 @@ describe("the database's own guards", () => {
       }
     }));
 
-  it("keeps a sender's address in the log only as a keyed digest, never the address", () =>
+  it("refuses a raw IP address in the activity log; only a keyed digest is kept", () =>
     rollback(db, async () => {
       const firm = "00000000-0000-4000-8000-0000000009a0";
       await db.query("insert into public.firms (id, name, state_code, status) values ($1, 'Invented Address Firm', '24', 'active')", [firm]);
-      await db.query("set local role service_role");
-      const lead = (ip: string) => attempt(db, "select public.add_form_lead($1, gen_random_uuid(), 'Invented Lead', 'individual', '', '', '{}', '', $2)", [firm, ip]);
-      for (const address of ["203.0.113.7", "2001:db8::1", "::ffff:198.51.100.4"]) {
-        expect(await lead(address)).toMatchObject({ ok: false, code: "23514" });
-        expect((await attempt(db, "insert into public.activity_log (firm_id, action, details) values ($1, 'lead.added', $2)", [firm, { ip: address }])).ok).toBe(false);
-      }
-      expect((await lead("Qm9yaW5nLWtleWVkLWRpZw")).ok).toBe(true);
-      await asOwner(db);
-      expect((await db.query("select details from public.activity_log where firm_id = $1", [firm])).rows).toEqual([{ details: { source: "form", ip: "Qm9yaW5nLWtleWVkLWRpZw" } }]);
+      for (const address of ["203.0.113.7", "2001:db8::1", "::ffff:198.51.100.4"])
+        expect((await attempt(db, "insert into public.activity_log (firm_id, action, details) values ($1, 'office.refused', $2)", [firm, { ip: address }])).ok).toBe(false);
+      expect((await attempt(db, "insert into public.activity_log (firm_id, action, details) values ($1, 'office.refused', $2)", [firm, { ip: "Qm9yaW5nLWtleWVkLWRpZw" }])).ok).toBe(true);
     }));
 
   it("writes only activity actions and details listed in src/lib/activity.ts", async () => {

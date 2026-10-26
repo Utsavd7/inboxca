@@ -128,15 +128,6 @@ html:has(.ui-public) { background: #f4f6fb; }
 .ui-public .notice { background: var(--pub-done-bg); color: var(--pub-done); }
 .ui-public .alert { background: var(--pub-late-bg); color: var(--pub-late); }
 
-/* The firm's enquiry form: one field a row, 44px to tap; the bots' field sits off screen. */
-.public-form { display: grid; gap: 14px; }
-.public-form > div { display: grid; gap: 6px; }
-.ui.ui-public .public-form label { color: var(--pub-ink-2); font-size: 14px; font-weight: 600; }
-.ui-public .public-form :is(input, select, textarea) { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--pub-field); border-radius: 10px; background: var(--pub-white); color: var(--pub-ink); font: inherit; font-size: 15px; transition: border-color 160ms, box-shadow 160ms; }
-.ui-public .public-form textarea { resize: vertical; }
-.ui-public .public-form :is(input, select, textarea):focus-visible { border-color: var(--pub-blue); }
-.ui-public .public-form .public-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-
 /* Buttons: 44px, a firm press */
 .ui-public .b { height: auto; min-height: 44px; padding: 8px 18px; border-radius: 10px; font-size: 15px; font-weight: 700; line-height: 1.3; white-space: normal; text-align: center; transition: transform 120ms var(--pub-out), background-color 160ms, box-shadow 160ms; }
 .ui-public .b:active:not(:disabled) { transform: scale(0.97); }

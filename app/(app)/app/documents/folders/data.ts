@@ -55,7 +55,7 @@ export async function browseContext() {
   if (!open?.includes(membership.firmId)) {
     const mine: { id: string; name: string }[] = [];
     for (let from = 0; ; from += 1000) {
-      const { data } = await supabase.from("clients").select("id, name").eq("firm_id", membership.firmId).eq("stage", "client").order("id").range(from, from + 999);
+      const { data } = await supabase.from("clients").select("id, name").eq("firm_id", membership.firmId).order("id").range(from, from + 999);
       mine.push(...(data ?? []));
       if (!data || data.length < 1000) break;
     }
@@ -117,7 +117,6 @@ async function clientNamed(ctx: Context, folder: string) {
     .from("clients")
     .select("id, name")
     .eq("firm_id", ctx.membership.firmId)
-    .eq("stage", "client")
     .ilike("name", `${folder.replace(/[\\%_]/g, "\\$&").replace(/ /g, "%")}%`)
     .order("name")
     .limit(50);

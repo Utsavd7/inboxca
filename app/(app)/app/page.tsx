@@ -20,7 +20,6 @@ import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { awake, replyReasons } from "@/src/lib/triage";
 import { activityNames } from "@/src/lib/activity";
 import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
-import { openStages, worksLeads } from "@/src/lib/leads";
 import { MarkFiled } from "./mark-filed";
 import { Count, Draw, List, Presence, Press } from "./motion";
 import { Pending } from "./pending";
@@ -256,9 +255,7 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
     owner ? Promise.resolve(supabase.from("devices").select("id").eq("firm_id", firm).eq("status", "waiting")) : null,
     Promise.resolve(supabase.rpc("notice_alerts", { target_firm: firm }).limit(10)),
     lead ? Promise.resolve(supabase.from("requests").select("id, reason_code, details").eq("kind", "alert").eq("status", "pending").limit(20)) : null,
-    // Leads whose follow up day has come (5.12), for those who work leads.
-    worksLeads(membership.role) ? Promise.resolve(supabase.from("clients").select("id, name, stage, follow_up_on:details->>follow_up_on").eq("firm_id", firm).in("stage", [...openStages]).lte("details->>follow_up_on", today).order("details->>follow_up_on").limit(5)) : null,
-  ]).then(async ([asks, mailboxes, devices, noticeAlerts, alerts, followUps]) => {
+  ]).then(async ([asks, mailboxes, devices, noticeAlerts, alerts]) => {
     const waitingIds = devices?.data?.map((device) => device.id) ?? [];
     const waitingToday = waitingIds.length
       ? await count(supabase.from("activity_log").select("entity_id", { count: "exact", head: true }).eq("firm_id", firm).eq("action", "device.first_seen").in("entity_id", waitingIds).gte("at", dayStart))
@@ -291,13 +288,6 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
           ...(alert.reason_code === "drive_away" && owner && { href: "/app/settings?group=email#drive", action: "Open drive settings", urgent: true }),
           ...(alert.reason_code === "virus" && { seen: alert.id, urgent: true }),
         })),
-      ...(followUps?.data ?? []).map((row) => ({
-        key: row.id,
-        text: `${row.name}: ${row.follow_up_on! < today ? `follow up was due ${dueLabel(row.follow_up_on!)}` : row.stage === "lead_new" ? "new enquiry, reply today" : "follow up today"}.`,
-        href: `/app/leads?lead=${row.id}`,
-        action: "Follow up",
-        urgent: row.follow_up_on! < today,
-      })),
     ];
     return looksList.sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent));
   });
@@ -355,7 +345,7 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
   const setup = owner
     ? Promise.all([
         accounts,
-        count(supabase.from("clients").select("id", { count: "exact", head: true }).eq("firm_id", firm).eq("stage", "client").is("archived_at", null)),
+        count(supabase.from("clients").select("id", { count: "exact", head: true }).eq("firm_id", firm).is("archived_at", null)),
         count(supabase.from("client_registrations").select("id", { count: "exact", head: true }).filter("services", "neq", "{}")),
         count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
       ]).then(([kinds, clients, services, members]) => [

@@ -3,16 +3,13 @@ import { serverCrypto } from "@/src/lib/crypto";
 import type { NewMail } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { classify } from "@/src/lib/triage";
-import { looksLikeEnquiry } from "@/src/lib/leads";
 import { todayInIndia } from "@/src/lib/calendar";
 import type { Handler } from "./runner";
 
 // Reads a connected mailbox's new mail (PLAN.md 4.5, 5.5). Mail from anyone who is not a
-// client or a contact of the firm is skipped without being opened or kept, unless the firm
-// asked for enquiries (5.12): then it is read in memory, and only one that reads like an
-// enquiry is kept, as its ids, for the team to add as a lead. The rest is labelled in
-// memory; only the label and reason are kept, and anything unclear becomes a Needs team
-// reply request. Repeated refused passwords mark the mailbox to be connected again,
+// client or a contact of the firm is skipped without being opened or kept. The rest is
+// labelled in memory; only the label and reason are kept, and anything unclear becomes a
+// Needs team reply request. Repeated refused passwords mark the mailbox to be connected again,
 // which stops polling until the owner does.
 export const mailPoll: Handler = async (job) => {
   const admin = supabaseAdmin();
@@ -26,26 +23,19 @@ export const mailPoll: Handler = async (job) => {
   const crypto = serverCrypto();
 
   // Senders are matched by blind index, so no address is compared or kept in plain text.
-  type Sender = { index: string; contact_id: string | null; client_id: string | null; enquiry?: boolean };
-  const enquiries = !!(account.settings as { capture_enquiries?: boolean }).capture_enquiries;
-  // The firm's own address, so its own mail is never offered as an enquiry.
-  const address = enquiries ? await crypto.decrypt(firm, `accounts/${account.id}/address`, account.address_enc) : "";
+  type Sender = { index: string; contact_id: string | null; client_id: string | null };
   const senders = new Map<string, Sender>();
   const keep = async (mail: NewMail[]) => {
     const indexes = new Map(await Promise.all([...new Set(mail.map((m) => m.from))].map(async (from) => [from, await crypto.blindIndex(firm, "email", from)] as const)));
     const values = [...new Set(indexes.values())];
     const [{ data: contacts }, { data: clients }] = await Promise.all([
       admin.from("contacts").select("id, email_bidx, contact_clients(client_id)").eq("firm_id", firm).in("email_bidx", values),
-      admin.from("clients").select("id, email_bidx, stage").eq("firm_id", firm).is("archived_at", null).in("email_bidx", values),
+      admin.from("clients").select("id, email_bidx").eq("firm_id", firm).is("archived_at", null).in("email_bidx", values),
     ]);
     for (const [from, index] of indexes) {
       const contact = contacts?.find((row) => row.email_bidx === index);
-      const own = clients?.filter((row) => row.email_bidx === index && row.stage === "client") ?? [];
-      // A known lead's mail, or the firm's own, is not offered as an enquiry.
-      if (!contact && !own.length) {
-        if (enquiries && from !== address.toLowerCase() && !clients?.some((row) => row.email_bidx === index)) senders.set(from, { index, contact_id: null, client_id: null, enquiry: true });
-        continue;
-      }
+      const own = clients?.filter((row) => row.email_bidx === index) ?? [];
+      if (!contact && !own.length) continue;
       const forClients = contact ? contact.contact_clients.map((link) => link.client_id) : own.map((row) => row.id);
       senders.set(from, { index, contact_id: contact?.id ?? null, client_id: forClients.length === 1 ? forClients[0] : null });
     }
@@ -60,10 +50,9 @@ export const mailPoll: Handler = async (job) => {
 
   await mailHealth(account.id,"read",false,account.credentials_enc);
   const today = todayInIndia();
-  // A stranger's mail that does not read like an enquiry is dropped here, unkept.
-  const events = read.mail.filter((mail) => !senders.get(mail.from)!.enquiry || looksLikeEnquiry(mail.from, mail.content)).map((mail) => {
+  const events = read.mail.map((mail) => {
     const sender = senders.get(mail.from)!;
-    const { label, reason } = sender.enquiry ? { label: null, reason: "enquiry" } : classify(mail.content, today);
+    const { label, reason } = classify(mail.content, today);
     return {
       firm_id: firm,
       account_id: account.id,
@@ -101,9 +90,9 @@ export const mailPoll: Handler = async (job) => {
     const queued = [...filing, ...asking, ...notices];
     if (queued.length) await admin.from("jobs").upsert(queued, { onConflict: "idempotency_key", ignoreDuplicates: true });
     // Unclear mail, a notice that asks something, or mail whose client is not known yet,
-    // waits for the team; an enquiry waits on the Leads page instead.
+    // waits for the team.
     const replies = (saved ?? [])
-      .filter((event) => event.reason_code !== "enquiry" && (event.label === "other" || event.reason_code === "notice_question" || !event.client_id))
+      .filter((event) => event.label === "other" || event.reason_code === "notice_question" || !event.client_id)
       .map((event) => ({ firm_id: firm, kind: "team_reply", client_id: event.client_id, entity_type: "email", entity_id: event.id, reason_code: event.client_id ? event.reason_code : "client_unclear" }));
     if (replies.length) await admin.from("requests").upsert(replies, { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true });
   }

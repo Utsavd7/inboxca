@@ -942,7 +942,6 @@ export async function findClients(text: string) {
   const { data } = await supabase
     .from("clients")
     .select("id, name, kind")
-    .eq("stage", "client")
     .is("archived_at", null)
     .ilike("name", `%${q.replace(/[\\%_]/g, "\\$&")}%`)
     .order("name")
@@ -1959,7 +1958,7 @@ async function permissionScope(form:FormData,prefix:string,firm:string) {
   if(names.length>100 || names.some(name=>name.length>200) || until && (!z.iso.date().safeParse(until).success || until<todayInIndia())) throw new Error("Choose a future end date and up to 100 client names, one per line.");
   const scope:PermissionScope={...(until && {until})};
   if(names.length) {
-    const {data,error}=await supabaseAdmin().from("clients").select("id,name").eq("firm_id",firm).eq("stage","client").in("name",names);
+    const {data,error}=await supabaseAdmin().from("clients").select("id,name").eq("firm_id",firm).in("name",names);
     if(error || data?.length!==names.length || names.some(name=>data.filter(client=>client.name===name).length!==1)) throw new Error("Use each client's full name as shown in Clients. Names must match one client each.");
     scope.clients=data.map(client=>client.id);
   }

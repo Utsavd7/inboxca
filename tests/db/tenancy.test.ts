@@ -235,7 +235,7 @@ const VISITOR_CALLS: Record<string, string> = {
 };
 
 // A firm with one of each row: a new firm table needs a line here.
-const ROWS = ["client", "lead", "registration", "contact", "task", "mail", "drive", "email", "enquiry", "document", "share", "request", "dataset", "device"] as const;
+const ROWS = ["client", "registration", "contact", "task", "mail", "drive", "email", "document", "share", "request", "dataset", "device"] as const;
 async function seedEvery(tag: string) {
   const ids = Object.fromEntries(["firm", "team", "branch", "clientGroup", "ledger", ...ROWS].map((key) => [key, randomUUID()])) as Record<"firm" | "team" | "branch" | "clientGroup" | "ledger" | (typeof ROWS)[number], string>;
   const people = Object.fromEntries(ROLES.map((role) => [role, randomUUID()])) as Record<(typeof ROLES)[number], string>;
@@ -247,7 +247,6 @@ async function seedEvery(tag: string) {
   await run("insert into public.groups (id, firm_id, kind, name) values ($2, $1, 'team', 'Team'), ($3, $1, 'branch', 'Branch'), ($4, $1, 'client_group', 'Group')", [ids.team, ids.branch, ids.clientGroup]);
   await run("insert into public.firm_members (firm_id, user_id, role, status, team_id) select $1, unnest($2::uuid[]), unnest($3::text[]), 'active', $4", [Object.values(people), ROLES, ids.team]);
   await run("insert into public.clients (id, firm_id, name, kind, email_enc, email_bidx, group_id, branch_id) values ($2, $1, 'Invented Client', 'business', 'sealed', $2::uuid::text, $3, $4)", [ids.client, ids.clientGroup, ids.branch]);
-  await run("insert into public.clients (id, firm_id, name, kind, stage) values ($2, $1, 'Invented Lead', 'individual', 'lead_new')", [ids.lead]);
   await run("insert into public.client_registrations (id, firm_id, client_id, kind, number_enc, number_bidx, state_code) values ($2, $1, $3, 'gstin', 'sealed', $2::uuid::text, '24')", [ids.registration, ids.client]);
   await run("insert into public.client_assignments (firm_id, client_id, user_id, role) values ($1, $2, $3, 'staff')", [ids.client, people.staff]);
   await run("insert into public.contacts (id, firm_id, name_enc, email_enc, email_bidx) values ($2, $1, 'sealed', 'sealed', $2::uuid::text)", [ids.contact]);
@@ -255,7 +254,6 @@ async function seedEvery(tag: string) {
   await run("insert into public.tasks (id, firm_id, client_id, kind, due_on) values ($2, $1, $3, 'notice', current_date)", [ids.task, ids.client]);
   await run("insert into public.connected_accounts (id, firm_id, kind, provider, address_enc, credentials_enc) values ($2, $1, 'mail', 'imap', 'sealed', 'sealed'), ($3, $1, 'drive', 'local', 'sealed', 'sealed')", [ids.mail, ids.drive]);
   await run("insert into public.email_events (id, firm_id, account_id, provider_message_id, sender_bidx, received_at, client_id, contact_id) values ($2, $1, $3, $2::uuid::text, 'sealed', now(), $4, $5)", [ids.email, ids.mail, ids.client, ids.contact]);
-  await run("insert into public.email_events (id, firm_id, account_id, provider_message_id, sender_bidx, received_at, reason_code) values ($2, $1, $3, $2::uuid::text, 'sealed', now(), 'enquiry')", [ids.enquiry, ids.mail]);
   await run("insert into public.documents (id, firm_id, client_id, work_type, document_type, drive_file_id, name, size, sha256, email_event_id, registration_id) values ($2, $1, $3, 'gst', 'Invoice', 'file', 'invoice.pdf', 1, $2::uuid::text, $4, $5)", [ids.document, ids.client, ids.email, ids.registration]);
   await run("insert into public.shares (id, firm_id, document_id, contact_id, email_event_id, status) values ($2, $1, $3, $4, $5, 'waiting')", [ids.share, ids.document, ids.contact, ids.email]);
   await run("insert into public.requests (id, firm_id, kind, client_id, entity_type, entity_id, status, details) values ($2, $1, 'documents', $3, 'client', $2, 'pending', '{}')", [ids.request, ids.client]);
@@ -294,7 +292,6 @@ const refused = (result: Awaited<ReturnType<typeof attempt>>) => !result.ok && [
 const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["accept_invite", "select public.accept_invite($1) r", ["firm"], true],
   ["access_check", "select public.access_check($1, $2, null, null, null) r", ["firm", "staff"], true],
-  ["add_lead", "select public.add_lead($1, gen_random_uuid(), 'Taken', 'individual', '', '', '{}', '') r", ["firm"], true],
   ["activity_feed", "select * from public.activity_feed($1, now() - interval '1 year', false)", ["firm"], true],
   ["add_clients", `select public.add_clients($1, '[{"name": "Taken", "kind": "business"}]') r`, ["firm"], true],
   ["admin_accounts", "select * from public.admin_accounts()", [], false],
@@ -321,21 +318,18 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["assigned_clients", "select * from public.assigned_clients()", [], false],
   ["can_access_client", "select public.can_access_client($1, $2) r", ["firm", "client"], true],
   ["can_review_office", "select public.can_review_office($1) r", ["firm"], true],
-  ["change_lead", "select public.change_lead($1, $2, 'move', 'cold') r", ["firm", "lead"], true],
   ["change_role", "select public.change_role($1, $2, 'manager') r", ["firm", "staff"], true],
   ["client_activity", "select * from public.client_activity($1)", ["client"], true],
   ["clients_with_right", "select * from public.clients_with_right('download')", [], false],
   ["close_firm", "select public.close_firm($1, $2) r", ["firm", "name"], true],
   ["closed_firms", "select * from public.closed_firms()", [], false],
   ["connect_drive", "select public.connect_drive($1, gen_random_uuid(), 'local', 'x', 'x', '{}', 'folder', 'v1') r", ["firm"], true],
-  ["dismiss_enquiry", "select public.dismiss_enquiry($1, $2) r", ["firm", "enquiry"], true],
   ["end_other_sessions", "select public.end_other_sessions() r", [], false],
   ["firm_export", "select public.firm_export($1) r", ["firm"], true],
   ["firm_people", "select * from public.firm_people($1)", ["firm"], true],
   ["firm_usage", "select * from public.firm_usage($1, current_date)", ["firm"], true],
   ["invite_member", "select public.invite_member($1, $2, 'staff') r", ["firm", "outsider"], true],
   ["is_orelu_admin", "select public.is_orelu_admin() r", [], true],
-  ["lead_firms", "select * from public.lead_firms()", [], false],
   ["member_role", "select public.member_role($1) r", ["firm"], true],
   ["my_firms", "select * from public.my_firms()", [], false],
   ["my_invites", "select * from public.my_invites()", [], false],
@@ -345,7 +339,6 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["restore_member", "select public.restore_member($1, $2) r", ["firm", "staff"], true],
   ["review_firms", "select * from public.review_firms()", [], false],
   ["service_status", "select public.service_status() r", [], false],
-  ["won_leads", "select * from public.won_leads($1)", ["firm"], true],
   ["session_live", "select public.session_live() r", [], false],
 ];
 
@@ -425,7 +418,7 @@ describe("every table and function, from the catalog", () => {
         from pg_constraint c join pg_class t on t.oid = c.conrelid join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
         where c.contype in ('p', 'u') and c.connamespace = 'public'::regnamespace and a.attname <> 'firm_id'`);
       const { rows: [{ id: job }] } = await db.query("select id::text from public.jobs where firm_id = $1 limit 1", [b.firm]);
-      const values: Record<string, string> = { firm: b.firm, client: b.client, name: b.name, owner: b.people.owner, staff: b.people.staff, lead: b.lead, enquiry: b.enquiry, job, outsider: randomUUID() };
+      const values: Record<string, string> = { firm: b.firm, client: b.client, name: b.name, owner: b.people.owner, staff: b.people.staff, job, outsider: randomUUID() };
       const secretsOf = (firm: typeof b) => [firm.firm, firm.name, ...Object.values(firm.people), ...ROWS.map((key) => firm[key])];
       const secrets = secretsOf(b);
       const fingerprint = async () => {
