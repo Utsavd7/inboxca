@@ -22,6 +22,17 @@ export function suggestedReply(reason: string | null | undefined, { name, client
     record_unclear: "Thank you for your email. Could you tell us which paper you need, and for which year? We will send it once we know.",
     not_allowed: `Thank you for your email. For safety, we send the papers of ${client} only to the email addresses on our records. Please ask ${client} to write to us, or to tell us to add your address.`,
     data_unclear: "Thank you for sending these papers. Could you tell us what they are for, such as GST or income tax, and for which month or year?",
+    asks_several: "Thank you for your email. We have noted each of your questions and will answer all of them soon.",
+    ask_filed: "Thank you for your email. We are checking whether the return you asked about is filed and will let you know soon.",
+    ask_papers: "Thank you for your email. We are checking which papers we still need from you and will send you the list soon.",
+    ask_due: "Thank you for your email. We are checking what is due for you and will send you the dates soon.",
+    status_not_filed: "Thank you for your email. We are checking where the return you asked about stands, and will tell you as soon as it is filed.",
+    status_unclear: "Thank you for your email. Could you tell us which return you mean, and for which month or year? We will then tell you where it stands.",
+    papers_none: "Thank you for your email. We will check whether we need any more papers from you and let you know.",
+    due_unchecked: "Thank you for your email. We are confirming your due dates and will send them to you soon.",
+    due_late: "Thank you for your email. We are looking at what is due for you and will get back to you soon about the next steps.",
+    due_none: "Thank you for your email. We will check what is coming up for you and let you know.",
+    answer_not_allowed: `Thank you for your email. For safety, we share the details of ${client} only with the email addresses on our records. Please ask ${client} to write to us, or to tell us to add your address.`,
   };
   return `Dear ${name},\n\n${lines[reason ?? ""] ?? lines.no_rule}\n\nRegards,\n${firm}`;
 }
