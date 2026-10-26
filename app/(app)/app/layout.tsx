@@ -34,7 +34,8 @@ const fortnightAgo = () => new Date(Date.now() - 14 * 86_400_000).toISOString();
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { supabase, membership, pcKey } = await currentMember();
   const jar = await cookies();
-  const theme = (["light", "dark"].includes(jar.get("theme")?.value ?? "") ? jar.get("theme")!.value : "system") as Theme;
+  // Light unless the person chose Dark or System in their account menu (user, 26 Oct 2026).
+  const theme = (["light", "dark", "system"].includes(jar.get("theme")?.value ?? "") ? jar.get("theme")!.value : "light") as Theme;
   // The bell's count: questions for this person, and what happened on their clients since
   // they last marked all read (14 days at most).
   const seen = jar.get("bell_seen")?.value;
