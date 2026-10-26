@@ -4,7 +4,7 @@ import { openView } from "./render.ts";
 import { readSheet } from "../src/lib/sheet.ts";
 import { exactMapping } from "../src/lib/sales-register.ts";
 import { createHash } from "node:crypto";
-import { readPortal, readTaxPdf, readTaxText } from "./portal.ts";
+import { gstr2bBills, readPortal, readTaxPdf, readTaxText } from "./portal.ts";
 import {verifyForm} from "../src/lib/form-worker.ts";
 import {editedForm} from "./edited-form.ts";
 import {templateSchema} from "../src/lib/templates.ts";
@@ -98,7 +98,8 @@ export async function handle(request: Request): Promise<Response> {
     if(portal) {
       // A locked PDF opens only with the password a person typed for it.
       const read=/\.json$/i.test(view.name) ? readPortal(data) : /\.txt$/i.test(view.name) ? readTaxText(data) : /\.pdf$/i.test(view.name) ? await readTaxPdf(data,view.password) : null;
-      return Response.json({read,sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
+      // A GSTR-2B's bills go back too, for the match with the purchase register.
+      return Response.json({read,...(/\.json$/i.test(view.name) && {bills:gstr2bBills(data)}),sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
     }
     if(sheet) {
       if(!/\.(xlsx?|csv)$/i.test(view.name)) throw new Error("Not a sheet");
