@@ -33,7 +33,7 @@ import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
 import { queueRead } from "@/src/jobs/read-document";
 import { runJobsSoon } from "@/src/jobs/run-soon";
-import { labels } from "@/src/lib/triage";
+import { labels, statusLabels, type Label } from "@/src/lib/triage";
 import { log } from "@/src/lib/logger";
 import { firmMailer, forgetMailToken, mailTokenForget } from "@/src/lib/firm-mail";
 import { adminConsent, isMailApi, MAIL_COOKIE, mailSignIn, mailSignInReady } from "@/src/lib/mail-oauth";
@@ -884,19 +884,26 @@ export async function manageEmail(form: FormData) {
     }
   } else if (form.get("intent") === "client" || form.get("intent") === "file") {
     // Mail from a contact who writes for several clients: a person says which client it is
-    // for, among the contact's own clients they may see; its attachments are then filed.
-    // File to a client: mail InboxCA could not match goes to any client the person may see.
+    // for, among the contact's own clients they may see, and the email then goes as a known
+    // client's does (mail-poll.ts): attachments filed, a notice recorded, a request for a paper
+    // or a question about where things stand answered by rules; only what they cannot answer
+    // waits for the team again. File to a client: mail InboxCA could not match goes to any
+    // client the person may see, and only its attachments are filed, as its sender is not known.
     const filing = form.get("intent") === "file";
     const email = String(form.get("email") ?? "");
     const { data: client } = await supabase.from("clients").select("id").eq("firm_id",membership.firmId).eq("id", String(form.get("client") ?? "")).maybeSingle();
     const admin = supabaseAdmin();
-    const { data: event } = await admin.from("email_events").select("id, contact_id, label").eq("id", email).eq("firm_id", membership.firmId).is("client_id", null).maybeSingle();
+    const { data: event } = await admin.from("email_events").select("id, contact_id, label, reason_code").eq("id", email).eq("firm_id", membership.firmId).is("client_id", null).maybeSingle();
     const { data: link } = filing ? { data: client && { client_id: client.id } } : await admin.from("contact_clients").select("client_id").eq("contact_id", event?.contact_id ?? "").eq("client_id", client?.id ?? "").maybeSingle();
     if (event && link) {
       await admin.from("email_events").update({ client_id: link.client_id }).eq("id", event.id);
-      await admin.from("requests").update({ status: "done" }).eq("kind", "team_reply").eq("entity_id", event.id);
-      const kind = event.label === "notice_received" ? "notice_from_mail" : "file_mail";
-      await admin.from("jobs").upsert({ firm_id: membership.firmId, kind, entity_type: "email", entity_id: event.id, idempotency_key: `${kind}:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+      const answers = !filing && (event.label === "records_past" || event.label === "records_current" || statusLabels.includes(event.label as Label));
+      const waits = !filing && (event.label === "other" || event.reason_code === "notice_question");
+      const reply = admin.from("requests");
+      const change = filing ? reply.update({ status: "done" }) : waits ? reply.update({ client_id: link.client_id, reason_code: event.reason_code ?? "no_rule" }).eq("status", "pending") : reply.delete().eq("status", "pending");
+      await change.eq("kind", "team_reply").eq("entity_type", "email").eq("entity_id", event.id);
+      const kinds = [event.label === "notice_received" ? "notice_from_mail" : "file_mail", ...(answers ? [event.label === "records_past" || event.label === "records_current" ? "records_reply" : "answer_mail"] : [])];
+      await admin.from("jobs").upsert(kinds.map((kind) => ({ firm_id: membership.firmId, kind, entity_type: "email", entity_id: event.id, idempotency_key: `${kind}:${event.id}` })), { onConflict: "idempotency_key", ignoreDuplicates: true });
       if (filing && back.startsWith("/app/inbox")) {
         revalidatePath("/app", "layout");
         redirect(`${back}${back.includes("?") ? "&" : "?"}filed=1`);
