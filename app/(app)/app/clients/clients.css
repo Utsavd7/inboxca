@@ -115,7 +115,12 @@
 .client-paper { display: grid; min-width: 0; }
 .client-paper .sub { display: flex; align-items: center; gap: var(--s1); font-size: 12px; }
 .client-docs .cell-form { justify-content: flex-end; }
+/* A return's date on its row: the month small over the day. */
+.today-date { display: grid; flex: none; width: 48px; padding: 2px 0; border-radius: var(--r1); text-align: center; line-height: 1.3; }
+.today-date span { color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.today-date strong { font-size: 16px; }
 .today-date.is-late { background: var(--k-late-bg); color: var(--k-late); }
+.today-date.is-late span { color: inherit; }
 .clients-page .cell-form { gap: var(--s2); }
 .clients-page .t input:not([type="checkbox"]), .clients-page .cell-select { height: var(--control); }
 .clients-page .t input[type="date"] { width: auto; }
