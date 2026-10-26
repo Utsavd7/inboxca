@@ -61,7 +61,7 @@ test("the owner turns Office only on for one branch, and its staff are checked a
     if (route.request().headers()["next-action"]) await new Promise((resolve) => setTimeout(resolve, 1500));
     await route.continue();
   });
-  await owner.getByRole("button", { name: "Turn on" }).click();
+  await owner.getByRole("button", { name: "Turn on", exact: true }).click();
   await expect(owner.locator('button[form="preset-form"]')).toHaveAttribute("aria-busy", "true");
   await expect(owner.getByRole("status").filter({ hasText: "On." })).toContainText("You are on your office internet connection now.");
   await owner.unroute(/\/app\/settings/);
