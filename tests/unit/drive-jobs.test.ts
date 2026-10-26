@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Drive } from "@/src/lib/drive";
 import type { Job } from "@/src/jobs/runner";
 
-// The server key's database, as far as the drive jobs use it: rows to read, and every write.
+// The server key's database, as far as the drive jobs use it: rows to read, and every write
+// (a database function's answer is under its name).
 const mock = vi.hoisted(() => ({
   rows: {} as Record<string, unknown>,
   writes: [] as { table: string; op: string; value: unknown; filters: string[] }[],
@@ -13,6 +14,7 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock("@/src/lib/supabase", () => ({
   supabaseAdmin: () => ({
+    rpc: async (name: string, value: unknown) => (mock.writes.push({ table: name, op: "rpc", value, filters: [] }), { data: mock.rows[name] ?? null }),
     from: (table: string) => {
       const filters: string[] = [];
       const query = {
@@ -106,5 +108,39 @@ describe("the drive check, when the drive is away", () => {
     mock.drive = { check: async () => ({ files: [], shared: false, freeBytes: 5 * 1024 ** 3 }) } as unknown as Drive;
     expect(await driveCheck(job(1), tools)).toEqual({ done: true });
     expect(alerts()).toMatchObject([{ op: "update", value: { status: "done" }, filters: ["kind=alert", "entity_type=drive_away", "entity_id=firm-1"] }]);
+  });
+
+  it("sends the jobs that ran out of tries again once it reaches the drive, before the alert clears", async () => {
+    const asked = () => mock.writes.filter((write) => write.table === "requeue_drive_jobs" || (write.table === "requests" && JSON.stringify(write).includes("drive_away"))).map((write) => [write.table, write.op, write.value]);
+    mock.drive = away;
+    await driveCheck(job(5), tools);
+    expect(asked()).toEqual([["requests", "upsert", expect.anything()]]);
+    mock.writes = [];
+    mock.drive = { check: async () => ({ files: [], shared: false, freeBytes: 5 * 1024 ** 3 }) } as unknown as Drive;
+    await driveCheck(job(1), tools);
+    expect(asked()).toEqual([["requeue_drive_jobs", "rpc", { target_firm: "firm-1" }], ["requests", "update", { status: "done" }]]);
+  });
+});
+
+describe("the drive check's low space alert", () => {
+  const full = () => mock.writes.filter((write) => write.table === "requests" && JSON.stringify(write).includes("drive_full")).map((write) => [write.op, write.value]);
+  const check = async (freeBytes: number) => {
+    mock.writes = [];
+    mock.drive = { check: async () => ({ files: [], shared: false, freeBytes }) } as unknown as Drive;
+    await driveCheck(job(1), tools);
+    return full();
+  };
+
+  it("warns when less than the files the firm added in the last 12 months is free", async () => {
+    mock.rows.drive_year_bytes = 3 * 1024 ** 3;
+    expect(await check(2 * 1024 ** 3)).toMatchObject([["upsert", { reason_code: "drive_full", status: "pending", details: { free_bytes: 2 * 1024 ** 3 } }]]);
+    expect(await check(4 * 1024 ** 3)).toEqual([["update", { status: "done" }]]);
+    expect(mock.writes).toContainEqual({ table: "drive_year_bytes", op: "rpc", value: { target_firm: "firm-1" }, filters: [] });
+  });
+
+  it("warns a new firm with little yet below the most one upload can add, 500 MB", async () => {
+    mock.rows.drive_year_bytes = 20 * 1024 ** 2;
+    expect(await check(400 * 1024 ** 2)).toMatchObject([["upsert", { details: { free_bytes: 400 * 1024 ** 2 } }]]);
+    expect(await check(600 * 1024 ** 2)).toEqual([["update", { status: "done" }]]);
   });
 });

@@ -21,6 +21,9 @@ export const TEST_RUN = `port-${process.env.PORT || 3000}`;
 export const MAIL_API_URL = `http://127.0.0.1:${Number(process.env.PORT || 3000) + 2}`;
 // An invented Dropbox app secret, so the test server takes change notices signed with it.
 export const DROPBOX_TEST_SECRET = "invented-dropbox-app-secret";
+// The fake Dropbox (drive-reconnect.spec.ts starts it) that Connect and Reconnect sign in to,
+// with an invented app key.
+export const DROPBOX_TEST_URL = `http://127.0.0.1:${Number(process.env.PORT || 3000) + 4}`;
 // An invented ITR software ID and city, so the test servers can make return files; never a real one.
 const ITR = { ITR_SOFTWARE_ID: "SW00000000", ITR_SOFTWARE_CITY: "Invented City" };
 // A phone notification key pair for the test server only, made fresh for each run.
@@ -43,6 +46,6 @@ export default defineConfig({
     command: "npm run start",
     url: origin,
     reuseExistingServer: !process.env.CI,
-    env: { FILE_WORKER_SECRET, FILE_WORKER_URL, JOB_WORKER_SECRET: TEST_WORKER_SECRET, MAIL_ALLOW_LOCAL: "1", REMINDERS_ANY_HOUR: "1", APP_BASE_URL: origin, OFFICE_IP_HEADER: "x-test-ip", COUNTRY_HEADER: "x-test-country", DRIVE_LOCAL_DIR: TEST_DRIVE, WORKSPACE_LOCAL_DIR: TEST_WORKSPACE, JOB_FIRMS_TEST: TEST_RUN, VAPID_PUBLIC_KEY: pushPublic, VAPID_PRIVATE_KEY: push.d!, SYSTEM_MAIL_URL: "smtp://127.0.0.1:3025/?ignoreTLS=true", EMAIL_FROM_DOMAIN: "invented.test", MAIL_API_TEST_URL: MAIL_API_URL, DROPBOX_APP_SECRET: DROPBOX_TEST_SECRET, ...fakeKeyValues, ...ITR },
+    env: { FILE_WORKER_SECRET, FILE_WORKER_URL, JOB_WORKER_SECRET: TEST_WORKER_SECRET, MAIL_ALLOW_LOCAL: "1", REMINDERS_ANY_HOUR: "1", APP_BASE_URL: origin, OFFICE_IP_HEADER: "x-test-ip", COUNTRY_HEADER: "x-test-country", DRIVE_LOCAL_DIR: TEST_DRIVE, WORKSPACE_LOCAL_DIR: TEST_WORKSPACE, JOB_FIRMS_TEST: TEST_RUN, VAPID_PUBLIC_KEY: pushPublic, VAPID_PRIVATE_KEY: push.d!, SYSTEM_MAIL_URL: "smtp://127.0.0.1:3025/?ignoreTLS=true", EMAIL_FROM_DOMAIN: "invented.test", MAIL_API_TEST_URL: MAIL_API_URL, DROPBOX_APP_SECRET: DROPBOX_TEST_SECRET, DROPBOX_APP_KEY: "invented-dropbox-app-key", DROPBOX_TEST_URL, ...fakeKeyValues, ...ITR },
   }],
 });

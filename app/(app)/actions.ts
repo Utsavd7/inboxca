@@ -15,7 +15,7 @@ import { assignmentRoles, canManageClients, checkClient, readKind, type ClientIn
 import { serverCrypto } from "@/src/lib/crypto";
 import { describeFile, documentTypes, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
-import { DRIVE_COOKIE, openDrive, saveDrive } from "@/src/lib/drive-account";
+import { DRIVE_COOKIE, openDrive, renewDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, laterBy, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
@@ -859,25 +859,43 @@ export async function connectDrive(form: FormData) {
   if (membership?.role !== "owner") redirect("/app");
   const provider = String(form.get("provider") ?? "");
   if (form.get("agree") !== "on") redirect("/app/settings?group=email&error=drive_terms#drive");
-  if (provider === "dropbox" && process.env.DROPBOX_APP_KEY) {
-    const { verifier, challenge } = pkce();
-    const state = randomUUID();
-    const h = await headers();
-    const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
-    (await cookies()).set(DRIVE_COOKIE, Buffer.from(JSON.stringify({ state, verifier })).toString("base64url"), {
-      httpOnly: true,
-      secure: origin.startsWith("https"),
-      sameSite: "lax",
-      maxAge: 600,
-      path: "/api/drive",
-    });
-    redirect(dropboxSignIn(state, challenge, `${origin}/api/drive/callback`));
-  }
+  if (provider === "dropbox" && process.env.DROPBOX_APP_KEY) await dropboxStart();
   if (provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?group=email&error=drive_provider#drive");
   const { error } = await saveDrive(supabase, membership.firmId, "local", "Test drive on this computer", "{}");
   if (error) redirect(`/app/settings?group=email&error=${error}#drive`);
   runJobsSoon();
   revalidatePath("/app/settings");
+}
+
+// Dropbox's own sign in page; a reconnect names the drive it signs in to again.
+async function dropboxStart(account?: string) {
+  const { verifier, challenge } = pkce();
+  const state = randomUUID();
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+  (await cookies()).set(DRIVE_COOKIE, Buffer.from(JSON.stringify({ state, verifier, account })).toString("base64url"), {
+    httpOnly: true,
+    secure: origin.startsWith("https"),
+    sameSite: "lax",
+    maxAge: 600,
+    path: "/api/drive",
+  });
+  redirect(dropboxSignIn(state, challenge, `${origin}/api/drive/callback`));
+}
+
+// Reconnect, beside the connected drive: the owner signs in to the same drive again, losing
+// nothing (renewDrive). The test drive has no sign in, so it is only checked again.
+export async function reconnectDrive() {
+  const { supabase, userId, membership } = await currentWriter();
+  if (membership?.role !== "owner") redirect("/app");
+  const { data: drive } = await supabase.from("connected_accounts").select("id, provider").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
+  if (drive?.provider === "dropbox" && process.env.DROPBOX_APP_KEY) await dropboxStart(drive.id);
+  if (drive?.provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?group=email&error=drive_provider#drive");
+  const { error } = await renewDrive(membership.firmId, drive.id, userId);
+  if (error) redirect(`/app/settings?group=email&error=${error}#drive`);
+  runJobsSoon();
+  revalidatePath("/app", "layout");
+  redirect("/app/settings?group=email&saved=drive#drive");
 }
 
 // Disconnecting deletes InboxCA's access at once; the files stay in the firm's drive.
