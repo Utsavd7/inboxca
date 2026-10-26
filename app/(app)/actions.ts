@@ -876,6 +876,7 @@ export async function connectDrive(form: FormData) {
   if (provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?group=email&error=drive_provider#drive");
   const { error } = await saveDrive(supabase, membership.firmId, "local", "Test drive on this computer", "{}");
   if (error) redirect(`/app/settings?group=email&error=${error}#drive`);
+  runJobsSoon();
   revalidatePath("/app/settings");
 }
 

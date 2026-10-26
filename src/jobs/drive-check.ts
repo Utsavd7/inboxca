@@ -1,7 +1,7 @@
 import { settleVersions } from "@/src/lib/documents";
 import { openDrive } from "@/src/lib/drive-account";
 import { supabaseAdmin } from "@/src/lib/supabase";
-import type { Handler } from "./runner";
+import { MAX_ATTEMPTS, type Handler } from "./runner";
 
 // Under this much free space the owner is told the drive is nearly full.
 export const LOW_SPACE = 1024 ** 3;
@@ -10,7 +10,8 @@ export const LOW_SPACE = 1024 ** 3;
 // a filed document whose file is gone is marked missing, one found again is put back, and
 // one renamed or moved in the drive is followed to its new name and logged. The owner gets
 // one alert per problem (the folder is shared or has a link, the drive is nearly full,
-// files are missing), cleared by the next check that finds all well.
+// files are missing, the drive cannot be reached), cleared by the next check that finds all
+// well. Dropbox's change notices also queue it (app/api/drive/dropbox).
 export const driveCheck: Handler = async (job) => {
   const admin = supabaseAdmin();
   const { data: account } = await admin.from("connected_accounts").select("id, firm_id, provider, credentials_enc").eq("id", job.entity_id ?? "").eq("kind", "drive").maybeSingle();
@@ -21,6 +22,9 @@ export const driveCheck: Handler = async (job) => {
   try {
     seen = await drive.check();
   } catch {
+    // Away after five tries: the owner is told, while new files wait (file_mail, 7 days).
+    if (job.attempts >= MAX_ATTEMPTS)
+      await admin.from("requests").upsert({ firm_id: firm, kind: "alert", entity_type: "drive_away", entity_id: firm, reason_code: "drive_away", status: "pending", details: {} }, { onConflict: "kind,entity_type,entity_id" });
     return { retry: "drive_unreachable" };
   }
   const byId = new Map(seen.files.map((file) => [file.id, file.path]));
@@ -50,6 +54,7 @@ export const driveCheck: Handler = async (job) => {
     drive_shared: seen.shared ? {} : null,
     drive_full: seen.freeBytes !== null && seen.freeBytes < LOW_SPACE ? { free_bytes: seen.freeBytes } : null,
     drive_missing: missing ? { files: missing } : null,
+    drive_away: null,
   };
   for (const [reason, details] of Object.entries(alerts)) {
     if (details)

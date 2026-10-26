@@ -1,6 +1,31 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { dropboxDrive, dropboxSignIn, pkce } from "@/src/lib/dropbox";
+import { dropboxAccountKey, dropboxDrive, dropboxNotice, dropboxSignIn, pkce } from "@/src/lib/dropbox";
+
+describe("Dropbox's change notices", () => {
+  // An invented app secret and invented account ids, in the layout Dropbox's webhook page shows.
+  const secret = "invented-app-secret";
+  const body = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+  const sign = (bytes: Uint8Array, key = secret) => createHmac("sha256", key).update(bytes).digest("hex");
+  const sent = body({ list_folder: { accounts: ["dbid:AAInventedOne", "dbid:AAInventedTwo", "dbid:AAInventedOne"] }, delta: { users: [12345678] } });
+
+  it("takes a notice signed with the app secret, naming each account once by its hash", () => {
+    expect(dropboxNotice(sent, sign(sent), secret)).toEqual([dropboxAccountKey("dbid:AAInventedOne"), dropboxAccountKey("dbid:AAInventedTwo")]);
+    expect(dropboxAccountKey("dbid:AAInventedOne")).toBe(createHash("sha256").update("dbid:AAInventedOne").digest("hex"));
+  });
+
+  it("refuses one with no signature, another key's signature, or a changed body", () => {
+    expect(dropboxNotice(sent, null, secret)).toBeNull();
+    expect(dropboxNotice(sent, "not hex", secret)).toBeNull();
+    expect(dropboxNotice(sent, sign(sent, "another-secret"), secret)).toBeNull();
+    expect(dropboxNotice(body({ list_folder: { accounts: ["dbid:AAInventedThree"] } }), sign(sent), secret)).toBeNull();
+  });
+
+  it("names nobody in a signed notice it cannot read", () => {
+    for (const bytes of [new TextEncoder().encode("not json"), body({ delta: { users: [1] } }), body({ list_folder: { accounts: [7] } })])
+      expect(dropboxNotice(bytes, sign(bytes), secret)).toEqual([]);
+  });
+});
 
 describe("signing in to Dropbox", () => {
   it("sends Dropbox only the PKCE challenge, and asks for a refresh token", () => {

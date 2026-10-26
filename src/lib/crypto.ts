@@ -207,6 +207,14 @@ export function firmCrypto(kek: Kek, store: KeyStore, now = () => Date.now()) {
       if (!(await store.write(firmId, next, previous))) throw new Error("The key changed meanwhile; try again");
       cache.delete(firmId);
     },
+
+    // After a rotation: the same value sealed with the newest key for the same place, or null
+    // when it already is. It is opened first, so a value moved from elsewhere is refused.
+    async reseal(firmId: string, place: string, value: string) {
+      const { keys } = await keySet(firmId);
+      if (Buffer.from(value, "base64url")[1] === keys.length - 1) return null;
+      return this.encrypt(firmId, place, await this.decrypt(firmId, place, value));
+    },
   };
 }
 

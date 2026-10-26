@@ -1,8 +1,8 @@
 // Key rotation drill (PLAN.md M11): gives each firm a new encryption key, then proves that
 // every encrypted value still opens, that blind indexes did not change, and that new values
 // use the new key. Prints counts per table, never a value. Older values keep their own key
-// until they are re-encrypted. Prints what it would do; `--yes` rotates. `--firm <id>`
-// limits it to one firm. Run with `npx --yes tsx scripts/rotate-keys.mts [--yes] [--firm <id>]`.
+// until scripts/reseal-values.mts seals them again. Prints what it would do; `--yes` rotates.
+// `--firm <id>` limits it to one firm. Run with `npx --yes tsx scripts/rotate-keys.mts [--yes] [--firm <id>]`.
 // The outer key is the server's own (serverKek): LOCAL_KEK from .env.local, or AWS KMS when
 // KMS_KEY_ID and KMS_CREDENTIALS are set in the shell, which may then name another database
 // in DATABASE_URL (production keys never live in .env.local).
@@ -78,6 +78,7 @@ if (!process.argv.includes("--yes")) {
     again[name].values - again[name].opened <= count.values - count.opened && again[name].indexes - again[name].matched <= count.indexes - count.matched);
   const passed = same && !failed.length && newest === firms.length;
   console.log(passed ? "Drill passed: everything that opened before still opens, and blind indexes are unchanged." : "Drill FAILED: see the counts above.");
+  console.log("In 5 minutes, seal the older values again with the new key: npx --yes tsx scripts/reseal-values.mts --yes");
   process.exitCode = passed ? 0 : 1;
 }
 if (!allOpened(counts)) console.log("Some values do not open with this server's keys (see the counts above); they were like this before the drill.");

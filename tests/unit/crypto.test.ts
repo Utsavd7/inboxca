@@ -138,6 +138,23 @@ describe("rotating a firm's key", () => {
     await fails(racing.rotate(FIRM));
     expect(store.rows.get(FIRM)!.equals(original)).toBe(true);
   });
+
+  it("seals an older value again with the newest key, in its own place only", async () => {
+    const { crypto } = setup();
+    const old = await crypto.encrypt(FIRM, PLACE, "ABCDE1234F");
+    await crypto.rotate(FIRM);
+    await crypto.rotate(FIRM);
+    const again = (await crypto.reseal(FIRM, PLACE, old))!;
+    expect(Buffer.from(again, "base64url")[1]).toBe(2);
+    expect(await crypto.decrypt(FIRM, PLACE, again)).toBe("ABCDE1234F");
+    // Already on the newest key: nothing to do.
+    expect(await crypto.reseal(FIRM, PLACE, again)).toBeNull();
+    // A value copied from another place or firm does not open, so it is not sealed anew.
+    await fails(crypto.reseal(FIRM, "clients/c2/pan", old));
+    await crypto.encrypt(OTHER, PLACE, "x");
+    await crypto.rotate(OTHER);
+    await fails(crypto.reseal(OTHER, PLACE, old));
+  });
 });
 
 describe("the unwrapped key in memory", () => {

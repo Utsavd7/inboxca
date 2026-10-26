@@ -1,4 +1,4 @@
-import { BellRing, CalendarClock, CalendarOff, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, Headset, KeyRound, LifeBuoy, LogIn, Mail, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
+import { BellRing, CalendarClock, CalendarOff, Check, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, Headset, KeyRound, LifeBuoy, LogIn, Mail, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import Form from "next/form";
@@ -13,6 +13,7 @@ import { documentTypes } from "@/src/lib/documents";
 import { switchable, defaults, type Permissions, type Standing } from "@/src/lib/rights";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { folderOrderNames, namings } from "@/src/lib/drive";
+import { LOW_SPACE } from "@/src/jobs/drive-check";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
@@ -135,8 +136,10 @@ export default async function Settings({
   });
   const scopeIds=group === "people" ? [...new Set([...Object.values(permissions).flatMap(column=>column?.scope?.clients ?? []),...always.flatMap(person=>person.rights.flatMap(grant=>"clients" in grant ? grant.clients ?? [] : []))])] : [];
   // Only the server reads a drive's settings; this page is the owner's.
-  const [{ data: driveSettings }, { data: mailServers }, driveAddress, mailAddress, { data: scopeClients }] = await Promise.all([
+  const [{ data: driveSettings }, { data: driveSetup }, { data: mailServers }, driveAddress, mailAddress, { data: scopeClients }] = await Promise.all([
     drive ? admin.from("connected_accounts").select("settings").eq("id", drive.id).single() : Promise.resolve({ data: null }),
+    // What InboxCA set up in the drive after Connect (the drive_setup job).
+    drive ? supabase.from("activity_log").select("details").eq("firm_id", membership.firmId).eq("action", "drive.setup").eq("entity_id", drive.id).order("at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
     mailbox?.status === "needs_reconnect" ? admin.from("connected_accounts").select("settings").eq("firm_id", membership.firmId).eq("id", mailbox.id).single() : Promise.resolve({ data: null }),
     drive && crypto.decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc),
     mailbox && crypto.decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc),
@@ -144,6 +147,17 @@ export default async function Settings({
   ]);
   const folderOrder = (driveSettings?.settings as { folder_order?: string } | undefined)?.folder_order ?? "year_client_work";
   const naming = (driveSettings?.settings as { naming?: string } | undefined)?.naming ?? "client_type_period";
+  // A line for each thing InboxCA set up in the drive, and whether it is as it should be.
+  const setup = driveSetup?.details as { reached?: boolean; clients?: number; test_file?: boolean; shared?: boolean; free_bytes?: number | null; notices?: boolean } | undefined;
+  const clientFolders = setup?.clients ?? 0;
+  const ticks: [boolean, string][] | null = !setup ? null : !setup.reached ? [[false, "InboxCA could not reach your drive to set it up. Disconnect it and connect it again."]] : [
+    [true, "Made the InboxCA folder"],
+    [true, !clientFolders ? "Each client gets a folder when their first paper arrives" : clientFolders === 1 ? "Made this year's folder for your client" : `Made this year's folder for each of your ${clientFolders} clients`],
+    [!!setup.test_file, setup.test_file ? "Saved a test file, read it back and removed it" : "Could not read back a test file. Disconnect the drive and connect it again."],
+    [!setup.shared, setup.shared ? "The InboxCA folder is shared or has a link. Stop the sharing in your drive." : "The InboxCA folder is shared with nobody"],
+    [setup.free_bytes == null || setup.free_bytes >= LOW_SPACE, setup.free_bytes == null ? "Your drive does not say how much space is left" : `${(setup.free_bytes / 1024 ** 3).toFixed(1)} GB free in your drive`],
+    [true, setup.notices ? "Changes made in the drive show here within minutes" : "Changes made in the drive show here the next morning"],
+  ];
   const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
   const settings = membership.settings;
   // The hours shown and changed: the main office's, or the picked branch's as its people have them.
@@ -240,6 +254,22 @@ export default async function Settings({
                   Disconnect
                 </Pending>
               </form>
+            )}
+            {drive && (
+              <List className="set-rows set-ticks" label="What InboxCA set up">
+                {ticks ? (
+                  ticks.map(([ok, text]) => (
+                    <Item key={text} className={ok ? undefined : "warn"}>
+                      {ok ? <Check size={16} aria-label="Done" /> : <TriangleAlert size={16} aria-label="Needs a look" />}
+                      <span className="grow">{text}</span>
+                    </Item>
+                  ))
+                ) : (
+                  <Item key="setting-up">
+                    <span className="grow">InboxCA is setting up your drive. This takes a minute.</span>
+                  </Item>
+                )}
+              </List>
             )}
             {drive && (
               <form action={setFolderOrder} className="set-fields">

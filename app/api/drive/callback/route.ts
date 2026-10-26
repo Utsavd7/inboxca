@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { runJobsSoon } from "@/src/jobs/run-soon";
 import { DRIVE_COOKIE, saveDrive } from "@/src/lib/drive-account";
 import { dropboxConnect, dropboxDrive } from "@/src/lib/dropbox";
 import { log } from "@/src/lib/logger";
@@ -31,9 +32,10 @@ export async function GET(request: NextRequest) {
   const { supabase, membership } = await currentMember();
   if (membership?.role !== "owner") return finish("drive_failed");
   try {
-    const { refreshToken, email } = await dropboxConnect(code, verifier, `${origin}/api/drive/callback`);
+    const { refreshToken, email, account } = await dropboxConnect(code, verifier, `${origin}/api/drive/callback`);
     await dropboxDrive(refreshToken).ensureFolder([]);
-    const { error } = await saveDrive(supabase, membership.firmId, "dropbox", `Dropbox, ${email}`, JSON.stringify({ refreshToken }));
+    const { error } = await saveDrive(supabase, membership.firmId, "dropbox", `Dropbox, ${email}`, JSON.stringify({ refreshToken }), { dropbox_account: account });
+    if (!error) runJobsSoon();
     return finish(error);
   } catch (error) {
     log.warn("drive.connect_failed", { provider: "dropbox", error: (error as Error).message });

@@ -869,6 +869,18 @@ test("the owner connects a drive only after agreeing to the Drive access terms",
   await expect(card.getByRole("status")).toHaveText("Connected: Test drive on this computer");
   const [consent] = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'drive.consent'", [firm.firmId]);
   expect(consent.details).toEqual({ provider: "local", level: "whole_drive", terms_version: "2026-10-17" });
+  // InboxCA then sets the drive up by itself, with a tick for each thing it did.
+  const ticks = card.getByRole("list", { name: "What InboxCA set up" });
+  await expect(async () => {
+    await owner.reload();
+    await expect(ticks).toContainText("Saved a test file, read it back and removed it", { timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+  await expect(ticks.getByRole("listitem")).toHaveCount(6);
+  await expect(ticks).toContainText("Made the InboxCA folder");
+  await expect(ticks).toContainText("The InboxCA folder is shared with nobody");
+  await expect(ticks).toContainText("GB free in your drive");
+  await expect(ticks).toContainText("Changes made in the drive show here the next morning");
+  await expect(ticks.getByLabel("Needs a look")).toHaveCount(0);
 });
 
 test("a client's attachments are filed into its folder in the drive; an unclear one waits under To check", async ({ request, browser }) => {
