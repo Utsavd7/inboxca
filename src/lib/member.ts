@@ -4,7 +4,7 @@ import { cache } from "react";
 import { closingToday } from "./hours";
 import { may, mayDecide, type Permissions, type Right, type Standing } from "./rights";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
-import { memberHours, officeDeviceAccess, officeProof } from "./office";
+import { chosenFirm, memberHours, officeDeviceAccess, officeProof } from "./office";
 import { supabaseAdmin, supabaseServer } from "./supabase";
 
 // The signed in person and their firm, for every product page and action; cached for the
@@ -14,7 +14,7 @@ import { supabaseAdmin, supabaseServer } from "./supabase";
 // where the firm uses them. A person in two firms works in the one they last chose in the
 // sidebar (FIRM_COOKIE), else the first, and every query after this names it
 // (x-inboxca-firm), so the database shows that firm alone.
-export const FIRM_COOKIE = "inboxca_firm";
+export { FIRM_COOKIE } from "./office";
 export const currentMember = cache(async () => {
   const signedIn = await supabaseServer();
   const { data: claims } = await signedIn.auth.getClaims();
@@ -39,15 +39,14 @@ export const currentMember = cache(async () => {
     .eq("user_id", userId)
     .order("firm_id")
     .limit(20);
-  const chosen = (await cookies()).get(FIRM_COOKIE)?.value;
-  const data = rows?.find((row) => row.firm_id === chosen) ?? rows?.[0] ?? null;
+  const data = await chosenFirm(rows);
   const supabase = data ? await supabaseServer({ ...proof, "x-inboxca-firm": data.firm_id }) : anyFirm;
   if (!data) {
     const { data: closed } = await supabase.rpc("closed_firms");
     if (closed?.[0]?.reason === "country") redirect("/auth/sign-out?reason=country");
     if (closed?.[0]?.reason === "hours") {
-      const { data: firm } = await supabaseAdmin().from("firm_members").select("firm_id")
-        .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+      const firm = await chosenFirm((await supabaseAdmin().from("firm_members").select("firm_id")
+        .eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
       if (firm) {
         const { error } = await supabaseAdmin().rpc("office_refused", { target_firm: firm.firm_id, person: userId, reason: "hours" });
         if (error) throw new Error(`Office refusal failed: ${error.code}`);

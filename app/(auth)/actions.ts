@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { log } from "@/src/lib/logger";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
-import { officeDeviceAccess } from "@/src/lib/office";
+import { chosenFirm, officeDeviceAccess } from "@/src/lib/office";
 import { withinLimit } from "@/src/lib/rate-limit";
 import { recoveryDigest, SEEN_COOKIE, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
@@ -69,7 +69,7 @@ async function oneSession(supabase: Awaited<ReturnType<typeof supabaseServer>>, 
   const { data: ended } = await supabase.rpc("end_other_sessions");
   if (!ended) return;
   const admin = supabaseAdmin();
-  const { data: member } = await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  const member = await chosenFirm((await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
   if (!member) return;
   await admin.from("activity_log").insert({ firm_id: member.firm_id, actor_id: userId, action: "session.ended_other", entity_type: "user", entity_id: userId, details: { ended } });
   await tellOwnerOnRepeat(member.firm_id, userId, email, "session.ended_other", "parallel");
@@ -129,7 +129,7 @@ export async function recoverTwoStep(_prev: StepState, form: FormData): Promise<
   if (error) throw new Error(`Recovery code not used: ${error.code}`);
   const { data: factors } = await admin.auth.admin.mfa.listFactors({ userId });
   for (const factor of factors?.factors ?? []) await admin.auth.admin.mfa.deleteFactor({ id: factor.id, userId });
-  const { data: member } = await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  const member = await chosenFirm((await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
   if (member) await admin.from("activity_log").insert({ firm_id: member.firm_id, actor_id: userId, action: "recovery.used", entity_type: "user", entity_id: userId, details: { left: saved.length - 1 } });
   redirect("/sign-in/two-step");
 }

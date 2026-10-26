@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect } from "@playwright/test";
-import { appKey, emailStep, localSupabase, query, seedFirm, signIn, totp } from "./local-supabase";
+import { addPerson, appKey, emailStep, localSupabase, query, seedFirm, signIn, totp } from "./local-supabase";
 
 // The app's frame: the theme and the folded sidebar are remembered and drawn by the server,
 // the keys work everywhere, and the help, what's new and notifications panels open and close.
@@ -232,5 +232,28 @@ test("a person in two firms works in one at a time and switches from the sidebar
   } finally {
     await firms[1].remove();
     await firms[0].remove();
+  }
+});
+
+test("the office check follows the firm chosen in the sidebar, not the first one", async ({ browser }) => {
+  const seeded = [await seedFirm("Invented Open Firm", `shell-open-${randomUUID()}@invented.test`), await seedFirm("Invented Office Firm", `shell-office-${randomUUID()}@invented.test`)];
+  // The firm with Office only on is the second by id, so the old first firm lookup missed it.
+  const [open, office] = seeded[0].firmId < seeded[1].firmId ? seeded : [seeded[1], seeded[0]];
+  const key = appKey(), email = `shell-chosen-${randomUUID()}@invented.test`, line = "198.51.100.77";
+  try {
+    const person = await addPerson(open.firmId, email, "partner", key);
+    await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'staff', 'active')", [office.firmId, person]);
+    await query(local.dbUrl, "update public.firms set settings = settings || $2 where id = $1", [office.firmId, { office: { on: true, lines: [{ ipv4: line }] } }]);
+    const context = await browser.newContext({ extraHTTPHeaders: { "x-test-ip": line } });
+    const page = await context.newPage();
+    await signIn(page, email, key);
+    await context.addCookies([{ name: "inboxca_firm", value: office.firmId, url: page.url() }]);
+    await page.goto("/app");
+    // This PC now waits for the office firm's owner, as any new PC there does.
+    await expect.poll(async () => await query(local.dbUrl, "select status from public.devices where firm_id = $1", [office.firmId])).toEqual([{ status: "waiting" }]);
+    expect(await query(local.dbUrl, "select count(*)::int as n from public.devices where firm_id = $1", [open.firmId])).toEqual([{ n: 0 }]);
+  } finally {
+    await office.remove(email);
+    await open.remove();
   }
 });

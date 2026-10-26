@@ -4,6 +4,14 @@ import { cookies, headers } from "next/headers";
 import { DEVICE_COOKIE, deviceHash, deviceName } from "./device";
 import { supabaseAdmin } from "./supabase";
 
+// The firm a person works in, for the checks that run before the database names it: the one
+// they chose in the sidebar, else the first by id, as currentMember chooses (src/lib/member.ts).
+export const FIRM_COOKIE = "inboxca_firm";
+export async function chosenFirm<T extends { firm_id: string }>(rows: T[] | null) {
+  const chosen = (await cookies()).get(FIRM_COOKIE)?.value;
+  return rows?.find((row) => row.firm_id === chosen) ?? rows?.[0] ?? null;
+}
+
 // The office connection (PLAN.md 5.8, 5.17.3): the office's public internet address as the
 // server sees it. IPv4 is matched exactly, IPv6 by its /64 prefix. A firm may have several
 // lines. Nothing a PC says about itself is trusted.
@@ -96,8 +104,8 @@ export const memberHours = (settings: Record<string, unknown>, branch?: { kind: 
 // The server checks both the approved PC and its connection on every request.
 export async function officeDeviceAccess(userId: string, observe = true) {
   const admin = supabaseAdmin();
-  const { data: firmRow } = await admin.from("firm_members").select(`firm_id, role, firms(settings), ${BRANCH}`)
-    .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  const firmRow = await chosenFirm((await admin.from("firm_members").select(`firm_id, role, firms(settings), ${BRANCH}`)
+    .eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
   const office = memberOffice((firmRow?.firms?.settings as { office?: Office } | undefined)?.office, firmRow?.branch);
   const requestHeaders = await headers();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -160,7 +168,7 @@ export async function officeDeviceAccess(userId: string, observe = true) {
 export async function officePc(userId: string) {
   const admin = supabaseAdmin();
   const token = (await cookies()).get(DEVICE_COOKIE)?.value;
-  const { data: member } = await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  const member = await chosenFirm((await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
   if (!token || !member) return null;
   const { data: device } = await admin.from("devices").select("id, kind, key_id, key_public")
     .eq("firm_id", member.firm_id).eq("token_hash", await deviceHash(token)).eq("status", "approved").maybeSingle();
@@ -171,8 +179,8 @@ export async function officePc(userId: string) {
 // or a deputy, marked as first used away (5.17.4 #28, #48).
 export async function askAway(userId: string) {
   const admin = supabaseAdmin();
-  const { data: firmRow } = await admin.from("firm_members").select(`firm_id, role, firms(settings), ${BRANCH}`)
-    .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
+  const firmRow = await chosenFirm((await admin.from("firm_members").select(`firm_id, role, firms(settings), ${BRANCH}`)
+    .eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
   const token = (await cookies()).get(DEVICE_COOKIE)?.value;
   const office = memberOffice((firmRow?.firms?.settings as { office?: Office } | undefined)?.office, firmRow?.branch);
   // The Office only and Solo CA presets turn asking off (5.17).
