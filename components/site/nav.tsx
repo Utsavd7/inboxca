@@ -74,6 +74,9 @@ export function Nav({ home = true }: { home?: boolean }) {
             </a>
           ))}
         </nav>
+        <a className="nav-sign-in" href="/sign-in">
+          Sign in
+        </a>
         <a
           className="btn btn-small"
           href={`${base}#invite`}
@@ -109,6 +112,7 @@ export function Nav({ home = true }: { home?: boolean }) {
                 {label}
               </a>
             ))}
+            <a href="/sign-in">Sign in</a>
           </motion.nav>
         )}
       </AnimatePresence>

@@ -1,14 +1,19 @@
 "use client";
+import Link from "next/link";
 import { useActionState } from "react";
 import { requestCode, verifyCode, type CodeState } from "../actions";
+import { ProviderButtons, type ProviderChoice } from "../providers";
 
-// With an email (just signed up, code already sent) it starts at the code step.
-export function SignInForm({ email }: { email?: string }) {
+// With an email (just signed up, code already sent) it starts at the code step. Google and
+// Microsoft lead the first step when they are set up.
+export function SignInForm({ email, providers = [] }: { email?: string; providers?: ProviderChoice[] }) {
   const [asked, ask, asking] = useActionState(requestCode, (email ? { step: "code", email } : { step: "email" }) as CodeState);
   const [checked, check, checking] = useActionState(verifyCode, { step: "code" } as CodeState);
 
   if (asked.step === "email")
     return (
+      <>
+      <ProviderButtons providers={providers} />
       <form action={ask} className="auth-form" noValidate>
         <p className="auth-lead">We will email you a code. No password needed.</p>
         <label htmlFor="email">Your work email</label>
@@ -30,7 +35,13 @@ export function SignInForm({ email }: { email?: string }) {
         <button className="btn" type="submit" disabled={asking}>
           {asking ? "Sending" : "Email me a code"}
         </button>
+        {!email && (
+          <p className="auth-small">
+            New to InboxCA? <Link href="/sign-up">Set up your firm</Link>
+          </p>
+        )}
       </form>
+      </>
     );
 
   const error = checked.error;

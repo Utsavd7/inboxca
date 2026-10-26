@@ -100,6 +100,8 @@ li { text-wrap: pretty; }
 .nav nav a:hover,
 .nav nav a[aria-current] { color: var(--navy); }
 .nav nav a > span:last-child { position: relative; }
+.nav-sign-in { padding: 8px 14px; border-radius: 999px; font-size: 15px; font-weight: 600; color: var(--slate); transition: color 0.35s var(--ease); }
+.nav-sign-in:hover { color: var(--navy); }
 .nav-active { position: absolute; inset: 0; border-radius: 999px; background: var(--wash); }
 .nav-menu { display: none; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--navy); transition: background 0.3s var(--ease); }
 .nav-menu:hover { background: var(--wash); }
@@ -541,6 +543,39 @@ li { text-wrap: pretty; }
 .code-input { font-size: 24px !important; letter-spacing: 0.3em; text-align: center; }
 .qr { justify-self: center; border: 1px solid var(--line); border-radius: 16px; padding: 8px; background: var(--white); }
 .secret { color: var(--navy); }
+/* Continue with Google or Microsoft: a plain button with the provider's own mark, as both
+   brands ask, then a line to the email code. */
+.auth-providers { display: grid; gap: 10px; margin-top: 18px; }
+.auth-card h1 + .auth-lead { margin-top: 8px; }
+.btn-provider {
+  display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; height: 48px; padding: 0 16px;
+  border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface, var(--white)); color: var(--navy); font-size: 16px; font-weight: 700;
+  transition: background 0.3s var(--ease), border-color 0.3s var(--ease), transform 0.25s var(--ease);
+}
+.btn-provider:hover { background: var(--grey); border-color: var(--slate); }
+.btn-provider:disabled { opacity: 0.7; cursor: default; }
+.auth-or { display: flex; align-items: center; gap: 12px; margin-top: 18px; font-size: 14px; color: var(--slate); }
+.auth-or::before,
+.auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+@media (prefers-reduced-motion: no-preference) {
+  .btn-provider:active { transform: scale(0.98); }
+}
+/* On a device set to dark, the sign in pages take the signed in app's dark colours. The QR
+   code keeps its white ground. */
+@media (prefers-color-scheme: dark) {
+  .auth-page {
+    color-scheme: dark; color: var(--navy);
+    --navy: #e8eefb; --slate: #a9b8d0; --grey: #08121f; --surface: #0e1b2e; --wash: rgba(125, 156, 240, 0.16);
+    --line: rgba(194, 211, 247, 0.1); --line-strong: rgba(194, 211, 247, 0.26); --error: #f58a80;
+  }
+  .auth-card,
+  .auth-form input,
+  .auth-form select { background: var(--surface); }
+  .auth-page .mark .tray { stroke: var(--surface); }
+  .auth-check a,
+  .auth-small a,
+  .auth-form .text-button { color: var(--tint); }
+}
 
 /* Invite dialog and form */
 .dialog-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(11, 31, 58, 0.5); backdrop-filter: blur(6px); }
@@ -648,7 +683,8 @@ li { text-wrap: pretty; }
   .footer { padding-bottom: 104px; }
   .nav nav { display: none; }
   /* The bottom bar carries the invite button on phones, so the top bar does not repeat it. */
-  .nav .btn { display: none; }
+  .nav .btn,
+  .nav-sign-in { display: none; }
   .nav-menu { display: grid; margin-left: auto; }
   .nav { padding-left: 14px; }
   .hero { padding-top: 124px; }
