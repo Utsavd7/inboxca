@@ -560,22 +560,6 @@ li { text-wrap: pretty; }
 @media (prefers-reduced-motion: no-preference) {
   .btn-provider:active { transform: scale(0.98); }
 }
-/* On a device set to dark, the sign in pages take the signed in app's dark colours. The QR
-   code keeps its white ground. */
-@media (prefers-color-scheme: dark) {
-  .auth-page {
-    color-scheme: dark; color: var(--navy);
-    --navy: #e8eefb; --slate: #a9b8d0; --grey: #08121f; --surface: #0e1b2e; --wash: rgba(125, 156, 240, 0.16);
-    --line: rgba(194, 211, 247, 0.1); --line-strong: rgba(194, 211, 247, 0.26); --error: #f58a80;
-  }
-  .auth-card,
-  .auth-form input,
-  .auth-form select { background: var(--surface); }
-  .auth-page .mark .tray { stroke: var(--surface); }
-  .auth-check a,
-  .auth-small a,
-  .auth-form .text-button { color: var(--tint); }
-}
 
 /* Invite dialog and form */
 .dialog-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(11, 31, 58, 0.5); backdrop-filter: blur(6px); }
