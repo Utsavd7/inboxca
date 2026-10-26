@@ -67,18 +67,24 @@ function openPush(body: Buffer, browser: ECDH, auth: Buffer) {
   return plain.subarray(0, plain.lastIndexOf(2)).toString();
 }
 
+// GreenMail makes a mailbox only when its first email arrives, so until then signing in to
+// it fails; that reads as no mail yet, and a waiting expect.poll keeps trying.
 async function lastMail(address: string) {
   const imap = new ImapFlow({ host: "127.0.0.1", port: 3143, secure: false, auth: { user: address, pass: address }, logger: false });
-  await imap.connect();
-  await imap.mailboxOpen("INBOX");
-  const message = await imap.fetchOne("*", { source: true });
-  await imap.logout();
-  return message && message.source ? ((await simpleParser(message.source)).text ?? "") : "";
+  try {
+    await imap.connect();
+    if (!(await imap.mailboxOpen("INBOX")).exists) return "";
+    const message = await imap.fetchOne("*", { source: true });
+    return message && message.source ? ((await simpleParser(message.source)).text ?? "") : "";
+  } catch {
+    return "";
+  } finally {
+    await imap.logout().catch(() => undefined);
+  }
 }
 async function mailCount(address:string) {
   const imap=new ImapFlow({host:"127.0.0.1",port:3143,secure:false,auth:{user:address,pass:address},logger:false});
-  await imap.connect();
-  try { return (await imap.mailboxOpen("INBOX")).exists; } finally { await imap.logout(); }
+  try { await imap.connect(); return (await imap.mailboxOpen("INBOX")).exists; } catch { return 0; } finally { await imap.logout().catch(() => undefined); }
 }
 // A base32 authenticator key, given to the owner directly so their sign in is quick.
 const deputyKey = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
