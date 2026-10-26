@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import { dueLabel } from "@/src/lib/calendar";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase");
@@ -23,7 +24,7 @@ async function signedInAdmin(browser: Browser, baseURL: string) {
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Set up a passkey" }).click();
   await expect(page.getByRole("heading", { name: "Today's changes" })).toBeVisible();
-  return { page, close: async () => { await context.close().catch(() => {}); await setup.remove(); } };
+  return { page, id: setup.ownerId, close: async () => { await context.close().catch(() => {}); await setup.remove(); } };
 }
 
 // A firm owner signed in with their 2 step code.
@@ -253,6 +254,77 @@ test("an admin retries a firm's failed job, looks only in the hour its owner all
     await owner.page.goto("/app/calendar");
     await expect(owner.page.getByRole("row").filter({ hasText: client })).not.toContainText("*");
   } finally {
+    await admin.close();
+    await owner.close();
+    await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
+  }
+});
+
+// M11: a government extension entered in the console moves a firm's open return only once a
+// CA has checked it; the office thresholds and a change from the daily forms check are saved
+// from the console too, each with the admin's name on it.
+test("an admin records an extension a CA then checks, saves the office thresholds and marks a forms change reviewed", async ({ browser, baseURL }) => {
+  test.setTimeout(150_000);
+  const tag = randomUUID().slice(0, 8), code = `ZX${randomBytes(4).toString("hex").toUpperCase()}`, client = `Invented Extension Client ${tag}`, name = `Invented Extension Firm ${tag}`;
+  const later = (days: number) => new Date(Date.now() + days * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const change = { source: `invented-${tag}`, name: `Invented form ${tag}`, url: "https://example.test/invented-form", at: new Date().toISOString(), status: "draft" };
+  const [thresholds] = await query(local.dbUrl, "select value from public.platform_settings where key = 'office'");
+  const owner = await signedInOwner(browser, name);
+  const admin = await signedInAdmin(browser, baseURL!);
+  const logged = (action: string) => query(local.dbUrl, "select actor_id, details from public.activity_log where firm_id is null and actor_id = $1 and action = $2", [admin.id, action]);
+  try {
+    await query(local.dbUrl, "insert into public.compliance_types (code, name, frequency, due_rule, source_url, verified_on, approved_by) values ($1, $2, 'monthly', '{\"for\": \"pan\", \"after\": 1, \"day\": 11}', 'https://example.test/invented-rule', current_date, 'CA Invented')", [code, `Invented return ${code}`]);
+    const [{ id: clientId }] = await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, $2, 'individual') returning id", [owner.firm.firmId, client]);
+    await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, $3, '2026-10', $4)", [owner.firm.firmId, clientId, code, later(3)]);
+    const dueOn = async () => (await query(local.dbUrl, "select due_on::text from public.tasks where client_id = $1", [clientId]))[0].due_on;
+
+    await admin.page.getByRole("link", { name: "Due dates" }).click();
+    const record = admin.page.getByRole("region", { name: "Record an extension" });
+    await record.getByLabel("Return").selectOption(code);
+    await record.getByLabel("Period, its last month").fill("2026-10");
+    await record.getByLabel("New due date").fill(later(20));
+    await record.getByLabel("Notification link").fill("https://example.test/invented-extension");
+    await record.getByRole("button", { name: "Save for a CA to check" }).click();
+    const check = admin.page.locator(`form[id="${code}-2026-10"]`);
+    await expect(check).toContainText(`Extension for 2026-10 to ${dueLabel(later(20))}: moves 1 return at 1 firm.`);
+    expect(await logged("admin.extension_added")).toEqual([{ actor_id: admin.id, details: { code, period: "2026-10", on: later(20) } }]);
+    // Until a CA checks it against the notification, the return keeps its date.
+    await admin.page.getByRole("link", { name: "Today's changes" }).click();
+    await expect(admin.page.getByRole("region", { name: "Due date changes" }).locator(".admin-row").filter({ hasText: code })).toContainText(`Touches 1 open return at 1 firm: ${name}.`);
+    expect(await dueOn()).toBe(later(3));
+    await admin.page.getByRole("link", { name: "Due dates" }).click();
+    await expect(check.getByLabel("Notification link")).toHaveValue("https://example.test/invented-extension");
+    await check.getByLabel("Checked by (CA)").fill("CA Invented Person");
+    await check.getByRole("button", { name: "Mark checked" }).click();
+    await expect(check).toHaveCount(0);
+    expect(await dueOn()).toBe(later(20));
+    expect(await logged("admin.rule_verified")).toEqual([{ actor_id: admin.id, details: { code, period: "2026-10", by: "CA Invented Person" } }]);
+
+    // A change the daily check found waits until an admin marks it reviewed.
+    await query(local.dbUrl, "insert into public.platform_settings (key, value) values ('watch', jsonb_build_object('changes', jsonb_build_array($1::jsonb))) on conflict (key) do update set value = jsonb_set(public.platform_settings.value, '{changes}', coalesce(public.platform_settings.value -> 'changes', '[]') || jsonb_build_array($1::jsonb))", [change]);
+    await admin.page.getByRole("link", { name: "Today's changes" }).click();
+    const row = admin.page.getByRole("region", { name: "Changes to review" }).locator(".admin-row").filter({ hasText: change.name });
+    await expect(row).toContainText("Touches no firm's open returns.");
+    await row.getByRole("button", { name: "Mark reviewed" }).click();
+    await expect(row).toHaveCount(0);
+    const [{ reviewed }] = await query(local.dbUrl, "select c as reviewed from public.platform_settings, jsonb_array_elements(value -> 'changes') c where key = 'watch' and c ->> 'source' = $1", [change.source]);
+    expect(reviewed).toMatchObject({ status: "reviewed", reviewed_by: admin.id });
+
+    // The fixed connection suggestion's thresholds, shared by every firm, so they are put back after.
+    await admin.page.getByRole("link", { name: "Office connections" }).click();
+    const rule = admin.page.getByRole("region", { name: "Fixed connection suggestion" });
+    await rule.getByLabel("Confirmations").fill("4");
+    await rule.getByLabel("In days").fill("21");
+    await rule.getByRole("button", { name: "Save" }).click();
+    await expect(admin.page.locator(".page-head")).toContainText("over the last 21 days");
+    await admin.page.reload();
+    await expect(rule.getByLabel("Confirmations")).toHaveValue("4");
+    await expect(rule.getByLabel("In days")).toHaveValue("21");
+    expect(await logged("admin.office_thresholds")).toEqual([{ actor_id: admin.id, details: { taps: 4, days: 21 } }]);
+  } finally {
+    if (thresholds) await query(local.dbUrl, "update public.platform_settings set value = $1 where key = 'office'", [thresholds.value]);
+    else await query(local.dbUrl, "delete from public.platform_settings where key = 'office'");
+    await query(local.dbUrl, "update public.platform_settings set value = jsonb_set(value, '{changes}', (select coalesce(jsonb_agg(c), '[]') from jsonb_array_elements(value -> 'changes') c where c ->> 'source' <> $1)) where key = 'watch'", [change.source]);
     await admin.close();
     await owner.close();
     await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);

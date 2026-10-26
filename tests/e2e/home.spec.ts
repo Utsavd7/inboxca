@@ -318,6 +318,19 @@ for (const [path, title] of [
     expect(await axe(page)).toEqual([]);
   });
 
+// The firm accepts the data processing agreement at sign up, so it is linked there.
+test("the data processing agreement is linked from sign up, private and accessible", async ({
+  page,
+}) => {
+  await page.goto("/sign-up");
+  await page.getByRole("link", { name: "data processing agreement" }).click();
+  await expect(page).toHaveURL(/\/dpa$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Data processing agreement");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+  await expect(page.getByText("a lawyer will review it")).toBeVisible();
+  expect(await axe(page)).toEqual([]);
+});
+
 test("the invite draft has readable answers and safe encoding", () => {
   const url = inviteMailto({
     name: "Sample CA",

@@ -9,6 +9,10 @@ const errors: Record<string, string> = {
   verify: "Give the notification's https link and the name of the CA who checked it.",
   extension: "Choose a rule, the period's last month, the new date and the notification's https link.",
 };
+const moved = (reach: { returns: number }[]) => {
+  const returns = reach.reduce((sum, row) => sum + row.returns, 0);
+  return returns === 1 ? "1 return" : `${returns} returns`;
+};
 
 // The due date rules and the government's extensions, those a CA has not yet checked first.
 // A rule moves dates only once a CA has checked it against its official source; checking a
@@ -43,7 +47,7 @@ export default async function AdminDueDates({ searchParams }: { searchParams: Pr
                 <strong>{names.get(rule.code)}</strong> <span className="sub-inline num">{rule.code}</span>
                 <span className="sub">
                   {rule.period_key
-                    ? `Extension for ${rule.period_key} to ${dueLabel((rule.due_rule as { on: string }).on)}: moves ${reach[at]!.reduce((sum, row) => sum + row.returns, 0)} returns at ${reach[at]!.length === 1 ? "1 firm" : `${reach[at]!.length} firms`}.`
+                    ? `Extension for ${rule.period_key} to ${dueLabel((rule.due_rule as { on: string }).on)}: moves ${moved(reach[at]!)} at ${reach[at]!.length === 1 ? "1 firm" : `${reach[at]!.length} firms`}.`
                     : "Every period. Its dates show a * until it is checked."}
                 </span>
               </div>

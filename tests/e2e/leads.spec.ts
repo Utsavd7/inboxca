@@ -3,7 +3,8 @@ import { test, expect, type Page } from "@playwright/test";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
-import { emailStep, localSupabase, pollFirmMail, query, seedFirm, totp } from "./local-supabase";
+import { dueLabel } from "@/src/lib/calendar";
+import { emailStep, localSupabase, mailTexts, pollFirmMail, query, seedFirm, totp } from "./local-supabase";
 
 // Leads (PLAN.md 5.12): the firm's public enquiry form, enquiries spotted in its email, the
 // board, follow ups from its own mailbox (the local GreenMail server) and turning a lead into
@@ -255,6 +256,46 @@ test("an enquiry email from someone new is offered, and added as a lead in one c
   await expect(owner.getByRole("status").filter({ hasText: "Lead marked lost." })).toBeVisible();
   await expect(column("Lost").getByRole("listitem").filter({ hasText: `Walk In ${tag}` })).toBeVisible();
   expect((await query(local.dbUrl, "select details->>'lost_reason' as reason from public.clients where firm_id = $1 and name = $2", [firm.firmId, `Walk In ${tag}`]))[0].reason).toBe("other_firm");
+});
+
+test("a lead's follow up day is saved and cleared, and an email that is not a lead is set aside", async () => {
+  const followUp = async () => (await query(local.dbUrl, "select details->>'follow_up_on' as day from public.clients where firm_id = $1 and name = $2", [firm.firmId, ravi.name]))[0].day;
+  const inFive = new Date(Date.now() + 5 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  await owner.goto("/app/leads");
+  await column("New").getByRole("link", { name: ravi.name }).click();
+  const panel = owner.getByRole("dialog", { name: ravi.name });
+  await panel.getByLabel("Follow up on").fill(inFive);
+  await panel.getByRole("button", { name: "Save day" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Follow up day saved." })).toBeVisible();
+  await expect(panel).toContainText(`Due ${dueLabel(inFive)}.`);
+  await expect(panel.getByLabel("Follow up on")).toHaveValue(inFive);
+  expect(await followUp()).toBe(inFive);
+  await owner.goto("/app/leads");
+  await expect(column("New").getByRole("listitem").filter({ hasText: ravi.name })).toContainText(`Follow up ${dueLabel(inFive).slice(0, -5)}`);
+  // An empty day clears it.
+  await column("New").getByRole("link", { name: ravi.name }).click();
+  await panel.getByLabel("Follow up on").fill("");
+  await panel.getByRole("button", { name: "Save day" }).click();
+  await expect(panel).toContainText("No follow up day set.");
+  expect(await followUp()).toBeNull();
+  await expect(panel.getByRole("list").last()).toContainText(`Follow up set for ${dueLabel(inFive)} by Leads`);
+  await expect(panel.getByRole("list").last()).toContainText("Follow up day cleared by Leads");
+  const set = await query(local.dbUrl, "select l.actor_id, l.details from public.activity_log l join public.clients c on c.id = l.entity_id where c.name = $2 and l.firm_id = $1 and l.action = 'lead.follow_up_set' order by l.at", [firm.firmId, ravi.name]);
+  expect(set).toEqual([{ actor_id: firm.ownerId, details: { on: inFive } }, { actor_id: firm.ownerId, details: {} }]);
+
+  // An email offered as an enquiry that is not one: InboxCA forgets it, the mailbox keeps it.
+  const asha = { name: `Asha Rao ${tag}`, email: `asha-${tag}@prospect.test` };
+  await smtp.sendMail({ from: `"${asha.name}" <${asha.email}>`, to: office, subject: `Quote for ITR filing ${tag}`, text: "Hello, what are your fees for filing my income tax return?" });
+  await readMail();
+  await owner.goto("/app/leads");
+  const offers = owner.getByRole("region", { name: "Emails that look like enquiries" });
+  await offers.getByRole("listitem").filter({ hasText: asha.email }).getByRole("button", { name: "Not a lead" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Set aside. The email stays in your mailbox." })).toBeVisible();
+  await expect(offers).toHaveCount(0);
+  expect(await query(local.dbUrl, "select id from public.email_events where firm_id = $1", [firm.firmId])).toEqual([]);
+  expect(await query(local.dbUrl, "select id from public.clients where firm_id = $1 and name = $2", [firm.firmId, asha.name])).toEqual([]);
+  expect(await query(local.dbUrl, "select actor_id from public.activity_log where firm_id = $1 and action = 'enquiry.dismissed'", [firm.firmId])).toEqual([{ actor_id: firm.ownerId }]);
+  expect((await mailTexts(office)).join("\n")).toContain("what are your fees for filing my income tax return?");
 });
 
 test("staff, who do not work leads, see no Leads page and no lead anywhere", async ({ browser }) => {

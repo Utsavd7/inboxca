@@ -3,12 +3,14 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { TEST_DRIVE } from "../../playwright.config";
+import { longDate } from "@/src/lib/hours";
 import { pdf } from "../fixtures/pdf";
 import { appKey, connectTestMailbox, localSupabase, mailTexts, makeMailbox, query, runJobs, seedFirm, signIn } from "./local-supabase";
 
 // The owner's everyday settings, each saved and shown again: papers sent on request, the
-// email limit, how the drive arranges and names files, and reminders paused for one client,
-// with the reminder email going from the firm's mailbox on the local GreenMail server.
+// email limit, how the drive arranges and names files, reminders paused for one client, with
+// the reminder email going from the firm's mailbox on the local GreenMail server, and holidays
+// and special hours taken off again.
 // Skipped when local Supabase is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
@@ -131,4 +133,39 @@ test("reminders go from the firm's mailbox, except to a client whose reminders a
   expect(await mailTexts(clients.Paused.email)).toEqual([]);
   const [paused] = await query(local.dbUrl, "select details from public.tasks where client_id = $1", [clients.Paused.id]);
   expect(paused.details.skipped).toMatchObject({ reason: "paused" });
+});
+
+test("the owner removes a holiday and a special hours day, and each change is logged", async () => {
+  const day = (ahead: number) => new Date(Date.now() + ahead * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const [first, second, third] = [day(30), day(60), day(90)];
+  const changed = async () => (await query(local.dbUrl, "select details -> 'settings' as keys from public.activity_log where firm_id = $1 and actor_id = $2 and action = 'firm.changed' order by at", [firm.firmId, firm.ownerId])).map((row) => row.keys);
+  await owner.goto("/app/settings?group=hours");
+  const holidays = owner.locator("section#holidays");
+  for (const [at, date] of [first, second].entries()) {
+    await holidays.getByLabel("Add a holiday").fill(date);
+    await holidays.getByRole("button", { name: "Add holiday" }).click();
+    await expect(holidays.getByRole("listitem")).toHaveCount(at + 1);
+  }
+  const special = owner.locator("section#special");
+  for (const [at, [from, to, open, close]] of [[first, first, "08:00", "20:00"], [second, third, "09:00", "21:00"]].entries()) {
+    for (const [label, value] of [["From", from], ["To", to], ["Opens", open], ["Closes", close]]) await special.getByLabel(label, { exact: true }).fill(value);
+    await special.getByRole("button", { name: "Add special hours" }).click();
+    await expect(special.getByRole("listitem")).toHaveCount(at + 1);
+  }
+
+  const before = await changed();
+  await holidays.getByRole("listitem").filter({ hasText: longDate(first) }).getByRole("button", { name: "Remove" }).click();
+  await expect(holidays.getByRole("listitem")).toHaveCount(1);
+  await expect(holidays.getByRole("listitem")).toContainText(longDate(second));
+  await special.getByRole("listitem").filter({ hasText: `${longDate(first)}: 08:00 to 20:00` }).getByRole("button", { name: "Remove" }).click();
+  await expect(special.getByRole("listitem")).toHaveCount(1);
+  await expect(special.getByRole("listitem")).toContainText(`${longDate(second)} to ${longDate(third)}: 09:00 to 21:00`);
+  const { holidays: kept, special_hours: hours } = await settings();
+  expect(kept).toEqual([second]);
+  expect(hours).toEqual([{ from: second, to: third, open: "09:00", close: "21:00" }]);
+  expect((await changed()).slice(before.length)).toEqual([["holidays"], ["special_hours"]]);
+  // Still removed when the page is drawn again.
+  await owner.reload();
+  await expect(holidays.getByRole("listitem")).toHaveCount(1);
+  await expect(special.getByRole("listitem")).toHaveCount(1);
 });
