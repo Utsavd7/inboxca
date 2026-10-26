@@ -1,8 +1,16 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
+import { loadEnvConfig } from "@next/env";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import { TEST_DRIVE } from "../../playwright.config";
 import { addDays, dueLabel } from "@/src/lib/calendar";
+import { serverCrypto } from "@/src/lib/crypto";
+import { place, type Draft } from "@/src/lib/datasets";
+import { localDrive } from "@/src/lib/drive";
+import { salesSections } from "@/src/lib/gstr1-fields";
+import { resavedWorkbook, sha256 } from "../fixtures/official-copy";
+import { inventedGstin } from "../fixtures/portal";
 import { firmWith, govItems, indiaToday } from "./gov-items";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 const local = localSupabase();
@@ -367,6 +375,77 @@ test("an admin adds the one line firms see under a new government item, and ends
   } finally {
     await govItems.remove([id]);
     await query(local.dbUrl, "delete from public.templates where form_code = $1", [form]);
+    await admin.close();
+    await owner.close();
+  }
+});
+
+// D42 without an app release: a new GSTR-1 workbook the daily check found with the same
+// layout waits in the store; an admin uses it from a period in one click, and a firm's next
+// GSTR-1 for that period is filled on it. One with a changed layout is never offered.
+test("an admin uses a same layout GSTR-1 workbook from a period in one click, and a firm prepares its GSTR-1 on it", async ({ browser, baseURL }) => {
+  test.setTimeout(150_000);
+  loadEnvConfig(process.cwd());
+  // A far period, so no other test's GSTR-1 meets the invented version while it is listed.
+  const tag = randomUUID().slice(0, 8), version = `9.${randomInt(1000, 99999)}`, file = `GSTR1_Excel_Workbook_Template_V${version}.xlsx`, copy = resavedWorkbook(), hash = sha256(copy);
+  const url = "https://tutorial.gst.gov.in/offlineutilities/returns/gst_offline_tool.zip";
+  const change = { source: `invented-${tag}`, name: `Invented offline tool ${tag}`, url, at: new Date().toISOString(), status: "draft", compared: [
+    { file, with: "2.2", same: true, template: { form_code: "GSTR1", version, source: { file: `gstr1-v${version}/${file}`, url, sha256: hash } } },
+    { file: `GSTR1_Excel_Workbook_Template_V${version}1.xlsx`, with: "2.2", differences: ["Sheet added: Invented"], more: 0 },
+  ] };
+  await query(local.dbUrl, "insert into public.official_files (sha256, bytes) values ($1, $2) on conflict do nothing", [hash, copy]);
+  await query(local.dbUrl, "insert into public.platform_settings (key, value) values ('watch', jsonb_build_object('changes', jsonb_build_array($1::jsonb))) on conflict (key) do update set value = jsonb_set(public.platform_settings.value, '{changes}', coalesce(public.platform_settings.value -> 'changes', '[]') || jsonb_build_array($1::jsonb))", [change]);
+  const admin = await signedInAdmin(browser, baseURL!);
+  const owner = await firmWith(browser, "gstin", ["GSTR1_M"]);
+  const drive = localDrive(TEST_DRIVE), files: string[] = [];
+  try {
+    await admin.page.reload();
+    const row = admin.page.getByRole("region", { name: "Changes to review" }).locator(".admin-row").filter({ hasText: change.name });
+    await expect(row).toContainText(`${file}: same layout as 2.2. InboxCA has kept the file, so it can be used without an app update.`);
+    await expect(row).toContainText("The layout changed, so this needs mapping by Orelu before InboxCA can use it.");
+    await expect(row.getByRole("button", { name: "Use this version" })).toHaveCount(1);
+    await row.getByLabel("Use this version from").fill("2099-01");
+    await row.getByRole("button", { name: "Use this version" }).click();
+    await expect(row).toContainText(`${file}: same layout as 2.2. In use as version ${version} from 1 Jan 2099.`);
+    await expect(row.getByRole("button", { name: "Use this version" })).toHaveCount(0);
+    expect(await query(local.dbUrl, "select details from public.activity_log where action = 'admin.template_added' and actor_id = $1", [admin.id])).toEqual([{ details: { form: "GSTR1", version, from: "2099-01-01", sha256: hash } }]);
+    // The version it matches keeps its periods.
+    await admin.page.getByRole("link", { name: "Form versions" }).click();
+    await expect(admin.page.locator(".admin-row").filter({ hasText: `GSTR1 version ${version}` })).toContainText("For Jan 2099 onwards.");
+    await expect(admin.page.locator(".admin-row").filter({ hasText: "GSTR1 version 2.2" })).toContainText("For May 2025 onwards.");
+
+    // A firm's checked register for Jan 2099 is filled on the stored workbook, which the app
+    // does not ship: the file worker fetches it from the store and checks its hash.
+    const [{ client, registration }] = await query(local.dbUrl, "select r.client_id as client, r.id as registration from public.client_registrations r where r.firm_id = $1", [owner.firm.firmId]);
+    const crypto = serverCrypto(), account = randomUUID(), source = randomUUID(), draft = randomUUID();
+    await query(local.dbUrl, "insert into public.connected_accounts (id, firm_id, kind, provider, address_enc, credentials_enc) values ($1, $2, 'drive', 'local', $3, $4)", [account, owner.firm.firmId, await crypto.encrypt(owner.firm.firmId, `accounts/${account}/address`, "Test drive"), await crypto.encrypt(owner.firm.firmId, `accounts/${account}/credentials`, "{}")]);
+    // Structure: the official GSTR-1 B2B worksheet headings. All taxpayer data is invented.
+    const values = [inventedGstin("ZZZPZ0002Z"), "Invented Recipient", "INV/1", "2099-01-10", "118.00", "24-Gujarat", "N", "", "Regular B2B", "", "18.00", "100.00", "0.00"];
+    const bytes = Buffer.from(`${salesSections.b2b.headings.join(",")}\n${values.join(",")}`);
+    const saved = await drive.save(await drive.ensureFolder([owner.firm.firmId]), "Invented register.csv", bytes);
+    if (saved === "taken") throw new Error("Test collision");
+    files.push(saved.id);
+    await query(local.dbUrl, "insert into public.documents (id, firm_id, client_id, work_type, document_type, period_key, name, size, sha256, drive_file_id) values ($1, $2, $3, 'gst', 'Sales register', '2099-01', 'Invented register.csv', $4, $5, $6)", [source, owner.firm.firmId, client, bytes.length, sha256(bytes), saved.id]);
+    const lines: Draft["lines"] = [];
+    for (let column = 0; column < values.length; column++) if (values[column]) {
+      const id = randomUUID();
+      lines.push({ id, field: `b2b.r2.c${column}`, value_enc: await crypto.encrypt(owner.firm.firmId, place(draft, id), JSON.stringify({ label: salesSections.b2b.headings[column], value: values[column], kind: column === 3 ? "date" : [4, 10, 11, 12].includes(column) ? "number" : "text" })), source: { document: source, sha256: sha256(bytes), sheet: 1, cell: `${String.fromCharCode(65 + column)}2`, page: 1 }, state: "confirmed", by: owner.firm.ownerId, at: new Date().toISOString() });
+    }
+    await query(local.dbUrl, "insert into public.datasets (id, firm_id, client_id, form_code, period_key, data) values ($1, $2, $3, 'GSTR1', '2099-01', $4)", [draft, owner.firm.firmId, client, { lines, checks: [] }]);
+    await owner.page.goto(`/app/clients/${client}?tab=outputs`);
+    await owner.page.getByRole("button", { name: "Prepare Jan 2099", exact: true }).click();
+    await expect(owner.page).toHaveURL(/\/files\/.*\/view/, { timeout: 60_000 });
+    const [prepared] = await query(local.dbUrl, "select drive_file_id, size, prepared from public.documents where firm_id = $1 and prepared is not null", [owner.firm.firmId]);
+    files.push(prepared.drive_file_id);
+    expect(prepared).toMatchObject({ prepared: { form: "GSTR1", registration, template: version } });
+    expect(Number(prepared.size)).toBeGreaterThan(0);
+    await owner.page.goto(`/app/clients/${client}?tab=outputs`);
+    await expect(owner.page.getByRole("region", { name: "Prepared forms" })).toContainText(`Official form ${version}.`);
+  } finally {
+    for (const id of files) await drive.trash(id).catch(() => {});
+    await query(local.dbUrl, "delete from public.templates where form_code = 'GSTR1' and version = $1", [version]);
+    await query(local.dbUrl, "update public.platform_settings set value = jsonb_set(value, '{changes}', (select coalesce(jsonb_agg(c), '[]') from jsonb_array_elements(value -> 'changes') c where c ->> 'source' <> $1)) where key = 'watch'", [change.source]);
+    await query(local.dbUrl, "delete from public.official_files where sha256 = $1 and not exists (select 1 from public.templates where source ->> 'sha256' = $1)", [hash]);
     await admin.close();
     await owner.close();
   }

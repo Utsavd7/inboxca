@@ -438,6 +438,19 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"official_files": {
+                  Row: {
+                    "bytes": string,"sha256": string
+                  }
+                  Insert: {
+                    "bytes": string,"sha256": string
+                  }
+                  Update: {
+                    "bytes"?: string,"sha256"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"orelu_admins": {
                   Row: {
                     "user_id": string
@@ -660,6 +673,9 @@ isOneToOne: false
                            },
 "admin_add_extension":
 { Args: { "link": string,"new_date": string,"rule_code": string,"rule_period": string }; Returns: boolean
+                           },
+"admin_add_template":
+{ Args: { "change_at": string,"change_source": string,"file": string,"starts": string }; Returns: boolean
                            },
 "admin_ask_support":
 { Args: { "target": string }; Returns: boolean
@@ -1030,6 +1046,11 @@ isOneToOne: false
                            },
 "take_form_download":
 { Args: { "person": string,"ticket": string,"token_hash": string }; Returns: string
+                           },
+"team_replies":
+{ Args: { "target_firm": string }; Returns: {
+              "assignee": string,"client_id": string,"client_name": string,"days": number,"email_id": string,"id": string,"late": boolean,"reason_code": string,"received_at": string
+            }[]
                            },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string

@@ -29,3 +29,10 @@ export function untilAfter(form:string,last:string) {
   const month=Number(last.slice(5,7));
   return month===12 ? `${Number(last.slice(0,4))+1}-01-01` : `${last.slice(0,4)}-${String(month+1).padStart(2,"0")}-01`;
 }
+
+// The first day of a version's first period (its valid_from): a GST form's month, an ITR's
+// assessment year from April. Null for a period that is not one.
+export function startOf(form:string,first:string) {
+  if(/^ITR[1-6]$/.test(form)) return /^20\d{2}$/.test(first) ? `${first}-04-01` : null;
+  return /^20\d{2}-(0[1-9]|1[0-2])$/.test(first) ? `${first}-01` : null;
+}

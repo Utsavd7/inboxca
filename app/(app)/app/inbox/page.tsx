@@ -19,6 +19,7 @@ import { currentMember, myQuestions } from "@/src/lib/member";
 import { opensInMailbox } from "@/src/lib/mailbox";
 import { askedPaper } from "@/src/lib/records";
 import { awake, labels, replyReasons } from "@/src/lib/triage";
+import { suggestedReply, waitingWords } from "@/src/lib/team-replies";
 import { LinkTabs } from "../link-tabs";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
@@ -31,7 +32,7 @@ const PAGE = 30;
 const shows = { "": "All", reply: "Needs reply", mine: "Mine", in: "From clients", out: "Sent to clients" } as const;
 const statuses = { reply: "Needs reply", snoozed: "Snoozed", approval: "Waiting for approval", check: "To check", answered: "Answered by InboxCA", replied: "Answered by your team", notice: "Notice recorded", filed: "Papers saved", none: "No reply needed", reminder: "Reminder sent", team: "Sent by team" } as const;
 const sentTags = { reminder: "Reminder sent", inboxca: "Sent by InboxCA", team: "Sent by team" } as const;
-type Tag = { text: string; tone: "warn" | "done" | "blue" | "" };
+type Tag = { text: string; tone: "warn" | "done" | "blue" | "late" | "" };
 // What InboxCA did with an email it read (email_outcomes, the most pressing first), in
 // a word or two; an email with none of them needed no reply. Snoozed shows its day.
 const outcomeTags: Record<string, Tag> = {
@@ -47,8 +48,9 @@ const outcomeTags: Record<string, Tag> = {
 };
 const outcomeKeys = ["reply", "snoozed", "approval", "check", "answered", "replied", "notice", "filed", "none"];
 type Row = { key: string; href: string; dir: "in" | "out"; client: string; clientId: string | null; at: string; messageId: string; subject: string; snippet: string; tags: Tag[]; request?: string; assignee?: string };
-// What a Needs reply request keeps besides its status: snoozed until a day, and who answers.
-type Ask = { snooze?: string; assignee?: string };
+// What a Needs reply request keeps besides its status: snoozed until a day, and who answers
+// when a person chose (null for nobody).
+type Ask = { snooze?: string; assignee?: string | null };
 
 const india = (at: string, options: Intl.DateTimeFormatOptions) => new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", ...options });
 const shortTime = (at: string, today: string) => {
@@ -93,13 +95,16 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const q = (sp.q ?? "").trim().slice(0, 200);
   const before = sp.before && !Number.isNaN(Date.parse(sp.before)) ? new Date(sp.before).toISOString() : "";
   // Which emails a status keeps: what InboxCA did with each (email_outcomes). Needs
-  // reply leaves out what is snoozed to a later day; Mine is what waits for this person.
-  const [{ data: chosenClient }, { data: only }] = await Promise.all([
+  // reply leaves out what is snoozed to a later day; Mine is what waits for this person
+  // (public.team_replies: who each waiting email is for, and how long it has waited).
+  const [{ data: chosenClient }, { data: replies }] = await Promise.all([
     sp.client && uuid.test(sp.client) ? supabase.from("clients").select("id, name").eq("id", sp.client).maybeSingle() : Promise.resolve({ data: null }),
-    show === "mine"
-      ? supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "pending").eq("details->>assignee", userId).limit(1000).then(({ data }) => ({ data: data?.map((row) => row.entity_id) ?? [] }))
-      : Promise.resolve({ data: null }),
+    supabase.rpc("team_replies", { target_firm: membership.firmId }),
   ]);
+  const replyOf = new Map(replies?.map((reply) => [reply.email_id, reply]));
+  const myReplies = (replies ?? []).filter((reply) => reply.assignee === userId);
+  const only = show === "mine" ? myReplies.map((reply) => reply.email_id) : null;
+  const mine = myReplies.filter((reply) => !chosenClient || reply.client_id === chosenClient.id).length;
   const filters = { client: chosenClient?.id, show: show || undefined, status: sp.status && sp.status in statuses ? sp.status : undefined, when: when || undefined, q: q || undefined };
   const href = (change: Partial<Search> = {}) => {
     const params = new URLSearchParams(Object.entries({ ...filters, ...change }).filter((entry): entry is [string, string] => !!entry[1]));
@@ -117,18 +122,16 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   if (until) events = events.lt("received_at", until);
   if (only) events = events.in("id", only);
   let needsCount = supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending").or(awake(today));
-  let mineCount = supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending").or(awake(today)).eq("details->>assignee", userId);
   let inCount = supabase.from("email_events").select("id", { count: "exact", head: true }).eq("firm_id", firm);
-  if (chosenClient) [needsCount, mineCount, inCount] = [needsCount.eq("client_id", chosenClient.id), mineCount.eq("client_id", chosenClient.id), inCount.eq("client_id", chosenClient.id)];
+  if (chosenClient) [needsCount, inCount] = [needsCount.eq("client_id", chosenClient.id), inCount.eq("client_id", chosenClient.id)];
   const cq = (sp.cq ?? "").trim().slice(0, 80);
   const cpage = Math.min(Math.max(0, Number(sp.cpage) || 0), 500);
   let pick = supabase.from("clients").select("id, name").is("archived_at", null).order("name").range(cpage * 8, cpage * 8 + 8);
   if (cq) pick = pick.ilike("name", `%${cq.replace(/[\\%_]/g, "\\$&")}%`);
   const owner = membership.role === "owner";
-  const [{ data: rows }, { count: needs }, { count: mine }, { count: fromClients }, { data: pickList }, { data: waiting }, { data: toCheck }, { data: papers }, toAnswer, { data: people }, { data: accounts }, { data: decided }, { data: week }] = await Promise.all([
+  const [{ data: rows }, { count: needs }, { count: fromClients }, { data: pickList }, { data: waiting }, { data: toCheck }, { data: papers }, toAnswer, { data: people }, { data: accounts }, { data: decided }, { data: week }] = await Promise.all([
     wantIn && (!only || only.length) ? events.order("received_at", { ascending: false }).order("id").limit(q ? 500 : PAGE).overrideTypes<{ id: string; received_at: string; provider_message_id: string }[]>() : Promise.resolve({ data: [] as never[] }),
     needsCount,
-    mineCount,
     inCount,
     pick,
     supabase.from("requests").select("id, entity_id, reason_code, details").eq("kind", "team_reply").eq("status", "pending").limit(1000),
@@ -175,6 +178,13 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   // A teammate an email is given to: their avatar's name, and how a line names them.
   const nameOf = (user: string) => personName(emailOf.get(user));
   const whoWords = (user: string) => (user === userId ? "you" : nameOf(user));
+  // Who a waiting email is for: the client's person unless someone chose; a snoozed one only by choice.
+  const forWho = (eventId: string) => (replyOf.has(eventId) ? replyOf.get(eventId)!.assignee : askOf(eventId).assignee) ?? undefined;
+  // "Waiting 2 days", red once past the firm's reply time.
+  const waitTag = (eventId: string): Tag[] => {
+    const reply = replyOf.get(eventId);
+    return reply && reply.days > 0 ? [{ text: waitingWords(reply.days), tone: reply.late ? "late" : "" }] : [];
+  };
   // What InboxCA did with an email, as its badge: snoozed shows until when.
   const outcomeTag = (eventId: string, outcome = "none"): Tag =>
     outcome === "snoozed" ? { text: snoozedTill(eventId) ? `Snoozed until ${dayName(snoozedTill(eventId)!)}` : "Snoozed", tone: "blue" } : outcomeTags[outcome] ?? outcomeTags.none;
@@ -200,9 +210,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           messageId: event.provider_message_id,
           subject: "",
           snippet: "",
-          tags: tagsOf(event),
+          tags: [...tagsOf(event), ...waitTag(event.id)],
           request: pending.get(event.id)?.id,
-          assignee: askOf(event.id).assignee,
+          assignee: forWho(event.id),
         };
       }),
     );
@@ -316,9 +326,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <span className="ib-row-top">
                 <strong>{row.dir === "out" && <span className="ib-sent-to">To </span>}{row.client}</strong>
                 {row.assignee && (
-                  <span className="ib-who-has" title={`Assigned to ${whoWords(row.assignee)}`}>
+                  <span className="ib-who-has">
                     <Avatar name={nameOf(row.assignee)} />
-                    <span className="sr-only">Assigned to {whoWords(row.assignee)}</span>
+                    For {whoWords(row.assignee)}
                   </span>
                 )}
                 <time dateTime={row.at}>{shortTime(row.at, today)}</time>
@@ -405,7 +415,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const asked = askedPaper(opened.subject, opened.text);
     const suggested = clientPapers ? suggestPapers(`${opened.subject}\n${opened.text}`, clientPapers, asked, [...documentTypes, ...((membership.settings.document_types ?? []) as string[])]).map((doc) => doc.id) : [];
     // Snooze and who answers, for an email that needs a reply.
-    const openAsk: Ask = event ? askOf(event.id) : {};
+    const openAsk: Ask = event ? { ...askOf(event.id), assignee: forWho(event.id) } : {};
     // What InboxCA did with the email in a line, with a link to what was sent or recorded.
     const filedHere = saved?.filter((doc) => doc.email_event_id === event?.id && doc.status !== "to_check").length ?? 0;
     const paperLink: [string, string] | undefined = shared ? [`/app/files/${shared.document_id}/view`, "View the paper"] : undefined;
@@ -431,6 +441,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <p className="ib-note">{event ? `From ${sender}${open.client && event.contact_id ? `, ${open.client.name}` : ""}` : `${kind === "team" ? "Sent by your team" : "Sent by InboxCA"} to ${open.client?.name}`}</p>
             </div>
             {openTag && <Badge tone={openTag.tone} plain={!openTag.tone}>{openTag.text}</Badge>}
+            {event && waitTag(event.id).map((tag) => <Badge key={tag.text} tone={tag.tone} plain={!tag.tone}>{tag.text}</Badge>)}
           </header>
           <div className="ib-actions">
             {event?.client_id && connected && <a className="b b-secondary" href="#reply-text" title="Press r"><Reply size={16} aria-hidden />Reply<kbd className="kbd" aria-hidden>r</kbd></a>}
@@ -471,7 +482,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             {request && (
               <details key={`assign${request.id}${openAsk.assignee}`} className="ib-menu">
                 <summary title="Who answers this email">
-                  {openAsk.assignee ? <><Avatar name={nameOf(openAsk.assignee)} />{openAsk.assignee === userId ? "You" : nameOf(openAsk.assignee)}</> : <><UserRound size={16} aria-hidden />Assign</>}
+                  {openAsk.assignee ? <><Avatar name={nameOf(openAsk.assignee)} />For {whoWords(openAsk.assignee)}</> : <><UserRound size={16} aria-hidden />Assign</>}
                   <ChevronDown size={14} aria-hidden />
                 </summary>
                 <form action={manageEmail} className="ib-pop" aria-label="Assign to">
@@ -565,7 +576,11 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             })}
           </ol>
           {event?.client_id && connected && (
-            <ReplyBox mail={event.id} papers={(clientPapers ?? []).map(({ id, name }) => ({ id, name }))} suggested={suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName} />
+            // An email waiting for a person gets a reply suggested by why it waits; a paper not in the drive, the client's Ask for papers too.
+            // Once it no longer waits, the box starts empty again.
+            <ReplyBox key={request?.id ?? "reply"} mail={event.id} papers={(clientPapers ?? []).map(({ id, name }) => ({ id, name }))} suggested={suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
+              suggestion={request ? suggestedReply(request.reason_code, { name: sender || open.client?.name || "", client: open.client?.name ?? "", firm: membership.firmName, paper: asked }) : undefined}
+              askPapers={request?.reason_code === "record_not_found" && !membership.viewOnlyUntil ? `/app/clients/${event.client_id}?tab=documents&ask=1` : undefined} />
           )}
           {sp.filed && open.client && <Toast>Filed to {open.client.name}. Any papers in it go to the client&apos;s folder.</Toast>}
         </div>

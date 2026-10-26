@@ -78,7 +78,7 @@
 .ib-row-top, .ib-row-foot { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
 .ib-row-top strong { flex: 1; min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .ib-sent-to { color: var(--ink-3); font-weight: 500; }
-.ib-who-has { display: inline-flex; }
+.ib-who-has { display: inline-flex; flex: none; align-items: center; gap: var(--s1); color: var(--ink-3); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .ib-who-has .avatar { width: 20px; height: 20px; font-size: 10px; }
 .ib-row time, .ib-who time { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
 .ib-subject { overflow: hidden; color: var(--ink-2); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
@@ -157,6 +157,9 @@
 .ib :is(.ib-reply, .ib-compose) textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-glow); outline: none; }
 .ib-templates { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .ib-templates .ib-chip { height: 28px; border-radius: var(--round); }
+/* The line over a suggested reply, with Ask for papers when the paper is not in the drive. */
+.ib-suggest { display: flex; align-items: center; gap: var(--s2); }
+.ib-suggest .ib-chip { height: 28px; text-decoration: none; }
 .ib-attach { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .ib-chip { display: inline-flex; align-items: center; gap: var(--s1); height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background var(--fast) var(--out), color var(--fast) var(--out), transform var(--fast) var(--out); }
 .ib-chip:hover { background: var(--hover); color: var(--ink); }

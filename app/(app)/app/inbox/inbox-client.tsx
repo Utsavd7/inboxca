@@ -1,5 +1,5 @@
 "use client";
-import { useLinkStatus } from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
@@ -34,8 +34,9 @@ export function InboxKeys() {
         "/": () => document.querySelector<HTMLInputElement>("#mail-search")?.focus(),
         Escape: () => {
           const url = new URL(location.href);
-          // Never with a side panel open, nor over a reply being written.
-          if (document.querySelector(".side-panel") || document.querySelector<HTMLTextAreaElement>("#reply-text")?.value || !(url.searchParams.has("mail") || url.searchParams.has("sent"))) return;
+          // Never with a side panel open, nor over a reply being written (a suggested one unchanged is not).
+          const box = document.querySelector<HTMLTextAreaElement>("#reply-text");
+          if (document.querySelector(".side-panel") || (box && box.value !== box.defaultValue) || !(url.searchParams.has("mail") || url.searchParams.has("sent"))) return;
           url.searchParams.delete("mail");
           url.searchParams.delete("sent");
           going(url.href);
@@ -112,7 +113,7 @@ function Templates({ name, firm }: { name: string; firm: string }) {
   const use = (button: HTMLButtonElement, line: string) => {
     const box = button.form?.elements.namedItem("text");
     if (!(box instanceof HTMLTextAreaElement)) return;
-    if (!box.value.trim() || templates.some((template) => box.value === whole(template.line))) {
+    if (!box.value.trim() || box.value === box.defaultValue || templates.some((template) => box.value === whole(template.line))) {
       box.value = whole(line);
       // The cursor waits where the person writes next: the first missing paper, or the end.
       const at = box.value.indexOf("\n- ");
@@ -183,8 +184,9 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
 }
 
 // The reply under an open conversation: quick replies, plain text, papers and files, and an
-// AI draft only once AI is set up.
-export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string }) {
+// AI draft only once AI is set up. An email waiting for a person opens with a suggested reply
+// written in, and, for a paper not in the drive, a way to ask the client for papers.
+export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, suggestion, askPapers }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; suggestion?: string; askPapers?: string }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const text = useRef<HTMLTextAreaElement>(null);
   const [draft, ask, drafting] = useActionState<Draft, FormData>(async (previous, form) => {
@@ -197,7 +199,13 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm }:
     <form action={sendReply} className="ib-reply" aria-label="Reply">
       <input type="hidden" name="mail" value={mail} />
       <Templates name={name} firm={firm} />
-      <textarea id="reply-text" ref={text} name="text" rows={4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." onKeyDown={sendKey} />
+      {suggestion && (
+        <p className="ib-note ib-suggest">
+          <span className="grow">A suggested reply is written in. Change what you need, then send it.</span>
+          {askPapers && <Link className="ib-chip" href={askPapers}>Ask for papers</Link>}
+        </p>
+      )}
+      <textarea id="reply-text" ref={text} name="text" rows={suggestion ? 7 : 4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." defaultValue={suggestion} onKeyDown={sendKey} />
       {mayAttach && <Attach papers={papers} chosen={chosen} setChosen={setChosen} offered={[...suggested, ...(draft.papers ?? [])]} />}
       <div className="ib-reply-foot">
         {draft.error && <span className="ib-note" role="status">{draft.error}</span>}

@@ -45,6 +45,11 @@ const schema = z
     // Orelu's system mail over SES SMTP: smtps://user:password@email-smtp.ap-south-1.amazonaws.com:465
     SYSTEM_MAIL_URL: secret,
 
+    // Continue with Google or Microsoft on the sign in pages: each button shows once its client
+    // ID is set here; its secret is set in Supabase Auth only.
+    SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: secret,
+    SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID: secret,
+
     GOOGLE_OAUTH_CLIENT_ID: secret,
     GOOGLE_OAUTH_CLIENT_SECRET: secret,
     MICROSOFT_CLIENT_ID: secret,

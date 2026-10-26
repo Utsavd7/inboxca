@@ -16,6 +16,7 @@ import * as mailApi from "../src/lib/mail-api.ts";
 import {verifyMail} from "../src/lib/mail-view.ts";
 import {editedItr} from "./itr.ts";
 import {intake} from "./intake.ts";
+import {fetchOfficial} from "./official.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
 const reads = new Map<string, number>();
@@ -55,7 +56,7 @@ export async function handle(request: Request): Promise<Response> {
     try {input=await verifyForm(await request.text(),request.headers.get("authorization") ?? "",secret,url.pathname.slice(9));}
     catch {return new Response("Not allowed",{status:403});}
     try {
-      request.signal.throwIfAborted();const output=prepare(input);
+      request.signal.throwIfAborted();await fetchOfficial(input.template.source,input.official);const output=prepare(input);
       return new Response(new Uint8Array(output.bytes),{headers:{"Content-Type":output.type,"Cache-Control":"private, no-store"}});
     } catch {return new Response("The figures do not pass the official form's checks.",{status:422});}
   }
@@ -84,6 +85,7 @@ export async function handle(request: Request): Promise<Response> {
     request.signal.throwIfAborted();
     const data = await original(view, request.signal);
     if(edited) {
+      if(view.form) await fetchOfficial(view.form.template.source,view.form.official);
       if(view.form?.template.form_code.startsWith("ITR")) {
         if(!/\.json$/i.test(view.name)) throw new Error("Choose the official return file");
         const context=z.object({template:templateSchema,period:z.string().regex(/^20\d{2}$/),pan:z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/)}).parse(view.form);

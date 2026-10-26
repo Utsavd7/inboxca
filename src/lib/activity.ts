@@ -14,6 +14,7 @@ export const activityNames: Record<string, string> = {
   "reminder.sent": "Reminder sent", "email.changed": "Email label corrected",
   "email.acknowledged": "Files received reply sent", "request.changed": "Request updated", "request.receipt_sent": "Receipt emailed for uploaded papers",
   "email.replied": "Reply sent", "email.written": "Email written to the client",
+  "email.assigned": "Email given to a person", "replies.waiting_sent": "Waiting replies emailed to the owner",
   "document.added": "Filing record added", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added",
 };
 
@@ -30,7 +31,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "session.ended_other": ["ended"], "recovery.codes_made": [], "recovery.used": ["left"], "hours.extended": ["until"],
   "admin.passkey_added": [], "admin.passkey_copied": [], "admin.passkey_used": [], "admin.passkeys_removed": ["removed"], "admin.job_retried": ["job"],
   "admin.incident_posted": ["parts", "level"], "admin.incident_updated": [], "admin.incident_closed": [], "admin.incident_emailed": ["firms"],
-  "admin.rule_verified": ["code", "period", "by"], "admin.extension_added": ["code", "period", "on"], "admin.office_thresholds": ["taps", "days"], "admin.change_reviewed": ["source", "at"],
+  "admin.rule_verified": ["code", "period", "by"], "admin.extension_added": ["code", "period", "on"], "admin.office_thresholds": ["taps", "days"], "admin.change_reviewed": ["source", "at"], "admin.template_added": ["form", "version", "from", "sha256"],
   "admin.update_noted": ["item", "uses", "keeps"], "admin.template_ended": ["form", "version", "until", "link"],
   "support.asked": [], "support.approved": [], "support.refused": [], "support.ended": [], "support.viewed": [],
   "office.learned": [], "office.refused": ["reason"], "office.no_fixed": [], "branch.hours": ["settings"],
@@ -54,6 +55,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "share.code_sent": [], "share.approved": [], "share.refused": [], "bulk_send.asked": ["clients", "type", "period"],
   "request.created": ["auto"], "request.phoned": [], "request.receipt_sent": [], "import.started": ["files", "scope"], "import.finished": ["files"], "import.undo_asked": [], "import.undone": [],
   "email.acknowledged": ["template"], "email.replied": ["files", "papers"], "email.written": ["to", "files", "papers"],
+  "email.assigned": ["person"], "replies.waiting_sent": ["emails", "people", "from"],
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"],
   "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state"], "dataset.edit_saved": ["dataset", "line"],
   "dataset.changed": ["dataset", "revision", "line", "state", "before", "after", "reason_enc", "registration", "entered", "zeroed"], // before, after and reason encrypted

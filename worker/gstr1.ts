@@ -1,11 +1,10 @@
-import {createHash} from "node:crypto";
-import {readFileSync} from "node:fs";
 import {amends,exemptRows,numericHeadings,salesSections,type SalesSection} from "../src/lib/gstr1-fields.ts";
 import {xlsxEntries} from "../src/lib/sheet.ts";
 import type {Figure} from "../src/lib/datasets.ts";
 import {chooseTemplate,type Template} from "../src/lib/templates.ts";
 import {writeWorkbook} from "./workbook.ts";
 import {officialSchema} from "./schema.ts";
+import {officialFile} from "./official.ts";
 import {isGstin} from "../src/lib/identifiers.ts";
 
 const unescape=(value:string)=>value.replaceAll("&amp;","&").replaceAll("&lt;","<").replaceAll("&gt;",">").replaceAll("&quot;",'"').replaceAll("&apos;","'");
@@ -14,8 +13,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
   chooseTemplate([template],"GSTR1",period);
   if(!isGstin(gstin) || !template.mappings.validator) throw new Error("Check the client's GST number and official form");
   if(!/^gstr1-v[\d.]+\/GSTR1_Excel_Workbook_Template_V[\d.]+\.xlsx$/.test(template.source.file)) throw new Error("Unknown official workbook");
-  const original=readFileSync(new URL(`../reference/official/${template.source.file}`,import.meta.url));
-  if(createHash("sha256").update(original).digest("hex")!==template.source.sha256) throw new Error("The official workbook changed");
+  const original=officialFile(template.source.file,template.source.sha256);
   const files=xlsxEntries(original),workbook=files.get("xl/workbook.xml")!().toString();
   const strings=[...files.get("xl/sharedStrings.xml")!().toString().matchAll(/<si>([\s\S]*?)<\/si>/g)].map(([,body])=>[...body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(([,text])=>unescape(text)).join(""));
   const sheetCells=(sheet:number)=>new Map([...files.get(`xl/worksheets/sheet${sheet}.xml`)!().toString().matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)].map(([,attrs,body=""])=>{const value=/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? "";return [/r="([A-Z]+\d+)"/.exec(attrs)![1],attrs.includes('t="s"') ? strings[Number(value)] : unescape(value)];}));

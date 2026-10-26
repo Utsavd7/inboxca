@@ -46,6 +46,7 @@ import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 import { sendSystemMail } from "@/src/lib/system-mail";
+import { REPLY_DAYS } from "@/src/lib/team-replies";
 import { keepSafetyCopy, openSafetyCopy } from "@/src/lib/workspace";
 
 export type InviteState = { error?: string; done?: string; values?: Record<string, string> };
@@ -832,7 +833,7 @@ export async function disconnectMailbox() {
 // take an email out of Needs reply when it needs none (and undo that from the toast), snooze
 // it, give it to a teammate, or file mail InboxCA could not match to a client.
 export async function manageEmail(form: FormData) {
-  const { supabase, membership } = await currentWriter();
+  const { supabase, membership, userId } = await currentWriter();
   if (!membership) redirect("/app");
   const label = String(form.get("label") ?? "");
   const request = String(form.get("request") ?? "");
@@ -855,16 +856,17 @@ export async function manageEmail(form: FormData) {
     const today = todayInIndia();
     const until = String(form.get("until") ?? "");
     const who = String(form.get("who") ?? "");
-    const { data: ask } = await supabase.from("requests").select("id, details").eq("id", request).eq("kind", "team_reply").eq("status", "pending").maybeSingle();
+    const { data: ask } = await supabase.from("requests").select("id, entity_id, details").eq("id", request).eq("kind", "team_reply").eq("status", "pending").maybeSingle();
     const { data: person } = intent === "assign" && who ? await supabaseAdmin().from("firm_members").select("user_id").eq("firm_id", membership.firmId).eq("user_id", who).eq("status", "active").maybeSingle() : { data: null };
     const fine = intent === "snooze" ? /^\d{4}-\d{2}-\d{2}$/.test(until) && until > today && until <= addDays(today, 366) : intent === "wake" || !who || !!person;
     if (ask && fine) {
       const details = { ...(ask.details as Record<string, Json>) };
       if (intent === "snooze") details.snooze = until;
       else if (intent === "wake") delete details.snooze;
-      else if (who) details.assignee = who;
-      else delete details.assignee;
+      // Nobody is a choice too: the email then stays off the client's person (public.team_replies).
+      else details.assignee = who || null;
       await supabaseAdmin().from("requests").update({ details }).eq("id", ask.id);
+      if (intent === "assign") await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "email.assigned", entity_type: "email", entity_id: ask.entity_id, details: { person: who || null } });
       if (back.startsWith("/app/inbox")) {
         revalidatePath("/app", "layout");
         redirect(intent === "wake" ? back : `${back}${back.includes("?") ? "&" : "?"}${intent === "snooze" ? "snoozed" : "assigned"}=${ask.id}`);
@@ -2165,6 +2167,16 @@ export async function saveMailLimit(form:FormData) {
   await supabase.from("firms").update({settings:{...membership.settings,mail_limit:limit.data}}).eq("id",membership.firmId);
   revalidatePath("/app/settings");
   redirect("/app/settings?group=email&saved=mail_limit#mailbox");
+}
+
+// Settings → Replies from your team: after how many working days a waiting email is late, and
+// whether the owner gets the 09:00 list of emails waiting more than a day.
+export async function saveReplies(form:FormData) {
+  const {supabase,membership}=await currentWriter();
+  if (membership?.role!=="owner") redirect("/app");
+  const days=z.coerce.number().int().min(1).max(5).catch(REPLY_DAYS).parse(form.get("days"));
+  await supabase.from("firms").update({settings:{...membership.settings,reply_days:days,reply_list:form.get("list")==="on"}}).eq("id",membership.firmId);
+  redirect("/app/settings?group=email&saved=replies#replies");
 }
 
 // Today: "Remind all late clients" or "Chase missing papers", after their preview. The daily

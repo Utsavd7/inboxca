@@ -8,7 +8,7 @@ import { officeProof } from "@/src/lib/office";
 import { CHALLENGE_COOKIE, checkAdminKey, checkAdminKeyUse, newChallenge } from "@/src/lib/pc-key";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { systemMailReady } from "@/src/lib/system-mail";
-import { untilAfter } from "@/src/lib/templates";
+import { startOf, untilAfter } from "@/src/lib/templates";
 import { currentAdmin, listedAdmin, PROOF_COOKIE } from "./admin";
 
 // Puts a failed job back in the queue and runs it now.
@@ -120,6 +120,20 @@ export async function endTemplate(form: FormData) {
   if (!asked.success || !until) return fail("/admin/forms", "end");
   const { data, error } = await supabase.rpc("admin_end_template", { form: asked.data.form, ver: asked.data.version, until, link: asked.data.link });
   if (error || !data) return fail("/admin/forms", "end");
+  revalidatePath("/admin", "layout");
+}
+
+// A new official file the daily check found with the same layout, used from a period without an
+// app release. The database takes the file, its hash and link only from what the check
+// recorded, and logs it.
+export async function addVersion(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const asked = z.object({ source: z.string().min(1).max(100), at: z.iso.datetime(), file: z.string().min(1).max(200), form: z.string().regex(/^[A-Z0-9_]{2,30}$/), from: z.string().max(7) })
+    .safeParse({ source: form.get("source"), at: form.get("at"), file: form.get("file"), form: form.get("form"), from: form.get("from") });
+  const starts = asked.success ? startOf(asked.data.form, asked.data.from) : null;
+  if (!asked.success || !starts) return fail("/admin", "use");
+  const { data, error } = await supabase.rpc("admin_add_template", { change_source: asked.data.source, change_at: asked.data.at, file: asked.data.file, starts });
+  if (error || !data) return fail("/admin", "use");
   revalidatePath("/admin", "layout");
 }
 

@@ -1,10 +1,9 @@
-import {createHash} from "node:crypto";
-import {readFileSync} from "node:fs";
 import {xlsxEntries} from "../src/lib/sheet.ts";
 import {chooseTemplate,type Template} from "../src/lib/templates.ts";
 import {numericHeadings,salesSections,type SalesSection} from "../src/lib/gstr1-fields.ts";
 import type {Figure} from "../src/lib/datasets.ts";
 import {gstr1Workbook} from "./gstr1.ts";
+import {officialFile} from "./official.ts";
 
 const decode=(text:string)=>text.replace(/&(lt|gt|amp|quot|apos|#x?[0-9a-f]+);/gi,(_,code:string)=>code[0]==="#" ? String.fromCodePoint(parseInt(code.slice(code[1]==="x" ? 2 : 1),code[1]==="x" ? 16 : 10)) : ({lt:"<",gt:">",amp:"&",quot:'"',apos:"'"} as Record<string,string>)[code]);
 const text=(xml:string)=>[...xml.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(([,value])=>decode(value)).join("");
@@ -32,8 +31,7 @@ export function editedForm(bytes:Buffer,context:{template:Template;period:string
   const {template,period,gstin}=context;
   chooseTemplate([template],"GSTR1",period);
   if(template.form_code!=="GSTR1" || template.mappings.format!=="xlsx" || !/^gstr1-v[\d.]+\/GSTR1_Excel_Workbook_Template_V[\d.]+\.xlsx$/.test(template.source.file)) throw new Error("Unsupported form");
-  const original=readFileSync(new URL(`../reference/official/${template.source.file}`,import.meta.url));
-  if(createHash("sha256").update(original).digest("hex")!==template.source.sha256) throw new Error("Official file changed");
+  const original=officialFile(template.source.file,template.source.sha256);
   if(/date1904="(?:1|true)"/.test(xlsxEntries(bytes).get("xl/workbook.xml")!().toString())) throw new Error("Keep the official workbook date setting");
   const parts=xlsxEntries(bytes),known=xlsxEntries(original);
   const external=(xml:string)=>[...xml.matchAll(/<Relationship\b[^>]*>/g)].filter(([tag])=>/TargetMode="External"|(?:vbaProject|oleObject|externalLink)"/.test(tag)).map(([tag])=>[...tag.matchAll(/(Type|Target|TargetMode)="([^"]*)"/g)].map(([,key,value])=>`${key}=${decode(value)}`).sort().join("|")).sort().join("\n");

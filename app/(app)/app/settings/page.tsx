@@ -27,6 +27,8 @@ import { isMailApi, mailSignInReady, signInNames, signInNotReady } from "@/src/l
 import { mailApis, type MailApi } from "@/src/lib/mail-view";
 import { MailboxForm } from "./mailbox-form";
 import { GroupAnchor } from "./group-anchor";
+import { saveReplies } from "@/app/(app)/actions";
+import { REPLY_DAYS } from "@/src/lib/team-replies";
 import "./settings.css";
 
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
@@ -48,10 +50,10 @@ const problems: Record<string, [string, string]> = {
   special: ["special", "The dates must run forward and the closing time must be after the opening time."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { preset: "Preset saved.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Papers saved.", permissions: "Permissions saved.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now." };
+const savedNames: Record<string, string> = { preset: "Preset saved.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Papers saved.", permissions: "Permissions saved.", mail_limit: "Email limit saved.", replies: "Reply time saved.",mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now." };
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
-  ["email", "Email and drive", ["mailbox", "drive"]],
+  ["email", "Email and drive", ["mailbox", "replies", "drive"]],
   ["access", "Office and sign in", ["preset", "office", "limits", "tester", "recovery"]],
   ["hours", "Hours and holidays", ["hours", "special", "holidays"]],
   ["people", "People's access", ["permissions", "always", "visibility"]],
@@ -65,9 +67,10 @@ const cardIcons: Record<string, [LucideIcon, Kind]> = {
   hours: [Clock, "week"], special: [CalendarClock, "week"], holidays: [CalendarOff, "week"],
   permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"],
   reminders: [BellRing, "notice"], records: [FileCheck2, "notice"],
+  replies: [Clock, "reply"],
   use: [Gauge, "docs"], data: [Download, "docs"], support: [Headset, "approve"], close: [TriangleAlert, "late"],
 };
-const ownerOnly = ["mailbox", "drive", "recovery", "visibility", "reminders", "records", "use", "data", "support", "close"];
+const ownerOnly = ["mailbox", "replies", "drive", "recovery", "visibility", "reminders", "records", "use", "data", "support", "close"];
 const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
 
 function Card({ id, title, line, danger, children }: { id: string; title: string; line?: React.ReactNode; danger?: boolean; children: React.ReactNode }) {
@@ -243,6 +246,25 @@ export default async function Settings({
               {problem("mailbox")}
               <div className="set-foot"><Pending busy="Saving" className={`b ${mailbox.status === "connected" ? "b-primary" : "b-secondary"}`}>Save email limit</Pending></div>
             </form>}
+          </Card>
+
+          <Card id="replies" title="Replies from your team" line="Emails InboxCA cannot answer go to the person who looks after the client. They turn red once they wait longer than this.">
+            <form action={saveReplies} className="set-stack">
+              <div className="set-fields">
+                <div>
+                  <label htmlFor="reply-days">Late after</label>
+                  <select id="reply-days" name="days" defaultValue={Number(settings.reply_days) || REPLY_DAYS}>
+                    {[1, 2, 3, 4, 5].map((days) => <option key={days} value={days}>{days === 1 ? "1 working day" : `${days} working days`}</option>)}
+                  </select>
+                </div>
+              </div>
+              <p className="hint">Sundays and your holidays do not count.</p>
+              <label className="check">
+                <input className="toggle" type="checkbox" name="list" defaultChecked={settings.reply_list !== false} />
+                Email me at 9:00 each morning when replies have waited more than a day
+              </label>
+              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save reply time</Pending></div>
+            </form>
           </Card>
 
           <Card id="drive" title="Firm drive" line="Client files are saved in your firm's own drive, in folders by year, client and work. InboxCA keeps no client files.">

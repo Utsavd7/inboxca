@@ -1,6 +1,7 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import type { Client } from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { chooseTemplate } from "@/src/lib/templates";
 import { actAs, asOwner, attempt, connect, rollback } from "./db";
 
 // New from the government (D42): a firm sees the last 14 days' items only in its clients' work
@@ -120,6 +121,72 @@ it("lets only an admin end a form version, only with the official link, after it
     expect((await db.query("select valid_until::text, status, source from public.templates where form_code = 'GSTR1' and version = '9.9'")).rows[0]).toEqual({ valid_until: "2026-10-01", status: "active", source: { file: "invented.xlsx", ended_by: "https://cbic-gst.gov.in/invented.pdf" } });
     expect((await db.query("select details from public.activity_log where action = 'admin.template_ended' and actor_id = $1", [admin])).rows).toEqual([
       { details: { form: "GSTR1", version: "9.9", until: "2026-10-01", link: "https://cbic-gst.gov.in/invented.pdf" } },
+    ]);
+  }));
+
+// The store for official files (D42): kept once by their hash, read and written by the server only.
+const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+it("keeps an official file once, by its hash, for the server only", () =>
+  rollback(db, async () => {
+    await seed();
+    const bytes = Buffer.from("Invented official file"), keep = "insert into public.official_files (sha256, bytes) values ($1, $2)";
+    await db.query("set local role service_role");
+    await db.query(keep, [sha(bytes), bytes]);
+    expect(await attempt(db, `${keep} on conflict do nothing`, [sha(bytes), bytes])).toMatchObject({ ok: true, count: 0 });
+    expect((await attempt(db, keep, ["a".repeat(64), Buffer.from("Another invented file")])).error).toContain("check constraint");
+    expect((await attempt(db, "update public.official_files set bytes = $1", [Buffer.from("Changed")])).error).toContain("permission denied");
+    expect((await attempt(db, "delete from public.official_files")).error).toContain("permission denied");
+    for (const person of [owner, admin, null]) {
+      if (person === admin) await asAdmin();
+      else await actAs(db, person);
+      expect((await attempt(db, "select sha256 from public.official_files")).error).toContain("permission denied");
+      expect((await attempt(db, keep, [sha(Buffer.from("x")), Buffer.from("x")])).error).toContain("permission denied");
+    }
+  }));
+
+it("lets only an admin use a same layout file in the store from a period of the version it matches, as a new version, logged", () =>
+  rollback(db, async () => {
+    await seed();
+    const bytes = Buffer.from("Invented same layout workbook"), url = "https://tutorial.gst.gov.in/offlineutilities/returns/gst_offline_tool.zip";
+    const source = { file: "gstr1-v9.9/GSTR1_Excel_Workbook_Template_V9.9.xlsx", url, sha256: sha(bytes) }, mappings = { format: "xlsx", sheets: { b2b: 2 } };
+    const at = "2026-10-26T03:00:00.000Z", compared = (file: string, form: string, version: string, layout: object) => ({ file, with: "9.8", ...layout, template: { form_code: form, version, source: { ...source, file: `invented/${file}` } } });
+    await db.query("insert into public.templates (form_code, version, valid_from, valid_until, status, source, mappings) values ('GSTR1', '9.8', '2026-04-01', '2027-04-01', 'active', $1, $2), ('ITR1', '9.8', '2026-04-01', null, 'active', $1, '{\"format\":\"json\"}')", [{ ...source, file: "invented.xlsx", sha256: "b".repeat(64) }, mappings]);
+    await db.query("update public.platform_settings set value = value || jsonb_build_object('changes', $1::jsonb) where key = 'watch'", [JSON.stringify([{ source: "gst_offline_tool", at, status: "draft", compared: [
+      { ...compared("GSTR1_Excel_Workbook_Template_V9.9.xlsx", "GSTR1", "9.9", { same: true }), template: { form_code: "GSTR1", version: "9.9", source } },
+      // Even with a version recorded beside it, a changed layout is never taken in one click.
+      compared("GSTR1_Excel_Workbook_Template_V9.7.xlsx", "GSTR1", "9.7", { differences: ["Sheet added: hsn"], more: 0 }),
+      compared("ITR-1_2026_Main_V9.9.json", "ITR1", "9.9", { same: true }),
+    ] }])]);
+    const use = (file: string, starts: string, when = at) => attempt(db, "select public.admin_add_template('gst_offline_tool', $1, $2, $3) ok", [when, file, starts]);
+    await actAs(db, owner);
+    expect((await use("GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-11-01")).error).toBe("Orelu admins only");
+    expect((await attempt(db, "insert into public.templates (form_code, version, valid_from, status, source, mappings) values ('GSTR1', '9.9', '2026-11-01', 'active', $1, $2)", [source, mappings])).error).toContain("permission denied");
+    await asAdmin();
+    // Not in the store yet.
+    expect((await use("GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-11-01")).rows).toEqual([{ ok: false }]);
+    await asOwner(db);
+    await db.query("insert into public.official_files (sha256, bytes) values ($1, $2)", [sha(bytes), bytes]);
+    await asAdmin();
+    for (const [file, starts, when] of [["GSTR1_Excel_Workbook_Template_V9.7.xlsx", "2026-11-01"], ["GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-03-01"], ["GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2027-04-01"],
+      ["GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-11-15"], ["GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-11-01", "2026-10-25T03:00:00.000Z"], ["ITR-1_2026_Main_V9.9.json", "2026-05-01"]])
+      expect((await use(file, starts, when)).rows).toEqual([{ ok: false }]);
+    expect((await use("GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-11-01")).rows).toEqual([{ ok: true }]);
+    expect((await use("GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-12-01")).rows).toEqual([{ ok: false }]);
+    expect((await use("ITR-1_2026_Main_V9.9.json", "2027-04-01")).rows).toEqual([{ ok: true }]);
+    await asOwner(db);
+    const { rows } = await db.query("select form_code, version, valid_from::text, valid_until::text, status, source, mappings from public.templates where version in ('9.8', '9.9') order by form_code, version");
+    expect(rows.filter((row) => row.version === "9.9")).toEqual([
+      { form_code: "GSTR1", version: "9.9", valid_from: "2026-11-01", valid_until: "2027-04-01", status: "active", source, mappings },
+      { form_code: "ITR1", version: "9.9", valid_from: "2027-04-01", valid_until: null, status: "active", source: { ...source, file: "invented/ITR-1_2026_Main_V9.9.json" }, mappings: { format: "json" } },
+    ]);
+    // The version it matches keeps its periods; from the first period both work, the newer by default.
+    const gst = rows.filter((row) => row.form_code === "GSTR1");
+    expect(chooseTemplate(gst, "GSTR1", "2026-10").version).toBe("9.8");
+    expect(chooseTemplate(gst, "GSTR1", "2026-11").version).toBe("9.9");
+    expect(chooseTemplate(gst, "GSTR1", "2026-11", "9.8", "Filing software needs the earlier version").version).toBe("9.8");
+    expect((await db.query("select firm_id, entity_type, details from public.activity_log where action = 'admin.template_added' and actor_id = $1 order by details ->> 'form'", [admin])).rows).toEqual([
+      { firm_id: null, entity_type: "rule", details: { form: "GSTR1", version: "9.9", from: "2026-11-01", sha256: sha(bytes) } },
+      { firm_id: null, entity_type: "rule", details: { form: "ITR1", version: "9.9", from: "2027-04-01", sha256: sha(bytes) } },
     ]);
   }));
 

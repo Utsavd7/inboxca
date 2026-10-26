@@ -5,6 +5,7 @@ import { checkSources, type Source, type Watch } from "@/src/jobs/forms-watch";
 import { gstNews } from "@/src/jobs/gov-pages";
 import { zip } from "@/src/lib/firm-download";
 import type { Template } from "@/src/lib/templates";
+import { resavedWorkbook, sha256 } from "../fixtures/official-copy";
 
 // A stand-in for the official sites: each address answers with whatever the test sets.
 const pages = new Map<string, string | Uint8Array<ArrayBuffer> | null>();
@@ -111,4 +112,46 @@ it("compares a new ITR schema on the downloads page with the one InboxCA fills, 
     { file: "ITR-1_2026_Main_V1.2.json", with: "1.1", differences: ["Field removed: ITR.ITR1.CreationInfo.IntermediaryCity"], more: 0 },
     { file: "ITR-4_2026_Main_V1.1.json", with: "1.1", same: true },
   ] }]);
+});
+
+// A same layout file in a version InboxCA does not have is kept in the store, with the version
+// it would become, for Orelu's admin to use from a period; a changed layout never is.
+it("keeps a same layout file of a new version in the store with the version it would become, and compares the next with it", async () => {
+  const kept: Buffer[] = [];
+  const store = { keep: async (bytes: Buffer) => void kept.push(bytes), read: async (hash: string) => kept.find((file) => sha256(file) === hash) ?? null };
+  const tool: Source = { key: "tool", name: "Invented offline tool", url: "https://official.invalid/tool.zip", area: "gst", kind: "file", known: sha("before"), compare: { file: /GSTR1_Excel_Workbook_Template_V([\d.]+)\.xlsx$/i, form: "GSTR1", rows: 4 } };
+  const copy = resavedWorkbook();
+  pages.set(tool.url, new Uint8Array(zip([{ name: "GSTR1_Excel_Workbook_Template_V9.9.xlsx", text: copy }])));
+  let watch = await checkSources(empty, day(0), fetcher, [tool], templates, store);
+  const next = { form_code: "GSTR1", version: "9.9", source: { file: "gstr1-v9.9/GSTR1_Excel_Workbook_Template_V9.9.xlsx", url: tool.url, sha256: sha256(copy) } };
+  expect(watch.changes).toMatchObject([{ compared: [{ file: "GSTR1_Excel_Workbook_Template_V9.9.xlsx", with: "2.2", same: true, template: next }] }]);
+  expect(kept.map(sha256)).toEqual([sha256(copy)]);
+  // Once in use, the next download is set beside it, read from the store; a changed layout is not kept.
+  const used = [...templates, { ...templates.find((row) => row.version === "2.2")!, ...next, valid_from: "2099-01-01" }];
+  pages.set(tool.url, new Uint8Array(zip([{ name: "GSTR1_Excel_Workbook_Template_V9.10.xlsx", text: official("gstr1-v2.0/GSTR1_Excel_Workbook_Template_V2.0.xlsx") }])));
+  watch = await checkSources(watch, day(1), fetcher, [tool], used, store);
+  const [, { compared: [different] }] = watch.changes as { compared: { with: string; differences: string[]; template?: object }[] }[];
+  expect(different).toMatchObject({ with: "9.9", differences: expect.arrayContaining(["Sheet added: hsn"]) });
+  expect(different.template).toBeUndefined();
+  expect(kept).toHaveLength(1);
+  // The same file again, or one in a version already listed, is not new.
+  pages.set(tool.url, new Uint8Array(zip([{ name: "GSTR1_Excel_Workbook_Template_V9.9.xlsx", text: copy }])));
+  watch = await checkSources(watch, day(2), fetcher, [tool], used, store);
+  expect(watch.changes.at(-1)).toMatchObject({ compared: [{ with: "9.9", same: true }] });
+  expect((watch.changes.at(-1) as { compared: { template?: object }[] }).compared[0].template).toBeUndefined();
+}, 30_000); // Three 7 MB workbooks are read; a busy machine needs more than 5 seconds.
+
+it("keeps a same layout ITR schema of a new version under its own link", async () => {
+  const kept: Buffer[] = [];
+  const store = { keep: async (bytes: Buffer) => void kept.push(bytes), read: async () => null };
+  const downloads: Source = { key: "itr", name: "Invented downloads", url: "https://official.invalid/itr", area: "income_tax", kind: "page", compare: { file: /ITR-(\d)_\d{4}_Main_V([\d.]+)\.json$/i } };
+  pages.set(downloads.url, '<a href="/f/ITR-1_2026_Main_V1.1.json">Schema</a>');
+  let watch = await checkSources(empty, day(0), fetcher, [downloads], templates, store);
+  // The same schema written on one line: the same fields, a different hash.
+  const schema = Buffer.from(JSON.stringify(JSON.parse(readFileSync("reference/official/itr/ITR-1_2026_Main_V1.1.json", "utf8"))));
+  pages.set("https://official.invalid/f/ITR-1_2026_Main_V1.3.json", new Uint8Array(schema));
+  pages.set(downloads.url, '<a href="/f/ITR-1_2026_Main_V1.3.json">Schema</a>');
+  watch = await checkSources(watch, day(1), fetcher, [downloads], templates, store);
+  expect(watch.changes).toMatchObject([{ compared: [{ file: "ITR-1_2026_Main_V1.3.json", with: "1.1", same: true, template: { form_code: "ITR1", version: "1.3", source: { file: "itr/ITR-1_2026_Main_V1.3.json", url: "https://official.invalid/f/ITR-1_2026_Main_V1.3.json", sha256: sha256(schema) } } }] }]);
+  expect(kept.map(sha256)).toEqual([sha256(schema)]);
 });
