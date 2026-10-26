@@ -28,7 +28,7 @@ export function placeOf(parts: string[], order: FolderOrder) {
 }
 
 // Files sent from a disk for the first import, removed files and files with a virus: the owner's alone.
-const ownerOnly = new Set([INCOMING, DELETED_FOLDER, VIRUS_FOLDER]);
+const ownerOnly = new Set([INCOMING, DELETED_FOLDER, "Deleted and old versions", VIRUS_FOLDER]);
 
 // Whether a person sees the folder or file at a path. Someone who sees every client sees it
 // all but the owner's own folders. Anyone else sees only what is inside one of their clients'

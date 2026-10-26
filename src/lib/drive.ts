@@ -41,8 +41,9 @@ export const incomingPath = (relative: string) =>
     .map((part) => safeName(part))
     .join("/");
 
-// Where a removed file waits 30 days before it goes to the drive's bin.
-export const DELETED_FOLDER = "Deleted and old versions";
+// Where a removed file waits 30 days before it goes to the drive's bin. Earlier versions stay
+// in their own folders; drives set up before 26 Oct 2026 also keep "Deleted and old versions".
+export const DELETED_FOLDER = "Removed papers";
 // Where a file the virus check stopped is kept, for the owner only, never shown in InboxCA.
 export const VIRUS_FOLDER = "Files with a virus";
 

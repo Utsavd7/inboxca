@@ -130,7 +130,7 @@ test("the drive's folders as the drive shows them: a hand placed file is filed i
     expect((await staff.request.get(`/app/documents/folders?path=${encodeURIComponent(`FY 2026-27/${mehta}`)}`)).status()).toBe(404);
     expect((await staff.request.get(`/app/documents/folders?path=Incoming`)).status()).toBe(404);
     const root = await (await staff.request.get("/app/documents/folders?path=")).json();
-    expect(root.entries.map((entry: { name: string }) => entry.name)).not.toContain("Deleted and old versions");
+    expect(root.entries.map((entry: { name: string }) => entry.name)).not.toContain("Removed papers");
     await staffMain.getByRole("link", { name: patel, exact: true }).click();
     await staffMain.getByRole("link", { name: "GST", exact: true }).click();
     await expect(staffMain.getByRole("row", { name: new RegExp(sales) })).toBeVisible();

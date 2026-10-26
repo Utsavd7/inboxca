@@ -42,7 +42,7 @@ import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings, providerFor } from "@/src/lib/mailbox";
 import { currentMember, currentWriter, FIRM_COOKIE, myQuestions } from "@/src/lib/member";
 import { activityNames } from "@/src/lib/activity";
-import { invitableRoles } from "@/src/lib/roles";
+import { invitableRoles, personName } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 import { sendSystemMail } from "@/src/lib/system-mail";
@@ -465,7 +465,7 @@ export async function manageClient(form: FormData) {
     // Assign to me on Today goes back to Today.
     if (form.get("from") === "today") return redirect(error ? "/app?error=assign" : "/app?assigned=1");
     // The details panel closes once its change is saved; other panels stay open for the next one.
-    const query = new URLSearchParams({ ...(tab && tab !== "overview" && (error || tab !== "details") && { tab }), ...(error && { error }) }).toString();
+    const query = new URLSearchParams({ ...(tab && tab !== "overview" && (error || tab !== "details") && { tab }), ...(error ? { error } : { changed: String(form.get("intent") ?? "") }) }).toString();
     return redirect(`/app/clients/${id}${query ? `?${query}` : ""}`);
   };
   if (!membership || !canManageClients(membership.role)) back("role");
@@ -538,14 +538,13 @@ export async function manageClient(form: FormData) {
       contact_id: contact.id,
       client_id: id,
       relation: String(form.get("relation") ?? "").trim().slice(0, 60) || null,
-      can_view_status: form.get("can_view_status") === "on",
       can_receive_documents: form.get("can_receive_documents") === "on",
     });
     if (error) back(error.code === "23505" ? "linked" : "contact");
   } else if (intent === "contact-rights") {
     await supabase
       .from("contact_clients")
-      .update({ can_view_status: form.get("can_view_status") === "on", can_receive_documents: form.get("can_receive_documents") === "on" })
+      .update({ can_receive_documents: form.get("can_receive_documents") === "on" })
       .eq("client_id", id)
       .eq("contact_id", String(form.get("contact") ?? ""));
   } else if (intent === "unlink-contact") {
@@ -607,7 +606,7 @@ export async function pauseReminders(form: FormData) {
   const client = String(form.get("client") ?? "");
   await supabase.from("clients").update({ reminders_paused: form.get("paused") === "on" }).eq("id", client);
   revalidatePath(`/app/clients/${client}`);
-  redirect(`/app/clients/${client}?tab=details`);
+  redirect(`/app/clients/${client}?tab=details&changed=reminders`);
 }
 
 export async function saveVisibility(form: FormData) {
@@ -1324,7 +1323,7 @@ export async function seenAlert(form: FormData) {
 }
 
 // The owner removes a file, or puts back one removed in the last 30 days (D18). A removed
-// file moves to the drive's Deleted and old versions folder; the nightly purge sends it to
+// file moves to the drive's Removed papers folder; the nightly purge sends it to
 // the drive's bin after 30 days. Removing for staff and managers is a request (later).
 export async function removeDocument(form: FormData) {
   const { id, userId, membership, back, document, client, clientId, drive, order, naming } = await visibleDocument(form);
@@ -1370,7 +1369,7 @@ export async function removeDocument(form: FormData) {
   await settleVersions(supabaseAdmin(), { client_id: clientId, ...document });
   await spendGrant(grant);
   revalidatePath("/app", "layout");
-  redirect(restoring ? `${back}&saved=${id}` : `${back}&removed=${id}`);
+  redirect(restoring ? `${back}&restored=${id}` : `${back}&removed=${id}`);
 }
 
 // Asks a client for files for one period (PLAN.md 5.3.1, 8.6). Every member may. The client
@@ -1445,7 +1444,7 @@ export async function saveChecklist(form: FormData) {
   else delete lists[client.kind];
   await supabaseAdmin().from("firms").update({ settings: { ...membership.settings, checklists: lists } }).eq("id", membership.firmId);
   revalidatePath("/app", "layout");
-  redirect(back);
+  redirect(`${back}&changed=list`);
 }
 
 // A file the client uploads through their private link, against one item asked for. The
@@ -2154,7 +2153,7 @@ export async function setPaperSharing(form:FormData) {
   if (policy==="internal") await admin.from("shares").update({status:"refused",link_token_hash:null,link_expires_at:null,delivery:null}).eq("firm_id",membership.firmId).eq("document_id",document.id);
   await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"document.sharing",entity_type:"document",entity_id:document.id,details:{policy:policy || "firm"}});
   revalidatePath("/app","layout");
-  redirect(`/app/clients/${document.client_id}?tab=files&edit=${document.id}`);
+  redirect(`/app/clients/${document.client_id}?tab=files&edit=${document.id}&changed=sharing`);
 }
 
 export async function saveMailLimit(form:FormData) {
@@ -2204,13 +2203,16 @@ export async function bellItems() {
   const { supabase, membership } = await currentMember();
   if (!membership) return [];
   const seen = Date.parse((await cookies()).get("bell_seen")?.value ?? "") || 0;
-  const [questions, { data: lines }] = await Promise.all([
+  const [questions, { data: lines }, { data: people }] = await Promise.all([
     myQuestions(),
     supabase.rpc("activity_feed", { target_firm: membership.firmId, since: new Date(Date.now() - 14 * 86_400_000).toISOString(), mine: true }),
+    supabase.rpc("firm_people", { target_firm: membership.firmId }),
   ]);
+  // A permission request names the person who asks, and the client it is for.
+  const asker = (ask: { details: unknown }) => personName(people?.find((person) => person.user_id === (ask.details as { by?: string }).by)?.email);
   return [
-    ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}`, who: ask.clients?.name ?? "Your team", at: null as string | null, fresh: true })),
-    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: activityNames[line.action] ?? "Client record changed", who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
+    ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}${ask.clients?.name ? ` for ${ask.clients.name}` : ""}`, who: asker(ask), at: null as string | null, fresh: true })),
+    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: activityNames[line.action] ?? "Client changed", who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
   ].slice(0, 20);
 }
 

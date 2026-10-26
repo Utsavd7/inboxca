@@ -12,6 +12,7 @@ import {askPermission} from "@/app/(app)/actions";
 import {grantFor} from "@/src/lib/permission-grants";
 import {Badge,Card,PageHead} from "../../../ui";
 import {Pending} from "../../../pending";
+import {keepReason,keptReason} from "@/src/lib/reason";
 import "../../clients.css";
 
 // One income tax return for one assessment year: what InboxCA already holds, what is still
@@ -21,7 +22,7 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
   let work:Awaited<ReturnType<typeof itrWork>>;
   try {work=await itrWork(id,form,period);} catch(error) {
     unstable_rethrow(error);
-    return <><PageHead crumbs={[[`/app/clients/${id}?tab=extraction`,"Client"]]} title="Income tax return"/><p className="hint">This return cannot be opened yet. Check that the client has one PAN, and that the official form for {itrYear(period)} is in InboxCA.</p></>;
+    return <><PageHead crumbs={[[`/app/clients/${id}?tab=extraction`,"Client"]]} title="Income tax return"/><p className="hint">InboxCA cannot open this return yet. Check that the client has a PAN. If it has one, InboxCA does not yet have the official form for {itrYear(period)}. Try again later.</p></>;
   }
   const {context,entries,drafts,review}=work,{membership,supabase,client}=context;
   const canEdit=!membership.viewOnlyUntil && (membership.may("edit_figures",id) || !!await grantFor(membership.firmId,context.userId,"edit_figures",id));
@@ -47,7 +48,7 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
     let zeroed=0;
     if(input.get("zero")==="1") for(const field of String(input.get("empty") ?? "").split(",")) if(/^itr\.[a-z0-9_.]{1,95}$/.test(field) && !String(input.get(field) ?? "").trim()) {input.set(field,"0");zeroed++;}
     let draft:string;
-    try {draft=await enterItr(id,form,period,input,zeroed);} catch(error) {unstable_rethrow(error);redirect(`${base}&group=${encodeURIComponent(String(input.get("group") ?? ""))}&message=check`);}
+    try {draft=await enterItr(id,form,period,input,zeroed);} catch(error) {unstable_rethrow(error);await keepReason(error);redirect(`${base}&group=${encodeURIComponent(String(input.get("group") ?? ""))}&message=check`);}
     revalidatePath("/app","layout");redirect(`${base}&group=${encodeURIComponent(String(input.get("group") ?? ""))}&saved=${draft}`);
   }
   const empty=shown.filter(entry=>entry.kind==="number" && !entry.choices && missing.has(itrField(entry,rows))).map(entry=>itrField(entry,rows));
@@ -57,13 +58,13 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
     <div className="pane client-pane">
     <Form action={`/app/clients/${id}/itr`} className="form-row">
       <div><label htmlFor="return">Return</label><select id="return" name="form" defaultValue={form}>{itrReturns.map(code=><option key={code} value={code}>{formName(code)}</option>)}</select></div>
-      <div><label htmlFor="year">Assessment year starts in</label><input id="year" name="year" defaultValue={period} inputMode="numeric" pattern="20[0-9]{2}" required/></div>
+      <div><label htmlFor="year">Assessment year (type 2026 for AY 2026-27)</label><input id="year" name="year" defaultValue={period} inputMode="numeric" pattern="20[0-9]{2}" required/></div>
       <button className="b b-secondary">Open</button>
     </Form>
-    {q.message && <p className="alert" role="status">Check the entries and your permission. Amounts need digits only and dates a real day. Correct figures already saved on the review screen.</p>}
+    {q.message && <p className="alert" role="status">{(await keptReason()) ?? "InboxCA could not save these entries. Amounts need digits only, and dates must be real days. To change a figure already saved, use Check the figures."}</p>}
     {q.saved && <p className="alert" role="status">Saved for checking. <Link href={`/app/clients/${id}?tab=extraction&draft=${q.saved}`}>Check the figures</Link></p>}
-    {!itrReady() && <p className="hint">Filing files are not set up yet: InboxCA needs its software ID from the Income Tax Department before it can make the return file. You can fill and check everything now.</p>}
-    {form==="ITR3" && <p className="hint">The balance sheet, profit and loss account and business schedules come from the client&apos;s accounts, which InboxCA does not read yet. Fill them here, or prepare the return in the official utility and add it under Prepared forms.</p>}
+    {!itrReady() && <p className="hint">InboxCA cannot make the return file for the income tax portal yet. It is waiting for its software ID from the Income Tax Department. You can fill in and check everything now.</p>}
+    {form==="ITR3" && <p className="hint">The balance sheet, profit and loss account and business schedules come from the client&apos;s accounts, which InboxCA does not read yet. Fill them here, or prepare the return in the official utility and add it under Return files.</p>}
     <Card id="itr-held" title="Already filled" Icon={FileCheck2} kind="done">
       <ul className="app-rows">
         <li className="app-row"><span className="grow"><strong>PAN {context.number}</strong><span className="sub">From the client&apos;s details. Used in every return.</span></span></li>
@@ -75,14 +76,14 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
       <div className="itr-body">
       {!!review.issues.length && <ul className="alert" role="alert">{review.issues.map(issue=><li key={issue}>{issue}</li>)}</ul>}
       {review.missing.length ? <nav className="pills" aria-label="Parts still to fill">{groups.filter(name=>counts.has(name)).map(name=><Link key={name} href={`${base}&group=${encodeURIComponent(name)}`} aria-current={name===group ? "page" : undefined}>{name}: {counts.get(name)}</Link>)}</nav>
-        : <p className="hint">Nothing left to fill. Check every figure, then prepare the return under <Link href={`/app/clients/${id}?tab=outputs`}>Prepared forms</Link>.</p>}
+        : <p className="hint">Nothing left to fill. Check every figure, then prepare the return under <Link href={`/app/clients/${id}?tab=outputs`}>Return files</Link>.</p>}
       </div>
     </Card>
     <Card id="itr-enter" title={group} Icon={PencilLine}>
       <div className="itr-body">
       <Form action={`/app/clients/${id}/itr`} className="form-row"><input type="hidden" name="form" value={form}/><input type="hidden" name="year" value={period}/>
         <div><label htmlFor="group">Part of the return</label><select id="group" name="group" defaultValue={group}>{groups.map(name=><option key={name}>{name}</option>)}</select></div>
-        {Array.from({length:depth},(_,index)=><div key={index}><label htmlFor={`row-${index}`}>{index ? "Inner row" : "Row, for repeated entries"}</label><input id={`row-${index}`} name={index ? "row2" : "row"} type="number" min={1} max={1000} defaultValue={rows[index]+1}/></div>)}
+        {Array.from({length:depth},(_,index)=><div key={index}><label htmlFor={`row-${index}`}>{index ? "Row number inside it" : "Row number, for details that repeat"}</label><input id={`row-${index}`} name={index ? "row2" : "row"} type="number" min={1} max={1000} defaultValue={rows[index]+1}/></div>)}
         <button className="b b-secondary">Open</button>
       </Form>
       <p className="hint">Leave anything that does not apply empty. Details marked To fill are needed by the official form.</p>
@@ -91,10 +92,10 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
         {shown.map(entry=>{
           const field=itrField(entry,rows),from=held.get(field),label=<>{entry.label}{entry.rows>0 && `, row ${rows[0]+1}`} {missing.has(field) && <Badge tone="warn">To fill</Badge>}</>;
           if(field==="itr.personal.pan") return <div key={field}><span className="sub">{label}</span><p><span className="num">{context.number}</span>, from the client&apos;s details</p></div>;
-          if(saved.has(field) || from) return <div key={field}><span className="sub">{label}</span><p className="hint">{from ? `${from.value}, from ${from.from}.` : "Already saved."} Correct it on the review screen.</p></div>;
+          if(saved.has(field) || from) return <div key={field}><span className="sub">{label}</span><p className="hint">{from ? `${from.value}, from ${from.from}.` : "Already saved."} To change it, use Check the figures.</p></div>;
           const suggested=field==="itr.personal.email" ? email : "";
           return <div key={field}><label htmlFor={field}>{label}</label>
-            {entry.choices || entry.primitive==="boolean" ? <select id={field} name={field} defaultValue=""><option value="">Leave empty</option>{(entry.choices ?? ["true","false"]).map(choice=><option key={choice} value={choice}>{choice}</option>)}</select>
+            {entry.choices || entry.primitive==="boolean" ? <select id={field} name={field} defaultValue=""><option value="">Leave empty</option>{(entry.choices ?? ["true","false"]).map(choice=><option key={choice} value={choice}>{entry.choices ? choice : choice==="true" ? "Yes" : "No"}</option>)}</select>
               : <input id={field} name={field} maxLength={2000} type={entry.kind==="date" ? "date" : "text"} inputMode={entry.kind==="number" ? "decimal" : undefined} defaultValue={suggested}/>}
             {suggested && <p className="hint">From the client&apos;s details in InboxCA. Check it before saving.</p>}
             {entry.defaultValue!==undefined && entry.defaultValue!=="0" && <p className="hint">The official form&apos;s usual value is {entry.defaultValue}.</p>}

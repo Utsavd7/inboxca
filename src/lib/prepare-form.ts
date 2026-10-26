@@ -13,7 +13,7 @@ export async function formContext(input:Work,edit=true) {
   const {supabase,membership,userId}=edit ? await currentWriter() : await currentMember();
   if(!membership) throw new Error("Sign in to your firm first.");
   const permission=edit && !membership.may("edit_figures",input.client) ? await grantFor(membership.firmId,userId,"edit_figures",input.client) : null;
-  if(edit && !membership.may("edit_figures",input.client) && !permission) throw new Error("Ask for permission to prepare a form.");
+  if(edit && !membership.may("edit_figures",input.client) && !permission) throw new Error("Ask for permission to prepare a return.");
   const itr=/^ITR[1-6]$/.test(input.form),kind=itr ? "pan" : "gstin";
   const [{data:client},{data:registrations},{data:templates}]=await Promise.all([
     supabase.from("clients").select("id,name").eq("firm_id",membership.firmId).eq("id",input.client).maybeSingle(),
@@ -21,8 +21,8 @@ export async function formContext(input:Work,edit=true) {
     supabase.from("templates").select("*").eq("form_code",input.form),
   ]);
   const registration=input.registration ? registrations?.find(row=>row.id===input.registration) : registrations?.length===1 ? registrations[0] : null;
-  if(!client || !registration) throw new Error("The work could not be found.");
-  if(itr && registrations?.length!==1) throw new Error("Choose a single PAN before preparing this form.");
+  if(!client || !registration) throw new Error("This return could not be found. Open the page again.");
+  if(itr && registrations?.length!==1) throw new Error("Keep only one PAN for this client before preparing this return.");
   const template=chooseTemplate((templates ?? []).map(row=>templateSchema.parse(row)),input.form,input.period,input.version,input.reason);
   const number=await serverCrypto().decrypt(membership.firmId,`clients/${input.client}/${kind}`,registration.number_enc);
   return {supabase,membership,userId,permission,client,registration,registrations:registrations?.length ?? 0,template,period:input.period,number,itr};
@@ -34,16 +34,16 @@ export function requestFor(context:Awaited<ReturnType<typeof formContext>>,draft
 // The caller spends a one-use permission atomically when saving the prepared form.
 export async function checkedForm(input:Work & {registration:string;drafts:string[]}) {
   z.array(z.uuid()).min(1).max(25).parse(input.drafts);
-  if(new Set(input.drafts).size!==input.drafts.length) throw new Error("Choose each source once.");
+  if(new Set(input.drafts).size!==input.drafts.length) throw new Error("Choose each set of figures once.");
   const context=await formContext(input),{supabase,membership,userId,permission}=context;
   // GSTR-3B is built from the month's GSTR-1 figures and its GSTR-2B credit.
   const {data:rows}=await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",input.client).in("form_code",context.itr ? ["ITR"] : input.form==="GSTR3B" ? ["GSTR1","GSTR3B"] : [input.form]).eq("period_key",input.period).in("id",input.drafts);
-  if(rows?.length!==input.drafts.length) throw new Error("The work could not be found.");
+  if(rows?.length!==input.drafts.length) throw new Error("This return could not be found. Open the page again.");
   // Existing registers have no registration choice. Never guess in a multi-number client.
   // Each register must name this GST number, or the client must have only one.
   const named=(row:{data:unknown})=>(row.data as {registration?:string} | null)?.registration;
   if(!context.itr && (input.form==="GSTR1" ? rows : rows.filter(row=>row.form_code==="GSTR1")).some(row=>named(row) ? named(row)!==context.registration.id : context.registrations!==1))
-    throw new Error("This client's registers need a GST number choice before a form can be prepared.");
+    throw new Error("Choose the GSTIN for each register of this client before preparing the return.");
   const drafts=[];
   for(const row of rows) {
     if(context.itr && draftSchema.parse(row.data).target?.form && draftSchema.parse(row.data).target!.form!==input.form) throw new Error("Choose the figures for this return.");
@@ -53,10 +53,11 @@ export async function checkedForm(input:Work & {registration:string;drafts:strin
 }
 
 export async function workerForm(request:FormRequest) {
-  if(!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) throw new Error("The form maker is not ready yet.");
+  if(!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) throw new Error("InboxCA cannot prepare returns yet. Try again later.");
   const body=JSON.stringify(formRequest.parse(request));
-  if(body.length>formLimit) throw new Error("Split this work into smaller registers.");
+  if(body.length>formLimit) throw new Error("This return is too large. Split its registers into smaller files.");
   const response=await fetch(`${process.env.FILE_WORKER_URL.replace(/\/$/,"")}/prepare/${request.template.form_code}`,{method:"POST",headers:{Authorization:await signView(body,process.env.FILE_WORKER_SECRET),"Content-Type":"application/json"},body,cache:"no-store",signal:AbortSignal.timeout(120_000)});
-  if(!response.ok || !response.body) throw new Error("The figures do not pass the official form's checks.");
+  // The form maker says why the figures failed (worker/handler.ts); that sentence is shown.
+  if(!response.ok || !response.body) throw new Error(response.status===422 && (await response.text()).trim().slice(0,300) || "The figures do not pass the official form's checks.");
   return response;
 }

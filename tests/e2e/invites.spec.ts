@@ -981,12 +981,12 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.reload();
   await expect(rows.filter({ hasText: "Same file as" })).toContainText("To check");
 
-  // The owner removes the second copy: it waits in the drive's Deleted and old versions folder and can be put back.
+  // The owner removes the second copy: it waits in the drive's Removed papers folder and can be restored.
   await rows.filter({ hasText: "Same file as" }).getByRole("link", { name: /^Check/ }).click();
   await expect(owner.getByRole("dialog")).toContainText("InboxCA also keeps its own locked copy for 30 days.");
   await owner.getByRole("dialog").getByRole("button", { name: /^Remove/ }).click();
   await expect(owner.getByRole("status")).toContainText("waits 30 days");
-  const removedFile = path.join(drive, "Deleted and old versions", `${mailClient} - Purchase bills - Sep 2026.pdf`);
+  const removedFile = path.join(drive, "Removed papers", `${mailClient} - Purchase bills - Sep 2026.pdf`);
   expect(await readFile(removedFile, "utf8")).toBe("%PDF-1.4 invented purchase bills");
   await expect(rows).toHaveCount(2);
   // InboxCA's own safety copy is sealed with the firm's key. With the Deleted folder emptied

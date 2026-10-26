@@ -3,11 +3,12 @@ import { findPeriod } from "./documents";
 // The records auto-reply (PLAN.md 5.5.2): which paper a client's email asks for, which filed
 // document answers it, and whether it may go at once. By rules, never AI (D29).
 
-// Routine papers go at once; every other paper is private and waits for one approval.
+// Routine papers go at once; every other paper is private and waits for one approval. The
+// firm's own note of an acknowledgement number is never routine.
 export const ROUTINE_DEFAULT = ["ITR-V", "Acknowledgement", "GSTR-1", "GSTR-3B", "Challan", "Certificate"];
 export type SharePolicy = "auto" | "approval" | "internal";
 export type RecordsSettings = { routine?: string[]; approve_all?: boolean };
-export const isRoutine = (type: string, settings: RecordsSettings = {}) => !settings.approve_all && (settings.routine ?? ROUTINE_DEFAULT).includes(type==="Filing record" ? "Acknowledgement" : type);
+export const isRoutine = (type: string, settings: RecordsSettings = {}) => !settings.approve_all && type !== "Filing record" && (settings.routine ?? ROUTINE_DEFAULT).includes(type);
 
 export const paperPolicy = (paper: { document_type: string; share_policy?: string | null }, settings: RecordsSettings = {}): SharePolicy =>
   paper.share_policy === "internal" ? "internal" : settings.approve_all ? "approval" : paper.share_policy === "approval" ? "approval" : paper.share_policy === "auto" || isRoutine(paper.document_type, settings) ? "auto" : "approval";

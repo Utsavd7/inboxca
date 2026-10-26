@@ -92,7 +92,7 @@ export async function verifySources(firm:string,client:string,draft:Draft) {
   if(!ids.length) return;
   if(ids.length>100) throw new Error("Split these source files into smaller drafts.");
   const {data,error}=await supabaseAdmin().from("documents").select("id,name,sha256").eq("firm_id",firm).eq("client_id",client).in("status",["filed","to_check"]).in("id",ids);
-  if(error || data?.length!==ids.length || data.some((doc)=>! /\.(pdf|xlsx|xls|csv|json|txt)$/i.test(doc.name)) || documents.some((line)=>data.find((doc)=>doc.id===line.source.document)?.sha256!==line.source.sha256)) throw new Error("A source file is not available.");
+  if(error || data?.length!==ids.length || data.some((doc)=>! /\.(pdf|xlsx|xls|csv|json|txt)$/i.test(doc.name)) || documents.some((line)=>data.find((doc)=>doc.id===line.source.document)?.sha256!==line.source.sha256)) throw new Error("A paper these figures came from is not available.");
 }
 
 // Called by the document jobs, never with email text. Source ids are checked before saving.
