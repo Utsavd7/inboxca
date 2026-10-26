@@ -1,6 +1,6 @@
 import "./documents.css";
 import "../clients/clients.css";
-import { Download, FolderOpen, Search, Send, Upload } from "lucide-react";
+import { Download, FileSearch, FolderOpen, Search, Send, Upload } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -12,8 +12,8 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, folderFor, periodChoices, periodName, workOfType } from "@/src/lib/documents";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { currentMember } from "@/src/lib/member";
+import { paperOrigins } from "@/src/lib/paper-origin";
 import { paperPolicy, type RecordsSettings } from "@/src/lib/records";
-import { personName } from "@/src/lib/roles";
 import { searchTokens, words } from "@/src/lib/search";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { AutoSelect } from "../auto-select";
@@ -25,12 +25,13 @@ import { Item, List, Presence } from "../motion";
 import { Avatar, Badge, Empty, PageHead, Row, SidePanel, Toast } from "../ui";
 import { CopyButton } from "../ui-client";
 import { RowKeys } from "../row-keys";
+import { CameFrom } from "./came-from";
 import { DropUpload, HeldFiles } from "./drop-upload";
 import { FileTile } from "./file-tile";
 import { FoldersView, ViewSwitch } from "./folders/view";
 
 const PAGE = 50;
-const columns = "id, client_id, name, document_type, work_type, period_key, status, email_event_id, received_at, form:prepared->>form, clients(name), email_events(contact_id, contacts(name_enc)), client_registrations(number_enc)";
+const columns = "id, client_id, name, document_type, work_type, period_key, status, email_event_id, received_at, sha256, prepared:prepared->>form, clients(name), client_registrations(number_enc)";
 const drives: Record<string, string> = { dropbox: "Dropbox", onedrive: "OneDrive" };
 const uuid = /^[0-9a-f-]{36}$/;
 // At most this many papers go out as secure links from one Send.
@@ -46,17 +47,19 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   // Financial years by the key of their last month's year: "2027" is FY 2026-27.
   const years = periodChoices(todayInIndia()).filter((key) => key.length === 4);
   const asked = /^(20\d\d)-(\d\d)$/.exec(params.year ?? "");
-  const year = params.year === "all" ? "" : asked && (Number(asked[1]) + 1) % 100 === Number(asked[2]) ? String(Number(asked[1]) + 1) : years[0];
+  // Papers waiting under To check show from every year, with why each waits.
+  const checking = params.show === "check";
+  const year = params.year === "all" || checking ? "" : asked && (Number(asked[1]) + 1) % 100 === Number(asked[2]) ? String(Number(asked[1]) + 1) : years[0];
   const kind = params.kind && params.kind in workTypes ? (params.kind as WorkType) : "";
   const q = params.q?.trim().slice(0, 200) ?? "";
   const page = /^\d{1,6}$/.test(params.page ?? "") ? Math.max(1, Number(params.page)) : 1;
   // Today's missing papers line opens only the papers no longer in the drive.
   const missing = params.show === "missing";
-  const live = missing ? (["eq", "missing"] as const) : (["not.in", "(deleted,earlier)"] as const);
+  const live = missing ? (["eq", "missing"] as const) : checking ? (["eq", "to_check"] as const) : (["not.in", "(deleted,earlier)"] as const);
   const typed = words(q, 8);
   const tokens = typed.length ? await searchTokens(membership.firmId, typed) : null;
 
-  const state = { year: year === years[0] ? "" : year ? `${Number(year) - 1}-${year.slice(2)}` : "all", kind, q, page: page > 1 ? String(page) : "", file: "", upload: "", client: "", portal: "", show: missing ? "missing" : "" };
+  const state = { year: year === years[0] ? "" : year ? `${Number(year) - 1}-${year.slice(2)}` : "all", kind, q, page: page > 1 ? String(page) : "", file: "", upload: "", client: "", portal: "", show: missing ? "missing" : checking ? "check" : "" };
   const link = (next: Partial<typeof state>) => {
     const search = new URLSearchParams(Object.entries({ ...state, ...next }).filter(([, value]) => value));
     return `/app/documents${search.size ? `?${search}` : ""}`;
@@ -73,6 +76,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
     return Promise.resolve(work ? query.eq("work_type", work) : query).then(({ count }) => count ?? 0);
   };
   const counts = new Map<WorkType | "", Promise<number>>([["", count()], ...(Object.keys(workTypes) as WorkType[]).map((work) => [work, count(work)] as const)]);
+  const waiting = checking ? counts.get("")! : Promise.resolve(supabase.from("documents").select("id", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("status", "to_check")).then(({ count }) => count ?? 0);
   const canUpload = !membership.viewOnlyUntil;
   // Upload papers: find the client, then their upload form opens here with type, work and period.
   const find = params.upload ? params.for?.trim().slice(0, 100) ?? "" : "";
@@ -83,12 +87,11 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   // Earlier versions are listed only in their current paper's panel on the client's page. One
   // more than a page is read, to know whether there is a next page.
   const listed = scoped(supabase.from("documents").select(columns).eq("firm_id", membership.firmId).filter("status", live[0], live[1]));
-  const [{ data: read, error }, { data: chosen }, { data: drive }, { data: people }, { data: matches }, { data: uploadClient }, { data: toSend }, { data: mailbox }] = await Promise.all([
+  const [{ data: read, error }, { data: chosen }, { data: drive }, { data: matches }, { data: uploadClient }, { data: toSend }, { data: mailbox }] = await Promise.all([
     (kind ? listed.eq("work_type", kind) : listed).order("received_at", { ascending: false }).order("id", { ascending: false }).range((page - 1) * PAGE, page * PAGE),
     // The paper shown on the right: the one chosen, else the first in the list.
     params.file && uuid.test(params.file) ? supabase.from("documents").select(columns).eq("firm_id", membership.firmId).eq("id", params.file).neq("status", "deleted").maybeSingle() : Promise.resolve({ data: null }),
     admin.from("connected_accounts").select("provider, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
-    supabase.rpc("firm_people", { target_firm: membership.firmId }),
     find ? supabase.from("clients").select("id, name").eq("firm_id", membership.firmId).is("archived_at", null).ilike("name", `%${find.replace(/[\\%_]/g, "\\$&")}%`).order("name").limit(8) : Promise.resolve({ data: null }),
     askedClient && canUpload ? supabase.from("clients").select("id, name, client_registrations(id, kind, number_enc)").eq("firm_id", membership.firmId).eq("id", askedClient).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
     sendPreview ? supabase.from("documents").select("id, client_id, name, status, share_policy, document_type, clients(name, email_enc)").eq("firm_id", membership.firmId).in("id", picked.slice(0, SEND)) : Promise.resolve({ data: null }),
@@ -102,32 +105,15 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   // This same view, with the chosen paper; the upload panel opens and closes over it.
   const here = { page: state.page, file: chosen?.id ?? "" };
 
-  // Where each paper came from. Uploads are known from the activity log, which every person
-  // who may see the client already sees on its page; only these papers' lines are read.
-  const unsent = shown.filter((row) => !row.email_event_id && !row.form).map((row) => row.id);
+  // Where each paper came from and when (src/lib/paper-origin.ts), and the chosen one's GSTIN.
   const crypto = serverCrypto();
-  const [{ data: added }, sent_by, paperGstin, gstins] = await Promise.all([
-    unsent.length ? admin.from("activity_log").select("entity_id, actor_id").eq("firm_id", membership.firmId).in("action", ["document.uploaded", "document.added"]).in("entity_id", unsent) : Promise.resolve({ data: [] }),
-    Promise.all(
-      [...new Map(shown.flatMap((row) => (row.email_events?.contacts && row.email_events.contact_id ? [[row.email_events.contact_id, row.email_events.contacts.name_enc] as const] : []))).entries()].map(
-        async ([id, name]) => [id, await crypto.decrypt(membership.firmId, `contacts/${id}/name`, name)] as const,
-      ),
-    ),
+  const [origins, paperGstin, gstins] = await Promise.all([
+    paperOrigins(supabase, membership.firmId, shown, paper?.id),
     paper?.client_registrations ? crypto.decrypt(membership.firmId, `clients/${paper.client_id}/gstin`, paper.client_registrations.number_enc) : "",
     // GST papers of a client with more than one GSTIN name their GSTIN, as on the client's page.
     Promise.all((uploadClient?.client_registrations ?? []).filter((registration) => registration.kind === "gstin").map(async (registration) => ({ id: registration.id, number: await crypto.decrypt(membership.firmId, `clients/${uploadClient!.id}/gstin`, registration.number_enc) }))),
   ]);
-  const adder = new Map((added ?? []).map((line) => [line.entity_id, line.actor_id]));
-  const emails = new Map((people ?? []).map((person) => [person.user_id, person.email]));
-  const senders = new Map(sent_by);
-  const cameFrom = (row: (typeof shown)[number]) => {
-    if (row.email_event_id) return `Email from ${senders.get(row.email_events?.contact_id ?? "") || row.clients?.name || "the client"}`;
-    if (row.form) return "Prepared in InboxCA";
-    if (!adder.has(row.id)) return "From the drive";
-    const by = adder.get(row.id);
-    if (!by) return "Client upload link";
-    return `${row.work_type === "gst" && /^GSTR-2[AB]$/.test(row.document_type) && /\.json$/i.test(row.name) ? "Portal file, added" : "Uploaded"} by ${personName(emails.get(by))}`;
-  };
+  const origin = paper && origins.get(paper.id);
 
   const order = ((drive?.settings as { folder_order?: FolderOrder } | null)?.folder_order ?? "year_client_work") as FolderOrder;
   const path = paper && [drives[drive?.provider ?? ""], "InboxCA", ...folderFor(order, paper.clients?.name ?? "", { work: paper.work_type as WorkType, period: paper.period_key, receivedAt: paper.received_at, toCheck: paper.status === "to_check" }), paper.name].filter(Boolean).join(" / ");
@@ -136,6 +122,8 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const tag = (status: string) => (status === "to_check" ? <Badge tone="warn">To check</Badge> : status === "missing" ? <Badge tone="late">Missing in the drive</Badge> : null);
   const portal = membership.may("portal_files");
   const filtered = !!(q || kind || year !== years[0] || missing);
+  // A paper under To check opens on its client's Documents to confirm or change its type and period.
+  const mayCheck = (row: { client_id: string; status: string }) => row.status === "to_check" && !membership.viewOnlyUntil && membership.may("rename", row.client_id);
 
   // Files dropped on the page go to the client being uploaded for, else the open paper's.
   const dropFor = uploadClient ?? (chosen?.clients ? { id: chosen.client_id, name: chosen.clients.name } : null);
@@ -201,7 +189,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             </button>
           </Form>
           {[...counts].map(([work, n]) => (
-            <Link key={work} className="docs-folder" href={link({ kind: work, page: "" })} aria-current={kind === work ? "page" : undefined}>
+            <Link key={work} className="docs-folder" href={link({ kind: work, page: "" })} aria-current={kind === work && (!checking || work) ? "page" : undefined}>
               <FolderOpen size={16} aria-hidden />
               <span>{work ? workTypes[work] : "All papers"}</span>
               <span className="docs-n">
@@ -211,6 +199,15 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               </span>
             </Link>
           ))}
+          <Link className="docs-folder docs-check" href={link({ show: "check", kind: "", page: "", year: "" })} aria-current={checking ? "page" : undefined}>
+            <FileSearch size={16} aria-hidden />
+            <span>To check</span>
+            <span className="docs-n">
+              <Suspense fallback={<span className="docs-wait" aria-label="Counting" />}>
+                <Count of={waiting} warn />
+              </Suspense>
+            </span>
+          </Link>
         </nav>
 
         <section className="docs-list" aria-label="Papers">
@@ -218,7 +215,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             {state.year && <input type="hidden" name="year" value={state.year} />}
             {kind && <input type="hidden" name="kind" value={kind} />}
             <Search size={16} aria-hidden />
-            {missing && <input type="hidden" name="show" value="missing" />}
+            {state.show && <input type="hidden" name="show" value={state.show} />}
             <input name="q" type="search" defaultValue={q} placeholder="Find a paper by its name or words inside it" aria-label="Find papers" />
           </Form>
           {missing && (
@@ -226,6 +223,15 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               <Badge tone="late">Missing in the drive</Badge>
               <span>Only papers no longer in your drive. Put each file back in its folder, or remove the paper on its client&apos;s Documents.</span>
               <Link className="b b-secondary" href={link({ show: "", page: "" })}>
+                Show all papers
+              </Link>
+            </p>
+          )}
+          {checking && (
+            <p className="docs-only">
+              <Badge tone="warn">To check</Badge>
+              <span>InboxCA could not file these papers on its own. Each one says why. Choose a paper, then check its type and period to file it.</span>
+              <Link className="b b-secondary" href={link({ show: "", page: "", year: "" })}>
                 Show all papers
               </Link>
             </p>
@@ -244,7 +250,6 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                       <th scope="col">Paper</th>
                       <th scope="col">Client</th>
                       <th scope="col">Period</th>
-                      <th scope="col">Came from</th>
                     </tr>
                   </thead>
                   <List key={link({})} as="tbody">
@@ -261,9 +266,10 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                                 {/* The Client column already names the client, so its name is not repeated here. */}
                                 {row.clients?.name && row.name.startsWith(`${row.clients.name} - `) ? row.name.slice(row.clients.name.length + 3) : row.name}
                               </Link>
-                              <span className="docs-tag">
-                                {workTypes[row.work_type as WorkType]}
+                              {/* How it came in, or why it waits under To check; the whole line on hover. */}
+                              <span className="docs-tag" title={`${origins.get(row.id)!.how}, ${origins.get(row.id)!.at}`}>
                                 {tag(row.status)}
+                                <span>{origins.get(row.id)!.why?.replace(/^./, (letter) => letter.toUpperCase()) ?? origins.get(row.id)!.short}</span>
                               </span>
                             </span>
                           </span>
@@ -275,7 +281,6 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                           </span>
                         </td>
                         <td>{periodName(row.period_key) || <span className="docs-faint">No period</span>}</td>
-                        <td className="docs-faint docs-from" title={cameFrom(row)}>{cameFrom(row)}</td>
                       </Item>
                     ))}
                   </List>
@@ -301,6 +306,13 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                 )}
               </div>
             </>
+          ) : checking ? (
+            <Empty Icon={FileSearch} kind="docs" title="Nothing to check">
+              <span>Every paper InboxCA received is filed in its folder.</span>
+              <Link className="b b-secondary" href={link({ show: "", page: "", year: "" })}>
+                Show all papers
+              </Link>
+            </Empty>
           ) : filtered ? (
             <Empty Icon={FolderOpen} kind="docs" title="No papers match">
               <span>Try All papers, another year, or other words.</span>
@@ -362,7 +374,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               </div>
               <div>
                 <dt>Came from</dt>
-                <dd>{cameFrom(paper)}</dd>
+                <dd>{origin && <CameFrom origin={origin} />}</dd>
               </div>
               {paperGstin && (
                 <div>
@@ -384,11 +396,16 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               )}
             </dl>
             <div className="docs-actions">
-              <Link className="b b-primary" href={`/app/files/${paper.id}/view`}>
+              {mayCheck(paper) && (
+                <Link className="b b-primary" href={`/app/clients/${paper.client_id}?tab=documents&edit=${paper.id}`}>
+                  Check and file
+                </Link>
+              )}
+              <Link className={`b ${mayCheck(paper) ? "b-secondary" : "b-primary"}`} href={`/app/files/${paper.id}/view`}>
                 View
               </Link>
               {/* With no drive linked there is nothing to download; the preview says why. */}
-              {owner && !paper.form && drive && (
+              {owner && !paper.prepared && drive && (
                 <a className="b b-secondary" href={`/app/files/${paper.id}`}>
                   Download
                 </a>
@@ -532,7 +549,8 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   );
 }
 
-// A count that arrives after the page.
-async function Count({ of }: { of: Promise<number> }) {
-  return <>{(await of).toLocaleString("en-IN")}</>;
+// A count that arrives after the page; papers waiting to be checked stand out.
+async function Count({ of, warn }: { of: Promise<number>; warn?: boolean }) {
+  const n = await of;
+  return warn && n ? <span className="count-pill warn">{n.toLocaleString("en-IN")}</span> : <>{n.toLocaleString("en-IN")}</>;
 }

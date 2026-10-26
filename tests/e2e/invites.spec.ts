@@ -909,6 +909,18 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const rows = owner.locator("section[aria-labelledby=files] tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
+  // Each paper says how it came in; the unclear one says why it waits, and its email opens in the Inbox.
+  await expect(rows.filter({ hasText: "Purchase bills" })).toContainText(`Filed by InboxCA from ${mailClient}'s email, `);
+  await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
+  const docsTab = owner.url();
+  await owner.goto("/app/documents");
+  await owner.getByRole("navigation", { name: "Folders" }).getByRole("link", { name: /To check/ }).click();
+  const waiting = owner.getByRole("complementary", { name: "Paper" });
+  await expect(waiting).toContainText(`Filed by InboxCA from ${mailClient}'s email, `);
+  await expect(waiting).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
+  await waiting.getByRole("link", { name: "Open the email" }).click();
+  await expect(owner.getByRole("heading", { name: "GST data" })).toBeVisible();
+  await owner.goto(docsTab);
   // A file opens in the viewer. Only the owner can get the original, sandboxed.
   await rows.getByRole("link", { name: `${mailClient} - Purchase bills - Sep 2026.pdf`, exact: true }).click();
   await expect(owner.getByText("View only. Your email and the time are shown across every page.")).toBeVisible();
@@ -992,6 +1004,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(owner.getByRole("status")).toContainText(`Saved as ${mailClient} - Form 16 - FY 2025-26.pdf`);
   expect(await readFile(path.join(drive, "FY 2025-26", mailClient, "Income tax", `${mailClient} - Form 16 - FY 2025-26.pdf`), "utf8")).toBe("%PDF-1.4 invented form 16");
+  await expect(rows.filter({ hasText: "Form 16" })).toContainText("Uploaded by Owner, ");
 
   // Asking the client for files emails them a private link; they upload with no sign in.
   await owner.getByRole("link", { name: "Ask for papers" }).click();
@@ -1023,6 +1036,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.reload();
   await expect(owner.getByRole("list", { name: "Files asked for" })).toContainText("1 of 2 received");
   await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Filed");
+  await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Sent by the client through their upload link, ");
   // The team checks what arrived. Ask again clears an item, so the client's link asks for it once more.
   // Several files chosen together all arrive before the request closes.
   const sales = visitor.getByRole("listitem").filter({ hasText: "Sales bills" });

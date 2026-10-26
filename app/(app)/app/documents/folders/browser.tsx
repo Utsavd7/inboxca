@@ -8,6 +8,8 @@ import { FileViewer } from "../../files/[id]/view/file-viewer";
 import { Badge, Empty, type Tone } from "../../ui";
 import { CopyButton } from "../../ui-client";
 import { fileDrivePaper, uploadToFolder } from "./actions";
+import type { Origin } from "@/src/lib/paper-origin";
+import { CameFrom } from "../came-from";
 import type { Entry, Listing } from "./data";
 
 type Slot = Listing | "gone" | "error";
@@ -198,7 +200,7 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
   const [grid, setGrid] = useState(false);
   const [drop, setDrop] = useState<string[] | null>(null);
   const [note, setNote] = useState<{ text: string; at: number; show?: string[] } | null>(null);
-  const [from, setFrom] = useState<Record<string, string>>({});
+  const [from, setFrom] = useState<Record<string, Origin>>({});
   const [busy, start] = useTransition();
   const chooser = useRef<HTMLInputElement>(null);
   const fetched = useRef(new Map<string, number>());
@@ -266,7 +268,7 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
     const stop = new AbortController();
     fetch(`/app/documents/folders?paper=${paperId}`, { signal: stop.signal })
       .then((response) => (response.ok ? response.json() : null))
-      .then((found: { from: string } | null) => found && setFrom((was) => ({ ...was, [paperId]: found.from })))
+      .then((found: Origin | null) => found && setFrom((was) => ({ ...was, [paperId]: found })))
       .catch(() => {});
     return () => stop.abort();
   }, [paperId, from]);
@@ -489,7 +491,7 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
             <dl className="fb-facts">
               <div>
                 <dt>Came from</dt>
-                <dd>{chosen.paper ? from[chosen.paper.id] ?? <span className="skel fb-skel-line" /> : "Put in the drive by hand, not through InboxCA"}</dd>
+                <dd>{!chosen.paper ? "Put in the drive by hand, not through InboxCA" : from[chosen.paper.id] ? <CameFrom origin={from[chosen.paper.id]} /> : <span className="skel fb-skel-line" />}</dd>
               </div>
               <div>
                 <dt>Size</dt>

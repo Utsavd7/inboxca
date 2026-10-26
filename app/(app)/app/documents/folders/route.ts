@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const paper = search.get("paper");
   if (paper) {
     const from = /^[0-9a-f-]{36}$/.test(paper) ? await cameFrom(ctx, paper) : null;
-    return from ? Response.json({ from }, { headers }) : new Response("Not found", { status: 404, headers });
+    return from ? Response.json(from, { headers }) : new Response("Not found", { status: 404, headers });
   }
   const parts = parsePath(search.get("path"));
   if (!parts) return new Response("Not found", { status: 404, headers });

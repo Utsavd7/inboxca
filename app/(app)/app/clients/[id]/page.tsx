@@ -22,6 +22,7 @@ import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDeta
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { mailLive } from "@/src/lib/mail-live";
 import { currentMember } from "@/src/lib/member";
+import { paperOrigins } from "@/src/lib/paper-origin";
 import { personName } from "@/src/lib/roles";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { labels, type Label } from "@/src/lib/triage";
@@ -34,6 +35,7 @@ import { Presence } from "../../motion";
 import { Pending } from "../../pending";
 import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Kind } from "../../ui";
 import { CopyButton } from "../../ui-client";
+import { CameFrom } from "../../documents/came-from";
 import { UploadForm } from "./upload-form";
 import { unsafeText } from "@/src/lib/intake";
 import "../clients.css";
@@ -217,6 +219,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   };
   // One paper's panel: correct it, send it, remove it. A send that failed comes back to it.
   const paper = documents.find((file) => file.id === (edit ?? send));
+  // Where each listed paper and the open one came from, and when (src/lib/paper-origin.ts).
+  const listed = tab === "documents" ? [...documents.slice(start, start + 50), ...(paper ? [paper] : [])] : [];
+  const origins = await paperOrigins(supabase, firm, listed.map((file) => ({ ...file, client_id: id, clients: client })), paper?.id);
   const earlier = (allFiles ?? []).filter((file) => paper && file.status === "earlier" && file.document_type === paper.document_type && file.period_key === paper.period_key && file.registration_id === paper.registration_id);
   const noticeFile = (allFiles ?? []).find((file) => file.id === (renamed ?? saved ?? removed));
   const sharedFile = documents.find((file) => file.id === shared);
@@ -696,7 +701,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                             </td>
                             <td>{document.document_type}</td>
                             <td>{periodName(document.period_key) || <span className="hint">None</span>}</td>
-                            <td className="hint">{document.prepared ? "Prepared here" : document.email_event_id ? "Email" : "Added"}, {receivedLabel(document.received_at)}</td>
+                            <td className="hint">
+                              <CameFrom origin={origins.get(document.id)!} why={!twin} />
+                            </td>
                             <td>
                               <Badge tone={document.status === "to_check" ? "warn" : document.status === "missing" ? "late" : "done"}>
                                 {document.status === "to_check" ? "To check" : document.status === "missing" ? "Missing in the drive" : "Filed"}
@@ -1166,7 +1173,7 @@ export default async function Client({ params, searchParams }: { params: Promise
       {paper && !viewOnly && !ask && !confirmSend && (
         <SidePanel key="edit-file" id="edit-file" title={paper.name} close={`${base}?tab=documents`}>
           {alert}
-          {paper.status === "to_check" && sameAs(paper) && <p className="hint">{sameAs(paper)}.</p>}
+          {paper.status === "to_check" && <p className="hint">{sameAs(paper) || `Waiting to be checked: ${origins.get(paper.id)?.why}`}.</p>}
           {canRename && !paper.prepared && (
             <>
               <p className="hint">{paper.status === "to_check" ? "Check its type and period, then save to file it." : "The file moves to the folder and name these give, in your firm's drive."}</p>

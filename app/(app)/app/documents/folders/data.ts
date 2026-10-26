@@ -8,7 +8,7 @@ import { safeName, workTypes, type Drive, type DriveEntry, type FolderOrder, typ
 import { openDrive } from "@/src/lib/drive-account";
 import { access, clientFolders, kindOf, placeOf, viewable } from "@/src/lib/drive-browse";
 import { currentMember } from "@/src/lib/member";
-import { personName } from "@/src/lib/roles";
+import { paperOrigins } from "@/src/lib/paper-origin";
 import { supabaseAdmin } from "@/src/lib/supabase";
 
 const PAGE = 200;
@@ -186,23 +186,16 @@ export async function listing(ctx: Context, parts: string[], cursor?: string): P
   };
 }
 
-// Where a paper came from, in words: the email's sender, a prepared form, who uploaded or
-// filed it, or the drive itself.
+// Where a paper came from and when, in words (src/lib/paper-origin.ts), with its place before
+// the first import. Null when the person may not see the paper.
 export async function cameFrom(ctx: Context, id: string) {
-  const { data: paper } = await ctx.supabase.from("documents").select("id, email_event_id, prepared, clients(name), email_events(contact_id, contacts(name_enc))").eq("firm_id", ctx.membership.firmId).eq("id", id).maybeSingle();
-  if (!paper) return null;
-  if (paper.email_event_id) {
-    const contact = paper.email_events?.contact_id && paper.email_events.contacts;
-    const sender = contact ? await serverCrypto().decrypt(ctx.membership.firmId, `contacts/${paper.email_events!.contact_id}/name`, contact.name_enc) : "";
-    return `Email from ${sender || paper.clients?.name || "the client"}`;
-  }
-  if (paper.prepared) return "Prepared in InboxCA";
-  const { data: line } = await ctx.admin.from("activity_log").select("action, actor_id").eq("firm_id", ctx.membership.firmId).eq("entity_id", id).in("action", ["document.uploaded", "document.added", "document.filed"]).order("at").limit(1).maybeSingle();
-  if (!line) return "From the drive";
-  if (!line.actor_id) return "Client upload link";
-  const { data: people } = await ctx.supabase.rpc("firm_people", { target_firm: ctx.membership.firmId });
-  const who = personName(people?.find((person) => person.user_id === line.actor_id)?.email);
-  return line.action === "document.filed" ? `Found in the drive, filed by ${who}` : `Uploaded by ${who}`;
+  const { data: paper } = await ctx.supabase
+    .from("documents")
+    .select("id, client_id, name, status, work_type, document_type, period_key, received_at, email_event_id, sha256, prepared:prepared->>form, clients(name)")
+    .eq("firm_id", ctx.membership.firmId)
+    .eq("id", id)
+    .maybeSingle();
+  return paper && (await paperOrigins(ctx.supabase, ctx.membership.firmId, [paper], id)).get(id)!;
 }
 
 // Files one paper for a client, like an upload: refused when the client already has the same
