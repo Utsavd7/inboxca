@@ -1949,8 +1949,10 @@ export async function savePermissions(form: FormData) {
   try {if(form.get("intent")!=="reset") for(const column of ["employee","manager"] as const) permissions[column]={...Object.fromEntries(Object.keys(switchable).map(right=>[right,form.get(`${column}:${right}`)==="on"])),scope:await permissionScope(form,`${column}:`,membership.firmId)};}
   catch {redirect("/app/settings?group=people&error=permission_scope#permissions");}
   const hideInactive = form.get("intent") !== "reset" && form.get("hide_inactive") === "on";
-  await supabase.from("firms").update({ settings: { ...membership.settings, permissions, second_form_approval:form.get("intent")!=="reset" && form.get("second_form_approval")==="on", viewer_hide_inactive: hideInactive } }).eq("id", membership.firmId);
-  await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions } });
+  // How many days before a due date a return still waiting for papers or checks turns red (5).
+  const pinDays = form.get("intent") === "reset" ? 5 : Math.min(30, Math.max(1, Math.round(Number(form.get("pin_days"))) || 5));
+  await supabase.from("firms").update({ settings: { ...membership.settings, permissions, second_form_approval:form.get("intent")!=="reset" && form.get("second_form_approval")==="on", viewer_hide_inactive: hideInactive, pin_days: pinDays } }).eq("id", membership.firmId);
+  await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions, pin_days: pinDays } });
   redirect("/app/settings?group=people&saved=permissions#permissions");
 }
 

@@ -30,6 +30,9 @@ import { AutoSelect } from "../../auto-select";
 import { LinkTabs } from "../../link-tabs";
 import { DroppedNotice, PortalDrop } from "../../portal-drop";
 import { MarkFiled } from "../../mark-filed";
+import { Fill } from "../../fill";
+import { returnStages, StageLine } from "../../return-work";
+import { fillable, fills } from "@/src/lib/return-work";
 import { Presence } from "../../motion";
 import { Pending } from "../../pending";
 import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Kind } from "../../ui";
@@ -156,6 +159,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
+  // Where each open return stands, and who may fill it by hand.
+  const stages = await returnStages(supabase, firm, sub === "returns" ? (tasks ?? []).filter((task) => task.status !== "filed").map((task) => task.id) : []);
+  const canPrepare = !viewOnly && membership.may("edit_figures", id);
   // Who confirmed each dated notice, from the firm's activity.
   const dated = tab === "notices" ? (notices ?? []).filter((notice) => (notice.details as unknown as NoticeDetails).action_date).map((notice) => notice.id) : [];
   // The portal file each open monthly GSTR-3B is read from (PLAN.md 5.3.1): the month's GSTR-2B.
@@ -782,15 +788,17 @@ export default async function Client({ params, searchParams }: { params: Promise
                         meta={
                           task.status === "filed"
                             ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}</>
-                            : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}</>
+                            : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}<StageLine code={task.code} work={stages.get(task.id)} /></>
                         }
                         status={
                           <Badge tone={task.status === "filed" ? "done" : overdue ? "late" : task.status === "in_progress" ? "blue" : ""}>
                             {overdue ? "Late" : taskStatuses[task.status as keyof typeof taskStatuses]}
                           </Badge>
                         }
-                        action={
-                          canFile && task.status !== "filed" ? (
+                        action={<>
+                          {canPrepare && fills(task.code) && fillable(stages.get(task.id)) && <Fill task={task.id} label={title} />}
+                          {stages.get(task.id)?.stage === "filled" && <Link className="b b-secondary" href={`/app/files/${stages.get(task.id)!.form}/view`} aria-label={`Check figures of ${title}`}>Check figures</Link>}
+                          {canFile && task.status !== "filed" ? (
                             task.due_on <= addDays(today, 30) && <Link className="b b-secondary" href={`${returnsHref}&task=${task.id}`} scroll={false} aria-label={`Mark ${title} filed`}>Mark filed</Link>
                           ) : (
                             canFile && (
@@ -800,8 +808,8 @@ export default async function Client({ params, searchParams }: { params: Promise
                                 <Pending className="b b-secondary" name="intent" value="reopen" aria-label={`${title} was not filed after all`}>Not filed after all</Pending>
                               </form>
                             )
-                          )
-                        }
+                          )}
+                        </>}
                       />
                     );
                   })}

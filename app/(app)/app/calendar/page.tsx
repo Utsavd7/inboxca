@@ -11,6 +11,9 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { AutoSelect } from "../auto-select";
 import { LinkTabs } from "../link-tabs";
 import { MarkFiled } from "../mark-filed";
+import { Fill } from "../fill";
+import { returnStages } from "../return-work";
+import { fillable, fills } from "@/src/lib/return-work";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Tone } from "../ui";
@@ -103,6 +106,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     rest,
   ]);
   if (total && from >= total) redirect(href({ page: Math.ceil(total / pageSize) }));
+  // GST returns with figures in but not filled yet, for Fill.
+  const stages = await returnStages(supabase, membership.firmId, viewOnly ? [] : (tasks ?? []).filter((task) => task.status !== "filed" && fills(task.code)).map((task) => task.id));
   const rule = new Map(rules?.map((r) => [r.code, r]));
   const name = (task: { code: string | null; period_key: string | null }) => [rule.get(task.code ?? "")?.name ?? task.code, periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)] as const;
   const onDay = new Map(perDay?.map((row) => [row.due_on, row]));
@@ -228,6 +233,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                           {!compact && "Remind client"}
                         </Link>
                       )}
+                      {!viewOnly && membership.may("edit_figures", task.client_id) && fillable(stages.get(task.id)) && <Fill task={task.id} label={`${task.clients.name} ${form}`} />}
                       {viewOnly ? null : task.status !== "filed" ? (
                         membership.may("mark_filed", task.client_id) && (
                           <Link className="b b-secondary" href={href({ page, task: task.id })} scroll={false} aria-label={`Mark ${task.clients.name} ${form} filed`}>

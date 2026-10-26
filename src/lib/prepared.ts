@@ -15,7 +15,7 @@ import {grantFor} from "./permission-grants";
 import {chooseTemplate,templateSchema} from "./templates";
 import {receive,unsafeText} from "./intake";
 
-export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional()});
+export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
 export type Prepared=z.infer<typeof preparedSchema>;
 export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : "GSTR-3B";
 
@@ -28,8 +28,10 @@ export async function prepareDocument(input:Parameters<typeof checkedForm>[0]) {
   return savePrepared(request,userId,permission,input.reason);
 }
 
-// Also used by a checked correction job. All its sources still pass the same gate.
-export async function savePrepared(request:FormRequest,userId:string,permission:string|null=null,reason?:string) {
+// Also used by a checked correction job. All its sources still pass the same gate. A fill (Fill,
+// src/lib/fill.ts) may hold figures not checked yet and goes through fill_form, under the same
+// lock; userId is null when InboxCA fills a return by itself.
+export async function savePrepared(request:FormRequest,userId:string|null,permission:string|null=null,reason?:string,fill=false) {
   const admin=supabaseAdmin();
   const [{data:client},{data:account}]=await Promise.all([
     admin.from("clients").select("name").eq("firm_id",request.firm).eq("id",request.client).single(),
@@ -39,8 +41,9 @@ export async function savePrepared(request:FormRequest,userId:string,permission:
   // Refuse unavailable ITR exports before reserving a name in the drive.
   const itrResponse=request.pan ? await workerForm(request) : null;
   const sources=request.drafts.map(({id,revision})=>({id,revision})).sort((a,b)=>a.id.localeCompare(b.id));
-  const {data:reserved,error}=await admin.rpc("reserve_form",{firm:request.firm,client:request.client,registration:request.registration,form:request.template.form_code,period:request.period,template:request.template.version,sources,person:userId,prefix:`${safeName(client.name,100)} - ${formName(request.template.form_code)} - ${formPeriod(request.period)}`,extension:request.template.mappings.format,choice:reason ? {reason_code:["amendment","software","correction"].includes(reason) ? reason : "other"} : {}});
-  if(error || !reserved) throw new Error("These figures changed. Check them before preparing the form again.");
+  const work={firm:request.firm,client:request.client,registration:request.registration,form:request.template.form_code,period:request.period,template:request.template.version,sources,person:userId as string,prefix:`${safeName(client.name,100)} - ${formName(request.template.form_code)} - ${formPeriod(request.period)}`,extension:request.template.mappings.format};
+  const {data:reserved,error}=fill ? await admin.rpc("fill_form",work) : await admin.rpc("reserve_form",{...work,choice:reason ? {reason_code:["amendment","software","correction"].includes(reason) ? reason : "other"} : {}});
+  if(error || !reserved) throw new Error(fill ? "This return could not be filled. It may be filed already, or its figures changed. Open it again." : "These figures changed. Check them before preparing the form again.");
   const saved=z.object({id:z.uuid(),name:z.string(),ready:z.boolean()}).parse(reserved);
   if(saved.ready) return saved.id;
   const drive=await openDrive(request.firm,account);
@@ -48,9 +51,17 @@ export async function savePrepared(request:FormRequest,userId:string,permission:
   if(!bytes.length || bytes.length>25_000_000) throw new Error("This form is too large. Split its registers first.");
   const folder=await drive.ensureFolder([workFolder(request.period),workYear(request.period),safeName(client.name),"Prepared"]);
   const file=await drive.save(folder,saved.name,bytes);
-  if(file==="taken") throw new Error("This form is already being prepared. Open the page again in a moment.");
+  if(file==="taken") {
+    // A second Fill of the same work while the first is saving opens the same draft once saved.
+    for(let wait=0;fill && wait<20;wait++) {
+      const {data:done}=await admin.from("documents").select("drive_file_id").eq("firm_id",request.firm).eq("id",saved.id).single();
+      if(done?.drive_file_id) return saved.id;
+      await new Promise(resolve=>setTimeout(resolve,500));
+    }
+    throw new Error(fill ? "This return is being filled now. Open it again in a moment." : "This form is already being prepared. Open the page again in a moment.");
+  }
   try {
-    const {data:finished,error}=await admin.rpc("finish_form",{target:saved.id,firm:request.firm,person:userId,file:file.id,checksum:createHash("sha256").update(bytes).digest("hex"),bytes:bytes.length,...(permission && {permission})});
+    const {data:finished,error}=await admin.rpc("finish_form",{target:saved.id,firm:request.firm,person:userId as string,file:file.id,checksum:createHash("sha256").update(bytes).digest("hex"),bytes:bytes.length,...(permission && {permission})});
     if(error || !finished) throw new Error("The figures or permission changed. Open the latest work and try again.");
   } catch(error) {await drive.trash(file.id);throw error;}
   return saved.id;

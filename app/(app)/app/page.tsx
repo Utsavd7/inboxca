@@ -14,6 +14,7 @@ import { periodName } from "@/src/lib/documents";
 import { describeHours, type Hours } from "@/src/lib/hours";
 import { currentMember, myQuestions } from "@/src/lib/member";
 import { formName, preparedSchema } from "@/src/lib/prepared";
+import { formsWorkItems } from "@/src/lib/work/forms";
 import { personName, roleNames } from "@/src/lib/roles";
 import { OfficePanel } from "./office-panel";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
@@ -26,6 +27,7 @@ import { Count, Draw, List, Presence, Press } from "./motion";
 import { Pending } from "./pending";
 import { firmAccounts } from "./shell-data";
 import { Celebrate } from "./today-client";
+import { workRows } from "./return-work";
 import { Avatar, Badge, Card, IconTile, PageHead, ProgressRing, Row, SidePanel, Toast } from "./ui";
 import "./today.css";
 
@@ -229,8 +231,9 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
   const questions = myQuestions();
   const accounts = firmAccounts();
 
-  // Prepared returns: drafts to approve, and approved forms whose acknowledgement arrived, to
-  // confirm the filing. Only the latest version of each counts.
+  // Prepared returns whose acknowledgement arrived, to confirm the filing; drafts to approve and
+  // files to file are pinned with the rest of the returns (src/lib/work/forms.ts). Only the
+  // latest version of each counts.
   const toApprove = Promise.all([
     approver || membership.may("mark_filed")
       ? Promise.resolve(supabase.from("documents").select("id, client_id, period_key, status, prepared, clients(name)").eq("firm_id", firm).not("prepared", "is", null).order("received_at", { ascending: false }).limit(100))
@@ -245,9 +248,11 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
         const group = [file.client_id, file.period_key, file.meta.form, file.meta.registration].join(":");
         if (seen.has(group)) return false;
         seen.add(group);
-        return file.status !== "deleted" && ((approver && file.meta.status === "draft") || (waitingAck.has(file.id) && membership.may("mark_filed", file.client_id)));
+        return file.status !== "deleted" && waitingAck.has(file.id) && membership.may("mark_filed", file.client_id);
       });
   });
+
+  const returnWork = formsWorkItems({ supabase, membership });
 
   // Things only the owner or partners act on: drive checks, PCs, the mailbox, notice dates.
   const looks = Promise.all([
@@ -388,7 +393,7 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
       : Promise.resolve(null);
   const preview = sends && (params.confirm === "late" || params.confirm === "papers") ? sendPreview(supabase, firm, params.confirm) : Promise.resolve(null);
 
-  return { today, owner, sends, membership, userId, replies, waits, papers, late, week, rules, toApprove, looks, month, lateTrend, papersWeek, feed, setup, assigned, askPush, pushKey, marking, preview, confirm: params.confirm };
+  return { today, owner, sends, membership, userId, replies, waits, papers, late, week, rules, toApprove, returnWork, looks, month, lateTrend, papersWeek, feed, setup, assigned, askPush, pushKey, marking, preview, confirm: params.confirm };
 }
 
 const returnName = (rule: Map<string, { name: string | null; frequency: string | null }>, code: string | null, period: string | null) => `${rule.get(code ?? "")?.name ?? code ?? ""} for ${periodLabel(rule.get(code ?? "")?.frequency ?? null, period)}`;
@@ -402,8 +407,8 @@ const waitFor = (ms: number) => (ms < 3_600_000 ? `${Math.max(1, Math.round(ms /
 
 // The greeting's line: how many things need this person today.
 async function Things({ data }: { data: Data }) {
-  const [replies, toApprove, late, looks] = await Promise.all([data.replies, data.toApprove, data.late, data.looks]);
-  const things = (replies.count ?? 0) + toApprove.length + (late.count ?? late.data?.length ?? 0) + looks.length;
+  const [replies, toApprove, late, looks, returnWork] = await Promise.all([data.replies, data.toApprove, data.late, data.looks, data.returnWork]);
+  const things = (replies.count ?? 0) + toApprove.length + (late.count ?? late.data?.length ?? 0) + looks.length + returnWork.length;
   return <span>{things ? `${plural(things, "thing needs", "things need")} you today.` : "Nothing needs you today."}</span>;
 }
 
@@ -501,14 +506,14 @@ function Sparkline({ points }: { points: number[] }) {
 // Needs you now: what the owner must look at, clients waiting for a reply, and returns to
 // approve, most urgent first, each with one action.
 async function NeedsNow({ data }: { data: Data }) {
-  const [looks, replies, waits, toApprove] = await Promise.all([data.looks, data.replies, data.waits, data.toApprove]);
+  const [looks, replies, waits, toApprove, returnWork] = await Promise.all([data.looks, data.replies, data.waits, data.toApprove, data.returnWork]);
   const replyCount = replies.count ?? 0;
   const replyRows = (replies.data ?? [])
     .map((request) => ({ request, at: waits.at.get(request.entity_id) }))
     .sort((a, b) => (a.at ?? "").localeCompare(b.at ?? ""));
-  const total = looks.length + replyCount + toApprove.length;
+  const total = looks.length + replyCount + toApprove.length + returnWork.length;
   return (
-    <Card id="t-now" title="Needs you now" Icon={Inbox} kind="reply" count={total} countTone={looks.some((look) => look.urgent) ? "late" : "warn"} className="today-now">
+    <Card id="t-now" title="Needs you now" Icon={Inbox} kind="reply" count={total} countTone={looks.some((look) => look.urgent) || returnWork.some((item) => item.urgent) ? "late" : "warn"} className="today-now">
       {total ? (
         <List name="now" className="app-rows">
           {looks.map((look) => (
@@ -530,6 +535,7 @@ async function NeedsNow({ data }: { data: Data }) {
               }
             />
           ))}
+          {workRows(returnWork, (client) => !data.membership.viewOnlyUntil && data.membership.may("edit_figures", client))}
           {replyRows.map(({ request, at }) => {
             const client = request.clients?.name ?? "A contact";
             return (
@@ -565,6 +571,7 @@ async function NeedsNow({ data }: { data: Data }) {
       ) : (
         <Calm title="You are all caught up" line="No client is waiting for a reply, and nothing waits for your approval." />
       )}
+      {returnWork.length > 6 && <SeeAll href="/app/calendar?view=week">See all {returnWork.length} returns</SeeAll>}
       {replyCount > 5 && <SeeAll href="/app/inbox">See all {replyCount} replies in the Inbox</SeeAll>}
     </Card>
   );
