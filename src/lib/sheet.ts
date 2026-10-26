@@ -39,9 +39,11 @@ export function readCsv(text: string) {
   return rows;
 }
 
-// Index the zip; inflate only the two XML files we read, at most 20 MB each.
+// Index the zip; inflate only the two XML files we read, at most 20 MB each. Each entry also
+// carries its bytes as the zip stores them, so a writer can copy an unchanged part as is.
+type Entry = (() => Buffer) & { stored?: { method: number; body: Buffer; crc: number; size: number } };
 export function xlsxEntries(data: Buffer) {
-  const files = new Map<string, () => Buffer>();
+  const files = new Map<string, Entry>();
   let end = data.length - 22;
   while (end >= 0 && data.readUInt32LE(end) !== 0x06054b50) end--;
   if (end < 0) throw new Error("Not an Excel file");
@@ -53,10 +55,10 @@ export function xlsxEntries(data: Buffer) {
     const start = local + 30 + data.readUInt16LE(local + 26) + data.readUInt16LE(local + 28);
     const body = data.subarray(start, start + data.readUInt32LE(at + 20));
     const method = data.readUInt16LE(at + 10);
-    files.set(name, () => {
+    files.set(name, Object.assign(() => {
       if (method !== 0 && method !== 8 || method === 0 && body.length > 20e6) throw new Error("Excel entry too large or unsupported");
       return method === 8 ? inflateRawSync(body, { maxOutputLength: 20e6 }) : body;
-    });
+    }, { stored: { method, body, crc: data.readUInt32LE(at + 16), size: data.readUInt32LE(at + 24) } }));
     at += 46 + nameLength + data.readUInt16LE(at + 30) + data.readUInt16LE(at + 32);
   }
   return files;

@@ -11,8 +11,11 @@ export function writeWorkbook(original:Buffer,cells:Map<string,Map<string,{value
     return next.number ? `<c${attrs}><v>${text}</v></c>` : `<c${attrs} t="inlineStr"><is><t xml:space="preserve">${text}</t></is></c>`;
   };
   for(const [name,read] of xlsxEntries(original)) {
-    let bytes=read();total+=bytes.length;if(total>100_000_000) throw new Error("Workbook too large");
     const updates=cells.get(name);
+    // A part left as it is keeps its compressed bytes: compressing the official workbook's
+    // 60 MB of unchanged sheets again took most of each fill.
+    const kept=!updates && name!=="xl/workbook.xml" && read.stored?.method===8 ? read.stored : null;
+    let bytes=kept ? Buffer.alloc(0) : read();total+=kept?.size ?? bytes.length;if(total>100_000_000) throw new Error("Workbook too large");
     if(updates) {
       paths.delete(name);
       const remaining=new Set(updates.keys());
@@ -47,8 +50,8 @@ export function writeWorkbook(original:Buffer,cells:Map<string,Map<string,{value
       bytes=Buffer.from(xml.replace(/<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g,cell=>/<f(?:\s|>)/.test(cell) ? cell.replace(/<v(?:\s[^>]*)?>[\s\S]*?<\/v>/g,"") : cell));
     }
     if(name==="xl/workbook.xml") bytes=Buffer.from(bytes.toString().replace(/<calcPr\b[^>]*\/>/,'<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>'));
-    const filename=Buffer.from(name),compressed=deflateRawSync(bytes),checksum=crc32(bytes),local=Buffer.alloc(30),central=Buffer.alloc(46);
-    local.writeUInt32LE(0x04034b50);local.writeUInt16LE(20,4);local.writeUInt16LE(0x800,6);local.writeUInt16LE(8,8);local.writeUInt16LE(33,12);local.writeUInt32LE(checksum,14);local.writeUInt32LE(compressed.length,18);local.writeUInt32LE(bytes.length,22);local.writeUInt16LE(filename.length,26);
+    const filename=Buffer.from(name),compressed=kept?.body ?? deflateRawSync(bytes),checksum=kept?.crc ?? crc32(bytes),local=Buffer.alloc(30),central=Buffer.alloc(46);
+    local.writeUInt32LE(0x04034b50);local.writeUInt16LE(20,4);local.writeUInt16LE(0x800,6);local.writeUInt16LE(8,8);local.writeUInt16LE(33,12);local.writeUInt32LE(checksum,14);local.writeUInt32LE(compressed.length,18);local.writeUInt32LE(kept?.size ?? bytes.length,22);local.writeUInt16LE(filename.length,26);
     central.writeUInt32LE(0x02014b50);central.writeUInt16LE(20,4);local.copy(central,6,4,30);central.writeUInt32LE(offset,42);
     parts.push(local,filename,compressed);directory.push(central,filename);offset+=local.length+filename.length+compressed.length;count++;
   }
