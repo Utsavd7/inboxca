@@ -28,7 +28,8 @@ import {
 import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Suspense, createContext, use, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Suspense, createContext, startTransition, use, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { switchFirm } from "@/app/(app)/actions";
 import { signOut } from "@/app/(auth)/actions";
 import { bellItems, markBellRead } from "@/app/(app)/actions";
 import { contactEmail } from "@/src/lib/site";
@@ -45,7 +46,7 @@ import { news, newsLatest, type News } from "./whats-new";
 // header's tools that every PageHead shows.
 
 export type Theme = "light" | "dark" | "system";
-export type Me = { member: boolean; name: string; email: string; role: string; firm: string; owner: boolean; people: boolean };
+export type Me = { member: boolean; name: string; email: string; role: string; firm: string; firmId: string; firms: { id: string; name: string }[]; owner: boolean; people: boolean };
 type Panel = "help" | "news" | "keys" | null;
 type Shell = {
   me: Me;
@@ -238,6 +239,16 @@ export function WorkspaceMenu() {
                 <small>{me.member ? "Firm workspace" : "No firm yet"}</small>
               </span>
             </div>
+            {me.firms.length > 1 && (
+              <Menu.Group aria-label="Your other firms">
+                {me.firms.filter((row) => row.id !== me.firmId).map((row) => (
+                  <Menu.Item key={row.id} className="menu-item" onClick={() => startTransition(() => switchFirm(row.id))}>
+                    <Avatar name={row.name} square />
+                    Switch to {row.name}
+                  </Menu.Item>
+                ))}
+              </Menu.Group>
+            )}
             <div className="menu-sep" />
             {me.owner && (
               <Menu.LinkItem className="menu-item" closeOnClick render={<Link href="/app/settings" />}>

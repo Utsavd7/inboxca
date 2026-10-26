@@ -39,7 +39,7 @@ import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { paperPolicy, type BulkSend, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings, providerFor } from "@/src/lib/mailbox";
-import { currentMember, currentWriter, myQuestions } from "@/src/lib/member";
+import { currentMember, currentWriter, FIRM_COOKIE, myQuestions } from "@/src/lib/member";
 import { activityNames } from "@/src/lib/activity";
 import { invitableRoles } from "@/src/lib/roles";
 import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
@@ -227,6 +227,15 @@ export async function stillHere() {
     secure: process.env.NODE_ENV === "production",
     path: "/",
   });
+}
+
+// A person in two firms moves to the other one from the sidebar. Only one of their own firms
+// open now is kept; currentMember then works in it, and the database shows it alone.
+export async function switchFirm(firm: string) {
+  const { membership } = await currentMember();
+  if (membership?.firms.some((row) => row.id === firm))
+    (await cookies()).set(FIRM_COOKIE, firm, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 365 * 86_400 });
+  redirect("/app");
 }
 
 // Staying past closing (PLAN.md 5.17.4 #15): in the last 10 minutes a person bound by office
