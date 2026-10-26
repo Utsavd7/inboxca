@@ -172,13 +172,16 @@ test("the owner changes the role, removes the person and brings them back", asyn
   await panel.getByLabel("Role").selectOption("staff");
   await panel.getByRole("button", { name: "Save changes" }).click();
   await expect(row).toContainText("Staff");
+  await expect(owner.getByRole("status").filter({ hasText: "Changes saved." })).toBeVisible();
   await owner.reload();
   await expect(panel.getByLabel("Role")).toHaveValue("staff");
 
-  await panel.getByRole("button", { name: "Remove from the firm" }).click();
+  // Removing asks once more before it takes access away.
+  await panel.getByRole("link", { name: "Remove from the firm" }).click();
+  await panel.getByRole("button", { name: "Yes, remove from the firm" }).click();
   await expect(row).toContainText("Removed");
-  await panel.getByRole("button", { name: "Bring back" }).click();
-  await expect(panel.getByRole("button", { name: "Remove from the firm" })).toBeVisible();
+  await panel.getByRole("button", { name: "Restore" }).click();
+  await expect(panel.getByRole("link", { name: "Remove from the firm" })).toBeVisible();
   await expect(row).toContainText("Active");
 });
 

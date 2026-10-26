@@ -10,6 +10,7 @@ import { OfficePanel } from "../office-panel";
 import { AutoSelect } from "../auto-select";
 import { AccessCheck } from "./access-check";
 import { documentTypes } from "@/src/lib/documents";
+import { paperType } from "@/src/lib/paper-type";
 import { switchable, defaults, type Permissions, type Standing } from "@/src/lib/rights";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
 import { folderOrderNames, namings } from "@/src/lib/drive";
@@ -36,19 +37,19 @@ const problems: Record<string, [string, string]> = {
   mail_limit: ["mailbox", "Choose a whole number from 1 to 2,000 for the email limit."],
   mail_denied: ["mailbox", "The sign in was not allowed, so nothing was connected."],
   mail_failed: ["mailbox", "The email did not finish connecting. Try again."],
-  mail_taken: ["mailbox", "A mailbox is already connected. Disconnect it first to use another address."],
-  mail_admin: ["mailbox", "Microsoft did not allow it. If your firm uses Microsoft 365, its admin may need to allow InboxCA once for the whole firm."],
+  mail_taken: ["mailbox", "A firm email is already connected. Disconnect it first to use another address."],
+  mail_admin: ["mailbox", "Microsoft did not let InboxCA connect. If your firm uses Microsoft 365, the person who manages it may need to allow InboxCA once for the whole firm. Ask them to choose Allow for the whole firm below."],
   drive_terms: ["drive", "Tick the box to agree to the Drive access terms first."],
   drive_provider: ["drive", "Choose a drive."],
   drive_taken: ["drive", "A drive is already connected. Disconnect it first."],
-  drive_denied: ["drive", "The drive was not allowed, so nothing was connected."],
+  drive_denied: ["drive", "You did not allow InboxCA on your drive's sign in page, so the drive is not connected. Connect again and choose Allow."],
   drive_failed: ["drive", "The drive did not finish connecting. Try again."],
   drive_other: ["drive", "That is a different Dropbox account. Sign in with the one already connected, or disconnect it first."],
   close_name: ["close", "Type the firm name exactly as it is shown."],
-  special: ["special", "The dates must run forward and the closing time must be after the opening time."],
+  special: ["special", "The To date must be the same as or after the From date, and Closes must be later than Opens."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { preset: "Preset saved.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Papers saved.", permissions: "Permissions saved.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now." };
+const savedNames: Record<string, string> = { preset: "Saved. Your team now works this way.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Paper sending rules saved.", permissions: "Permissions saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", folders: "Folder order and file names saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now." };
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "drive"]],
@@ -91,14 +92,14 @@ function Card({ id, title, line, danger, children }: { id: string; title: string
 export default async function Settings({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string; group?: string; branch?: string; check?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; group?: string; branch?: string; check?: string; confirm?: string }>;
 }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   if (!officeApprover(membership.role, userId, membership.settings)) return <NotForYou title="Settings" who="the owner" />;
-  if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel branch={(await searchParams).branch} error={(await searchParams).error} /></>;
+  if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Approve your office internet connection and the PCs your staff use." /><OfficePanel branch={(await searchParams).branch} error={(await searchParams).error} /></>;
   const owner = membership.role === "owner";
-  const { saved, error, group: asked, branch, check } = await searchParams;
+  const { saved, error, group: asked, branch, check, confirm } = await searchParams;
   // The co-admin sees only the groups about keeping client data safe.
   const shown = groups.map(([id, name, sections]) => [id, name, sections.filter((section) => owner || !ownerOnly.includes(section))] as const).filter(([, , sections]) => sections.length);
   const groupOf = Object.fromEntries(shown.flatMap(([id, , sections]) => sections.map((section) => [section, id])));
@@ -121,7 +122,7 @@ export default async function Settings({
     <div className="set-page">
       <PageHead title="Settings" sub="Only you, the owner, see this page." />
       <div className="set-body">
-        <Card id="data" title="Your firm is closing" line={<>InboxCA deletes your firm&apos;s data on {longDate(new Date(Date.parse(closed.at) + 30 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }))}. Download your data before then. The activity log is kept one more year, as Indian rules require, then deleted. Files in your firm&apos;s drive stay where they are.</>}>
+        <Card id="data" title="Your firm is closing" line={<>InboxCA deletes your firm&apos;s data on {longDate(new Date(Date.parse(closed.at) + 30 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }))}. Download your data before then. The activity log is kept one more year, as Indian rules require, then deleted. Papers in your firm&apos;s drive stay where they are.</>}>
           <div className="set-foot">{download}</div>
         </Card>
       </div>
@@ -159,7 +160,7 @@ export default async function Settings({
     [true, !clientFolders ? "Each client gets a folder when their first paper arrives" : clientFolders === 1 ? "Made this year's folder for your client" : `Made this year's folder for each of your ${clientFolders} clients`],
     [!!setup.test_file, setup.test_file ? "Saved a test file, read it back and removed it" : "Could not read back a test file. Disconnect the drive and connect it again."],
     [!setup.shared, setup.shared ? "The InboxCA folder is shared or has a link. Stop the sharing in your drive." : "The InboxCA folder is shared with nobody"],
-    [setup.free_bytes == null || setup.free_bytes >= low, setup.free_bytes == null ? "Your drive does not say how much space is left" : `${(setup.free_bytes / 1024 ** 3).toFixed(1)} GB free in your drive`],
+    [setup.free_bytes == null || setup.free_bytes >= low, setup.free_bytes == null ? "Your drive does not say how much space is left" : `${(setup.free_bytes / 1024 ** 3).toFixed(1)} GB free in your drive${setup.free_bytes < low ? ". Free up space or add more, or InboxCA cannot save new papers" : ""}`],
     [true, setup.notices ? "Changes made in the drive show here within minutes" : "Changes made in the drive show here the next morning"],
   ];
   const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
@@ -198,7 +199,7 @@ export default async function Settings({
   };
   return (
     <div className="set-page">
-      <PageHead title="Settings" sub={owner ? "How your firm uses InboxCA. Only you, the owner, see this page." : "How your firm keeps client data safe. As co-admin you change these with the owner."} />
+      <PageHead title="Settings" sub={owner ? "How your firm uses InboxCA. Only you, the owner, see this page." : "How your firm keeps client data safe. As second admin, you can change these, and so can the owner."} />
       <GroupAnchor groupOf={groupOf} />
       <div className="set">
         <nav className="set-nav" aria-label="Settings">
@@ -214,27 +215,34 @@ export default async function Settings({
         </nav>
         <div key={group} className="set-body page-in">
           {group === "email" && <>
-          <Card id="mailbox" title="Firm email" line="The address your clients write to. InboxCA reads only your clients' mail, keeps no copy of it, and replies from this address.">
+          <Card id="mailbox" title="Firm email" line="The address your clients write to. InboxCA reads only your clients' emails, keeps no copy of them, and replies from this address.">
             {mailbox ? (
-              <form action={disconnectMailbox} className="connection">
+              <div className="connection">
                 <Mail size={16} aria-hidden />
                 <p className="grow" role="status">
                   <Badge tone={mailbox.status === "connected" ? "done" : "late"}>{mailbox.status === "connected" ? "Connected" : "Needs to be connected again"}</Badge>
                   <span className="sr-only">: </span>
                   <strong>{mailAddress}</strong>
                 </p>
-                <Pending className="b b-secondary" type="submit">
+                <Link className="b b-secondary" href="/app/settings?group=email&confirm=mail#mailbox" scroll={false}>
                   Disconnect
-                </Pending>
-              </form>
+                </Link>
+              </div>
             ) : (
               <>
                 {signIn()}
                 <MailboxForm />
               </>
             )}
+            {mailbox && confirm === "mail" && (
+              <form action={disconnectMailbox} className="set-foot">
+                <p className="hint grow">Disconnect {mailAddress}? InboxCA stops reading it, and replies and reminders stop until you connect it again. Your emails stay where they are.</p>
+                <Pending className="b b-danger" type="submit" busy="Disconnecting">Yes, disconnect</Pending>
+                <Link className="b b-secondary" href="/app/settings?group=email#mailbox" scroll={false}>Cancel</Link>
+              </form>
+            )}
             {mailbox?.status==="needs_reconnect" && <>
-              <p className="alert" role="alert">Connect your firm&apos;s email again. Replies will wait until it is connected.</p>
+              <p className="alert" role="alert">Connect the firm email again. Replies will wait until it is connected.</p>
               {isMailApi(mailbox.provider) && mailSignInReady(mailbox.provider) ? signIn(mailbox.provider) : <MailboxForm reconnecting initial={{address:mailAddress ?? "",...Object.fromEntries(Object.entries((mailServers?.settings ?? {}) as Record<string,unknown>).filter(([key])=>["imap","smtp"].includes(key)).flatMap(([key,value])=>Object.entries(value as Record<string,string|number>).map(([part,value])=>[`${key}_${part}`,String(value)])))}} />}
             </>}
             {mailbox && <form action={saveMailLimit} className="set-fields">
@@ -245,9 +253,9 @@ export default async function Settings({
             </form>}
           </Card>
 
-          <Card id="drive" title="Firm drive" line="Client files are saved in your firm's own drive, in folders by year, client and work. InboxCA keeps no client files.">
+          <Card id="drive" title="Firm drive" line="Client papers are saved in your firm's own drive, in folders by year, client and type of work. InboxCA keeps no copy of them.">
             {drive && (
-              <form action={disconnectDrive} className="connection">
+              <form action={reconnectDrive} className="connection">
                 <HardDrive size={16} aria-hidden />
                 <p className="grow" role="status">
                   <Badge tone={driveAway ? "late" : "done"}>{driveAway ? "Cannot be reached" : "Connected"}</Badge>
@@ -256,13 +264,20 @@ export default async function Settings({
                 </p>
                 {/* Signs in to the same drive again, keeping its folders and papers. */}
                 {ready[drive.provider] && (
-                  <Pending className={`b ${driveAway ? "b-primary" : "b-secondary"}`} type="submit" formAction={reconnectDrive} busy="Reconnecting">
-                    Reconnect
+                  <Pending className={`b ${driveAway ? "b-primary" : "b-secondary"}`} type="submit" busy="Connecting again">
+                    Connect again
                   </Pending>
                 )}
-                <Pending className="b b-secondary" type="submit">
+                <Link className="b b-secondary" href="/app/settings?group=email&confirm=drive#drive" scroll={false}>
                   Disconnect
-                </Pending>
+                </Link>
+              </form>
+            )}
+            {drive && confirm === "drive" && (
+              <form action={disconnectDrive} className="set-foot">
+                <p className="hint grow">Disconnect {driveAddress}? InboxCA stops saving papers to it until you connect it again. The papers already in your drive stay where they are.</p>
+                <Pending className="b b-danger" type="submit" busy="Disconnecting">Yes, disconnect</Pending>
+                <Link className="b b-secondary" href="/app/settings?group=email#drive" scroll={false}>Cancel</Link>
               </form>
             )}
             {drive && problem("drive")}
@@ -285,10 +300,10 @@ export default async function Settings({
             {drive && (
               <form action={setFolderOrder} className="set-fields">
                 <p className="hint set-wide">
-                  Past files already in your drive? <Link href="/app/import">Add old files</Link>, sorted into their client folders in place.
+                  Old papers already in your drive? <Link href="/app/import">Add old files</Link> moves them into their client folders.
                 </p>
                 <div>
-                  <label htmlFor="folder-order">How new files are arranged</label>
+                  <label htmlFor="folder-order">Folder order for new papers</label>
                   <select id="folder-order" name="order" defaultValue={folderOrder}>
                     {Object.entries(folderOrderNames).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -298,7 +313,7 @@ export default async function Settings({
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="naming">How new files are named</label>
+                  <label htmlFor="naming">How new papers are named</label>
                   <select id="naming" name="naming" defaultValue={naming}>
                     {Object.entries(namings).map(([value, example]) => (
                       <option key={value} value={value}>
@@ -322,14 +337,14 @@ export default async function Settings({
                     </label>
                   ))}
                 </fieldset>
-                <p className="hint">InboxCA can read this whole drive and touches only the folders you choose and its own InboxCA folder, so connect a drive kept for your firm.</p>
+                <p className="hint">InboxCA gets access to the whole drive, but it opens only the folders you choose and its own InboxCA folder. Connect a drive used only for your firm.</p>
                 <div>
                   <h3 className="set-sub">What you are allowing InboxCA to do</h3>
                   <ul className="points">
                     <li>Read the files in the folders you choose, and every file it saves.</li>
                     <li>Make folders, and rename and move folders and files to keep them in order.</li>
-                    <li>Save files from client emails, and the forms it fills.</li>
-                    <li>Read figures from your files to fill GST and income tax forms for your team to check.</li>
+                    <li>Save papers from client emails, and the returns it prepares.</li>
+                    <li>Read figures from your papers to prepare GST and income tax returns for your team to check.</li>
                     <li>It will not delete a file without your approval, share anything outside your firm, open folders you did not choose, or use your files to train AI.</li>
                     <li>You can take this access back at any time, here or at your drive provider.</li>
                   </ul>
@@ -348,10 +363,10 @@ export default async function Settings({
           </>}
 
           {group === "access" && <>
-          <Card id="preset" title="Access preset" line="One choice sets Office only, office hours and signing out. You can change each of them after.">
+          <Card id="preset" title="How your team works" line="One choice sets Office only, office hours and signing out. You can change each of them after.">
             <form id="preset-form" action={choosePreset} className="set-stack">
               <fieldset className="set-choices">
-                <legend className="sr-only">Preset</legend>
+                <legend className="sr-only">How your team works</legend>
                 {Object.entries(presets).map(([key, { name, line }]) => (
                   <label key={key}>
                     <input type="radio" name="preset" value={key} required defaultChecked={preset === key} aria-label={`${name}: ${line}`} />
@@ -359,13 +374,13 @@ export default async function Settings({
                   </label>
                 ))}
               </fieldset>
-              {(!(settings.office as Office | undefined)?.on || (settings.office as Office).anywhere) && <fieldset className="set-options"><legend>If you choose an office preset: are you in the office now?</legend>
+              {(!(settings.office as Office | undefined)?.on || (settings.office as Office).anywhere) && <fieldset className="set-options"><legend>If you choose anything but Standard: are you in the office now?</legend>
                 <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, I am in the office now</label>
-                <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it there later</label>
+                <label className="check"><input type="radio" name="here" value="no" />No, I will approve the office internet connection later, from the office</label>
               </fieldset>}
               <div className="set-foot">
-                <Pending busy="Saving" className="b b-primary" type="submit">Use this preset</Pending>
-                {!preset && <p className="hint">Your rules no longer match a preset.</p>}
+                <Pending busy="Saving" className="b b-primary" type="submit">Use this choice</Pending>
+                {!preset && <p className="hint">Your rules no longer match one of these choices.</p>}
               </div>
             </form>
             <OfficePanel error={error} inPreset branch={branch} />
@@ -402,13 +417,21 @@ export default async function Settings({
           <Card id="tester" title="Check someone's access" line="Can a person use InboxCA now, from here, on this PC? InboxCA answers with the same checks it makes on every page.">
             <AccessCheck person={check} />
           </Card>
-          {owner && <Card id="recovery" title="Recovery codes" line="If you lose the phone with your 2 step code, one of these codes lets you set it up again after the email code. Each code works once, and new codes stop the old ones. Keep them away from your phone.">
-            <form action="/app/settings/recovery-codes" method="post" className="set-foot"><button className="b b-secondary" type="submit">Download 10 new codes</button></form>
+          {owner && <Card id="recovery" title="Recovery codes" line="If you lose the phone that gives your 2 step code, sign in with the email code, then type one of these codes to set up a new phone. Each code works once. Keep them somewhere other than your phone.">
+            {confirm === "codes" ? (
+              <form action="/app/settings/recovery-codes" method="post" className="set-foot">
+                <p className="hint grow">Your old codes stop working as soon as you download new ones.</p>
+                <button className="b b-primary" type="submit">Yes, download 10 new codes</button>
+                <Link className="b b-secondary" href="/app/settings?group=access#recovery" scroll={false}>Cancel</Link>
+              </form>
+            ) : (
+              <div className="set-foot"><Link className="b b-secondary" href="/app/settings?group=access&confirm=codes#recovery" scroll={false}>Download 10 new codes</Link></div>
+            )}
           </Card>}
           </>}
 
           {group === "hours" && <>
-          <Card id="hours" title={picked ? `Office hours for ${picked.name}` : "Office hours"} line={picked ? "India time. Whether these hours apply is chosen under Main office." : "India time. You can always sign in; these hours apply to everyone else."}>
+          <Card id="hours" title={picked ? `Office hours for ${picked.name}` : "Office hours"} line={picked ? "India time. The switch that limits people to office hours is under Main office." : "India time. You can always sign in. If the switch below is on, everyone else can use InboxCA only in these hours."}>
             {!!branches?.length && <Form action="/app/settings#hours">
               <input type="hidden" name="group" value="hours" />
               <div className="form-row"><div>
@@ -513,14 +536,14 @@ export default async function Settings({
           </>}
 
           {group === "people" && <>
-          <Card id="permissions" title="Permissions" line="Everyone sees every client's files, view only, and does the filing work: correcting a file's type or period, adding portal files, marking returns filed. Anything more is a question to their manager or to you, unless you switch it on here.">
+          <Card id="permissions" title="Permissions" line="Everyone can view every client's papers. The ticks below are what staff and managers may do without asking. For anything not ticked, they ask their manager or you for permission.">
             <form action={savePermissions} className="set-stack">
               <div className="set-table">
                 <table className="t">
                   <thead>
                     <tr>
                       <th scope="col">Without asking</th>
-                      <th scope="col" className="shrink">Employees</th>
+                      <th scope="col" className="shrink">Staff</th>
                       <th scope="col" className="shrink">Managers</th>
                     </tr>
                   </thead>
@@ -530,7 +553,7 @@ export default async function Settings({
                         <td>{label}</td>
                         {(["employee", "manager"] as const).map((column) => (
                           <td key={column} className="shrink">
-                            <input type="checkbox" name={`${column}:${right}`} disabled={right==="approve_requests" && column==="employee"} defaultChecked={permissions[column]?.[right as keyof typeof switchable] ?? (right in defaults || right==="approve_requests" && column==="manager")} aria-label={`${label}: ${column === "employee" ? "employees" : "managers"}`} />
+                            <input type="checkbox" name={`${column}:${right}`} disabled={right==="approve_requests" && column==="employee"} defaultChecked={permissions[column]?.[right as keyof typeof switchable] ?? (right in defaults || right==="approve_requests" && column==="manager")} aria-label={`${label}: ${column === "employee" ? "staff" : "managers"}`} />
                           </td>
                         ))}
                       </tr>
@@ -538,11 +561,11 @@ export default async function Settings({
                   </tbody>
                 </table>
               </div>
-              <p className="hint">Partners follow managers. Removing files stays yours.</p>
-              <details className="reveal"><summary>Limit these role permissions</summary><p className="hint">Leave blank for every client with no end date. View only access stays the same.</p><div className="set-fields">{(["employee","manager"] as const).map(column=><fieldset key={column} className="set-stack"><legend>{column==="employee" ? "Employees" : "Managers"}</legend><div><label htmlFor={`${column}-clients`}>Client names, one per line</label><textarea id={`${column}-clients`} name={`${column}:clients`} rows={3} defaultValue={namesOf(permissions[column]?.scope?.clients)}/></div><div><label htmlFor={`${column}-until`}>Last day, if needed</label><input id={`${column}-until`} type="date" name={`${column}:until`} defaultValue={permissions[column]?.scope?.until}/></div></fieldset>)}</div></details>
+              <p className="hint">Partners may do the same as managers. Only you can remove papers.</p>
+              <details className="reveal"><summary>Limit these to some clients or a last day</summary><p className="hint">Leave blank for every client with no end date. View only access stays the same.</p><div className="set-fields">{(["employee","manager"] as const).map(column=><fieldset key={column} className="set-stack"><legend>{column==="employee" ? "Staff" : "Managers"}</legend><div><label htmlFor={`${column}-clients`}>Client names, one per line</label><textarea id={`${column}-clients`} name={`${column}:clients`} rows={3} defaultValue={namesOf(permissions[column]?.scope?.clients)}/></div><div><label htmlFor={`${column}-until`}>Last day, if needed</label><input id={`${column}-until`} type="date" name={`${column}:until`} defaultValue={permissions[column]?.scope?.until}/></div></fieldset>)}</div></details>
               <label className="check">
                 <input className="toggle" type="checkbox" name="hide_inactive" defaultChecked={settings.viewer_hide_inactive === true} />
-                Hide documents when InboxCA is not the active window (staff often read a document while typing in the portal beside it, so this is off unless you need it)
+                Hide papers when someone switches to another window. Leave this off if staff read a paper while typing into the tax portal beside it.
               </label>
               <label className="check"><input className="toggle" type="checkbox" name="second_form_approval" defaultChecked={settings.second_form_approval===true}/>Second approval before filing. Another person must approve after the figures are checked.</label>
               <div className="set-days"><label htmlFor="pin-days">Days before the due date to fill each GST return, and show it in red if it still needs papers or checks</label><input id="pin-days" name="pin_days" type="number" min="1" max="30" step="1" className="num" defaultValue={Number(settings.pin_days) || 5} /></div>
@@ -551,14 +574,21 @@ export default async function Settings({
                 <Pending busy="Saving" className="b b-primary" name="intent" value="save">
                   Save permissions
                 </Pending>
-                <Pending className="b b-ghost" name="intent" value="reset" busy="Resetting">
+                <Link className="b b-ghost" href="/app/settings?group=people&confirm=reset#permissions" scroll={false}>
                   Reset to defaults
-                </Pending>
+                </Link>
               </div>
             </form>
+            {confirm === "reset" && (
+              <form action={savePermissions} className="set-foot">
+                <p className="hint grow">Reset every permission to the defaults? This also clears the client and last day limits, Hide papers and the second approval, and sets the GST fill days back to 5.</p>
+                <Pending className="b b-danger" name="intent" value="reset" busy="Resetting">Yes, reset</Pending>
+                <Link className="b b-secondary" href="/app/settings?group=people#permissions" scroll={false}>Cancel</Link>
+              </form>
+            )}
           </Card>
 
-          {(!!others.length || !!always.length) && <Card id="always" title="Allow one person without asking" line="Let one person do one thing without asking, for some clients or until a date, on top of their role.">
+          {(!!others.length || !!always.length) && <Card id="always" title="Extra permission for one person" line="Let one person do one thing without asking, for some clients or until a date, on top of their role.">
             {!!others.length && <form action={allowStanding} className="set-fields"><div><label htmlFor="standing-person">Person</label><select id="standing-person" name="person" required>{others.map(person=><option key={person.user_id} value={person.user_id}>{person.email}</option>)}</select></div><div><label htmlFor="standing-right">What they may do</label><select id="standing-right" name="right">{Object.entries(switchable).map(([right,label])=><option key={right} value={right}>{label}</option>)}</select></div><div><label htmlFor="standing-clients">Client names, one per line. Blank means every client.</label><textarea id="standing-clients" name="clients" rows={3}/></div><div><label htmlFor="standing-until">Last day, if needed</label><input id="standing-until" name="until" type="date"/></div><div className="set-foot"><Pending busy="Saving" className="b b-primary">Allow this person</Pending></div></form>}
             {!!always.length && (
               <>
@@ -600,7 +630,7 @@ export default async function Settings({
           </>}
 
           {group === "reminders" && <>
-          <Card id="reminders" title="Reminders" line="InboxCA emails each client once a day at most, from your firm's address, at the stages you choose. Only dates a CA has confirmed are reminded.">
+          <Card id="reminders" title="Reminders" line="InboxCA emails each client at most once a day, from your firm email, at the stages you choose. It reminds only for due dates it has checked against the government notification.">
             <form action={saveReminders} className="set-stack">
               <label className="check">
                 <input className="toggle" type="checkbox" name="on" defaultChecked={settings.reminders === true} />
@@ -624,21 +654,21 @@ export default async function Settings({
               </fieldset>
               <label className="check">
                 <input className="toggle" type="checkbox" name="acknowledge" defaultChecked={settings.acknowledge === true} />
-                Reply to clients when their files arrive, saying what was received
+                Reply to clients when their papers arrive, saying what was received
               </label>
-              <p className="hint">A reminder is skipped when the return is filed, the client already sent files for it, or your team is replying to them.</p>
+              <p className="hint">A reminder is skipped when the return is filed, the client already sent papers for it, or your team is replying to them.</p>
               <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save reminders</Pending></div>
             </form>
           </Card>
 
-          <Card id="records" title="Papers sent on request" line="When a client or an allowed contact asks for a paper by email, InboxCA finds it and replies with a secure link. Ticked papers go at once; the rest wait for one approval in the Inbox.">
+          <Card id="records" title="Papers sent on request" line="When a client, or a contact with Receives papers ticked, asks for a paper by email, InboxCA finds it and replies with a secure link. Ticked paper types go at once. The others wait until someone approves them in the Inbox.">
             <form action={saveRecords} className="set-stack">
               <fieldset>
                 <legend>Send at once</legend>
                 <div className="set-grid">{documentTypes.map((type) => (
                   <label key={type} className="check">
                     <input type="checkbox" name="routine" value={type} defaultChecked={isRoutine(type, { routine: records.routine })} />
-                    {type}
+                    {paperType(type)}
                   </label>
                 ))}</div>
               </fieldset>
@@ -646,13 +676,13 @@ export default async function Settings({
                 <input className="toggle" type="checkbox" name="approve_all" defaultChecked={records.approve_all === true} />
                 Wait for approval for every paper
               </label>
-              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save papers</Pending></div>
+              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save paper sending rules</Pending></div>
             </form>
           </Card>
           </>}
 
           {group === "data" && <>
-          <Card id="use" title="InboxCA use" line="What sizes a plan. Your files stay in your own drive; InboxCA storage holds the client list, records and what InboxCA reads from files.">
+          <Card id="use" title="InboxCA use" line="How much your firm uses InboxCA, which will later decide your plan. Your papers stay in your own drive. InboxCA stores your client list, returns, notices, the activity log and what it reads from papers.">
             {usage && (
               <Suspense fallback={<div className="set-meters" aria-busy="true"><span className="skel" /><span className="skel" /></div>}>
                 <Meters usage={usage} />
@@ -663,10 +693,10 @@ export default async function Settings({
           <Card id="data" title="Your data" line="Your client list, returns and notices, the list of papers and the activity log, as spreadsheet files in one ZIP. The papers themselves are already in your firm's drive.">
             <div className="set-foot">{download}</div>
           </Card>
-          <Card id="support" title="Orelu support" line="Orelu cannot see your clients or papers. To help with a problem, Orelu support may ask here for an hour's look at your people and client names.">
+          <Card id="support" title="Orelu support" line="Orelu is the company that makes InboxCA. Orelu cannot see your clients or papers. To fix a problem, Orelu support may ask here to see your people and client names for one hour.">
             <Support supabase={supabase} firmId={membership.firmId} />
           </Card>
-          <Card id="close" title="Close the firm" danger line="Everyone is signed out, your team can no longer sign in, and the firm email and drive are disconnected. For 30 days you can still sign in and download your data. Then InboxCA deletes your firm's data; the activity log is kept one more year, as Indian rules require. Files in your drive are not touched.">
+          <Card id="close" title="Close the firm" danger line="Everyone is signed out, your team can no longer sign in, and the firm email and drive are disconnected. For 30 days you can still sign in and download your data. Then InboxCA deletes your firm's data; the activity log is kept one more year, as Indian rules require. Papers in your drive are not touched.">
             <details className="reveal" open={error === "close_name"}>
               <summary>Close the firm</summary>
               <form action={closeFirm} className="set-fields">
@@ -719,7 +749,7 @@ async function Support({ supabase, firmId }: { supabase: Awaited<ReturnType<type
       )}
       {!!steps?.length && (
         <ul className="set-support">
-          {steps.map((step) => <li key={`${step.action}${step.at}`} className="hint"><span className="num">{at(step.at)}</span> {supportWords[step.action] ?? step.action}</li>)}
+          {steps.map((step) => <li key={`${step.action}${step.at}`} className="hint"><span className="num">{at(step.at)}</span> {supportWords[step.action] ?? "Orelu support access changed"}</li>)}
         </ul>
       )}
     </>

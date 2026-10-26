@@ -15,14 +15,14 @@ export type MailCheck = { cursor: string } | { error: "sign_in" | "server" };
 
 // The providers Indian firms use most, with each one's published servers: found by the
 // address's own domain, or by where a firm's own domain receives mail.
-const zohoHelp = "Zoho Mail needs an app password (Zoho Accounts, Security, App passwords) and IMAP access turned on in Mail settings.";
+const zohoHelp = "Zoho Mail needs an app password, not your usual password. Make one in Zoho Accounts under Security, then App passwords. Then turn on IMAP access in Zoho Mail settings.";
 const providers: (MailSettings & { name: string; domains: string[]; mx: RegExp; help: string })[] = [
-  { name: "Gmail", domains: ["gmail.com", "googlemail.com"], mx: /google(mail)?\.com/, imap: { host: "imap.gmail.com", port: 993 }, smtp: { host: "smtp.gmail.com", port: 465 }, help: "Gmail needs an app password: Google Account, Security, App passwords." },
+  { name: "Gmail", domains: ["gmail.com", "googlemail.com"], mx: /google(mail)?\.com/, imap: { host: "imap.gmail.com", port: 993 }, smtp: { host: "smtp.gmail.com", port: 465 }, help: "Gmail needs an app password, not your usual password. Make one in your Google Account under Security, then App passwords." },
   { name: "Zoho Mail", domains: ["zoho.in", "zohomail.in"], mx: /zoho\.in/, imap: { host: "imap.zoho.in", port: 993 }, smtp: { host: "smtp.zoho.in", port: 465 }, help: zohoHelp },
   { name: "Zoho Mail", domains: ["zoho.com", "zohomail.com"], mx: /zoho(mail)?\.com/, imap: { host: "imap.zoho.com", port: 993 }, smtp: { host: "smtp.zoho.com", port: 465 }, help: zohoHelp },
-  { name: "Yahoo Mail", domains: ["yahoo.com", "yahoo.co.in", "ymail.com", "rocketmail.com"], mx: /yahoodns\.net/, imap: { host: "imap.mail.yahoo.com", port: 993 }, smtp: { host: "smtp.mail.yahoo.com", port: 465 }, help: "Yahoo Mail needs an app password: Account info, Account security, Generate app password." },
-  { name: "GoDaddy email", domains: [], mx: /secureserver\.net/, imap: { host: "imap.secureserver.net", port: 993 }, smtp: { host: "smtpout.secureserver.net", port: 465 }, help: "Use this mailbox's own password, the one set for it at GoDaddy." },
-  { name: "Hostinger email", domains: [], mx: /hostinger\.com/, imap: { host: "imap.hostinger.com", port: 993 }, smtp: { host: "smtp.hostinger.com", port: 465 }, help: "Use this mailbox's own password, the one set for it at Hostinger." },
+  { name: "Yahoo Mail", domains: ["yahoo.com", "yahoo.co.in", "ymail.com", "rocketmail.com"], mx: /yahoodns\.net/, imap: { host: "imap.mail.yahoo.com", port: 993 }, smtp: { host: "smtp.mail.yahoo.com", port: 465 }, help: "Yahoo Mail needs an app password, not your usual password. Make one in Account info under Account security, then Generate app password." },
+  { name: "GoDaddy email", domains: [], mx: /secureserver\.net/, imap: { host: "imap.secureserver.net", port: 993 }, smtp: { host: "smtpout.secureserver.net", port: 465 }, help: "Use this email address's own password, the one set for it at GoDaddy." },
+  { name: "Hostinger email", domains: [], mx: /hostinger\.com/, imap: { host: "imap.hostinger.com", port: 993 }, smtp: { host: "smtp.hostinger.com", port: 465 }, help: "Use this email address's own password, the one set for it at Hostinger." },
 ];
 export const providerFor = (imapHost: string) => providers.find((provider) => provider.imap.host === imapHost);
 

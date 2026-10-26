@@ -119,6 +119,7 @@ export async function manageMember(form: FormData) {
       .eq("user_id", args.person);
   }
   revalidatePath("/app/people");
+  redirect(`/app/people?person=${encodeURIComponent(args.person)}&saved=${intent === "remove" || intent === "restore" ? intent : "role"}`);
 }
 
 // People → Teams and Branches: the owner adds and removes them. Removing a team leaves its
@@ -825,6 +826,7 @@ export async function disconnectMailbox() {
   await forgetMailToken(membership.firmId, userId).catch(() => log.warn("mail_token_not_revoked", {}));
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "mail");
   revalidatePath("/app/settings");
+  redirect("/app/settings?group=email&saved=mail_off#mailbox");
 }
 
 // Inbox: correct an email's label (a person's choice wins over the rules and is logged),
@@ -947,6 +949,7 @@ export async function disconnectDrive() {
   if (membership?.role !== "owner") redirect("/app");
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "drive");
   revalidatePath("/app/settings");
+  redirect("/app/settings?group=email&saved=drive_off#drive");
 }
 
 // Closing the firm (PLAN.md 5.5.1): the owner types the firm's name, which the database
@@ -1601,6 +1604,7 @@ export async function setFolderOrder(form: FormData) {
     await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "drive.folder_order", entity_type: "account", entity_id: account.id, details: { order, naming } });
   }
   revalidatePath("/app/settings");
+  redirect("/app/settings?group=email&saved=folders#drive");
 }
 
 // The first import (PLAN.md 5.16): the owner approves moving past files already in the
@@ -1851,7 +1855,7 @@ export async function setOfficeOnly(form: FormData) {
   // is not an active partner) comes back as a note on the panel, not a broken page.
   const refused = error && (Object.entries(officeRefusals).find(([text]) => error.message.includes(text))?.[1] ?? "office");
   if (!refused) revalidatePath("/app", "layout");
-  redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}${refused ? `&error=${refused}` : ""}#office`);
+  redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}${refused ? `&error=${refused}` : decision === "deputies" ? "&saved=deputies" : ""}#office`);
 }
 
 // The owner decides whether a waiting PC stays in the office, travels, or is refused.
@@ -1999,7 +2003,7 @@ export async function savePermissions(form: FormData) {
   const pinDays = form.get("intent") === "reset" ? 5 : Math.min(30, Math.max(1, Math.round(Number(form.get("pin_days"))) || 5));
   await supabase.from("firms").update({ settings: { ...membership.settings, permissions, second_form_approval:form.get("intent")!=="reset" && form.get("second_form_approval")==="on", viewer_hide_inactive: hideInactive, pin_days: pinDays } }).eq("id", membership.firmId);
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions, pin_days: pinDays } });
-  redirect("/app/settings?group=people&saved=permissions#permissions");
+  redirect(`/app/settings?group=people&saved=${form.get("intent") === "reset" ? "reset" : "permissions"}#permissions`);
 }
 
 async function permissionScope(form:FormData,prefix:string,firm:string) {
@@ -2028,7 +2032,7 @@ export async function allowStanding(form:FormData) {
   if(error) throw new Error("The permission could not be saved.");
   await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"permission.always",entity_type:"user",entity_id:person,details:{right,for:person,...scope}});
   revalidatePath("/app","layout");
-  redirect("/app/settings?group=people&saved=permissions#permissions");
+  redirect("/app/settings?group=people&saved=allowed#permissions");
 }
 
 // Settings → Permissions: the owner withdraws what one person was always allowed.
@@ -2041,7 +2045,7 @@ export async function withdrawAlways(form: FormData) {
   if (!member) redirect("/app/settings?group=people#permissions");
   await admin.from("firm_members").update({ access: { ...(member.access as object), always: [] } }).eq("firm_id", membership.firmId).eq("user_id", person);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permission.withdrawn", entity_type: "user", entity_id: person });
-  redirect("/app/settings?group=people&saved=permissions#permissions");
+  redirect("/app/settings?group=people&saved=withdrawn#permissions");
 }
 
 // A staff member away from the office asks to use this device there (5.17.4 #48).

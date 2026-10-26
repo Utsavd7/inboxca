@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { changeGroup, manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
-import { Avatar, Badge, Empty, IconTile, NotForYou, PageHead, SidePanel, type Tone } from "../ui";
+import { Avatar, Badge, Empty, IconTile, NotForYou, PageHead, SidePanel, Toast, type Tone } from "../ui";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { invitableRoles, personName, roleLabel } from "@/src/lib/roles";
@@ -14,6 +14,8 @@ const statusNames: Record<string, string> = { active: "Active", invited: "Invite
 const statusTones: Record<string, Tone> = { active: "done", invited: "warn" };
 // Each role keeps one colour on its pill; the colour names the role, the word says it.
 const roleTones: Record<string, Tone> = { owner: "purple", partner: "blue", manager: "blue" };
+// What a change on a person says once it is saved (?saved=).
+const savedNames: Record<string, string> = { role: "Changes saved.", remove: "Removed from the firm.", restore: "Restored. They can sign in again." };
 // A person is in at most one team and works at most at one branch.
 const kinds = [
   { kind: "team", column: "team_id", title: "Teams", one: "Team", Icon: Users },
@@ -22,7 +24,7 @@ const kinds = [
 
 // The firm's people. Everyone who opens People sees the list; only the owner invites,
 // changes roles, teams and branches, and removes people, each in a panel beside the list.
-export default async function People({ searchParams }: { searchParams: Promise<{ panel?: string; person?: string }> }) {
+export default async function People({ searchParams }: { searchParams: Promise<{ panel?: string; person?: string; confirm?: string; saved?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   if (!["owner", "partner", "manager"].includes(membership.role)) return <NotForYou title="People" who="the owner, partners and managers" />;
@@ -30,7 +32,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "branch"]).order("name"),
   ]);
-  const { panel, person: chosen } = await searchParams;
+  const { panel, person: chosen, confirm, saved } = await searchParams;
   const groupName = new Map(groups?.map((group) => [group.id, group.name]));
   const groupsOf = (kind: string) => groups?.filter((group) => group.kind === kind) ?? [];
   const size = (column: "team_id" | "branch_id", id: string) => {
@@ -152,7 +154,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
           <form key={person.role + person.status + person.team_id + person.branch_id} action={manageMember} className="fields">
             <input type="hidden" name="person" value={person.user_id} />
             {person.status === "deactivated" ? (
-              <p className="hint">Removed from the firm. Bring them back to let them sign in again.</p>
+              <p className="hint">Removed from the firm. Restore them to let them sign in again.</p>
             ) : (
               <>
                 <div>
@@ -187,15 +189,32 @@ export default async function People({ searchParams }: { searchParams: Promise<{
             )}
             <div className="people-leave">
               {person.status === "deactivated" ? (
-                <Pending className="b b-primary" name="intent" value="restore" busy="Bringing back">
-                  Bring back
+                <Pending className="b b-primary" name="intent" value="restore" busy="Restoring">
+                  Restore
                 </Pending>
+              ) : person.status === "invited" ? (
+                <>
+                  <p className="hint">The invite stops working.</p>
+                  <Pending className="b b-secondary" name="intent" value="remove" busy="Removing">
+                    Withdraw invite
+                  </Pending>
+                </>
+              ) : confirm === "remove" ? (
+                <>
+                  <p className="hint">Remove {personName(person.email)} from the firm? They lose access at once. You can restore them later.</p>
+                  <Pending className="b b-danger" name="intent" value="remove" busy="Removing">
+                    Yes, remove from the firm
+                  </Pending>
+                  <Link className="b b-secondary" href={`/app/people?person=${person.user_id}`} scroll={false}>
+                    Cancel
+                  </Link>
+                </>
               ) : (
                 <>
-                  <p className="hint">{person.status === "invited" ? "The invite stops working." : "They lose access at once. You can bring them back later."}</p>
-                  <Pending className="b b-secondary" name="intent" value="remove" busy="Removing">
-                    {person.status === "invited" ? "Withdraw invite" : "Remove from the firm"}
-                  </Pending>
+                  <p className="hint">They lose access at once. You can restore them later.</p>
+                  <Link className="b b-secondary" href={`/app/people?person=${person.user_id}&confirm=remove`} scroll={false}>
+                    Remove from the firm
+                  </Link>
                 </>
               )}
             </div>
@@ -250,6 +269,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
         </SidePanel>
       )}
       </Presence>
+      {saved && savedNames[saved] && <Toast>{savedNames[saved]}</Toast>}
     </div>
   );
 }
