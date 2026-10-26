@@ -13,11 +13,12 @@ const names = new Map(sources.map((source) => [source.key, source.name]));
 export async function governmentUpdates(supabase: Db, firmId: string) {
   const { data, error } = await supabase.rpc("gov_updates", { target_firm: firmId });
   if (error) throw new Error(`Government updates failed: ${error.code}`);
-  const found = data as { areas: Area[]; items: Omit<GovUpdate, "from">[] };
+  const found = data as { areas: Area[]; failing: string[]; items: Omit<GovUpdate, "from">[] };
   return {
     items: found.items.map((item): GovUpdate => ({ ...item, from: names.get(item.source) ?? "An official site" })),
-    // The official pages InboxCA cannot read for these areas, for people to look at themselves.
-    unread: sources.filter((source) => source.kind === "manual" && found.areas.includes(source.area)),
+    // The official pages InboxCA cannot read for these areas, for people to look at themselves:
+    // those that block readers, and any the check has not read for two days.
+    unread: sources.filter((source) => (source.kind === "manual" || found.failing.includes(source.key)) && found.areas.includes(source.area)),
   };
 }
 

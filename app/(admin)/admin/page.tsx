@@ -14,7 +14,7 @@ type Watch = { sources?: Record<string, { checked?: string }>; changes?: Change[
 const areas: Record<string, string> = { gst: "GST", income_tax: "Income tax", tds: "TDS", company_law: "Company law" };
 
 // A new official file beside the copy InboxCA fills today.
-function Layout({ compared }: { compared: Compared }) {
+function Comparison({ compared }: { compared: Compared }) {
   if (compared.error) return <span className="sub">{compared.file}: could not compare ({compared.error}).</span>;
   if (compared.same) return <span className="sub">{compared.file}: same layout as {compared.with}.</span>;
   return (
@@ -74,7 +74,7 @@ export default async function AdminToday({ searchParams }: { searchParams: Promi
                   {!!change.removed?.length && `, ${change.removed.length} files removed`}
                 </span>
                 <Touches reach={changeReach[at]} />
-                {change.compared?.map((compared) => <Layout key={compared.file} compared={compared} />)}
+                {change.compared?.map((compared) => <Comparison key={compared.file} compared={compared} />)}
                 {!!change.compared?.length && <span className="sub">Not used yet. InboxCA has no store for official files yet, so a new version is added to its list of forms by hand.</span>}
               </div>
               <a href={change.url} target="_blank" rel="noreferrer">Open the source</a>

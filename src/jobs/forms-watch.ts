@@ -126,8 +126,9 @@ export async function checkSources(previous: Watch, now: Date, fetcher: typeof f
     } catch (error) {
       const failures = (seen.failures ?? 0) + 1;
       next.sources[source.key] = { ...seen, failures, checked: at };
-      // Two days running: the page has probably moved.
-      if (failures === 2) next.alerts.push({ source: source.key, name: source.name, url: source.url, at, reason: error instanceof Error ? error.message.slice(0, 120) : "unreadable" });
+      // Two days running: the page has probably moved. A refused connection says why (its cause).
+      const reason = error instanceof Error ? ((error.cause as Error | undefined)?.message ?? error.message) : "unreadable";
+      if (failures === 2) next.alerts.push({ source: source.key, name: source.name, url: source.url, at, reason: String(reason).slice(0, 120) });
     }
   }
   next.changes = next.changes.slice(-200);

@@ -25,7 +25,8 @@ $$;
 revoke all on function private.work_areas(uuid) from public, anon, authenticated;
 
 -- What is new from the government in the last 14 days for an active member's firm, newest
--- first, each marked dismissed or not for this person, with the firm's work areas.
+-- first, each marked dismissed or not for this person, with the firm's work areas and the
+-- sources the check has not been able to read for two days or more.
 create or replace function public.gov_updates(target_firm uuid) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare
@@ -35,7 +36,9 @@ begin
   select m.dismissed into mine from public.firm_members m where m.firm_id = target_firm and m.user_id = (select auth.uid()) and m.status = 'active';
   if mine is null then raise exception 'Members only' using errcode = '42501'; end if;
   areas := private.work_areas(target_firm);
-  return jsonb_build_object('areas', to_jsonb(areas), 'items', coalesce((
+  return jsonb_build_object('areas', to_jsonb(areas), 'failing', coalesce((
+    select jsonb_agg(s.key) from public.platform_settings p cross join jsonb_each(p.value -> 'sources') s
+    where p.key = 'watch' and jsonb_typeof(s.value -> 'failures') = 'number' and (s.value ->> 'failures')::numeric >= 2), '[]'), 'items', coalesce((
     select jsonb_agg(i || jsonb_build_object('dismissed', i ->> 'id' = any(mine)) order by i ->> 'seen' desc, n desc)
     from public.platform_settings p cross join jsonb_array_elements(p.value -> 'items') with ordinality e (i, n)
     where p.key = 'watch' and i ->> 'area' = any(areas)

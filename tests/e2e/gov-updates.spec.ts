@@ -36,7 +36,6 @@ test("Today shows what is new from the government only to a firm with that work,
     const rows = gst.page.getByRole("region", { name: "Last 14 days" }).locator(".app-row");
     await expect(rows.filter({ hasText: `Invented notification ${tag}` })).toContainText("Dismissed");
     await expect(rows.filter({ hasText: `Invented advisory on GSTR-1 ${tag}` }).getByRole("button", { name: "Dismiss" })).toBeVisible();
-    await expect(gst.page.getByRole("region", { name: "Pages to check yourself" })).toHaveCount(0);
 
     // A firm with only income tax work sees neither, and is told which pages to look at itself.
     await income.page.goto("/app/government");

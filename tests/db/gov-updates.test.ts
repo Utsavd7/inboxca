@@ -48,7 +48,7 @@ async function seed() {
   const longAgo = (await db.query("select ((now() at time zone 'Asia/Kolkata')::date - 20)::text d")).rows[0].d;
   const item = (id: string, area: string, seen: string) => ({ id, source: "gst_news", area, title: `Invented ${id.slice(0, 1)}`, link: "https://www.gst.gov.in/newsandupdates/read/1", seen });
   await db.query("insert into public.platform_settings(key,value) values ('watch',$1) on conflict (key) do update set value=excluded.value", [
-    JSON.stringify({ sources: {}, changes: [], alerts: [], items: [item(old, "gst", longAgo), item(gst, "gst", today), item(income, "income_tax", today)] }),
+    JSON.stringify({ sources: { cbic_gst: { failures: 2 }, gst_news: { failures: 1 } }, changes: [], alerts: [], items: [item(old, "gst", longAgo), item(gst, "gst", today), item(income, "income_tax", today)] }),
   ]);
 }
 const updates = async (firm: string) => (await db.query("select public.gov_updates($1) u", [firm])).rows[0].u;
@@ -57,7 +57,7 @@ it("shows a firm the last 14 days' items in its clients' work areas only, and no
   rollback(db, async () => {
     await seed();
     await actAs(db, owner);
-    expect(await updates(gstFirm)).toMatchObject({ areas: ["gst"], items: [{ id: gst, area: "gst", dismissed: false }] });
+    expect(await updates(gstFirm)).toMatchObject({ areas: ["gst"], failing: ["cbic_gst"], items: [{ id: gst, area: "gst", dismissed: false }] });
     expect((await updates(gstFirm)).items).toHaveLength(1);
     expect((await attempt(db, "select public.gov_updates($1)", [itFirm])).error).toBe("Members only");
     await actAs(db, itOwner);
