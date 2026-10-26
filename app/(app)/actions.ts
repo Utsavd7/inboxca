@@ -1445,7 +1445,7 @@ export async function sendDocument(form: FormData) {
   const records = (membership.settings.records ?? {}) as RecordsSettings;
   const sent = await sendShare({
     firmId: membership.firmId,
-    firmName: membership.firmName,
+    firmName: membership.firmName, actor: userId,
     documentId: id,
     documentName: document.name,
     clientName: owner?.clients?.name ?? "",
@@ -1463,7 +1463,7 @@ export async function sendDocument(form: FormData) {
 // after the preview of who gets what. As one at a time, the papers must be filed and not kept
 // inside the firm, and the person must be allowed to send for the client; others are skipped.
 export async function sendPapers(form: FormData) {
-  const { supabase, membership } = await currentWriter();
+  const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const asked = String(form.get("back") ?? "");
   const back = asked.startsWith("/app/documents") ? asked : "/app/documents";
@@ -1477,7 +1477,7 @@ export async function sendPapers(form: FormData) {
     const policy = paperPolicy(paper, records);
     if (!membership.may("send", paper.client_id) || paper.status !== "filed" || policy === "internal" || !paper.clients?.email_enc) continue;
     const to = await crypto.decrypt(membership.firmId, `clients/${paper.client_id}/email`, paper.clients.email_enc);
-    if (await sendShare({ firmId: membership.firmId, firmName: membership.firmName, documentId: paper.id, documentName: paper.name, clientName: paper.clients.name, contactId: null, to, needsCode: policy === "approval" })) sent++;
+    if (await sendShare({ firmId: membership.firmId, firmName: membership.firmName, actor: userId, documentId: paper.id, documentName: paper.name, clientName: paper.clients.name, contactId: null, to, needsCode: policy === "approval" })) sent++;
   }
   revalidatePath("/app", "layout");
   redirect(`${back}${back.includes("?") ? "&" : "?"}sent=${sent}-${ids.length - sent}`);
@@ -1619,7 +1619,7 @@ export async function decideShare(form: FormData) {
     !!document &&
     (await sendShare({
       firmId: membership.firmId,
-      firmName: membership.firmName,
+      firmName: membership.firmName, actor: userId,
       documentId: share.document_id,
       documentName: document.name,
       clientName: document.clients?.name ?? "",

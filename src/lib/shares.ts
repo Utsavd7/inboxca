@@ -23,6 +23,8 @@ export async function sendShare(share: {
   waitingId?: string;
   // A private paper: its link opens only with a one-time code (8.6).
   needsCode?: boolean;
+  // The person who sent it; none when the server sends on its own.
+  actor?: string;
 }) {
   const mailer = await firmMailer(share.firmId, share.firmName);
   if (!mailer) return false;
@@ -49,7 +51,7 @@ export async function sendShare(share: {
   const crypto = serverCrypto();
   const token = delivery?.link_enc ? await crypto.decrypt(share.firmId, `shares/${id}/link`, delivery.link_enc) : randomBytes(32).toString("base64url");
   const finish = async () => {
-    const { error } = await admin.rpc("finish_share", {share_id:id});
+    const { error } = await admin.rpc("finish_share", {share_id:id,...(share.actor && {actor:share.actor})});
     if (error) throw new Error("share_not_saved");
   };
   // A previous attempt may have reached SMTP before the worker stopped.

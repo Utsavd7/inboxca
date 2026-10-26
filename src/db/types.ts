@@ -798,7 +798,7 @@ isOneToOne: false
 { Args: { "event_id": string,"template_version": number }; Returns: undefined
                            },
 "finish_share":
-{ Args: { "share_id": string }; Returns: undefined
+{ Args: { "actor"?: string,"share_id": string }; Returns: undefined
                            },
 "firm_export":
 { Args: { "target_firm": string }; Returns: Json

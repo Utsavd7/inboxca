@@ -48,7 +48,7 @@ export async function sendReply(form: FormData) {
   for (const paper of chosen ?? []) {
     const shared = await sendShare({
       firmId: membership.firmId,
-      firmName: membership.firmName,
+      firmName: membership.firmName, actor: userId,
       documentId: paper.id,
       documentName: paper.name,
       clientName: open.client?.name ?? "",
@@ -99,7 +99,7 @@ export async function sendEmail(form: FormData) {
   for (const paper of chosen ?? []) {
     let missed = false;
     for (const recipient of to) {
-      const shared = await sendShare({ firmId: membership.firmId, firmName: membership.firmName, documentId: paper.id, documentName: paper.name, clientName: client.name, contactId: recipient.contact, to: recipient.address }).catch(() => false);
+      const shared = await sendShare({ firmId: membership.firmId, firmName: membership.firmName, actor: userId, documentId: paper.id, documentName: paper.name, clientName: client.name, contactId: recipient.contact, to: recipient.address }).catch(() => false);
       missed ||= !shared;
     }
     if (missed) unsent++;
