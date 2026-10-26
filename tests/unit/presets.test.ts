@@ -6,8 +6,8 @@ describe("access presets (5.17)", () => {
   it("start a new firm on Standard and find each preset from the rules it sets", () => {
     expect(presetOf({})).toBe("standard");
     for (const key of Object.keys(presets) as Preset[]) {
-      const { office, away, hours_only, idle_minutes, india_only } = presets[key];
-      expect(presetOf({ office: { on: office, away }, access: { hours_only, idle_minutes: idle_minutes || undefined, india_only } })).toBe(key);
+      const { office, anywhere, away, hours_only, idle_minutes, india_only } = presets[key];
+      expect(presetOf({ office: { on: office, away, anywhere: anywhere || undefined }, access: { hours_only, idle_minutes: idle_minutes || undefined, india_only } })).toBe(key);
     }
   });
 
@@ -15,8 +15,9 @@ describe("access presets (5.17)", () => {
     expect(presetOf({ office: { on: true, away: false }, access: { hours_only: true, idle_minutes: 30 } })).toBeUndefined();
     // A firm that switched Office only on before presets still lets staff ask to work away.
     expect(presetOf({ office: { on: true }, access: { hours_only: true, idle_minutes: 15 } })).toBe("office_remote");
-    // Remote friendly without India only is a rule changed by hand.
-    expect(presetOf({ access: { hours_only: true } })).toBeUndefined();
+    // Remote friendly without India only, or without approved devices, is a rule changed by hand.
+    expect(presetOf({ office: { on: true, away: false, anywhere: true }, access: { hours_only: true } })).toBeUndefined();
+    expect(presetOf({ access: { hours_only: true, india_only: true } })).toBeUndefined();
   });
 });
 

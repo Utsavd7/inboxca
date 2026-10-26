@@ -8,7 +8,8 @@ import { supabaseAdmin } from "./supabase";
 // server sees it. IPv4 is matched exactly, IPv6 by its /64 prefix. A firm may have several
 // lines. Nothing a PC says about itself is trusted.
 export type OfficeLine = { id?: string; ipv4?: string; ipv6?: string; confirmed_on: string; seen_on?: string; until?: string; fixed?: boolean };
-export type Office = { on?: boolean; lines?: OfficeLine[]; deputies?: string[]; co_admin?: string | null; away?: boolean };
+// anywhere: Remote friendly's approved devices, used from any connection (5.17).
+export type Office = { on?: boolean; lines?: OfficeLine[]; deputies?: string[]; co_admin?: string | null; away?: boolean; anywhere?: boolean };
 export const officeApprover = (role: string, userId: string, settings: Record<string, unknown>) =>
   role === "owner" || role === "partner" && ((settings.office as Office | undefined)?.deputies ?? []).includes(userId);
 // The owner, or the deputy named co-admin, who also changes the access settings (5.17.4 #22).
@@ -81,7 +82,15 @@ export const onOfficeLine = (address: string, office: Office | undefined) => {
 const BRANCH = "branch:groups!firm_members_firm_id_branch_id_fkey(kind, settings)";
 export const memberOffice = (office: Office | undefined, branch?: { kind: string; settings: unknown } | null): Office | undefined => {
   const own = branch?.kind === "branch" ? (branch.settings as { office?: Office }).office : undefined;
-  return own ? { ...office, on: false, lines: [], ...own } : office;
+  return own ? { ...office, on: false, lines: [], anywhere: false, ...own } : office;
+};
+
+// A branch's own hours, holidays and special hours replace the firm's for its people, each
+// on its own (private.branch_settings). Only for reading: never saved back to the firm.
+export const HOURS_KEYS = ["hours", "holidays", "special_hours"] as const;
+export const memberHours = (settings: Record<string, unknown>, branch?: { kind: string; settings: unknown } | null) => {
+  const own = branch?.kind === "branch" ? (branch.settings ?? {}) as Record<string, unknown> : {};
+  return { ...settings, ...Object.fromEntries(HOURS_KEYS.filter((key) => key in own).map((key) => [key, own[key]])) };
 };
 
 // The server checks both the approved PC and its connection on every request.
@@ -104,7 +113,8 @@ export async function officeDeviceAccess(userId: string, observe = true) {
     let pc;
     if (token) {
       const digest = await deviceHash(token);
-      if (observe && line && connectionRule(line, office, "laptop") === "known") {
+      // Under Remote friendly an approved device works anywhere, so a new one asks from anywhere.
+      if (observe && (office.anywhere || line && connectionRule(line, office, "laptop") === "known")) {
         const { error } = await admin.rpc("register_device", {
           target_firm: firmRow.firm_id, actor: userId, token_digest: digest,
           label: deviceName(requestHeaders.get("user-agent") ?? ""),
@@ -116,8 +126,8 @@ export async function officeDeviceAccess(userId: string, observe = true) {
       if (error) throw new Error(`PC check failed: ${error.code}`);
       pc = data;
     }
-    if (!observe) return { approved: false, deviceStatus: null, connectionWaiting: pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting", remoteUntil: null, pcKey: null };
-    if (pc?.status === "approved" && pc.kind === "office") pcKey = pc.key_id ? "ready" : "needed";
+    if (!observe) return { approved: false, deviceStatus: null, connectionWaiting: !office.anywhere && pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting", remoteUntil: null, pcKey: null, anywhere: !!office.anywhere };
+    if (pc?.status === "approved" && pc.kind === "office" && !office.anywhere) pcKey = pc.key_id ? "ready" : "needed";
     // A personal device works anywhere for its one person until its end date, view only;
     // anyone else on it, after that day, or once the firm stops working away, is refused.
     if (pc?.status === "approved" && pc.kind === "personal") {
@@ -127,6 +137,8 @@ export async function officeDeviceAccess(userId: string, observe = true) {
         const { error } = await admin.rpc("office_refused", { target_firm: firmRow.firm_id, person: userId, reason: "pc" });
         if (error) throw new Error(`Office refusal failed: ${error.code}`);
       }
+    } else if (pc?.status === "approved" && office.anywhere) {
+      approved = true;
     } else if (pc?.status === "approved" && line) {
       const { data, error } = await admin.rpc("observe_office", {
         target_firm: firmRow.firm_id, person: userId, pc: pc.id, connection: line,
@@ -135,12 +147,13 @@ export async function officeDeviceAccess(userId: string, observe = true) {
       approved = data === true;
       connectionWaiting = !approved;
     } else {
-      deviceStatus = pc?.status === "refused" ? "refused" : pc || line && connectionRule(line, office, "laptop") === "known" ? "waiting" : null;
+      deviceStatus = pc?.status === "refused" ? "refused" : pc || office.anywhere || line && connectionRule(line, office, "laptop") === "known" ? "waiting" : null;
       const { error } = await admin.rpc("office_refused", { target_firm: firmRow.firm_id, person: userId, reason: "pc" });
       if (error) throw new Error(`Office refusal failed: ${error.code}`);
     }
   }
-  return { approved, deviceStatus, connectionWaiting, remoteUntil, pcKey };
+  // With anywhere an approved device is no second proof, so the 2 step code is still asked.
+  return { approved, deviceStatus, connectionWaiting, remoteUntil, pcKey, anywhere: !!office?.anywhere };
 }
 
 // This browser's approved PC in the person's firm, for its key.

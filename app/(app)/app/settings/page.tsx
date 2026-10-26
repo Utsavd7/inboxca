@@ -1,11 +1,14 @@
 import { BellRing, CalendarClock, CalendarOff, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, Headset, KeyRound, LifeBuoy, LogIn, Mail, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import Form from "next/form";
 import Link from "next/link";
 import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
-import { firmAdmin, officeApprover, type Office } from "@/src/lib/office";
+import { firmAdmin, HOURS_KEYS, memberHours, officeApprover, type Office } from "@/src/lib/office";
 import { presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
+import { AutoSelect } from "../auto-select";
+import { AccessCheck } from "./access-check";
 import { documentTypes } from "@/src/lib/documents";
 import { switchable, defaults, type Permissions, type Standing } from "@/src/lib/rights";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
@@ -47,7 +50,7 @@ const savedNames: Record<string, string> = { preset: "Preset saved.", visibility
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "drive"]],
-  ["access", "Office and sign in", ["preset", "office", "limits", "recovery"]],
+  ["access", "Office and sign in", ["preset", "office", "limits", "tester", "recovery"]],
   ["hours", "Hours and holidays", ["hours", "special", "holidays"]],
   ["people", "People's access", ["permissions", "always", "visibility"]],
   ["reminders", "Reminders and papers", ["reminders", "records"]],
@@ -56,7 +59,7 @@ const groups = [
 const groupIcons: Record<string, LucideIcon> = { email: Mail, access: ShieldCheck, hours: Clock, people: Users, reminders: BellRing, data: Database };
 // Each card's tile: what it is about, in the colour of its kind.
 const cardIcons: Record<string, [LucideIcon, Kind]> = {
-  mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], recovery: [LifeBuoy, "approve"],
+  mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], tester: [UserCheck, "approve"], recovery: [LifeBuoy, "approve"],
   hours: [Clock, "week"], special: [CalendarClock, "week"], holidays: [CalendarOff, "week"],
   permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"],
   reminders: [BellRing, "notice"], records: [FileCheck2, "notice"],
@@ -86,14 +89,14 @@ function Card({ id, title, line, danger, children }: { id: string; title: string
 export default async function Settings({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string; group?: string; branch?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; group?: string; branch?: string; check?: string }>;
 }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   if (!officeApprover(membership.role, userId, membership.settings)) return <NotForYou title="Settings" who="the owner" />;
   if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Confirm your office connection and approve PCs for your firm." /><OfficePanel branch={(await searchParams).branch} error={(await searchParams).error} /></>;
   const owner = membership.role === "owner";
-  const { saved, error, group: asked, branch } = await searchParams;
+  const { saved, error, group: asked, branch, check } = await searchParams;
   // The co-admin sees only the groups about keeping client data safe.
   const shown = groups.map(([id, name, sections]) => [id, name, sections.filter((section) => owner || !ownerOnly.includes(section))] as const).filter(([, , sections]) => sections.length);
   const groupOf = Object.fromEntries(shown.flatMap(([id, , sections]) => sections.map((section) => [section, id])));
@@ -102,13 +105,15 @@ export default async function Settings({
   // clients) come in after the page, in their own card.
   const admin = supabaseAdmin();
   const usage = group === "data" ? Promise.resolve(supabase.rpc("firm_usage", { target_firm: membership.firmId })).then(({ data }) => data?.[0]) : null;
-  const [{ data: closed }, { data: accounts }, { data: people }, { data: standing }] = await Promise.all([
+  const [{ data: closed }, { data: accounts }, { data: people }, { data: standing }, { data: branches }] = await Promise.all([
     // A closed firm keeps only its download until InboxCA deletes it, 30 days on.
     supabase.from("activity_log").select("at").eq("entity_id", membership.firmId).eq("firm_id", membership.firmId).eq("action", "firm.closed").maybeSingle(),
     group === "email" ? supabase.from("connected_accounts").select("id, kind, provider, address_enc, status") : Promise.resolve({ data: null }),
     group === "people" ? supabase.rpc("firm_people", { target_firm: membership.firmId }) : Promise.resolve({ data: null }),
     // People the owner or a deputy always allowed something, from a question in the Inbox.
     group === "people" ? admin.from("firm_members").select("user_id, access").eq("firm_id", membership.firmId).not("access->always", "is", null) : Promise.resolve({ data: null }),
+    // Each branch may keep its own hours (5.17.4 #13).
+    group === "hours" ? supabase.from("groups").select("id, name, kind, settings").eq("firm_id", membership.firmId).eq("kind", "branch").order("name") : Promise.resolve({ data: null }),
   ]);
   if (closed) return (
     <div className="set-page">
@@ -141,9 +146,14 @@ export default async function Settings({
   const naming = (driveSettings?.settings as { naming?: string } | undefined)?.naming ?? "client_type_period";
   const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
   const settings = membership.settings;
-  const hours = (settings.hours as Hours | undefined) ?? SUGGESTED_HOURS;
-  const holidays = (settings.holidays as string[] | undefined) ?? [];
-  const special = (settings.special_hours as SpecialHours[] | undefined) ?? [];
+  // The hours shown and changed: the main office's, or the picked branch's as its people have them.
+  const picked = branches?.find((row) => row.id === branch);
+  const times = memberHours(settings, picked);
+  const ownHours = !!picked && HOURS_KEYS.some((key) => key in ((picked.settings ?? {}) as object));
+  const where = picked && <input type="hidden" name="branch" value={picked.id} />;
+  const hours = (times.hours as Hours | undefined) ?? SUGGESTED_HOURS;
+  const holidays = (times.holidays as string[] | undefined) ?? [];
+  const special = (times.special_hours as SpecialHours[] | undefined) ?? [];
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number; india_only?: boolean };
   const hoursOnly = access.hours_only ?? false;
   const records = (settings.records ?? {}) as RecordsSettings;
@@ -308,7 +318,7 @@ export default async function Settings({
                   </label>
                 ))}
               </fieldset>
-              {!(settings.office as Office | undefined)?.on && <fieldset className="set-options"><legend>If you choose an office preset: are you in the office now?</legend>
+              {(!(settings.office as Office | undefined)?.on || (settings.office as Office).anywhere) && <fieldset className="set-options"><legend>If you choose an office preset: are you in the office now?</legend>
                 <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, I am in the office now</label>
                 <label className="check"><input type="radio" name="here" value="no" />No, I will confirm it there later</label>
               </fieldset>}
@@ -348,14 +358,28 @@ export default async function Settings({
               <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save signing in limits</Pending></div>
             </form>
           </Card>
+          <Card id="tester" title="Check someone's access" line="Can a person use InboxCA now, from here, on this PC? InboxCA answers with the same checks it makes on every page.">
+            <AccessCheck person={check} />
+          </Card>
           {owner && <Card id="recovery" title="Recovery codes" line="If you lose the phone with your 2 step code, one of these codes lets you set it up again after the email code. Each code works once, and new codes stop the old ones. Keep them away from your phone.">
             <form action="/app/settings/recovery-codes" method="post" className="set-foot"><button className="b b-secondary" type="submit">Download 10 new codes</button></form>
           </Card>}
           </>}
 
           {group === "hours" && <>
-          <Card id="hours" title="Office hours" line="India time. You can always sign in; these hours apply to everyone else.">
-            <form action={saveHours} className="set-stack">
+          <Card id="hours" title={picked ? `Office hours for ${picked.name}` : "Office hours"} line={picked ? "India time. Whether these hours apply is chosen under Main office." : "India time. You can always sign in; these hours apply to everyone else."}>
+            {!!branches?.length && <Form action="/app/settings#hours">
+              <input type="hidden" name="group" value="hours" />
+              <div className="form-row"><div>
+                <label htmlFor="hours-branch">Office</label>
+                <AutoSelect save="branch" id="hours-branch" name="branch" defaultValue={picked?.id ?? ""}>
+                  <option value="">Main office</option>
+                  {branches.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+                </AutoSelect>
+              </div><button className="sr-only" value="branch">Show</button></div>
+              {picked && !ownHours && <p className="hint">{picked.name} uses the main office&apos;s hours, holidays and special hours until you save its own here.</p>}
+            </Form>}
+            <form action={saveHours} className="set-stack">{where}
               <table className="set-hours">
                 <tbody>
                   {DAYS.map((name, day) => (
@@ -375,23 +399,26 @@ export default async function Settings({
                   ))}
                 </tbody>
               </table>
-              <label className="check">
+              {!picked && <label className="check">
                 <input className="toggle" type="checkbox" name="hours_only" defaultChecked={hoursOnly} />
                 Everyone except you can use InboxCA only during office hours, and not on holidays
-              </label>
+              </label>}
               {problem("hours")}
               <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save office hours</Pending></div>
             </form>
+            {ownHours && <form action={saveHours} className="set-foot">{where}
+              <Pending className="b b-ghost" name="intent" value="follow">Use the main office&apos;s hours</Pending>
+            </form>}
           </Card>
 
-          <Card id="special" title="Special hours" line="A tax season or a late evening: these times replace the office hours on every day in the dates. Holidays stay closed.">
+          <Card id="special" title={picked ? `Special hours for ${picked.name}` : "Special hours"} line="A tax season or a late evening: these times replace the office hours on every day in the dates. Holidays stay closed.">
             {!!special.length && <List className="set-rows" rise={false}>
               {special.map((range) => (
                 <Item key={range.from + range.to}>
                   <span className="grow">
                     {range.from === range.to ? longDate(range.from) : `${longDate(range.from)} to ${longDate(range.to)}`}: {range.open} to {range.close}
                   </span>
-                  <form action={changeSpecialHours}>
+                  <form action={changeSpecialHours}>{where}
                     <input type="hidden" name="from" value={range.from} />
                     <input type="hidden" name="to" value={range.to} />
                     <Pending className="b b-ghost" name="intent" value="remove">
@@ -401,7 +428,7 @@ export default async function Settings({
                 </Item>
               ))}
             </List>}
-            <form action={changeSpecialHours} className="set-fields set-four">
+            <form action={changeSpecialHours} className="set-fields set-four">{where}
               {[
                 ["from", "From", "date"],
                 ["to", "To", "date"],
@@ -418,14 +445,14 @@ export default async function Settings({
             </form>
           </Card>
 
-          <Card id="holidays" title="Holidays" line="Days your office is closed.">
+          <Card id="holidays" title={picked ? `Holidays for ${picked.name}` : "Holidays"} line="Days your office is closed.">
             {!!holidays.length && <List className="set-rows" rise={false}>
               {holidays.map((date) => (
                 <Item key={date}>
                   <span className="grow">
                     {new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { weekday: "long" })}, {longDate(date)}
                   </span>
-                  <form action={changeHoliday}>
+                  <form action={changeHoliday}>{where}
                     <input type="hidden" name="date" value={date} />
                     <Pending className="b b-ghost" name="intent" value="remove">
                       Remove
@@ -434,7 +461,7 @@ export default async function Settings({
                 </Item>
               ))}
             </List>}
-            <form action={changeHoliday} className="set-fields">
+            <form action={changeHoliday} className="set-fields">{where}
               <div>
                 <label htmlFor="holiday">Add a holiday</label>
                 <input id="holiday" type="date" name="date" required />

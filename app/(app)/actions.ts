@@ -21,7 +21,7 @@ import { DAYS, laterBy, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { activeClients, importSince, inScope, planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
-import { askAway, firmAdmin, officeApprover, officePc, requestLine, type Office } from "@/src/lib/office";
+import { askAway, firmAdmin, memberHours, officeApprover, officePc, requestLine, type Office } from "@/src/lib/office";
 import { presets, type Preset } from "@/src/lib/presets";
 import { CHALLENGE_COOKIE, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
 import { recognisePortalFile } from "@/src/lib/portal-files";
@@ -142,17 +142,49 @@ export async function joinFirm(form: FormData) {
   redirect("/app");
 }
 
+// The branch a Settings → Hours form names (5.17.4 #13), if any: its hours, holidays and special
+// hours as its people have them (the main office's where it has none of its own), and a save
+// the database checks and logs (branch_hours).
+async function hoursBranch(form: FormData, supabase: Awaited<ReturnType<typeof currentWriter>>["supabase"], firmId: string, settings: Record<string, unknown>, userId: string) {
+  const branch = String(form.get("branch") ?? "");
+  if (!branch) return null;
+  const { data: group } = z.uuid().safeParse(branch).success
+    ? await supabase.from("groups").select("kind, settings").eq("firm_id", firmId).eq("id", branch).eq("kind", "branch").maybeSingle()
+    : { data: null };
+  if (!group) redirect("/app/settings?group=hours");
+  return {
+    back: `/app/settings?group=hours&branch=${branch}`,
+    settings: memberHours(settings, group),
+    save: async (changes: Record<string, unknown>) => {
+      const { error } = await supabaseAdmin().rpc("branch_hours", { target_firm: firmId, actor: userId, branch, changes: changes as Json });
+      if (error) throw new Error(`Branch hours failed: ${error.code}`);
+    },
+  };
+}
+
 // Settings → Office hours. The database logs every change to the firm's settings.
 export async function saveHours(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
+  const branch = await hoursBranch(form, supabase, membership.firmId, membership.settings, userId);
+  const back = branch?.back ?? "/app/settings?group=hours";
+  // The branch goes back to the main office's hours, holidays and special hours.
+  if (branch && form.get("intent") === "follow") {
+    await branch.save({ hours: null, holidays: null, special_hours: null });
+    redirect(`${back}&saved=hours`);
+  }
   const hours: Hours = {};
   for (const day of DAYS.keys()) {
     if (!form.get(`open-${day}`)) continue;
     const [from, to] = [form.get(`from-${day}`), form.get(`to-${day}`)].map(String);
     if (!/^\d\d:\d\d$/.test(from) || !/^\d\d:\d\d$/.test(to) || from >= to)
-      redirect(`/app/settings?group=hours&error=${DAYS[day]}`);
+      redirect(`${back}&error=${DAYS[day]}`);
     hours[day] = [from, to];
+  }
+  // Whether office hours apply stays the firm's.
+  if (branch) {
+    await branch.save({ hours });
+    redirect(`${back}&saved=hours`);
   }
   const { settings } = membership;
   const access = { ...(settings.access as object), hours_only: form.get("hours_only") === "on" };
@@ -165,10 +197,12 @@ export async function changeHoliday(form: FormData) {
   if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const date = String(form.get("date") ?? "");
   if (!/^\d{4}-\d\d-\d\d$/.test(date)) redirect("/app/settings?group=hours");
-  const current = (membership.settings.holidays as string[] | undefined) ?? [];
+  const branch = await hoursBranch(form, supabase, membership.firmId, membership.settings, userId);
+  const current = ((branch?.settings ?? membership.settings).holidays as string[] | undefined) ?? [];
   const holidays =
     form.get("intent") === "remove" ? current.filter((day) => day !== date) : [...new Set([...current, date])].sort();
-  await supabase.from("firms").update({ settings: { ...membership.settings, holidays } }).eq("id", membership.firmId);
+  if (branch) await branch.save({ holidays });
+  else await supabase.from("firms").update({ settings: { ...membership.settings, holidays } }).eq("id", membership.firmId);
   revalidatePath("/app/settings");
 }
 
@@ -198,11 +232,14 @@ export async function choosePreset(form: FormData) {
   const key = String(form.get("preset") ?? "");
   if (!Object.hasOwn(presets, key)) redirect("/app/settings?group=access#preset");
   const preset = presets[key as Preset];
-  if (!!(membership.settings.office as Office | undefined)?.on !== preset.office) {
+  const office = (membership.settings.office ?? {}) as Office;
+  // From approved devices anywhere to an office preset, the office connection is asked again.
+  const toOffice = preset.office && !preset.anywhere && (!office.on || !!office.anywhere);
+  if (!!office.on !== preset.office || toOffice && form.get("here") === "yes") {
     const line = requestLine(await headers(), todayInIndia());
     const { error } = await supabaseAdmin().rpc("office_control", {
       target_firm: membership.firmId, actor: userId, decision: preset.office ? "on" : "off",
-      ...(preset.office && form.get("here") === "yes" && line && { connection: line }),
+      ...(toOffice && form.get("here") === "yes" && line && { connection: line }),
     });
     if (error) throw new Error(`Office change failed: ${error.code}`);
   }
@@ -212,7 +249,7 @@ export async function choosePreset(form: FormData) {
     ...settings,
     // Office hours only needs hours: the suggested ones until the owner sets them.
     hours: (settings.hours ?? SUGGESTED_HOURS) as Hours,
-    office: { ...(settings.office as object), away: preset.away },
+    office: { ...(settings.office as object), away: preset.away, anywhere: preset.anywhere || undefined },
     access: { ...(settings.access as object), hours_only: preset.hours_only, idle_minutes: preset.idle_minutes || undefined, india_only: preset.india_only || undefined },
   } }).eq("id", membership.firmId);
   revalidatePath("/app", "layout");
@@ -275,17 +312,19 @@ export async function changeSpecialHours(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const [from, to, open, close] = ["from", "to", "open", "close"].map((name) => String(form.get(name) ?? ""));
-  const current = (membership.settings.special_hours as SpecialHours[] | undefined) ?? [];
+  const branch = await hoursBranch(form, supabase, membership.firmId, membership.settings, userId);
+  const current = ((branch?.settings ?? membership.settings).special_hours as SpecialHours[] | undefined) ?? [];
   let special: SpecialHours[];
   if (form.get("intent") === "remove") special = current.filter((range) => range.from !== from || range.to !== to);
   else {
     const day = /^\d{4}-\d\d-\d\d$/;
     const time = /^\d\d:\d\d$/;
     if (!day.test(from) || !day.test(to) || from > to || !time.test(open) || !time.test(close) || open >= close)
-      redirect("/app/settings?group=hours&error=special");
+      redirect(`${branch?.back ?? "/app/settings?group=hours"}&error=special`);
     special = [...current, { from, to, open, close }].sort((a, b) => a.from.localeCompare(b.from));
   }
-  await supabase.from("firms").update({ settings: { ...membership.settings, special_hours: special } }).eq("id", membership.firmId);
+  if (branch) await branch.save({ special_hours: special });
+  else await supabase.from("firms").update({ settings: { ...membership.settings, special_hours: special } }).eq("id", membership.firmId);
   revalidatePath("/app/settings");
 }
 
@@ -1758,17 +1797,21 @@ export async function reviewDevice(form: FormData) {
   const decision = String(form.get("decision") ?? "");
   const device = String(form.get("device") ?? "");
   const until = String(form.get("until") ?? "");
-  if (!["office", "laptop", "personal", "refuse", "withdraw"].includes(decision) || (device && !z.uuid().safeParse(device).success) || (decision === "personal" && !z.iso.date().safeParse(until).success)) redirect("/app/settings?group=access#office");
+  // Approve all covers the PCs of the office shown: a branch's own, else the main office's.
+  const branch = String(form.get("branch") ?? "");
+  const back = `/app/settings?group=access${z.uuid().safeParse(branch).success ? `&branch=${branch}` : ""}#office`;
+  if (!["office", "laptop", "personal", "refuse", "withdraw"].includes(decision) || (device && !z.uuid().safeParse(device).success) || (branch && !z.uuid().safeParse(branch).success) || (decision === "personal" && !z.iso.date().safeParse(until).success)) redirect(back);
   const { error } = await supabaseAdmin().rpc("review_devices", {
     target_firm: membership.firmId,
     actor: userId,
     target_device: device || "00000000-0000-0000-0000-000000000000",
     decision,
     ...(decision === "personal" && { until_day: until }),
+    ...(branch && { branch }),
   });
   if (error) throw new Error(`Device review failed: ${error.code}`);
   revalidatePath("/app");
-  redirect("/app/settings?group=access#office");
+  redirect(back);
 }
 
 // Permission requests (PLAN.md 5.17.2): asked by an employee or manager who may not do it

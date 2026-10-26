@@ -4,11 +4,11 @@ import type { Office } from "./office";
 // editable after. Office presets sign idle screens out after 15 minutes, for shared PCs
 // (5.17.4 #3). Nothing is stored about the choice: the page finds the preset the rules match.
 export const presets = {
-  standard: { name: "Standard", line: "Everyone signs in with the 2 step code, on any device, from anywhere, at any time.", office: false, away: true, hours_only: false, idle_minutes: 0, india_only: false },
-  office: { name: "Office only", line: "Staff, managers and front desk work only on approved PCs in the office, in office hours. You and partners work from anywhere.", office: true, away: false, hours_only: true, idle_minutes: 15, india_only: false },
-  office_remote: { name: "Office and approved remote", line: "Like Office only, and staff may ask to use their own device away from the office; you allow it for some days, to view only.", office: true, away: true, hours_only: true, idle_minutes: 15, india_only: false },
-  remote: { name: "Remote friendly", line: "Everyone works from anywhere; everyone but you only from India and in office hours.", office: false, away: true, hours_only: true, idle_minutes: 0, india_only: true },
-  solo: { name: "Solo CA", line: "For one CA who moves: InboxCA signs out after 15 minutes without use. Any staff work only on approved PCs in the office.", office: true, away: false, hours_only: false, idle_minutes: 15, india_only: false },
+  standard: { name: "Standard", line: "Everyone signs in with the 2 step code, on any device, from anywhere, at any time.", office: false, anywhere: false, away: true, hours_only: false, idle_minutes: 0, india_only: false },
+  office: { name: "Office only", line: "Staff, managers and front desk work only on approved PCs in the office, in office hours. You and partners work from anywhere.", office: true, anywhere: false, away: false, hours_only: true, idle_minutes: 15, india_only: false },
+  office_remote: { name: "Office and approved remote", line: "Like Office only, and staff may ask to use their own device away from the office; you allow it for some days, to view only.", office: true, anywhere: false, away: true, hours_only: true, idle_minutes: 15, india_only: false },
+  remote: { name: "Remote friendly", line: "Staff, managers and front desk work from anywhere on devices you approve, only from India and in office hours. You and partners work from anywhere.", office: true, anywhere: true, away: false, hours_only: true, idle_minutes: 0, india_only: true },
+  solo: { name: "Solo CA", line: "For one CA who moves: InboxCA signs out after 15 minutes without use. Any staff work only on approved PCs in the office.", office: true, anywhere: false, away: false, hours_only: false, idle_minutes: 15, india_only: false },
 };
 export type Preset = keyof typeof presets;
 
@@ -18,7 +18,7 @@ export function presetOf(settings: Record<string, unknown>) {
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; india_only?: boolean };
   return (Object.keys(presets) as Preset[]).find((key) => {
     const preset = presets[key];
-    return !!office.on === preset.office && (!preset.office || (office.away ?? true) === preset.away)
+    return !!office.on === preset.office && (!preset.office || (office.away ?? true) === preset.away && !!office.anywhere === preset.anywhere)
       && !!access.hours_only === preset.hours_only && (Number(access.idle_minutes) || 0) === preset.idle_minutes && !!access.india_only === preset.india_only;
   });
 }

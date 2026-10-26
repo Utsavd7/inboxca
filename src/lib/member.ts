@@ -4,7 +4,7 @@ import { cache } from "react";
 import { closingToday } from "./hours";
 import { may, mayDecide, type Permissions, type Right, type Standing } from "./rights";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
-import { officeDeviceAccess, officeProof } from "./office";
+import { memberHours, officeDeviceAccess, officeProof } from "./office";
 import { supabaseAdmin, supabaseServer } from "./supabase";
 
 // The signed in person and their firm, for every product page and action; cached for the
@@ -21,12 +21,21 @@ export const currentMember = cache(async () => {
   if (!claims) redirect("/sign-in");
   const userId = claims.claims.sub;
   const office = await officeDeviceAccess(userId);
-  if (claims.claims.aal !== "aal2" && !office.approved) redirect("/sign-in/two-step");
-  const proof = office.approved || office.remoteUntil ? { "x-inboxca-office": await officeProof(userId, String(claims.claims.session_id ?? "")) } : undefined;
-  const anyFirm = proof ? await supabaseServer(proof) : signedIn;
+  if (claims.claims.aal !== "aal2" && (!office.approved || office.anywhere)) redirect("/sign-in/two-step");
+  const session = String(claims.claims.session_id ?? "");
+  // India only (5.17, Remote friendly): the country the host vouches for, from the header
+  // COUNTRY_HEADER names (Cloudflare's CF-IPCountry); unset, the check is off. The database
+  // refuses those it binds without this proof (country_allows); the owner works from anywhere.
+  const countryHeader = process.env.COUNTRY_HEADER;
+  const inIndia = !countryHeader || (await headers()).get(countryHeader) === "IN";
+  const proof = {
+    ...(office.approved || office.remoteUntil ? { "x-inboxca-office": await officeProof(userId, session) } : {}),
+    ...(inIndia && { "x-inboxca-country": await officeProof(`country:${userId}`, session) }),
+  };
+  const anyFirm = Object.keys(proof).length ? await supabaseServer(proof) : signedIn;
   const { data: rows } = await anyFirm
     .from("firm_members")
-    .select("firm_id, role, access, firms(name, settings)")
+    .select("firm_id, role, access, firms(name, settings), branch:groups!firm_members_firm_id_branch_id_fkey(kind, settings)")
     .eq("user_id", userId)
     .order("firm_id")
     .limit(20);
@@ -35,6 +44,7 @@ export const currentMember = cache(async () => {
   const supabase = data ? await supabaseServer({ ...proof, "x-inboxca-firm": data.firm_id }) : anyFirm;
   if (!data) {
     const { data: closed } = await supabase.rpc("closed_firms");
+    if (closed?.[0]?.reason === "country") redirect("/auth/sign-out?reason=country");
     if (closed?.[0]?.reason === "hours") {
       const { data: firm } = await supabaseAdmin().from("firm_members").select("firm_id")
         .eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
@@ -48,10 +58,6 @@ export const currentMember = cache(async () => {
   const access = (data.access ?? {}) as Record<string, unknown>;
 
   const settings = (data.firms?.settings ?? {}) as Record<string, unknown>;
-  // India only (5.17, Remote friendly): the country the host vouches for, from the header
-  // COUNTRY_HEADER names (Cloudflare's CF-IPCountry); unset, the check is off. The owner works from anywhere.
-  const countryHeader = process.env.COUNTRY_HEADER;
-  if (countryHeader && data.role !== "owner" && accessSetting(settings, data.role, data.access, "india_only") && (await headers()).get(countryHeader) !== "IN") redirect("/auth/sign-out?reason=country");
   const idleMinutes = Number(accessSetting(settings, data.role, data.access, "idle_minutes")) || 0;
   if (idleMinutes) {
     // Last active: the signed cookie, or the latest sign in proof if there is none yet.
@@ -61,8 +67,9 @@ export const currentMember = cache(async () => {
     const last = Math.max(0, ...signedAt, seenAt(userId, (await cookies()).get(SEEN_COOKIE)?.value));
     if (Date.now() - last > idleMinutes * 60_000) redirect("/auth/sign-out?reason=idle");
   }
-  // Closing time today for anyone office hours bind, for the warning before it.
-  const closing = data.role !== "owner" && accessSetting(settings, data.role, data.access, "hours_only") ? closingToday(settings, data.access) : null;
+  // Closing time today for anyone office hours bind, by their branch's hours if it has its own,
+  // for the warning before it.
+  const closing = data.role !== "owner" && accessSetting(settings, data.role, data.access, "hours_only") ? closingToday(memberHours(settings, data.branch), data.access) : null;
   const membership = {
     firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, access, idleMinutes, closing, email: String(claims.claims.email ?? ""),
     // Every firm the person may open now, for the sidebar's switcher.
