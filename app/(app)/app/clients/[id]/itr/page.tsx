@@ -5,6 +5,7 @@ import {redirect,unstable_rethrow} from "next/navigation";
 import {revalidatePath} from "next/cache";
 import {z} from "zod";
 import {enterItr,itrField,itrWork} from "@/src/lib/itr";
+import {itrChecks} from "@/src/lib/itr-check";
 import {itrReady,itrReturns,itrYear} from "@/src/lib/itr-fields";
 import {formName} from "@/src/lib/prepared";
 import {serverCrypto} from "@/src/lib/crypto";
@@ -12,6 +13,7 @@ import {askPermission} from "@/app/(app)/actions";
 import {grantFor} from "@/src/lib/permission-grants";
 import {Badge,Card,PageHead} from "../../../ui";
 import {Pending} from "../../../pending";
+import {ItrDifferences} from "../../../itr-check";
 import "../../clients.css";
 
 // One income tax return for one assessment year: what InboxCA already holds, what is still
@@ -34,6 +36,8 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
   ]);
   const paperName=(row:typeof papers[number])=>names?.find(file=>file.id===row.data.lines[0].source.document)?.name ?? "Figures from a paper";
   for(const row of papers) for(const line of row.data.lines) if(line.state!=="rejected") held.set(line.field,{value:row.figures.get(line.id)!.value,from:paperName(row)});
+  // The return against the client's Form 26AS and Form 16 for the year, before anyone approves it.
+  const check=await itrChecks(supabase,membership.firmId,[{client:id,period,form}]).then(([one])=>one,()=>null);
   const email=details?.email_enc ? await serverCrypto().decrypt(membership.firmId,`clients/${id}/email`,details.email_enc) : "";
   const saved=new Set(own?.data.lines.map(line=>line.field)),missing=new Set(review.missing.flatMap(item=>item.field ? [item.field] : []));
   const groups=[...new Set(entries.map(entry=>entry.group))],group=groups.includes(q.group ?? "") ? q.group! : review.missing[0]?.group ?? groups[0];
@@ -64,6 +68,7 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
     {q.saved && <p className="alert" role="status">Saved for checking. <Link href={`/app/clients/${id}?tab=extraction&draft=${q.saved}`}>Check the figures</Link></p>}
     {!itrReady() && <p className="hint">Filing files are not set up yet: InboxCA needs its software ID from the Income Tax Department before it can make the return file. You can fill and check everything now.</p>}
     {form==="ITR3" && <p className="hint">The balance sheet, profit and loss account and business schedules come from the client&apos;s accounts, which InboxCA does not read yet. Fill them here, or prepare the return in the official utility and add it under Prepared forms.</p>}
+    {check ? <><ItrDifferences differences={check.differences}/>{!check.statement ? <p className="hint">Add the client&apos;s Form 26AS for {itrYear(period)} to check the TDS in this return against it.</p> : !check.differences.length && <p className="hint">The TDS in this return matches Form 26AS.</p>}</> : <p className="hint">This return could not be checked against Form 26AS yet.</p>}
     <Card id="itr-held" title="Already filled" Icon={FileCheck2} kind="done">
       <ul className="app-rows">
         <li className="app-row"><span className="grow"><strong>PAN {context.number}</strong><span className="sub">From the client&apos;s details. Used in every return.</span></span></li>

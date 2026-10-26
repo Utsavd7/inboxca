@@ -14,3 +14,5 @@ td .fill-now-why { max-width: 220px; }
 .fill-checks .grow { flex: 1; min-width: 0; }
 .fill-checks .num { color: var(--wait-fg); font-weight: 600; }
 .fill-checks li.is-wrong .num { color: var(--late-fg); }
+/* A return's differences with Form 26AS (itr-check.tsx) take a whole row of a form. */
+.fields > .fill-checks { grid-column: 1 / -1; margin-bottom: 0; }
