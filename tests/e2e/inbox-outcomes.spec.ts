@@ -94,7 +94,7 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   const outcomes: [string, string, string[]][] = [
     ["answered", "Answered by InboxCA", [`ITR copy ${tag}`]],
     ["approval", "Waiting for approval", [`Statements ${tag}`]],
-    ["filed", "Filed", [`Bills ${tag}`]],
+    ["filed", "Papers saved", [`Bills ${tag}`]],
     ["notice", "Notice recorded", [`Notice ${tag}`]],
     ["reply", "Needs reply", [`Meeting ${tag}`, `Hidden ${tag}`]],
     ["none", "No reply needed", [`Thanks ${tag}`]],

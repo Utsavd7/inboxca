@@ -29,7 +29,7 @@ import "./inbox.css";
 
 const PAGE = 30;
 const shows = { "": "All", reply: "Needs reply", mine: "Mine", in: "From clients", out: "Sent to clients" } as const;
-const statuses = { reply: "Needs reply", snoozed: "Snoozed", approval: "Waiting for approval", check: "To check", answered: "Answered by InboxCA", replied: "Answered by your team", notice: "Notice recorded", filed: "Filed", none: "No reply needed", reminder: "Reminder sent", team: "Sent by team" } as const;
+const statuses = { reply: "Needs reply", snoozed: "Snoozed", approval: "Waiting for approval", check: "To check", answered: "Answered by InboxCA", replied: "Answered by your team", notice: "Notice recorded", filed: "Papers saved", none: "No reply needed", reminder: "Reminder sent", team: "Sent by team" } as const;
 const sentTags = { reminder: "Reminder sent", inboxca: "Sent by InboxCA", team: "Sent by team" } as const;
 type Tag = { text: string; tone: "warn" | "done" | "blue" | "" };
 // What InboxCA did with an email it read (email_outcomes, the most pressing first), in
@@ -42,7 +42,7 @@ const outcomeTags: Record<string, Tag> = {
   answered: { text: "Answered by InboxCA", tone: "done" },
   replied: { text: "Answered by your team", tone: "done" },
   notice: { text: "Notice recorded", tone: "blue" },
-  filed: { text: "Filed", tone: "done" },
+  filed: { text: "Papers saved", tone: "done" },
   none: { text: "No reply needed", tone: "" },
 };
 const outcomeKeys = ["reply", "snoozed", "approval", "check", "answered", "replied", "notice", "filed", "none"];

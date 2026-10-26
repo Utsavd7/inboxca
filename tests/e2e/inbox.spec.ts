@@ -166,7 +166,7 @@ test("an attachment shows where it was saved in the drive, and opens in the view
   await expect(file).toContainText(`Saved to FY 2026-27 / ${clientName} / GST`);
   const [{ id }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1", [firm.firmId]);
   await expect(file.getByRole("link", { name: "View" })).toHaveAttribute("href", `/app/files/${id}/view`);
-  await expect(list().getByRole("listitem").filter({ hasText: "September purchase bills" })).toContainText("Filed");
+  await expect(list().getByRole("listitem").filter({ hasText: "September purchase bills" })).toContainText("Papers saved");
 });
 
 test("the team writes a new email to a client, only to the client's known addresses, with a paper and a file", async () => {
