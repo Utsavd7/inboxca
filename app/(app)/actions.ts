@@ -10,7 +10,7 @@ import { STAGES } from "@/src/lib/reminders";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
-import { checklists, kindChecklist, receiveItem, type DocumentRequest } from "@/src/lib/checklists";
+import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { describeFile, documentTypes, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
@@ -25,6 +25,7 @@ import { askAway, firmAdmin, officeApprover, officePc, requestLine, type Office 
 import { presets, type Preset } from "@/src/lib/presets";
 import { CHALLENGE_COOKIE, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
 import { recognisePortalFile } from "@/src/lib/portal-files";
+import { recognisePortalPdf } from "@/src/lib/tax-papers";
 import { receive } from "@/src/lib/intake";
 import { may, mayDecide, rightWords, routeOf, switchable, type Permissions, type Right, type Scope as PermissionScope, type Standing } from "@/src/lib/rights";
 import { searchTokens, words } from "@/src/lib/search";
@@ -1120,8 +1121,8 @@ export async function guessPapers(names: string[]) {
 }
 
 // Files staff fetched from the government portals, dropped in one or many at a time (PLAN.md
-// 5.3.1, D39). Each is known by its own contents; the client comes from the GSTIN inside it
-// and must be one the person may see. Every member may do this. A file that is not a known
+// 5.3.1, D39). Each is known by its own contents; the client comes from the GSTIN or PAN
+// inside it and must be one the person may see. Every member may do this. A file that is not a known
 // portal file is filed under the client's To check only when the owner, a partner or a
 // manager drops it on that client's page; otherwise it is left out, and the summary says so.
 export async function dropPortalFiles(form: FormData) {
@@ -1149,23 +1150,17 @@ export async function dropPortalFiles(form: FormData) {
     }
     for await (const file of sent.papers) {
       const bytes = file.bytes;
-      const portal = recognisePortalFile(bytes);
-      const { data: registration } = portal
-        ? await supabase.from("client_registrations").select("id, client_id, clients(id, name)").eq("firm_id",membership.firmId).eq("kind", "gstin").eq("number_bidx", await crypto.blindIndex(membership.firmId, "gstin", portal.gstin)).maybeSingle()
+      // A GST paper names its client by GSTIN, an income tax paper by PAN.
+      const portal = recognisePortalFile(bytes) ?? await recognisePortalPdf(bytes);
+      const [kind, number] = !portal ? [] : "gstin" in portal ? ["gstin", portal.gstin] : ["pan", portal.pan];
+      const { data: registration } = kind && number
+        ? await supabase.from("client_registrations").select("id, client_id, clients(id, name)").eq("firm_id",membership.firmId).eq("kind", kind).eq("number_bidx", await crypto.blindIndex(membership.firmId, kind, number)).maybeSingle()
         : { data: null };
       let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
       if (portal && registration?.clients && membership.may("portal_files",registration.client_id)) {
-        saved = await saveForClient(membership, userId, registration.clients, { work_type: "gst", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: registration.id }, file, opened, sent.scanned);
+        saved = await saveForClient(membership, userId, registration.clients, { work_type: kind === "gstin" ? "gst" : "income_tax", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: kind === "gstin" ? registration.id : null }, file, opened, sent.scanned);
         // The "still missing" item asked for by this file's name closes; a request with every item in closes, and its reminders stop.
-        if (typeof saved === "object") {
-          const admin = supabaseAdmin();
-          const { data: asks } = await admin.from("requests").select("id, details").eq("client_id", registration.client_id).eq("kind", "documents").eq("status", "pending");
-          for (const ask of asks ?? []) {
-            const details = ask.details as unknown as DocumentRequest;
-            if (receiveItem(details, portal.type, portal.period, saved.id))
-              await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: details.items.every((entry) => entry.received.length) ? "done" : "pending" }).eq("id", ask.id);
-          }
-        }
+        if (typeof saved === "object") await receiveAsked(supabaseAdmin(), registration.client_id, portal.type, portal.period, saved.id);
       } else if (!portal && client && membership.may("upload", client.id)) {
         saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, file, opened, sent.scanned);
       }
@@ -1190,8 +1185,28 @@ export async function savePassword(form: FormData) {
   const admin = supabaseAdmin();
   await admin.from("documents").update({ password_enc: await serverCrypto().encrypt(membership.firmId, `documents/${file.id}/password`, password) }).eq("firm_id", membership.firmId).eq("id", file.id);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.password_saved", entity_type: "document", entity_id: file.id });
+  await fileUnlocked(membership, userId, file.id, password).catch(() => undefined);
   await queueRead(membership.firmId, file.id);
   return "saved" as const;
+}
+
+// A locked file a permitted person left under the client's To check is known once the
+// password typed for it opens it. An income tax paper with this client's PAN is then filed
+// like any portal file (PLAN.md 5.3.1), as that person's rename; anything else stays.
+async function fileUnlocked(membership: NonNullable<Awaited<ReturnType<typeof currentWriter>>["membership"]>, userId: string, id: string, password: string) {
+  const admin = supabaseAdmin();
+  const { data: paper } = await admin.from("documents").select("client_id, status, name, drive_file_id, received_at, clients(name)").eq("firm_id", membership.firmId).eq("id", id).single();
+  const opened = paper?.clients && paper.status === "to_check" && membership.may("portal_files", paper.client_id) ? await firmDrive(membership.firmId) : null;
+  if (!paper?.clients || !opened) return;
+  const portal = await recognisePortalPdf(await opened.drive.read(paper.drive_file_id), password);
+  const { data: own } = portal ? await admin.from("client_registrations").select("id").eq("firm_id", membership.firmId).eq("client_id", paper.client_id).eq("kind", "pan").eq("number_bidx", await serverCrypto().blindIndex(membership.firmId, "pan", portal.pan)).maybeSingle() : { data: null };
+  if (!portal || !own) return;
+  const client = paper.clients.name, folder = await opened.drive.ensureFolder(folderFor(opened.order, client, { work: "income_tax", period: portal.period, receivedAt: paper.received_at, toCheck: false }));
+  const placed = await placeUnderFreeName({ client, type: portal.type, period: periodName(portal.period), extension: path.extname(paper.name) }, receivedLabel(paper.received_at), (name) => opened.drive.move(paper.drive_file_id, folder, name), opened.naming);
+  if (placed === "taken") return;
+  await admin.rpc("rename_document", { target: id, actor: userId, new_work: "income_tax", new_type: portal.type, new_period: portal.period, new_status: "filed", new_name: placed.name, new_file: placed.id });
+  await settleVersions(admin, { client_id: paper.client_id, work_type: "income_tax", document_type: portal.type, period_key: portal.period, registration_id: null });
+  await receiveAsked(admin, paper.client_id, portal.type, portal.period, id);
 }
 
 // The owner has seen that the virus check stopped a file (src/lib/intake.ts); it leaves Today.

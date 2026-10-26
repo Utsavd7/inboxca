@@ -15,10 +15,10 @@ export function PortalDrop({ clientId, back }: { clientId?: string; back?: strin
         <label htmlFor="portal-files">
           <strong>Add portal files</strong>
         </label>
-        <span className="hint">GSTR-2B and GSTR-2A downloaded from the GST portal. InboxCA reads the client and month inside each file.</span>
+        <span className="hint">GSTR-2B and GSTR-2A from the GST portal; Form 16, Form 26AS, AIS, TIS and ITR-V from the income tax portals. InboxCA reads the client and period inside each file.</span>
       </p>
       <span className="drop-pick">
-        <input id="portal-files" name="files" type="file" multiple required accept=".json,application/json" />
+        <input id="portal-files" name="files" type="file" multiple required accept=".json,.txt,.pdf,application/json,text/plain,application/pdf" />
         <Pending className="b b-secondary" type="submit">
           Add
         </Pending>
@@ -34,7 +34,7 @@ export function DroppedNotice({ value }: { value?: string }) {
   const parts = [
     filed && `${filed} filed in ${filed === 1 ? "its client's folder" : "their clients' folders"}`,
     again && `${again} already there`,
-    left && `${left} not filed: not a known portal file, or its GSTIN is not one of your clients'`,
+    left && `${left} not filed: not a known portal file, locked with a password, or its GSTIN or PAN is not one of your clients'`,
     unsafe && `${unsafe} not saved: a virus, a program or a ZIP InboxCA could not open`,
     unchecked && `${unchecked} could not be checked for viruses just now; add ${unchecked === 1 ? "it" : "them"} again in a minute`,
   ].filter(Boolean);

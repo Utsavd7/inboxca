@@ -1,16 +1,20 @@
 import { createHash } from "node:crypto";
 
+// Words placed on a page (x and y in points from the bottom left), for a form's layout.
+export type Placed = { x: number; y: number; text: string; size?: number }[];
+const placed = (page: Placed) => page.map(({ x, y, text, size = 8 }) => `BT /F1 ${size} Tf 1 0 0 1 ${x} ${y} Tm (${text.replace(/[()\\]/g, "\\$&")}) Tj ET`).join("\n");
+
 // A one-page PDF that says what it is, so a demo file opens in any viewer. Padding adds a
-// comment of that many bytes, for a large file.
-export function pdf(text: string, pages = 1, padding = 0) {
-  const stream = `BT /F1 16 Tf 72 720 Td (${text.replace(/[()\\]/g, "")}) Tj ET`;
+// comment of that many bytes, for a large file. Given placed words, one page for each.
+export function pdf(text: string | Placed[], pages = typeof text === "string" ? 1 : text.length, padding = 0) {
+  const stream = (i: number) => (typeof text === "string" ? `BT /F1 16 Tf 72 720 Td (${text.replace(/[()\\]/g, "")}) Tj ET` : placed(text[i]));
   const font = 3 + pages * 2;
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     `<< /Type /Pages /Kids [${Array.from({ length: pages }, (_, i) => `${3 + i * 2} 0 R`).join(" ")}] /Count ${pages} >>`,
     ...Array.from({ length: pages }, (_, i) => [
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${4 + i * 2} 0 R /Resources << /Font << /F1 ${font} 0 R >> >> >>`,
-      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+      `<< /Length ${stream(i).length} >>\nstream\n${stream(i)}\nendstream`,
     ]).flat(),
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   ];
@@ -26,8 +30,8 @@ export function pdf(text: string, pages = 1, padding = 0) {
 }
 
 // The one-page PDF locked with a password by the standard 40-bit RC4 handler (ISO 32000-1,
-// 7.6.3, revision 2), as banks and the tax portal lock statements.
-export function lockedPdf(text: string, password: string) {
+// 7.6.3, revision 2), as banks and the tax portal lock statements. Given placed words, its first page.
+export function lockedPdf(text: string | Placed[], password: string) {
   const pad = Buffer.from("28bf4e5e4e758a4164004e56fffa01082e2e00b6d0683e802f0ca9fe6453697a", "hex");
   const padded = Buffer.concat([Buffer.from(password, "latin1"), pad]).subarray(0, 32);
   const md5 = (...parts: Buffer[]) => createHash("md5").update(Buffer.concat(parts)).digest();
@@ -40,7 +44,7 @@ export function lockedPdf(text: string, password: string) {
   const id = Buffer.from("0123456789abcdef0123456789abcdef", "hex"), permissions = Buffer.alloc(4);
   permissions.writeInt32LE(-44);
   const owner = rc4(md5(padded).subarray(0, 5), padded), key = md5(padded, owner, permissions, id).subarray(0, 5);
-  const content = rc4(md5(key, Buffer.from([4, 0, 0, 0, 0])).subarray(0, 10), Buffer.from(`BT /F1 16 Tf 72 720 Td (${text.replace(/[()\\]/g, "")}) Tj ET`, "latin1"));
+  const content = rc4(md5(key, Buffer.from([4, 0, 0, 0, 0])).subarray(0, 10), Buffer.from(typeof text === "string" ? `BT /F1 16 Tf 72 720 Td (${text.replace(/[()\\]/g, "")}) Tj ET` : placed(text[0]), "latin1"));
   const objects = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
     Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),

@@ -117,6 +117,8 @@ function build(request:FormRequest,creation:Values) {
   if(!pan || meta.AssessmentYear!==period) throw new Error("This official ITR year is not ready yet");
   const body:Values={CreationInfo:creation,[`Form_${form}`]:meta},seen=new Set<string>(),issues:string[]=[];
   for(const draft of request.drafts) for(const [field,figure] of draft.figures) {
+    // A paper's own rows, such as Form 26AS's, are there to check the return against, not to fill it.
+    if(!field.startsWith("itr.")) continue;
     const entry=itrEntry(template,field),value=itrValue(entry,figure.value),row=entry.rows ? `, row ${Number(entry.path.match(/\.(\d+)(\.|$)/)![1])+1}` : "";
     if(seen.has(entry.path)) throw new Error("Two sources fill the same figure. Check them together first");
     seen.add(entry.path);put(body,entry.path,value);

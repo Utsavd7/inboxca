@@ -1,0 +1,34 @@
+[
+  {
+    "file": "Notification-51-2026-ITR-V.pdf",
+    "title": "Notification No. 51/2026 (G.S.R. 232(E), 30 March 2026): Form ITR-V and the ITR Acknowledgement for Assessment Year 2026-27",
+    "url": "https://www.incometax.gov.in/iec/foportal/sites/default/files/2026-04/Notification%20No.51_2026.pdf",
+    "fetched": "2026-10-26",
+    "sha256": "f4f02746034640307c960fb54684c3ad7ce4f4efd411c3fc303a3826237fb816",
+    "bytes": 428547
+  },
+  {
+    "file": "AIS-FAQ.pdf",
+    "title": "FAQs on AIS (Annual Information Statement), with the parts of AIS and of the Taxpayer Information Summary (TIS)",
+    "url": "https://www.incometax.gov.in/iec/foportal/sites/default/files/2022-07/Click%20Here_1.pdf",
+    "fetched": "2026-10-26",
+    "sha256": "2d3cfb078b18b66cfacd12c72769c1895ea7eb4682810336e3da0ca4a4eaaf63",
+    "bytes": 165506
+  },
+  {
+    "file": "it-rules-2026-forms-130-168.json",
+    "title": "Income-tax Rules, 2026: the text of Form No. 130 (PDF pages 742 to 748) and Form No. 168 (PDF page 897) as pdf.js extracts it; the 976 page PDF itself is not kept here",
+    "url": "https://www.incometax.gov.in/iec/foportal/sites/default/files/2026-03/En-Notified-IT-Rules-2026-20-03-2026.pdf",
+    "fetched": "2026-10-26",
+    "sha256": "30bc85bf9d3ff23f378d5ddd2ca1d2e3d223134471fc8163aa5e2feecacb7e51",
+    "bytes": 10019228
+  },
+  {
+    "file": null,
+    "title": "TRACES e-tutorials: Download Form 16 (Part-A and Part-B); Form 26AS Annual Tax Statement; Converting the Form 26AS text file to Excel",
+    "url": "https://traces61contents.tdscpc.gov.in/en/e-tutorial-taxpayer.html",
+    "fetched": "2026-10-26",
+    "sha256": null,
+    "note": "Read for the printed titles, headings and the caret separated text layout of Form 16 and Form 26AS only, then deleted: their screenshots show real taxpayers' PANs, names and TANs. No value from them is in this repository."
+  }
+]

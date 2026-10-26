@@ -4,7 +4,7 @@ import { serverCrypto } from "./crypto";
 import { supabaseAdmin } from "./supabase";
 import { itrReturns } from "./itr-fields";
 
-const source = z.object({document:z.uuid().optional(),sha256:z.string().regex(/^[a-f0-9]{64}$/).optional(),page:z.number().int().min(1).max(30).optional(),sheet:z.number().int().min(1).max(100).optional(),cell:z.string().regex(/^[A-Z]([1-9][0-9]{0,2}|100[0-4])$/).optional(),path:z.string().startsWith("/").max(256).optional(),reader:z.string().regex(/^gstr2(b-v4\.[45]|a-v2\.3)$/).optional(),entered_by:z.uuid().optional(),entered_at:z.iso.datetime().optional()}).refine(s=>s.entered_by ? !!s.entered_at && !s.document && !s.sha256 && !s.page && !s.sheet && !s.cell && !s.path && !s.reader : !s.entered_at && !!s.document && !!s.sha256 && !!s.page && !!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-Z]/,""))/40)));
+const source = z.object({document:z.uuid().optional(),sha256:z.string().regex(/^[a-f0-9]{64}$/).optional(),page:z.number().int().min(1).max(30).optional(),sheet:z.number().int().min(1).max(100).optional(),cell:z.string().regex(/^[A-Z]([1-9][0-9]{0,2}|100[0-4])$/).optional(),path:z.string().startsWith("/").max(256).optional(),reader:z.string().regex(/^(gstr2(b-v4\.[45]|a-v2\.3)|form26as-text|form16-traces|form130-rules-2026)$/).optional(),entered_by:z.uuid().optional(),entered_at:z.iso.datetime().optional()}).refine(s=>s.entered_by ? !!s.entered_at && !s.document && !s.sha256 && !s.page && !s.sheet && !s.cell && !s.path && !s.reader : !s.entered_at && !!s.document && !!s.sha256 && !!s.page && !!s.sheet===!!s.cell && (!s.cell || s.page===Math.ceil(Number(s.cell.replace(/^[A-Z]/,""))/40)));
 export const draftSchema = z.object({
   lines:z.array(z.object({id:z.uuid(),field:z.string().regex(/^[a-z][a-z0-9_.]{0,99}$/),value_enc:z.string().min(20).max(20000),source,state:z.enum(["pending","confirmed","rejected"]),by:z.uuid().optional(),at:z.iso.datetime().optional()}).refine((line)=>line.state==="pending" || !!line.by && !!line.at)).min(1).max(10000),
   target:z.object({form:z.enum(itrReturns),version:z.string().regex(/^\d+(\.\d+){0,3}$/)}).optional(),
@@ -92,7 +92,7 @@ export async function verifySources(firm:string,client:string,draft:Draft) {
   if(!ids.length) return;
   if(ids.length>100) throw new Error("Split these source files into smaller drafts.");
   const {data,error}=await supabaseAdmin().from("documents").select("id,name,sha256").eq("firm_id",firm).eq("client_id",client).in("status",["filed","to_check"]).in("id",ids);
-  if(error || data?.length!==ids.length || data.some((doc)=>! /\.(pdf|xlsx|xls|csv|json)$/i.test(doc.name)) || documents.some((line)=>data.find((doc)=>doc.id===line.source.document)?.sha256!==line.source.sha256)) throw new Error("A source file is not available.");
+  if(error || data?.length!==ids.length || data.some((doc)=>! /\.(pdf|xlsx|xls|csv|json|txt)$/i.test(doc.name)) || documents.some((line)=>data.find((doc)=>doc.id===line.source.document)?.sha256!==line.source.sha256)) throw new Error("A source file is not available.");
 }
 
 // Called by the document jobs, never with email text. Source ids are checked before saving.

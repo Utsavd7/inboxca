@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,6 +6,8 @@ import { test, expect, type Page } from "@playwright/test";
 import { TEST_DRIVE } from "../../playwright.config";
 import { emailStep, localSupabase, query, runJobs, seedFirm, totp } from "./local-supabase";
 import { gstr2a, inventedGstin } from "../fixtures/portal";
+import { form16, form26asText, itrVerification, pan, tan } from "../fixtures/tax-papers";
+import { localDrive } from "@/src/lib/drive";
 
 // Portal files dropped in from Documents and from a client's Returns, and old files sent from
 // a disk into the drive's Incoming folder, then sorted. Skipped when local Supabase is not running.
@@ -88,6 +90,65 @@ test("a GSTR-2A added on Documents closes the GSTR-2A asked for", async () => {
   expect(request.status).toBe("done");
   const [document] = await query(local.dbUrl, "select document_type, period_key from public.documents where client_id = $1", [client]);
   expect(document).toEqual({ document_type: "GSTR-2A", period_key: "2026-09" });
+});
+
+test("a Form 26AS text file and a Form 16 added on Documents are filed under the client by PAN, and the 26AS rows reach the year's figures", async ({ request }) => {
+  const name = `Iyer Consultants ${tag}`;
+  await owner.goto("/app/clients?panel=add");
+  await owner.getByLabel("Name", { exact: true }).fill(name);
+  await owner.getByLabel("Kind", { exact: true }).selectOption("individual");
+  await owner.getByLabel("PAN", { exact: true }).fill(pan);
+  await owner.getByRole("button", { name: "Add client" }).click();
+  await expect(owner.locator(".page-head")).toContainText(name);
+  const [{ id: client }] = await query(local.dbUrl, "select id from public.clients where firm_id = $1 and name = $2", [firm.firmId, name]);
+  await owner.goto("/app/documents");
+  await owner.getByRole("link", { name: "Add portal files" }).click();
+  await owner.getByLabel("Add portal files").setInputFiles([{ name: "download.txt", mimeType: "text/plain", buffer: form26asText() }, { name: "certificate.pdf", mimeType: "application/pdf", buffer: Buffer.from(form16()) }]);
+  await owner.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(owner).toHaveURL(/\/app\/documents\?dropped=2-0-0$/);
+  const papers = await query(local.dbUrl, "select id, document_type, period_key, work_type, name from public.documents where client_id = $1 order by document_type", [client]);
+  expect(papers.map(({ document_type, period_key, work_type, name }) => ({ document_type, period_key, work_type, name }))).toEqual([
+    { document_type: "Form 16", period_key: "2026", work_type: "income_tax", name: `${name} - Form 16 - FY 2025-26.pdf` },
+    { document_type: "Form 26AS", period_key: "2026", work_type: "income_tax", name: `${name} - Form 26AS - FY 2025-26.txt` },
+  ]);
+  expect(await readFile(path.join(drive, "InboxCA", "FY 2025-26", name, "Income tax", `${name} - Form 26AS - FY 2025-26.txt`))).toEqual(form26asText());
+  await runJobs(request, firm.firmId);
+  // Each paper's figures wait in a draft of its own for the year, every one to be checked.
+  const drafts = await query(local.dbUrl, "select id, form_code, period_key, data from public.datasets where client_id = $1 order by id", [client]);
+  expect(drafts.map((draft) => [draft.id, draft.form_code, draft.period_key]).sort()).toEqual(papers.map((paper) => [paper.id, "ITR", "2026"]).sort());
+  expect(drafts.every((draft) => draft.data.lines.every((line: { state: string }) => line.state === "pending"))).toBe(true);
+  await owner.goto(`/app/clients/${client}?tab=extraction&draft=${papers[1].id}`);
+  await expect(owner.getByRole("link", { name: `${tan}: total tax deducted: 64480.00` })).toBeVisible();
+  await owner.goto(`/app/clients/${client}/itr?form=ITR1&year=2026`);
+  // The return holds both papers; the 26AS rows are there to check it against, not to fill it.
+  const held = owner.getByRole("region", { name: "Already filled" });
+  await expect(held).toContainText(`${name} - Form 26AS - FY 2025-26.txt`);
+  await expect(held).toContainText(`${name} - Form 16 - FY 2025-26.pdf`);
+  await expect(owner.getByText("Choose a field from this official form")).toHaveCount(0);
+});
+
+test("a locked ITR-V under a client's To check is filed as soon as a person types its password", async () => {
+  const name = `Desai Associates ${tag}`, who = "ZZZPZ0006Z"; // ggignore: an invented PAN.
+  await owner.goto("/app/clients?panel=add");
+  await owner.getByLabel("Name", { exact: true }).fill(name);
+  await owner.getByLabel("Kind", { exact: true }).selectOption("individual");
+  await owner.getByLabel("PAN", { exact: true }).fill(who);
+  await owner.getByRole("button", { name: "Add client" }).click();
+  await expect(owner.locator(".page-head")).toContainText(name);
+  const [{ id: client }] = await query(local.dbUrl, "select id from public.clients where firm_id = $1 and name = $2", [firm.firmId, name]);
+  // As a client's email leaves it: under To check, its type and year not known, since the lock hides them.
+  const bytes = Buffer.from(itrVerification("invented-pass", who)), store = localDrive(drive);
+  const saved = await store.save(await store.ensureFolder(["FY 2026-27", name, "Other", "To check"]), `${name} - Document.pdf`, bytes);
+  if (saved === "taken") throw new Error("Test file collision");
+  const [{ id }] = await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, status, name, size, sha256, drive_file_id) values ($1, $2, 'other', 'Document', 'to_check', $3, $4, $5, $6) returning id", [firm.firmId, client, `${name} - Document.pdf`, bytes.length, createHash("sha256").update(bytes).digest("hex"), saved.id]);
+  await owner.goto(`/app/files/${id}/view`);
+  await owner.getByLabel("This PDF has a password. Type it to open the file.").fill("invented-pass");
+  await owner.getByRole("button", { name: "Open", exact: true }).click();
+  await expect(owner.getByRole("img", { name: "Page 1", exact: true })).toBeVisible();
+  const [paper] = await query(local.dbUrl, "select document_type, period_key, work_type, status, name from public.documents where id = $1", [id]);
+  expect(paper).toEqual({ document_type: "ITR-V", period_key: "2026", work_type: "income_tax", status: "filed", name: `${name} - ITR-V - FY 2025-26.pdf` });
+  expect(await readFile(path.join(drive, "InboxCA", "FY 2025-26", name, "Income tax", paper.name))).toEqual(bytes);
+  expect((await query(local.dbUrl, "select actor_id from public.activity_log where entity_id = $1 and action = 'document.renamed'", [id]))).toEqual([{ actor_id: firm.ownerId }]);
 });
 
 test("each open monthly GSTR-3B says whether its GSTR-2B is in, with the box beside it", async () => {
