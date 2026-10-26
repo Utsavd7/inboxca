@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { checkEnquiry, convertsLeads, humanSent, leadDetails, looksLikeEnquiry, nameFromAddress, nextFollowUp, proposeLead, worksLeads } from "@/src/lib/leads";
+import { checkEnquiry, convertsLeads, embedSites, frameAncestors, humanSent, leadDetails, looksLikeEnquiry, nameFromAddress, nextFollowUp, proposeLead, worksLeads } from "@/src/lib/leads";
 
 const form = (fields: Record<string, string>) => {
   const data = new FormData();
@@ -57,4 +57,13 @@ it("reads a lead's details, keeping only what it should hold", () => {
   expect(leadDetails({ service: "gst", follow_up_on: "2026-10-30", other: "x" })).toEqual({ service: "gst", follow_up_on: "2026-10-30" });
   expect(leadDetails({ service: "unknown" })).toEqual({});
   expect(leadDetails(null)).toEqual({});
+});
+
+it("keeps the websites that may show the form as secure origins, and lets no other site frame it", () => {
+  expect(embedSites("https://Sharma-CA.in/contact-us\nsharmaca.co.in, https://sharma-ca.in")).toEqual(["https://sharma-ca.in", "https://sharmaca.co.in"]);
+  expect(embedSites("  ")).toEqual([]);
+  for (const typed of ["http://sharmaca.in", "https://me@sharmaca.in", "localhost", "a.in b.in c.in d.in e.in f.in"]) expect(embedSites(typed), typed).toBeNull();
+  expect(frameAncestors(["https://sharma-ca.in", "https://sharmaca.co.in"])).toBe("frame-ancestors https://sharma-ca.in https://sharmaca.co.in");
+  expect(frameAncestors(undefined)).toBe("frame-ancestors 'none'");
+  expect(frameAncestors(["http://old.in", "https://a.in; script-src *", "https://a.in/page", 7])).toBe("frame-ancestors 'none'");
 });

@@ -6,7 +6,7 @@ import type { Json } from "@/src/db/types";
 import { todayInIndia } from "@/src/lib/calendar";
 import { serverCrypto } from "@/src/lib/crypto";
 import { firmMailer } from "@/src/lib/firm-mail";
-import { checkEnquiry, lostReasons, nextFollowUp, proposeLead, sealLead, services, typedValues, worksLeads } from "@/src/lib/leads";
+import { checkEnquiry, embedSites, lostReasons, nextFollowUp, proposeLead, sealLead, services, typedValues, worksLeads } from "@/src/lib/leads";
 import { mailLive } from "@/src/lib/mail-live";
 import { currentWriter } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -129,6 +129,19 @@ export async function setEnquiryForm(form: FormData) {
   await supabase.from("firms").update({ settings: (on ? { ...settings, enquiry_form: { key: randomBytes(12).toString("base64url") } } : settings) as { [key: string]: Json } }).eq("id", membership.firmId);
   revalidatePath("/app/leads");
   redirect(`/app/leads?panel=setup&saved=${on ? "form_on" : "form_off"}`);
+}
+
+// The owner lists the websites that may show the form inside their own pages; the form's page
+// tells browsers so (proxy.ts). Turning the form off clears them with its link.
+export async function setEmbedSites(form: FormData) {
+  const { supabase, membership } = await leadWriter();
+  const enquiryForm = membership.settings.enquiry_form as { key?: string } | undefined;
+  if (membership.role !== "owner" || !enquiryForm?.key) redirect("/app/leads");
+  const sites = embedSites(String(form.get("sites") ?? "").slice(0, 2000));
+  if (!sites) redirect("/app/leads?panel=setup&error=sites");
+  await supabase.from("firms").update({ settings: { ...membership.settings, enquiry_form: { ...enquiryForm, sites } } as { [key: string]: Json } }).eq("id", membership.firmId);
+  revalidatePath("/app/leads");
+  redirect("/app/leads?panel=setup&saved=sites");
 }
 
 // The owner asks InboxCA to look for enquiries in the firm's email, or stops it. The mailbox's

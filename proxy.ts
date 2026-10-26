@@ -1,11 +1,19 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { formFirm } from "@/app/f/[formKey]/firm";
 import { DEVICE_COOKIE, newDeviceToken } from "@/src/lib/device";
+import { frameAncestors } from "@/src/lib/leads";
 
 // Keeps the sign in session fresh on the product's pages. It decides nothing: each page
 // checks the session and the 2 step level itself, and the database checks again.
 // The public site never runs this, so its pages stay static and fast.
 export async function proxy(request: NextRequest) {
+  // The enquiry form (no sign in) only says which websites may show it inside their pages.
+  if (request.nextUrl.pathname.startsWith("/f/")) {
+    const form = NextResponse.next();
+    form.headers.set("Content-Security-Policy", frameAncestors((await formFirm(request.nextUrl.pathname.split("/")[2] ?? ""))?.sites));
+    return form;
+  }
   let response = NextResponse.next({ request });
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -45,5 +53,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/admin/:path*", "/sign-in/:path*", "/auth/:path*"],
+  matcher: ["/app/:path*", "/admin/:path*", "/sign-in/:path*", "/auth/:path*", "/f/:path*"],
 };

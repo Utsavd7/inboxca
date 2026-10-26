@@ -1,3 +1,4 @@
+import Form from "next/form";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { reviewDevice, setOfficeOnly } from "@/app/(app)/actions";
@@ -6,6 +7,7 @@ import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
 import { firmAdmin, fixedSuggestion, memberOffice, officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { supabaseAdmin } from "@/src/lib/supabase";
+import { AutoSelect } from "./auto-select";
 import { Pending } from "./pending";
 
 // Only office approvers read these requests and the activity behind them.
@@ -62,7 +64,7 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const line = <p className="hint">Staff, managers and front desk use approved PCs on your office internet connection. You and partners can use InboxCA anywhere.</p>;
   const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">{where}
     <Pending className="b b-ghost" name="intent" value="forget">Forget office connections</Pending><Pending className="b b-secondary" name="intent" value="off">Turn off</Pending>
-  </form> : isAdmin && inPreset ? <><input type="hidden" form="preset-form" name="intent" value="on" />{picked && <input type="hidden" form="preset-form" name="branch" value={picked.id} />}<button className="b b-primary" form="preset-form" formAction={setOfficeOnly} formNoValidate>Turn on</button></>
+  </form> : isAdmin && inPreset ? <><input type="hidden" form="preset-form" name="intent" value="on" />{picked && <input type="hidden" form="preset-form" name="branch" value={picked.id} />}<Pending className="b b-primary" form="preset-form" formAction={setOfficeOnly} formNoValidate>Turn on</Pending></>
     : isAdmin && <form action={setOfficeOnly}>{where}
     <fieldset className="fieldset"><legend>Are you in your office right now?</legend>
       <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, this is my office</label>
@@ -75,17 +77,17 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
       {!inPreset && <h2 id={compact ? "office-alerts" : "office-title"}>{compact ? "Your office today" : "Staff can use InboxCA only in the office"}</h2>}
       {refusedNotes[error] && <p className="alert" role="alert">{refusedNotes[error]}</p>}
       {!compact && !inPreset && line}
-      {!compact && !!branches?.length && <form method="get" action="/app/settings#office">
+      {!compact && !!branches?.length && <Form action="/app/settings#office">
         <input type="hidden" name="group" value="access" />
         <div className="form-row"><div>
           <label htmlFor="office-branch">Office</label>
-          <select id="office-branch" name="branch" defaultValue={picked?.id ?? ""}>
+          <AutoSelect save="branch" id="office-branch" name="branch" defaultValue={picked?.id ?? ""}>
             <option value="">Main office</option>
             {branches.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
-          </select>
-        </div><button className="b b-secondary">Show</button></div>
+          </AutoSelect>
+        </div><button className="sr-only" value="branch">Show</button></div>
         {picked && !(picked.settings as { office?: Office }).office && <p className="hint">{picked.name} follows the main office until you turn Office only on or off for it here.</p>}
-      </form>}
+      </Form>}
       {office.on && !compact && <p className={here ? "notice" : "alert"} role="status">{here ? "On. You are on your office internet connection now." : "On. Waiting for your firm to confirm the office internet connection."}</p>}
       {anyOn && requests?.map((request) => {
         const details = request.details as { person?: string; day?: string };

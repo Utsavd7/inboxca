@@ -108,6 +108,74 @@ test("a slow page shows the loading bar, and a slow save keeps its button busy",
     await expect(busy).toBeDisabled();
     await expect(panel.getByText("Invented Team")).toBeVisible();
     await expect(busy).toHaveCount(0);
+
+    // A button outside its form (Office only's Turn on sends the preset's form) is busy too, and
+    // free again once the page comes back. Sent as "here" with no address seen, it is refused.
+    await page.unroute(/\/app\/people/);
+    await page.goto("/app/settings?group=access#office");
+    await page.route(/\/app\/settings/, async (route) => {
+      const body = route.request().postData();
+      if (!route.request().headers()["next-action"] || !body) return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.continue({ postData: body.replace(/(name="[^"]*intent"\r\n\r\n)on/, "$1here") });
+    });
+    await page.locator("#office details.office-switch > summary").click();
+    await page.getByRole("button", { name: "Turn on", exact: true }).click();
+    const turnOn = page.locator('button[form="preset-form"]');
+    await expect(turnOn).toHaveAttribute("aria-busy", "true");
+    await expect(turnOn).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Use this preset" })).toBeDisabled();
+    await expect(page.getByRole("alert").filter({ hasText: "could not see this connection's address" })).toBeVisible();
+    await expect(turnOn).not.toHaveAttribute("aria-busy");
+    await expect(turnOn).not.toHaveAttribute("disabled");
+  } finally {
+    await firm.remove();
+  }
+});
+
+test("a search moves to its results without reloading the page, shows the bar, and works without JavaScript", async ({ page, browser }) => {
+  test.setTimeout(90_000);
+  const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+  const email = `shell-find-${randomUUID()}@invented.test`;
+  const firm = await seedFirm("Invented Find Firm", email, key);
+  try {
+    await emailStep(page, email);
+    await page.getByLabel("6 digit code from the app").fill(totp(key));
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/app$/);
+    await page.goto("/app/clients");
+    // A mark on the page itself: a full reload would wipe it.
+    await page.evaluate(() => Object.assign(window, { kept: true }));
+    const held: (() => void)[] = [];
+    await page.route(/\/app\/clients\?q=/, async (route) => {
+      if (route.request().headers().rsc) await new Promise<void>((resolve) => held.push(resolve));
+      await route.continue();
+    });
+    await page.getByLabel("Find by name, email, PAN or GSTIN").fill("Invented Mehta");
+    await page.getByLabel("Find by name, email, PAN or GSTIN").press("Enter");
+    await expect(page.locator(".nav-bar")).toHaveAttribute("data-state", "run");
+    held.forEach((resolve) => resolve());
+    await expect(page).toHaveURL(/\/app\/clients\?q=Invented\+Mehta$/);
+    await expect(page.locator(".nav-bar")).not.toHaveAttribute("data-state");
+    await expect(page.getByLabel("Find by name, email, PAN or GSTIN")).toHaveValue("Invented Mehta");
+    expect(await page.evaluate(() => "kept" in window)).toBe(true);
+
+    // A picker applies by itself, the same way: Documents' year.
+    await page.goto("/app/documents");
+    await page.evaluate(() => Object.assign(window, { kept: true }));
+    await page.getByLabel("Financial year").selectOption("all");
+    await expect(page).toHaveURL(/\/app\/documents\?year=all$/);
+    expect(await page.evaluate(() => "kept" in window)).toBe(true);
+
+    // Without JavaScript the same forms still find, by a plain page load.
+    const plain = await browser.newContext({ javaScriptEnabled: false, storageState: await page.context().storageState() });
+    const still = await plain.newPage();
+    await still.goto("/app/clients");
+    await still.getByLabel("Find by name, email, PAN or GSTIN").fill("Invented Shah");
+    await still.getByLabel("Find by name, email, PAN or GSTIN").press("Enter");
+    await expect(still).toHaveURL(/\/app\/clients\?q=Invented\+Shah$/);
+    await expect(still.getByLabel("Find by name, email, PAN or GSTIN")).toHaveValue("Invented Shah");
+    await plain.close();
   } finally {
     await firm.remove();
   }

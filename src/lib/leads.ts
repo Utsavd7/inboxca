@@ -89,6 +89,24 @@ export function humanSent(trap: string, startedAt: number, now = Date.now()) {
 // At most this many enquiries an hour from one address, and from everyone, for one firm.
 export const FORM_LIMITS = { perSender: 5, perFirm: 50 };
 
+// The websites that may show the form inside their own pages (an iframe), as the owner types
+// them, one a line: each a secure (https) address, kept as its origin, so a page of the site
+// counts for the whole site. A name alone (yourfirm.in) is read as https://yourfirm.in.
+export const EMBED_SITES = 5;
+// Null when one is not such an address, or there are too many.
+export function embedSites(typed: string) {
+  const sites = new Set<string>();
+  for (const line of typed.split(/[\s,]+/).filter(Boolean)) {
+    const url = URL.parse(line.includes("://") ? line : `https://${line}`);
+    if (url?.protocol !== "https:" || url.username || url.password || !url.hostname.includes(".")) return null;
+    sites.add(url.origin);
+  }
+  return sites.size > EMBED_SITES ? null : [...sites];
+}
+// The form page's frame-ancestors: only the firm's listed websites, or none at all.
+export const frameAncestors = (sites: unknown) =>
+  `frame-ancestors ${(Array.isArray(sites) ? sites.filter((site) => typeof site === "string" && URL.parse(site)?.origin === site && site.startsWith("https://")) : []).join(" ") || "'none'"}`;
+
 // Email from someone who is not a client or contact yet, read in memory: whether it reads like
 // someone asking for the firm's services (rules, no AI). Newsletters, mailers and automatic
 // notices are left out.

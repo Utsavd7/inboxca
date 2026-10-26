@@ -1,4 +1,5 @@
 import { AlarmClock, CheckCheck, ChevronDown, FolderInput, Inbox as InboxIcon, Mail, MailOpen, PenLine, Reply, Search, UserRound } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense, ViewTransition } from "react";
@@ -287,10 +288,10 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     <details key={`${summary}${current}${sp.file}`} className="ib-menu" open={open}>
       <summary>{summary}<ChevronDown size={14} aria-hidden /></summary>
       <div className="ib-pop">
-        <form action="/app/inbox" role="search">
+        <Form action="/app/inbox" scroll={false} role="search">
           {Object.entries(keep).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
           <input type="search" name="cq" defaultValue={cq} placeholder="Find a client" aria-label="Find a client" />
-        </form>
+        </Form>
         {current && !keep.compose && <Link href={href({ client: undefined })}>All clients</Link>}
         {pickList?.slice(0, 8).map((row) => (
           <Link key={row.id} href={link(row.id)} aria-current={row.id === current ? "true" : undefined}><Avatar name={row.name} />{row.name}</Link>
@@ -675,11 +676,11 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             <LinkBusy />
           </Link>
         )}
-        <form className="ib-search" action="/app/inbox" role="search">
+        <Form className="ib-search" action="/app/inbox" role="search">
           {Object.entries({ ...filters, q: undefined }).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
           <Search size={14} aria-hidden />
           <input id="mail-search" type="search" name="q" defaultValue={q} placeholder="Search email" aria-label="Search email" title="Press / to search" />
-        </form>
+        </Form>
       </div>
 
       <Reading>

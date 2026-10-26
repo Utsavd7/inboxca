@@ -9,7 +9,7 @@ import { dueLabel, todayInIndia } from "@/src/lib/calendar";
 import { clientKinds, type ClientKind } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { emailTemplates } from "@/src/lib/email-templates";
-import { convertsLeads, FOLLOW_UPS, leadDetails, lostReasons, openStages, proposeLead, services, stages, urgencies, worksLeads, type LeadDetails } from "@/src/lib/leads";
+import { convertsLeads, EMBED_SITES, FOLLOW_UPS, leadDetails, lostReasons, openStages, proposeLead, services, stages, urgencies, worksLeads, type LeadDetails } from "@/src/lib/leads";
 import { mailLive } from "@/src/lib/mail-live";
 import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
@@ -17,7 +17,7 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { Pending } from "../pending";
 import { Avatar, Badge, Card, Empty, NotForYou, PageHead, Row, SidePanel, Toast } from "../ui";
 import { CopyButton } from "../ui-client";
-import { addLead, changeLead, confirmEnquiry, dismissEnquiry, sendFollowUp, setEnquiryCapture, setEnquiryForm } from "./actions";
+import { addLead, changeLead, confirmEnquiry, dismissEnquiry, sendFollowUp, setEmbedSites, setEnquiryCapture, setEnquiryForm } from "./actions";
 import { Board, type LeadCard } from "./board";
 import { LeadForm } from "./lead-form";
 
@@ -25,7 +25,7 @@ type Search = { lead?: string; panel?: string; do?: string; write?: string; save
 const uuid = /^[0-9a-f-]{36}$/;
 const saved: Record<string, string> = {
   added: "Lead added.", move: "Lead moved.", lost: "Lead marked lost.", follow_up: "Follow up day saved.", followed_up: "Follow up email sent.", notes: "Notes saved.",
-  dismissed: "Set aside. The email stays in your mailbox.", form_on: "Your enquiry form is on.", form_off: "Your enquiry form is off.",
+  dismissed: "Set aside. The email stays in your mailbox.", form_on: "Your enquiry form is on.", form_off: "Your enquiry form is off.", sites: "Websites saved.",
   capture_on: "InboxCA now looks for enquiries in your email.", capture_off: "InboxCA no longer looks for enquiries in your email.",
 };
 const errors: Record<string, string> = {
@@ -66,8 +66,9 @@ export default async function Leads({ searchParams }: { searchParams: Promise<Se
   ]);
   const connected = mailbox?.status === "connected";
   const capturing = connected && !!(mailbox?.settings as { capture_enquiries?: boolean } | null)?.capture_enquiries;
-  const formKey = (membership.settings.enquiry_form as { key?: string } | undefined)?.key;
+  const { key: formKey, sites = [] } = (membership.settings.enquiry_form ?? {}) as { key?: string; sites?: string[] };
   const formLink = formKey ? `${process.env.APP_BASE_URL ?? `https://${head.get("host")}`}/f/${formKey}` : "";
+  const embed = `<iframe src="${formLink}" title="Enquiry form" width="100%" height="760" style="border:0"></iframe>`;
 
   const card = (row: { id: string; name: string; stage: string; details: unknown }): LeadCard => {
     const details = leadDetails(row.details);
@@ -189,6 +190,34 @@ export default async function Leads({ searchParams }: { searchParams: Promise<Se
               <p className="hint">The owner turns the enquiry form on.</p>
             )}
           </section>
+          {formLink && (
+            <section className="lead-way" aria-labelledby="way-embed">
+              <h3 id="way-embed">On your website</h3>
+              <p className="hint">To show the form inside a page of your website, paste this code into it. Only the websites listed below can show it.</p>
+              <p className="lead-link">
+                <span className="num">{embed}</span>
+                <CopyButton text={embed} label="Embed code" />
+              </p>
+              {sp.error === "sites" && (
+                <p className="alert" role="alert">
+                  Type each website as its address, like https://yourfirm.in, one a line, up to {EMBED_SITES}.
+                </p>
+              )}
+              {owner && !locked ? (
+                <form action={setEmbedSites} className="lead-write">
+                  <label htmlFor="embed-sites">Websites that may show the form</label>
+                  <textarea id="embed-sites" name="sites" rows={3} defaultValue={sites.join("\n")} maxLength={2000} placeholder="https://yourfirm.in" />
+                  <span className="lead-acts">
+                    <Pending className="b b-secondary" busy="Saving">
+                      Save websites
+                    </Pending>
+                  </span>
+                </form>
+              ) : (
+                <p className="hint">{sites.length ? `Shown on ${sites.join(", ")}.` : "No website shows it yet. The owner lists them here."}</p>
+              )}
+            </section>
+          )}
           <section className="lead-way" aria-labelledby="way-email">
             <h3 id="way-email">Enquiries by email</h3>
             <p className="hint">Email from someone who is not a client yet, that asks about your services, shows on this page for you to add as a lead in one click. Nothing of it is kept until you add it.</p>

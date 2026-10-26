@@ -2,6 +2,7 @@ import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { sendSkip, type BulkSend } from "@/src/lib/records";
 import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { canManageClients } from "@/src/lib/clients";
@@ -203,7 +204,7 @@ export default async function Clients({
 
       <div className="clients-bar">
         <LinkTabs kind="pills" label="Show" items={(Object.keys(pills) as Pill[]).map((pill) => ({ href: href({ show: pill }), label: pills[pill], count: countOf[pill], current: show === pill }))} />
-        <form className="clients-find" role="search">
+        <Form action="/app/clients" className="clients-find" role="search">
           <span className="search">
             <Search size={16} aria-hidden />
             <input id="q" name="q" type="search" defaultValue={q} placeholder="Name, email, PAN or GSTIN" aria-label="Find by name, email, PAN or GSTIN" />
@@ -223,7 +224,7 @@ export default async function Clients({
           <button className="b b-secondary" type="submit">
             Find
           </button>
-        </form>
+        </Form>
       </div>
 
       {params.error === "send_permission" && <p className="alert" role="alert">Your owner needs to allow sending papers first.</p>}

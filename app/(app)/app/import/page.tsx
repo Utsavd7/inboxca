@@ -1,5 +1,6 @@
 import "./import.css";
 import { FolderInput } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { startImport, undoFirstImport } from "@/app/(app)/actions";
@@ -94,7 +95,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
         <>
           <section className="panel" aria-labelledby="choose">
             <h2 id="choose">What to bring</h2>
-            <form className="import-choose">
+            <Form action="/app/import" className="import-choose">
               <fieldset>
                 <legend>Folders in your drive</legend>
                 {folders.map((folder) => (
@@ -127,7 +128,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
               <button className="b b-secondary" type="submit">
                 Show what would move
               </button>
-            </form>
+            </Form>
           </section>
           <DiskUpload incoming={folders.find((folder) => folder.endsWith(`InboxCA/${INCOMING}`))} />
 
@@ -225,12 +226,12 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
       {pick && (
         <SidePanel key="pick" id="pick-client" title="Choose the client" close={address({})}>
           <p className="hint num">{pick}</p>
-          <form action="/app/import" role="search" className="import-find">
+          <Form action="/app/import" scroll={false} role="search" className="import-find">
             {[...new URLSearchParams(address({ pick }).split("?")[1]).entries()].map(([key, value], at) => (
               <input key={at} type="hidden" name={key} value={value} />
             ))}
             <input type="search" name="cq" defaultValue={cq} placeholder="Find a client" aria-label="Find a client" autoFocus />
-          </form>
+          </Form>
           <ul className="rows">
             {found.slice(0, 8).map((client) => (
               <li key={client.id}>

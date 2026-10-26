@@ -1,3 +1,4 @@
+import Form from "next/form";
 import Link from "next/link";
 import {ChevronLeft,FileCheck2,ListTodo,PencilLine} from "lucide-react";
 import {redirect,unstable_rethrow} from "next/navigation";
@@ -54,11 +55,11 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
     <PageHead crumb={<Link className="crumb" href={`/app/clients/${id}?tab=extraction`}><ChevronLeft size={14} aria-hidden/>{client.name}</Link>} title={`${formName(form)} ${itrYear(period)}`}
       sub={<span className="head-meta"><span>InboxCA fills what it already holds and lists the rest for you. Nothing is guessed.</span></span>}/>
     <div className="pane client-pane">
-    <form className="form-row" method="get">
+    <Form action={`/app/clients/${id}/itr`} className="form-row">
       <div><label htmlFor="return">Return</label><select id="return" name="form" defaultValue={form}>{itrReturns.map(code=><option key={code} value={code}>{formName(code)}</option>)}</select></div>
       <div><label htmlFor="year">Assessment year starts in</label><input id="year" name="year" defaultValue={period} inputMode="numeric" pattern="20[0-9]{2}" required/></div>
       <button className="b b-secondary">Open</button>
-    </form>
+    </Form>
     {q.message && <p className="alert" role="status">Check the entries and your permission. Amounts need digits only and dates a real day. Correct figures already saved on the review screen.</p>}
     {q.saved && <p className="alert" role="status">Saved for checking. <Link href={`/app/clients/${id}?tab=extraction&draft=${q.saved}`}>Check the figures</Link></p>}
     {!itrReady() && <p className="hint">Filing files are not set up yet: InboxCA needs its software ID from the Income Tax Department before it can make the return file. You can fill and check everything now.</p>}
@@ -79,11 +80,11 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
     </Card>
     <Card id="itr-enter" title={group} Icon={PencilLine}>
       <div className="itr-body">
-      <form className="form-row" method="get"><input type="hidden" name="form" value={form}/><input type="hidden" name="year" value={period}/>
+      <Form action={`/app/clients/${id}/itr`} className="form-row"><input type="hidden" name="form" value={form}/><input type="hidden" name="year" value={period}/>
         <div><label htmlFor="group">Part of the return</label><select id="group" name="group" defaultValue={group}>{groups.map(name=><option key={name}>{name}</option>)}</select></div>
         {Array.from({length:depth},(_,index)=><div key={index}><label htmlFor={`row-${index}`}>{index ? "Inner row" : "Row, for repeated entries"}</label><input id={`row-${index}`} name={index ? "row2" : "row"} type="number" min={1} max={1000} defaultValue={rows[index]+1}/></div>)}
         <button className="b b-secondary">Open</button>
-      </form>
+      </Form>
       <p className="hint">Leave anything that does not apply empty. Details marked To fill are needed by the official form.</p>
       {!canEdit ? <form action={askPermission}><input type="hidden" name="client" value={id}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-secondary" disabled={!!membership.viewOnlyUntil}>Ask to enter figures</Pending></form> : <form action={save} className="fields">
         <input type="hidden" name="draft" value={own?.id ?? ""}/><input type="hidden" name="revision" value={own?.revision ?? 0}/><input type="hidden" name="group" value={group}/><input type="hidden" name="empty" value={empty.join(",")}/>

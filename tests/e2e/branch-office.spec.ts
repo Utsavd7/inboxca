@@ -46,13 +46,22 @@ test.afterAll(() => firm.remove(staffEmail));
 test("the owner turns Office only on for one branch, and its staff are checked against that office", async () => {
   await signIn(owner, ownerEmail, ownerKey);
   await owner.goto("/app/settings?group=access#office");
+  // The office picker applies by itself; its Show button is there only for screen readers.
   await owner.getByLabel("Office", { exact: true }).selectOption({ label: "Pune" });
-  await owner.getByRole("button", { name: "Show" }).click();
+  await expect(owner).toHaveURL(new RegExp(`/app/settings\\?group=access&branch=${branchId}#office$`));
   await expect(owner.getByText("Pune follows the main office")).toBeVisible();
+  await expect(owner.getByRole("button", { name: "Show", exact: true })).toHaveClass("sr-only");
   await owner.locator("#office details.office-switch > summary").click();
   await owner.getByLabel("Yes, I am in the office now").check();
+  // Turn on sits outside the preset's form and still shows it is saving.
+  await owner.route(/\/app\/settings/, async (route) => {
+    if (route.request().headers()["next-action"]) await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
   await owner.getByRole("button", { name: "Turn on" }).click();
+  await expect(owner.locator('button[form="preset-form"]')).toHaveAttribute("aria-busy", "true");
   await expect(owner.getByRole("status").filter({ hasText: "On." })).toContainText("You are on your office internet connection now.");
+  await owner.unroute(/\/app\/settings/);
   expect((await settingsOf("groups", branchId)).office).toMatchObject({ on: true, lines: [{ ipv4: BRANCH_IP }] });
   expect((await settingsOf("firms", firm.firmId)).office).toBeUndefined();
 
