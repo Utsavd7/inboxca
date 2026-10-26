@@ -145,7 +145,7 @@ test("the team replies in the conversation from the firm's mailbox, threaded, an
   await expect(messages).toHaveCount(2);
   await expect(messages.nth(1)).toContainText("Your team");
   await expect(messages.nth(1)).toContainText("Tuesday at 11");
-  await expect(list().getByRole("listitem").filter({ hasText: `Meeting ${tag}`, hasNotText: "Re:" })).toContainText("Done");
+  await expect(list().getByRole("listitem").filter({ hasText: `Meeting ${tag}`, hasNotText: "Re:" })).toContainText("Answered by your team");
   await expect(list().getByRole("listitem").filter({ hasText: `Re: Meeting ${tag}` })).toContainText("Sent by team");
 });
 

@@ -9,6 +9,7 @@ import { PushSwitch } from "./push-switch";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { canManageClients } from "@/src/lib/clients";
 import { addDays, dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
+import { whenRange } from "@/src/lib/mail-view";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { periodName } from "@/src/lib/documents";
 import { describeHours, type Hours } from "@/src/lib/hours";
@@ -58,7 +59,8 @@ type Data = ReturnType<typeof load>;
 // Today: what needs this person, as a dashboard. A greeting with how many things need them,
 // four figures for the month (each opens its list), then "Needs you now" (replies, approvals
 // and what the owner must look at, most urgent first) and the late returns on the left, and
-// getting started, the next 7 days, papers still missing and what InboxCA did on the right.
+// getting started, the week's email, the next 7 days, papers still missing and what InboxCA did
+// on the right.
 // Every query starts at once; each part shows as soon as its own data is in, so the page
 // paints at once. Everything is limited to what this person's role and the row rules allow.
 export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
@@ -177,6 +179,9 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
               <GettingStarted data={data} />
             </Suspense>
           )}
+          <Suspense fallback={<CardSkeleton title="Email this week" rows={1} />}>
+            <MailWeek data={data} />
+          </Suspense>
           <Suspense fallback={<CardSkeleton title="Due this week" rows={2} />}>
             <ThisWeek data={data} />
           </Suspense>
@@ -325,6 +330,13 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
     };
   });
 
+  // This week's email, from Monday as the Inbox's This week: read, answered by InboxCA,
+  // answered by the team, and still waiting for a reply (email_outcomes).
+  const mailWeek = Promise.all(["", "answered", "replied", "reply"].map((outcome) => {
+    const read = supabase.from("email_outcomes").select("id", { count: "exact", head: true }).eq("firm_id", firm).gte("received_at", whenRange("week", today).from!);
+    return count(outcome ? read.contains("outcomes", [outcome]) : read);
+  }));
+
   // What InboxCA did by itself today (papers filed from email come from the papers themselves).
   const feed = Promise.all([
     Promise.resolve(supabase.rpc("activity_feed", { target_firm: firm, since: dayStart })),
@@ -378,7 +390,7 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
       : Promise.resolve(null);
   const preview = sends && (params.confirm === "late" || params.confirm === "papers") ? sendPreview(supabase, firm, params.confirm) : Promise.resolve(null);
 
-  return { today, owner, sends, membership, userId, replies, waits, papers, late, week, rules, toApprove, looks, month, lateTrend, papersWeek, feed, setup, assigned, askPush, pushKey, marking, preview, confirm: params.confirm };
+  return { today, owner, sends, membership, userId, replies, waits, papers, late, week, rules, toApprove, looks, month, lateTrend, papersWeek, mailWeek, feed, setup, assigned, askPush, pushKey, marking, preview, confirm: params.confirm };
 }
 
 const returnName = (rule: Map<string, { name: string | null; frequency: string | null }>, code: string | null, period: string | null) => `${rule.get(code ?? "")?.name ?? code ?? ""} for ${periodLabel(rule.get(code ?? "")?.frequency ?? null, period)}`;
@@ -786,6 +798,31 @@ async function Missing({ data }: { data: Data }) {
           </Link>
         </p>
       )}
+    </Card>
+  );
+}
+
+// The week's email in four figures, each opening that list in the Inbox.
+async function MailWeek({ data }: { data: Data }) {
+  const [read, answered, replied, waiting] = await data.mailWeek;
+  const figures = [
+    { key: "read", filter: "show=in", label: "Read", value: read },
+    { key: "answered", filter: "status=answered", label: "Answered by InboxCA", value: answered },
+    { key: "replied", filter: "status=replied", label: "Answered by your team", value: replied },
+    { key: "reply", filter: "status=reply", label: "Waiting for a reply", value: waiting },
+  ];
+  return (
+    <Card id="t-mail" title="Email this week" Icon={Inbox} kind="reply">
+      <ul className="mail-week">
+        {figures.map((figure) => (
+          <li key={figure.key}>
+            <Link href={`/app/inbox?when=week&${figure.filter}`}>
+              <strong><Count id={`mail-${figure.key}`} value={figure.value} /></strong>
+              <span>{figure.label}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }

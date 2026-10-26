@@ -29,9 +29,23 @@ import "./inbox.css";
 
 const PAGE = 30;
 const shows = { "": "All", reply: "Needs reply", mine: "Mine", in: "From clients", out: "Sent to clients" } as const;
-const statuses = { reply: "Needs reply", snoozed: "Snoozed", filed: "Filed", reminder: "Reminder sent", team: "Sent by team", check: "To check" } as const;
+const statuses = { reply: "Needs reply", snoozed: "Snoozed", approval: "Waiting for approval", check: "To check", answered: "Answered by InboxCA", replied: "Answered by your team", notice: "Notice recorded", filed: "Filed", none: "No reply needed", reminder: "Reminder sent", team: "Sent by team" } as const;
 const sentTags = { reminder: "Reminder sent", inboxca: "Sent by InboxCA", team: "Sent by team" } as const;
 type Tag = { text: string; tone: "warn" | "done" | "blue" | "" };
+// What InboxCA did with an email it read (email_outcomes, the most pressing first), in
+// a word or two; an email with none of them needed no reply. Snoozed shows its day.
+const outcomeTags: Record<string, Tag> = {
+  reply: { text: "Needs reply", tone: "warn" },
+  approval: { text: "Waiting for approval", tone: "warn" },
+  check: { text: "To check", tone: "warn" },
+  unanswered: { text: "Not answered yet", tone: "blue" },
+  answered: { text: "Answered by InboxCA", tone: "done" },
+  replied: { text: "Answered by your team", tone: "done" },
+  notice: { text: "Notice recorded", tone: "blue" },
+  filed: { text: "Filed", tone: "done" },
+  none: { text: "No reply needed", tone: "" },
+};
+const outcomeKeys = ["reply", "snoozed", "approval", "check", "answered", "replied", "notice", "filed", "none"];
 type Row = { key: string; href: string; dir: "in" | "out"; client: string; clientId: string | null; at: string; messageId: string; subject: string; snippet: string; tags: Tag[]; request?: string; assignee?: string };
 // What a Needs reply request keeps besides its status: snoozed until a day, and who answers.
 type Ask = { snooze?: string; assignee?: string };
@@ -78,16 +92,13 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const when = sp.when && sp.when in whens ? sp.when : "";
   const q = (sp.q ?? "").trim().slice(0, 200);
   const before = sp.before && !Number.isNaN(Date.parse(sp.before)) ? new Date(sp.before).toISOString() : "";
-  // Which emails a status keeps, from InboxCA's own records. Needs reply leaves out what is
-  // snoozed to a later day; Mine is what waits for this person.
-  const asks = () => supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "pending");
+  // Which emails a status keeps: what InboxCA did with each (email_outcomes). Needs
+  // reply leaves out what is snoozed to a later day; Mine is what waits for this person.
   const [{ data: chosenClient }, { data: only }] = await Promise.all([
     sp.client && uuid.test(sp.client) ? supabase.from("clients").select("id, name").eq("id", sp.client).maybeSingle() : Promise.resolve({ data: null }),
-    status === "reply" || status === "snoozed"
-      ? (status === "snoozed" ? asks().gt("details->>snooze", today) : show === "mine" ? asks().or(awake(today)).eq("details->>assignee", userId) : asks().or(awake(today))).limit(1000).then(({ data }) => ({ data: data?.map((row) => row.entity_id) ?? [] }))
-      : status === "filed" || status === "check"
-        ? supabase.from("documents").select("email_event_id").eq("status", status === "filed" ? "filed" : "to_check").not("email_event_id", "is", null).limit(1000).then(({ data }) => ({ data: data?.map((row) => row.email_event_id!) ?? [] }))
-        : Promise.resolve({ data: null }),
+    show === "mine"
+      ? supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "pending").eq("details->>assignee", userId).limit(1000).then(({ data }) => ({ data: data?.map((row) => row.entity_id) ?? [] }))
+      : Promise.resolve({ data: null }),
   ]);
   const filters = { client: chosenClient?.id, show: show || undefined, status: sp.status && sp.status in statuses ? sp.status : undefined, when: when || undefined, q: q || undefined };
   const href = (change: Partial<Search> = {}) => {
@@ -95,11 +106,13 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     return `/app/inbox${params.size ? `?${params}` : ""}`;
   };
   const wantIn = show !== "out" && status !== "reminder" && status !== "team";
-  const wantOut = !["reply", "mine", "in"].includes(show) && !["reply", "snoozed", "filed", "check"].includes(status);
+  const wantOut = !["reply", "mine", "in"].includes(show) && !outcomeKeys.includes(status);
   const range = whenRange(when, today);
   const until = [range.until, before].filter(Boolean).sort()[0];
-  let events = supabase.from("email_events").select("id, client_id, contact_id, received_at, label, decision_source, provider_message_id, clients(name), contacts(name_enc)").eq("firm_id", firm);
+  let events = supabase.from("email_outcomes").select("id, client_id, contact_id, received_at, label, decision_source, provider_message_id, outcomes, clients(name), contacts(name_enc)").eq("firm_id", firm);
   if (chosenClient) events = events.eq("client_id", chosenClient.id);
+  if (status === "none") events = events.filter("outcomes", "eq", "{}");
+  else if (outcomeKeys.includes(status)) events = events.contains("outcomes", [status]);
   if (range.from) events = events.gte("received_at", range.from);
   if (until) events = events.lt("received_at", until);
   if (only) events = events.in("id", only);
@@ -113,7 +126,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   if (cq) pick = pick.ilike("name", `%${cq.replace(/[\\%_]/g, "\\$&")}%`);
   const owner = membership.role === "owner";
   const [{ data: rows }, { count: needs }, { count: mine }, { count: fromClients }, { data: pickList }, { data: waiting }, { data: toCheck }, { data: papers }, toAnswer, { data: people }, { data: accounts }, { data: decided }, { data: week }] = await Promise.all([
-    wantIn && (!only || only.length) ? events.order("received_at", { ascending: false }).order("id").limit(q ? 500 : PAGE) : Promise.resolve({ data: [] as never[] }),
+    wantIn && (!only || only.length) ? events.order("received_at", { ascending: false }).order("id").limit(q ? 500 : PAGE).overrideTypes<{ id: string; received_at: string; provider_message_id: string }[]>() : Promise.resolve({ data: [] as never[] }),
     needsCount,
     mineCount,
     inCount,
@@ -162,30 +175,21 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   // A teammate an email is given to: their avatar's name, and how a line names them.
   const nameOf = (user: string) => personName(emailOf.get(user));
   const whoWords = (user: string) => (user === userId ? "you" : nameOf(user));
-  // What became of each email: waiting (or snoozed), papers filed or to check, or done.
-  const statesOf = async (ids: string[]) => {
-    const [{ data: done }, { data: filedDocs }] = ids.length
-      ? await Promise.all([
-          supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "done").in("entity_id", ids),
-          supabase.from("documents").select("email_event_id, status").in("email_event_id", ids),
-        ])
-      : [{ data: [] }, { data: [] }];
-    return (eventId: string): Tag | null =>
-      snoozedTill(eventId) ? { text: `Snoozed until ${dayName(snoozedTill(eventId)!)}`, tone: "blue" }
-      : pending.has(eventId) ? { text: "Needs reply", tone: "warn" }
-      : filedDocs?.some((doc) => doc.email_event_id === eventId && doc.status === "to_check") ? { text: "To check", tone: "warn" }
-      : filedDocs?.some((doc) => doc.email_event_id === eventId && doc.status === "filed") ? { text: "Filed", tone: "done" }
-      : done?.some((request) => request.entity_id === eventId) ? { text: "Done", tone: "done" }
-      : null;
+  // What InboxCA did with an email, as its badge: snoozed shows until when.
+  const outcomeTag = (eventId: string, outcome = "none"): Tag =>
+    outcome === "snoozed" ? { text: snoozedTill(eventId) ? `Snoozed until ${dayName(snoozedTill(eventId)!)}` : "Snoozed", tone: "blue" } : outcomeTags[outcome] ?? outcomeTags.none;
+  // An email's badges: what InboxCA did, then what it is when it waits or needed no reply
+  // (such as a notice that asks something), otherwise the next thing it did.
+  const tagsOf = (event: { id: string; label: string | null; outcomes: string[] | null }) => {
+    const [first = "none", next] = event.outcomes ?? [];
+    const second = ["reply", "snoozed", "unanswered", "none"].includes(first) ? (event.label && event.label !== "other" ? labelTag(event.label) : null) : next ? outcomeTag(event.id, next) : null;
+    return second ? [outcomeTag(event.id, first), second] : [outcomeTag(event.id, first)];
   };
-  // The emails' rows from InboxCA's own records: who, when and what waits. An email waiting
-  // for a reply also shows what it is, such as a notice that asks something. The subject and
-  // first line are filled in from the mailbox.
+  // The emails' rows from InboxCA's own records: who, when and what InboxCA did. The subject
+  // and first line are filled in from the mailbox.
   const storedRows = async (list: typeof events_): Promise<Row[]> => {
-    const stateTag = await statesOf(list.map((event) => event.id));
     return Promise.all(
       list.map(async (event) => {
-        const state = stateTag(event.id);
         return {
           key: event.id,
           href: href({ mail: event.id }),
@@ -196,7 +200,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           messageId: event.provider_message_id,
           subject: "",
           snippet: "",
-          tags: !state ? [labelTag(event.label)] : pending.has(event.id) && event.label && event.label !== "other" ? [state, labelTag(event.label)] : [state],
+          tags: tagsOf(event),
           request: pending.get(event.id)?.id,
           assignee: askOf(event.id).assignee,
         };
@@ -375,15 +379,21 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const clientId = open.client?.id ?? null;
     const request = event ? pending.get(event.id) : undefined;
     const inIds = open.messages.filter((message) => message.box === "inbox").map((message) => message.messageId);
-    const [{ data: threadEvents }, { data: clientPapers }, { data: links }, { data: fileTo }, stateTag, sender] = await Promise.all([
+    const [{ data: threadEvents }, { data: clientPapers }, { data: links }, { data: fileTo }, { data: what }, { data: sends }, { data: notice }, sender] = await Promise.all([
       inIds.length ? supabase.from("email_events").select("id, provider_message_id").eq("firm_id", firm).in("provider_message_id", inIds) : Promise.resolve({ data: [] as { id: string; provider_message_id: string }[] }),
       clientId && event ? supabase.from("documents").select("id, name, document_type, period_key").eq("client_id", clientId).eq("status", "filed").order("received_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] as { id: string; name: string; document_type: string; period_key: string }[] }),
       request?.reason_code === "client_unclear" && event ? supabase.from("contact_clients").select("client_id, clients(name)").eq("contact_id", event.contact_id ?? "") : Promise.resolve({ data: [] as { client_id: string; clients: { name: string } | null }[] }),
       // File to a client, for mail InboxCA could not match: the client picked, then confirmed.
       event && !event.client_id && sp.file && uuid.test(sp.file) ? supabase.from("clients").select("id, name").eq("id", sp.file).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
-      statesOf(event ? [event.id] : []),
+      // What InboxCA did with it, and the paper sent or waiting and the notice recorded that
+      // its line links to.
+      event ? supabase.from("email_outcomes").select("outcomes").eq("id", event.id).maybeSingle() : Promise.resolve({ data: null }),
+      event ? supabase.from("shares").select("document_id, status, documents(name)").eq("email_event_id", event.id).in("status", ["sent", "waiting"]).limit(10) : Promise.resolve({ data: [] as { document_id: string; status: string; documents: { name: string } | null }[] }),
+      event ? supabase.from("tasks").select("id").eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1).maybeSingle() : Promise.resolve({ data: null }),
       event ? event.clients?.name ?? contactName(firm, event).then((name) => name || "A contact") : "",
     ]);
+    const outcome = what?.outcomes?.[0] ?? "none";
+    const shared = sends?.find((share) => share.status === (outcome === "approval" ? "waiting" : "sent"));
     const eventOf = new Map(threadEvents?.map((row) => [row.provider_message_id, row.id]));
     const { data: saved } = threadEvents?.length
       ? await supabase.from("documents").select("id, name, email_event_id, work_type, period_key, status, received_at").in("email_event_id", threadEvents.map((row) => row.id))
@@ -391,11 +401,26 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const order = ((drive?.settings ?? {}) as { folder_order?: FolderOrder }).folder_order ?? "year_client_work";
     const place = (doc: NonNullable<typeof saved>[number]) => folderFor(order, open.client?.name ?? "", { work: doc.work_type as never, period: doc.period_key, receivedAt: doc.received_at ?? "", toCheck: doc.status === "to_check" }).join(" / ");
     const kind = opened.box === "sent" ? sentKind(opened.messageId) : null;
-    const openTag: Tag | null = event ? stateTag(event.id) : kind ? { text: sentTags[kind], tone: "" } : null;
+    const openTag: Tag | null = event ? outcomeTag(event.id, outcome) : kind ? { text: sentTags[kind], tone: "" } : null;
     const asked = askedPaper(opened.subject, opened.text);
     const suggested = clientPapers ? suggestPapers(`${opened.subject}\n${opened.text}`, clientPapers, asked, [...documentTypes, ...((membership.settings.document_types ?? []) as string[])]).map((doc) => doc.id) : [];
     // Snooze and who answers, for an email that needs a reply.
     const openAsk: Ask = event ? askOf(event.id) : {};
+    // What InboxCA did with the email in a line, with a link to what was sent or recorded.
+    const filedHere = saved?.filter((doc) => doc.email_event_id === event?.id && doc.status !== "to_check").length ?? 0;
+    const paperLink: [string, string] | undefined = shared ? [`/app/files/${shared.document_id}/view`, "View the paper"] : undefined;
+    const did = event && ({
+      snoozed: { text: `Snoozed. It comes back to Needs reply on ${dayName(snoozedTill(event.id) ?? today)}.` },
+      reply: { text: `${replyReasons[request?.reason_code ?? ""] ?? "Waits for your team"}.${openAsk.assignee ? ` Given to ${whoWords(openAsk.assignee)}.` : ""}` },
+      approval: { text: `InboxCA found ${shared?.documents?.name ?? "the paper"}. It goes to the client once someone approves it.`, link: paperLink },
+      check: { text: "InboxCA saved its papers under To check. Check their type and period.", link: event.client_id ? [`/app/clients/${event.client_id}?tab=files`, "Check them"] : undefined },
+      unanswered: { text: "InboxCA has not answered this request for a paper yet." },
+      answered: { text: shared ? `InboxCA answered with ${shared.documents?.name ?? "the paper"}, as a secure link.` : "InboxCA told the client their papers arrived.", link: paperLink },
+      replied: { text: "Your team answered it." },
+      notice: { text: "InboxCA recorded the notice. Confirm its dates.", link: notice ? [`/app/notices?notice=${notice.id}`, "Open the notice"] : undefined },
+      filed: { text: `InboxCA filed ${filedHere === 1 ? "its paper" : `its ${filedHere} papers`} into ${open.client?.name ?? "the client"}'s folders.` },
+      none: { text: "No reply needed. Nothing waits for anyone." },
+    } as Record<string, { text: string; link?: [string, string] }>)[outcome];
     return (
       <ViewTransition enter="ib-in" exit="ib-out" default="none">
         <div className="ib-convo">
@@ -504,7 +529,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <Pending className="b b-primary" name="intent" value="file" busy="Filing">File to {fileTo.name}</Pending>
             </form>
           )}
-          {request && request.reason_code && replyReasons[request.reason_code] && <p className="ib-note">{replyReasons[request.reason_code]}</p>}
+          {did && <p className="ib-note ib-did">{did.text}{did.link && <> <Link href={did.link[0]}>{did.link[1]}</Link></>}</p>}
           <ol className="ib-thread" aria-label="Conversation">
             {open.messages.map((message) => {
               const files = saved?.filter((doc) => doc.email_event_id === eventOf.get(message.messageId)) ?? [];
@@ -651,7 +676,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         {clientPicker(chosenClient?.name ?? "Client", { ...filters, client: undefined }, (id) => href({ client: id }), chosenClient?.id, !composing && !sp.file && (!!cq || !!sp.cpage))}
         <details className="ib-menu">
           <summary>{status && sp.status ? statuses[status] : "Status"}<ChevronDown size={14} aria-hidden /></summary>
-          <div className="ib-pop">
+          <div className="ib-pop is-tall">
             <Link href={href({ status: undefined })}>Any status</Link>
             {Object.entries(statuses).map(([key, name]) => (
               <Link key={key} href={href({ status: key, show: undefined })} aria-current={sp.status === key ? "true" : undefined}>{name}</Link>
