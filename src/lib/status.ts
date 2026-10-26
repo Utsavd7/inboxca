@@ -2,7 +2,7 @@ import { supabaseAnonymous } from "./supabase";
 
 // The public status page (PLAN.md 5.17 #43): each part of InboxCA as working, slow or down,
 // from cheap checks and the jobs table, made worse by any open incident an Orelu admin posted.
-export const statusParts = { app: "The app", mail: "Mail reading", files: "File worker", reminders: "Reminders" } as const;
+export const statusParts = { app: "The app", mail: "Reading firm email", files: "Reading and checking files", reminders: "Reminders" } as const;
 export type Part = keyof typeof statusParts;
 export type State = "working" | "slow" | "down" | "off";
 export type Incident = { id: string; title: string; parts: Part[]; level: "slow" | "down"; updates: { at: string; note: string }[]; started_at: string; ended_at: string | null };

@@ -203,7 +203,7 @@ test("the team writes a new email to a client, only to the client's known addres
   const written = received.find((message) => message.subject === `Audit plan ${tag}`);
   expect(written?.text).toContain("We start the audit on Monday.");
   expect(written?.attachments.map((file) => file.filename)).toEqual(["audit_plan.txt"]);
-  expect(received.find((message) => message.subject === `${clientName} - Purchase bills - Sep 2026.pdf`)?.text).toContain("/s/");
+  expect(received.find((message) => message.subject?.startsWith("Purchase bills for Sep 2026 from "))?.text).toContain("/s/");
   const [{ id: paper }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1", [firm.firmId]);
   const [{ details }] = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'email.written' and entity_id = $2", [firm.firmId, clientId]);
   expect(details).toEqual({ to: 1, files: 1, papers: [paper] });

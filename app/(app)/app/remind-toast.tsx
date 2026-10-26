@@ -17,7 +17,7 @@ export function RemindToast() {
   if (client && job)
     return (
       <ToastMotion>
-        <span>The reminder goes out in a minute from your firm email.</span>
+        <span>The reminder goes out from your firm email in about 20 seconds. Undo stops it.</span>
         <form action={stopSend}>
           <input type="hidden" name="client" value={client} />
           <input type="hidden" name="job" value={job} />

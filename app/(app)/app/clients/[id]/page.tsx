@@ -858,7 +858,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         {tab === "notices" && (
           <>
             <p className="client-tools hint">
-              <span>Check each suggested date against the notice, then choose Save date.</span>
+              <span>Check each suggested date against the notice, then choose Mark date checked.</span>
               <Link href="/app/notices">All notices</Link>
             </p>
             <section aria-labelledby="client-notices">
@@ -888,7 +888,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                                 {!viewOnly && manage && <>
                                   <input type="date" name="date" defaultValue={details.suggested_date} aria-label={`Action date for ${details.notice_type}`} className="cell-input" required />
                                   <span className="hint need-date">Pick the date from the notice first</span>
-                                  <Pending className="b b-secondary" name="intent" value="confirm">Save date</Pending>
+                                  <Pending className="b b-secondary" name="intent" value="confirm">Mark date checked</Pending>
                                 </>}
                               </form>
                             )}

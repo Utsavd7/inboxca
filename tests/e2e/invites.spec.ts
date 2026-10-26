@@ -123,7 +123,7 @@ test("the owner invites a new person, who appears as invited", async () => {
   await expect(row).toContainText("Manager");
   await expect(row).toContainText("Invited");
   // Orelu's system email names the firm; the sign in code comes separately.
-  await expect.poll(() => lastMail(newEmail), { timeout: 15_000 }).toContain("has added you to its team.");
+  await expect.poll(() => lastMail(newEmail), { timeout: 15_000 }).toContain("It has invited you to join its team.");
   expect(await lastMail(newEmail)).toMatch(/Sign in at http\S+\/sign-in with this email address/);
 
   await owner.getByLabel("Their work email").fill(newEmail);
@@ -482,9 +482,9 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   expect(push.headers["content-encoding"]).toBe("aes128gcm");
   expect(String(push.headers.authorization)).toMatch(/^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=/);
   const message = JSON.parse(openPush(push.body, browserKey, auth));
-  expect(message).toEqual({ title: "A question for you", body: "New asks to upload a file.", url: "/app/inbox" });
+  expect(message).toEqual({ title: "A permission request for you", body: "New asks to upload a paper.", url: "/app/inbox" });
   // #20, #57: an email copy too, whose link only opens the Inbox.
-  await expect.poll(() => lastMail(ownerEmail), { timeout: 15_000 }).toContain("New asks to upload a file.");
+  await expect.poll(() => lastMail(ownerEmail), { timeout: 15_000 }).toContain("New asks to upload a paper.");
   expect(await lastMail(ownerEmail)).toMatch(/Open InboxCA to see it: http\S+\/app\/inbox\n\nThis link only opens InboxCA\. Nothing changes until you sign in and choose\./);
   pushService.close();
   await query(local.dbUrl, "delete from public.push_subscriptions where user_id = $1", [ownerId]);
@@ -506,7 +506,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
 
   // The person has no team manager, so the question goes to the owner.
   await owner.goto("/app/inbox");
-  const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "New asks to upload a file" });
+  const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "New asks to upload a paper" });
   await expect(question).toContainText(`Ask Client ${tag}`);
   // #42, #44, #57: copying an approval form or visiting its address cannot approve it.
   const [{ id: asked }] = await query(local.dbUrl, "select id from public.requests where firm_id=$1 and kind='permission' and status='pending' and expires_at>now()", [firm.firmId]);
@@ -520,7 +520,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id=$1 and actor_id=$2 and action='approval.denied'", [firm.firmId, requester]))[0].n).toBe(1);
   // Answer opens the question beside the list, by name; the toast can undo the answer.
   await question.getByRole("link", { name: "Answer" }).click();
-  const answer = owner.getByRole("dialog", { name: `New asks to upload a file for Ask Client ${tag}` });
+  const answer = owner.getByRole("dialog", { name: `New asks to upload a paper for Ask Client ${tag}` });
   await answer.getByRole("button", { name: "Refuse" }).click();
   const toast = owner.getByRole("status").filter({ hasText: "Refused." });
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
@@ -529,7 +529,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   expect((await query(local.dbUrl, "select status from public.requests where id=$1", [fields.request]))[0].status).toBe("pending");
   await question.getByRole("link", { name: "Answer" }).click();
   await answer.getByRole("button", { name: "Allow once" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "New may upload a file once, within an hour." })).toBeVisible();
+  await expect(owner.getByRole("status").filter({ hasText: "New may upload a paper once, within an hour." })).toBeVisible();
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
 
   await person.goto(files);
@@ -545,7 +545,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await person.getByRole("button", { name: "Ask to upload" }).click();
   await expect(person.getByText("Asked", { exact: true })).toBeVisible();
   await owner.goto("/app/inbox");
-  await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a file" }).getByRole("link", { name: "Answer" }).click();
+  await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a paper" }).getByRole("link", { name: "Answer" }).click();
   await owner.getByRole("dialog").getByRole("button", { name: "Always allow New" }).click();
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
   await person.goto(files);
@@ -558,7 +558,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await expect(person.getByRole("button", { name: "Ask to upload" })).toBeVisible();
 
   // #47: a changed role right is read on the next request, and reset removes it.
-  await owner.getByLabel("Upload files: employees").check();
+  await owner.getByLabel("Upload papers: staff").check();
   await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save permissions", exact: true }).click()]);
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
@@ -766,7 +766,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await blocked.goto("/sign-in");
   await blocked.getByLabel("Your work email").fill(mailboxEmail);
   await blocked.getByRole("button", { name: "Email me a code" }).click();
-  await expect(blocked.getByRole("alert").filter({ hasText: "The firm's email address cannot be used to sign in." })).toBeVisible();
+  await expect(blocked.getByRole("alert").filter({ hasText: "This is your firm email, which InboxCA reads. Sign in with your own work email instead." })).toBeVisible();
   await blocked.close();
 
   const [{ user_id: mailboxUser }] = await query(local.dbUrl, "select user_id from public.firm_members m join auth.users u on u.id = m.user_id where m.firm_id = $1 and u.email = $2", [firm.firmId, mailboxEmail]);
@@ -774,7 +774,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await owner.goto("/app/people?panel=invite");
   await owner.getByLabel("Their work email").fill(mailboxEmail);
   await owner.getByRole("button", { name: "Send invite" }).click();
-  await expect(owner.getByRole("alert").filter({ hasText: "The firm's email address cannot be a team login." })).toBeVisible();
+  await expect(owner.getByRole("alert").filter({ hasText: "This is the firm email. Invite each person with their own email address." })).toBeVisible();
 
   await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill(mailClient);
@@ -1030,7 +1030,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(link);
   // The firm's name leads: what it needs, by when, and how much has arrived.
-  await expect(visitor.getByRole("heading", { level: 1 })).toHaveText(/ needs 2 papers by \d{1,2} \w{3} \d{4}$/);
+  await expect(visitor.getByRole("heading", { level: 1 })).toHaveText(/ needs 2 papers\. This link works until \d{1,2} \w{3} \d{4}\.$/);
   await expect(visitor.getByText(`Papers for ${mailClient}`)).toBeVisible();
   await expect(visitor.getByRole("region", { name: "Progress" })).toContainText("0 of 2 papers received");
   await expect(visitor.getByText(`Questions? Email ${mailboxEmail}`)).toBeVisible();
@@ -1383,7 +1383,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   expect(await mailCount(`client-${tag}@patel.test`)).toBe(sentBefore);
   expect(await lastMail(`client-${tag}@patel.test`)).toMatch(/Download it here: http\S+\/s\//);
   await send("Audit report","2025");
-  await expect(progress).toContainText("Skipped. No filed paper for this year");
+  await expect(progress).toContainText("Skipped. No saved paper of this type for this year");
   await send("Balance sheet","2026");
   await expect(progress).toContainText("Waiting for approval in the Inbox");
   await owner.goto("/app/inbox");

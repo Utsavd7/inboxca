@@ -25,6 +25,8 @@ let firm: Awaited<ReturnType<typeof seedFirm>>;
 
 test.beforeAll(async () => {
   firm = await seedFirm(`Limits Firm ${tag}`, ownerEmail, "JBSWY3DPEHPK3PXP");
+  // The sign in page offers a recovery code only to someone who has them; an invented one here.
+  await query(local.dbUrl, "update auth.users set raw_app_meta_data = raw_app_meta_data || jsonb_build_object('recovery', jsonb_build_array('invented')) where id = $1", [firm.ownerId]);
 });
 test.afterAll(async () => {
   await query(local.dbUrl, "delete from private.rate_limits where key = any($1)", [keys]);

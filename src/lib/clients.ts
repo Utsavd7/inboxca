@@ -28,10 +28,10 @@ export function checkClient(input: ClientInput): { client: ClientInput } | { err
   const pan = cleanNumber(input.pan) || (gstin && panOfGstin(gstin));
   const email = (input.email ?? "").trim().toLowerCase();
   if (!name || name.length > 200) return { error: "Enter the client's name." };
-  if (!(input.kind in clientKinds)) return { error: "Choose what kind of client this is." };
+  if (!(input.kind in clientKinds)) return { error: "Choose the client type." };
   if (gstin && !isGstin(gstin)) return { error: "That GSTIN is not valid. Check it for a typing mistake." };
   if (pan && !isPan(pan)) return { error: "That PAN is not valid. A PAN is 5 letters, 4 digits and a letter." };
-  if (gstin && panOfGstin(gstin) !== pan) return { error: "The PAN does not match the one inside the GSTIN." };
+  if (gstin && panOfGstin(gstin) !== pan) return { error: "The PAN does not match the GSTIN. Characters 3 to 12 of a GSTIN are the PAN. Check both, or leave the PAN empty." };
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "That email address is not valid." };
   return { client: { name, kind: input.kind, pan, gstin, email } };
 }

@@ -53,7 +53,7 @@ export function checkFigures(draft:Draft,figures:Map<string,Figure>) {
         expected=sign*((product*sign+BigInt(5000))/BigInt(10000));
       }
       return expected===read(check.total) ? [] : [`${figures.get(check.total)?.label ?? `Check ${index+1}`}: the figures do not add up.`];
-    } catch {return [`Check ${index+1}: a required figure is missing or rejected.`];}
+    } catch {return [`${figures.get(check.total)?.label ?? `Total ${index+1}`}: a figure it needs is missing or marked wrong.`];}
   });
 }
 export async function openFigures(firm:string,id:string,draft:Draft) {

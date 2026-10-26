@@ -17,7 +17,7 @@ export const outageEmail: Handler = async (job, { markSending }) => {
   const text = [
     `InboxCA is not working fully right now: ${incident.title}.`,
     `Affected: ${parts}.`,
-    "Your files stay safe in your own drive, and emails wait in your mailbox until InboxCA reads them again.",
+    "Your papers stay safe in your firm's drive. New emails wait in your firm email until InboxCA reads them again.",
     `Follow progress at ${process.env.APP_BASE_URL ?? ""}/status`,
     "Orelu, the team behind InboxCA",
   ].join("\n\n");

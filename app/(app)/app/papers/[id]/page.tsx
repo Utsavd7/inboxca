@@ -121,7 +121,7 @@ export default async function Papers({ params, searchParams }: { params: Promise
             </form>
           }
         >
-          The reminder goes out in a minute from your firm email.
+          The reminder goes out from your firm email in about 20 seconds. Undo stops it.
         </Toast>
       )}
       {query.phoned && <Toast>Marked as asked by phone. The next reminder email waits 3 days.</Toast>}

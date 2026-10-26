@@ -27,7 +27,7 @@ const uuid = /^[0-9a-f-]{36}$/;
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const saved: Record<string, string> = { filed: "marked filed", in_progress: "marked in progress", reopen: "marked not filed" };
 const problems: Record<string, string> = {
-  filing: "Your firm has not allowed you to record filing for all the chosen work.",
+  filing: "You are not allowed to mark one or more of the chosen returns filed. Ask the owner to turn this on for you.",
   send: "The reminder could not start. Try again.",
   started: "The reminder had already gone, so it could not be stopped.",
 };
@@ -127,7 +127,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     return missing.length && (details.followups?.length ?? 0) < MAX_FOLLOW_UPS ? [{ id: request.id, what: `${missing.join(", ")}${details.period ? ` for ${periodName(details.period)}` : ""}` }] : [];
   });
   const stops = reminding && [
-    mailbox?.status !== "connected" && "Connect the firm's email in Settings first. Reminders go from the firm's own address.",
+    mailbox?.status !== "connected" && "The firm email is not connected. The owner can connect it in Settings. Reminders go from the firm email.",
     !reminding.email_enc && "This client has no email address. Add one on the client's page.",
     reminding.reminders_paused && "Reminders are paused for this client. Resume them on the client's page.",
     !!remindedToday && "This client was already reminded today. Each client gets at most one reminder a day.",
@@ -161,7 +161,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const list = (
     <section className="split cal-list" aria-label="Returns">
       <div className="cal-tools">
-        <span className="hint">{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "Dates marked * are not yet confirmed by a CA against the official notification." : "Tick returns to mark many at once."}</span>
+        <span className="hint">{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "InboxCA has not yet checked dates marked * against the government notification." : "Tick returns to mark many at once."}</span>
         <Form action="/app/calendar">
           <input type="hidden" name="view" value={view} />
           {day && <input type="hidden" name="day" value={day} />}
@@ -471,7 +471,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
             <ul className="app-rows cal-remind">
               {remindTasks.map((task) => {
                 const [form, of] = name(task);
-                return <Row key={task.id} lead={<Avatar name={reminding.name} />} title={`${form} ${of}`} meta={`Due ${dueLabel(task.due_on)}`} status={rule.get(task.code ?? "")?.verified_on ? <Badge tone="blue">In the email</Badge> : <Badge plain>Date not confirmed, left out</Badge>} />;
+                return <Row key={task.id} lead={<Avatar name={reminding.name} />} title={`${form} ${of}`} meta={`Due ${dueLabel(task.due_on)}`} status={rule.get(task.code ?? "")?.verified_on ? <Badge tone="blue">In the email</Badge> : <Badge plain>Date not checked yet, left out</Badge>} />;
               })}
             </ul>
           ) : (
@@ -528,7 +528,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
             </form>
           }
         >
-          The reminder goes out in a minute from your firm&apos;s email.
+          The reminder goes out from your firm email in about 20 seconds. Undo stops it.
         </Toast>
       )}
       {params.stopped && <Toast>Stopped. Nothing was sent.</Toast>}

@@ -47,4 +47,4 @@ export function pickPaper<T extends { document_type: string; period_key: string;
 }
 
 export type BulkSend = { by: string; day: string; type: string; period: string; clients: { id: string; share: string; state?: "sent" | "waiting" | "skipped"; reason?: string }[] };
-export const sendSkip: Record<string,string> = { no_email: "No email address", record_not_found: "No filed paper for this year", record_unclear: "More than one matching paper. Please choose on the client's page", record_internal: "Kept inside your firm", archived: "Client is archived or no longer available" };
+export const sendSkip: Record<string,string> = { no_email: "No email address", record_not_found: "No saved paper of this type for this year", record_unclear: "More than one matching paper. Please choose on the client's page", record_internal: "Kept inside your firm", archived: "Client is archived or no longer available" };

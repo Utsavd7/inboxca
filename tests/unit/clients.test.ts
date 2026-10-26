@@ -16,7 +16,7 @@ it("cleans a client, takes the PAN from its GSTIN, and checks the email", () => 
     client: { name: "Shah", kind: "business", pan: "AAPFU0939F", gstin: "27AAPFU0939F1ZV", email: "accounts@shah.in" },
   });
   expect(checkClient({ name: "Shah", kind: "business", pan: "ABCPI1234K", gstin: "27AAPFU0939F1ZV", email: "" })).toEqual({
-    error: "The PAN does not match the one inside the GSTIN.",
+    error: "The PAN does not match the GSTIN. Characters 3 to 12 of a GSTIN are the PAN. Check both, or leave the PAN empty.",
   });
   expect(checkClient({ name: "Shah", kind: "business", pan: "", gstin: "", email: "shah@" })).toEqual({
     error: "That email address is not valid.",

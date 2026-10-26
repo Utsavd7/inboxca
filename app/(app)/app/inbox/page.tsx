@@ -147,7 +147,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       : Promise.resolve({ data: null }),
   ]);
   const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
-  // A question in words, with the person's name: "Sunil asks to upload a file".
+  // A question in words, with the person's name: "Sunil asks to upload a paper".
   const asking = (ask: { reason_code: string | null; details: unknown }) => {
     const details = ask.details as { by: string; until?: string };
     return { name: personName(emailOf.get(details.by)), what: ask.reason_code === "time" ? `work until ${details.until} today` : rightWords[ask.reason_code as Right] };

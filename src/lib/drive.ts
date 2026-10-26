@@ -183,9 +183,9 @@ export function safeName(name: string, max = 120) {
 export const folderOrders = ["year_client_work", "work_year_client", "client_year_work"] as const;
 export type FolderOrder = (typeof folderOrders)[number];
 export const folderOrderNames: Record<FolderOrder, string> = {
-  year_client_work: "Year, client, work: FY 2026-27 / Patel Textiles / GST",
-  work_year_client: "Work, year, client: GST / FY 2026-27 / Patel Textiles",
-  client_year_work: "Client, year, work: Patel Textiles / FY 2026-27 / GST",
+  year_client_work: "Year, client, type of work: FY 2026-27 / Patel Textiles / GST",
+  work_year_client: "Type of work, year, client: GST / FY 2026-27 / Patel Textiles",
+  client_year_work: "Client, year, type of work: Patel Textiles / FY 2026-27 / GST",
 };
 export function folderPath(order: FolderOrder, year: string, client: string, work: WorkType) {
   const parts = { year, client: safeName(client, 80), work: workTypes[work] };

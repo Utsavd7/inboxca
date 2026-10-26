@@ -48,7 +48,7 @@ describe("smart reminders", () => {
     const { subject, text } = reminderEmail("Patel Textiles", "Demo CA Firm", [task({ id: "a" })], today);
     expect(subject).toBe("Reminder: GSTR-3B (monthly) due 20 Oct 2026");
     expect(text).toContain("- GSTR-3B (monthly) for Sep 2026: due in 3 days, on 20 Oct 2026");
-    expect(text).toContain("please reply to this email with your sales bills, purchase bills, bank statement.");
+    expect(text).toContain("please reply to this email with them attached: Sales bills, Purchase bills, Bank statement.");
   });
 
   it("follows up a request every 3 days, up to 4 times, asking only for what is missing", () => {

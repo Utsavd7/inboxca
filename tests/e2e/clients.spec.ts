@@ -56,7 +56,7 @@ test("services on a client's GSTIN give it its due dates", async () => {
   await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Returns/ }).click();
   const due = owner.locator("section[aria-labelledby=due] li");
   await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");
-  await expect(owner.locator(".client-pane")).toContainText("not yet confirmed by a CA");
+  await expect(owner.locator(".client-pane")).toContainText("InboxCA has not yet checked");
   const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed'",[firm.firmId]);
   expect(n).toBeGreaterThan(12);
   await expect(due).toHaveCount(n);

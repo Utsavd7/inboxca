@@ -62,7 +62,7 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
   const email = values.email.trim().toLowerCase();
   if (!z.email().safeParse(email).success) return { error: "Enter a valid email address.", values };
   if (await mailboxLogin(email, membership.firmId))
-    return { error: "The firm's email address cannot be a team login.", values };
+    return { error: "This is the firm email. Invite each person with their own email address.", values };
   const role = invitable.safeParse(form.get("role"));
   if (!role.success) return { error: "Choose a role.", values };
 
@@ -90,9 +90,9 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
   });
   if (error) log.warn("invite.email_failed", { status: error.status });
   // Orelu's system email names the firm, once it is set up (PLAN.md M0 step 8).
-  await sendSystemMail(email, `${membership.firmName} added you on InboxCA`, [
-    `${membership.firmName} uses InboxCA for its clients' papers and returns, and has added you to its team.`,
-    `Sign in at ${origin}/sign-in with this email address. A sign in code comes in a separate email; there is no password.`,
+  await sendSystemMail(email, `${membership.firmName} invited you to InboxCA`, [
+    `${membership.firmName} uses InboxCA for its clients' papers and returns. It has invited you to join its team.`,
+    `To join, go to ${origin}/sign-in and enter this email address. InboxCA emails you a code to sign in. There is no password.`,
     "If you did not expect this, you can ignore this email.",
   ].join("\n\n")).catch(() => log.warn("invite.system_mail_failed"));
   revalidatePath("/app/people");
@@ -760,7 +760,7 @@ export async function connectMailbox(_prev: MailboxState, form: FormData): Promi
   const crypto=serverCrypto();
   const index=await crypto.blindIndex(membership.firmId,"email",address);
   const priorIndex=prior && (prior.address_bidx ?? await crypto.blindIndex(membership.firmId,"email",await crypto.decrypt(membership.firmId,`accounts/${prior.id}/address`,prior.address_enc)));
-  if (prior && (prior.status!=="needs_reconnect" || priorIndex!==index)) return {error:"A mailbox is already connected. Disconnect it first to use another address.",values};
+  if (prior && (prior.status!=="needs_reconnect" || priorIndex!==index)) return {error:"A firm email is already connected. Disconnect it first to use another address.",values};
   const id=prior?.id ?? randomUUID();
   const fields={
     id,firm_id:membership.firmId,kind:"mail",provider:"imap",status:"connected",
@@ -2107,7 +2107,7 @@ export async function confirmWithPcKey(answer: { id: string; clientDataJSON: str
   const line = requestLine(await headers(), todayInIndia());
   if (!pc?.device.key_public || !parsed.success || parsed.data.id !== pc.device.key_id || !line
     || !checkKeyUse(parsed.data, pc.device.key_public, (await headers()).get("origin") ?? "", (await cookies()).get(CHALLENGE_COOKIE)?.value, pc.device.id))
-    return "This PC's key did not match. Ask the owner or a deputy to confirm the connection.";
+    return "This PC could not prove it is the office PC. Ask the owner or a deputy to approve the connection.";
   (await cookies()).delete(CHALLENGE_COOKIE);
   const { error } = await supabaseAdmin().rpc("observe_office", { target_firm: pc.firmId, person: userId, pc: pc.device.id, connection: line, proven: true });
   if (error) throw new Error(`Office check failed: ${error.code}`);
