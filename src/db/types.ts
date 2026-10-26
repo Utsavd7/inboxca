@@ -1047,6 +1047,11 @@ isOneToOne: false
 "take_form_download":
 { Args: { "person": string,"ticket": string,"token_hash": string }; Returns: string
                            },
+"team_replies":
+{ Args: { "target_firm": string }; Returns: {
+              "assignee": string,"client_id": string,"client_name": string,"days": number,"email_id": string,"id": string,"late": boolean,"reason_code": string,"received_at": string
+            }[]
+                           },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string
                            },

@@ -271,15 +271,22 @@ test("an email that needs a reply is given to a teammate, snoozed to a day, mark
   const details = async (request: string) => (await query(local.dbUrl, "select details from public.requests where id = $1", [request]))[0].details;
   const { request: a } = await requestOf(`Question A ${tag}`);
 
-  // Assign to: the teammate's avatar shows on the row, and Mine lists it.
+  // With nobody assigned to the client, its email is for the owner: For you on the row, and in
+  // Mine. Assign changes it: to nobody, then to a teammate.
+  await expect(list().getByRole("listitem").filter({ hasText: `Question A ${tag}` })).toContainText("For you");
+  await expect(owner.getByRole("link", { name: /^Mine/ })).toContainText("2");
+  await pane().locator("summary", { hasText: "For you" }).click();
+  await pane().getByRole("form", { name: "Assign to" }).getByRole("button", { name: "Nobody" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Nobody is assigned now." })).toBeVisible();
+  expect(await details(a)).toEqual({ assignee: null });
+  await expect(owner.getByRole("link", { name: /^Mine/ })).toContainText("1");
   await pane().getByText("Assign", { exact: true }).click();
   await pane().getByRole("form", { name: "Assign to" }).getByRole("button", { name: /\(you\)/ }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Assigned to you." })).toBeVisible();
   expect(await details(a)).toEqual({ assignee: firm.ownerId });
-  await expect(list().getByRole("listitem").filter({ hasText: `Question A ${tag}` })).toContainText("Assigned to you");
-  await expect(owner.getByRole("link", { name: /^Mine/ })).toContainText("1");
+  await expect(owner.getByRole("link", { name: /^Mine/ })).toContainText("2");
   await owner.getByRole("link", { name: /^Mine/ }).click();
-  await expect(list().getByRole("listitem")).toHaveCount(1);
+  await expect(list().getByRole("listitem")).toHaveCount(2);
 
   // Snooze until tomorrow (h opens it): out of Needs reply until that day, with Undo.
   await list().getByText(`Question A ${tag}`).click();
