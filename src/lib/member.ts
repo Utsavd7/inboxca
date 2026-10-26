@@ -11,8 +11,10 @@ import { supabaseAdmin, supabaseServer } from "./supabase";
 // request, so the layout and the page share one lookup. Sends anyone who has not finished
 // the required sign in steps back to sign in, and signs out anyone past the firm's idle limit. Row
 // level security shows only active memberships, within office hours and the session limit
-// where the firm uses them. A person in two firms works in the first for now, and every query
-// after this names it (x-inboxca-firm), so the database shows that firm alone.
+// where the firm uses them. A person in two firms works in the one they last chose in the
+// sidebar (FIRM_COOKIE), else the first, and every query after this names it
+// (x-inboxca-firm), so the database shows that firm alone.
+export const FIRM_COOKIE = "inboxca_firm";
 export const currentMember = cache(async () => {
   const signedIn = await supabaseServer();
   const { data: claims } = await signedIn.auth.getClaims();
@@ -22,13 +24,14 @@ export const currentMember = cache(async () => {
   if (claims.claims.aal !== "aal2" && !office.approved) redirect("/sign-in/two-step");
   const proof = office.approved || office.remoteUntil ? { "x-inboxca-office": await officeProof(userId, String(claims.claims.session_id ?? "")) } : undefined;
   const anyFirm = proof ? await supabaseServer(proof) : signedIn;
-  const { data } = await anyFirm
+  const { data: rows } = await anyFirm
     .from("firm_members")
     .select("firm_id, role, access, firms(name, settings)")
     .eq("user_id", userId)
     .order("firm_id")
-    .limit(1)
-    .maybeSingle();
+    .limit(20);
+  const chosen = (await cookies()).get(FIRM_COOKIE)?.value;
+  const data = rows?.find((row) => row.firm_id === chosen) ?? rows?.[0] ?? null;
   const supabase = data ? await supabaseServer({ ...proof, "x-inboxca-firm": data.firm_id }) : anyFirm;
   if (!data) {
     const { data: closed } = await supabase.rpc("closed_firms");
@@ -62,6 +65,8 @@ export const currentMember = cache(async () => {
   const closing = data.role !== "owner" && accessSetting(settings, data.role, data.access, "hours_only") ? closingToday(settings, data.access) : null;
   const membership = {
     firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, access, idleMinutes, closing, email: String(claims.claims.email ?? ""),
+    // Every firm the person may open now, for the sidebar's switcher.
+    firms: rows!.map((row) => ({ id: row.firm_id, name: row.firms?.name ?? "" })),
     // On a personal device allowed away from the office the person only views, until its end date.
     viewOnlyUntil: office.remoteUntil,
     may: (right: Right, client?: string) => !office.remoteUntil && may(data.role, right, settings.permissions as Permissions, (access.always ?? []) as Standing[], client),

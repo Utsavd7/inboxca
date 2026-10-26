@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect } from "@playwright/test";
-import { emailStep, localSupabase, seedFirm, totp } from "./local-supabase";
+import { appKey, emailStep, localSupabase, query, seedFirm, signIn, totp } from "./local-supabase";
 
 // The app's frame: the theme and the folded sidebar are remembered and drawn by the server,
 // the keys work everywhere, and the help, what's new and notifications panels open and close.
@@ -197,5 +197,40 @@ test("the page never slides sideways when something scrolls it", async ({ page }
     await expect.poll(() => pane.evaluate((el) => el.scrollLeft)).toBe(0);
   } finally {
     await firm.remove();
+  }
+});
+
+test("a person in two firms works in one at a time and switches from the sidebar", async ({ page }) => {
+  const key = appKey();
+  const email = `shell-two-firms-${randomUUID()}@invented.test`;
+  const firms = [await seedFirm("Invented First Firm", email, key), await seedFirm("Invented Second Firm", `shell-second-owner-${randomUUID()}@invented.test`)];
+  try {
+    // The same person is the first firm's owner and the second firm's partner.
+    await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'partner', 'active')", [firms[1].firmId, firms[0].ownerId]);
+    for (const [at, firm] of firms.entries())
+      await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, $2, 'individual')", [firm.firmId, `Invented Client of Firm ${at + 1}`]);
+    const names = ["Invented First Firm", "Invented Second Firm"];
+    // Until they choose, they work in the first by its id.
+    const [now, other] = firms[0].firmId < firms[1].firmId ? [0, 1] : [1, 0];
+    await signIn(page, email, key);
+    const firm = page.locator(".rail-firm");
+    await expect(firm).toContainText(names[now]);
+    await page.goto("/app/clients");
+    await expect(page.getByRole("link", { name: `Invented Client of Firm ${now + 1}` })).toBeVisible();
+    await expect(page.getByText(`Invented Client of Firm ${other + 1}`)).toHaveCount(0);
+
+    await firm.click();
+    await page.getByRole("menuitem", { name: `Switch to ${names[other]}` }).click();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(firm).toContainText(names[other]);
+    await page.goto("/app/clients");
+    await expect(page.getByRole("link", { name: `Invented Client of Firm ${other + 1}` })).toBeVisible();
+    await expect(page.getByText(`Invented Client of Firm ${now + 1}`)).toHaveCount(0);
+    // The choice stays for the next visit.
+    await page.reload();
+    await expect(firm).toContainText(names[other]);
+  } finally {
+    await firms[1].remove();
+    await firms[0].remove();
   }
 });
