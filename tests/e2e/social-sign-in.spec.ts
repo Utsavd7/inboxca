@@ -12,7 +12,8 @@ const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 test.describe.configure({ timeout: 90_000 });
 
-const admin = createClient(local.url, local.secretKey, { auth: { persistSession: false } });
+// Made when a test runs, so the file loads where there is no local Supabase (the skip above).
+const admin = () => createClient(local.url, local.secretKey, { auth: { persistSession: false } });
 const names = { google: "Google", azure: "Microsoft" } as const;
 type Via = keyof typeof names;
 const tag = () => randomUUID().slice(0, 8);
@@ -55,7 +56,7 @@ const link = (userId: string, via: Via, email: string, verified = true) => {
 // What Supabase makes when the provider signs in an address it does not know: a confirmed login
 // whose only identity is the provider's.
 async function providerUser(email: string, via: Via) {
-  const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true });
+  const { data, error } = await admin().auth.admin.createUser({ email, email_confirm: true });
   if (error) throw error;
   await query(local.dbUrl, "delete from auth.identities where user_id = $1", [data.user.id]);
   await query(local.dbUrl, "update auth.users set raw_app_meta_data = jsonb_build_object('provider', $2::text, 'providers', jsonb_build_array($2::text)) where id = $1", [data.user.id, via]);
@@ -176,7 +177,7 @@ test("an account made by email signs in with Google as the same account, then th
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(page).toHaveURL(/\/app$/);
     await expect(page.locator(".rail-firm")).toContainText(firmName);
-    const { data } = await admin.auth.admin.getUserById(firm.ownerId);
+    const { data } = await admin().auth.admin.getUserById(firm.ownerId);
     expect(data.user!.identities!.map((identity) => identity.provider).sort()).toEqual(["email", "google"]);
     expect((await query(local.dbUrl, "select count(*)::int n from auth.users where email = $1", [email]))[0].n).toBe(1);
   } finally {
@@ -232,7 +233,7 @@ test("an invited person joins with Microsoft when the address matches the invite
   const firm = await seedFirm(firmName, `inviter-${tag()}@example.test`, appKey());
   try {
     // The owner's invite: a confirmed login for the address and a waiting place in the firm.
-    const { data } = await admin.auth.admin.createUser({ email: staff, email_confirm: true });
+    const { data } = await admin().auth.admin.createUser({ email: staff, email_confirm: true });
     await query(local.dbUrl, "insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'staff', 'invited')", [firm.firmId, data.user!.id]);
     await link(data.user!.id, "azure", staff);
     await page.goto("/sign-in");
