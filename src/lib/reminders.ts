@@ -83,8 +83,8 @@ export function followUpDue(request: { expires_at: string; details: { items: { t
   return missing.length && count < MAX_FOLLOW_UPS && (now || -daysUntil(last, today) >= FOLLOW_UP_DAYS) ? missing : null;
 }
 
-// The one email a client gets today, in English (Hindi and Gujarati follow once a native
-// speaker has checked the wording): returns due, and documents still missing.
+// The one email a client gets today, in English (InboxCA writes in English only): returns
+// due, and documents still missing.
 export function reminderEmail(client: string, firm: string, tasks: ReminderTask[], today: string, followUps: FollowUp[] = []) {
   const when = (due: string) => {
     const days = daysUntil(due, today);
