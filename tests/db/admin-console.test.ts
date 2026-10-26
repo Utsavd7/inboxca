@@ -118,6 +118,7 @@ it("shows an admin each firm's health and no client data, and lets them retry a 
     await asOwner(db);
     expect((await db.query("select state, attempts from public.jobs where id = $1", [job])).rows[0]).toEqual({ state: "pending", attempts: 0 });
     expect((await db.query("select value #> '{changes,0}' c from public.platform_settings where key = 'watch'")).rows[0].c).toMatchObject({ status: "reviewed", reviewed_by: admin });
+    expect((await db.query("select details from public.activity_log where action = 'admin.change_reviewed' and actor_id = $1", [admin])).rows).toEqual([{ details: { source: "gstr1", at: "2026-10-25T00:00:00.000Z" } }]);
     expect((await db.query("select actor_id, firm_id, details from public.activity_log where action = 'admin.job_retried' and details ->> 'job' = $1", [String(job)])).rows).toEqual([{ actor_id: admin, firm_id: null, details: { job: Number(job) } }]);
   }));
 

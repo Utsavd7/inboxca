@@ -24,8 +24,9 @@ it("keeps bulk progress private to its author or leads and queues it once; deliv
   expect((await db.query("select id from public.requests where id=$1",[batch])).rows).toEqual([{id:batch}]);
   expect((await attempt(db,"update public.requests set status='done' where id=$1",[batch])).count).toBe(0);
   await asOwner(db);
-  await db.query("select public.finish_share($1)",[share]);
+  // Sent by a person, the log names them; sent again, nothing more is logged.
+  await db.query("select public.finish_share($1,$2)",[share,owner]);
   await db.query("select public.finish_share($1)",[share]);
   expect((await db.query("select status,delivery from public.shares where id=$1",[share])).rows).toEqual([{status:"sent",delivery:{state:"sent"}}]);
-  expect((await db.query("select count(*)::int n from public.activity_log where action='document.shared' and entity_id=$1",[doc])).rows[0].n).toBe(1);
+  expect((await db.query("select actor_id from public.activity_log where action='document.shared' and entity_id=$1",[doc])).rows).toEqual([{actor_id:owner}]);
 }));
