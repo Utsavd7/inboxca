@@ -4,9 +4,12 @@ import { periodName } from "@/src/lib/documents";
 import { whenRange } from "@/src/lib/mail-view";
 import { currentMember, myQuestions } from "@/src/lib/member";
 import { formName, preparedSchema } from "@/src/lib/prepared";
+import { answersWorkItems } from "@/src/lib/work/answers";
 import { formsWorkItems } from "@/src/lib/work/forms";
 import { governmentUpdates, governmentWorkItems } from "@/src/lib/work/government";
+import { gstMatchWorkItems } from "@/src/lib/work/gst-match";
 import { inboxWeek, inboxWorkItems } from "@/src/lib/work/inbox";
+import { inboxTeamWorkItems } from "@/src/lib/work/inbox-team";
 import { itrCheckWorkItems } from "@/src/lib/work/itr-check";
 import { papersWorkItems } from "@/src/lib/work/papers";
 import { isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
@@ -154,18 +157,26 @@ export async function workFor(ctx: Context, late: number) {
       papers.then(tag("papers")),
       formsWorkItems(ctx).then(tag("returns")),
       itrCheckWorkItems(ctx).then(tag("returns"), () => []),
-      inboxWorkItems(ctx).then((list) => list.map((item): Listed => ({ ...item, area: item.key.startsWith("reply:") ? "emails" : "papers" }))),
+      gstMatchWorkItems(ctx).then(tag("returns"), () => []),
+      // An email waiting for a person is on the Today of the person it is given to, and late ones
+      // on the owner's and partners' (inbox-team.ts). Front desk also gets the emails that name no
+      // client, as picking the client is theirs.
+      inboxWorkItems(ctx).then((list) => list.flatMap((item): Listed[] => (!item.key.startsWith("reply:") ? [{ ...item, area: "papers" }] : membership.role === "front_desk" && !item.client ? [{ ...item, area: "emails" }] : []))),
+      inboxTeamWorkItems(ctx).then(tag("emails")),
+      answersWorkItems(ctx).then(tag("emails"), () => []),
       attention(ctx).then(({ lines }) => (lines.includes("gov") ? [] : governmentWorkItems(ctx).then(tag("gov"), () => []))),
       lateRows.then(({ items }) => items),
       confirmations,
       firmItems,
     ])
   ).flat();
+  // One row an email, the one given to a person when there are two.
+  const unique = [...new Map(items.map((item) => [item.key, item])).values()];
   const { count: lateCount, items: lateList } = await lateRows;
   // Someone who does not lead sees the clients they look after.
-  const theirs = lead ? [] : [...new Set(items.flatMap((item) => (item.audience === "assigned" && item.client ? [item.client.id] : [])))];
+  const theirs = lead ? [] : [...new Set(unique.flatMap((item) => (item.audience === "assigned" && item.client ? [item.client.id] : [])))];
   const looked = lead ? null : new Set(theirs.length ? ((await supabase.rpc("looked_after", { target_firm: firm, clients: theirs })).data ?? []) : []);
-  const shown = rankWork(items.filter((item) => visibleTo(item, { role: membership.role, looked })), today);
+  const shown = rankWork(unique.filter((item) => visibleTo(item, { role: membership.role, looked })), today);
   return { items: shown, total: shown.length + Math.max(0, lateCount - lateList.length), late: lateCount };
 }
 

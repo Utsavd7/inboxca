@@ -1,6 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { loadEnvConfig } from "@next/env";
 import { test, expect, type Browser, type Page } from "@playwright/test";
+import { serverCrypto } from "@/src/lib/crypto";
 import { addPerson, appKey, localSupabase, query, seedFirm, signIn } from "./local-supabase";
 
 // Today by role (PLAN.md "Today by role"): one screen for each person in a firm of 1,200
@@ -46,7 +48,14 @@ test.beforeAll(async ({ browser }) => {
   await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) values ($1, $2, 'compliance', 'GSTR1_M', '2026-08', ${day(-8)}), ($1, $3, 'compliance', 'GSTR1_M', '2026-08', ${day(-8)})`, [firm.firmId, mehtaId, shahId]);
   await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on, status, details) values ($1, $2, 'compliance', 'GSTR3B_M', '2026-09', ${day(0)}, 'upcoming', '{}'), ($1, $2, 'compliance', 'GSTR1_M', '2026-09', ${day(0)}, 'filed', jsonb_build_object('filed_on', ${day(0)}))`, [firm.firmId, mehtaId]);
   await query(local.dbUrl, `insert into public.requests (firm_id, client_id, kind, entity_type, entity_id, expires_at, details) values ($1, $2, 'documents', 'checklist', gen_random_uuid(), now() + interval '10 days', jsonb_build_object('period', '2026-09', 'link_hash', $3::text, 'items', jsonb_build_array(jsonb_build_object('type', 'Sales bills', 'work', 'gst', 'received', '[]'::jsonb)), 'followups', jsonb_build_array(${day(-6)}, ${day(-3)})))`, [firm.firmId, mehtaId, `invented-${tag}`]);
-  await query(local.dbUrl, "insert into public.requests (firm_id, client_id, kind, entity_type, entity_id, reason_code) values ($1, $2, 'team_reply', 'email', gen_random_uuid(), 'no_rule')", [firm.firmId, mehtaId]);
+  // The email came 5 days ago through a mailbox that needs connecting again (so no job reads it):
+  // it is given to Mehta's staff, and late, so the owner sees it too.
+  loadEnvConfig(process.cwd());
+  const crypto = serverCrypto();
+  const account = randomUUID();
+  await query(local.dbUrl, "insert into public.connected_accounts (id, firm_id, kind, provider, address_enc, credentials_enc, status) values ($1, $2, 'mail', 'imap', $3, $4, 'needs_reconnect')", [account, firm.firmId, await crypto.encrypt(firm.firmId, `accounts/${account}/address`, "office@invented.test"), await crypto.encrypt(firm.firmId, `accounts/${account}/credentials`, "{}")]);
+  const [{ id: mail }] = await query(local.dbUrl, "insert into public.email_events (firm_id, account_id, client_id, provider_message_id, sender_bidx, received_at) values ($1, $2, $3, $4, 'invented', now() - interval '5 days') returning id", [firm.firmId, account, mehtaId, `<today-${tag}@invented.test>`]);
+  await query(local.dbUrl, "insert into public.requests (firm_id, client_id, kind, entity_type, entity_id, reason_code) values ($1, $2, 'team_reply', 'email', $3, 'no_rule')", [firm.firmId, mehtaId, mail]);
   // 1,200 more clients, each with a return 10 days late, that nobody in particular looks after.
   await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) select $1, 'Invented Bulk Client ' || n, 'individual' from generate_series(1, $2) n", [firm.firmId, BULK]);
   await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) select $1, id, 'compliance', 'GSTR1_M', '2026-08', ${day(-10)} from public.clients where firm_id = $1 and name like 'Invented Bulk Client %'`, [firm.firmId]);
@@ -74,8 +83,10 @@ test("the owner sees the whole firm: 7 rows, See all, and the firm's numbers, on
   await expect(owner.locator(".page-head")).toContainText(/Good (morning|afternoon|evening), Today\./);
   const rows = list(owner).getByRole("listitem");
   await expect(rows).toHaveCount(7);
-  await expect(rows.first()).toContainText("File GSTR-1 (monthly) for Aug 2026");
-  await expect(rows.first()).toContainText("10 days late");
+  // The reply waited longer than the firm allows: red with no date to wait for, so first.
+  await expect(rows.first()).toContainText(`Reply to ${mehta}`);
+  await expect(rows.nth(1)).toContainText("File GSTR-1 (monthly) for Aug 2026");
+  await expect(rows.nth(1)).toContainText("10 days late");
   // Every late client, Mehta's return due today, the call and the reply.
   const all = BULK + 5;
   await expect(owner.locator(".page-head")).toContainText(`${all.toLocaleString("en-IN")} things need you.`);
@@ -115,9 +126,10 @@ test("the manager sees their team's clients and the team's numbers", async () =>
   const manager = pages.manager!;
   await manager.goto("/app");
   const rows = list(manager).getByRole("listitem");
-  // Mehta's late return, the call, the reply, and the GSTR-3B due today: returns due soon are
-  // pinned to whoever looks after the client, so to a manager for their team's people (return_pins).
-  await expect(rows.filter({ hasText: mehta })).toHaveCount(4);
+  // Mehta's late return, the call, and the GSTR-3B due today: returns due soon are pinned to
+  // whoever looks after the client, so to a manager for their team's people (return_pins). The
+  // reply is given to Mehta's staff; late ones go to the owner and partners only.
+  await expect(rows.filter({ hasText: mehta })).toHaveCount(3);
   await expect(rows.filter({ hasText: `GSTR-3B for ${mehta}` })).toHaveCount(1);
   await expect(list(manager)).not.toContainText(shah);
   await expect(list(manager)).not.toContainText("Invented Bulk Client");
@@ -136,10 +148,12 @@ test("staff see their own clients only, with a button for each, and their own nu
   await staff.goto("/app");
   const rows = list(staff).getByRole("listitem");
   await expect(rows).toHaveCount(4);
-  await expect(rows.nth(0)).toContainText("File GSTR-1 (monthly) for Aug 2026");
-  await expect(rows.nth(1)).toContainText(`GSTR-3B for ${mehta}, Sep 2026`);
-  await expect(rows.nth(0)).toContainText(mehta);
-  await expect(rows.nth(0).getByRole("link", { name: `See returns: ${mehta}` })).toBeVisible();
+  // The late reply first (red, no date), then by date.
+  await expect(rows.nth(0)).toContainText(`Reply to ${mehta}`);
+  await expect(rows.nth(1)).toContainText("File GSTR-1 (monthly) for Aug 2026");
+  await expect(rows.nth(2)).toContainText(`GSTR-3B for ${mehta}, Sep 2026`);
+  await expect(rows.nth(1)).toContainText(mehta);
+  await expect(rows.nth(1).getByRole("link", { name: `See returns: ${mehta}` })).toBeVisible();
   await expect(rows.filter({ hasText: `Reply to ${mehta}` }).getByRole("link", { name: `Reply to ${mehta}` })).toHaveAttribute("href", /\/app\/inbox\?mail=/);
   await expect(list(staff)).not.toContainText(shah);
   await expect(list(staff).getByRole("link", { name: /^See all/ })).toHaveCount(0);
@@ -149,11 +163,11 @@ test("staff see their own clients only, with a button for each, and their own nu
   await expect(week(staff).getByRole("link", { name: /^Answered by InboxCA 0/ })).toBeVisible();
   // j and k move between the rows' buttons.
   await staff.keyboard.press("j");
-  await expect(rows.nth(0).getByRole("link", { name: `See returns: ${mehta}` })).toBeFocused();
+  await expect(rows.nth(0).getByRole("link", { name: `Reply to ${mehta}` })).toBeFocused();
   await staff.keyboard.press("j");
-  await expect(rows.nth(1).locator(".row-end > a, .row-end button").last()).toBeFocused();
+  await expect(rows.nth(1).getByRole("link", { name: `See returns: ${mehta}` })).toBeFocused();
   await staff.keyboard.press("k");
-  await expect(rows.nth(0).getByRole("link", { name: `See returns: ${mehta}` })).toBeFocused();
+  await expect(rows.nth(0).getByRole("link", { name: `Reply to ${mehta}` })).toBeFocused();
   expect(await oneScreen(staff)).toBe(true);
   await shoot(staff, "staff");
   // Their full list holds the same, and nothing to remind in bulk.
