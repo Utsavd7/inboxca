@@ -50,7 +50,7 @@ it("keeps the latest paper of a type, period and GSTIN current and the others as
     const [{ id: only }] = (await db.query(gstin, [firm, one, `v-${randomUUID()}`])).rows;
     const [{ id: first }] = (await db.query(gstin, [firm, two, `v-${randomUUID()}`])).rows;
     await db.query(gstin, [firm, two, `v-${randomUUID()}`]);
-    const add = async (client: string, type: string, at: string, registration: string | null, work = "gst") => (await db.query(paper, [firm, client, work, type, "2026-09", randomUUID(), at, registration])).rows[0].id as string;
+    const add = async (client: string, type: string, at: string, registration: string | null, work = "gst", extension = ".xlsx") => (await db.query(paper, [firm, client, work, type, "2026-09", `${randomUUID()}${extension}`, at, registration])).rows[0].id as string;
     const status = async (...ids: string[]) => (await db.query("select id, status from public.documents where id = any($1)", [ids])).rows.reduce((all, row) => ({ ...all, [row.id]: row.status }), {} as Record<string, string>);
     const admin = supabaseAdmin();
     const group = { client_id: one, work_type: "gst", document_type: "Purchase bills", period_key: "2026-09", registration_id: only };
@@ -78,6 +78,12 @@ it("keeps the latest paper of a type, period and GSTIN current and the others as
     const [n1, n2] = [await add(one, "Notice", "2026-10-01", null, "other"), await add(one, "Notice", "2026-10-02", null, "other")];
     await settleVersions(admin, { ...group, work_type: "other", document_type: "Notice", registration_id: null });
     expect(await status(n1, n2)).toEqual({ [n1]: "filed", [n2]: "filed" });
+    // Bills come many a month: a PDF of bills is its own paper beside the register, and a bill the
+    // earlier rule took for an old version is its own paper again.
+    const [p1, p2] = [await add(one, "Purchase bills", "2026-10-06", only, "gst", ".pdf"), await add(one, "Purchase bills", "2026-10-07", only, "gst", ".pdf")];
+    await db.query("update public.documents set status = 'earlier' where id = $1", [p1]);
+    await settleVersions(admin, group);
+    expect(await status(p1, p2, older, newer)).toEqual({ [p1]: "filed", [p2]: "filed", [older]: "earlier", [newer]: "filed" });
     // So does Form 16: one an employer, and often its Part A and Part B apart.
     const [f1, f2] = [await add(one, "Form 16", "2026-10-01", null, "income_tax"), await add(one, "Form 16", "2026-10-02", null, "income_tax")];
     await settleVersions(admin, { ...group, work_type: "income_tax", document_type: "Form 16", registration_id: null });
