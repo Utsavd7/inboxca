@@ -1,10 +1,11 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 import { INCOMING, type Drive } from "./drive";
 
 // Dropbox (PLAN.md 5.5.1): InboxCA's app has Full Dropbox access and signs in with PKCE,
-// so it holds no app secret. The owner's refresh token is kept encrypted; each use gets a
-// short access token from it. New files go under /InboxCA; nothing else is touched
-// except the folders the owner ticks.
+// so signing in needs no app secret (it only checks change notices, DROPBOX_APP_SECRET).
+// The owner's refresh token is kept encrypted; each use gets a short access token from it.
+// New files go under /InboxCA; nothing else is touched except the folders the owner ticks.
 const ROOT = "/InboxCA";
 const appKey = () => process.env.DROPBOX_APP_KEY ?? "";
 
@@ -39,11 +40,33 @@ async function token(body: Record<string, string>) {
   return (await response.json()) as { access_token: string; refresh_token?: string };
 }
 
-// Exchanges the code Dropbox returned for a refresh token and the account's email.
+// Exchanges the code Dropbox returned for a refresh token, the account's email, and the
+// account as change notices name it (dropboxAccountKey).
 export async function dropboxConnect(code: string, verifier: string, redirectUri: string) {
   const { access_token, refresh_token } = await token({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: redirectUri });
-  const account = await call(access_token, "users/get_current_account", null);
-  return { refreshToken: refresh_token ?? "", email: String((account as { email?: string }).email ?? "") };
+  const account = (await call(access_token, "users/get_current_account", null)) as { email?: string; account_id?: string };
+  return { refreshToken: refresh_token ?? "", email: String(account.email ?? ""), account: account.account_id ? dropboxAccountKey(account.account_id) : "" };
+}
+
+// A Dropbox account id as InboxCA keeps it, in the drive's settings: only its hash.
+export const dropboxAccountKey = (accountId: string) => createHash("sha256").update(accountId).digest("hex");
+
+// Dropbox's change notices (docs.dropboxapi.com/dropbox-api/docs/webhooks, read on 26 Oct
+// 2026): a POST whose X-Dropbox-Signature is the hex HMAC-SHA256 of the whole body with the
+// app secret, listing in list_folder.accounts the accounts with changes, never the changes.
+// Returns those accounts as kept (dropboxAccountKey), or null when the signature is not right.
+const notice = z.object({ list_folder: z.object({ accounts: z.array(z.string()) }) });
+export function dropboxNotice(body: Uint8Array, signature: string | null, secret: string) {
+  const expected = createHmac("sha256", secret).update(body).digest();
+  const given = Buffer.from(signature ?? "", "hex");
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  let parsed;
+  try {
+    parsed = notice.safeParse(JSON.parse(new TextDecoder().decode(body)));
+  } catch {
+    return [];
+  }
+  return parsed.success ? [...new Set(parsed.data.list_folder.accounts)].map(dropboxAccountKey) : [];
 }
 
 async function call(accessToken: string, route: string, body: unknown) {

@@ -79,6 +79,8 @@
 .set-rows li:first-child { border-top: 0; }
 .set-rows .grow { flex: 1; min-width: 0; }
 .set-rows + form { margin-top: 16px; }
+.set-ticks li > svg { flex: none; color: var(--done-fg); }
+.set-ticks li.warn > svg { color: var(--wait-fg); }
 
 .set-table { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
 .set-page .set-table .t th { height: 32px; padding: 0 12px; background: var(--side); color: var(--ink-3); font-size: 12px; font-weight: 600; }

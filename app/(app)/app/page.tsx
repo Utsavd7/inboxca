@@ -41,6 +41,7 @@ const alertText = (reason: string, details: { free_bytes?: number; files?: numbe
     parallel: `${details.email} signed in on another PC ${details.count} times today, which ends the other session each time. Ask whether their login is shared.`,
     request_stalled: `${details.client} has not uploaded the documents you asked for, after three reminders. A call may help.`,
     drive_missing: `${details.files} ${details.files === 1 ? "paper is" : "papers are"} missing from your drive.`,
+    drive_away: "InboxCA cannot reach your drive. New files wait up to 7 days.",
     virus: `${details.name} had a virus. Nobody can open it in InboxCA; it is in the Files with a virus folder of your drive.`,
   })[reason] ?? "Something in your drive needs a look.";
 
@@ -287,6 +288,7 @@ function load(supabase: Db, membership: Member, userId: string, params: Params) 
           key: alert.id,
           text: alertText(alert.reason_code ?? "", alert.details as { free_bytes?: number; files?: number; client?: string; email?: string; count?: number; name?: string }),
           ...(alert.reason_code === "drive_missing" && { href: "/app/documents?year=all&show=missing", action: "See missing papers" }),
+          ...(alert.reason_code === "drive_away" && owner && { href: "/app/settings?group=email#drive", action: "Open drive settings", urgent: true }),
           ...(alert.reason_code === "virus" && { seen: alert.id, urgent: true }),
         })),
       ...(followUps?.data ?? []).map((row) => ({
