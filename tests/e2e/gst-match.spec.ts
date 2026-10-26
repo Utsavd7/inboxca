@@ -45,7 +45,7 @@ test("lists the bills to ask suppliers about, the amounts that differ and what o
     await expect(drive.getByRole("status")).toContainText("Connected");
     await page.goto("/app/clients?panel=add");
     await page.getByLabel("Name", { exact: true }).fill(name);
-    await page.getByLabel("Kind", { exact: true }).selectOption("business");
+    await page.getByLabel("Client type", { exact: true }).selectOption("business");
     await page.getByLabel("GSTIN", { exact: true }).fill(own);
     await page.getByRole("button", { name: "Add client" }).click();
     await expect(page.locator(".page-head")).toContainText(name);
@@ -61,7 +61,7 @@ test("lists the bills to ask suppliers about, the amounts that differ and what o
       await page.goto(`/app/clients/${client}?tab=documents`);
       await page.getByRole("link", { name: "Upload papers" }).click();
       await page.getByRole("dialog").getByLabel("Files", { exact: true }).setInputFiles({ name: upload, mimeType: "text/csv", buffer: register(upload) });
-      await expect(page.getByRole("group", { name: upload }).getByLabel("Type")).toHaveValue("Purchase bills");
+      await expect(page.getByRole("group", { name: upload }).getByLabel("Paper type")).toHaveValue("Purchase bills");
       await page.getByRole("dialog").getByRole("button", { name: "Upload", exact: true }).click();
       await expect.poll(async () => (await query(local.dbUrl, "select count(*)::int n from public.documents where client_id = $1 and document_type = 'Purchase bills'", [client]))[0].n).toBe(registers);
       await runJobs(request, firm.firmId);
