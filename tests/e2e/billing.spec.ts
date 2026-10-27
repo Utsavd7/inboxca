@@ -6,8 +6,9 @@ import { appKey, emailStep, latestEmail, localSupabase, query, seedFirm, systemM
 
 // Orelu's billing through the real pages, with payments on and Cashfree a fake on this machine
 // (PLAN.md 5.14.1, D33): a new firm signs up, chooses its plan and sets up AutoPay in the fake's
-// checkout, and the signed webhook makes it active; Settings, Billing lists its receipt, turns
-// AutoPay off and gives the money back within 14 days with the 2 step code; the admin console
+// checkout, and the signed webhook makes it active; Settings, Billing lists its receipt and turns
+// AutoPay off; near its plan's returns, Today offers the plan that fits and one payment moves it
+// up; the money comes back within 14 days with the 2 step code; the admin console
 // shows the refund by month and reason. Skipped when local Supabase is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
@@ -107,6 +108,25 @@ test("Settings, Billing lists the receipt and turns AutoPay off", async ({ page 
   expect((await firm()).autopay).toBe("cancelled");
   expect(fake.subscriptions.get((await firm()).mandate)!.status).toBe("CANCELLED");
   await expect(page.getByRole("button", { name: "Turn AutoPay on" })).toBeVisible();
+});
+
+test("Today shows the owner the plan that fits once the returns near the plan, and one payment moves the firm up", async ({ page }) => {
+  // Returns due so far: all that a Solo plan paid monthly has given by this month (5.14, D38).
+  const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const months = ((Number(day.slice(5, 7)) + 8) % 12) + 1;
+  await query(local.dbUrl, "insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [(await firm()).id, day, Math.ceil((800 * months) / 12)]);
+  await emailStep(page, email);
+  await page.getByLabel("6 digit code from the app").fill(await code());
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  const card = page.getByRole("region", { name: "Your plan" });
+  await expect(card).toContainText("Growth");
+  await card.getByRole("button", { name: /move up/ }).click();
+  await expect(page).toHaveURL(/\/app\/settings\?group=billing&saved=checkout/);
+  await expect.poll(async () => (await query(local.dbUrl, "select status from public.payments where kind = 'upgrade' and firm_id = $1", [(await firm()).id]))[0]?.status).toBe("done");
+  await page.reload();
+  await expect(page.locator("section#plan")).toContainText("Growth");
+  await expect(page.locator("section#fit")).toHaveCount(0);
 });
 
 test("the owner gets the money back within 14 days with the 2 step code, and the firm can only view", async ({ page }) => {

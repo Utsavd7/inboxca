@@ -50,11 +50,12 @@ export async function startCheckout(_prev: CheckoutState, form: FormData): Promi
   }));
 }
 
-// A one time payment: pay now, move up, one more person, one more AI block, an AI top-up.
+// A one time payment: pay now, move up (to a plan chosen, or the one the meters say fits), one
+// more person, one more AI block, an AI top-up.
 export async function buyCheckout(_prev: CheckoutState, form: FormData): Promise<CheckoutState> {
   const me = await owner();
   if (!me) return { error: "Only the owner pays for the plan." };
-  const kind = z.enum(["renewal", "upgrade", "extra_user", "ai_block", "topup"]).safeParse(form.get("kind"));
+  const kind = z.enum(["renewal", "upgrade", "fit", "extra_user", "ai_block", "topup"]).safeParse(form.get("kind"));
   if (!kind.success) return { error: "Choose what to pay for." };
   let what: Buy;
   if (kind.data === "upgrade") {

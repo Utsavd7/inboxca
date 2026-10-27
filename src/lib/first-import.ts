@@ -66,6 +66,11 @@ export function importSince(createdAt: string, today: string) {
   return `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+// The first import is outside InboxCA storage once, for papers dated before sign up (D38): a
+// month up to the one the firm signed up in, or a financial year ended before it. A paper with
+// no period cannot be shown to be older, so it counts.
+export const datedBeforeSignUp = (period: string, signUpMonth: string) => (period.length === 7 ? period <= signUpMonth : period.length === 4 && `${period}-03` < signUpMonth);
+
 export function planImport(
   files: { id: string; path: string; size: number }[],
   clients: { id: string; name: string }[],

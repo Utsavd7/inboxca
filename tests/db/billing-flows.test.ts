@@ -226,6 +226,60 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     }
   });
 
+  it("tells the owner once at 80% of the plan, and with the plan fit on moves a firm past it up on the mandate after a 3 day notice, never above its maximum", async () => {
+    const gst = { ...tax, gstin: "27AAAFI1234B1Z5", stateCode: "27", sac: "9983", rate: 18, gstFrom: today() };
+    await db.query("update public.platform_settings set value = $1 where key = 'tax'", [gst]);
+    try {
+      const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
+      // Returns due so far, against a monthly plan's twelfths of the year so far.
+      const months = money.monthsBegun(today());
+      const due = (firm: string, n: number) => db.query("insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [firm, today(), n]);
+      const planOf = async (firm: string) => money.planPrice(formula, (await subOf(firm)).plan, "monthly").code;
+      const told = (firm: string) => db.query("select entity_type, details from public.requests where firm_id = $1 and reason_code = 'plan_upgrade_suggested'", [firm]).then((result) => result.rows);
+
+      const firm = await activeFirm("fit");
+      await due(firm.id, Math.ceil((800 * months * 1.1) / 12) + 1);
+      await billing.dailyBilling(firm.id);
+      await billing.dailyBilling(firm.id);
+      expect(await told(firm.id)).toEqual([{ entity_type: `plan_fit_returns_${money.financialYear(today())}`, details: {} }]);
+      expect(await paymentsOf(firm.id, "upgrade")).toHaveLength(0);
+
+      await db.query("update public.platform_settings set value = value || '{\"fitEnforced\": true}' where key = 'plan_formula'");
+      await billing.dailyBilling(firm.id);
+      await billing.dailyBilling(firm.id);
+      const sub = await subOf(firm.id);
+      const moves = await paymentsOf(firm.id, "upgrade");
+      const difference = money.withGst(money.prorate(349_900 - 149_900, today(), sub.paid_until, "monthly"), money.taxSchema.parse(gst), "27", today());
+      expect(moves).toHaveLength(1);
+      expect(moves[0]).toMatchObject({ status: "created", amount_paise: difference.total, gst_paise: difference.gst, details: { via: "charge" } });
+      expect(moves[0].amount_paise).toBeLessThanOrEqual(sub.plan.maxPaise);
+      expect(moves[0].due_at.getTime() - Date.now()).toBeGreaterThan(3 * 86_400_000 - 60_000);
+      expect(fake.charges.get(moves[0].id)).toMatchObject({ subscription_id: firm.mandate, payment_type: "CHARGE", payment_amount: difference.total / 100 });
+      expect(await billing.buy(firm.id, firm.owner, { kind: "fit" }, returnUrl)).toMatchObject({ error: expect.stringContaining("on its way") });
+      expect(await planOf(firm.id)).toBe("solo");
+      await fake.charge(moves[0].id, "SUCCESS");
+      expect(await planOf(firm.id)).toBe("growth");
+      expect((await paymentsOf(firm.id, "upgrade"))[0].doc).toMatchObject({ kind: "invoice", cgst: difference.gst / 2, sgst: difference.gst / 2, total: difference.total });
+
+      // Past Growth at a full year's pace: Scale's difference is above the mandate's maximum, so
+      // nothing is debited and the owner approves once, by paying it as an order.
+      const big = await activeFirm("fit-big");
+      await due(big.id, Math.ceil((2000 * months) / 12) + 1);
+      await billing.dailyBilling(big.id);
+      await billing.dailyBilling(big.id);
+      expect(await paymentsOf(big.id, "upgrade")).toHaveLength(0);
+      expect((await told(big.id)).map((row) => row.details)).toEqual([{ approve: today() }]);
+      expect(await billing.buy(big.id, big.owner, { kind: "fit" }, returnUrl)).toMatchObject({ kind: "order" });
+      const [order] = await paymentsOf(big.id, "upgrade");
+      expect(order.amount_paise).toBeGreaterThan((await subOf(big.id)).plan.maxPaise);
+      await fake.pay(order.id);
+      expect(await planOf(big.id)).toBe("scale");
+    } finally {
+      await db.query("update public.platform_settings set value = value || '{\"fitEnforced\": false}' where key = 'plan_formula'");
+      await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);
+    }
+  });
+
   it("lets an admin give back a payment taken twice, keeps Cashfree's fees, and alerts on what does not match", async () => {
     const firm = await activeFirm("admin");
     await billing.buy(firm.id, firm.owner, { kind: "topup" }, returnUrl);

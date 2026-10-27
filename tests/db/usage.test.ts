@@ -108,7 +108,7 @@ describe("the owner's meters", () => {
       expect(Number((await usage()).workspace_bytes)).toBeGreaterThan(Number(before.workspace_bytes));
     }));
 
-  it("keep papers and email records counted in InboxCA storage after they are deleted", () =>
+  it("keep papers, email records and client records counted in InboxCA storage after they are deleted", () =>
     rollback(db, async () => {
       await seed();
       const before = await usage();
@@ -123,5 +123,14 @@ describe("the owner's meters", () => {
       // A paper from last year is not this year's.
       await paper("00000000-0000-4000-8000-000000000e79", "2026-03-20");
       expect(await usage()).toEqual(added);
+      // A deleted client's record stays counted on the day it went (to within the few header
+      // bytes a row loses when the delete reads it back), and is not growth.
+      const now = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      const held = await usage(now);
+      const { size } = (await db.query("select sum(pg_column_size(c.*))::int as size from public.clients c where firm_id = $1", [FIRM])).rows[0];
+      await db.query("delete from public.clients where firm_id = $1", [FIRM]);
+      const after = await usage(now);
+      expect(Math.abs(Number(after.workspace_bytes) - Number(held.workspace_bytes))).toBeLessThan(size / 10);
+      expect(Number(after.workspace_by_march) - Number(after.workspace_bytes)).toBe(Number(held.workspace_by_march) - Number(held.workspace_bytes));
     }));
 });
