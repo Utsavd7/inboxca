@@ -185,3 +185,31 @@ export async function reseal(db: ClientBase, crypto: ReturnType<typeof firmCrypt
   if (values) await db.query("insert into public.activity_log (firm_id, action, entity_type, entity_id, details) values ($1, 'keys.resealed', 'firm', $1, $2)", [firm, { values, key_number: newest }]);
   return counts;
 }
+
+// After the re-seal: what of a firm still needs a key older than its newest, per table, and its
+// 30-day safety copies, which are locked and so never sealed again: one taken before the
+// newest key could be in use (its keys.rotated line, plus the 5 minutes app servers keep a key
+// set; with no such line, any) needs its key until its 30 days end. Within those 5 minutes a
+// server may still seal a new value with an older key, so they count too.
+export async function olderKeyUse(db: ClientBase, firm: string, newest: number) {
+  const counts = await staleCounts(db, firm, newest);
+  const { rows: [row] } = await db.query(`with rotated as (select max(at) + interval '5 minutes' done from public.activity_log
+      where firm_id = $1 and action = 'keys.rotated' and (details->>'key_number')::int = $2)
+    select (select count(*)::int from public.activity_log c, rotated r where c.firm_id = $1 and c.action = 'document.safety_copy'
+        and c.at > now() - interval '30 days' and c.at < coalesce(r.done, 'infinity')) copies,
+      (select count(*)::int from rotated where done > now()) recent`, [firm, newest]);
+  return { ...counts, "safety copies": row.copies, "the 5 minutes after the rotation": row.recent };
+}
+
+// Wipes a firm's keys older than its newest from its key set (crypto.retire), only when
+// nothing above still needs one; the search key that blind indexes use stays. Returns what
+// still needs one (and then changes nothing), and how many keys were wiped, or with `dryRun`
+// would be. One line in the firm's log counts them (keys.retired).
+export async function retireKeys(db: ClientBase, crypto: ReturnType<typeof firmCrypto>, firm: string, dryRun = false) {
+  const newest = await newestKey(crypto, firm);
+  const using = Object.fromEntries(Object.entries(await olderKeyUse(db, firm, newest)).filter(([, count]) => count));
+  if (Object.keys(using).length) return { using, keys: 0 };
+  const keys = await crypto.retire(firm, newest, dryRun);
+  if (keys && !dryRun) await db.query("insert into public.activity_log (firm_id, action, entity_type, entity_id, details) values ($1, 'keys.retired', 'firm', $1, $2)", [firm, { keys, key_number: newest }]);
+  return { using, keys };
+}

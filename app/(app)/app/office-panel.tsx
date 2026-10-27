@@ -108,9 +108,10 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
             : `${personName(emails.get(details.person ?? ""))} on ${pc.name} is on a new internet connection:`}</p>
           <form action={setOfficeOnly} className="form-row">
             <input type="hidden" name="request" value={request.id} />
+            {/* Today first, so a quick tap does not keep a connection for good (5.17.4 #51). */}
             {request.reason_code === "office_waiting" && <>
-              <Pending className="b b-primary b-small" name="intent" value="confirm">This is my office</Pending>
-              <Pending className="b b-secondary b-small" name="intent" value="today">Allow this connection today</Pending>
+              <Pending className="b b-primary b-small" name="intent" value="today">Allow this connection today</Pending>
+              <Pending className="b b-secondary b-small" name="intent" value="confirm">This is my office</Pending>
             </>}
             <Pending className="b b-ghost b-small" name="intent" value="refuse">Not my office</Pending>
           </form>

@@ -50,6 +50,7 @@ if (!yes) console.log(`Would seal ${sum("older")} values again with each firm's 
 else {
   console.log(`Sealed ${sum("sealed")} values again with each firm's newest key.`);
   if (sum("left")) console.log(`${sum("left")} values are still on an older key: they do not open with this server's keys, or changed while this ran. Run again to retry.`);
+  else console.log("Then retire the older keys: npx --yes tsx scripts/retire-keys.mts --yes");
   process.exitCode = sum("left") ? 1 : 0;
 }
 console.log(`Took ${((Date.now() - started) / 1000).toFixed(1)} s.`);

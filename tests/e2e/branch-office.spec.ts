@@ -83,6 +83,14 @@ test("the owner turns Office only on for one branch, and its staff are checked a
   await query(local.dbUrl, "update public.devices set status = 'approved', kind = 'office' where firm_id = $1", [firm.firmId]);
   await staff.goto("/app/clients");
   await expect(staff.getByRole("heading", { name: "Clients", level: 1 })).toBeVisible();
+  // On a new connection the PC waits, and the owner's first choice allows it for today only (#51).
+  await staff.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.98" });
+  await staff.goto("/app/clients");
+  await expect(staff.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
+  await owner.goto(`/app/settings?group=access&branch=${branchId}#office`);
+  const asked = owner.locator(".notice").filter({ hasText: "is on a new internet connection" });
+  await expect(asked.locator(".b-primary")).toHaveText("Allow this connection today");
+  await expect(asked.getByRole("button").first()).toHaveText("Allow this connection today");
 
   // Out of the branch, the person follows the firm, which has no Office only.
   await query(local.dbUrl, "update public.firm_members set branch_id = null where user_id = $1", [staffId]);

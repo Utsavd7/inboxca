@@ -6,7 +6,7 @@
 // The outer key is the server's own (serverKek): LOCAL_KEK from .env.local, or AWS KMS when
 // KMS_KEY_ID and KMS_CREDENTIALS are set in the shell, which may then name another database
 // in DATABASE_URL (production keys never live in .env.local).
-import { allOpened, checkValues, localEnv, pgKeyStore, printCounts } from "./encrypted-values.mts";
+import { allOpened, checkValues, localEnv, newestKey, pgKeyStore, printCounts } from "./encrypted-values.mts";
 
 const url = process.env.KMS_KEY_ID && process.env.DATABASE_URL ? process.env.DATABASE_URL : localEnv();
 const { default: pg } = await import("pg");
@@ -55,6 +55,8 @@ if (!process.argv.includes("--yes")) {
   for (const firm of firms) {
     try {
       await crypto.rotate(firm);
+      // When the newest key came in, for retire-keys (the safety copies made before it).
+      await db.query("insert into public.activity_log (firm_id, action, entity_type, entity_id, details) values ($1, 'keys.rotated', 'firm', $1, $2)", [firm, { key_number: await newestKey(crypto, firm) }]);
       rotated++;
     } catch (error) {
       failed.push(`${firm}: ${(error as Error).message}`);
