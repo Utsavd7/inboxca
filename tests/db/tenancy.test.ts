@@ -386,10 +386,10 @@ describe("every table and function, from the catalog", () => {
         }
       }
       // Secrets stay with the server (PLAN.md 8.4): nobody signed in, nor a visitor, reads a
-      // credential, a password, a wrapped key or a token's or code's hash.
+      // credential, a password, a wrapped key, a token's or code's hash, or an identity hash (D38).
       const secrets = await db.query(`select c.relname || '.' || a.attname name from pg_attribute a join pg_class c on c.oid = a.attrelid join pg_namespace n on n.oid = c.relnamespace
         where n.nspname = 'public' and c.relkind in ('r', 'p') and a.attnum > 0 and not a.attisdropped
-          and a.attname ~ '(credential|password|secret|wrapped_key|token_hash|code_hash|private_key)'
+          and a.attname ~ '(credential|password|secret|wrapped_key|token_hash|code_hash|private_key|identity_hash)'
           and (has_column_privilege('authenticated', c.oid, a.attnum, 'select') or has_column_privilege('anon', c.oid, a.attnum, 'select'))`);
       for (const column of secrets.rows) problems.push(`${column.name}: a secret signed in people can read`);
       // Tenant consistent keys (PLAN.md 11): a key from one firm row to another names the firm.

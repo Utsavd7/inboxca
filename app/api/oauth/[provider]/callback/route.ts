@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { runJobsSoon } from "@/src/jobs/run-soon";
-import { serverCrypto } from "@/src/lib/crypto";
+import { accountIdentity, serverCrypto } from "@/src/lib/crypto";
 import { log } from "@/src/lib/logger";
 import { apiAccount } from "@/src/lib/mail-api";
 import { isMailApi, MAIL_COOKIE, mailTokens, zohoMail, zohoServer } from "@/src/lib/mail-oauth";
@@ -61,6 +61,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       status: "connected",
       address_enc: await crypto.encrypt(firm, `accounts/${id}/address`, address),
       address_bidx: index,
+      identity_hash: accountIdentity("mail", provider, address),
       credentials_enc: await crypto.encrypt(firm, `accounts/${id}/credentials`, JSON.stringify({ refreshToken: tokens.refreshToken, accessToken: tokens.accessToken, expires: tokens.expires })),
       // The same way in again keeps its place in the mailbox, so waiting mail is still read.
       sync_cursor: prior?.provider === provider && prior.sync_cursor ? prior.sync_cursor : found.cursor,
