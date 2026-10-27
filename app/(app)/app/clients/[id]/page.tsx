@@ -1474,7 +1474,7 @@ async function Activity({ client, people, undo }: { client: string; people: { us
             <span className="grow">
               <span className="name">{activityNames[entry.action] ?? "Client changed"}</span>
               {entry.renamed_from && <span className="sub">{entry.renamed_to ? `${entry.renamed_from} to ${entry.renamed_to}` : `Was ${entry.renamed_from}`}</span>}
-              <span className="sub">{entry.actor_id ? people.find((person) => person.user_id === entry.actor_id)?.email ?? "Former team member" : "InboxCA"}, <time className="num" dateTime={entry.at}>{mailTime(entry.at)}</time></span>
+              <span className="sub">{entry.actor_id ? people.find((person) => person.user_id === entry.actor_id)?.email ?? "Former team member" : "InboxCA"}, <time dateTime={entry.at}>{mailTime(entry.at)}</time></span>
             </span>
             {/* A manager or the owner puts back the latest rename of a file in one click (5.17.2). */}
             {activity.data.findIndex((other) => other.document_id === entry.document_id) === index && undoable.includes(entry.document_id) && (

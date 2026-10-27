@@ -1,7 +1,7 @@
 /* Settings: a short list of groups on the left, the chosen group's cards on the right.
    Each card a tile, a title, one line, its controls and one Save. */
 .set { display: grid; grid-template-columns: 216px minmax(0, 760px); gap: var(--s6); align-items: start; margin-top: var(--s5); }
-.set-nav { position: sticky; top: 112px; display: grid; gap: 2px; padding: var(--s2); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-1); }
+.set-nav { position: sticky; top: 72px; display: grid; gap: 2px; padding: var(--s2); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-1); }
 .set-nav a { display: flex; align-items: center; gap: var(--s2); height: var(--control); padding: 0 var(--s2); border-radius: var(--r2); color: var(--ink-2); font-size: 14px; font-weight: 500; text-decoration: none; transition: background var(--fast) var(--out), color var(--fast) var(--out), transform var(--fast) var(--out); }
 .set-nav a svg { flex: none; color: var(--ink-3); transition: color var(--fast) var(--out); }
 .set-nav a:hover { background: var(--hover); color: var(--ink); }
@@ -15,7 +15,9 @@
 .set-head .grow { display: grid; flex: 1; gap: 2px; min-width: 0; padding-top: 5px; }
 .set-page .panel h2 { font-size: 15px; font-weight: 600; line-height: 1.3; }
 .set-page .panel .set-head .hint { margin-top: 2px; line-height: 1.5; }
-.set-page .set-body > .panel > :not(.set-head) { margin-left: 44px; }
+/* A card's body starts under its title: the tile's 28 px and the 12 px gap. */
+.set-page .set-body > .panel > :not(.set-head) { margin-left: 40px; }
+.set-page .set-body > .panel > p.hint { margin-top: 12px; }
 .set-page .check:has(> .toggle) { gap: var(--s3); }
 .set-page .panel > form, .set-page .panel > .connection, .set-page .panel > .reveal > form { margin-top: 16px; }
 .set-page .panel > .reveal > summary, .set-page .panel > .set-foot { margin-top: 16px; }
@@ -26,6 +28,7 @@
 .set-page textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 .set-page legend { margin-bottom: 8px; color: var(--ink-2); font-size: 13px; font-weight: 500; }
 .set-page fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.set-page fieldset > .hint { margin-bottom: 12px; }
 
 /* Controls stacked, or fields in a two column grid; the Save row always last. */
 .set-stack { display: grid; gap: 12px; }
@@ -114,7 +117,8 @@
 .set-meters dt { color: var(--ink-3); font-size: 13px; }
 .set-meters dd { margin: 4px 0 0; font-size: 16px; font-weight: 600; }
 .set-meters .set-bar { height: 8px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: var(--gray-bg); }
-.set-bar span { display: block; height: 100%; background: var(--ink-3); }
+/* The fill in the brand blue, as the sidebar's meter, growing in from the left. */
+.set-bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transform-origin: left; animation: bar-grow 900ms var(--out) 200ms both; }
 .set-meters .set-meter-note { margin-top: 8px; color: var(--ink-2); font-size: 13px; font-weight: 500; }
 
 /* Closing the firm sits last, apart, in red. */

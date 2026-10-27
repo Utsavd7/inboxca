@@ -144,13 +144,13 @@ export default async function Clients({
         lead: lead ? (lead.team_id ? nameOf.get(lead.team_id) : personName(emailOf.get(lead.user_id ?? ""))) : "",
         team: !!lead?.team_id,
         next,
-        // Late first, then missing papers; one tag when neither.
+        // Late first, then missing papers; one quiet tag when neither (green means done only).
         tags: archived
           ? [["Archived", ""] as const]
           : [
               ...(client.late.length ? [[`Late: ${client.late.length} return${client.late.length === 1 ? "" : "s"}`, "late"] as const] : []),
               ...(client.asks.length ? [["Missing papers", "warn"] as const] : []),
-              ...(client.late.length || client.asks.length ? [] : [next ? (["On track", "done"] as const) : (["No returns", ""] as const)]),
+              ...(client.late.length || client.asks.length ? [] : [next ? (["On track", ""] as const) : (["No returns", ""] as const)]),
             ],
       };
     }),
