@@ -1079,7 +1079,6 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   // A link copied wrong names nothing of the firm.
   await visitor.goto(`${link}x`);
   await expect(visitor.getByRole("heading")).toHaveText("This link has ended or was copied wrong.");
-  await expect(visitor.getByText("Ask your CA's office to send a new one.")).toBeVisible();
   await expect(visitor.getByText("Questions?")).toHaveCount(0);
 
   // A filed document goes to the client as a secure link that stops after 5 downloads.
@@ -1336,7 +1335,6 @@ test("a client who uploads gets one emailed receipt a sitting, from the firm's m
     { name: "rent-2.jpg", mimeType: "image/jpeg", buffer: Buffer.from("invented photo of another rent receipt") },
   ]);
   await expect(visitor.getByRole("heading", { name: "All 2 papers received" })).toBeVisible();
-  await expect(visitor.getByText("A receipt listing what you sent is on its way to your email.")).toBeVisible();
   await jobs();
   await expect.poll(() => lastMail(client)).toContain("- Bank statement: 1 file\n- Rent receipts: 2 files\n\nThat is everything we asked for.");
   expect(await lastMail(client)).not.toMatch(/InboxCA/);

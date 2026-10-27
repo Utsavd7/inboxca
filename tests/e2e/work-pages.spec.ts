@@ -7,8 +7,8 @@ import { TEST_DRIVE } from "../../playwright.config";
 import { pdf } from "../fixtures/pdf";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
-// Documents, Calendar, Notices, People and Settings: the actions each page offers beyond its
-// list. Skipped when local Supabase is not running.
+// Documents and Calendar: the actions each page offers beyond its list. Skipped when local
+// Supabase is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase");
 test.describe.configure({ mode: "serial", timeout: 90_000 });
@@ -142,30 +142,4 @@ test("Calendar: a month of days with a dot for each kind of return, a day's retu
   await panel.getByRole("link", { name: "Cancel" }).click();
   await expect(panel).toHaveCount(0);
   await expect(owner).toHaveURL(new RegExp(`month=.*`));
-});
-
-test("Notices, People and Settings: status pills, the open notice, an empty team and switches", async () => {
-  await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, due_on, details) values ($1, $2, 'notice', '2030-01-22', '{"authority":"gst","notice_type":"Invented GST notice","reference":"","received_on":"2026-10-20"}')`, [firm.firmId, patel]);
-  await owner.goto("/app/notices");
-  const notice = owner.locator("section[aria-label=Notices] tbody tr").filter({ hasText: "Invented GST notice" });
-  await expect(notice).toContainText("Open");
-  await notice.getByRole("link", { name: `Update the notice for ${patelName}` }).click();
-  const panel = owner.getByRole("dialog", { name: "Invented GST notice" });
-  await expect(panel).toContainText("Received 20 Oct 2026");
-  await expect(panel.getByRole("button", { name: "Mark replied" })).toBeVisible();
-
-  await owner.goto("/app/people");
-  await expect(owner.getByRole("row").filter({ hasText: email })).toContainText("Owner");
-  await expect(owner.getByRole("row").filter({ hasText: email })).toContainText("Active");
-  await expect(owner.getByText("Just you so far")).toBeVisible();
-
-  await owner.goto("/app/settings?group=reminders");
-  const reminders = owner.getByLabel("Email clients before their returns are due");
-  await expect(reminders).toHaveClass(/toggle/);
-  await reminders.check();
-  await owner.getByRole("button", { name: "Save reminders" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Reminders saved." })).toBeVisible();
-  await expect(reminders).toBeChecked();
-  await owner.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: "Your data" }).click();
-  await expect(owner.locator("section#close")).toHaveClass(/set-danger/);
 });

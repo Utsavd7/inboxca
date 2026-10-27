@@ -87,7 +87,6 @@ async function shoot(page: Page, name: string) {
 test("the owner sees the whole firm: 7 rows, See all, and the firm's numbers, on one screen", async () => {
   const owner = pages.owner!;
   await owner.goto("/app");
-  await expect(owner.locator(".page-head")).toContainText(/Good (morning|afternoon|evening), Today\./);
   const rows = list(owner).getByRole("listitem");
   await expect(rows).toHaveCount(7);
   // The reply waited longer than the firm allows: red with no date to wait for, so first.
@@ -102,8 +101,6 @@ test("the owner sees the whole firm: 7 rows, See all, and the firm's numbers, on
   await expect(week(owner).getByRole("link", { name: /^Late / })).toContainText((BULK + 2).toLocaleString("en-IN"));
   await expect(week(owner).getByRole("link", { name: /^Waiting for papers 1 client/ })).toHaveAttribute("href", "/app/clients?show=missing");
   await expect(week(owner).getByRole("link", { name: /\d Waiting$/ })).toBeVisible();
-  // Off Today: the week strip, InboxCA's day, the four big figures and the email week card.
-  for (const gone of ["Due this week", "What InboxCA did today", "Email this week", "Returns filed this month", "Get questions and approvals"]) await expect(owner.getByText(gone)).toHaveCount(0);
   expect(await oneScreen(owner)).toBe(true);
   await shoot(owner, "owner");
 

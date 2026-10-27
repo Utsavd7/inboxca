@@ -1,7 +1,5 @@
 "use client";
 import "./globals.css";
-import "./(app)/app/app.css";
-import "./public-link.css";
 
 // The last catch, when even the page frame failed to open: InboxCA's own plain page with Try
 // again and the way back, instead of the browser's technical one.
@@ -10,7 +8,7 @@ export default function GlobalError({ retry }: { error: unknown; retry: () => vo
     <html lang="en-IN">
       <body>
         <title>Page did not open | InboxCA</title>
-        <main className="ui ui-public">
+        <main className="plain-page">
           <header className="public-band">
             <p className="public-firm">
               <strong>InboxCA</strong>
