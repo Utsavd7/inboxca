@@ -692,15 +692,6 @@ a.app-card, .app-card.is-link { position: relative; text-decoration: none; trans
 .stagger > .kept { animation: none; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 
-/* A progress ring (ui.tsx ProgressRing): the arc draws once from empty. */
-.progress-ring { position: relative; display: grid; flex: none; place-items: center; width: 88px; height: 88px; }
-.progress-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
-.progress-ring circle { fill: none; stroke-width: 8; }
-.progress-ring .ring-track { stroke: var(--press); }
-.progress-ring .ring-arc { stroke: var(--accent); stroke-linecap: round; }
-.progress-ring.is-done .ring-arc { stroke: var(--done-dot); }
-.progress-ring strong { font-size: 17px; font-weight: 650; letter-spacing: -0.02em; }
-
 /* A copy button beside a number or a path. */
 .copy { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-left: var(--s1); border: 0; border-radius: var(--r1); background: none; color: var(--ink-3); vertical-align: middle; cursor: pointer; transition: background var(--fast) var(--out), color var(--fast) var(--out), transform var(--fast) var(--out); }
 .copy:hover { background: var(--press); color: var(--ink); }
@@ -777,10 +768,6 @@ a.app-card, .app-card.is-link { position: relative; text-decoration: none; trans
 .keys h3 { margin-bottom: var(--s2); color: var(--ink-3); font-size: 12px; font-weight: 600; }
 .keys li { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); min-height: 30px; border-bottom: 1px solid var(--line); font-size: 13px; }
 .keys li span:last-child { display: inline-flex; gap: 3px; }
-
-/* A line or ring that draws itself once along its length (motion.tsx Draw). */
-.draw { stroke-dasharray: var(--p) 2; animation: draw 900ms var(--out) 120ms both; }
-@keyframes draw { from { stroke-dasharray: 0 2; } }
 
 /* A number counting up from 0 once, before any script (motion.tsx Count). */
 @property --n { syntax: "<integer>"; inherits: false; initial-value: 0; }

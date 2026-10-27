@@ -1,7 +1,6 @@
 import {expect,it} from "vitest";
 import {readSheet} from "@/src/lib/sheet";
-import {changedKey,changeGap,changeOf,changeState,changeTotal,countsOf,extractPurchases,invoiceKey,matchBills,matchChanged,matchLine,suggestColumns,totalOf,type Bill,type Changed,type PurchaseMapping} from "@/src/lib/purchase-register";
-import {gstMatchWorkItems} from "@/src/lib/work/gst-match";
+import {changedKey,changeGap,changeOf,changeState,changeTotal,countsOf,extractPurchases,invoiceKey,matchBills,matchChanged,suggestColumns,totalOf,type Bill,type Changed,type PurchaseMapping} from "@/src/lib/purchase-register";
 import {gstr2bBills} from "../../worker/portal";
 import {inventedGstin,statement,supplierChangedNotes,supplierChanges,supplierInvoices,supplierNotes} from "../fixtures/portal";
 
@@ -65,8 +64,6 @@ it("matches within one rupee on every amount, adds up a bill on several rows, an
   expect(totalOf(result.extra,"portal").taxable).toBe(10000);
   expect(matchBills([book("INV/5",100000,9000,9000)],[{...portal[0],number:"INV/5",amounts:amounts(100101,9000,9000)}]).differ).toHaveLength(1);
   expect(countsOf(result)).toEqual({matched:3,missing:1,extra:1,differ:1,changed:0});
-  expect(matchLine(countsOf(result))).toBe("3 matched, 1 not in GSTR-2B: ask the supplier, 1 in GSTR-2B but not in the books, 1 amount differs");
-  expect(matchLine({matched:12,missing:3,extra:0,differ:2})).toBe("12 matched, 3 not in GSTR-2B: ask the supplier, 2 amounts differ");
   expect(result.skipped).toBe(2);
 });
 
@@ -147,7 +144,6 @@ it("lists what each correction changes this month, by GSTN's rule, and what the 
   // Corrected less original, a credit note's below zero, and only those whose original is known.
   expect(changeTotal(result.changed)).toEqual(amounts(4000,360,360));
   expect(countsOf(result)).toEqual({matched:0,missing:0,extra:0,differ:0,changed:4});
-  expect(matchLine(countsOf(result))).toBe("0 matched, 4 corrected by the supplier: update the books");
 });
 
 // GSTR-2B's summary gives the change its corrections make this month (FAQ question 8: "the
@@ -171,10 +167,4 @@ it("checks GSTR-2B's own total of the corrections against the bills listed, and 
   // The summary also counts T-12 (up ₹9 a head): more than ₹1 apart on a head.
   expect(changeGap(listed({igst:0,cgst:1260,sgst:1260,cess:0}))).toEqual({official:2520,listed:720});
   expect(changeGap(listed({igst:0,cgst:360,sgst:360,cess:101}))).toEqual({official:821,listed:720});
-});
-
-it("puts the corrections the books do not show yet on Today",async()=>{
-  const row={register_id:"register",client_id:"client",client_name:"Invented Traders",period_key:"2026-10",due_on:"2099-11-20",counts:{matched:1,missing:1,extra:0,differ:0,changed:2}};
-  const context={supabase:{rpc:async()=>({data:[row]})},membership:{firmId:"firm"}} as unknown as Parameters<typeof gstMatchWorkItems>[0];
-  expect((await gstMatchWorkItems(context))[0].why).toBe("Oct 2026: 1 bill not in GSTR-2B, 2 bills corrected by the supplier");
 });

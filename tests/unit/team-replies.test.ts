@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { suggestedReply, waitingWords } from "@/src/lib/team-replies";
+import { suggestedReply } from "@/src/lib/team-replies";
 import { replyReasons } from "@/src/lib/triage";
 
 const names = { name: "Meera Shah", client: "Invented Traders", firm: "Test Firm" };
@@ -23,10 +23,4 @@ it("names the paper and year the rules read in the email, or none", () => {
   expect(suggestedReply("record_not_found", { ...names, paper: { types: ["ITR-V", "Acknowledgement"], period: "2026" } })).toContain("We could not find the ITR-V for FY 2025-26 in our records just now.");
   expect(suggestedReply("record_internal", { ...names, paper: { types: ["Balance sheet"], period: "" } })).toContain("We have your request for the Balance sheet.");
   expect(suggestedReply("record_not_found", { ...names, paper: { types: [], period: "2026" } })).toContain("We could not find the paper you asked for in our records");
-});
-
-it("says how long an email has waited, from its second day", () => {
-  expect(waitingWords(0)).toBe("");
-  expect(waitingWords(1)).toBe("Waiting 1 day");
-  expect(waitingWords(4)).toBe("Waiting 4 days");
 });

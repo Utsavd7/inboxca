@@ -16,7 +16,8 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
   const original=officialFile(template.source.file,template.source.sha256);
   const files=xlsxEntries(original),workbook=files.get("xl/workbook.xml")!().toString();
   const strings=[...files.get("xl/sharedStrings.xml")!().toString().matchAll(/<si>([\s\S]*?)<\/si>/g)].map(([,body])=>[...body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(([,text])=>unescape(text)).join(""));
-  const sheetCells=(sheet:number)=>new Map([...files.get(`xl/worksheets/sheet${sheet}.xml`)!().toString().matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)].map(([,attrs,body=""])=>{const value=/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? "";return [/r="([A-Z]+\d+)"/.exec(attrs)![1],attrs.includes('t="s"') ? strings[Number(value)] : unescape(value)];}));
+  // A sheet's cells, or one row's: a section's headings are row 4 of a sheet of up to 330,000 cells.
+  const sheetCells=(sheet:number,row?:number)=>{const xml=files.get(`xl/worksheets/sheet${sheet}.xml`)!().toString();return new Map([...(row ? new RegExp(`<row\\b[^>]*\\br="${row}"[^>]*>[\\s\\S]*?</row>`).exec(xml)?.[0] ?? "" : xml).matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)].map(([,attrs,body=""])=>{const value=/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? "";return [/r="([A-Z]+\d+)"/.exec(attrs)![1],attrs.includes('t="s"') ? strings[Number(value)] : unescape(value)];}));};
   const masterSheet=[...workbook.matchAll(/<sheet\b[^>]*name="([^"]+)"[^>]*>/g)].findIndex(([,name])=>name==="master")+1,master=sheetCells(masterSheet),lists=new Map<string,string[]>();
   const masterRange=(column:string,from:number,to:number)=>Array.from({length:to-from+1},(_,n)=>master.get(`${column}${from+n}`) ?? "").filter(Boolean);
   for(const [,name,ref] of workbook.matchAll(/<definedName\b[^>]*name="([^"]+)"[^>]*>([^<]+)<\/definedName>/g)) {
@@ -44,7 +45,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
       const section=key.split(".")[0] as SalesSection,sheet=template.mappings.sheets?.[section];
       if(!sheet) throw new Error("This register section does not fit the return's month");
       if(!checkedSheets.has(section)) {
-        const headings=sheetCells(sheet);
+        const headings=sheetCells(sheet,4);
         if(salesSections[section].headings.some((heading,column)=>headings.get(`${String.fromCharCode(65+column)}4`)!==heading)) throw new Error("The official headings changed");
         validated.set(section,new Map([...files.get(`xl/worksheets/sheet${sheet}.xml`)!().toString().matchAll(/<xm:f>master!\$([A-Z]+)\$(\d+):\$\1\$(\d+)<\/xm:f><\/x14:formula1><xm:sqref>([A-Z])5:\4\d+<\/xm:sqref>/g)].map(([,column,from,to,at])=>[at.charCodeAt(0)-65,masterRange(column,Number(from),Number(to))])));
         checkedSheets.add(section);

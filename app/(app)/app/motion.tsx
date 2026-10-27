@@ -1,5 +1,5 @@
 "use client";
-import { AnimatePresence, LazyMotion, MotionConfig, MotionGlobalConfig, animate, domMax, m, useIsPresent, useReducedMotion, type HTMLMotionProps } from "motion/react";
+import { AnimatePresence, LazyMotion, MotionConfig, MotionGlobalConfig, animate, domMax, m, useIsPresent, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Children, Fragment, cloneElement, createContext, isValidElement, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
@@ -7,7 +7,7 @@ import { Children, Fragment, cloneElement, createContext, isValidElement, useCon
 // The app's motion, in a few small pieces every page can reuse (Motion, from "motion/react").
 // The shell wraps everything in <MotionRoot>, so:
 // - only m.* components are used (LazyMotion strict), and what must show at once (rows fading
-//   up, numbers counting, rings drawing) starts in CSS, before any script. The features are
+//   up, numbers counting) starts in CSS, before any script. The features are
 //   domMax, not the smaller domAnimation: the sliding indicators and gliding rows need layout
 //   animation. They load with the page, not later: a later load changes the motion context
 //   while streamed parts are still arriving, and React then draws those parts a second time;
@@ -16,7 +16,6 @@ import { Children, Fragment, cloneElement, createContext, isValidElement, useCon
 // Route changes stay on React's ViewTransition (page-in.tsx). The pieces:
 //   <Press href?>  a link (with href) or a button that presses in (scale .97); lift also
 //                  raises it 2 px under the pointer. Plain .b buttons press in with CSS already.
-//   <Lift>         a block (a card, a tile) that rises 2 px under the pointer.
 //   <Indicator>    the one marker of the current item (sidebar, tabs, pills): render it inside
 //                  the current item only, with the same id in every item; it glides between them.
 //   <Presence>     wraps a conditional, {open && <SidePanel ... />}, so it animates out as well
@@ -27,7 +26,6 @@ import { Children, Fragment, cloneElement, createContext, isValidElement, useCon
 //                  Two lists on one page with the same keys need different names.
 //   <Count>        a number: counts up once (CSS, before any script), then springs to new values;
 //                  with an id, it does not count up again when a save redraws the page.
-//   <Draw>         an SVG path or circle that draws itself once (rings, sparklines).
 
 // Critically damped by default (no bounce); panels and toasts get a touch of spring.
 export const spring = { type: "spring", duration: 0.32, bounce: 0 } as const;
@@ -54,14 +52,6 @@ type PressProps = { href?: string; scroll?: boolean; lift?: boolean; className?:
 export function Press({ href, scroll, lift = false, ...rest }: PressProps) {
   const feel = { whileTap: { scale: 0.97 }, ...(lift && { whileHover: { y: -2 } }), transition: quick };
   return href !== undefined ? <MLink href={href} scroll={scroll} {...feel} {...rest} /> : <m.button type="button" {...feel} {...rest} />;
-}
-
-export function Lift({ className, children, ...rest }: HTMLMotionProps<"div">) {
-  return (
-    <m.div className={className} whileHover={{ y: -2 }} transition={quick} {...rest}>
-      {children}
-    </m.div>
-  );
 }
 
 export function Indicator({ id, className }: { id: string; className: string }) {
@@ -212,11 +202,4 @@ export function Count({ value, id }: { value: number; id?: string }) {
       <span className="sr-only">{value.toLocaleString("en-IN")}</span>
     </>
   );
-}
-
-// Drawn by its path length in CSS (app.css .draw), so it draws at first paint, script or not.
-type DrawProps = { className?: string; progress?: number } & ({ d: string } | { cx: number; cy: number; r: number });
-export function Draw({ className = "", progress = 1, ...shape }: DrawProps) {
-  const feel = { className: `draw ${className}`, pathLength: 1, style: { "--p": progress } as CSSProperties };
-  return "d" in shape ? <path d={shape.d} {...feel} /> : <circle cx={shape.cx} cy={shape.cy} r={shape.r} {...feel} />;
 }

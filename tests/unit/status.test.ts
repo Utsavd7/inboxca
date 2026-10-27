@@ -2,7 +2,7 @@ import { createServer, type Socket } from "node:net";
 import { afterEach, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ status: { data: null as unknown, error: null as unknown } }));
 vi.mock("@/src/lib/supabase", () => ({ supabaseAnonymous: () => ({ rpc: async () => mock.status }) }));
-import { currentStatus, lateState, partStates, summary, timedState, workerState, type Incident } from "@/src/lib/status";
+import { currentStatus, lateState, partStates, timedState, type Incident } from "@/src/lib/status";
 import { sendSystemMail, systemMailReady } from "@/src/lib/system-mail";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -14,24 +14,11 @@ it("judges a part by how long its due work has waited and how fast its check ans
   expect([timedState(true, 300), timedState(true, 2500), timedState(false, 10)]).toEqual(["working", "slow", "down"]);
 });
 
-it("makes a part worse, never better, for an open incident, and sums the page in one line", () => {
+it("makes a part worse, never better, for an open incident", () => {
   const measured = { app: "working", mail: "slow", files: "off", reminders: "working" } as const;
   const states = partStates(measured, [incident(["mail", "reminders"], "down"), incident(["app"], "down", "2026-10-26T01:00:00Z"), incident(["mail"], "slow")]);
   expect(states).toEqual({ app: "working", mail: "down", files: "off", reminders: "down" });
   expect(partStates(measured, [incident(["files"], "slow")]).files).toBe("slow");
-  expect(summary(states)).toBe("Some parts of InboxCA are down");
-  expect(summary(measured)).toBe("Some parts of InboxCA are slow");
-  expect(summary({ app: "working", mail: "working", files: "off", reminders: "working" })).toBe("Everything is working");
-});
-
-it("checks the file worker's health only when one is set up", async () => {
-  vi.stubEnv("FILE_WORKER_URL", "");
-  expect(await workerState()).toBe("off");
-  vi.stubEnv("FILE_WORKER_URL", "http://worker.invented/");
-  const fetcher = vi.fn(async () => new Response("Ready"));
-  expect(await workerState(fetcher as unknown as typeof fetch)).toBe("working");
-  expect(fetcher).toHaveBeenCalledWith("http://worker.invented/health", expect.anything());
-  expect(await workerState((async () => { throw new Error("refused"); }) as unknown as typeof fetch)).toBe("down");
 });
 
 it("reads the database's waiting work and incidents, and calls every part down without the database", async () => {

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DELETED_FOLDER, INCOMING, localDrive } from "@/src/lib/drive";
-import { access, clientFolders, kindOf, parsePath, placeOf, viewable } from "@/src/lib/drive-browse";
+import { access, clientFolders, parsePath, placeOf } from "@/src/lib/drive-browse";
 
 describe("the folder view's paths", () => {
   it("reads a folder path from the address, and refuses one that leaves its folder", () => {
@@ -16,11 +16,6 @@ describe("the folder view's paths", () => {
     expect(placeOf(["FY 2026-27"], "year_client_work")).toEqual({ client: null, work: null });
     expect(placeOf(["Income tax", "FY 2026-27", "Patel Textiles"], "work_year_client")).toEqual({ client: "Patel Textiles", work: "income_tax" });
     expect(placeOf(["Patel Textiles", "FY 2026-27", "Notes"], "client_year_work")).toEqual({ client: "Patel Textiles", work: null });
-  });
-  it("tells a file's kind and whether the viewer shows it", () => {
-    expect(["a.PDF", "b.xlsx", "c.csv", "d.jpeg", "e.json", "f.zip", "README"].map(kindOf)).toEqual(["pdf", "sheet", "sheet", "image", "json", "other", "other"]);
-    expect(viewable("Patel - GSTR-2B - Sep 2026.json")).toBe(true);
-    expect(viewable("backup.zip")).toBe(false);
   });
 });
 

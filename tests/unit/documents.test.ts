@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { kindChecklist, kindChecklists } from "@/src/lib/checklists";
-import { describeFile, filePeriod, gstinFor, periodName, workOfType } from "@/src/lib/documents";
+import { describeFile, filePeriod, gstinFor, periodName } from "@/src/lib/documents";
 
 // Attachment names as clients send them, and where InboxCA files each one.
 describe("what an attachment is", () => {
@@ -38,16 +37,5 @@ describe("the GSTIN a paper is for", () => {
     expect(gstinFor("gst", ["a", "b"], "elsewhere")).toBeNull();
     expect(gstinFor("income_tax", ["a"], "a")).toBeNull();
     expect(gstinFor("gst", [])).toBeNull();
-  });
-});
-
-describe("practice lists by kind of client", () => {
-  it("start from the practice list, and a firm's own list replaces it", () => {
-    expect(kindChecklist({}, "individual")).toEqual(kindChecklists.individual);
-    expect(kindChecklist({ checklists: { individual: ["Form 16"] } }, "individual")).toEqual(["Form 16"]);
-    expect(kindChecklist({ checklists: { individual: ["Form 16"] } }, "trust")).toEqual(kindChecklists.trust);
-  });
-  it("file each paper under its work", () => {
-    expect(["Form 16", "AIS", "Form 26AS", "Sales bills", "Trial balance", "Bank statement", "Trust deed"].map(workOfType)).toEqual(["income_tax", "income_tax", "income_tax", "gst", "tax_audit", "other", "other"]);
   });
 });

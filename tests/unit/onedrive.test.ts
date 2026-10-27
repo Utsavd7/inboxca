@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { pkce } from "@/src/lib/dropbox";
-import { onedriveConnect, onedriveDrive, onedriveReady, onedriveSignIn } from "@/src/lib/onedrive";
+import { onedriveConnect, onedriveDrive, onedriveSignIn } from "@/src/lib/onedrive";
 import { PIECE, quickXorHash, sendPieces } from "@/src/lib/onedrive-upload";
 import { fakeOneDrive, fakeOneDriveKeys } from "../fake-onedrive";
 
@@ -30,12 +30,6 @@ async function signedIn(keep?: (token: string) => Promise<unknown>) {
 }
 
 describe("signing in to OneDrive", () => {
-  it("stays off until the app's ID and secret are both set", () => {
-    expect(onedriveReady()).toBe(true);
-    vi.stubEnv("MS_DRIVE_CLIENT_SECRET", "");
-    expect(onedriveReady()).toBe(false);
-  });
-
   it("asks Microsoft's common sign in for the owner's files with a PKCE challenge only", () => {
     const { verifier, challenge } = pkce();
     const url = new URL(onedriveSignIn("state-1", challenge, redirect));

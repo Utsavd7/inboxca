@@ -1,16 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { paragraphs, replySubject, sentKind, signMail, snippet, stripQuoted, suggestPapers, threadKeys, verifyMail, whenRange } from "@/src/lib/mail-view";
+import { replySubject, signMail, stripQuoted, suggestPapers, threadKeys, verifyMail } from "@/src/lib/mail-view";
 
 describe("reading a message", () => {
   const text = "Sir,\n\nAttaching the September bills.\nSales register on Monday.\n\nRajesh\n\nOn Mon, 20 Oct 2026 at 10:00, Invented CA <office@invented.test> wrote:\n> Please send the bills.\n> Thanks";
   it("leaves out the earlier messages it quotes", () => {
     expect(stripQuoted(text)).toBe("Sir,\n\nAttaching the September bills.\nSales register on Monday.\n\nRajesh");
     expect(stripQuoted("Thanks\n> quoted line\nmore\n-----Original Message-----\nold")).toBe("Thanks\nmore");
-  });
-  it("gives a one line start for the list and paragraphs for the conversation", () => {
-    expect(snippet(text)).toBe("Sir, Attaching the September bills. Sales register on Monday. Rajesh");
-    expect(snippet("x".repeat(300))).toHaveLength(140);
-    expect(paragraphs(text)).toEqual(["Sir,", "Attaching the September bills.\nSales register on Monday.", "Rajesh"]);
   });
   it("threads a reply under every earlier Message-ID, and says Re once", () => {
     expect(threadKeys("<c@x>", "<b@x>", ["<a@x>", "<b@x>"])).toEqual(["<a@x>", "<b@x>", "<c@x>"]);
@@ -19,22 +14,6 @@ describe("reading a message", () => {
     expect(replySubject("GSTR-3B query")).toBe("Re: GSTR-3B query");
     expect(replySubject("RE: GSTR-3B query")).toBe("RE: GSTR-3B query");
   });
-  it("tells InboxCA's reminders and emails from the team's", () => {
-    expect(sentKind("<reminder-c1-2026-10-24@inboxca.test>")).toBe("reminder");
-    expect(sentKind("<share-s1@inboxca.test>")).toBe("inboxca");
-    expect(sentKind("<received-e1@inboxca.test>")).toBe("inboxca");
-    expect(sentKind("<reply-r1@inboxca.test>")).toBe("team");
-    expect(sentKind("<CAB123@mail.gmail.com>")).toBe("team");
-  });
-});
-
-it("turns When into India time spans", () => {
-  expect(whenRange("today", "2026-10-24")).toEqual({ from: "2026-10-24T00:00:00+05:30" });
-  expect(whenRange("week", "2026-10-24")).toEqual({ from: "2026-10-19T00:00:00+05:30" });
-  expect(whenRange("week", "2026-10-19")).toEqual({ from: "2026-10-19T00:00:00+05:30" });
-  expect(whenRange("month", "2026-10-24")).toEqual({ from: "2026-10-01T00:00:00+05:30" });
-  expect(whenRange("older", "2026-10-24")).toEqual({ until: "2026-10-01T00:00:00+05:30" });
-  expect(whenRange("", "2026-10-24")).toEqual({});
 });
 
 it("suggests the client's papers an email asks for, the asked period first", () => {

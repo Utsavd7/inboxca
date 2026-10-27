@@ -17,7 +17,7 @@ const when = (at: string) =>
 
 // Why a paper waits under To check (PLAN.md 5.5.0): the same file came in before, else what
 // InboxCA could not tell from its name.
-export function waitsFor(paper: { document_type: string; period_key: string }, twin: boolean) {
+function waitsFor(paper: { document_type: string; period_key: string }, twin: boolean) {
   if (twin) return "the same file came in before";
   const unknown = [paper.document_type === "Document" && "type", !paper.period_key && "period"].filter(Boolean).join(" and ");
   return unknown ? `InboxCA could not tell its ${unknown}` : "InboxCA was not sure of its type";
