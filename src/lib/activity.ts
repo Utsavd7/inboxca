@@ -33,7 +33,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   // Written by the database as rows change (log_change): what changed, or the new row's kind.
   ...Object.fromEntries(["group", "member", "client", "registration", "assignment", "contact", "contact_link", "task", "account", "email", "request"]
     .flatMap((thing) => [[`${thing}.added`, ["kind"]], [`${thing}.removed`, ["kind"]], [`${thing}.changed`, ["changed"]]])),
-  "firm.signed_up": ["accepted"], "firm.changed": ["name", "settings"], "firm.downloaded": [], "firm.closed": [], "firm.data_deleted": [],
+  "firm.signed_up": ["accepted"], "firm.changed": ["name", "settings"], "firm.downloaded": [], "firm.closed": ["reason"], "firm.data_deleted": [],
   "member.invited": ["role"], "member.joined": [], "member.role_changed": ["role"], "member.removed": [], "member.invite_withdrawn": [], "member.restored": [],
   "session.ended_other": ["ended"], "recovery.codes_made": [], "recovery.used": ["left"], "hours.extended": ["until"],
   "admin.passkey_added": [], "admin.passkey_copied": [], "admin.passkey_used": [], "admin.passkeys_removed": ["removed"], "admin.job_retried": ["job"],
@@ -74,4 +74,9 @@ export const activityDetails: Record<string, readonly string[]> = {
   "form.downloaded": [], "form.filed": ["ack", "paper"], "form.differences_seen": ["differences"],
   // The purchase register and GSTR-2B papers, and how many bills differ; never a GSTIN or an invoice.
   "gst_match.made": ["register", "statement", "differences"], "gst_match.downloaded": ["register"],
+  // Orelu's billing of the firm (5.14.1): payment ids, kinds, methods and states only.
+  "billing.autopay_started": ["method", "cycle"], "billing.autopay_on": ["method"], "billing.autopay_cancelled": ["by"], "billing.order_started": ["payment", "kind"],
+  "billing.paid": ["payment", "kind"], "billing.payment_failed": ["payment", "kind"], "billing.renewal_raised": ["payment"], "billing.downgrade_set": [],
+  "billing.money_back": ["payments"], "billing.refund_asked": ["payment", "reason"], "billing.refunded": ["payment"], "billing.refund_failed": ["payment"],
+  "billing.state": ["status"], "billing.auto_topup": ["payment", "blocks"], "billing.pilot": [], "admin.tax_saved": ["registered", "from"],
 };

@@ -1,6 +1,17 @@
 import { custom, extraPerson, plans, practices } from "@/content/plans";
 
+export const sitePrices = { plans, practices, extraPerson, custom };
+
 export type Practice = (typeof practices)[number][0];
+type Slabs = readonly (readonly [number, number])[];
+// The figures an estimate reads: the site's price list, or the server's plan_formula (PLAN.md
+// 5.14), with which billing prices every payment.
+export type Formula = {
+  plans: readonly { monthly: number; yearly: number; maxReturns: number; people: number }[];
+  practices: readonly (readonly [string, string, number])[];
+  extraPerson: number;
+  custom: { [key in "base" | "floor" | "ending" | "returnsPerStep" | "includedSteps" | "includedPeople" | "aiCredits" | "aiPerStep" | "yearlyMonths" | "yearlyAdd"]: number } & { workSlabs: Slabs; peopleSlabs: Slabs };
+};
 
 // Slabs work like income tax slabs: only the part inside a slab pays that slab's rate.
 function slabs(
@@ -19,7 +30,7 @@ function slabs(
 
 // The plan and price a firm would be shown, from three answers. An estimate: the
 // real plan is worked out from the firm's own client list after it joins.
-export function estimate(clients: number, practice: Practice, team: number) {
+export function estimate(clients: number, practice: Practice, team: number, { plans, practices, extraPerson, custom }: Formula = sitePrices) {
   const rate = practices.find(([key]) => key === practice)![2];
   const returns = Math.round(clients * rate);
   const index = plans.findIndex((plan) => returns <= plan.maxReturns);

@@ -431,6 +431,19 @@ isOneToOne: false
       referencedColumns: ["firm_id","id"]
     }
                   ]
+                },"guarantee_claims": {
+                  Row: {
+                    "claimed_at": string,"identity_hash": string
+                  }
+                  Insert: {
+                    "claimed_at"?: string,"identity_hash": string
+                  }
+                  Update: {
+                    "claimed_at"?: string,"identity_hash"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"incidents": {
                   Row: {
                     "ended_at": string | null,"id": string,"level": string,"parts": (string)[],"started_at": string,"title": string,"updates": NonNullable<Json>
@@ -488,6 +501,25 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"payments": {
+                  Row: {
+                    "amount_paise": number,"created_at": string,"details": NonNullable<Json>,"doc": Json | null,"due_at": string | null,"fee_paise": number | null,"fee_tax_paise": number | null,"firm_id": string,"gst_paise": number,"id": string,"kind": string,"provider_ref": string | null,"reason": string | null,"refund_of": string | null,"settled_at": string | null,"status": string
+                  }
+                  Insert: {
+                    "amount_paise": number,"created_at"?: string,"details"?: NonNullable<Json>,"doc"?: Json | null,"due_at"?: string | null,"fee_paise"?: number | null,"fee_tax_paise"?: number | null,"firm_id": string,"gst_paise"?: number,"id"?: string,"kind": string,"provider_ref"?: string | null,"reason"?: string | null,"refund_of"?: string | null,"settled_at"?: string | null,"status"?: string
+                  }
+                  Update: {
+                    "amount_paise"?: number,"created_at"?: string,"details"?: NonNullable<Json>,"doc"?: Json | null,"due_at"?: string | null,"fee_paise"?: number | null,"fee_tax_paise"?: number | null,"firm_id"?: string,"gst_paise"?: number,"id"?: string,"kind"?: string,"provider_ref"?: string | null,"reason"?: string | null,"refund_of"?: string | null,"settled_at"?: string | null,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "payments_firm_id_refund_of_fkey"
+      columns: ["firm_id","refund_of"]
+isOneToOne: false
+      referencedRelation: "payments"
+      referencedColumns: ["firm_id","id"]
+    }
                   ]
                 },"platform_settings": {
                   Row: {
@@ -579,6 +611,25 @@ isOneToOne: false
       foreignKeyName: "shares_firm_id_fkey"
       columns: ["firm_id"]
 isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"subscriptions": {
+                  Row: {
+                    "cycle": string,"firm_id": string,"mandate": string | null,"method": string | null,"paid_until": string | null,"phone_enc": string | null,"plan": NonNullable<Json>,"status": string
+                  }
+                  Insert: {
+                    "cycle": string,"firm_id": string,"mandate"?: string | null,"method"?: string | null,"paid_until"?: string | null,"phone_enc"?: string | null,"plan": NonNullable<Json>,"status"?: string
+                  }
+                  Update: {
+                    "cycle"?: string,"firm_id"?: string,"mandate"?: string | null,"method"?: string | null,"paid_until"?: string | null,"phone_enc"?: string | null,"plan"?: NonNullable<Json>,"status"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "subscriptions_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: true
       referencedRelation: "firms"
       referencedColumns: ["id"]
     }
@@ -705,6 +756,9 @@ isOneToOne: false
 "admin_ask_support":
 { Args: { "target": string }; Returns: boolean
                            },
+"admin_billing":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "admin_email_incident":
 { Args: { "incident": string }; Returns: number
                            },
@@ -742,6 +796,9 @@ isOneToOne: false
               "email": string,"passkeys": number,"user_id": string
             }[]
                            },
+"admin_pilot":
+{ Args: { "target": string }; Returns: boolean
+                           },
 "admin_post_incident":
 { Args: { "incident_level": string,"incident_parts": (string)[],"incident_title": string }; Returns: string
                            },
@@ -761,6 +818,9 @@ isOneToOne: false
                            },
 "admin_set_office":
 { Args: { "days": number,"taps": number }; Returns: boolean
+                           },
+"admin_set_tax":
+{ Args: { "tax": Json }; Returns: boolean
                            },
 "admin_support_view":
 { Args: { "target": string }; Returns: Json
@@ -843,6 +903,9 @@ isOneToOne: false
                            },
 "close_firm":
 { Args: { "target_firm": string,"typed_name": string }; Returns: boolean
+                           },
+"close_unpaid":
+{ Args: { "target_firm": string,"why": string }; Returns: boolean
                            },
 "closed_firms":
 { Args: Record<PropertyKey, never>; Returns: {
@@ -958,6 +1021,9 @@ isOneToOne: false
                            },
 "member_role":
 { Args: { "target_firm": string }; Returns: string
+                           },
+"money_back_claim":
+{ Args: { "claim": boolean,"identities": (string)[] }; Returns: boolean
                            },
 "month_by_return":
 { Args: { "first_day": string }; Returns: {
