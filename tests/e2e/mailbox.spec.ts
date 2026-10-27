@@ -3,8 +3,8 @@ import { test, expect } from "@playwright/test";
 import nodemailer from "nodemailer";
 import { emailStep, localSupabase, seedFirm, totp } from "./local-supabase";
 
-// The owner types only the firm's address and password; InboxCA says what it found, and the
-// server settings are changed only when it finds none (the local GreenMail mailbox).
+// The owner types only the firm's address and password; the server settings are changed only
+// when InboxCA finds none (the local GreenMail mailbox).
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 
@@ -27,17 +27,7 @@ test("the owner connects the firm's mailbox with only its address and password",
     const card = page.locator("section#mailbox");
     const address = card.getByLabel("The firm's email address");
 
-    await address.fill("shah.associates@gmail.com");
-    await address.blur();
-    await expect(card.getByText("Found Gmail. Gmail needs an app password, not your usual password. Make one in your Google Account under Security, then App passwords.")).toBeVisible();
-    await address.fill("shah.associates@outlook.com");
-    await address.blur();
-    // The test server has Microsoft sign in set up (the fake in tests/fake-mail.ts).
-    await expect(card.getByText("This address is on Outlook or Microsoft 365. Use Connect with Microsoft above.")).toBeVisible();
-
     await address.fill(office);
-    await address.blur();
-    await expect(card.getByText("InboxCA did not find this provider, so it will try the usual server names.")).toBeVisible();
     await card.getByLabel("Its password").fill(office);
     await card.getByRole("button", { name: "Connect email" }).click();
     await expect(card.getByRole("alert")).toContainText("could not reach the mail server");

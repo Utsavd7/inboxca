@@ -4,7 +4,7 @@ InboxCA is a product by Orelu for Indian CA firms. This repo contains the public
 
 ## Architecture
 
-![InboxCA architecture: the firm team uses the app, Supabase and background jobs; a separate file worker handles the firm drive and planned workspace, with cloud deployment pending.](docs/assets/architecture.png)
+![InboxCA architecture: the firm team uses the app, Supabase, background jobs and Cashfree billing; a separate file worker views, checks and reads the firm drive's files, with cloud deployment pending.](docs/assets/architecture.png)
 
 [Open the diagram source](docs/architecture.html). It shows the target design, with planned cloud services labelled. The web app, database, jobs and file worker run locally. Hosting for the mail library remains open.
 
@@ -16,7 +16,6 @@ Supporting services are kept outside the overview so the main path stays readabl
 | --- | --- |
 | Amazon SES, Mumbai | System email from Orelu; client replies use the firm's mailbox |
 | Web Push | Staff phone notifications |
-| Cashfree hosted checkout, AutoPay and verified webhooks, behind a provider neutral billing core | Orelu plan payments, receipts and refunds; off until its keys are set |
 | Optional AI adapter | Off until the privacy and evaluation gates pass; confirmed records are still required for outputs |
 | Sentry server reporter | Error type, code frames and route pattern only; off without configuration |
 
