@@ -5,10 +5,11 @@ import { redirect } from "next/navigation";
 import { statusKind, type Delivery } from "@/src/jobs/answer-mail";
 import { runJobsSoon } from "@/src/jobs/run-soon";
 import { aiReady, askAi } from "@/src/lib/ai";
+import { aiReasons, writeReply } from "@/src/lib/ai-reply";
 import { answerOf } from "@/src/lib/answers";
 import { serverCrypto } from "@/src/lib/crypto";
 import { firmMailer } from "@/src/lib/firm-mail";
-import { replySubject, stripQuoted, threadKeys } from "@/src/lib/mail-view";
+import { replySubject, threadKeys } from "@/src/lib/mail-view";
 import { currentWriter } from "@/src/lib/member";
 import { sendShare } from "@/src/lib/shares";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -134,30 +135,15 @@ export async function draftEmail(_previous: Draft, form: FormData): Promise<Draf
 }
 
 // "Write a reply with AI": a draft for the person to read, change and send themselves, and
-// the client's papers it thinks were asked for. Off until an AI key is set.
+// the client's papers it thinks were asked for, from the client's records by the assistant's
+// tools under the person's own access, with the output checks (src/lib/ai-reply.ts). Off until
+// an AI key is set.
 export async function draftReply(_previous: Draft, form: FormData): Promise<Draft> {
   const { supabase, membership } = await currentWriter();
   if (!membership || !aiReady()) return { error: "Turns on when AI is set up." };
-  const open = await conversation(supabase, membership.firmId, { mail: String(form.get("mail") ?? "") });
-  if (!open?.event?.client_id || !open.messages.length) return { error: "The email could not be read just now." };
-  const { data: documents } = await supabase.from("documents").select("id, name").eq("client_id", open.event.client_id).eq("status", "filed").order("received_at", { ascending: false }).limit(100);
-  const answer = await askAi(
-    "reply_draft",
-    "You draft a short, polite plain text reply for an Indian CA firm to its client's email. Never invent figures, dates or facts that are not in the emails. Answer as JSON: {\"reply\": string, \"papers\": string[]} where papers are ids from the list that the client asked for.",
-    JSON.stringify({
-      firm: membership.firmName,
-      client: open.client?.name,
-      conversation: open.messages.map((message) => ({ from: message.box === "sent" ? "firm" : "client", date: message.date, text: stripQuoted(message.text).slice(0, 4000) })),
-      papers: documents ?? [],
-    }),
-  );
-  try {
-    const parsed = JSON.parse(answer ?? "") as { reply?: unknown; papers?: unknown };
-    const ids = new Set(documents?.map((document) => document.id));
-    return { text: String(parsed.reply ?? "").slice(0, 20_000), papers: (Array.isArray(parsed.papers) ? parsed.papers : []).map(String).filter((paper) => ids.has(paper)) };
-  } catch {
-    return { error: "No draft this time. Write the reply yourself." };
-  }
+  const result = await writeReply(supabase, membership.firmId, membership.firmName, String(form.get("mail") ?? ""), "reply_draft", !membership.viewOnlyUntil);
+  if (!result) return { error: "The email could not be read just now." };
+  return result.outcome === "draft" ? { text: result.text, papers: result.papers } : { error: `No draft this time. ${aiReasons[result.reason]}` };
 }
 
 // InboxCA's answer by rules (Inbox, answered B and C) from the open email or the Inbox's list:

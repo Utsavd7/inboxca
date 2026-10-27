@@ -13,6 +13,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { documentTypes, folderFor } from "@/src/lib/documents";
 import type { FolderOrder } from "@/src/lib/drive";
 import { aiReady } from "@/src/lib/ai";
+import { aiDraftOf } from "@/src/lib/ai-reply";
 import { mailLive } from "@/src/lib/mail-live";
 import { paragraphs, sentKind, suggestPapers, whenRange, whens, type MailItem } from "@/src/lib/mail-view";
 import { currentMember, myQuestions } from "@/src/lib/member";
@@ -407,7 +408,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const clientId = open.client?.id ?? null;
     const request = event ? pending.get(event.id) : undefined;
     const inIds = open.messages.filter((message) => message.box === "inbox").map((message) => message.messageId);
-    const [{ data: threadEvents }, { data: clientPapers }, { data: links }, { data: fileTo }, { data: what }, { data: sends }, { data: notice }, sender] = await Promise.all([
+    const [{ data: threadEvents }, { data: clientPapers }, { data: links }, { data: fileTo }, { data: what }, { data: sends }, { data: notice }, sender, aiWork] = await Promise.all([
       inIds.length ? supabase.from("email_events").select("id, provider_message_id").eq("firm_id", firm).in("provider_message_id", inIds) : Promise.resolve({ data: [] as { id: string; provider_message_id: string }[] }),
       clientId && event ? supabase.from("documents").select("id, name, document_type, period_key, prepared").eq("client_id", clientId).eq("status", "filed").order("received_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] as { id: string; name: string; document_type: string; period_key: string; prepared: null }[] }),
       request?.reason_code === "client_unclear" && event ? supabase.from("contact_clients").select("client_id, clients(name)").eq("contact_id", event.contact_id ?? "") : Promise.resolve({ data: [] as { client_id: string; clients: { name: string } | null }[] }),
@@ -419,6 +420,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       event ? supabase.from("shares").select("document_id, status, documents(name)").eq("email_event_id", event.id).in("status", ["sent", "waiting"]).limit(10) : Promise.resolve({ data: [] as { document_id: string; status: string; documents: { name: string } | null }[] }),
       event ? supabase.from("tasks").select("id").eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1).maybeSingle() : Promise.resolve({ data: null }),
       event ? event.clients?.name ?? contactName(firm, event).then((name) => name || "A contact") : "",
+      // AI's sealed draft for an email waiting for a person, or why AI left it to them; not for
+      // someone who may only view, as it may carry the upload link.
+      request && event && !membership.viewOnlyUntil ? aiDraftOf(firm, request.id, event.id).catch(() => null) : null,
     ]);
     // InboxCA's answer shows on its own above, so the line says what else InboxCA did.
     const outcomes = what?.outcomes ?? [];
@@ -617,9 +621,10 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           ) : event?.client_id && connected && (
             // An email waiting for a person gets a reply suggested by why it waits; a paper not in the drive, the client's Ask for papers too.
             // Once it no longer waits, the box starts empty again.
-            <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : undefined} mail={event.id} papers={attachable(clientPapers)} suggested={suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
+            <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}:${aiWork && "text" in aiWork ? "ai" : ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : aiWork && "text" in aiWork ? aiWork.text : undefined} mail={event.id} papers={attachable(clientPapers)} suggested={aiWork && "papers" in aiWork ? [...suggested, ...aiWork.papers] : suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
               suggestion={request ? suggestedReply(request.reason_code, { name: sender || open.client?.name || "", client: open.client?.name ?? "", firm: membership.firmName, paper: asked }) : undefined}
-              askPapers={request?.reason_code === "record_not_found" && !membership.viewOnlyUntil ? `/app/clients/${event.client_id}?tab=documents&ask=1` : undefined} />
+              askPapers={request?.reason_code === "record_not_found" && !membership.viewOnlyUntil ? `/app/clients/${event.client_id}?tab=documents&ask=1` : undefined}
+              note={aiWork && "text" in aiWork ? "AI wrote this from your records. Check it, then send it. Nothing goes until you do." : aiWork ? `No AI draft. ${aiWork.reason}` : undefined} />
           )}
           {sp.filed && open.client && <Toast>Saved to {open.client.name}. InboxCA is now saving any papers in it to the client&apos;s folder.</Toast>}
         </div>

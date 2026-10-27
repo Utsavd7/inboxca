@@ -70,18 +70,23 @@ describe("smart reminders", () => {
   });
 });
 
-// M5 acceptance: a wrong date, form, period or amount cannot replace the records.
-it("uses the template for an unchecked draft, with AI writing off", async () => {
+// M5 acceptance: a wrong date, form, period or amount cannot replace the records. AI may add
+// only an opening with no fact in it; every line of the template stays.
+it("keeps every line of the template and takes only a fact free AI opening", async () => {
   const { checkedReminder } = await import("@/src/lib/reminders");
   const template = reminderEmail("Invented Textiles", "Test Firm", [task({ id: "a" })], today);
-  expect(checkedReminder(template, template)).toBe(template);
-  for (const draft of [
-    { ...template, text: template.text.replace("20 Oct 2026", "21 Oct 2026") },
-    { ...template, text: template.text.replace("GSTR-3B", "GSTR-1") },
-    { ...template, text: template.text.replace("Sep 2026", "Aug 2026") },
-    { ...template, text: template.text + "\nPay Rs 1,23,456." },
-    { ...template, text: template.text + "\nYou owe two lakh rupees." },
-  ]) expect(checkedReminder(draft, template)).toBe(template);
+  expect(checkedReminder(null, template)).toBe(template);
+  for (const opening of [
+    "Your GSTR-3B is due on 21 Oct 2026.",
+    "Hope you are well. Your return for Aug 2026 is late.",
+    "Please pay Rs 1,23,456 soon.",
+    "You owe two lakh rupees.",
+    "We recommend you invest before the year ends.",
+    "Pay here: https://pay.invented.test/now",
+  ]) expect(checkedReminder(opening, template)).toBe(template);
+  const warm = checkedReminder("We hope you and your family are keeping well.", template);
+  expect(warm.subject).toBe(template.subject);
+  expect(warm.text).toBe(template.text.replace("\n\n", "\n\nWe hope you and your family are keeping well.\n\n"));
 });
 
 it("uses the firm's chosen stages, including none, with the current stages as default", async () => {

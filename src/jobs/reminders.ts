@@ -7,6 +7,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { firmMailer } from "@/src/lib/firm-mail";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { askDays, firstAsk, followUpDue, papersFor, periodsOf, planAsks, planReminders, reminderStages, checkedReminder, type FollowUp, type ReminderTask } from "@/src/lib/reminders";
+import { reminderOpening } from "@/src/lib/ai-reply";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Handler } from "./runner";
 
@@ -163,10 +164,13 @@ export const sendReminders: Handler = async (job) => {
         continue;
       }
     }
-    await markAll("sending");
     const person = people.get(clientId)!;
+    // A warm opening by AI when credits allow (PLAN.md 5.18), asked before the send starts.
+    const opening = await reminderOpening(firm, firmRow.name, person.name);
+    await markAll("sending");
     const to = await crypto.decrypt(firm, `clients/${clientId}/email`, person.email_enc!);
-    const { subject, text } = checkedReminder(undefined, emailTemplates.reminder(person.name, firmRow.name, mine, today, asks));
+    const template = emailTemplates.reminder(person.name, firmRow.name, mine, today, asks);
+    const { subject, text } = checkedReminder(opening, template);
     const sent = await mailer.send(to, subject, text, messageId);
     await markAll(sent ? "sent" : mailer.waitUntil ? "failed" : "sending");
     if (!sent) {
@@ -182,7 +186,7 @@ export const sendReminders: Handler = async (job) => {
         action: "reminder.sent",
         entity_type: "client",
         entity_id: clientId,
-        details: { template:`reminder.en.${TEMPLATE_VERSION}`,tasks: mine.map((task) => task.id), requests: asks.map((ask) => ask.requestId), works: [...new Set(mine.map((task) => workOfService(task.code)))] },
+        details: { template:`reminder.en.${TEMPLATE_VERSION}${text === template.text ? "" : ".ai"}`,tasks: mine.map((task) => task.id), requests: asks.map((ask) => ask.requestId), works: [...new Set(mine.map((task) => workOfService(task.code)))] },
       });
   }
   return uncertain ? {retry:"mail_not_sent",patient:true} : {done:true};
