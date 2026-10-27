@@ -5,17 +5,8 @@
 .clients-page .empty { padding: var(--s7) var(--s4); gap: var(--s2); }
 .clients-page .empty .b { margin-top: var(--s2); }
 
-/* Filter pills and search on one line under the header. The current pill's dark thumb slides
-   from the last one (link-tabs.tsx), so the link itself stays clear. */
+/* Filter pills (the same as Inbox's, app.css .pills) and search on one line under the header. */
 .clients-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
-.clients-page .pills { gap: var(--s2); padding: 0; background: none; }
-.clients-page .pills a { height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); color: var(--ink-2); font-weight: 600; box-shadow: var(--shadow-button); transition: background var(--fast) var(--out), border-color var(--fast) var(--out), color var(--fast) var(--out); }
-.clients-page .pills a:hover { border-color: var(--line-3); color: var(--ink); }
-.clients-page .pills a[aria-current="page"] { border-color: var(--ink); background: none; color: var(--surface); }
-/* Plain link pills (a client's registers and sets of figures) have no thumb: the link is the fill. */
-.clients-page .pills a[aria-current="page"]:not(:has(.tab-thumb)) { background: var(--ink); }
-.clients-page .pills .tab-thumb { border-radius: var(--r2); }
-.clients-page .pills small { margin-left: var(--s2); color: inherit; font-size: 12px; font-weight: 600; opacity: 0.8; }
 .clients-find { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .clients-find .search { position: relative; width: 280px; max-width: 100%; }
 .clients-find .search svg { position: absolute; top: var(--s2); left: var(--s3); color: var(--ink-3); pointer-events: none; }
@@ -38,6 +29,8 @@
 .clients-page .pager p:empty { display: none; }
 /* The next return over its date, wrapping rather than pushing the status out of view. */
 .clients-page .t td.clients-next { min-width: 200px; white-space: normal; line-height: 1.35; }
+/* Where a paper came from wraps too, so the status and Open stay on screen. */
+.clients-page .t td:has(> .came-from) { min-width: 240px; white-space: normal; }
 /* A client late and missing papers shows both pills, late first, one over the other. */
 .clients-tags { display: inline-flex; flex-direction: column; align-items: flex-start; gap: var(--s1); }
 /* Copy for a number or a path waits for the pointer on its row, as quick actions do. */
@@ -114,6 +107,7 @@
 .client-tools a:not(.b) { color: var(--accent); font-weight: 600; text-decoration: none; }
 .client-tools a:not(.b):hover { text-decoration: underline; }
 .client-tools .page-actions { margin-left: auto; }
+.client-tools .clients-find .search { width: 360px; }
 .client-paper { display: grid; min-width: 0; }
 .client-paper .sub { display: flex; align-items: center; gap: var(--s1); font-size: 12px; }
 .client-docs .cell-form { justify-content: flex-end; }
@@ -128,7 +122,7 @@
 .clients-page .t input[type="date"] { width: auto; }
 /* A notice's status as a pill that is also its menu. */
 .pill-select.badge { padding-right: 0; }
-.ui .pill-select .cell-select { min-width: 0; height: 22px; padding: 0 var(--s5) 0 0; border: 0; background-color: transparent; color: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ui .pill-select .cell-select { min-width: 0; height: 22px; padding: 0 var(--s5) 0 0; border: 0; background-color: transparent; background-position: right 2px center; background-size: 14px; color: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .ui .pill-select .cell-select:hover { background-color: transparent; }
 
 /* A client's Activity: a vertical timeline, each change with its own icon. */

@@ -12,7 +12,8 @@ import { InviteForm } from "./invite-form";
 import "./people.css";
 
 const statusNames: Record<string, string> = { active: "Active", invited: "Invited", deactivated: "Removed" };
-const statusTones: Record<string, Tone> = { active: "done", invited: "warn" };
+// Active is the usual state, so it stays quiet; green means done only.
+const statusTones: Record<string, Tone> = { invited: "warn" };
 // Each role keeps one colour on its pill; the colour names the role, the word says it.
 const roleTones: Record<string, Tone> = { owner: "purple", partner: "blue", manager: "blue" };
 // What a change on a person says once it is saved (?saved=).

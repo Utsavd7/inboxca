@@ -48,7 +48,7 @@ export async function YourComputers() {
   const computers = computersOf(data.user?.app_metadata.devices).slice().reverse();
   const when = (at: string) => at ? new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
   return (
-    <ul className="rows">
+    <ul className="set-rows">
       {computers.map((computer) => (
         <li key={computer.id}>
           <span className="grow"><strong>{computer.id === mine ? "This computer" : "Another computer"}</strong>, approved {when(computer.at)}</span>
