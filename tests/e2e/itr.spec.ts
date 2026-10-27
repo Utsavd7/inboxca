@@ -21,11 +21,12 @@ type Figure={label:string;value:string;kind?:"number"|"text"|"date"};
 // The pinned official schema, checked here as the file worker checks it.
 const officialSchema=(file:string)=>{const ajv=new Ajv({schemaId:"auto",allErrors:true,extendRefs:true,logger:false});ajv.addMetaSchema(draft4);return ajv.compile(JSON.parse(readFileSync(`reference/official/${file}`,"utf8")));};
 async function seedClient(name:string,email:string) {
-  const secret=key(),owner=`itr-${randomUUID()}@invented.test`,firm=await seedFirm(name,owner,secret),client=randomUUID(),registration=randomUUID(),account=randomUUID(),crypto=serverCrypto();
-  await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind,email_enc,email_bidx) values($1,$2,'Invented ITR Person','individual',$3,$4)",[client,firm.firmId,await crypto.encrypt(firm.firmId,`clients/${client}/email`,email),await crypto.blindIndex(firm.firmId,"email",email)]);
+  // Each test's client has its own name, as tests run side by side and the test drive is shared.
+  const secret=key(),owner=`itr-${randomUUID()}@invented.test`,firm=await seedFirm(name,owner,secret),client=randomUUID(),registration=randomUUID(),account=randomUUID(),crypto=serverCrypto(),person=`Invented ITR Person ${randomBytes(3).toString("hex")}`;
+  await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind,email_enc,email_bidx) values($1,$2,$5,'individual',$3,$4)",[client,firm.firmId,await crypto.encrypt(firm.firmId,`clients/${client}/email`,email),await crypto.blindIndex(firm.firmId,"email",email),person]);
   await query(local.dbUrl,"insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values($1,$2,$3,'pan',$4,$5)",[registration,firm.firmId,client,await crypto.encrypt(firm.firmId,`clients/${client}/pan`,pan),await crypto.blindIndex(firm.firmId,"pan",pan)]);
   await query(local.dbUrl,"insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc) values($1,$2,'drive','local',$3,$4)",[account,firm.firmId,await crypto.encrypt(firm.firmId,`accounts/${account}/address`,"Invented drive"),await crypto.encrypt(firm.firmId,`accounts/${account}/credentials`,"{}")]);
-  return {firm,owner,secret,client,registration,crypto};
+  return {firm,owner,secret,client,registration,crypto,person};
 }
 async function signIn(page:Page,email:string,secret:string) {
   await emailStep(page,email);await page.getByLabel("6 digit code from the app").fill(totp(secret));await page.getByRole("button",{name:"Continue",exact:true}).click();await expect(page).toHaveURL(/\/app$/);
@@ -40,7 +41,7 @@ async function lines(firm:string,draft:string,figures:[string,Figure][],source:D
 // M6 ITR acceptance: a client with Form 16 figures becomes an approved ITR-1 file, filed.
 test("Form 16 figures, client details and entered details become an approved ITR-1 JSON download",async({page})=>{
   test.setTimeout(240_000);loadEnvConfig(process.cwd());
-  const {firm,owner,secret,client,registration}=await seedClient("Invented ITR Browser Firm","invented.person@invented.test");
+  const {firm,owner,secret,client,registration,person}=await seedClient("Invented ITR Browser Firm","invented.person@invented.test");
   const drive=localDrive(TEST_DRIVE),form16=randomUUID(),paper=randomUUID(),request=itrRequest("ITR1");
   const field=(path:string)=>itrFieldName("ITR1",path);
   try {
@@ -94,7 +95,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await page.screenshot({path:test.info().outputPath("itr-prepare.png"),fullPage:true});
     await expect(prepare).toContainText("Invented Form 16.pdf");await prepare.getByRole("button",{name:"Prepare ITR-1 AY 2026-27"}).click();await expect(page).toHaveURL(/\/files\/.*\/view/);
     let [prepared]=await query(local.dbUrl,checked,[firm.firmId]);
-    expect(prepared.prepared.status).toBe("approved");expect(prepared.name).toMatch(/^Invented ITR Person - ITR-1 - AY 2026-27 - v\d\.json$/);expect(prepared.drive_file_id).toContain("Income tax/");expect(prepared.drive_file_id).toContain("/Prepared/");
+    expect(prepared.prepared.status).toBe("approved");expect(prepared.name).toMatch(new RegExp(`^${person} - ITR-1 - AY 2026-27 - v\\d\\.json$`));expect(prepared.drive_file_id).toContain("Income tax/");expect(prepared.drive_file_id).toContain("/Prepared/");
     expect(prepared.prepared.sources.map((source:{id:string})=>source.id).sort()).toEqual([own.id,paper].sort());
     expect((await page.request.get(`/app/files/${prepared.id}`)).status()).toBe(404);
     await page.goto(`/app/clients/${client}?tab=outputs`);let row=page.locator("li").filter({has:page.getByRole("link",{name:prepared.name,exact:true})});
@@ -169,7 +170,7 @@ test("ITR-2, ITR-3 and ITR-4 are prepared from checked figures, and a return cor
 // Form 26AS that differs keeps the next one a draft for the CA. Invented data only.
 test("Fill makes an ITR draft to check, the last check fills the checked return, and a Form 26AS difference keeps it a draft",async({page})=>{
   test.setTimeout(240_000);loadEnvConfig(process.cwd());
-  const {firm,owner,secret,client,registration}=await seedClient("Invented ITR Fill Firm","invented.fill@invented.test");
+  const {firm,owner,secret,client,registration,person}=await seedClient("Invented ITR Fill Firm","invented.fill@invented.test");
   // A paper's figures carry its own id, as the readers save them.
   const drive=localDrive(TEST_DRIVE),request=itrRequest("ITR1"),own=randomUUID(),paper=randomUUID(),statement=paper,bank="BLRZ99999Z"; // ggignore: invented bank TAN.
   const prepared="select id,name,size,prepared from public.documents where firm_id=$1 and prepared is not null order by (prepared->>'version')::int";
@@ -194,7 +195,7 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     await expect(checks).toContainText("1 figure not checked yet.");await expect(checks.getByRole("listitem")).toContainText("invented@invented.test");
     await page.screenshot({path:test.info().outputPath("itr-fill.png"),fullPage:true});
     let forms=await query(local.dbUrl,prepared,[firm.firmId]);
-    expect(forms).toHaveLength(1);expect(forms[0].name).toBe("Invented ITR Person - ITR-1 - AY 2026-27 - v1 (to check).json");expect(forms[0].prepared).toMatchObject({status:"draft",filled:true});expect(Number(forms[0].size)).toBeGreaterThan(0);
+    expect(forms).toHaveLength(1);expect(forms[0].name).toBe(`${person} - ITR-1 - AY 2026-27 - v1 (to check).json`);expect(forms[0].prepared).toMatchObject({status:"draft",filled:true});expect(Number(forms[0].size)).toBeGreaterThan(0);
     // Three days before the due date the automatic fill finds the same draft.
     await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date+3 where id=$1",[task]);
     await query(local.dbUrl,"insert into public.jobs(firm_id,kind,entity_type,entity_id,idempotency_key) values($1,'fill_return','task',$2,$3)",[firm.firmId,task,`fill_return:${task}:test`]);
@@ -208,7 +209,7 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
     await expect.poll(async()=>(await query(local.dbUrl,prepared,[firm.firmId])).filter(form=>Number(form.size)>0).length,{timeout:60_000}).toBe(2);
     forms=await query(local.dbUrl,prepared,[firm.firmId]);
-    expect(forms[1].name).toBe("Invented ITR Person - ITR-1 - AY 2026-27 - v2.json");expect(forms[1].prepared.status).toBe("approved");expect(forms[1].prepared.filled).toBeUndefined();
+    expect(forms[1].name).toBe(`${person} - ITR-1 - AY 2026-27 - v2.json`);expect(forms[1].prepared.status).toBe("approved");expect(forms[1].prepared.filled).toBeUndefined();
     // Form 26AS arrives with TDS the return does not claim: the next fill waits for the CA.
     const bytes=Buffer.from("Invented Form 26AS text for AY 2026-27"),sha256=createHash("sha256").update(bytes).digest("hex");
     const saved=await drive.save(await drive.ensureFolder([firm.firmId,"Income tax"]),"Invented 26AS.txt",bytes);if(saved==="taken") throw new Error("Test collision");
@@ -218,7 +219,7 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     await runJobs(page.request,firm.firmId);
     await expect.poll(async()=>(await query(local.dbUrl,prepared,[firm.firmId])).length,{timeout:60_000}).toBe(3);
     forms=await query(local.dbUrl,prepared,[firm.firmId]);
-    expect(forms[2].name).toBe("Invented ITR Person - ITR-1 - AY 2026-27 - v3.json");expect(forms[2].prepared.status).toBe("draft");
+    expect(forms[2].name).toBe(`${person} - ITR-1 - AY 2026-27 - v3.json`);expect(forms[2].prepared.status).toBe("draft");
     await page.goto(`/app/clients/${client}?tab=outputs`);
     const held=page.locator("li").filter({has:page.getByRole("link",{name:forms[2].name,exact:true})});
     await expect(held.getByRole("region",{name:"Differences with Form 26AS"})).toContainText("Check before approving: 1 difference with Form 26AS");

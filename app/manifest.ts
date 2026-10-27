@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
-// Lets InboxCA be added to a phone's home screen, which iPhones need for notifications.
+// Lets a browser install InboxCA as an app on a laptop or office PC (PLAN.md 5.17: laptop only;
+// notifications are an optional setting for that computer).
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "InboxCA",
