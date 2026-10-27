@@ -885,6 +885,9 @@ isOneToOne: false
 "change_role":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
                            },
+"claim_downloads":
+{ Args: { "lines": Json,"most"?: number,"target_firm": string }; Returns: boolean
+                           },
 "claim_jobs":
 { Args: { "batch"?: number,"lease_seconds"?: number }; Returns: {
               "attempts": number,

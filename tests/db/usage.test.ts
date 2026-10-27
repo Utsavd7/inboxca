@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { actAs, asOwner, connect, rollback } from "./db";
@@ -107,6 +108,21 @@ describe("the owner's meters", () => {
       await paper("00000000-0000-4000-8000-000000000e77", "2026-10-20");
       expect(Number((await usage()).workspace_bytes)).toBeGreaterThan(Number(before.workspace_bytes));
     }));
+
+  it("never let downloads at the same moment pass the month's downloads", async () => {
+    const firm = randomUUID();
+    await db.query("insert into public.firms (id, name, state_code, status) values ($1, 'Usage Claims', '24', 'active')", [firm]);
+    try {
+      const lines = JSON.stringify([{ action: "document.downloaded", entity_id: randomUUID() }]);
+      const people = await Promise.all(Array.from({ length: 12 }, () => connect()));
+      const claimed = await Promise.all(people.map((person) => person.query("select public.claim_downloads($1, $2, 5) ok", [firm, lines]).then((result) => result.rows[0].ok)));
+      await Promise.all(people.map((person) => person.end()));
+      expect(claimed.filter(Boolean)).toHaveLength(5);
+      expect((await db.query("select count(*)::int n from public.activity_log where firm_id = $1 and action = 'document.downloaded'", [firm])).rows[0].n).toBe(5);
+    } finally {
+      await db.query("with gone as (select set_config('app.log_purge', 'on', true)) delete from public.firms where id = $1 and exists (select 1 from gone)", [firm]);
+    }
+  });
 
   it("keep papers, email records and client records counted in InboxCA storage after they are deleted", () =>
     rollback(db, async () => {

@@ -7,8 +7,8 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { sendSystemMail } from "@/src/lib/system-mail";
 import { docText, docTitles, taxLines, type Doc } from "./documents";
 import {
-  addDays, daysBetween, financialYear, formulaSchema, GB, gstOn, indiaDay, mandateMax, methodsFor, moneyBackLastDay, overdueState, periodEnd, planFit, planPrice, prorate,
-  RETRY_DAYS, rupees, serialNumber, taxSchema, toYearly, withGst, type Cycle, type DocKind, type FirmPlan, type Method, type PlanFormula, type Tax,
+  addDays, daysBetween, financialYear, formulaSchema, GB, gstOn, indiaDay, mandateMax, methodsFor, moneyBackLastDay, newPlanYear, overdueState, periodEnd, planFit, planPrice, prorate,
+  RETRY_DAYS, rupees, serialNumber, sizedByWork, taxSchema, toYearly, withGst, type Cycle, type DocKind, type FirmPlan, type Method, type PlanFormula, type Tax,
 } from "./money";
 import { billingProvider, type BillingEvent, type Checkout, type PaymentProvider } from "./provider";
 
@@ -110,6 +110,38 @@ export async function fitOf(admin: Admin, firmId: string, formula: PlanFormula, 
   const { data } = await admin.rpc("firm_usage", { target_firm: firmId, today: day });
   const used = data?.[0];
   return used ? planFit(formula, sub.plan as unknown as SubPlan, sub.cycle as Cycle, { returns: used.returns_so_far, returnsByMarch: used.returns_this_year, bytes: Number(used.workspace_bytes), bytesByMarch: Number(used.workspace_by_march) }, day) : null;
+}
+
+// The work of the plan year a renewal ends, in returns a year: measured to the day before a yearly
+// payer's renewal, or to 31 March for a monthly payer, and never past today.
+type Renewing = Pick<Subscription, "plan" | "cycle" | "paid_until">;
+async function yearWork(admin: Admin, firmId: string, formula: PlanFormula, sub: Renewing, today: string) {
+  const end = sub.cycle === "yearly" ? addDays(sub.paid_until!, -1) : `${sub.paid_until!.slice(0, 4)}-03-31`;
+  return (await fitOf(admin, firmId, formula, sub, end < today ? end : today))?.measured ?? null;
+}
+
+// The plan a renewal is for: a move down the owner chose, or the plan as it is. At a new plan year
+// the floor the meters moved the plan up to comes down to the work the year measured (never up:
+// that is the move up, with its own notice), but never so far that the firm lands on a smaller
+// plan it did not choose (5.14).
+async function renewalPlan(admin: Admin, firmId: string, formula: PlanFormula, sub: Renewing, today: string): Promise<FirmPlan> {
+  const plan = sub.plan as unknown as SubPlan;
+  const base = plan.next ?? plan;
+  if (base.returns === undefined || !newPlanYear(sub.cycle as Cycle, sub.paid_until!)) return base;
+  const reset = { ...base, returns: Math.min(base.returns, (await yearWork(admin, firmId, formula, sub, today)) ?? base.returns) };
+  return plan.next || planPrice(formula, reset, sub.cycle as Cycle).paise === planPrice(formula, base, sub.cycle as Cycle).paise ? reset : base;
+}
+
+// The move down (5.14): from 30 days before a renewal that starts a new plan year until it is
+// raised, the plan the year's work fits, when it costs less than the plan now. The owner is offered
+// it on one card and by one email, and it applies at that renewal only when the owner accepts.
+export async function moveDownFit(admin: Admin, firmId: string, formula: PlanFormula, sub: Renewing, today: string) {
+  const plan = sub.plan as unknown as SubPlan;
+  const ahead = sub.paid_until ? daysBetween(today, sub.paid_until) : 0;
+  if (plan.next || ahead <= 3 || ahead > 30 || !newPlanYear(sub.cycle as Cycle, sub.paid_until!)) return null;
+  const measured = await yearWork(admin, firmId, formula, sub, today);
+  const down = measured === null ? null : sizedByWork(formula, plan, measured);
+  return down && planPrice(formula, down, sub.cycle as Cycle).paise < planPrice(formula, plan, sub.cycle as Cycle).paise ? { plan: down, on: sub.paid_until! } : null;
 }
 
 // A move to a bigger plan or a switch to yearly payment raised on the mandate and not taken yet.
@@ -218,8 +250,9 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
   if (what.kind === "renewal") {
     if (sub.paid_until > addDays(today, 3)) return { error: "Your plan is paid until then already." };
     const period: [string, string] = [sub.paid_until, periodEnd(sub.paid_until, cycle)];
-    lines = withPeriod(planPrice(formula, plan.next ?? plan, cycle).lines, period);
-    details = { period, plan: plan.next ?? plan };
+    const next = await renewalPlan(admin, firmId, formula, sub, today);
+    lines = withPeriod(planPrice(formula, next, cycle).lines, period);
+    details = { period, plan: next };
   } else if (what.kind === "topup") {
     if (await blocksThisMonth(admin, firmId, plan, today) >= current.blockCap) return { error: "Your plan has all the extra AI it can take this month. Move to a bigger plan for more." };
     lines = [{ text: `AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits for this month`, paise: formula.aiBlock.price * 100 }];
@@ -322,17 +355,22 @@ export async function stopAutoPay(firmId: string, actor: string | null, by: "own
 }
 
 // A smaller plan, from the next renewal (5.14.1 Plan changes); never below the people active now.
-export async function setDowngrade(firmId: string, actor: string, plan: FirmPlan | null) {
+// "fit": the move down the year's work fits (moveDownFit), worked out here again.
+export async function setDowngrade(firmId: string, actor: string, chosen: FirmPlan | "fit" | null) {
   const admin = supabaseAdmin();
   const { data: sub } = await admin.from("subscriptions").select("*").eq("firm_id", firmId).maybeSingle();
   if (!sub) return "Set up AutoPay first.";
+  const { formula } = chosen === "fit" ? await billingSettings(admin) : { formula: null };
+  const fit = formula && (await moveDownFit(admin, firmId, formula, sub, indiaDay(new Date())));
+  if (chosen === "fit" && !fit) return "Your plan is the one your firm's work fits.";
+  const plan = fit ? fit.plan : (chosen as FirmPlan | null);
   if (plan) {
     const { count } = await admin.from("firm_members").select("user_id", { count: "exact", head: true }).eq("firm_id", firmId).in("status", ["active", "invited"]);
     if (plan.people < (count ?? 1)) return `Your firm has ${count} people. Remove people in People first, or keep a team of ${count}.`;
   }
   const rest = { ...planOf(sub), next: undefined };
-  // Never below the work the meters measured (5.14).
-  await admin.from("subscriptions").update({ plan: json(plan ? { ...rest, next: { ...plan, returns: rest.returns } } : rest) }).eq("firm_id", firmId);
+  // Never below the work the meters measured (5.14): the move down that fits carries the year's.
+  await admin.from("subscriptions").update({ plan: json(plan ? { ...rest, next: fit ? plan : { ...plan, returns: rest.returns } } : rest) }).eq("firm_id", firmId);
   await note(admin, firmId, actor, "billing.downgrade_set");
   return null;
 }
@@ -655,7 +693,7 @@ export async function dailyBilling(firmId: string, now = new Date()) {
   // The renewal once, from 3 days ahead; after a failed eNACH or card debit, again on days 1, 3
   // and 6 (Cashfree retries UPI AutoPay itself).
   if (sub.status === "active" && sub.mandate && !waiting && ((ahead >= 0 && ahead <= 3 && !tried?.length) || (sub.method !== "upi" && RETRY_DAYS.includes(late)))) {
-    const next = plan.next ?? plan;
+    const next = await renewalPlan(admin, firmId, formula, sub, today);
     const period: [string, string] = [due, periodEnd(due, sub.cycle as Cycle)];
     const priced = quote(formula, tax, firm.stateCode, next, sub.cycle as Cycle, due < today ? today : due);
     if (priced.recurring.total > plan.maxPaise) {
@@ -681,6 +719,7 @@ export async function dailyBilling(firmId: string, now = new Date()) {
     }
   }
   if (firm.status === "active") await fitDay(admin, provider, formula, tax, firm, sub, email, now);
+  if (firm.status === "active") await downDay(admin, formula, tax, firm, sub, email, today);
   const status = overdueState(due, today);
   if (status === firm.status || !["active", "grace", "read_only"].includes(firm.status)) return;
   // A debit still on its way keeps the firm as it is until it fails.
@@ -757,6 +796,23 @@ async function fitDay(admin: Admin, provider: PaymentProvider, formula: PlanForm
     `${firm.name}'s work has passed its ${current.name} plan, so it moves to the ${moved.name} plan, ${rupees(withGst(moved.paise, tax, firm.stateCode, today).total)} ${per}. Orelu (InboxCA) will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, the difference for ${long(today)} to ${long(until)}.`,
     `AutoPay reference: ${sub.mandate}.`,
     `To stop it, turn AutoPay off in Settings, Billing before then: ${link(BILLING)}`,
+  ]);
+}
+
+// The move down, emailed once for each renewal that starts a new plan year (5.14); the owner's card
+// on Today and in Settings, Billing offers the same plan and price.
+async function downDay(admin: Admin, formula: PlanFormula, tax: Tax | null, firm: Firm, sub: Subscription, email: string | null, today: string) {
+  const down = await moveDownFit(admin, firm.id, formula, sub, today);
+  if (!down) return;
+  const { data: first } = await admin.from("requests").upsert({ firm_id: firm.id, kind: "alert", entity_type: `plan_down_${down.on}`, entity_id: firm.id, reason_code: "plan_down_suggested", status: "done" }, { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true }).select("id");
+  if (!first?.length) return;
+  const cycle = sub.cycle as Cycle;
+  const [now, then] = [planPrice(formula, planOf(sub), cycle), planPrice(formula, down.plan, cycle)];
+  const price = (paise: number) => `${rupees(withGst(paise, tax, firm.stateCode, down.on).total)} ${cycle === "monthly" ? "a month" : "a year"}${gstOn(tax, down.on) ? " with GST" : ""}`;
+  await mail(email, `InboxCA: ${firm.name} fits a smaller plan`, [
+    `${firm.name}'s work this year fits the ${then.name} plan, ${price(then.paise)}, in place of the ${now.name} plan, ${price(now.paise)}.`,
+    `To move down at your renewal on ${long(down.on)}, choose Move down in Settings, Billing by ${long(addDays(down.on, -4))}: ${link(BILLING)}`,
+    "Nothing changes unless you choose.",
   ]);
 }
 

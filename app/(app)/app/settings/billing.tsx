@@ -1,7 +1,7 @@
 import { CreditCard, Gauge } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
-import { billingSettings, fitOf, methodWords, moneyBack, movingUp, quote, type SubPlan } from "@/src/lib/billing/billing";
+import { billingSettings, fitOf, methodWords, moneyBack, moveDownFit, movingUp, quote, type SubPlan } from "@/src/lib/billing/billing";
 import { docTitles, type Doc } from "@/src/lib/billing/documents";
 import { addDays, GB, gstOn, indiaDay, mandateMax, planPrice, planSchema, prorate, rupees, toYearly, withGst, type Cycle, type FirmPlan, type Method } from "@/src/lib/billing/money";
 import { billingProvider } from "@/src/lib/billing/provider";
@@ -105,7 +105,7 @@ const ToYearly = ({ pay, paidUntil, today }: { pay: number; paidUntil: string; t
 // shown when either yearly measure reaches 80% of the plan or is on course to pass it. The plan
 // that fits and every amount are the server's; the one action pays the difference for the rest
 // of the paid period. A monthly payer whose year still fits its plan is offered yearly payment
-// instead, never a bigger plan.
+// instead, never a bigger plan. Before a new plan year it offers the move down the year fits.
 export async function PlanFit({ firmId, Card, fit: known }: { firmId: string; Card?: (props: CardProps) => React.ReactNode; fit?: Awaited<ReturnType<typeof fitOf>> }) {
   if (!billingProvider()) return null;
   const admin = supabaseAdmin();
@@ -113,9 +113,18 @@ export async function PlanFit({ firmId, Card, fit: known }: { firmId: string; Ca
   const [{ formula, tax }, { data: sub }, { data: firm }] = await Promise.all([billingSettings(admin), admin.from("subscriptions").select("cycle, paid_until, plan").eq("firm_id", firmId).maybeSingle(), admin.from("firms").select("gstin, state_code, status").eq("id", firmId).single()]);
   if (!formula || !sub?.paid_until || sub.paid_until <= today || firm?.status !== "active") return null;
   const fit = known ?? (await fitOf(admin, firmId, formula, sub, today));
-  if (!fit?.notice) return null;
   const cycle = sub.cycle as Cycle;
   const state = firm.gstin?.slice(0, 2) ?? firm.state_code ?? "";
+  // Before a new plan year, the smaller plan the year's work fits, when there is one.
+  const down = !fit?.notice && (await moveDownFit(admin, firmId, formula, sub, today));
+  if (down) {
+    const smaller = quote(formula, tax, state, down.plan, cycle, down.on);
+    const line = `This year's work fits the ${smaller.price.name} plan: ${rupees(smaller.recurring.total)} ${cycle === "monthly" ? "a month" : "a year"}${smaller.recurring.gst ? " with GST" : ""}, from your renewal on ${longDate(down.on)}`;
+    const button = <form action={moveDown} className={Card ? "set-foot" : undefined}><input type="hidden" name="fit" value="yes" /><Pending className="b b-primary" busy="Saving">Move down at renewal</Pending></form>;
+    return Card ? <Card id="fit" title="Your firm fits a smaller plan" line={`${line}.`}><p className="hint set-after">Nothing changes unless you choose.</p>{button}</Card>
+      : <div className="today-line" role="region" aria-label="Your plan"><Gauge size={16} aria-hidden /><span className="grow"><strong>Your firm fits a smaller plan.</strong> {line}.</span>{button}</div>;
+  }
+  if (!fit?.notice) return null;
   const moved = quote(formula, tax, state, fit.next, cycle, today);
   const current = planPrice(formula, sub.plan as unknown as SubPlan, cycle);
   const year = fit.yearly ? toYearly(formula, sub.plan as unknown as SubPlan, today, sub.paid_until) : null;
