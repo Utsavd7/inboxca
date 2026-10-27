@@ -14,6 +14,12 @@ describe("email triage by rules", () => {
     const guessed = results.filter((email) => email.label === "other" && email.got !== "other");
     expect(guessed.map((email) => `${email.subject} → ${email.got as Label}`)).toEqual([]);
   });
+  it("takes a request for Form 16, Form No. 130, 26AS or Form No. 168 as a request for papers, but not an email that sends one", () => {
+    const email = (text: string, attachments: string[] = []) => classify({ subject: "Request", text, attachments }, "2026-10-17");
+    for (const text of ["Please send my Form 16 for FY 2025-26", "Please send Form No. 130 for tax year 2026-27", "Can you share my 26AS?", "Please send form 168"])
+      expect(email(text), text).toEqual({ label: "records_current", reason: "record_request" });
+    expect(email("Form 16 attached. Please send the list of other papers.", ["form16.pdf"])).toEqual({ label: "data_income_tax", reason: "data_words_with_files" });
+  });
   it("keeps a notice that asks something for the team as well", () => {
     const notice = (text: string) => classify({ subject: "GST notice", text, attachments: [] }, "2026-10-17");
     expect(notice("Sir, we received a notice from the GST department. What should we do? Please call.")).toEqual({ label: "notice_received", reason: "notice_question" });

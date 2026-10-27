@@ -146,12 +146,12 @@ test("the invited person signs in from the email, sets up 2 step and joins", asy
   await expect(page.locator(".rail-firm")).toContainText("Invite Test Firm");
   await expect(page.locator(".rail-me")).toContainText("Manager");
   // A manager's sidebar has People but not Settings, which is the owner's.
-  await expect(page.getByRole("link", { name: "People" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "People", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Settings" })).toHaveCount(0);
   await expect(page.getByText(/has invited you/)).toHaveCount(0);
 
   // Only the owner invites.
-  await page.getByRole("link", { name: "People" }).click();
+  await page.getByRole("link", { name: "People", exact: true }).click();
   await expect(page.getByText(ownerEmail)).toBeVisible();
   await expect(page.getByRole("link", { name: "Invite person" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /^Change/ })).toHaveCount(0);

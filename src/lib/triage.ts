@@ -24,6 +24,7 @@ export const replyReasons: Record<string, string> = {
   record_internal: "Asks for a paper kept inside your firm",
   record_not_found: "Asks for a paper that is not in the drive",
   record_unclear: "Asks for a paper, but more than one paper matches",
+  record_prepared: "Asks for a filed return. Only the prepared return is saved, not the filed copy",
   not_allowed: "Asks for a paper this sender may not receive",
   data_unclear: "Sent papers, but InboxCA could not tell if they are for GST, income tax or tax audit",
   client_unclear: "Writes for several clients. Pick which one",
@@ -48,6 +49,8 @@ const words = {
   notice: ["notice", "intimation", "show cause", "143(1)", "u/s 148", "section 148", "drc-01", "drc 01", "asmt-10", "asmt 10", "demand order", "summons", "नोटिस", "નોટિસ"],
   ask: ["send", "share", "forward", "need a copy", "copy of", "please provide", "can you provide", "bhej*", "chahiye", "भेज*", "चाहिए", "મોકલ*", "જોઈએ"],
   record: ["itr", "acknowledg*", "computation", "financial statement", "balance sheet", "profit and loss", "audit report", "filed return", "return copy", "gst return", "gstr-1", "gstr 1", "gstr1", "gstr-3b", "gstr 3b", "gstr3b", "challan", "certificate", "रिटर्न", "રિટર્ન", "चालान", "ચલણ", "बैलेंस शीट", "બેલેન્સ શીટ", "ऑडिट रिपोर्ट", "ઓડિટ રિપોર્ટ"],
+  // Papers clients both send and ask for: asked only in an email without files.
+  forms: ["form 16", "form16", "form 130", "form no. 130", "form no 130", "26as", "form 168", "form no. 168", "form no 168"],
   past: ["last year", "previous year", "old return", "earlier year", "pichhle saal", "pichle saal", "पिछले साल", "ગયા વર્ષ"],
   data_gst: ["gst data", "sales", "purchase", "invoice", "bills", "b2b", "gstr-1 data", "gstr 1 data", "e-way", "बिल", "बिक्री", "खरीद", "વેચાણ", "ખરીદી", "બિલ"],
   data_income_tax: ["form 16", "form16", "salary", "interest certificate", "capital gain", "80c", "investment proof", "rent receipt", "home loan", "itr data", "income details", "pension", "वेतन", "પગાર"],
@@ -88,7 +91,7 @@ export function classify(email: Email, today: string): { label: Label; reason: s
   const data = (["data_gst", "data_income_tax", "data_tax_audit"] as const)
     .map((label) => ({ label, score: count(everything, label) }))
     .sort((a, b) => b.score - a.score);
-  const asks = count(text, "ask") > 0 && count(text, "record") > 0;
+  const asks = count(text, "ask") > 0 && (count(text, "record") > 0 || (!email.attachments.length && count(text, "forms") > 0));
   if (email.attachments.length && data[0].score && !asks) {
     if (data[0].score === data[1].score) return { label: "other", reason: "data_unclear" };
     return { label: data[0].label, reason: "data_words_with_files" };
