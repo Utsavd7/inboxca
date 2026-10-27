@@ -1,3 +1,4 @@
+import { checkAiText } from "./ai-checks";
 import { dueLabel, periodLabel } from "./calendar";
 import { checklists, workOfService } from "./checklists";
 import { periodName, workOfType } from "./documents";
@@ -181,11 +182,12 @@ export function reminderEmail(client: string, firm: string, tasks: ReminderTask[
   };
 }
 
-// Until AI writing is enabled, even a factually correct paraphrase uses the checked wording.
-// Compare every dated, numbered and named fact, then require the template's sentences too.
-export function checkedReminder(draft: { subject: string; text: string } | undefined, template: { subject: string; text: string }) {
-  if (!draft) return template;
-  const facts = (mail: typeof template) => `${mail.subject} ${mail.text}`.match(/\b(?:\d[\w,./:-]*|[A-Z][A-Z0-9]*(?:-\d[\w()-]*)?|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/g)?.join(" ") ?? "";
-  const words = (value: string) => value.replace(/\s+/g, " ").trim();
-  return facts(draft) === facts(template) && words(draft.subject) === words(template.subject) && words(draft.text) === words(template.text) ? draft : template;
+// AI may write only a short opening after the greeting (PLAN.md 5.18): no figure, date, link or
+// advice in it (checkAiText with no records and no link of its own) and nothing about returns,
+// papers or dates. Every line of the template stays as it is, so a wrong date, form, period or
+// amount can never replace the records.
+export function checkedReminder(opening: string | null | undefined, template: { subject: string; text: string }) {
+  const line = opening?.replace(/\s+/g, " ").trim() ?? "";
+  if (!line || line.length > 300 || checkAiText(line, "", "") || /\b(?:return|gst|itr|tds|tax|due|late|overdue|deadline|paper|document|fil(?:e|ed|ing)|upload)/i.test(line)) return template;
+  return { subject: template.subject, text: template.text.replace("\n\n", `\n\n${line}\n\n`) };
 }

@@ -20,6 +20,7 @@ export const activityNames: Record<string, string> = {
   "email.replied": "Reply sent", "email.written": "Email written to the client",
   "email.assigned": "Email given to a person", "replies.waiting_sent": "Waiting replies emailed to the owner",
   "email.answered": "Reply sent by InboxCA", "email.answer_stopped": "Reply by InboxCA stopped",
+  "email.ai_drafted": "Reply drafted by AI for a person to check", "email.ai_left": "Left for the team by AI",
   "document.added": "Acknowledgement saved", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked",
   "contact.added": "Contact added", "contact.changed": "Contact changed",
   "fills.asked": "Fill asked for returns late or due in the next 7 days", "fills.stopped": "Fill stopped before it started",
@@ -71,6 +72,8 @@ export const activityDetails: Record<string, readonly string[]> = {
   "email.assigned": ["person"], "replies.waiting_sent": ["emails", "people", "from"],
   // InboxCA's answer by rules (Inbox, answered B and C): its template, or the kind a person stopped.
   "email.answered": ["template"], "email.answer_stopped": ["kind"],
+  // AI's draft for an email waiting for a person (5.11): kept sealed on its request, or why AI left it.
+  "email.ai_drafted": [], "email.ai_left": ["reason"],
   "fills.asked": ["returns", "clients", "batch"], "fills.stopped": ["returns", "batch"],
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"],
   "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state"], "dataset.edit_saved": ["dataset", "line"],

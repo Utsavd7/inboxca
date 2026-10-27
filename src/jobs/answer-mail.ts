@@ -17,13 +17,42 @@ export const statusKind = (kind: string | null) => kind === "filed" || kind === 
 
 // Who may get InboxCA's answer: the client's own registered address, or a contact the firm
 // allows to receive the client's papers. Empty for anyone else.
-async function answerTo(admin: Admin, event: AnswerEvent) {
+export async function answerTo(admin: Admin, event: AnswerEvent) {
   const crypto = serverCrypto();
   if (event.contact_id) {
     const { data: link } = await admin.from("contact_clients").select("can_receive_documents, contacts(email_enc)").eq("contact_id", event.contact_id).eq("client_id", event.client_id!).maybeSingle();
     return link?.can_receive_documents && link.contacts ? crypto.decrypt(event.firm_id, `contacts/${event.contact_id}/email`, link.contacts.email_enc) : "";
   }
   return event.clients?.email_enc ? crypto.decrypt(event.firm_id, `clients/${event.client_id}/email`, event.clients.email_enc) : "";
+}
+
+// What the records say for a status question (filed, due, papers), read only for this firm's
+// client with the client given (the server's, or a person's under row level security): its
+// lines, or why a person must answer instead. AI's tools read the same (src/lib/ai-reply.ts).
+export async function recordLines(db: Admin, firm: string, client: string, kind: "filed" | "due" | "papers", asked: Asked, link = true): Promise<{ lines: string[] } | { team: string }> {
+  const today = todayInIndia();
+  if (kind === "papers") {
+    const { data: asks, error } = await db.from("requests").select("id, details").eq("firm_id", firm).eq("client_id", client).eq("kind", "documents").eq("status", "pending").gt("expires_at", new Date().toISOString());
+    if (error) throw new Error("records_not_read");
+    const crypto = serverCrypto();
+    const open = asks.map((ask) => ({ id: ask.id, details: ask.details as unknown as DocumentRequest })).filter((ask) => ask.details.link_enc);
+    return papersAnswer(await Promise.all(open.map(async ({ id, details }) => ({
+      period: details.period,
+      missing: details.items.filter((item) => !item.received.length).map((item) => item.type),
+      link: link ? `${process.env.APP_BASE_URL ?? ""}/u/${await crypto.decrypt(firm, `requests/${id}/link`, details.link_enc!)}` : "(the upload link)",
+    }))), asked);
+  }
+  const [{ data: tasks, error }, { data: rules, error: rulesError }] = await Promise.all([
+    db.from("tasks").select("code, period_key, due_on, status, details").eq("firm_id", firm).eq("client_id", client).eq("kind", "compliance").gte("due_on", addDays(today, -400)).lte("due_on", addDays(today, 400)),
+    db.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", ""),
+  ]);
+  if (error || rulesError) throw new Error("records_not_read");
+  const rule = new Map(rules.map((row) => [row.code, row]));
+  const list: AnswerTask[] = tasks.map((task) => {
+    const of = rule.get(task.code ?? "");
+    return { code: task.code ?? "", period_key: task.period_key ?? "", due_on: task.due_on, status: task.status, details: task.details as AnswerTask["details"], rule: { name: of?.name ?? task.code ?? "", frequency: of?.frequency ?? null, verified: !!of?.verified_on } };
+  });
+  return kind === "filed" ? filedAnswer(list, asked, today) : dueAnswer(list, asked, today);
 }
 
 // The answer an email calls for, from the firm's records as they are now: its email, or why a
@@ -33,31 +62,9 @@ export async function draftAnswer(admin: Admin, event: AnswerEvent, link = true)
   const kind = answerOf(event.label);
   if (!kind || !event.client_id || !event.clients || !event.firms) return null;
   const asked = ((event.delivery ?? {}) as Delivery).asked ?? {};
-  const today = todayInIndia();
   let answer: { lines: string[] } | { team: string } = { lines: [] };
-  if (kind === "filed" || kind === "due") {
-    const [{ data: tasks, error }, { data: rules, error: rulesError }] = await Promise.all([
-      admin.from("tasks").select("code, period_key, due_on, status, details").eq("client_id", event.client_id).eq("kind", "compliance").gte("due_on", addDays(today, -400)).lte("due_on", addDays(today, 400)),
-      admin.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", ""),
-    ]);
-    if (error || rulesError) throw new Error("records_not_read");
-    const rule = new Map(rules.map((row) => [row.code, row]));
-    const list: AnswerTask[] = tasks.map((task) => {
-      const of = rule.get(task.code ?? "");
-      return { code: task.code ?? "", period_key: task.period_key ?? "", due_on: task.due_on, status: task.status, details: task.details as AnswerTask["details"], rule: { name: of?.name ?? task.code ?? "", frequency: of?.frequency ?? null, verified: !!of?.verified_on } };
-    });
-    answer = kind === "filed" ? filedAnswer(list, asked, today) : dueAnswer(list, asked, today);
-  } else if (kind === "papers") {
-    const { data: asks, error } = await admin.from("requests").select("id, details").eq("client_id", event.client_id).eq("kind", "documents").eq("status", "pending").gt("expires_at", new Date().toISOString());
-    if (error) throw new Error("records_not_read");
-    const crypto = serverCrypto();
-    const open = asks.map((ask) => ({ id: ask.id, details: ask.details as unknown as DocumentRequest })).filter((ask) => ask.details.link_enc);
-    answer = papersAnswer(await Promise.all(open.map(async ({ id, details }) => ({
-      period: details.period,
-      missing: details.items.filter((item) => !item.received.length).map((item) => item.type),
-      link: link ? `${process.env.APP_BASE_URL ?? ""}/u/${await crypto.decrypt(event.firm_id, `requests/${id}/link`, details.link_enc!)}` : "(the upload link)",
-    }))), asked);
-  } else if (kind === "received") {
+  if (kind === "filed" || kind === "due" || kind === "papers") answer = await recordLines(admin, event.firm_id, event.client_id, kind, asked, link);
+  else if (kind === "received") {
     const { data: papers, error } = await admin.from("documents").select("document_type, work_type, period_key, status").eq("email_event_id", event.id).in("status", ["filed", "earlier", "to_check"]);
     if (error) throw new Error("records_not_read");
     if (!papers.length) return null;

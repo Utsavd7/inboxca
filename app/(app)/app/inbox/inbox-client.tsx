@@ -185,9 +185,9 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
 
 // The reply under an open conversation: quick replies, plain text, papers and files, and an
 // AI draft only once AI is set up. It starts from InboxCA's own answer when a person edits it;
-// an email waiting for a person opens with a suggested reply written in, and, for a paper not
-// in the drive, a way to ask the client for papers.
-export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, start, suggestion, askPapers }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; start?: string; suggestion?: string; askPapers?: string }) {
+// an email waiting for a person opens with AI's draft or a suggested reply written in (note
+// says which), and, for a paper not in the drive, a way to ask the client for papers.
+export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, start, suggestion, askPapers, note }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; start?: string; suggestion?: string; askPapers?: string; note?: string }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const text = useRef<HTMLTextAreaElement>(null);
   const [draft, ask, drafting] = useActionState<Draft, FormData>(async (previous, form) => {
@@ -200,9 +200,9 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, s
     <form action={sendReply} className="ib-reply" aria-label="Reply">
       <input type="hidden" name="mail" value={mail} />
       <Templates name={name} firm={firm} />
-      {suggestion && !start && (
+      {(note || (suggestion && !start)) && (
         <p className="ib-note ib-suggest">
-          <span className="grow">A suggested reply is written in. Change what you need, then send it.</span>
+          <span className="grow">{note ?? "A suggested reply is written in. Change what you need, then send it."}</span>
           {askPapers && <Link className="ib-chip" href={askPapers}>Ask for papers</Link>}
         </p>
       )}

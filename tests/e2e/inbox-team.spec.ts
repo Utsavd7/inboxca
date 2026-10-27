@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { simpleParser } from "mailparser";
 import { ImapFlow } from "imapflow";
+import { loadEnvConfig } from "@next/env";
+import { serverCrypto } from "@/src/lib/crypto";
 import { addPerson, appKey, connectTestMailbox, localSupabase, mailTexts, pollFirmMail, query, runJobs, seedFirm, signIn, testSmtp as smtp } from "./local-supabase";
 
 // The emails InboxCA cannot answer go to a person (PLAN.md "Inbox, answered" E): each is for the
@@ -133,4 +135,26 @@ test("the suggested reply goes with a paper from the client's folder, picked in 
   const [{ id: document }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1", [firm.firmId]);
   expect(await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'email.replied'", [firm.firmId])).toEqual([{ details: { files: 0, papers: [document] } }]);
   await expect(row(`Bank loan ${tag}`)).toContainText("Answered by your team");
+});
+
+test("AI's draft waits in the reply box, goes only when a person sends it, and is then removed", async () => {
+  await smtp.sendMail({ from: client.email, to: office, subject: `Diwali ${tag}`, text: "Happy Diwali to the whole team!" });
+  await pollFirmMail(owner.request, firm.firmId);
+  await runJobs(owner.request, firm.firmId);
+  // The test server has no AI key: its job for the email ended without asking anyone. The draft
+  // is sealed here with the firm's key, as the job seals it.
+  const [ask] = await query(local.dbUrl, "select r.id, j.state from public.requests r join public.email_events e on e.id = r.entity_id join public.jobs j on j.idempotency_key = 'ai_draft:' || r.id || ':' || r.client_id where r.firm_id = $1 and r.status = 'pending' order by e.received_at desc limit 1", [firm.firmId]);
+  expect(ask.state).toBe("done");
+  loadEnvConfig(process.cwd());
+  const draft = `Dear ${client.name},\n\nThank you for your wishes. Happy Diwali to you and your family from all of us.\n\nRegards,\n${firmName}`;
+  await query(local.dbUrl, "update public.requests set draft_enc = $2 where id = $1", [ask.id, await serverCrypto().encrypt(firm.firmId, `requests/${ask.id}/draft`, JSON.stringify({ text: draft, papers: [] }))]);
+
+  await owner.goto("/app/inbox?show=reply");
+  await row(`Diwali ${tag}`).getByText(`Diwali ${tag}`).click();
+  await expect(owner.getByLabel("Your reply")).toHaveValue(draft);
+  expect((await mailTexts(client.email)).some((text) => text.includes("Thank you for your wishes"))).toBe(false);
+  await owner.getByRole("button", { name: "Send reply" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Reply sent" })).toBeVisible();
+  expect((await mailTexts(client.email)).filter((text) => text.includes("Thank you for your wishes"))).toHaveLength(1);
+  expect(await query(local.dbUrl, "select status, draft_enc from public.requests where id = $1", [ask.id])).toEqual([{ status: "done", draft_enc: null }]);
 });

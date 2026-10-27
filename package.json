@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:db": "vitest run --config vitest.db.config.ts",
+    "test:ai-evals": "vitest run --config tests/ai-evals/vitest.config.ts",
     "db:types": "supabase gen types typescript --local --schema public > src/db/types.ts",
     "db:env": "node scripts/local-env.mjs",
     "test:e2e": "playwright test",
