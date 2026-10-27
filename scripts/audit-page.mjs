@@ -42,7 +42,7 @@ try {
         path: join(output, `screenshots/${width}-${motion}-control.png`),
         animations: "disabled",
       });
-      await page.locator("#invite").scrollIntoViewIfNeeded();
+      await page.locator("#start").scrollIntoViewIfNeeded();
       await page.evaluate(() =>
         window.scrollTo({
           top: document.body.scrollHeight,

@@ -1,4 +1,5 @@
 import { CalendarDays, ListChecks, Rocket, TriangleAlert } from "lucide-react";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -46,11 +47,12 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     if (closed?.reason === "session") redirect("/auth/sign-out?reason=session");
     return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} connectionWaiting={connectionWaiting} pcKey={pcKey} />;
   }
-  // Signed up, payments set up, nothing paid yet: the plan and AutoPay come first (5.14.1).
+  // Signed up, payments set up, nothing paid yet: the plan and AutoPay come first (5.14.1), with the
+  // answers chosen on the site's price list until the owner asks for another plan.
   if (membership.billing === "start") return (
     <div className="today">
       <PageHead title={`Welcome to InboxCA, ${personName(membership.email)}`} sub={membership.role === "owner" ? "One last step: choose your plan and set up AutoPay. Your firm starts as soon as the first payment is in." : "Your firm starts once its owner chooses a plan."} />
-      {membership.role === "owner" && <StartPlan supabase={supabase} firmId={membership.firmId} ask={plan} />}
+      {membership.role === "owner" && <StartPlan supabase={supabase} firmId={membership.firmId} ask={plan.clients ? plan : Object.fromEntries(new URLSearchParams((await cookies()).get("plan_ask")?.value))} />}
     </div>
   );
   const ctx = { supabase, membership, userId };

@@ -84,13 +84,8 @@ export function Cost() {
           back to you will be measured with the first firms.
         </p>
         <div className="quote-cta">
-          <a
-            className="btn btn-light"
-            href="#invite"
-            data-open-dialog="invite"
-            aria-haspopup="dialog"
-          >
-            Ask for an invite
+          <a className="btn btn-light" href="#plans">
+            Find your plan
             <ArrowRight size={18} aria-hidden />
           </a>
           <span className="guarantee">{guarantee}</span>

@@ -2,7 +2,6 @@ import { contactEmail } from "@/src/lib/site";
 import { Footer } from "./footer";
 import { Nav } from "./nav";
 import { MotionRoot } from "./reveal";
-import { SiteDialogs } from "./site-dialogs";
 
 export type PolicySection = {
   id: string;
@@ -76,7 +75,6 @@ export function Policy({
         </div>
       </main>
       <Footer />
-      <SiteDialogs />
     </MotionRoot>
   );
 }

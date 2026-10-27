@@ -10,8 +10,8 @@ import {
   Plus,
   ShieldCheck,
 } from "lucide-react";
-import { guarantee, makers, questions, worksWith } from "@/content/site";
-import { planNotes, SHOW_PLANS } from "@/content/plans";
+import { guarantee, makers, questions, startSteps, worksWith } from "@/content/site";
+import { SHOW_PLANS } from "@/content/plans";
 import { contactEmail } from "@/src/lib/site";
 import { Control } from "@/components/site/control";
 import { Cost } from "@/components/site/cost";
@@ -21,8 +21,7 @@ import { Footer } from "@/components/site/footer";
 import { Nav } from "@/components/site/nav";
 import { Plans } from "@/components/site/plans";
 import { MotionRoot, Reveal } from "@/components/site/reveal";
-import { SiteDialogs } from "@/components/site/site-dialogs";
-import { StickyInvite } from "@/components/site/sticky-invite";
+import { StickyStart } from "@/components/site/sticky-start";
 
 // The four promises a CA asks about first. Details are on the security policy page.
 const trust = [
@@ -32,17 +31,12 @@ const trust = [
   [History, "Every action recorded", "Nobody can edit the record."],
 ] as const;
 
-function InviteLink({ className = "btn" }: { className?: string }) {
+function StartLink({ className = "btn" }: { className?: string }) {
   return (
-    <a
-      className={className}
-      href="#invite"
-      data-open-dialog="invite"
-      aria-haspopup="dialog"
-    >
-      Ask for an invite
+    <Link className={className} href="/sign-up">
+      Get started
       <ArrowRight size={18} aria-hidden />
-    </a>
+    </Link>
   );
 }
 
@@ -62,7 +56,7 @@ export default function Home() {
           <div className="wrap">
             <p className="status">
               <span className="status-dot" aria-hidden />
-              In development. First firms by invitation.
+              Nothing to install. Set it up yourself.
             </p>
             <h1>
               <span className="line">
@@ -78,7 +72,7 @@ export default function Home() {
               approves every form before it is filed.
             </p>
             <div className="hero-actions">
-              <InviteLink />
+              <StartLink />
               <a className="link" href="#how-it-works">
                 See how it works
               </a>
@@ -174,7 +168,7 @@ export default function Home() {
           <section className="band" id="plans">
             <div className="wrap">
               <Reveal className="band-head">
-                <h2>Plans that follow your work.</h2>
+                <h2>Choose your plan and start.</h2>
                 <p className="band-lead">
                   Every plan has every feature and unlimited clients. Prices
                   are estimates, before GST.
@@ -182,15 +176,23 @@ export default function Home() {
               </Reveal>
               <Reveal delay={0.1}>
                 <Plans />
-                <ul className="plan-notes">
-                  {planNotes.map(([title, text]) => (
+              </Reveal>
+              <div className="start-steps">
+                <h3>How to start</h3>
+                <ol>
+                  {startSteps.map(([title, text], step) => (
                     <li key={title}>
-                      <strong>{title}</strong>
-                      {text}
+                      <Reveal delay={0.12 * step}>
+                        <span className="start-step num" aria-hidden>
+                          {step + 1}
+                        </span>
+                        <strong>{title}</strong>
+                        <span>{text}</span>
+                      </Reveal>
                     </li>
                   ))}
-                </ul>
-              </Reveal>
+                </ol>
+              </div>
             </div>
           </section>
         )}
@@ -220,7 +222,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="closing-band" id="invite">
+        <section className="closing-band" id="start">
           <div className="wrap">
             <Reveal className="closing">
               <DrawnMark />
@@ -229,7 +231,7 @@ export default function Home() {
                 That is the goal for your firm&apos;s inbox. Less chasing. More
                 doing.
               </p>
-              <InviteLink className="btn btn-light" />
+              <StartLink className="btn btn-light" />
               <p className="guarantee closing-guarantee">{guarantee}</p>
               <p className="closing-mail">
                 Or write to{" "}
@@ -259,8 +261,7 @@ export default function Home() {
         </section>
       </main>
       <Footer />
-      <StickyInvite />
-      <SiteDialogs />
+      <StickyStart />
     </MotionRoot>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Minus, Plus } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Minus, Plus } from "lucide-react";
 import { custom, planRows, plans, practices, rupees } from "@/content/plans";
 import { estimate, type Practice } from "@/src/lib/estimate";
 import { Rolling } from "./rolling";
@@ -62,6 +63,9 @@ export function Plans() {
   const price = yearly ? result.yearly : result.monthly;
   const saving = result.monthly * 12 - result.yearly;
   const returns = number(Math.round(result.returns / 10) * 10);
+  // Sign up carries the choice as plain plan answers; the server prices it again from plan_formula.
+  const start = (plan: string) =>
+    `/sign-up?${new URLSearchParams({ plan: plan.toLowerCase(), cycle: yearly ? "yearly" : "monthly", clients: String(clients), practice, people: String(team) })}`;
 
   return (
     <div className="plans">
@@ -233,6 +237,10 @@ export function Plans() {
               </button>
             )}
           </p>
+          <Link className="btn btn-light quote-start" href={start(name)}>
+            Start with {name}
+            <ArrowRight size={18} aria-hidden />
+          </Link>
           <p className="sr-only" aria-live="polite">
             {name} fits your firm: {rupees(price)} {per}.
           </p>
@@ -261,6 +269,9 @@ export function Plans() {
                 </div>
               ))}
             </dl>
+            <Link className={`btn plan-start ${fit === index ? "" : "btn-quiet"}`} href={start(plan.name)}>
+              Start with {plan.name}
+            </Link>
           </li>
         ))}
       </ul>
@@ -305,6 +316,9 @@ export function Plans() {
                 </dd>
               </div>
             </dl>
+            <Link className="btn plan-start" href={start("Custom")}>
+              Start with Custom
+            </Link>
           </>
         ) : (
           <p className="custom-idle">
@@ -314,8 +328,8 @@ export function Plans() {
         )}
       </div>
       <p className="plan-guide">
-        An estimate from your answers. Your exact plan is worked out from your
-        own client list once you join.
+        An estimate from your answers. You see the exact price, with GST,
+        before you pay.
       </p>
     </div>
   );

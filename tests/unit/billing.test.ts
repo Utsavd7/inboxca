@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cashfree } from "@/src/lib/billing/cashfree";
 import { docHtml, docNotes, docRows, taxLines, type Doc } from "@/src/lib/billing/documents";
 import {
-  addMonths, financialYear, formulaSchema, GB, gstOn, gstSplit, mandateMax, methodsFor, moneyBackLastDay, overdueState, planFit, planPrice, prorate, serialNumber, taxSchema, toYearly, withGst,
+  addMonths, chosenPlan, financialYear, formulaSchema, GB, gstOn, gstSplit, mandateMax, methodsFor, moneyBackLastDay, overdueState, planFit, planPrice, prorate, serialNumber, taxSchema, toYearly, withGst,
 } from "@/src/lib/billing/money";
 import { custom, extraPerson, plans, practices } from "@/content/plans";
 
@@ -29,6 +29,16 @@ describe("plan prices from the formula", () => {
     expect(planPrice(formula, { clients: 50, practice: "mixed", people: 5, aiBlocks: 0 }, "yearly").paise).toBe(1_649_900 + 159_600 * 11);
     expect(planPrice(formula, { clients: 150, practice: "mixed", people: 4, aiBlocks: 2 }, "monthly")).toMatchObject({ code: "growth", paise: 349_900 + 79_800, blockCap: 3 });
     expect(planPrice(formula, { clients: 900, practice: "mixed", people: 8, aiBlocks: 0 }, "monthly")).toMatchObject({ code: "custom", paise: 1_949_900 });
+  });
+
+  it("prices a plan chosen on the site from the formula, never from the link, and drops a bad link", () => {
+    expect(chosenPlan(formula, { plan: "growth", cycle: "yearly", clients: "120", practice: "mixed", people: "5", price: "1" }))
+      .toMatchObject({ cycle: "yearly", plan: { clients: 120, practice: "mixed", people: 5 }, price: { code: "growth", paise: 3_849_900 } });
+    // A plan other than the one the answers name: that plan's size in the same kind of practice.
+    expect(chosenPlan(formula, { plan: "scale", clients: "120", practice: "salaried", people: "5" })).toMatchObject({ cycle: "monthly", plan: { clients: 2000 }, price: { code: "scale", paise: 749_900 } });
+    expect(chosenPlan(formula, { plan: "solo", clients: "abc" })).toMatchObject({ plan: { clients: 70, practice: "mixed", people: 1 }, price: { code: "solo" } });
+    for (const query of [{}, { plan: "gold", clients: "120", practice: "mixed", people: "5" }, { plan: "custom", clients: "120", practice: "mixed", people: "5" }, { plan: ["growth", "scale"] }])
+      expect(chosenPlan(formula, query)).toBeNull();
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { signOut } from "../actions";
 import { ProviderButtons, type ProviderChoice } from "../providers";
 import { SignInForm } from "../sign-in/sign-in-form";
@@ -9,8 +9,13 @@ import { states } from "./states";
 
 // Google and Microsoft lead when they are set up. With an account (back from either, in no
 // firm yet) only the firm's details are asked for.
-export function SignUpForm({ account, providers }: { account?: string; providers: ProviderChoice[] }) {
+export function SignUpForm({ account, providers, plan }: { account?: string; providers: ProviderChoice[]; plan?: string }) {
   const [state, send, sending] = useActionState(account ? setUpFirm : signUp, {} as SignUpState);
+  // The plan chosen on the site waits for Today's plan choice through the email code, Google or
+  // Microsoft and the 2 step setup (whose redirect renders Today): plan answers only, for a day.
+  useEffect(() => {
+    if (plan) document.cookie = `plan_ask=${plan}; path=/; max-age=86400; samesite=lax${location.protocol === "https:" ? "; secure" : ""}`;
+  }, [plan]);
   if (state.email) return <SignInForm email={state.email} />;
 
   return (
