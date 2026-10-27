@@ -57,7 +57,9 @@ export function planPrice(formula: PlanFormula, plan: FirmPlan, cycle: Cycle) {
 // carried forward within the year; yearly payers have it all at once. The owner is told when a
 // measure reaches 80% of what is earned, or its projection passes the plan; the firm is past its
 // plan above the growth cushion. The plan that fits takes the projection, or what a monthly payer
-// used so far at a full year's pace, and is always bigger than the plan now.
+// used so far at a full year's pace, and is always bigger than the plan now. A monthly payer whose
+// year still fits its plan (both projections to March within it) is offered yearly payment instead,
+// which gives the year's allowance at once, and never a bigger plan: CA work is seasonal.
 export const GB = 1024 ** 3;
 export type Measured = { returns: number; returnsByMarch: number; bytes: number; bytesByMarch: number };
 // Months of the April to March year begun by this day: April 1, March 12.
@@ -70,7 +72,7 @@ export function planFit(formula: PlanFormula, plan: FirmPlan, cycle: Cycle, usag
     const earned = allowance * share;
     return { measure, used, byMarch, allowance, earned, notice: used >= 0.8 * earned || byMarch > allowance, over: used > earned * (1 + formula.growthCushion), need: (Math.max(byMarch, used / share) / allowance) * returns };
   });
-  return { measures, notice: measures.some((m) => m.notice), over: measures.some((m) => m.over), next: { ...plan, returns: Math.ceil(Math.max(returns + 1, ...measures.map((m) => m.need))) } };
+  return { measures, notice: measures.some((m) => m.notice), over: measures.some((m) => m.over), yearly: cycle === "monthly" && measures.every((m) => m.byMarch <= m.allowance), next: { ...plan, returns: Math.ceil(Math.max(returns + 1, ...measures.map((m) => m.need))) } };
 }
 
 // Orelu's tax details, from the admin console only (D32): never typed in code. GST is charged
@@ -159,6 +161,16 @@ export function prorate(pricePaise: number, today: string, paidUntil: string, cy
   const start = addMonths(paidUntil, cycle === "monthly" ? -1 : -12);
   const left = Math.max(0, Math.min(daysBetween(today, paidUntil), daysBetween(start, paidUntil)));
   return Math.round((pricePaise * left) / daysBetween(start, paidUntil));
+}
+
+// A monthly payer's switch to yearly payment (D38), before GST: the yearly price for the rest of
+// the April to March year, less what is left of the month already paid. The plan is then paid to
+// the 1 April after the next month, and renews yearly from there, so a switch in the year's last
+// month also pays the whole of the next year.
+export function toYearly(formula: PlanFormula, plan: FirmPlan, today: string, paidUntil: string) {
+  const until = `${Number(financialYear(addMonths(paidUntil, 1)).slice(0, 4)) + 1}-04-01`;
+  const yearly = planPrice(formula, plan, "yearly").paise;
+  return { until, paise: prorate(yearly, today, until, "yearly") + prorate(yearly, today, addMonths(until, -12), "yearly") - prorate(planPrice(formula, plan, "monthly").paise, today, paidUntil, "monthly") };
 }
 
 // After a debit due on paidUntil is not paid: days 0 to 7 everything works with a banner,
