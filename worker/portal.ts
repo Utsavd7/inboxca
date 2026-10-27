@@ -44,8 +44,12 @@ export const portalParsers:PortalParser[]=["v4.5","v4.4"].map((version)=>({versi
 }}));
 // A GSTR-2B's B2B invoices and its credit and debit notes (docdata b2b and cdnr, in the pinned
 // schema's own fields), for the match with the client's purchase register. Amounts are in paise,
-// from each bill's totals or else its items; a credit note's are below zero. Changed invoices and
-// notes (b2ba, cdnra) and the other sections are not read.
+// from each bill's totals or else its items; a credit note's are below zero. Invoices and notes
+// the supplier corrected (b2ba, cdnra) come as `changed`, with the original's number and date
+// (oinum and oidt, ontnum and ontdt). GSTN's GSTR-2B FAQ (tutorial.gst.gov.in, read 27 Oct
+// 2026): "the document details will display revised details with reference to the original
+// document", so the original's amounts come from the earlier GSTR-2B it was in. Records marked
+// isITCRevAmd (an ITC reversal amendment, no rule given for it) and the other sections are not read.
 export function gstr2bBills(bytes:Uint8Array) {
   let value:unknown;
   try {value=JSON.parse(new TextDecoder().decode(bytes).replace(/^﻿/,""));} catch {return null;}
@@ -54,12 +58,13 @@ export function gstr2bBills(bytes:Uint8Array) {
   if(!version || !isGstin(gstin) || !/^(0[1-9]|1[0-2])20\d{2}$/.test(period)) return null;
   const list=(item:unknown)=>Array.isArray(item) ? item.map(object) : [];
   const paise=(bill:Record<string,unknown>,key:string,sign:number)=>sign*Math.round(100*(typeof bill[key]==="number" ? bill[key] as number : list(bill.items).reduce((sum,item)=>sum+(typeof item[key]==="number" ? item[key] as number : 0),0)))||0;
-  const bills=(["b2b","cdnr"] as const).flatMap((section)=>list(object(data.docdata)[section]).flatMap((supplier)=>list(supplier[section==="b2b" ? "inv" : "nt"]).map((bill)=>{
-    const note=section==="cdnr" ? (bill.typ==="C" ? "C" as const : "D" as const) : undefined,sign=note==="C" ? -1 : 1;
-    return {gstin:String(supplier.ctin).toUpperCase(),name:String(supplier.trdnm ?? "").slice(0,100),number:String(section==="b2b" ? bill.inum : bill.ntnum),date:String(bill.dt),...(note && {note}),
-      amounts:{taxable:paise(bill,"txval",sign),igst:paise(bill,"igst",sign),cgst:paise(bill,"cgst",sign),sgst:paise(bill,"sgst",sign),cess:paise(bill,"cess",sign)}};
+  const bills=(["b2b","cdnr","b2ba","cdnra"] as const).flatMap((section)=>list(object(data.docdata)[section]).flatMap((supplier)=>list(supplier[section.startsWith("b2b") ? "inv" : "nt"]).filter((bill)=>bill.isITCRevAmd!=="Y").map((bill)=>{
+    const note=section.startsWith("cdnr") ? (bill.typ==="C" ? "C" as const : "D" as const) : undefined,sign=note==="C" ? -1 : 1;
+    return {gstin:String(supplier.ctin).toUpperCase(),name:String(supplier.trdnm ?? "").slice(0,100),number:String(note ? bill.ntnum : bill.inum),date:String(bill.dt),...(note && {note}),
+      amounts:{taxable:paise(bill,"txval",sign),igst:paise(bill,"igst",sign),cgst:paise(bill,"cgst",sign),sgst:paise(bill,"sgst",sign),cess:paise(bill,"cess",sign)},
+      ...(section.endsWith("a") && {was:{number:String(note ? bill.ontnum : bill.oinum),date:String(note ? bill.ontdt : bill.oidt)}})};
   })));
-  return bills.length<=10000 ? {gstin,period:`${period.slice(2)}-${period.slice(0,2)}`,version,bills} : null;
+  return bills.length<=10000 ? {gstin,period:`${period.slice(2)}-${period.slice(0,2)}`,version,bills:bills.filter((bill)=>!bill.was),changed:bills.filter((bill)=>bill.was)} : null;
 }
 // GSTR-2A by GSTN's pinned v2.3 response schema, which lays out its B2B invoices only; other
 // sections stay unread. The GSTIN and month are the download's own gstin and fp, as the drop

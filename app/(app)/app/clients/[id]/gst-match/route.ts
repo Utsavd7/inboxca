@@ -2,7 +2,7 @@ import {redirect} from "next/navigation";
 import {csv} from "@/src/lib/firm-download";
 import {currentMember} from "@/src/lib/member";
 import {openMatch} from "@/src/lib/purchase-match";
-import type {Amounts,Entry} from "@/src/lib/purchase-register";
+import {changeOf,type Amounts,type Entry} from "@/src/lib/purchase-register";
 import {supabaseAdmin} from "@/src/lib/supabase";
 
 // Excel reads "(500.00)" as minus 500; a leading minus sign would be kept as text.
@@ -23,11 +23,12 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
   ]);
   if(!paper || !match) redirect(`${back}&match=source#gst-match`);
   const result=await openMatch(membership.firmId,register,match.result_enc);
-  const lines=([["Not in GSTR-2B",result.missing],["Amount differs",result.differ],["In GSTR-2B, not in the books",result.extra],["Matched",result.matched]] as [string,Entry[]][])
-    .flatMap(([list,entries])=>entries.map((entry)=>[list,entry.gstin,entry.name ?? "",entry.number,entry.date,entry.note==="C" ? "Credit note" : entry.note==="D" ? "Debit note" : "",...amounts(entry.books),...amounts(entry.portal),entry.rows?.join(" ") ?? ""]));
+  const lines=([["Not in GSTR-2B",result.missing],["Amount differs",result.differ],["In GSTR-2B, not in the books",result.extra],["Corrected by the supplier",result.changed],["Matched",result.matched]] as [string,Entry[]][])
+    .flatMap(([list,entries])=>entries.map((entry)=>[list,entry.gstin,entry.name ?? "",entry.number,entry.date,entry.note==="C" ? "Credit note" : entry.note==="D" ? "Debit note" : "",...amounts(entry.books),...amounts(entry.portal),entry.rows?.join(" ") ?? "",
+      entry.booked ?? "",entry.was?.number ?? "",entry.was?.date ?? "",entry.was?.period ?? "",...amounts(changeOf(entry))]));
   const {error}=await supabaseAdmin().from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"gst_match.downloaded",entity_type:"client",entity_id:id,details:{register}});
   if(error) redirect(`${back}&match=read#gst-match`);
   const heads=["Taxable value","IGST","CGST","SGST","Cess"];
-  const text=csv(["List","Supplier GSTIN","Supplier name","Invoice number","Invoice date","Note",...heads.map((head)=>`${head} in the books`),...heads.map((head)=>`${head} in GSTR-2B`),"Rows in the register"],lines);
+  const text=csv(["List","Supplier GSTIN","Supplier name","Invoice number","Invoice date","Note",...heads.map((head)=>`${head} in the books`),...heads.map((head)=>`${head} in GSTR-2B`),"Rows in the register","Register month","Original number","Original date","Original in GSTR-2B for",...heads.map((head)=>`${head} change this month`)],lines);
   return new Response(text,{headers:{"Content-Type":"text/csv; charset=utf-8","Content-Disposition":`attachment; filename*=UTF-8''${encodeURIComponent(`${paper.name.replace(/\.[^.]+$/,"")} - GSTR-2B match.csv`)}`,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
 }
