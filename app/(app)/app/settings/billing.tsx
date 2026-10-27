@@ -1,3 +1,4 @@
+import { CreditCard } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { billingSettings, methodWords, moneyBack, quote, type SubPlan } from "@/src/lib/billing/billing";
@@ -8,9 +9,10 @@ import { longDate } from "@/src/lib/hours";
 import type { currentMember } from "@/src/lib/member";
 import { Item, List } from "../motion";
 import { Pending } from "../pending";
-import { Badge } from "../ui";
+import { Badge, IconTile } from "../ui";
 import { approveCheckout, buyCheckout, moneyBackAction, moveDown, saveAutoTopUp, startCheckout, turnOffAutoPay } from "./billing-actions";
 import { Checkout, MoneyBackForm } from "./checkout";
+import "./settings.css";
 
 // Settings, Billing and sign up's last step (PLAN.md 5.14.1): the plan and its price, AutoPay,
 // add-ons paid before they apply, receipts, and the money back within 14 days. Every amount is
@@ -65,8 +67,9 @@ export async function StartPlan({ supabase, firmId, ask }: { supabase: Supabase;
   const cycle: Cycle = ask.cycle === "yearly" ? "yearly" : "monthly";
   const priced = plan?.success ? quote(formula, tax, firm?.gstin?.slice(0, 2) ?? firm?.state_code ?? "", plan.data, cycle, indiaDay(new Date()), true) : null;
   return (
+    <div className="set-page"><div className="set-body set-start">
     <section className="panel set-card" aria-labelledby="start-title">
-      <header className="set-head"><span className="grow"><h2 id="start-title">Choose your plan to start</h2><p className="hint">Tell us about your firm and InboxCA names the plan that fits. Clients are unlimited on every plan.</p></span></header>
+      <header className="set-head"><IconTile Icon={CreditCard} kind="approve" /><span className="grow"><h2 id="start-title">Choose your plan to start</h2><p className="hint">Tell us about your firm and InboxCA names the plan that fits. Clients are unlimited on every plan.</p></span></header>
       <PlanQuestions ask={ask} practices={formula.practices} action="/app" button="See my plan" />
       {priced && plan?.success && (
         <Checkout action={startCheckout} label="Set up AutoPay" busy="Opening the payment page">
@@ -83,6 +86,7 @@ export async function StartPlan({ supabase, firmId, ask }: { supabase: Supabase;
         </Checkout>
       )}
     </section>
+    </div></div>
   );
 }
 
@@ -121,8 +125,11 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
   const changed = change?.success ? planPrice(formula, change.data, cycle) : null;
   const upgrade = changed && sub.paid_until && changed.paise > priced.price.paise ? withGst(prorate(changed.paise - priced.price.paise, today, sub.paid_until, cycle), tax, state, today).total : 0;
   const hidden = (values: Record<string, string>) => Object.entries(values).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />);
+  // After the money back the plan is over: what happened, the receipts and the money back stay.
+  const ended = back.state === "refunding" || back.state === "refunded";
   return (
     <>
+      {ended ? <Card id="plan" title="Your plan" line="Your plan is cancelled with its money back. Your firm can view everything and download its data in Settings, Your data, for 30 days."><span /></Card> : <>
       <Card id="plan" title="Your plan" line={`${priced.price.name} plan, ${rupees(priced.recurring.total)} ${per}${gst}. A team of up to ${team}, ${priced.price.aiCredits.toLocaleString("en-IN")} AI credits a month${plan.aiBlocks ? ` and ${plan.aiBlocks} more AI ${plan.aiBlocks === 1 ? "block" : "blocks"}` : ""}.`}>
         <p role="status">
           {overdue ? <Badge tone="late">Not paid since {longDate(sub.paid_until!)}</Badge> : sub.paid_until ? <Badge tone="done">Paid until {last(sub.paid_until)}</Badge> : <Badge tone="warn">Waiting for the first payment</Badge>}{" "}
@@ -167,8 +174,9 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
         ) : <p className="hint">That is the plan you have now.</p>)}
         {plan.next && <form action={moveDown} className="set-foot"><input type="hidden" name="undo" value="yes" /><Pending className="b b-ghost" busy="Saving">Keep my plan as it is</Pending></form>}
       </Card>
+      </>}
 
-      {sub.paid_until && sub.paid_until > today && (
+      {!ended && sub.paid_until && sub.paid_until > today && (
         <Card id="addons" title="Add to your plan" line="Paid first: each one is added as soon as its payment is in.">
           <List className="set-rows" rise={false}>
             {[["extra_user", "One more person in your team", person], ["ai_block", `One more AI block of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits every month`, block], ["topup", `An AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits for this month`, topup]].map(([kind, words, amount]) => (
