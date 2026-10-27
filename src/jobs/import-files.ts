@@ -5,7 +5,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { filePeriod, folderFor, placeUnderFreeName, receivedLabel } from "@/src/lib/documents";
 import type { FolderOrder, Naming, WorkType } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
-import type { Planned } from "@/src/lib/first-import";
+import { datedBeforeSignUp, type Planned } from "@/src/lib/first-import";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { forgetText } from "@/src/lib/workspace";
 import { queueRead } from "./read-document";
@@ -24,10 +24,12 @@ export const importFiles: Handler = async (job) => {
   if (request?.status !== "pending") return { done: true };
   const firm = request.firm_id;
   const plan = request.details as unknown as ImportPlan;
-  const [{ data: account }, { data: clients }] = await Promise.all([
+  const [{ data: account }, { data: clients }, { data: signedUp }] = await Promise.all([
     admin.from("connected_accounts").select("id, provider, credentials_enc, settings").eq("firm_id", firm).eq("kind", "drive").maybeSingle(),
     admin.from("clients").select("id, name").eq("firm_id", firm).in("id", plan.files.slice(plan.done, plan.done + BATCH).map((file) => file.client)),
+    admin.from("firms").select("created_at").eq("id", firm).maybeSingle(),
   ]);
+  const signUpMonth = new Date(signedUp?.created_at ?? Date.now()).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7);
   if (!account) return { retry: "drive_unreachable", patient: true };
   const drive = await openDrive(firm, account);
   const order = ((account.settings as { folder_order?: FolderOrder }).folder_order ?? "year_client_work") as FolderOrder;
@@ -45,7 +47,7 @@ export const importFiles: Handler = async (job) => {
       if (placed === "taken") { plan.done++; continue; }
       const id = randomUUID();
       // The first import stays outside InboxCA storage (PLAN.md 5.14): entered at 0 bytes first.
-      await admin.from("usage_ledger").insert({ firm_id: firm, due_on: now.slice(0, 10), bytes: 0, ref: id });
+      if (datedBeforeSignUp(file.period, signUpMonth)) await admin.from("usage_ledger").insert({ firm_id: firm, due_on: now.slice(0, 10), bytes: 0, ref: id });
       await admin.from("documents").insert({
         id,
         firm_id: firm,

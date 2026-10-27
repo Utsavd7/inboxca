@@ -1,12 +1,13 @@
-import { CreditCard } from "lucide-react";
+import { CreditCard, Gauge } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
-import { billingSettings, methodWords, moneyBack, quote, type SubPlan } from "@/src/lib/billing/billing";
+import { billingSettings, fitOf, methodWords, moneyBack, movingUp, quote, type SubPlan } from "@/src/lib/billing/billing";
 import { docTitles, type Doc } from "@/src/lib/billing/documents";
-import { addDays, gstOn, indiaDay, mandateMax, planPrice, planSchema, prorate, rupees, withGst, type Cycle, type FirmPlan, type Method } from "@/src/lib/billing/money";
+import { addDays, GB, gstOn, indiaDay, mandateMax, planPrice, planSchema, prorate, rupees, withGst, type Cycle, type FirmPlan, type Method } from "@/src/lib/billing/money";
 import { billingProvider } from "@/src/lib/billing/provider";
 import { longDate } from "@/src/lib/hours";
 import type { currentMember } from "@/src/lib/member";
+import { supabaseAdmin } from "@/src/lib/supabase";
 import { Item, List } from "../motion";
 import { Pending } from "../pending";
 import { Badge, IconTile } from "../ui";
@@ -22,7 +23,7 @@ type CardProps = { id: string; title: string; line?: React.ReactNode; danger?: b
 export type PlanAsk = { clients?: string; practice?: string; people?: string; cycle?: string };
 
 const last = (until: string) => longDate(addDays(until, -1));
-const askedPlan = (ask: PlanAsk, fallback?: FirmPlan) => planSchema.safeParse({ clients: Number(ask.clients ?? fallback?.clients), practice: ask.practice ?? fallback?.practice, people: Number(ask.people ?? fallback?.people), aiBlocks: fallback?.aiBlocks ?? 0 });
+const askedPlan = (ask: PlanAsk, fallback?: FirmPlan) => planSchema.safeParse({ clients: Number(ask.clients ?? fallback?.clients), practice: ask.practice ?? fallback?.practice, people: Number(ask.people ?? fallback?.people), aiBlocks: fallback?.aiBlocks ?? 0, returns: fallback?.returns });
 const kindWords: Record<string, string> = { plan: "First payment", renewal: "Plan renewal", upgrade: "Move to a bigger plan", extra_user: "One more person", ai_block: "One more AI block", topup: "AI top-up", setup: "Setup", refund: "Money given back" };
 
 // The two questions and the team, as on the site's price list: the plan is named from them.
@@ -90,6 +91,58 @@ export async function StartPlan({ supabase, firmId, ask }: { supabase: Supabase;
   );
 }
 
+// The plan fit (PLAN.md 5.14, D38), on the owner's Today and at the top of Settings, Billing:
+// shown when either yearly measure reaches 80% of the plan or is on course to pass it. The plan
+// that fits and every amount are the server's; the one action pays the difference for the rest
+// of the paid period.
+export async function PlanFit({ firmId, Card }: { firmId: string; Card?: (props: CardProps) => React.ReactNode }) {
+  if (!billingProvider()) return null;
+  const admin = supabaseAdmin();
+  const today = indiaDay(new Date());
+  const [{ formula, tax }, { data: sub }, { data: firm }] = await Promise.all([billingSettings(admin), admin.from("subscriptions").select("cycle, paid_until, plan").eq("firm_id", firmId).maybeSingle(), admin.from("firms").select("gstin, state_code, status").eq("id", firmId).single()]);
+  if (!formula || !sub?.paid_until || sub.paid_until <= today || firm?.status !== "active") return null;
+  const fit = await fitOf(admin, firmId, formula, sub, today);
+  if (!fit?.notice) return null;
+  const cycle = sub.cycle as Cycle;
+  const state = firm.gstin?.slice(0, 2) ?? firm.state_code ?? "";
+  const moved = quote(formula, tax, state, fit.next, cycle, today);
+  const pay = withGst(prorate(moved.price.paise - planPrice(formula, sub.plan as unknown as SubPlan, cycle).paise, today, sub.paid_until, cycle), tax, state, today).total;
+  const raised = await movingUp(admin, firmId);
+  const plan = `The ${moved.price.name} plan fits your firm's work: ${rupees(moved.recurring.total)} ${cycle === "monthly" ? "a month" : "a year"}${moved.recurring.gst ? " with GST" : ""}`;
+  const action = raised ? <p className="hint">{rupees(raised.amount_paise)} will be taken on {longDate(indiaDay(new Date(raised.due_at!)))} to move you up.</p>
+    : pay > 0 ? <Checkout action={buyCheckout} label={`Pay ${rupees(pay)} and ${moved.price.code === "custom" ? "switch to Custom" : "move up"}`} busy="Opening the payment page" className=""><input type="hidden" name="kind" value="fit" /></Checkout> : null;
+  const share = (m: (typeof fit.measures)[number]) => Math.round((100 * m.used) / m.earned);
+  if (!Card) {
+    const first = fit.measures.find((m) => m.notice)!;
+    const words = first.measure === "returns" ? "returns" : "InboxCA storage";
+    return (
+      <div className="today-line" role="region" aria-label="Your plan">
+        <Gauge size={16} aria-hidden />
+        <span className="grow"><strong>{share(first) >= 80 ? `Your firm has used ${share(first)}% of its plan's ${words}.` : `Your firm's ${words} ${first.measure === "returns" ? "are" : "is"} on course to pass its plan by March.`}</strong> {plan}.</span>
+        {action}
+      </div>
+    );
+  }
+  const figure = (m: (typeof fit.measures)[number], value: number) => (m.measure === "returns" ? Math.round(value).toLocaleString("en-IN") : `${(value / GB).toFixed(1)} GB`);
+  return (
+    <Card id="fit" title="Your firm is outgrowing its plan" line={`${plan}, a team of up to ${Math.max(fit.next.people, moved.price.people)} and ${moved.price.aiCredits.toLocaleString("en-IN")} AI credits a month.`}>
+      <dl className="set-meters">
+        {fit.measures.map((m) => (
+          <div key={m.measure}>
+            <dt>{m.measure === "returns" ? "Returns due so far" : "InboxCA storage used"}</dt>
+            <dd>{figure(m, m.used)} of {figure(m, m.earned)}, {share(m)}%</dd>
+            <dd className="set-bar"><span style={{ width: `${Math.min(100, share(m))}%` }} /></dd>
+            <dd className="set-meter-note">About {figure(m, m.byMarch)} by March, of {figure(m, m.allowance)} a year</dd>
+          </div>
+        ))}
+      </dl>
+      {cycle === "monthly" && <p className="hint set-after">Paid monthly, your plan gives a twelfth of the year each month. What you do not use carries forward to March.</p>}
+      <p className="hint set-after">{formula.fitEnforced ? "When your firm passes its plan, InboxCA moves it to the plan that fits and takes the difference, with an email 3 days before." : "Nothing changes until you choose."}</p>
+      {action}
+    </Card>
+  );
+}
+
 // Settings, Billing: one card for each thing the owner may do.
 export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: Supabase; firmId: string; ask: PlanAsk & { change?: string; error?: string }; Card: (props: CardProps) => React.ReactNode }) {
   if (!billingProvider()) return <Card id="plan" title="Your plan" line="Payments are not set up yet. Your firm uses InboxCA with no payment for now."><p className="hint">Nothing is charged. When Orelu starts taking payments, you will choose your plan here.</p></Card>;
@@ -130,6 +183,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
   return (
     <>
       {ended ? <Card id="plan" title="Your plan" line="Your plan is cancelled with its money back. Your firm can view everything and download its data in Settings, Your data, for 30 days."><span /></Card> : <>
+      <PlanFit firmId={firmId} Card={Card} />
       <Card id="plan" title="Your plan" line={`${priced.price.name} plan, ${rupees(priced.recurring.total)} ${per}${gst}. A team of up to ${team}, ${priced.price.aiCredits.toLocaleString("en-IN")} AI credits a month${plan.aiBlocks ? ` and ${plan.aiBlocks} more AI ${plan.aiBlocks === 1 ? "block" : "blocks"}` : ""}.`}>
         <p role="status">
           {overdue ? <Badge tone="late">Not paid since {longDate(sub.paid_until!)}</Badge> : sub.paid_until ? <Badge tone="done">Paid until {last(sub.paid_until)}</Badge> : <Badge tone="warn">Waiting for the first payment</Badge>}{" "}

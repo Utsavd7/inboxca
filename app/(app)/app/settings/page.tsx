@@ -79,7 +79,7 @@ const cardIcons: Record<string, [LucideIcon, Kind]> = {
   reminders: [BellRing, "notice"], answers: [MailCheck, "notice"], records: [FileCheck2, "notice"],
   replies: [Clock, "reply"],
   use: [Gauge, "docs"], data: [Download, "docs"], support: [Headset, "approve"], close: [TriangleAlert, "late"],
-  plan: [CreditCard, "approve"], change: [SlidersHorizontal, "approve"], addons: [UserPlus, "papers"], receipts: [Receipt, "docs"], money_back: [RotateCcw, "late"],
+  fit: [Gauge, "approve"], plan: [CreditCard, "approve"], change: [SlidersHorizontal, "approve"], addons: [UserPlus, "papers"], receipts: [Receipt, "docs"], money_back: [RotateCcw, "late"],
 };
 const ownerOnly = ["mailbox", "replies", "drive", "recovery", "visibility", "exceptions", "reminders", "answers", "records", "use", "data", "support", "close", "plan", "change", "addons", "receipts", "money_back"];
 const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
