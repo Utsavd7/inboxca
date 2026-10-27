@@ -3,7 +3,7 @@ import path from "node:path";
 import { queueRead } from "@/src/jobs/read-document";
 import { todayInIndia } from "@/src/lib/calendar";
 import { serverCrypto } from "@/src/lib/crypto";
-import { describeFile, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
+import { describeFile, filePeriod, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
 import { safeName, workTypes, type Drive, type DriveEntry, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { access, clientFolders, kindOf, placeOf, viewable } from "@/src/lib/drive-browse";
@@ -219,7 +219,7 @@ export async function fileForClient(
   const folder = folderFor(ctx.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: values.status === "to_check" });
   const target = await ctx.drive!.ensureFolder(folder);
   const placed = await placeUnderFreeName(
-    { client: client.name, type: values.document_type, period: periodName(values.period_key), extension: path.extname(file.name) },
+    { client: client.name, type: values.document_type, period: filePeriod(values.period_key), extension: path.extname(file.name) },
     receivedLabel(now),
     (name) => place(target, name),
     ctx.naming,

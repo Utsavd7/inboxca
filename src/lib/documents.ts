@@ -64,8 +64,14 @@ export function findPeriod(text: string) {
   return yearFirst ? `${yearFirst[1]}-${yearFirst[2]}` : "";
 }
 
-export const periodName = (key: string) =>
+// "FY 2026-27" or "Sep 2026" as drive file names write a period. Names never change, so a
+// firm's drive keeps one layout.
+export const filePeriod = (key: string) =>
   key.length === 4 ? `FY ${Number(key) - 1}-${key.slice(2)}` : key ? `${monthNames[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}` : "";
+
+// The period in words for people. The Income-tax Act, 2025 calls the year from 1 April 2026
+// a tax year, so "2027" is "Tax year 2026-27"; earlier years stay "FY 2025-26".
+export const periodName = (key: string) => (key.length === 4 && key >= "2027" ? `Tax year ${Number(key) - 1}-${key.slice(2)}` : filePeriod(key));
 
 // The type, work, period and financial year of an attachment. Sure only when both the type
 // and the period were found; otherwise it is filed under To check for a person to confirm.
