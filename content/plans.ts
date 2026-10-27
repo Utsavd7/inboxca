@@ -101,15 +101,15 @@ export const planRows = [
 export const planNotes = [
   [
     "Your files are not counted",
-    "They stay in your own drive. InboxCA storage is only its working space for your client list and the figures it reads.",
+    "They stay in your own drive. InboxCA storage is only its working space for your client list and the figures it reads. Downloads through InboxCA are fair use, and you can allow more.",
   ],
   [
     "Money back in 14 days",
     "Cancel within 14 days of your first plan payment and get it back in full.",
   ],
   [
-    "Grow when you need to",
-    "One more person in your team is ₹399 a month. More AI is ₹399 a month. A one time setup fee is shown before you pay.",
+    "Told before you outgrow it",
+    "At 80% of your plan you hear about it, with the plan that fits. Pay monthly or yearly, and switch to yearly any time. One more person or more AI is ₹399 a month each. A one time setup fee is shown before you pay.",
   ],
 ] as const;
 

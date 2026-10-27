@@ -5,6 +5,7 @@ import { Count, Item, PanelMotion, ToastMotion } from "./motion";
 import { PanelEscape } from "./panel-escape";
 import { HeadTools, MenuButton } from "./shell";
 import "./side-panel.css";
+import { initials } from "@/src/lib/utils";
 
 // The app's small shared pieces, so every page speaks the same visual language.
 
@@ -38,12 +39,6 @@ export function PageHead({ title, sub, crumb, crumbs = [], actions }: { title: R
     </div>
   );
 }
-
-// Two letters for a name or an address: "Patel Textiles" is PT, "ravi@x.in" is RA.
-export const initials = (text: string) => {
-  const words = text.split("@")[0].split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? words[0]?.[1] ?? "")).toUpperCase();
-};
 
 // One of eight avatar hues for a name, the same every time (never the late red or done green).
 export const hueOf = (name: string) => [...name.trim().toLowerCase()].reduce((hash, char) => (hash * 31 + char.codePointAt(0)!) >>> 0, 7) % 8;

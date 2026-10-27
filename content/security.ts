@@ -3,7 +3,7 @@
 // built. A lawyer reviews it with the terms and privacy notice before the pilot.
 import { analyticsToken } from "@/src/lib/site";
 
-export const securityUpdated = "11 Oct 2026";
+export const securityUpdated = "27 Oct 2026";
 
 export const securitySections = [
   {
@@ -23,7 +23,7 @@ export const securitySections = [
     points: [
       "Email subjects and email text. Your emails stay in your own mailbox.",
       "Portal passwords and OTPs. InboxCA never logs in to the GST or income tax portal.",
-      "Card and bank details. Payments go through Razorpay, a licensed payment company.",
+      "Card and bank details. Payments go through Cashfree's own checkout.",
       "Full Aadhaar numbers. Only the last 4 digits are shown.",
     ],
   },
@@ -42,6 +42,7 @@ export const securitySections = [
     title: "Who can open what",
     points: [
       "Every sign in needs two proofs. Staff at an approved office PC use the code sent to their own email; you, your deputies and anyone outside the office also use a code from a phone app. One login is for one person.",
+      "The owner's login works only on computers the owner approved. A new computer waits for the owner's OK, and a lost one can be removed, which signs it out.",
       "Staff can view files but cannot change, share or delete the originals. The owner decides what each role may do.",
       "With the office only switch, staff can sign in only on PCs you approved, on your office internet, in your office hours.",
       "Every view, download, share and delete request is recorded. The record is kept for 12 to 36 months and nobody can edit it or delete it early, the owner included.",
@@ -84,7 +85,7 @@ export const securitySections = [
     points: [
       "The Digital Personal Data Protection Act 2023 and its Rules of 2025.",
       "The Information Technology Act 2000 and the CERT-In directions of April 2022.",
-      "The Reserve Bank's rules for card and AutoPay payments, through Razorpay.",
+      "The Reserve Bank's rules for card and AutoPay payments, through Cashfree.",
       "For your clients' data, your firm decides and InboxCA only follows your instructions, under a signed data processing agreement.",
     ],
   },
@@ -97,7 +98,7 @@ export const securitySections = [
       "Amazon Web Services, in Mumbai: the key vault, file checks and system email.",
       "Backblaze: InboxCA's encrypted temporary files, safety copies and backups.",
       "OpenAI: AI, with nothing kept.",
-      "Razorpay: plan payments. Sentry: error reports, with personal details removed.",
+      "Cashfree: plan payments. Sentry: error reports, with personal details removed.",
       "Your own mailbox (Google, Microsoft or Zoho) and your own drive (Microsoft or Dropbox).",
     ],
   },
