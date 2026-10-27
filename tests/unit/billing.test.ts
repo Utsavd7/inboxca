@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cashfree } from "@/src/lib/billing/cashfree";
 import { docHtml, docNotes, docRows, taxLines, type Doc } from "@/src/lib/billing/documents";
 import {
-  addMonths, financialYear, formulaSchema, gstOn, gstSplit, mandateMax, methodsFor, moneyBackLastDay, overdueState, planPrice, prorate, serialNumber, taxSchema, withGst,
+  addMonths, financialYear, formulaSchema, GB, gstOn, gstSplit, mandateMax, methodsFor, moneyBackLastDay, overdueState, planFit, planPrice, prorate, serialNumber, taxSchema, withGst,
 } from "@/src/lib/billing/money";
 import { custom, extraPerson, plans, practices } from "@/content/plans";
 
@@ -29,6 +29,45 @@ describe("plan prices from the formula", () => {
     expect(planPrice(formula, { clients: 50, practice: "mixed", people: 5, aiBlocks: 0 }, "yearly").paise).toBe(1_649_900 + 159_600 * 11);
     expect(planPrice(formula, { clients: 150, practice: "mixed", people: 4, aiBlocks: 2 }, "monthly")).toMatchObject({ code: "growth", paise: 349_900 + 79_800, blockCap: 3 });
     expect(planPrice(formula, { clients: 900, practice: "mixed", people: 8, aiBlocks: 0 }, "monthly")).toMatchObject({ code: "custom", paise: 1_949_900 });
+  });
+});
+
+describe("the plan fit from the meters (5.14, D38)", () => {
+  const solo = { clients: 60, practice: "mixed" as const, people: 1, aiBlocks: 0 };
+  const none = { returns: 0, returnsByMarch: 0, bytes: 0, bytesByMarch: 0 };
+  const fit = (used: Partial<typeof none>, cycle: "monthly" | "yearly" = "yearly", day = "2026-10-27", plan = solo) => planFit(formula, plan, cycle, { ...none, ...used }, day);
+
+  it("gives a yearly payer the year's allowance at once, and a monthly payer a twelfth a month, carried forward to March", () => {
+    expect(fit({}).measures.map((m) => m.earned)).toEqual([800, 4 * GB]);
+    expect(fit({}, "monthly", "2026-04-01").measures[0].earned).toBeCloseTo(800 / 12);
+    // October is the 7th month: what April to September left unused is still there.
+    expect(fit({}, "monthly").measures[0].earned).toBeCloseTo((800 * 7) / 12);
+    expect(fit({}, "monthly", "2027-03-31").measures[0].earned).toBe(800);
+    expect(fit({ returns: 374, returnsByMarch: 374 }, "monthly")).toMatchObject({ notice: true, over: false });
+    expect(fit({ returns: 374, returnsByMarch: 374 })).toMatchObject({ notice: false });
+  });
+
+  it("tells the owner at 80% of the plan, or when the projection passes it, whichever comes first", () => {
+    expect(fit({ returns: 639, returnsByMarch: 800 }).notice).toBe(false);
+    expect(fit({ returns: 640, returnsByMarch: 800 }).notice).toBe(true);
+    expect(fit({ returns: 10, returnsByMarch: 801 }).notice).toBe(true);
+    expect(fit({ bytes: 0.8 * 4 * GB, bytesByMarch: 0.8 * 4 * GB }).notice).toBe(true);
+    expect(fit({ bytes: GB, bytesByMarch: 4 * GB + 1 }).notice).toBe(true);
+  });
+
+  it("moves a firm past its plan and the 10% cushion to the plan that fits, and above Enterprise to Custom priced by the formula", () => {
+    expect(fit({ returns: 880, returnsByMarch: 880 }).over).toBe(false);
+    const past = fit({ returns: 881, returnsByMarch: 1200 });
+    expect(past.over).toBe(true);
+    expect(planPrice(formula, past.next, "monthly")).toMatchObject({ code: "growth", paise: 349_900 });
+    // A monthly payer's 600 returns by October are 1,029 at a full year's pace: still Growth.
+    expect(planPrice(formula, fit({ returns: 600, returnsByMarch: 600 }, "monthly").next, "monthly").code).toBe("growth");
+    // At 80% the plan offered is the next one up even when the year still fits.
+    expect(planPrice(formula, fit({ returns: 700, returnsByMarch: 700 }).next, "monthly").code).toBe("growth");
+    // 9,000 returns: 45 GB at 200 returns a GB, Enterprise's ₹15,499 + 5 × ₹305, rounded to end in 499.
+    expect(planPrice(formula, fit({ returns: 9000, returnsByMarch: 9000 }).next, "monthly")).toMatchObject({ code: "custom", paise: 1_749_900 });
+    // Storage decides when it is the bigger measure: 11 GB is past Growth's 10 GB.
+    expect(planPrice(formula, fit({ bytes: 11 * GB, bytesByMarch: 11 * GB }).next, "monthly").code).toBe("scale");
   });
 });
 

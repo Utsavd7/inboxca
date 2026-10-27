@@ -22,13 +22,14 @@ export const formulaSchema = z.object({
 });
 export type PlanFormula = z.infer<typeof formulaSchema>;
 
-// What a firm's plan is made of: its two answers and its team, as at sign up (5.14), and the
-// AI blocks bought every month.
+// What a firm's plan is made of: its two answers and its team, as at sign up (5.14), the
+// AI blocks bought every month, and the work the meters moved it up to (returns a year).
 export const planSchema = z.object({
   clients: z.number().int().min(1).max(100_000),
   practice: z.enum(["salaried", "mixed", "gst"]),
   people: z.number().int().min(1).max(1000),
   aiBlocks: z.number().int().min(0).default(0),
+  returns: z.number().int().min(0).optional(),
 });
 export type FirmPlan = z.infer<typeof planSchema>;
 export type Cycle = "monthly" | "yearly";
@@ -39,7 +40,7 @@ const paise = (rupees: number) => Math.round(rupees * 100);
 // The plan a firm's answers name and its price before GST for one cycle, line by line. Extra
 // people and AI blocks on a yearly plan join it at the yearly multiple (5.14).
 export function planPrice(formula: PlanFormula, plan: FirmPlan, cycle: Cycle) {
-  const fit = estimate(plan.clients, plan.practice as Practice, plan.people, formula as unknown as Formula);
+  const fit = estimate(plan.clients, plan.practice as Practice, plan.people, formula as unknown as Formula, plan.returns);
   const months = cycle === "monthly" ? 1 : formula.custom.yearlyMonths;
   const preset = fit.custom ? null : formula.plans[fit.index];
   const name = preset?.name ?? "Custom";
@@ -48,6 +49,28 @@ export function planPrice(formula: PlanFormula, plan: FirmPlan, cycle: Cycle) {
   if (!fit.custom && fit.extraPeople) lines.push({ text: `${fit.extraPeople} more ${fit.extraPeople === 1 ? "person" : "people"} in the team`, paise: paise(fit.extraCost * months) });
   if (plan.aiBlocks) lines.push({ text: `${plan.aiBlocks} more AI ${plan.aiBlocks === 1 ? "block" : "blocks"} of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits a month`, paise: paise(plan.aiBlocks * formula.aiBlock.price * months) });
   return { code: preset?.code ?? "custom", name, lines, paise: lines.reduce((sum, line) => sum + line.paise, 0), people: preset?.people ?? formula.custom.includedPeople, blockCap: cap, aiCredits: preset?.aiCredits ?? fit.aiCredits ?? 0 };
+}
+
+// The plan fit (5.14, D38): the firm's two yearly measures, used so far and projected to March,
+// against its plan. A plan's InboxCA storage is its returns at the formula's rate (returnsPerStep
+// returns to a GB). Monthly payers earn the year's allowance a twelfth a month, unused amounts
+// carried forward within the year; yearly payers have it all at once. The owner is told when a
+// measure reaches 80% of what is earned, or its projection passes the plan; the firm is past its
+// plan above the growth cushion. The plan that fits takes the projection, or what a monthly payer
+// used so far at a full year's pace, and is always bigger than the plan now.
+export const GB = 1024 ** 3;
+export type Measured = { returns: number; returnsByMarch: number; bytes: number; bytesByMarch: number };
+// Months of the April to March year begun by this day: April 1, March 12.
+export const monthsBegun = (day: string) => ((Number(day.slice(5, 7)) + 8) % 12) + 1;
+export function planFit(formula: PlanFormula, plan: FirmPlan, cycle: Cycle, usage: Measured, day: string) {
+  const fit = estimate(plan.clients, plan.practice as Practice, plan.people, formula as unknown as Formula, plan.returns);
+  const returns = fit.custom ? fit.storageGb * formula.custom.returnsPerStep : formula.plans[fit.index].maxReturns;
+  const share = cycle === "yearly" ? 1 : monthsBegun(day) / 12;
+  const measures = ([["returns", usage.returns, usage.returnsByMarch, returns], ["storage", usage.bytes, usage.bytesByMarch, (returns / formula.custom.returnsPerStep) * GB]] as const).map(([measure, used, byMarch, allowance]) => {
+    const earned = allowance * share;
+    return { measure, used, byMarch, allowance, earned, notice: used >= 0.8 * earned || byMarch > allowance, over: used > earned * (1 + formula.growthCushion), need: (Math.max(byMarch, used / share) / allowance) * returns };
+  });
+  return { measures, notice: measures.some((m) => m.notice), over: measures.some((m) => m.over), next: { ...plan, returns: Math.ceil(Math.max(returns + 1, ...measures.map((m) => m.need))) } };
 }
 
 // Orelu's tax details, from the admin console only (D32): never typed in code. GST is charged

@@ -18,7 +18,7 @@ import { Pending } from "./pending";
 import { attention, weekFor, workFor } from "./work-data";
 import { WorkRows } from "./work-rows";
 import { Card, PageHead, SidePanel, Toast } from "./ui";
-import { StartPlan, type PlanAsk } from "./settings/billing";
+import { PlanFit, StartPlan, type PlanAsk } from "./settings/billing";
 import { WarmLink } from "./ui-client";
 import "./today.css";
 
@@ -107,6 +107,11 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       <Suspense fallback={null}>
         <Attention ctx={ctx} />
       </Suspense>
+      {membership.role === "owner" && (
+        <Suspense fallback={null}>
+          <PlanFit firmId={membership.firmId} />
+        </Suspense>
+      )}
 
       <div className="today-grid">
         <Suspense fallback={<CardSkeleton title="Your list" rows={5} />}>

@@ -29,10 +29,11 @@ function slabs(
 }
 
 // The plan and price a firm would be shown, from three answers. An estimate: the
-// real plan is worked out from the firm's own client list after it joins.
-export function estimate(clients: number, practice: Practice, team: number, { plans, practices, extraPerson, custom }: Formula = sitePrices) {
+// real plan is worked out from the firm's own client list after it joins. `measured` is the
+// work the meters moved a firm up to, in returns a year; its plan is never priced below it.
+export function estimate(clients: number, practice: Practice, team: number, { plans, practices, extraPerson, custom }: Formula = sitePrices, measured = 0) {
   const rate = practices.find(([key]) => key === practice)![2];
-  const returns = Math.round(clients * rate);
+  const returns = Math.max(Math.round(clients * rate), measured);
   const index = plans.findIndex((plan) => returns <= plan.maxReturns);
   if (index !== -1 && team <= custom.includedPeople) {
     const plan = plans[index];

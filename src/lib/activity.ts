@@ -79,7 +79,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "gst_match.made": ["register", "statement", "differences"], "gst_match.downloaded": ["register"],
   // Orelu's billing of the firm (5.14.1): payment ids, kinds, methods and states only.
   "billing.autopay_started": ["method", "cycle"], "billing.autopay_on": ["method"], "billing.autopay_cancelled": ["by"], "billing.order_started": ["payment", "kind"],
-  "billing.paid": ["payment", "kind"], "billing.payment_failed": ["payment", "kind"], "billing.renewal_raised": ["payment"], "billing.downgrade_set": [],
+  "billing.paid": ["payment", "kind"], "billing.payment_failed": ["payment", "kind"], "billing.renewal_raised": ["payment"], "billing.moved_up": ["payment"], "billing.downgrade_set": [],
   "billing.money_back": ["payments"], "billing.refund_asked": ["payment", "reason"], "billing.refunded": ["payment"], "billing.refund_failed": ["payment"],
   "billing.state": ["status"], "billing.auto_topup": ["payment", "blocks"], "billing.pilot": [], "admin.tax_saved": ["registered", "from"],
   // Fair use (5.14, D26): the owner's OK for more downloads this month; an admin's verdict on two firms that may be one.
