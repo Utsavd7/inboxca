@@ -16,6 +16,7 @@ import * as mailApi from "../src/lib/mail-api.ts";
 import {verifyMail} from "../src/lib/mail-view.ts";
 import {editedItr} from "./itr.ts";
 import {intake} from "./intake.ts";
+import {ocr} from "./ocr.ts";
 import {fetchOfficial} from "./official.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
@@ -54,6 +55,7 @@ export async function handle(request: Request): Promise<Response> {
   if (request.method === "GET" && url.pathname === "/health") return new Response("Ready");
   const secret = process.env.FILE_WORKER_SECRET ?? "";
   if (request.method === "POST" && url.pathname === "/intake") return intake(request, secret);
+  if (request.method === "POST" && url.pathname === "/ocr") return ocr(request, secret);
   if(request.method==="POST" && url.pathname.startsWith("/prepare/")) {
     let input;
     try {input=await verifyForm(await request.text(),request.headers.get("authorization") ?? "",secret,url.pathname.slice(9));}
