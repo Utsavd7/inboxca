@@ -315,6 +315,54 @@ test("the client list shows its true count and a second page", async () => {
   await pager.getByRole("link", { name: "Next" }).click();
   await expect(owner).toHaveURL(/q=Client&page=2/);
   await expect(pager).toContainText("Showing 51 to 100 of 551 clients");
+
+  // Upload papers on Documents finds a client among many, 8 at a time.
+  await owner.goto("/app/documents?view=papers&upload=1&for=Paging%20Client");
+  const picker = owner.getByRole("dialog", { name: "Upload papers" });
+  await expect(picker.getByRole("link", { name: /^Choose Paging Client/ })).toHaveCount(8);
+  await expect(picker.getByRole("navigation", { name: "Client pages" })).toContainText("1 to 8 of 51");
+  await picker.getByRole("link", { name: "Next" }).click();
+  await expect(picker.getByRole("navigation", { name: "Client pages" })).toContainText("9 to 16 of 51");
+  await expect(picker.getByRole("link", { name: "Choose Paging Client 009" })).toBeVisible();
+});
+
+test("each pill counts every client it shows, and late clients fill the pages before the rest", async () => {
+  const tag = randomUUID().slice(0, 6);
+  const like = `Count ${tag} %`;
+  // 120 invented clients: the first 60 have a late return, and every second one is missing papers.
+  await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) select $1, 'Count ' || $2 || ' ' || lpad(n::text, 3, '0'), 'individual' from generate_series(1, 120) n", [firm.firmId, tag]);
+  await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) select firm_id, id, 'GSTR1_M', '2026-08', (now() at time zone 'Asia/Kolkata')::date - 3 from public.clients where firm_id = $1 and name like $2 and right(name, 3)::int <= 60", [firm.firmId, like]);
+  await query(local.dbUrl, "insert into public.requests (firm_id, client_id, kind, entity_type, entity_id, expires_at) select firm_id, id, 'documents', 'client', gen_random_uuid(), now() + interval '7 days' from public.clients where firm_id = $1 and name like $2 and right(name, 3)::int % 2 = 0", [firm.firmId, like]);
+  try {
+    const name = (n: number) => `Count ${tag} ${String(n).padStart(3, "0")}`;
+    const pills = owner.getByRole("navigation", { name: "Show" });
+    const pager = owner.getByRole("navigation", { name: "Client pages" });
+    const rows = owner.locator(".clients-table tbody tr");
+    await owner.goto(`/app/clients?q=Count%20${tag}`);
+    for (const pill of ["All 120", "Late 60", "Missing papers 60", "Assigned to me 0"]) await expect(pills.getByRole("link", { name: pill })).toBeVisible();
+    await expect(pager).toContainText("Showing 1 to 50 of 120 clients");
+    await expect(rows.filter({ hasText: "Late: 1 return" })).toHaveCount(50);
+    // Page 2 ends the late clients and starts the rest, each by name.
+    await pager.getByRole("link", { name: "Next" }).click();
+    await expect(pager).toContainText("Showing 51 to 100 of 120 clients");
+    await expect(rows.first()).toContainText(name(51));
+    await expect(rows.filter({ hasText: "Late: 1 return" })).toHaveCount(10);
+    await expect(rows.nth(10)).toContainText(name(61));
+    await pager.getByRole("link", { name: "Next" }).click();
+    await expect(pager).toContainText("Showing 101 to 120 of 120 clients");
+    await expect(pager.getByRole("link", { name: "Next" })).toHaveCount(0);
+
+    await pills.getByRole("link", { name: "Late 60" }).click();
+    await expect(pager).toContainText("Showing 1 to 50 of 60 clients");
+    await pager.getByRole("link", { name: "Next" }).click();
+    await expect(pager).toContainText("Showing 51 to 60 of 60 clients");
+    await expect(rows.last()).toContainText(name(60));
+    await pills.getByRole("link", { name: "Missing papers 60" }).click();
+    await expect(pager).toContainText("Showing 1 to 50 of 60 clients");
+    await expect(rows.first()).toContainText(name(2));
+  } finally {
+    await query(local.dbUrl, "delete from public.clients where firm_id = $1 and name like $2", [firm.firmId, like]);
+  }
 });
 
 test("clients in one group are listed together", async () => {
@@ -564,15 +612,23 @@ test("a client's row offers Write and Ask for papers; its header copies numbers 
   await expect(head.getByRole("link", { name: /^Next due: / })).toContainText(days === 0 ? ", today" : days === 1 ? ", tomorrow" : `, in ${days} days`);
   await expect(head.getByRole("link", { name: /^Next due: / })).toHaveAttribute("href", `/app/clients/${id}?tab=returns`);
 
-  // Papers show 50 at a time, each with its type and a Copy for its drive folder.
-  await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, period_key, drive_file_id, name, size, sha256) select $1, $2, 'gst', 'Sales bills', '2026-09', 'paging/' || n, 'Paging paper ' || n || '.pdf', 10, md5('paging' || n) from generate_series(1, 51) n", [firm.firmId, id]);
+  // Papers show 50 at a time, each with its type and a Copy for its drive folder, with their
+  // true count however many there are.
+  await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, period_key, drive_file_id, name, size, sha256, received_at) select $1, $2, 'gst', 'Sales bills', '2026-09', 'paging/' || n, 'Paging paper ' || n || '.pdf', 10, md5('paging' || n), now() - n * interval '1 minute' from generate_series(1, 551) n", [firm.firmId, id]);
   const [{ papers }] = await query(local.dbUrl, "select count(*)::int papers from public.documents where client_id=$1 and status not in ('deleted', 'earlier')", [id]);
   await owner.goto(`/app/clients/${id}?tab=documents`);
   await expect(owner.locator("section[aria-labelledby=files] tbody tr")).toHaveCount(50);
   await expect(owner.locator("section[aria-labelledby=files] tbody tr").first().getByRole("button", { name: "Copy Drive folder" })).toHaveCount(1);
+  await expect(owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: `Documents ${papers}` })).toBeVisible();
   const pages = owner.getByRole("navigation", { name: "Papers pages" });
   await expect(pages).toContainText(`Showing 1 to 50 of ${papers} papers`);
   await pages.getByRole("link", { name: "Next" }).click();
-  await expect(pages).toContainText(`Showing 51 to ${Math.min(100, papers)} of ${papers} papers`);
+  await expect(pages).toContainText(`Showing 51 to 100 of ${papers} papers`);
+  // The last page, past the 500 the page once stopped at, and a paper there opens.
+  const last = Math.ceil(papers / 50);
+  await owner.goto(`/app/clients/${id}?tab=documents&page=${last}`);
+  await expect(pages).toContainText(`Showing ${(last - 1) * 50 + 1} to ${papers} of ${papers} papers`);
+  await owner.getByRole("link", { name: "Open Paging paper 551.pdf" }).click();
+  await expect(owner.getByRole("dialog", { name: "Paging paper 551.pdf" })).toBeVisible();
   await query(local.dbUrl, "delete from public.documents where client_id=$1 and drive_file_id like 'paging/%'", [id]);
 });
