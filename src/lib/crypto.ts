@@ -115,7 +115,8 @@ export function firmCrypto(kek: Kek, store: KeyStore, now = () => Date.now()) {
     }
     const plain = await kek.unwrap(wrapped, firmId);
     const set = { index: plain.subarray(0, KEY), keys: [] as Buffer[], until: now() + CACHE_MS };
-    for (let at = KEY; at < plain.length; at += KEY) set.keys.push(plain.subarray(at, at + KEY));
+    // A retired key is kept as zeros, so later keys keep their numbers; it opens nothing.
+    for (let at = KEY; at < plain.length; at += KEY) if (plain.subarray(at, at + KEY).some(Boolean)) set.keys[at / KEY - 1] = plain.subarray(at, at + KEY);
     cache.set(firmId, set);
     return set;
   }
@@ -214,6 +215,23 @@ export function firmCrypto(kek: Kek, store: KeyStore, now = () => Date.now()) {
       const { keys } = await keySet(firmId);
       if (Buffer.from(value, "base64url")[1] === keys.length - 1) return null;
       return this.encrypt(firmId, place, await this.decrypt(firmId, place, value));
+    },
+
+    // After the re-seal: wipes the firm's keys older than `newest`, so a copy of them taken
+    // later opens nothing. The search key and the newest key stay. Returns how many it wiped
+    // (with `dryRun`, would wipe); refuses if the newest key is no longer `newest`.
+    async retire(firmId: string, newest: number, dryRun = false) {
+      const previous = await store.read(firmId);
+      const plain = previous && (await kek.unwrap(previous, firmId));
+      if (!plain || plain.length / KEY - 2 !== newest) throw new Error("The key changed meanwhile; try again");
+      const older = plain.subarray(KEY, plain.length - KEY);
+      let live = 0;
+      for (let at = 0; at < older.length; at += KEY) if (older.subarray(at, at + KEY).some(Boolean)) live++;
+      if (!live || dryRun) return live;
+      const next = await kek.wrap(Buffer.concat([plain.subarray(0, KEY), Buffer.alloc(older.length), plain.subarray(plain.length - KEY)]), firmId);
+      if (!(await store.write(firmId, next, previous))) throw new Error("The key changed meanwhile; try again");
+      cache.delete(firmId);
+      return live;
     },
   };
 }

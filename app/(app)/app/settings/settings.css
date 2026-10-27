@@ -122,8 +122,6 @@
 .set-danger h2 { color: var(--red-fg); }
 .set-page .set-danger .reveal > summary { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 6px; color: var(--red-fg); font-weight: 600; text-decoration: none; transition: background var(--fast) var(--out); }
 .set-page .set-danger .reveal > summary:hover { background: var(--red-bg); }
-.b-danger { border-color: var(--red-fg); background: var(--red-fg); color: var(--white); }
-.b-danger:hover:not(:disabled) { background: var(--red-fg); opacity: 0.9; }
 
 @media (max-width: 1000px) {
   .set { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }

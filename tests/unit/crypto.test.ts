@@ -155,6 +155,27 @@ describe("rotating a firm's key", () => {
     await crypto.rotate(OTHER);
     await fails(crypto.reseal(OTHER, PLACE, old));
   });
+
+  it("retires the older keys: they open nothing, the newest and the search key stay, numbers do not move", async () => {
+    const { kek, store, crypto } = setup();
+    const old = await crypto.encrypt(FIRM, PLACE, "ABCDE1234F");
+    const index = await crypto.blindIndex(FIRM, "pan", "ABCDE1234F");
+    await crypto.rotate(FIRM);
+    await crypto.rotate(FIRM);
+    const newer = await crypto.encrypt(FIRM, PLACE, "ABCDE1234F");
+    // Only for the newest key it was checked against.
+    await fails(crypto.retire(FIRM, 1));
+    expect(await crypto.retire(FIRM, 2, true)).toBe(2);
+    expect(await crypto.retire(FIRM, 2)).toBe(2);
+    expect(await crypto.retire(FIRM, 2)).toBe(0);
+    const fresh = firmCrypto(kek, store);
+    await fails(fresh.decrypt(FIRM, PLACE, old));
+    expect(await fresh.decrypt(FIRM, PLACE, newer)).toBe("ABCDE1234F");
+    expect(await fresh.blindIndex(FIRM, "pan", "ABCDE1234F")).toBe(index);
+    await fresh.rotate(FIRM);
+    expect(Buffer.from(await fresh.encrypt(FIRM, PLACE, "x"), "base64url")[1]).toBe(3);
+    expect(await fresh.decrypt(FIRM, PLACE, newer)).toBe("ABCDE1234F");
+  });
 });
 
 describe("the unwrapped key in memory", () => {

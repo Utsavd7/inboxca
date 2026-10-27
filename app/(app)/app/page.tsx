@@ -236,7 +236,9 @@ async function ThisWeek({ week, role }: { week: ReturnType<typeof weekFor>; role
         <Link className="week-label" href="/app/people">
           Busiest people
         </Link>{" "}
-        {busiest.length ? (
+        {!busiest ? (
+          <span className="week-sub">Could not load this just now</span>
+        ) : busiest.length ? (
           <ol>
             {busiest.map((person) => (
               <li key={person.id}>
