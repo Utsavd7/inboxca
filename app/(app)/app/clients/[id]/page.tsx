@@ -26,7 +26,7 @@ import { mailLive } from "@/src/lib/mail-live";
 import { currentMember } from "@/src/lib/member";
 import { paperOrigins } from "@/src/lib/paper-origin";
 import { personName } from "@/src/lib/roles";
-import { searchTokens, words } from "@/src/lib/search";
+import { scanType, searchTokens, words } from "@/src/lib/search";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { labels, type Label } from "@/src/lib/triage";
 import { workspaceStore } from "@/src/lib/workspace";
@@ -255,10 +255,13 @@ export default async function Client({ params, searchParams }: { params: Promise
   const checking = documents.filter((file) => file.status === "to_check");
   const periods = checking.flatMap((file) => (file.period_key ? [`"${file.period_key}"`] : []));
   const versions = supabase.from("documents").select(fileColumns).eq("firm_id", firm).eq("client_id", id).eq("status", "earlier");
-  const [origins, { data: twins }, { data: earlierFiles }] = await Promise.all([
+  const [origins, { data: twins }, { data: earlierFiles }, suggested] = await Promise.all([
     paperOrigins(supabase, firm, listed.map((file) => ({ ...file, client_id: id, clients: client })), paper?.id),
     checking.length ? supabase.from("documents").select("id, name, sha256, document_type, period_key").eq("firm_id", firm).eq("client_id", id).not("status", "in", "(deleted,earlier)").or([`sha256.in.(${checking.map((file) => file.sha256)})`, ...(periods.length ? [`period_key.in.(${periods})`] : [])].join(",")) : Promise.resolve({ data: [] }),
     paper ? (paper.registration_id ? versions.eq("registration_id", paper.registration_id) : versions.is("registration_id", null)).eq("document_type", paper.document_type).eq("period_key", paper.period_key).order("received_at", { ascending: false }) : Promise.resolve({ data: [] }),
+    // A scan to check, which this person sees: its OCR text may suggest its type and period
+    // (src/lib/search.ts). Its details are never given to a person's own reads.
+    paper?.status === "to_check" ? supabaseAdmin().from("documents").select("details").eq("firm_id", firm).eq("id", paper.id).single().then(({ data }) => scanType(firm, paper.id, data?.details)) : null,
   ]);
   const earlier = earlierFiles ?? [];
   const noticeFile = (namedFiles ?? []).find((file) => file.id === (renamed ?? saved ?? removed ?? restored));
@@ -1238,10 +1241,10 @@ export default async function Client({ params, searchParams }: { params: Promise
           {paper.status === "to_check" && <p className="hint">{sameAs(paper) || `Waiting to be checked: ${origins.get(paper.id)?.why}`}.</p>}
           {canRename && !paper.prepared && (
             <>
-              <p className="hint">{paper.status === "to_check" ? "Check its paper type and period, then choose Save." : "When you save, InboxCA moves and renames the file in your firm's drive to match."}</p>
+              <p className="hint">{paper.status === "to_check" ? `${suggested ? "InboxCA read this scan and filled in what it looks like. " : ""}Check its paper type and period, then choose Save.` : "When you save, InboxCA moves and renames the file in your firm's drive to match."}</p>
               <form action={manageDocument} className="fields">
                 <input type="hidden" name="document" value={paper.id} />
-                <DocumentFields type={paper.document_type} work={paper.work_type} period={paper.period_key} firmTypes={firmTypes} keep={manage} />
+                <DocumentFields type={suggested?.type ?? paper.document_type} work={suggested ? "income_tax" : paper.work_type} period={suggested?.period ?? paper.period_key} firmTypes={firmTypes} keep={manage} />
                 <Pending className="b b-primary" name="intent" value="save">Save</Pending>
               </form>
             </>

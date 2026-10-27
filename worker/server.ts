@@ -14,7 +14,7 @@ createServer(async (incoming, outgoing) => {
     const chunks: Buffer[] = [];
     let size = 0;
     // A file sent in is passed on as it arrives; the handler stops at its signed size.
-    const streamed = incoming.method === "POST" && incoming.url === "/intake";
+    const streamed = incoming.method === "POST" && (incoming.url === "/intake" || incoming.url === "/ocr");
     if (!streamed) for await (const chunk of incoming) {
       size += chunk.length;
       if (size > (incoming.url?.startsWith("/prepare/") ? formLimit : incoming.url?.startsWith("/mail/") ? mailLimits.body : 16_384)) { outgoing.writeHead(413).end(); return; }

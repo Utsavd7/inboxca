@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -87,6 +88,13 @@ it("refuses a picture whose header claims more pixels than the viewer draws", as
   huge.writeUInt32BE(50_000, 16);
   huge.writeUInt32BE(50_000, 20);
   await expect(renderPage(huge, "huge.png", 1, "Person")).rejects.toThrow("Not a picture this viewer shows");
+  // OCR refuses it by the same header, before decoding: as too large, not as unreadable.
+  const secret = randomBytes(32).toString("hex");
+  vi.stubEnv("FILE_WORKER_SECRET", secret);
+  try {
+    const ticket = JSON.stringify({ size: huge.length, sha256: createHash("sha256").update(huge).digest("hex"), zip: false, expires: Math.floor(Date.now() / 1000) + 60, pages: [], password: 0 });
+    expect((await handle(new Request("http://worker/ocr", { method: "POST", body: new Uint8Array(huge), headers: { authorization: await signView(ticket, secret), "x-inboxca-intake": ticket } }))).status).toBe(413);
+  } finally { vi.unstubAllEnvs(); }
 });
 
 // A PDF with a password opens only with the one a person typed; nothing is guessed.
