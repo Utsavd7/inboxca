@@ -22,7 +22,8 @@ export type Bill={gstin:string;number:string;date:string;amounts:Amounts;row?:nu
 const wasSchema=z.object({number:z.string().max(40),date:z.string().max(20),period:z.string().max(7).optional(),amounts:amountsSchema.optional()});
 export const entrySchema=z.object({gstin:z.string().max(15),number:z.string().max(40),date:z.string().max(20),name:z.string().max(100).optional(),note:z.enum(["C","D"]).optional(),books:amountsSchema.optional(),portal:amountsSchema.optional(),rows:z.array(z.number().int()).max(1000).optional(),times:z.number().int().optional(),was:wasSchema.optional(),booked:z.string().max(7).optional()});
 export type Entry=z.infer<typeof entrySchema>;
-export const matchSchema=z.object({matched:z.array(entrySchema),missing:z.array(entrySchema),extra:z.array(entrySchema),differ:z.array(entrySchema),changed:z.array(entrySchema).default([]),skipped:z.number().int().min(0)});
+// official: GSTR-2B's own total of the month's corrections, from its summary (worker/portal.ts).
+export const matchSchema=z.object({matched:z.array(entrySchema),missing:z.array(entrySchema),extra:z.array(entrySchema),differ:z.array(entrySchema),changed:z.array(entrySchema).default([]),official:amountsSchema.omit({taxable:true}).optional(),skipped:z.number().int().min(0)});
 export type Match=z.infer<typeof matchSchema>;
 export type Counts={matched:number;missing:number;extra:number;differ:number;changed?:number};
 
@@ -118,6 +119,13 @@ export function matchChanged(result:Match,changed:Changed[],originals:Map<string
 export const changeState=(entry:Entry)=>!entry.books ? "absent" : agrees(entry.books,entry.portal ?? zero) ? "done" : entry.was?.amounts && agrees(entry.books,entry.was.amounts) ? "old" : "other";
 export const changeOf=(entry:Entry)=>entry.was?.amounts && Object.fromEntries(heads.map((head)=>[head,(entry.portal ?? zero)[head]-entry.was!.amounts![head]])) as Amounts;
 export const changeTotal=(entries:Entry[])=>entries.reduce((sum,entry)=>add(sum,changeOf(entry) ?? zero),zero);
+// GSTR-2B's own total of the corrections against the change of those whose original was found:
+// both totals of tax when a tax head differs by more than ₹1, else null.
+export function changeGap(match:Match) {
+  if(!match.official) return null;
+  const official={...match.official,taxable:0},listed=changeTotal(match.changed);
+  return heads.some((head)=>head!=="taxable" && Math.abs(official[head]-listed[head])>100) ? {official:taxOf(official),listed:taxOf(listed)} : null;
+}
 
 export const countsOf=(match:Match):Counts=>({matched:match.matched.length,missing:match.missing.length,extra:match.extra.length,differ:match.differ.length,changed:match.changed.filter((entry)=>changeState(entry)!=="done").length});
 export const totalOf=(entries:Entry[],side:"books"|"portal")=>entries.reduce((sum,entry)=>entry[side] ? add(sum,entry[side]!) : sum,zero);

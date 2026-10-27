@@ -5,6 +5,7 @@ import { manageClient, manageTasks, sendNow, stopSend } from "@/app/(app)/action
 import { canManageClients } from "@/src/lib/clients";
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import type { DocumentRequest } from "@/src/lib/checklists";
+import { itrReady } from "@/src/lib/itr-fields";
 import { currentMember } from "@/src/lib/member";
 import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
 import { fillLine } from "@/src/lib/return-work";
@@ -19,7 +20,7 @@ import { WorkRows } from "../work-rows";
 import { Avatar, Badge, Card, Empty, PageHead, Row, SidePanel, Toast } from "../ui";
 import "../work.css";
 
-type Params = { show?: string; page?: string; panel?: string; client?: string; confirm?: string; sending?: string; job?: string; stopped?: string; assigned?: string; marked?: string; t?: string; error?: string; filling?: string; clients?: string; batch?: string };
+type Params = { show?: string; page?: string; panel?: string; client?: string; confirm?: string; sending?: string; job?: string; stopped?: string; assigned?: string; marked?: string; t?: string; error?: string; filling?: string; clients?: string; itrs?: string; batch?: string };
 type Db = Awaited<ReturnType<typeof currentMember>>["supabase"];
 const PAGE = 25;
 // Late clients read at once; the Calendar lists every late return beyond them.
@@ -146,7 +147,7 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
             </form>
           }
         >
-          {plural(Number(params.filling), "return", "returns")} for {plural(Number(params.clients), "client", "clients")} will be filled in a minute. Your team still checks each one.
+          {plural(Number(params.filling), "return", "returns")} for {plural(Number(params.clients), "client", "clients")} will be filled in a minute{Number(params.itrs) > 0 && `, ${plural(Number(params.itrs), "ITR", "ITRs")} only where every detail is there`}. Your team still checks each one.
         </Toast>
       )}
       {params.sending && params.job && (
@@ -251,17 +252,18 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
         )}
         {filling && (
           <SidePanel key="fill" id="fill-title" title="Fill returns late or due in the next 7 days" close={back}>
-            <p className="hint">InboxCA fills each GSTR-1 and GSTR-3B from the figures it has read, as it does by itself before the due date. A person still checks every figure before a return can be approved, downloaded or filed. Returns filled already or being filled are not filled again.</p>
+            <p className="hint">InboxCA fills each GSTR-1, GSTR-3B and ITR from the figures it has read, as it does by itself before the due date. A person still checks every figure before a return can be approved, downloaded or filed. Returns filled already or being filled are not filled again.</p>
             <p>
               <strong>
                 {plural(filling.count, "return", "returns")} for {plural(filling.clients, "client", "clients")}.
               </strong>{" "}
               {filling.toCheck ? `${filling.toCheck} ${filling.toCheck === 1 ? "has" : "have"} figures still to check.` : ""}
+              {filling.itrs ? ` ${filling.itrs} of them ${filling.itrs === 1 ? "is an ITR" : "are ITRs"}, filled only where every detail its official form needs is there. Any left unfilled shows why here.` : ""}
             </p>
-            {!filling.rows.length && <p className="hint">No GSTR-1 or GSTR-3B of your clients is late or due in the next 7 days.</p>}
+            {!filling.rows.length && <p className="hint">No GSTR-1, GSTR-3B or ITR of your clients is late or due in the next 7 days.</p>}
             <ul className="app-rows work-preview">
               {filling.rows.slice(0, 200).map((row) => (
-                <Row key={row.key} lead={<Avatar name={row.name} />} title={row.name} meta={row.what} status={row.go ? <Badge tone="blue">Will be filled</Badge> : <Badge plain>{row.status}</Badge>} />
+                <Row key={row.key} lead={<Avatar name={row.name} />} title={row.name} meta={row.what} status={row.go ? <Badge tone="blue">{row.status}</Badge> : <Badge plain>{row.status}</Badge>} />
               ))}
             </ul>
             {filling.rows.length > 200 && <p className="hint">The first 200 are listed.</p>}
@@ -327,11 +329,12 @@ async function sendPreview(supabase: Db, firm: string, what: "late" | "papers") 
   };
 }
 
-// What Fill all would do, for its preview: each GSTR-1 and GSTR-3B late or due in the next 7 days that
-// this person may fill (public.due_fills), and why any is left out. The fill job decides the same.
+// What Fill all would do, for its preview: each GSTR-1, GSTR-3B and ITR late or due in the next 7
+// days that this person may fill (public.due_fills), and why any is left out. The fill job decides
+// the same, and only it knows whether an ITR has every detail its official form needs.
 async function fillPreview(supabase: Db, firm: string, today: string) {
   const { data } = await supabase.rpc("due_fills", { target_firm: firm });
-  const rows = (data ?? []).map((row) => ({ key: row.task, client: row.client, name: row.client_name, toCheck: row.open > 0, ...fillLine(row, today) }));
+  const rows = (data ?? []).map((row) => ({ key: row.task, client: row.client, name: row.client_name, toCheck: row.open > 0, itr: row.code.startsWith("ITR_"), ...fillLine(row, today, itrReady()) }));
   const ready = rows.filter((row) => row.go);
-  return { rows, count: ready.length, clients: new Set(ready.map((row) => row.client)).size, toCheck: ready.filter((row) => row.toCheck).length };
+  return { rows, count: ready.length, clients: new Set(ready.map((row) => row.client)).size, toCheck: ready.filter((row) => row.toCheck).length, itrs: ready.filter((row) => row.itr).length };
 }

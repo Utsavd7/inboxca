@@ -7,7 +7,7 @@ export type Job = Database["public"]["Tables"]["jobs"]["Row"];
 
 // What a handler reports. Codes are short machine words, never content.
 export type Outcome =
-  | { done: true }
+  | { done: true; reason?: string } // finished; with a reason code when it left the work for a person
   | { retry: string; patient?: boolean; at?: Date } // try again later, with this reason code; patient when the other side is away; at a set time
   | { fail: string }; // give up, with this reason code
 
@@ -70,7 +70,7 @@ export async function runDueJobs(
       }
     }
     if ("done" in outcome) {
-      await store.finish(job.id, "done");
+      await store.finish(job.id, "done", outcome.reason);
       summary.done++;
     } else if ("retry" in outcome && (outcome.at || job.attempts < (outcome.patient ? PATIENT_ATTEMPTS : MAX_ATTEMPTS))) {
       // A set time (the end of quiet hours, say) is not a failure, so it uses no try.

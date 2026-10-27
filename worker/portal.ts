@@ -64,7 +64,19 @@ export function gstr2bBills(bytes:Uint8Array) {
       amounts:{taxable:paise(bill,"txval",sign),igst:paise(bill,"igst",sign),cgst:paise(bill,"cgst",sign),sgst:paise(bill,"sgst",sign),cess:paise(bill,"cess",sign)},
       ...(section.endsWith("a") && {was:{number:String(note ? bill.ontnum : bill.oinum),date:String(note ? bill.ontdt : bill.oidt)}})};
   })));
-  return bills.length<=10000 ? {gstin,period:`${period.slice(2)}-${period.slice(0,2)}`,version,bills:bills.filter((bill)=>!bill.was),changed:bills.filter((bill)=>bill.was)} : null;
+  // GSTR-2B's own total of the corrections, from its summary (itcsumm, fields as the pinned schemas
+  // name them), in paise and signed as above. The same FAQ (tutorial.gst.gov.in/userguide/returns/
+  // FAQ_gstr2b.htm), question 8: "Summary wise details of all amendment tables in Form GSTR-2B
+  // displays the differential tax amount (Amended – Original)". Questions 4 to 7 list changed
+  // invoices and debit notes in Part A (nonrevsup and revsup b2ba and cdnra) and changed credit
+  // notes in Part B (othersup cdnra and cdnrarev), which takes credit away, so those count below
+  // zero. Credit available and not available both count; rejected (itcRejected) and reversed
+  // (itcrev) credit do not. Tax only: the summary has no taxable value. None when it lists no
+  // corrected section.
+  const summary=object(data.itcsumm),parts=[["nonrevsup","b2ba",1],["nonrevsup","cdnra",1],["revsup","b2ba",1],["revsup","cdnra",1],["othersup","cdnra",-1],["othersup","cdnrarev",-1]] as const;
+  const sections=["itcavl","itcunavl"].flatMap((credit)=>parts.flatMap(([group,section,sign])=>{const node=object(object(object(summary[credit])[group])[section]);return Object.keys(node).length ? [{node,sign}] : [];}));
+  const official=sections.length ? Object.fromEntries((["igst","cgst","sgst","cess"] as const).map((head)=>[head,sections.reduce((sum,{node,sign})=>sum+paise(node,head,sign),0)])) as Record<"igst"|"cgst"|"sgst"|"cess",number> : undefined;
+  return bills.length<=10000 ? {gstin,period:`${period.slice(2)}-${period.slice(0,2)}`,version,bills:bills.filter((bill)=>!bill.was),changed:bills.filter((bill)=>bill.was),...(official && {official})} : null;
 }
 // GSTR-2A by GSTN's pinned v2.3 response schema, which lays out its B2B invoices only; other
 // sections stay unread. The GSTIN and month are the download's own gstin and fp, as the drop

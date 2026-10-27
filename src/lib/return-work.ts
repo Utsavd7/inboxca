@@ -55,12 +55,26 @@ export function pinWords(pin:Pin,today:string) {
   return {title,meta:`${due[0].toUpperCase()}${due.slice(1)}. ${held[0].toUpperCase()}${held.slice(1)}`};
 }
 
+// Why InboxCA's own fill left a return for a person, by the code its job keeps
+// (src/jobs/fill-return.ts, src/lib/fill.ts).
+export const fillReasons:Record<string,string>={
+  software:"InboxCA cannot make the return file for the income tax portal yet. It is waiting for its software ID from the Income Tax Department.",
+  forms:"Figures are entered for two ITR forms. Prepare the right one under Return files.",
+  details:"Details its official form needs are still empty. Fill them on its income tax page.",
+  issues:"Some figures do not fit its official form. Correct them on its income tax page.",
+  pan:"Keep only one PAN for this client before preparing this return.",
+  form:"The official form for this period is not ready yet.",
+};
+
 // A return in Fill all's preview (/app/work, public.due_fills): it is filled now when ready and
-// not filled or being filled already; otherwise the line says why not.
-export type DueFill=Work & {code:string;period_key:string;due_on:string;wrong:number;ready:boolean;filling:boolean};
-export function fillLine(row:DueFill,today:string) {
-  const go=row.ready && !row.filling;
-  const why=row.wrong ? `${figures(row.wrong)} marked wrong` : !row.ready && row.stage==="figures" && !row.missing ? "Corrected file to check first" : stageLine(row);
-  return {go,status:go ? "Will be filled" : ["filled","draft","approved"].includes(row.stage) ? "Filled already" : row.filling ? "Being filled" : "Not ready",
-    what:`${returnOf(row.code)} for ${returnPeriod(row.code,row.period_key)}, ${dueWords(row.due_on,today)}. ${go ? (row.open ? `${figures(row.open)} to check` : "Every figure checked") : why}`};
+// not filled or being filled already; otherwise the line says why not. Only the file worker knows
+// whether an ITR has every detail its official form needs, so an ITR is filled where every detail
+// is there, none before InboxCA has its software ID (itrs false), and one the last fill left says why.
+export type DueFill=Work & {code:string;period_key:string;due_on:string;wrong:number;ready:boolean;filling:boolean;reason?:string|null};
+export function fillLine(row:DueFill,today:string,itrs=true) {
+  const itr=/^ITR_/.test(row.code),held=itr && !itrs && row.ready && !row.filling,go=row.ready && !row.filling && !held;
+  const why=held ? fillReasons.software : row.wrong ? `${figures(row.wrong)} marked wrong` : !row.ready && row.stage==="figures" && !row.missing ? "Corrected file to check first" : stageLine(row);
+  const ready=row.reason ? `Not filled last time. ${fillReasons[row.reason] ?? "Press Fill on the return to see why."}` : row.open ? `${figures(row.open)} to check` : "Every figure checked";
+  return {go,status:go ? (itr ? "Filled if every detail is there" : "Will be filled") : ["filled","draft","approved"].includes(row.stage) ? "Filled already" : row.filling ? "Being filled" : "Not ready",
+    what:`${returnOf(row.code)} for ${returnPeriod(row.code,row.period_key)}, ${dueWords(row.due_on,today)}. ${go ? ready : why}`};
 }

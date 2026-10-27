@@ -95,15 +95,19 @@ describe("when a worker stops halfway", () => {
 describe("finishing jobs", () => {
   it("records done, retry and failure through the runner", () =>
     rollback(db, async () => {
-      // Due long ago and one batch of 3 only, so jobs other runs have due are not run.
-      for (const kind of ["ok", "again", "unknown"]) await add(kind, { kind, run_at: "2000-01-01T00:00:00Z" });
+      // Due long ago and one batch of 4 only, so jobs other runs have due are not run.
+      for (const kind of ["ok", "left", "again", "unknown"]) await add(kind, { kind, run_at: "2000-01-01T00:00:00Z" });
       let tick = 0;
       const summary = await runDueJobs(pgJobStore(db), {
         ok: async () => ({ done: true }),
+        left: async () => ({ done: true, reason: "details" }),
         again: async () => ({ retry: "busy" }),
-      }, { batch: 3, maxRunMs: 2, clock: () => tick++ });
-      expect(summary).toEqual({ claimed: 3, done: 1, retried: 1, failed: 1 });
-      expect(await states()).toEqual({ ok: "done", again: "pending", unknown: "failed" });
+      }, { batch: 4, maxRunMs: 2, clock: () => tick++ });
+      expect(summary).toEqual({ claimed: 4, done: 2, retried: 1, failed: 1 });
+      expect(await states()).toEqual({ ok: "done", left: "done", again: "pending", unknown: "failed" });
+      // A job done with a reason (a return left for a person) keeps it; one done without keeps none.
+      const done = await db.query("select idempotency_key as key, last_error_code from public.jobs where idempotency_key = any($1) order by 1", [[`${PREFIX}left`, `${PREFIX}ok`]]);
+      expect(done.rows.map((row) => row.last_error_code)).toEqual(["details", null]);
       const again = await db.query(
         "select run_at > now() as later, last_error_code from public.jobs where idempotency_key = $1",
         [`${PREFIX}again`],

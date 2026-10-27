@@ -1,6 +1,6 @@
 import {expect,it} from "vitest";
 import {readSheet} from "@/src/lib/sheet";
-import {changedKey,changeOf,changeState,changeTotal,countsOf,extractPurchases,invoiceKey,matchBills,matchChanged,matchLine,suggestColumns,totalOf,type Bill,type Changed,type PurchaseMapping} from "@/src/lib/purchase-register";
+import {changedKey,changeGap,changeOf,changeState,changeTotal,countsOf,extractPurchases,invoiceKey,matchBills,matchChanged,matchLine,suggestColumns,totalOf,type Bill,type Changed,type PurchaseMapping} from "@/src/lib/purchase-register";
 import {gstMatchWorkItems} from "@/src/lib/work/gst-match";
 import {gstr2bBills} from "../../worker/portal";
 import {inventedGstin,statement,supplierChangedNotes,supplierChanges,supplierInvoices,supplierNotes} from "../fixtures/portal";
@@ -148,6 +148,29 @@ it("lists what each correction changes this month, by GSTN's rule, and what the 
   expect(changeTotal(result.changed)).toEqual(amounts(4000,360,360));
   expect(countsOf(result)).toEqual({matched:0,missing:0,extra:0,differ:0,changed:4});
   expect(matchLine(countsOf(result))).toBe("0 matched, 4 corrected by the supplier: update the books");
+});
+
+// GSTR-2B's summary gives the change its corrections make this month (FAQ question 8: "the
+// differential tax amount (Amended – Original)"): changed invoices in Part A, changed credit notes
+// in Part B, which takes credit away. Invented figures only.
+it("checks GSTR-2B's own total of the corrections against the bills listed, and says nothing when they agree",()=>{
+  // Changed invoices up ₹1.80 a head; a changed credit note down ₹1.80, so credit up ₹1.80.
+  const summary={itcavl:{nonrevsup:{igst:0,cgst:1.8,sgst:1.8,cess:0,b2ba:{igst:0,cgst:1.8,sgst:1.8,cess:0}},othersup:{igst:0,cgst:-1.8,sgst:-1.8,cess:0,cdnra:{igst:0,cgst:-1.8,sgst:-1.8,cess:0}}},
+    itcunavl:{revsup:{igst:0.5,cgst:0,sgst:0,cess:0,b2ba:{igst:0.5,cgst:0,sgst:0,cess:0}}}};
+  const input=statement(inventedGstin());
+  expect(gstr2bBills(Buffer.from(JSON.stringify({...input,data:{...input.data,itcsumm:summary}})))!.official).toEqual({igst:50,cgst:360,sgst:360,cess:0});
+  // A summary with no corrected section gives no total.
+  expect(gstr2bBills(Buffer.from(JSON.stringify(input)))!.official).toBeUndefined();
+  // One bill whose original an earlier GSTR-2B has (up ₹3.60 a head), one whose original none has.
+  const changed:Changed[]=[{gstin:one,number:"INV/1",date:"2026-08-05",amounts:amounts(104000,9360,9360),was:{number:"INV/1",date:"2026-08-05"}},
+    {gstin:two,number:"T-12",date:"2026-08-09",amounts:amounts(60000,5400,5400),was:{number:"T-12",date:"2026-08-09"}}];
+  const listed=(official?:{igst:number;cgst:number;sgst:number;cess:number})=>({...matchChanged(matchBills([],[]),changed,new Map([[changedKey(changed[0],"INV/1"),{amounts:amounts(100000,9000,9000),period:"2026-08"}]])),official});
+  expect(changeGap(listed())).toBeNull();
+  expect(changeGap(listed({igst:0,cgst:360,sgst:360,cess:0}))).toBeNull();
+  expect(changeGap(listed({igst:0,cgst:450,sgst:270,cess:0}))).toBeNull();
+  // The summary also counts T-12 (up ₹9 a head): more than ₹1 apart on a head.
+  expect(changeGap(listed({igst:0,cgst:1260,sgst:1260,cess:0}))).toEqual({official:2520,listed:720});
+  expect(changeGap(listed({igst:0,cgst:360,sgst:360,cess:101}))).toEqual({official:821,listed:720});
 });
 
 it("puts the corrections the books do not show yet on Today",async()=>{

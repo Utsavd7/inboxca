@@ -341,7 +341,7 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["firm_people", "select * from public.firm_people($1)", ["firm"], true],
   ["firm_usage", "select * from public.firm_usage($1, current_date)", ["firm"], true],
   ["due_fills", "select * from public.due_fills($1)", ["firm"], true],
-  ["queue_fills", "select * from public.queue_fills($1, gen_random_uuid())", ["firm"], true],
+  ["queue_fills", "select * from public.queue_fills($1, gen_random_uuid(), true)", ["firm"], true],
   ["stop_fills", "select public.stop_fills($1, gen_random_uuid(), 0) r", ["firm"], true],
   ["gov_updates", "select public.gov_updates($1) r", ["firm"], true],
   ["dismiss_gov_update", "select public.dismiss_gov_update($1, '0123456789abcdef') r", ["firm"], true],
