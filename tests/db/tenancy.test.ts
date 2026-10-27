@@ -228,6 +228,7 @@ const NOT_FIRM: Record<string, string> = {
   push_subscriptions: "a person's phones, server only",
   incidents: "Orelu's outage notes for the status page, server only",
   official_files: "official government files kept by their hash, server only",
+  guarantee_claims: "keyed hashes for the money-back guarantee once per firm, no firm's data, server only",
 };
 const ROLES = ["owner", "partner", "manager", "staff", "front_desk"] as const;
 // Definer functions a visitor who is not signed in may call, and why.
@@ -265,6 +266,8 @@ async function seedEvery(tag: string) {
   await run("insert into public.firm_keys (firm_id, wrapped_key) values ($1, 'sealed')", []);
   await run("insert into public.jobs (firm_id, kind, entity_type, entity_id, idempotency_key) values ($1, 'reminders', 'client', $2, $2::uuid::text)", [ids.client]);
   await run("insert into public.usage_ledger (firm_id, due_on, ref) values ($1, current_date, $2)", [ids.ledger]);
+  await run("insert into public.subscriptions (firm_id, cycle, plan) values ($1, 'monthly', '{}')", []);
+  await run("insert into public.payments (firm_id, kind, amount_paise) values ($1, 'plan', 100)", []);
   return { ...ids, name, people };
 }
 
@@ -298,7 +301,10 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["add_clients", `select public.add_clients($1, '[{"name": "Taken", "kind": "business"}]') r`, ["firm"], true],
   ["admin_accounts", "select * from public.admin_accounts()", [], false],
   ["admin_add_extension", "select public.admin_add_extension('GSTR1', '2026-09', current_date, 'https://example.test') r", [], true],
-  ["admin_add_template", "select public.admin_add_template('gst_offline_tool', '2026-10-26T03:00:00.000Z', 'GSTR1.xlsx', current_date) r", [], true],
+  ["admin_billing", "select public.admin_billing() r", [], false],
+  ["admin_pilot", "select public.admin_pilot($1) r", ["firm"], true],
+  ["admin_set_tax", "select public.admin_set_tax('{}') r", [], true],
+  ["admin_add_template","select public.admin_add_template('gst_offline_tool', '2026-10-26T03:00:00.000Z', 'GSTR1.xlsx', current_date) r", [], true],
   ["admin_ask_support", "select public.admin_ask_support($1) r", ["firm"], true],
   ["admin_email_incident", "select public.admin_email_incident(gen_random_uuid()) r", [], true],
   ["admin_end_template", "select public.admin_end_template('GSTR1', '2.2', current_date, 'https://cbic-gst.gov.in/x.pdf') r", [], true],

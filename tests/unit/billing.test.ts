@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { cashfree } from "@/src/lib/billing/cashfree";
 import { docHtml, docNotes, docRows, taxLines, type Doc } from "@/src/lib/billing/documents";
@@ -125,7 +125,7 @@ describe("documents", () => {
 });
 
 describe("Cashfree webhooks", () => {
-  const secret = "invented-cashfree-secret";
+  const secret = randomBytes(24).toString("base64url");
   afterEach(() => void delete process.env.CASHFREE_SECRET_KEY);
   const signed = (body: object, key = "event-1") => {
     const raw = JSON.stringify(body);

@@ -113,7 +113,8 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
   const shown = (payments ?? []).filter((row) => row.status === "done" || (row.kind === "refund" && row.status !== "cancelled") || (row.status === "failed" && row.kind === "renewal"));
   // What each add-on costs now, for the rest of the paid period.
   const left = (more: FirmPlan) => (sub.paid_until && sub.paid_until > today ? withGst(prorate(planPrice(formula, more, cycle).paise - priced.price.paise, today, sub.paid_until, cycle), tax, state, today).total : 0);
-  const person = left({ ...plan, people: plan.people + 1 });
+  const team = Math.max(plan.people, priced.price.people);
+  const person = left({ ...plan, people: team + 1 });
   const block = left({ ...plan, aiBlocks: (plan.aiBlocks ?? 0) + 1 });
   const topup = withGst(formula.aiBlock.price * 100, tax, state, today).total;
   const change = ask.change ? askedPlan(ask, plan) : null;
@@ -122,7 +123,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
   const hidden = (values: Record<string, string>) => Object.entries(values).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />);
   return (
     <>
-      <Card id="plan" title="Your plan" line={`${priced.price.name} plan, ${rupees(priced.recurring.total)} ${per}${gst}. A team of up to ${plan.people}, ${priced.price.aiCredits.toLocaleString("en-IN")} AI credits a month${plan.aiBlocks ? ` and ${plan.aiBlocks} more AI ${plan.aiBlocks === 1 ? "block" : "blocks"}` : ""}.`}>
+      <Card id="plan" title="Your plan" line={`${priced.price.name} plan, ${rupees(priced.recurring.total)} ${per}${gst}. A team of up to ${team}, ${priced.price.aiCredits.toLocaleString("en-IN")} AI credits a month${plan.aiBlocks ? ` and ${plan.aiBlocks} more AI ${plan.aiBlocks === 1 ? "block" : "blocks"}` : ""}.`}>
         <p role="status">
           {overdue ? <Badge tone="late">Not paid since {longDate(sub.paid_until!)}</Badge> : sub.paid_until ? <Badge tone="done">Paid until {last(sub.paid_until)}</Badge> : <Badge tone="warn">Waiting for the first payment</Badge>}{" "}
           {autopay ? `AutoPay is on with your ${methodWords[sub.method as Method]}${sub.paid_until ? `. Next payment ${rupees(coming.recurring.total)} on ${longDate(sub.paid_until)}` : ""}.` : sub.status === "created" ? "AutoPay is waiting for your bank or payment page." : "AutoPay is off. Nothing more will be taken."}

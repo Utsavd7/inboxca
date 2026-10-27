@@ -28,7 +28,9 @@ export type SubPlan = FirmPlan & { version: number; maxPaise: number; next?: Fir
 // What a payment buys: its lines before GST, how it is paid (taken at the mandate's
 // authorisation, debited on it, or a one time order), the period it pays for and the plan or
 // add-on it brings.
-export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; setupPaise?: number };
+// `base`: the team the plan took when one more person was bought (its own people, or the more
+// the plan includes).
+export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number };
 export type Alert = { kind: string; ref?: string; at: string };
 
 const json = (value: unknown) => value as NonNullable<Json>;
@@ -113,21 +115,21 @@ export async function startAutoPay(firmId: string, actor: string, input: Start):
   const cycle = input.cycle ?? (sub?.cycle as Cycle | undefined);
   const phone = input.phone ?? (sub?.phone_enc ? await serverCrypto().decrypt(firmId, `subscriptions/${firmId}/phone`, sub.phone_enc) : "");
   if (!plan || !cycle || !/^[6-9][0-9]{9}$/.test(phone)) return { error: "Enter your plan and a 10 digit mobile number." };
-  if (input.address !== undefined || input.gstin) {
-    const { data: before } = await admin.from("firms").select("gstin, settings").eq("id", firmId).single();
-    const settings = { ...(before?.settings as Record<string, unknown>), ...(input.address !== undefined && { billing_address: input.address }) };
-    const { error } = await admin.from("firms").update({ settings: json(settings), ...(input.gstin && input.gstin !== before?.gstin && { gstin: input.gstin, state_code: null }) }).eq("id", firmId);
-    if (error) return { error: error.code === "23505" ? "This GSTIN is already used by another firm on InboxCA." : "Your firm's details could not be saved. Try again." };
-  }
   const firm = (await firmOf(admin, firmId))!;
   const email = await ownerOf(admin, firmId);
   if (!email) return { error: "Only the owner sets up AutoPay." };
   const today = indiaDay(new Date());
   const { data: paid } = await admin.from("payments").select("id").eq("firm_id", firmId).eq("kind", "plan").eq("status", "done").limit(1).maybeSingle();
-  const priced = quote(formula, tax, firm.stateCode, plan, cycle, today, !paid);
+  // A GSTIN names the firm's state, which decides CGST and SGST or IGST.
+  const priced = quote(formula, tax, input.gstin?.slice(0, 2) ?? firm.stateCode, plan, cycle, today, !paid);
   if (!priced.methods.some(({ method }) => method === input.method)) return { error: "Choose one of the ways to pay shown." };
   const maxPaise = mandateMax(priced.price.paise, input.method);
   if (priced.recurring.total > maxPaise) return { error: "This amount is above what UPI AutoPay allows. Choose the bank mandate." };
+  if (input.address !== undefined || input.gstin) {
+    const settings = { ...(firm.settings as Record<string, unknown>), ...(input.address !== undefined && { billing_address: input.address }) };
+    const { error } = await admin.from("firms").update({ settings: json(settings), ...(input.gstin && input.gstin !== firm.gstin && { gstin: input.gstin, state_code: null }) }).eq("id", firmId);
+    if (error) return { error: error.code === "23505" ? "This GSTIN is already used by another firm on InboxCA." : "Your firm's details could not be saved. Try again." };
+  }
   const mandate = `ib-${randomUUID().replaceAll("-", "")}`;
   // Nothing is due while a plan is paid ahead; an earlier checkout left unfinished is dropped.
   const due = !paid ? "plan" : !sub?.paid_until || sub.paid_until <= addDays(today, 3) ? "renewal" : null;
@@ -197,14 +199,15 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
     details = { add: 1 };
   } else {
     if (sub.paid_until <= today) return { error: "Pay for your plan first." };
-    const next = what.kind === "upgrade" ? what.plan : what.kind === "extra_user" ? { ...plan, people: plan.people + 1 } : { ...plan, aiBlocks: (plan.aiBlocks ?? 0) + 1 };
+    const team = Math.max(plan.people, current.people);
+    const next = what.kind === "upgrade" ? what.plan : what.kind === "extra_user" ? { ...plan, people: team + 1 } : { ...plan, aiBlocks: (plan.aiBlocks ?? 0) + 1 };
     if (what.kind === "ai_block" && (await blocksThisMonth(admin, firmId, plan, today)) >= current.blockCap) return { error: "Your plan has all the extra AI it can take. Move to a bigger plan for more." };
     const moved = planPrice(formula, next, cycle);
     if (moved.paise <= current.paise) return { error: "That is not more than your plan now. Choose it as a change at renewal." };
     const until = addDays(sub.paid_until, -1);
     const words = what.kind === "upgrade" ? `Move to the ${moved.name} plan` : what.kind === "extra_user" ? "One more person in the team" : `One more AI block of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits a month`;
     lines = [{ text: `${words}, ${long(today)} to ${long(until)}`, paise: prorate(moved.paise - current.paise, today, sub.paid_until, cycle) }];
-    details = what.kind === "upgrade" ? { plan: what.plan } : { add: 1 };
+    details = what.kind === "upgrade" ? { plan: what.plan } : what.kind === "extra_user" ? { add: 1, base: team } : { add: 1 };
     if (!lines[0].paise) return { error: "Your plan renews today. Make the change at renewal." };
   }
   const amount = withGst(lines.reduce((sum, line) => sum + line.paise, 0), tax, firm.stateCode, today);
@@ -292,8 +295,11 @@ export async function setAutoTopUp(firmId: string, blocks: number) {
 // pilot, a mandate not yet authorised). Deactivating a person frees the place at once.
 export async function teamSize(firmId: string) {
   if (!billingProvider()) return null;
-  const { data: sub } = await supabaseAdmin().from("subscriptions").select("plan, paid_until").eq("firm_id", firmId).maybeSingle();
-  return sub?.paid_until ? (sub.plan as unknown as SubPlan).people : null;
+  const admin = supabaseAdmin();
+  const [{ formula }, { data: sub }] = await Promise.all([billingSettings(admin), admin.from("subscriptions").select("plan, cycle, paid_until").eq("firm_id", firmId).maybeSingle()]);
+  if (!formula || !sub?.paid_until) return null;
+  const plan = sub.plan as unknown as SubPlan;
+  return Math.max(plan.people, planPrice(formula, plan, sub.cycle as Cycle).people);
 }
 
 // A verified webhook, applied once: each change is made only from the state it expects, so a
@@ -375,7 +381,7 @@ async function paid(admin: Admin, id: string, ref?: string) {
       }
     }
     if (payment.kind === "upgrade" && details.plan) await admin.from("subscriptions").update({ plan: json({ ...plan, ...details.plan }) }).eq("firm_id", firmId);
-    if (payment.kind === "extra_user") await admin.from("subscriptions").update({ plan: json({ ...plan, people: plan.people + (details.add ?? 1) }) }).eq("firm_id", firmId);
+    if (payment.kind === "extra_user") await admin.from("subscriptions").update({ plan: json({ ...plan, people: Math.max(plan.people, details.base ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
     if (payment.kind === "ai_block") await admin.from("subscriptions").update({ plan: json({ ...plan, aiBlocks: (plan.aiBlocks ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
   }
   await note(admin, firmId, null, "billing.paid", { payment: id, kind: payment.kind });
