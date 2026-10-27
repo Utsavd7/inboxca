@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect, type Browser } from "@playwright/test";
 import { CASHFREE_KEYS, CASHFREE_TEST_URL } from "../../playwright.config";
 import { fakeCashfree } from "../fake-cashfree";
@@ -13,6 +13,8 @@ const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 // One worker, as the fake Cashfree has one port.
 test.describe.configure({ mode: "serial", timeout: 120_000 });
+// The owner uses one computer throughout, as each new one waits for the owner's approval (D38).
+test.use({ storageState: { cookies: [{ name: "inboxca_device", value: randomBytes(32).toString("hex"), domain: "127.0.0.1", path: "/", expires: -1, httpOnly: true, secure: false, sameSite: "Lax" }], origins: [] } });
 
 const tag = randomUUID().slice(0, 8);
 const email = `billing-${tag}@example.test`;

@@ -34,6 +34,7 @@ import { MailboxForm } from "./mailbox-form";
 import { GroupAnchor } from "./group-anchor";
 import { saveReplies } from "@/app/(app)/actions";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
+import { NewComputers } from "../new-computers";
 import { PushSwitch } from "../push-switch";
 import { BillingCards } from "./billing";
 import "./settings.css";
@@ -432,6 +433,7 @@ export default async function Settings({
           </>}
 
           {group === "access" && <>
+          {owner && <NewComputers error={error} back="settings" />}
           <Card id="preset" title="How your team works" line="One choice sets Office only, office hours and signing out. You can change each of them after.">
             <form id="preset-form" action={choosePreset} className="set-stack">
               <fieldset className="set-choices">

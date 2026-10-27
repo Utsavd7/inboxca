@@ -122,3 +122,66 @@ describe("the policy tester", () => {
     expect((await attempt(db, "select public.access_check($1, $2, null, '', '')", [OTHER_FIRM, STAFF])).ok).toBe(false);
   }));
 });
+
+describe("the owner's computers (D38)", () => {
+  // The owner's sign in token carries the digests of the computers they approved.
+  const asTheOwner = async (devices: string[], headers: Record<string, string>, session = SESSION(OWNER), person = OWNER) => {
+    await asOwner(db);
+    await db.query("set local role authenticated");
+    await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: person, role: "authenticated", aal: "aal2", session_id: session, app_metadata: { devices } })]);
+    await db.query("select set_config('request.headers', $1, true)", [JSON.stringify(headers)]);
+  };
+  const proof = (key: string, person = OWNER, session = SESSION(OWNER), until?: number) => ({ "x-inboxca-device": sign(key, `device:${person}:${session}`, until) });
+
+  it("a computer the owner has not approved reads nothing of the firm; the server's proof for this person and session opens it", () => rollback(db, async () => {
+    const key = await seed({});
+    await db.query("insert into public.clients (firm_id, name, kind) values ($1, 'Invented Computer Client', 'individual')", [FIRM]);
+    const reads = async (devices: string[], headers: Record<string, string>) => {
+      await asTheOwner(devices, headers);
+      const found = (await db.query("select public.member_role($1) as role, (select count(*)::int from public.clients) as clients", [FIRM])).rows[0];
+      await asOwner(db);
+      return found;
+    };
+    // The first computer needs no proof: the server approves it by itself.
+    expect(await reads([], {})).toEqual({ role: "owner", clients: 1 });
+    expect(await reads(["approved"], {})).toEqual({ role: null, clients: 0 });
+    expect(await reads(["approved"], proof(key))).toEqual({ role: "owner", clients: 1 });
+    // Someone else's proof, another session's, an old one, or the office proof opens nothing.
+    for (const wrong of [proof(key, PARTNER), proof(key, OWNER, SESSION(STAFF)), proof(key, OWNER, SESSION(OWNER), Math.floor(Date.now() / 1000) - 10), { "x-inboxca-device": sign(key, `${OWNER}:${SESSION(OWNER)}`) }])
+      expect(await reads(["approved"], wrong)).toEqual({ role: null, clients: 0 });
+    // Only the owner's login is held to it.
+    expect((await role(PARTNER, {})).role).toBe("partner");
+  }));
+
+  it("the owner approves or refuses from an approved computer, never from the one asking, while the request is open", () => rollback(db, async () => {
+    const key = await seed({});
+    const asking = ["00000000-0000-4000-8000-00000000e1a1", "00000000-0000-4000-8000-00000000e1a2", "00000000-0000-4000-8000-00000000e1a3"];
+    const [first, second, old] = (await db.query(
+      "insert into public.requests (firm_id, kind, entity_type, entity_id, reason_code, details, expires_at) select $1, 'alert', 'owner_device', s, 'owner_device', $2, case when s = $5 then now() - interval '1 minute' else now() + interval '30 minutes' end from unnest(array[$3, $4, $5]::uuid[]) with ordinality u (s, n) order by n returning id",
+      [FIRM, { by: OWNER, name: "Chrome on Windows" }, ...asking],
+    )).rows.map((row) => row.id as string);
+    const review = async (request: string, decision: string, headers: Record<string, string> = proof(key), session = SESSION(OWNER), person = OWNER) => {
+      await asTheOwner(["approved"], headers, session, person);
+      const result = await attempt(db, "select public.review_owner_device($1, $2) as done", [request, decision]);
+      await asOwner(db);
+      return result.ok ? result.rows[0].done : result.error;
+    };
+    const status = async (id: string) => (await db.query("select status from public.requests where id = $1", [id])).rows[0].status;
+
+    // Not from an unapproved computer, nor the asking one itself, nor a partner, nor once it ended.
+    expect(await review(first, "approve", {})).toBeNull();
+    expect(await review(first, "approve", proof(key, OWNER, asking[0]), asking[0])).toBeNull();
+    expect(await review(first, "approve", proof(key, PARTNER, SESSION(PARTNER)), SESSION(PARTNER), PARTNER)).toBeNull();
+    expect(await review(old, "approve")).toBeNull();
+    expect(await status(first)).toBe("pending");
+    expect(await review(first, "approve")).toBe(true);
+    expect(await review(second, "refuse")).toBe(true);
+    // Answered once: a second answer changes nothing.
+    expect(await review(first, "refuse")).toBeNull();
+    expect([await status(first), await status(second), await status(old)]).toEqual(["approved", "refused", "pending"]);
+    expect((await db.query("select action from public.activity_log where firm_id = $1 and entity_type = 'owner_device' order by action", [FIRM])).rows.map((row) => row.action)).toEqual(["device.approved", "device.refused"]);
+    // Only the owner sees them.
+    await actAs(db, STAFF, "aal2", SESSION(STAFF));
+    expect((await db.query("select count(*)::int as n from public.requests where entity_type = 'owner_device'")).rows[0].n).toBe(0);
+  }));
+});

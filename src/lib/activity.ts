@@ -45,6 +45,8 @@ export const activityDetails: Record<string, readonly string[]> = {
   "office.learned": [], "office.refused": ["reason"], "office.no_fixed": [], "branch.hours": ["settings"],
   ...Object.fromEntries(["on", "off", "forget", "fixed", "here", "confirm", "today", "refuse", "deputies", "follow"].map((decision) => [`office.${decision}`, ["deputies", "co_admin", "branch", ...(decision === "refuse" ? ["device", "unmarked"] : [])]])),
   "device.first_seen": [], "device.approved": ["kind", "until"], "device.refused": [], "device.withdrawn": [], "device.key_added": [], "device.key_synced": [],
+  // The owner's own computers (D38): one asking, and one approved for good (its first, or approved).
+  "device.asked": [], "device.trusted": ["via"],
   "approval.denied": ["kind"], "capture_attempt": [],
   "permission.asked": ["right", "until"], "permission.allowed": ["right", "for"], "permission.refused": ["right", "for"], "permission.always": ["right", "for", "clients", "until"],
   "permission.undone": ["right", "for"], "permission.withdrawn": [], "permissions.changed": ["permissions", "pin_days"],

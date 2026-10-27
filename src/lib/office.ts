@@ -104,8 +104,11 @@ export const memberHours = (settings: Record<string, unknown>, branch?: { kind: 
 // The server checks both the approved PC and its connection on every request.
 export async function officeDeviceAccess(userId: string, observe = true) {
   const admin = supabaseAdmin();
-  const firmRow = await chosenFirm((await admin.from("firm_members").select(`firm_id, role, firms(settings), ${BRANCH}`)
-    .eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
+  const { data: rows } = await admin.from("firm_members").select(`firm_id, role, firms(settings), ${BRANCH}`)
+    .eq("user_id", userId).eq("status", "active").order("firm_id").limit(20);
+  const firmRow = await chosenFirm(rows);
+  // The firm whose owner this login is, the chosen one first, for the owner's computers (D38).
+  const ownerOf = (firmRow?.role === "owner" ? firmRow : rows?.find((row) => row.role === "owner"))?.firm_id ?? null;
   const office = memberOffice((firmRow?.firms?.settings as { office?: Office } | undefined)?.office, firmRow?.branch);
   const requestHeaders = await headers();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -161,7 +164,7 @@ export async function officeDeviceAccess(userId: string, observe = true) {
     }
   }
   // With anywhere an approved device is no second proof, so the 2 step code is still asked.
-  return { approved, deviceStatus, connectionWaiting, remoteUntil, pcKey, anywhere: !!office?.anywhere };
+  return { approved, deviceStatus, connectionWaiting, remoteUntil, pcKey, anywhere: !!office?.anywhere, ownerOf };
 }
 
 // This browser's approved PC in the person's firm, for its key.

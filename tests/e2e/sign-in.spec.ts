@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { askForCode, emailStep, localSupabase, seedFirm, totp } from "./local-supabase";
 
 // Signing in through the real pages against local Supabase: an email code, then a code
@@ -10,11 +10,14 @@ test.describe.configure({ mode: "serial", timeout: 90_000 });
 
 const email = `owner-${randomUUID().slice(0, 8)}@example.test`;
 let firm: Awaited<ReturnType<typeof seedFirm>>;
+// The owner's first computer, which approves the next ones (D38).
+let first: Page;
 let secret = "";
 let lastCode = "";
 
-test.beforeAll(async () => {
+test.beforeAll(async ({ browser }) => {
   firm = await seedFirm("Test Firm", email);
+  first = await (await browser.newContext()).newPage();
 });
 test.afterAll(() => firm.remove());
 
@@ -34,7 +37,8 @@ test("the app sends a signed out visitor to sign in", async ({ page }) => {
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test("first sign in: email code, then setting up the 2 step code", async ({ page }) => {
+test("first sign in: email code, then setting up the 2 step code", async () => {
+  const page = first;
   await emailStep(page, email);
   await expect(page.getByRole("heading", { name: "Set up your 2 step code" })).toBeVisible();
   await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();
@@ -55,7 +59,8 @@ test("first sign in: email code, then setting up the 2 step code", async ({ page
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test("next sign in asks for the app's code, and firm data waits for it", async ({ page }) => {
+test("next sign in asks for the app's code, and firm data waits for it", async () => {
+  const page = first;
   await emailStep(page, email);
   await expect(page.getByRole("heading", { name: "Enter your 2 step code" })).toBeVisible();
   await page.goto("/app");
@@ -63,6 +68,24 @@ test("next sign in asks for the app's code, and firm data waits for it", async (
   await page.getByLabel("6 digit code from the app").fill(await nextTotp());
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator(".rail-me")).toContainText("Owner");
+});
+
+test("a new computer waits, reaching nothing of the firm, until a computer already signed in approves it", async ({ page }) => {
+  await emailStep(page, email);
+  await page.getByLabel("6 digit code from the app").fill(await nextTotp());
+  await page.getByRole("button", { name: "Continue" }).click();
+  const waits = page.getByRole("heading", { name: /^Approve this computer/ });
+  await expect(waits).toBeVisible();
+  await page.goto("/app/clients");
+  await expect(waits).toBeVisible();
+
+  await first.goto("/app");
+  await first.getByRole("region", { name: "New computer" }).getByRole("button", { name: "Approve" }).click();
+  await expect(first.getByRole("region", { name: "New computer" })).toHaveCount(0);
+  await page.getByRole("link", { name: "I approved it" }).click();
+  await expect(page.locator(".rail-me")).toContainText("Owner");
+  await page.goto("/app/clients");
+  await expect(page).toHaveURL(/\/app\/clients$/);
 });
 
 test("the link in the email works on the same device", async ({ page, baseURL }) => {

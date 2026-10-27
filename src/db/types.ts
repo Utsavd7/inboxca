@@ -1128,6 +1128,9 @@ isOneToOne: false
 "review_firms":
 { Args: Record<PropertyKey, never>; Returns: string[]
                            },
+"review_owner_device":
+{ Args: { "decision": string,"request": string }; Returns: boolean
+                           },
 "save_dataset":
 { Args: { "audit": Json,"body": Json,"client": string,"draft": string,"event": string,"expected": number,"firm": string,"form": string,"period": string,"permission"?: string,"person": string }; Returns: boolean
                            },

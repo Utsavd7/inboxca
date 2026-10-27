@@ -1987,6 +1987,22 @@ export async function reviewDevice(form: FormData) {
   redirect(back);
 }
 
+// A new computer on the owner's login (D38): approved or refused by the owner from a computer
+// already signed in, never a phone (laptop only, 26 Oct 2026). The database checks that it is the
+// owner, on an approved computer other than the one asking, and that the request is still open.
+export async function reviewOwnerDevice(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const back = (error?: string) => (form.get("back") === "settings" ? `/app/settings?group=access${error ? `&error=${error}` : ""}` : `/app${error ? `?error=${error}` : ""}`);
+  const request = String(form.get("request") ?? "");
+  if (/Android|iPhone|iPad/.test((await headers()).get("user-agent") ?? "")) redirect(back("phone"));
+  if (!z.uuid().safeParse(request).success) redirect(back());
+  const { data, error } = await supabase.rpc("review_owner_device", { request, decision: form.get("decision") === "approve" ? "approve" : "refuse" });
+  if (error) throw new Error(`Computer review failed: ${error.code}`);
+  revalidatePath("/app");
+  redirect(back(data ? undefined : "computer_ended"));
+}
+
 // Permission requests (PLAN.md 5.17.2): asked by an employee or manager who may not do it
 // themselves, answered by their team's manager or by the owner or a deputy, as routeOf
 // says. Allow once is a grant for one use within an hour.
