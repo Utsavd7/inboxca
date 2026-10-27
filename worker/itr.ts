@@ -53,6 +53,15 @@ export function itrEntries(template:Template) {
   for(const [key,node] of Object.entries(root.properties!)) walk(node,[key],!!root.required?.includes(key));
   // A part with many details is split by its next heading, so one page shows one part.
   const sizes=new Map<string,number>();for(const {path} of leaves) sizes.set(path[0],(sizes.get(path[0]) ?? 0)+1);
+  // That heading is the schema's own description of it, else InboxCA's name, else its key's words.
+  // A description two headings share, such as ITR-1's claimed and allowed deductions, names neither.
+  const headings=new Map<string,Record<string,string>>(),heading=(key:string,child:string)=>{
+    if(!headings.has(key)) {
+      const texts=Object.entries(resolve(root.properties![key]).properties ?? {}).map(([name,node])=>[name,described(node.description ?? resolve(node).description)]);
+      headings.set(key,Object.fromEntries(texts.map(([name,text])=>[name,text && texts.filter(other=>other[1]===text).length===1 ? text : group(name)])));
+    }
+    return headings.get(key)![child] ?? group(child);
+  };
   const result=leaves.map(({path,node,required}):ItrEntry=>{
     const target=path.join("."),rows=path.filter(key=>key==="*").length,split=sizes.get(path[0])!>80 && path.length>2;
     const field=itrFieldName(form,target),named=itrFields[field as keyof typeof itrFields];
@@ -62,7 +71,7 @@ export function itrEntries(template:Template) {
     const kind=(primitive==="integer" || primitive==="number") && !node.pattern ? "number" : /YYYY-MM-DD/.test(node.description ?? "") || /^(DOB|DateDep|.*Date)$/.test(path.at(-1)!) && /\\d\{3\}/.test(node.pattern ?? "") ? "date" : "text";
     // InboxCA's own label, else the schema's description, else the detail's own name from the
     // schema ("Address, Road Or Street"), which CA staff recognise from the utility.
-    const part=split ? `${group(path[0])}: ${words(path[1])}` : group(path[0]);
+    const part=split ? `${group(path[0])}: ${heading(path[0],path[1])}` : group(path[0]);
     const label=named?.label ?? (described(node.description) || path.slice(split ? 2 : 1).filter(key=>key!=="*").map(words).join(", ").slice(0,120) || words(path.at(-1)!));
     // A value the schema fixes, such as the due date ITR-1 allows, is offered as its only choice.
     const choices=node.enum?.map(String) ?? (node.pattern && /^[A-Za-z0-9 .-]+$/.test(node.pattern) ? [node.pattern] : undefined);
