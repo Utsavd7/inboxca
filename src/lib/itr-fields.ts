@@ -3,8 +3,9 @@ export const itrForms=["ITR1","ITR2","ITR3","ITR4","ITR5","ITR6"] as const;
 export type ItrForm=typeof itrForms[number];
 // The returns InboxCA prepares; ITR-5 and ITR-6 follow later (PLAN.md 5.7.3).
 export const itrReturns=["ITR1","ITR2","ITR3","ITR4"] as const;
-// period_key 2026 is AY 2026-27, the same key as FY 2025-26 elsewhere.
-export const itrYear=(year:string)=>`AY ${year}-${String(Number(year)+1).slice(-2)}`;
+// period_key 2026 is AY 2026-27, the same key as FY 2025-26 elsewhere. From 1 April 2026 the
+// Income-tax Act, 2025 has no assessment year: key 2027 is tax year 2026-27.
+export const itrYear=(year:string)=>Number(year)>=2027 ? `Tax year ${Number(year)-1}-${year.slice(2)}` : `AY ${year}-${String(Number(year)+1).slice(-2)}`;
 
 // AY 2026-27 schemas from the Income Tax Department; hashes and URLs are in itr/README.md.
 export const itrSources={
