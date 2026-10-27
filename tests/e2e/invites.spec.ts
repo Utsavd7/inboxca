@@ -873,7 +873,8 @@ test("repeated mailbox failures ask the owner to reconnect, then pending mail re
 test("the owner connects a drive only after agreeing to the Drive access terms", async () => {
   await owner.goto("/app/settings");
   const card = owner.locator("section#drive");
-  await expect(card.getByLabel(/OneDrive/)).toBeDisabled();
+  // The test server has OneDrive's invented app keys (tests/fake-onedrive.ts), so it is offered.
+  await expect(card.getByLabel(/OneDrive/)).toBeEnabled();
   await card.getByLabel("Test drive on this computer").check();
   await card.getByRole("button", { name: "Connect drive" }).click();
   await expect(card.getByRole("status")).toHaveCount(0);

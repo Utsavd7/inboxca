@@ -27,6 +27,7 @@ import { Pending } from "../pending";
 import { STAGES, askChoices, askDays, stageNames, reminderStages } from "@/src/lib/reminders";
 import { isMailApi, mailSignInReady, signInNames, signInNotReady } from "@/src/lib/mail-oauth";
 import { mailApis, type MailApi } from "@/src/lib/mail-view";
+import { onedriveReady } from "@/src/lib/onedrive";
 import { MailboxForm } from "./mailbox-form";
 import { GroupAnchor } from "./group-anchor";
 import { saveReplies } from "@/app/(app)/actions";
@@ -48,7 +49,7 @@ const problems: Record<string, [string, string]> = {
   drive_taken: ["drive", "A drive is already connected. Disconnect it first."],
   drive_denied: ["drive", "You did not allow InboxCA on your drive's sign in page, so the drive is not connected. Connect again and choose Allow."],
   drive_failed: ["drive", "The drive did not finish connecting. Try again."],
-  drive_other: ["drive", "That is a different Dropbox account. Sign in with the one already connected, or disconnect it first."],
+  drive_other: ["drive", "That is a different account from the one connected. Sign in with the one already connected, or disconnect it first."],
   close_name: ["close", "Type the firm name exactly as it is shown."],
   special: ["special", "The To date must be the same as or after the From date, and Closes must be later than Opens."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
@@ -168,7 +169,7 @@ export default async function Settings({
     [setup.free_bytes == null || setup.free_bytes >= low, setup.free_bytes == null ? "Your drive does not say how much space is left" : `${(setup.free_bytes / 1024 ** 3).toFixed(1)} GB free in your drive${setup.free_bytes < low ? ". Free up space or add more, or InboxCA cannot save new papers" : ""}`],
     [true, setup.notices ? "Changes made in the drive show here within minutes" : "Changes made in the drive show here the next morning"],
   ];
-  const ready: Record<string, boolean> = { onedrive: false, dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
+  const ready: Record<string, boolean> = { onedrive: onedriveReady(), dropbox: !!process.env.DROPBOX_APP_KEY, local: true };
   const settings = membership.settings;
   // The hours shown and changed: the main office's, or the picked branch's as its people have them.
   const picked = branches?.find((row) => row.id === branch);
@@ -357,7 +358,7 @@ export default async function Settings({
                     <label key={provider} className="check">
                       <input type="radio" name="provider" value={provider} required disabled={!ready[provider]} />
                       {driveNames[provider]}
-                      {!ready[provider] && <span className="badge plain">Coming soon</span>}
+                      {!ready[provider] && <span className="badge plain">Not set up yet</span>}
                     </label>
                   ))}
                 </fieldset>

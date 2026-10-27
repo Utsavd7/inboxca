@@ -25,9 +25,12 @@ async function original(view: ViewRequest, signal: AbortSignal) {
     if (!process.env.DRIVE_LOCAL_DIR) throw new Error("No local drive");
     return localDrive(process.env.DRIVE_LOCAL_DIR, (id) => { if (process.env.FILE_WORKER_TEST === "1") reads.set(id, (reads.get(id) ?? 0) + 1); }, viewLimits.bytes).read(view.file);
   }
-  const response = await fetch("https://content.dropboxapi.com/2/files/download", {
-    method: "POST", signal, headers: { Authorization: `Bearer ${view.token}`, "Dropbox-API-Arg": JSON.stringify({ path: view.file }).replace(/[\u007f-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`) },
-  });
+  // OneDrive answers with a redirect to the file's own short-lived address, which needs no sign in.
+  const response = view.provider === "onedrive"
+    ? await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(view.file)}/content`, { signal, headers: { Authorization: `Bearer ${view.token}` } })
+    : await fetch("https://content.dropboxapi.com/2/files/download", {
+      method: "POST", signal, headers: { Authorization: `Bearer ${view.token}`, "Dropbox-API-Arg": JSON.stringify({ path: view.file }).replace(/[\u007f-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`) },
+    });
   if (!response.ok || Number(response.headers.get("Content-Length")) > viewLimits.bytes || !response.body) throw new Error("Cannot read file");
   // A fixed bounded buffer avoids joining a second original copy or trusting a size header.
   const length = Number(response.headers.get("Content-Length"));

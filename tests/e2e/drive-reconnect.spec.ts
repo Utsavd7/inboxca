@@ -120,6 +120,6 @@ test("Reconnect signs in to the same Dropbox again, and saves its account for ch
   // Another Dropbox account is refused, as this drive's papers are not in it.
   account.id = `dbid:AAInventedOther${tag}`;
   await card.getByRole("button", { name: "Connect again" }).click();
-  await expect(card.getByRole("alert")).toHaveText("That is a different Dropbox account. Sign in with the one already connected, or disconnect it first.");
+  await expect(card.getByRole("alert")).toHaveText("That is a different account from the one connected. Sign in with the one already connected, or disconnect it first.");
   expect(await drive()).toEqual([again]);
 });

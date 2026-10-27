@@ -86,7 +86,7 @@ async function Loaded({ parts }: { parts: string[] }) {
       initial={Object.fromEntries(shown.map((found) => [found.path.join("/"), found]))}
       home={shown[shown.length - 1].path}
       asked={parts.join("/")}
-      drive={{ name: ctx.account?.provider === "dropbox" ? "Dropbox" : "Test drive", web: ctx.owner && ctx.account?.provider === "dropbox" }}
+      drive={{ name: ctx.account?.provider === "dropbox" ? "Dropbox" : ctx.account?.provider === "onedrive" ? "OneDrive" : "Test drive", web: ctx.owner && ctx.account?.provider === "dropbox" }}
       choices={{
         types: [...documentTypes, ...((ctx.membership.settings.document_types ?? []) as string[])],
         works: Object.entries(workTypes),

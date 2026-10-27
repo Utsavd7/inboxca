@@ -130,7 +130,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
               </button>
             </Form>
           </section>
-          <DiskUpload incoming={folders.find((folder) => folder.endsWith(`InboxCA/${INCOMING}`))} />
+          <DiskUpload incoming={folders.find((folder) => folder.endsWith(`InboxCA/${INCOMING}`))} onedrive={account?.provider === "onedrive"} />
 
           {!!ticked.length && (
             <section className="panel" aria-labelledby="preview">
