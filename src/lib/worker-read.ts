@@ -4,7 +4,8 @@ import {signView,type ViewRequest} from "./file-worker";
 import {officialLink} from "./official-files";
 import {supabaseAdmin} from "./supabase";
 
-const result=z.object({sha256:z.string().regex(/^[a-f0-9]{64}$/),rows:z.array(z.array(z.string().max(2000)).max(26)).max(1000)});
+const rows=z.array(z.array(z.string().max(2000)).max(26)).max(1000);
+const result=z.object({sha256:z.string().regex(/^[a-f0-9]{64}$/),rows,sheet:z.number().int().min(1).max(40).default(1),more:z.array(z.object({sheet:z.number().int().min(2).max(40),rows})).max(39).default([])});
 // Called only after a document access check, or from its firm's document job.
 export async function workerRead(firm:string,document:{id:string;name:string;sha256:string},purpose:"sheet"|"portal"|"edited",form?:ViewRequest["form"],password?:string) {
   if(!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) throw new Error("The file reader is not ready yet.");
@@ -23,4 +24,6 @@ export async function workerRead(firm:string,document:{id:string;name:string;sha
   if(parsed.sha256!==document.sha256) throw new Error("The paper changed. Add the latest file before reading it again.");
   return parsed;
 }
-export async function workerSheet(firm:string,document:{id:string;name:string;sha256:string}) {return result.parse(await workerRead(firm,document,"sheet")).rows;}
+// The register's sheet, and the workbook's other sheets with a register's official headings.
+export async function workerSheets(firm:string,document:{id:string;name:string;sha256:string}) {return result.parse(await workerRead(firm,document,"sheet"));}
+export async function workerSheet(firm:string,document:{id:string;name:string;sha256:string}) {return (await workerSheets(firm,document)).rows;}

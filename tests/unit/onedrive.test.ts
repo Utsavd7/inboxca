@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { pkce } from "@/src/lib/dropbox";
-import { onedriveConnect, onedriveDrive, onedriveSignIn } from "@/src/lib/onedrive";
+import { onedriveAccessToken, onedriveConnect, onedriveDrive, onedriveSignIn, onedriveUnwatch, onedriveWatch, watchCheck } from "@/src/lib/onedrive";
 import { PIECE, quickXorHash, sendPieces } from "@/src/lib/onedrive-upload";
 import { fakeOneDrive, fakeOneDriveKeys } from "../fake-onedrive";
 
@@ -145,6 +145,31 @@ describe("the firm's OneDrive", () => {
     expect(fake.drive.pieces).toHaveLength(3);
     expect(await drive.incomingFile("Old files/2024/ITR-V.pdf")).toEqual({ id: fake.file("/InboxCA/Incoming/Old files/2024/ITR-V.pdf")!.id, hash: await quickXorHash(file) });
     expect(await drive.incomingFile("Old files/2024/missing.pdf")).toBeNull();
+  });
+
+  it("watches the drive's top for change notices, renews the watch, makes it again when gone, and removes it", async () => {
+    const token = await onedriveAccessToken((await signedIn()).refreshToken);
+    const address = "https://inboxca.invalid/api/drive/onedrive";
+    const made = await onedriveWatch(token, address);
+    const kept = fake.drive.watches.get(made.id)!;
+    expect(kept).toMatchObject({ resource: "me/drive/root", changeType: "updated", notificationUrl: address, lifecycleNotificationUrl: address, expirationDateTime: made.until });
+    // InboxCA keeps only the hash of the secret each notice carries.
+    expect(made.check).toBe(watchCheck(kept.clientState));
+    // Renewed: the same watch and secret, with a new end.
+    const renewed = await onedriveWatch(token, address, made.id);
+    expect(renewed).toEqual({ id: made.id, until: expect.any(String) });
+    expect(fake.drive.watches.get(made.id)).toMatchObject({ clientState: kept.clientState, expirationDateTime: renewed.until });
+    // Gone at Microsoft: a new one with a new secret. One left from before (409) is replaced.
+    fake.drive.watches.clear();
+    const again = await onedriveWatch(token, address, made.id);
+    expect(again.id).not.toBe(made.id);
+    expect(again.check).not.toBe(made.check);
+    const replaced = await onedriveWatch(token, address);
+    expect([...fake.drive.watches.keys()]).toEqual([replaced.id]);
+    // Removed at Disconnect, and removing it again is no error.
+    await onedriveUnwatch(token, replaced.id);
+    await onedriveUnwatch(token, replaced.id);
+    expect(fake.drive.watches.size).toBe(0);
   });
 });
 

@@ -7,7 +7,7 @@ import type {Handler} from "./runner";
 export const readSalesRegister:Handler=async(job)=>{
   if(!job.firm_id) return {done:true};
   const {data:document}=await supabaseAdmin().from("documents").select("id,firm_id,client_id,name,sha256,period_key,status,work_type,document_type,registration_id").eq("firm_id",job.firm_id).eq("id",job.entity_id ?? "").maybeSingle();
-  if(!document || document.status!=="filed" || document.work_type!=="gst" || !/\.(xlsx?|csv)$/i.test(document.name)) return {done:true};
+  if(!document || document.status!=="filed" || document.work_type!=="gst" || !/\.(xlsx?|ods|csv)$/i.test(document.name)) return {done:true};
   // A purchase register is never read as sales: it is matched with the month's GSTR-2B.
   if(document.document_type==="Purchase bills") {
     try {await matchPurchases(document,null);return {done:true};}

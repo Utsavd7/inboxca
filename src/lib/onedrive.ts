@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { INCOMING, type Drive } from "./drive";
 import { sendPieces } from "./onedrive-upload";
 
@@ -90,6 +90,41 @@ export async function onedriveAccessToken(refreshToken: string, keep?: (refreshT
   const fresh = await token({ grant_type: "refresh_token", refresh_token: refreshToken });
   if (fresh.refresh_token && keep) await keep(fresh.refresh_token).catch(() => undefined);
   return fresh.access_token;
+}
+
+// Microsoft Graph's change notices for the drive (PLAN.md 5.5.1; learn.microsoft.com/graph,
+// subscription resource type, Create subscription and Receive change notifications through
+// webhooks, read on 27 Oct 2026). A watch on the drive's top (on work drives the only folder that
+// can be watched) tells notificationUrl that something in the drive changed, never what. Its
+// clientState, a secret made here for each watch, comes back with every notice; InboxCA keeps
+// only its hash (watchCheck). Microsoft's longest watch on a drive is 42,300 minutes (under 30
+// days); InboxCA asks for an hour less, so a clock a little ahead never asks for more. Microsoft's
+// calls to authorize the watch again (lifecycle notices) go to the same address.
+export const WATCH_FOR = (42_300 - 60) * 60_000;
+export const watchCheck = (clientState: string) => createHash("sha256").update(clientState).digest("hex");
+
+// Renews the watch named, which also authorizes it again, or makes a new one when there is none
+// or Microsoft no longer has it. Microsoft refuses a second watch on the drive by the same app
+// (409), such as one left by an earlier connection whose secret is gone: InboxCA's own watches on
+// this address are removed and it tries once more. A new watch comes with its secret's hash.
+export async function onedriveWatch(accessToken: string, notificationUrl: string, id?: string) {
+  const until = new Date(Date.now() + WATCH_FOR).toISOString();
+  if (id && (await call(accessToken, `${GRAPH}/subscriptions/${encodeURIComponent(id)}`, "PATCH", { expirationDateTime: until })).status === 200) return { id, until };
+  const clientState = randomBytes(32).toString("base64url");
+  const make = () => call(accessToken, `${GRAPH}/subscriptions`, "POST", { changeType: "updated", resource: "me/drive/root", notificationUrl, lifecycleNotificationUrl: notificationUrl, expirationDateTime: until, clientState });
+  let made = await make();
+  if (made.status === 409) {
+    const mine = await call(accessToken, `${GRAPH}/subscriptions`);
+    for (const old of (mine.value as { id: string; notificationUrl?: string }[] | undefined) ?? []) if (old.notificationUrl === notificationUrl) await onedriveUnwatch(accessToken, old.id);
+    made = await make();
+  }
+  if (made.status !== 201 || typeof made.id !== "string") throw new Error(`onedrive_watch_${made.status}`);
+  return { id: made.id, until, check: watchCheck(clientState) };
+}
+
+export async function onedriveUnwatch(accessToken: string, id: string) {
+  const removed = await call(accessToken, `${GRAPH}/subscriptions/${encodeURIComponent(id)}`, "DELETE");
+  if (removed.status >= 300 && removed.status !== 404) throw new Error("onedrive_unwatch");
 }
 
 export function onedriveDrive(refreshToken: string, keep?: (refreshToken: string) => Promise<unknown>): Drive {
