@@ -13,7 +13,7 @@ const session = (id: string) => `${id.slice(0, -3)}c${id.slice(-2)}`;
 const calls = ["admin_firms()", "admin_accounts()", "admin_failed_jobs()", "admin_watch()", "admin_retry_job(0)", "admin_review_change('gstr1', 'x')", "admin_people()", `admin_remove_passkeys('${other}')`,
   "admin_post_incident('x', '{app}', 'down')", `admin_update_incident('${firm}', 'x', true)`, `admin_email_incident('${firm}')`, "admin_incidents()", `admin_firm('${firm}')`,
   "admin_reach('{GSTR1_M}')", "admin_verify_rule('GSTR1_M', '', 'https://example.test', 'CA Invented')", "admin_add_extension('GSTR1_M', '2026-09', '2026-10-30', 'https://example.test')",
-  "admin_set_office(3, 14)", "admin_office(14)", `admin_ask_support('${firm}')`, `admin_support_view('${firm}')`];
+  "admin_set_office(3, 14)", "admin_office(14)", `admin_ask_support('${firm}')`, `admin_support_view('${firm}')`, "admin_billing()", "admin_set_tax('{}')", `admin_pilot('${firm}')`];
 
 // Acts as a person in their session, with the passkey proof the server sends after a check.
 async function asAdmin(person: string, { seconds = 3600, key = "", forSession = session(person) } = {}) {
