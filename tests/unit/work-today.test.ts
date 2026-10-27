@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { weekFor } from "@/app/(app)/app/work-data";
 import { inFilter, rankWork, visibleTo, type Listed } from "@/src/lib/work/today";
 
 // Today by role: every area's items in one list, most urgent first, and only what the person's
@@ -64,4 +65,14 @@ it("filters the full list: mine, late, approvals and each area", () => {
   expect(keys("papers")).toEqual(["approve:paper", "call:shah"]);
   expect(keys("returns")).toEqual(["late:shah", "approve:draft"]);
   expect(keys("emails")).toEqual(["reply:mehta"]);
+});
+
+it("tells a manager the busiest people could not be read, rather than that none are busy", async () => {
+  const week = (teamLoad: { data: unknown; error: unknown }) => weekFor({
+    supabase: { rpc: async (name: string) => (name === "team_load" ? teamLoad : { data: [], error: null }) },
+    membership: { role: "manager", firmId: "firm" },
+    userId: "me",
+  } as unknown as Parameters<typeof weekFor>[0], Promise.resolve({ items: [], total: 0, late: 0 }));
+  expect((await week({ data: null, error: { code: "57014" } })).busiest).toBeNull();
+  expect((await week({ data: [], error: null })).busiest).toEqual([]);
 });

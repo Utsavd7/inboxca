@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { firmCrypto, localKek } from "@/src/lib/crypto";
-import { checkValues, ENCRYPTED, pgKeyStore, reseal, STORED, staleCounts } from "../../scripts/encrypted-values.mts";
+import { checkValues, ENCRYPTED, pgKeyStore, reseal, retireKeys, STORED, staleCounts } from "../../scripts/encrypted-values.mts";
 import { asOwner, attempt, connect, rollback } from "./db";
 
 // The re-seal after a key rotation (PLAN.md 8.4): each older value sealed again with the firm's
@@ -91,6 +91,66 @@ describe("sealing older values again after a key rotation", () => {
     rollback(db, async () => {
       expect(Object.keys(STORED).sort()).toEqual(Object.keys(ENCRYPTED).sort());
       for (const sql of Object.values(STORED)) await db.query(sql, [FIRM, [], [], []]);
+    }));
+});
+
+describe("retiring the older keys after the re-seal", () => {
+  const wrapped = async () => (await db.query("select wrapped_key from public.firm_keys where firm_id = $1", [FIRM])).rows[0].wrapped_key as string;
+
+  it("wipes them once nothing needs them: every value still opens, blind indexes stay, and the older key opens nothing", () =>
+    rollback(db, async () => {
+      const { kek, crypto } = await seed();
+      const open = () => checkValues(db, firmCrypto(kek, pgKeyStore(db)), [FIRM]);
+      const before = await open();
+      // A value sealed with the first key and kept nowhere InboxCA looks.
+      const kept = await crypto.encrypt(FIRM, "drill/kept", "Invented note");
+      await crypto.rotate(FIRM);
+      await reseal(db, firmCrypto(kek, pgKeyStore(db)), FIRM);
+      // The rotation an hour ago, and a safety copy taken since, with the newest key.
+      await db.query("insert into public.activity_log (firm_id, action, entity_type, entity_id, details, at) values ($1, 'keys.rotated', 'firm', $1, $2, now() - interval '1 hour'), ($1, 'document.safety_copy', 'firm', $1, '{}', now() - interval '10 minutes')", [FIRM, { key_number: 1 }]);
+      const was = await wrapped();
+      // A dry run counts the key and changes nothing.
+      expect(await retireKeys(db, firmCrypto(kek, pgKeyStore(db)), FIRM, true)).toEqual({ using: {}, keys: 1 });
+      expect(await wrapped()).toBe(was);
+      expect(await retireKeys(db, firmCrypto(kek, pgKeyStore(db, true)), FIRM)).toEqual({ using: {}, keys: 1 });
+      expect(await wrapped()).not.toBe(was);
+      expect(await open()).toEqual(before);
+      await expect(firmCrypto(kek, pgKeyStore(db)).decrypt(FIRM, "drill/kept", kept)).rejects.toThrow();
+      // Nothing left to retire; a later rotation adds key 2, and values on key 1 still open.
+      expect(await retireKeys(db, firmCrypto(kek, pgKeyStore(db, true)), FIRM)).toEqual({ using: {}, keys: 0 });
+      const rotated = firmCrypto(kek, pgKeyStore(db, true));
+      await rotated.rotate(FIRM);
+      expect(Buffer.from(await rotated.encrypt(FIRM, "drill/kept", "x"), "base64url")[1]).toBe(2);
+      expect(await open()).toEqual(before);
+      const { rows: log } = await db.query("select details from public.activity_log where firm_id = $1 and action = 'keys.retired'", [FIRM]);
+      expect(log).toEqual([{ details: { keys: 1, key_number: 1 } }]);
+    }));
+
+  it("refuses while a value, a safety copy or the 5 minutes after the rotation still need an older key, and names them", () =>
+    rollback(db, async () => {
+      const { kek, crypto, client } = await seed();
+      const retire = () => retireKeys(db, firmCrypto(kek, pgKeyStore(db, true)), FIRM);
+      const older = (await db.query("select email_enc from public.clients where id = $1", [client])).rows[0].email_enc;
+      await crypto.rotate(FIRM);
+      await reseal(db, firmCrypto(kek, pgKeyStore(db)), FIRM);
+      // One value back on the first key, as a server that had not yet seen the rotation would seal it.
+      await db.query("update public.clients set email_enc = $2 where id = $1", [client, older]);
+      const was = await wrapped();
+      expect(await retire()).toEqual({ using: { "clients.email": 1 }, keys: 0 });
+      expect(await wrapped()).toBe(was);
+      await reseal(db, firmCrypto(kek, pgKeyStore(db)), FIRM);
+      // Within 5 minutes of the rotation a server may still seal with the older key. A safety
+      // copy older than 30 days has passed its lock, so it does not count.
+      const log = (action: string, at: string, details: object = {}) =>
+        db.query(`insert into public.activity_log (firm_id, action, entity_type, entity_id, details, at) values ($1, $2, 'firm', $1, $3, now() - interval '${at}')`, [FIRM, action, details]);
+      await log("keys.rotated", "0 minutes", { key_number: 1 });
+      await log("document.safety_copy", "31 days");
+      expect(await retire()).toEqual({ using: { "the 5 minutes after the rotation": 1 }, keys: 0 });
+      // A safety copy taken before the newest key came in is locked for 30 days, so it keeps its key.
+      await log("document.safety_copy", "2 hours");
+      expect(await retire()).toEqual({ using: { "safety copies": 1, "the 5 minutes after the rotation": 1 }, keys: 0 });
+      expect(await wrapped()).toBe(was);
+      expect((await db.query("select count(*)::int n from public.activity_log where firm_id = $1 and action = 'keys.retired'", [FIRM])).rows[0].n).toBe(0);
     }));
 });
 

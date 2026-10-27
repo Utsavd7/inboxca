@@ -190,7 +190,8 @@ export async function weekFor(ctx: Context, work: ReturnType<typeof workFor>) {
   const [range, mail, load, people] = await Promise.all([
     Promise.resolve(supabase.rpc("work_numbers", lead ? { target_firm: membership.firmId, since: `${today.slice(0, 8)}01`, until: monthEnd } : { target_firm: membership.firmId, since: monday, until: addDays(monday, 6), mine: true })).then(({ data }) => data?.[0] ?? { due: 0, filed: 0, waiting: 0 }),
     membership.role === "manager" ? null : inboxWeek(ctx),
-    membership.role === "manager" ? Promise.resolve(supabase.rpc("team_load", { target_firm: membership.firmId, until: addDays(monday, 6) })).then(({ data }) => data ?? []) : [],
+    // null when it could not be read, so Today says so rather than "no returns".
+    membership.role === "manager" ? Promise.resolve(supabase.rpc("team_load", { target_firm: membership.firmId, until: addDays(monday, 6) })).then(({ data, error }) => (error ? null : (data ?? []))) : [],
     membership.role === "manager" ? Promise.resolve(supabase.rpc("firm_people", { target_firm: membership.firmId })).then(({ data }) => new Map(data?.map((person) => [person.user_id, person.email]))) : new Map<string, string>(),
   ]);
   const { items, late } = await work;
@@ -200,6 +201,6 @@ export async function weekFor(ctx: Context, work: ReturnType<typeof workFor>) {
     late,
     approve: items.filter((item) => item.area === "returns" && item.key.startsWith("approve:")).length,
     stuck: items.filter((item) => item.key.startsWith("call:") || (item.area === "returns" && item.urgent && !!item.due && item.due >= today)).length,
-    busiest: load.map((row) => ({ id: row.user_id, email: people.get(row.user_id) ?? "", returns: row.returns })),
+    busiest: load?.map((row) => ({ id: row.user_id, email: people.get(row.user_id) ?? "", returns: row.returns })) ?? null,
   };
 }

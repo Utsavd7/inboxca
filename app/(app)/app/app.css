@@ -334,6 +334,8 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .b-secondary:hover:not(:disabled) { border-color: var(--line-3); background: var(--hover); }
 .b-ghost { color: var(--ink-2); }
 .b-ghost:hover:not(:disabled) { background: var(--press); color: var(--ink); }
+.b-danger { border-color: var(--red-fg); background: var(--red-fg); color: var(--white); }
+.b-danger:hover:not(:disabled) { background: var(--red-fg); opacity: 0.9; }
 @media (hover: hover) and (pointer: fine) {
   /* The lifted card still covers the spot it left, so a pointer on its edge does not flicker. */
   a.app-card::after, .kpi::after { content: ""; position: absolute; inset: 0 0 -2px; }

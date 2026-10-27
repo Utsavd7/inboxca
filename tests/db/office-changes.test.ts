@@ -164,6 +164,25 @@ it("removes the office mark on repeated wrong confirmations, even when the PC is
   expect((await db.query("select count(*)::int n from public.activity_log where firm_id=$1 and action='office.refuse' and at > now() - interval '30 days'", [FIRM])).rows[0].n).toBe(2);
 }));
 
+// #38: each refusal names the PC, and an office PC whose connection is refused a second time
+// in 30 days loses its mark by itself, even before its key is set up.
+it("removes the office mark when a PC's connection is refused a second time in 30 days", () => rollback(db, async () => {
+  const pc = await seed();
+  await db.query("update public.devices set kind = 'office' where id = $1", [pc]);
+  const refuse = async (ipv4: string) => {
+    expect(await observe(pc, { ipv4 })).toBe(false);
+    const [{ id }] = (await db.query("select id from public.requests where firm_id=$1 and entity_id=$2 and reason_code='office_waiting' and status='pending'", [FIRM, pc])).rows;
+    await db.query("select public.office_control($1, $2, 'refuse', $3)", [FIRM, OWNER, id]);
+    return (await db.query("select kind from public.devices where id=$1", [pc])).rows[0].kind;
+  };
+  expect(await refuse("198.51.100.30")).toBe("office");
+  expect(await refuse("198.51.100.40")).toBe("laptop");
+  // A laptop refused again stays as it is.
+  expect(await refuse("198.51.100.50")).toBe("laptop");
+  const { rows } = await db.query("select details from public.activity_log where firm_id=$1 and action='office.refuse'", [FIRM]);
+  expect(rows.map((row) => row.details).sort((a, b) => Number(!!a.unmarked) - Number(!!b.unmarked))).toEqual([{ device: pc }, { device: pc }, { device: pc, unmarked: true }]);
+}));
+
 // #18, #44: the database refuses a manager even if a forged server call names them.
 it("refuses a manager's forged PC and connection approvals", () => rollback(db, async () => {
   const pc = await seed();

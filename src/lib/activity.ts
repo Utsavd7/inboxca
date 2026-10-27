@@ -43,7 +43,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "admin.update_noted": ["item", "uses", "keeps"], "admin.template_ended": ["form", "version", "until", "link"],
   "support.asked": [], "support.approved": [], "support.refused": [], "support.ended": [], "support.viewed": [],
   "office.learned": [], "office.refused": ["reason"], "office.no_fixed": [], "branch.hours": ["settings"],
-  ...Object.fromEntries(["on", "off", "forget", "fixed", "here", "confirm", "today", "refuse", "deputies", "follow"].map((decision) => [`office.${decision}`, ["deputies", "co_admin", "branch"]])),
+  ...Object.fromEntries(["on", "off", "forget", "fixed", "here", "confirm", "today", "refuse", "deputies", "follow"].map((decision) => [`office.${decision}`, ["deputies", "co_admin", "branch", ...(decision === "refuse" ? ["device", "unmarked"] : [])]])),
   "device.first_seen": [], "device.approved": ["kind", "until"], "device.refused": [], "device.withdrawn": [], "device.key_added": [], "device.key_synced": [],
   "approval.denied": ["kind"], "capture_attempt": [],
   "permission.asked": ["right", "until"], "permission.allowed": ["right", "for"], "permission.refused": ["right", "for"], "permission.always": ["right", "for", "clients", "until"],
@@ -51,8 +51,9 @@ export const activityDetails: Record<string, readonly string[]> = {
   "mailbox.connected": ["provider"], "mailbox.reconnected": ["provider"],
   // Each use and save of a mailbox's sign in token (8.7): never the token itself.
   "mailbox.token_read": ["provider", "why"], "mailbox.token_saved": ["provider", "why"], "mailbox.token_deleted": ["provider", "revoked"], "drive.consent": ["provider", "level", "terms_version"], "drive.folder_order": ["order", "naming"],
-  // What InboxCA set up in a newly connected drive (5.5.1), and the re-seal after a key rotation (8.4).
+  // What InboxCA set up in a newly connected drive (5.5.1), and a key rotation, its re-seal and retiring the older keys (8.4).
   "drive.setup": ["reached", "clients", "test_file", "shared", "free_bytes", "notices"], "keys.resealed": ["values", "key_number"],
+  "keys.rotated": ["key_number"], "keys.retired": ["keys", "key_number"],
   // The owner signed in to the same drive again, and the jobs queued again once it was back;
   // OneDrive's renewed refresh token saved (never the token itself).
   "drive.reconnected": ["provider"], "drive.back": ["jobs"], "drive.token_saved": ["provider"],
