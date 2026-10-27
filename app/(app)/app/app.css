@@ -237,8 +237,6 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .nav-bar[data-state="done"] { opacity: 0; transition: transform var(--base) var(--out), opacity var(--base) var(--out) var(--fast); }
 .pane-in { animation: page-in var(--slow) var(--out); }
 @keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
-.panel-in { animation: panel-in var(--spring-time) var(--spring); }
-@keyframes panel-in { from { opacity: 0; transform: translateX(32px); } }
 
 /* Moving between pages: the old page leaves in 100 ms, the new one rises 8 px in 240 ms, and
    the header's title crossfades in place. */
@@ -321,7 +319,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .b { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--s2); height: var(--control); padding: 0 var(--s3); border: 1px solid transparent; border-radius: var(--r2); font: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; text-decoration: none; cursor: pointer; transition: background var(--fast) var(--out), border-color var(--fast) var(--out), color var(--fast) var(--out), box-shadow var(--fast) var(--out), transform var(--fast) var(--out), filter var(--fast) var(--out); }
 .b:active:not(:disabled) { transform: scale(0.97); }
 /* The rest that is clicked presses in the same way; rows and menu choices darken instead. */
-:is(.tabs a, .pills a, .side-item, .rail-search, a.app-card, .app-card.is-link):active { transform: scale(0.97); }
+:is(.tabs a, .pills a, .side-item, .rail-search, a.app-card):active { transform: scale(0.97); }
 :is(.menu-item, .bell-list a):active { background: var(--press); }
 .b:disabled { opacity: 0.5; cursor: not-allowed; }
 .b[aria-busy="true"] { cursor: progress; }
@@ -342,7 +340,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .b-danger:hover:not(:disabled) { background: var(--red-fg); opacity: 0.9; }
 @media (hover: hover) and (pointer: fine) {
   /* The lifted card still covers the spot it left, so a pointer on its edge does not flicker. */
-  a.app-card::after, .kpi::after { content: ""; position: absolute; inset: 0 0 -2px; }
+  a.app-card::after { content: ""; position: absolute; inset: 0 0 -2px; }
 }
 .b-small { height: var(--control); padding: 0 var(--s2); font-size: 13px; }
 .b-icon { width: var(--control); padding: 0; }
@@ -375,7 +373,6 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .check-row { display: flex; margin: var(--s2) 0; }
 .fieldset { margin: var(--s4) 0 0; padding: 0; border: 0; }
 .fieldset legend { margin-bottom: var(--s1); color: var(--ink-2); font-size: 13px; }
-.subhead { margin: var(--s5) 0 var(--s1); font-size: 14px; font-weight: 600; }
 .points { display: grid; gap: var(--s1); padding-left: var(--s4); list-style: disc; color: var(--ink-2); }
 .alert { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s4); padding: var(--s2) var(--s3); border-radius: var(--r2); background: var(--red-bg); color: var(--red-fg); font-size: 13px; }
 /* A field's own error, under it, with the field marked. */
@@ -433,11 +430,11 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 /* Status pills and avatars. A pill with a meaning has a dot and a word, never colour alone;
    a plain one (a count, a kind) has no dot. */
 .badge { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 22px; padding: 0 var(--s2); border-radius: var(--round); background: var(--none-bg); color: var(--none-fg); font-size: 12px; font-weight: 600; white-space: nowrap; }
-.badge:is(.blue, .tag-invited, .done, .late, .tag-deactivated, .warn, .purple):not(.plain)::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: var(--round); background: currentColor; }
-.badge.blue, .badge.tag-invited { background: var(--info-bg); color: var(--info-fg); }
+.badge:is(.blue, .done, .late, .warn, .purple):not(.plain)::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: var(--round); background: currentColor; }
+.badge.blue { background: var(--info-bg); color: var(--info-fg); }
 .badge.done { background: var(--done-bg); color: var(--done-fg); }
 .badge.done::before { background: var(--done-dot); }
-.badge.late, .badge.tag-deactivated { background: var(--late-bg); color: var(--late-fg); }
+.badge.late { background: var(--late-bg); color: var(--late-fg); }
 .badge.late::before { background: var(--late-dot); }
 .badge.warn { background: var(--wait-bg); color: var(--wait-fg); }
 .badge.warn::before { background: var(--wait-dot); }
@@ -455,13 +452,8 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .avatar.a6 { background: var(--a6-bg); color: var(--a6-fg); }
 .avatar.a7 { background: var(--a7-bg); color: var(--a7-fg); }
 .who { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
-.file-icon { flex: none; color: var(--ink-3); }
 .sub-head { margin-top: var(--s5); font-size: 14px; font-weight: 600; }
-.ask-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--s4); margin-top: var(--s4); }
-.ask-groups fieldset { display: grid; align-content: start; gap: var(--s1); border: 0; }
-.ask-groups legend { margin-bottom: var(--s1); font-weight: 600; }
 .link-once { overflow-wrap: anywhere; user-select: all; }
-.asks { margin-top: var(--s3); }
 .send-to { display: grid; justify-items: start; gap: var(--s2); margin-top: var(--s4); }
 .drop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s5); padding: var(--s3) var(--s4); border: 1px dashed var(--line-2); border-radius: var(--r3); }
 .drop > svg { flex: none; color: var(--ink-3); }
@@ -487,16 +479,11 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .ui input[type="file"]::file-selector-button:hover { background: var(--hover); }
 .notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s3); padding: var(--s2) var(--s3); border-radius: var(--r2); background: var(--green-bg); color: var(--green-fg); font-size: 13px; }
 
-/* Record pages: the work on the left, the details down the right. */
-.record { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--s7); align-items: start; margin-top: var(--s5); }
-.record-side { position: sticky; top: 72px; padding-left: var(--s5); border-left: 1px solid var(--line); }
-.record-side h2 { margin-bottom: var(--s2); color: var(--ink-3); font-size: 13px; font-weight: 500; }
+/* Details as label and value pairs (a client's details, an open notice). */
 .props { display: grid; gap: var(--s1); }
 .props > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: var(--s3); min-height: var(--control); }
 .props dt { color: var(--ink-3); font-size: 13px; }
 .props dd { overflow-wrap: anywhere; }
-.record-main > .tabs { margin-top: 0; }
-@media (max-width: 1080px) { .record { grid-template-columns: 1fr; gap: var(--s5); } .record-side { position: static; order: -1; padding-left: 0; border-left: 0; } }
 
 /* Tabs and filters. The current one carries a line (tabs) or a thumb (pills) that slides
    from the last one when the view changes (link-tabs.tsx). */
@@ -530,13 +517,6 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .empty-art svg.empty-bg { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; background: none; }
 .empty-art .icon-tile { position: relative; width: 40px; height: 40px; border-radius: var(--r2); box-shadow: var(--shadow-2); }
 
-.needs > li > svg { flex: none; color: var(--ink-3); }
-.needs > li.is-late > svg,
-.needs > li.is-late strong { color: var(--red-fg); }
-.needs > li.is-clear { color: var(--ink-3); }
-.needs > li.is-clear > svg { color: var(--green-fg); }
-.when { color: var(--ink-3); font-size: 13px; white-space: nowrap; }
-
 .import-choose { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--s4) var(--s6); align-items: start; margin-top: var(--s3); }
 .import-choose fieldset { display: grid; gap: var(--s2); border: 0; }
 .import-choose legend { margin-bottom: var(--s1); font-weight: 600; }
@@ -559,7 +539,6 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .cmd-input input { flex: 1; height: 52px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; outline: none; }
 .cmd-list { max-height: 360px; overflow-y: auto; padding: var(--s2); }
 .cmd-list li { display: flex; align-items: center; gap: var(--s3); height: var(--row); padding: 0 var(--s3); border-radius: var(--r2); cursor: pointer; }
-.cmd-list .cmd-group { height: 28px; padding-top: var(--s2); color: var(--ink-3); font-size: 12px; font-weight: 600; cursor: default; }
 .cmd-list li[aria-selected="true"] { background: var(--accent-soft); }
 .cmd-list li[aria-selected="true"] > svg:first-child { color: var(--accent); }
 .cmd-list li small { margin-left: auto; color: var(--ink-3); font-size: 12px; }
@@ -569,8 +548,6 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 @media (max-width: 860px) {
   .stage-body { padding: 0 var(--s4) var(--s5); }
   .stage-notes, .status-bar { padding-inline: var(--s4); }
-  .ribbon-days { height: 92px; gap: 0; }
-  .app-invite { grid-template-columns: 1fr; }
 }
 /* Phones and narrow windows: the page scrolls as usual, the sidebar is a drawer opened from
    the menu button in the header, and the page's actions wrap under its title. */
@@ -635,8 +612,8 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .kbd { display: inline-flex; align-items: center; height: 20px; padding: 0 var(--s1); border: 1px solid var(--line-2); border-radius: var(--r1); color: var(--ink-3); font: 500 12px var(--font-plex), ui-monospace, monospace; }
 
 /* Boxes the pages drew before, as surfaces on the canvas. */
-:is(.clients-table, .client-card, .clients-progress, .set-page .set-body > .panel, .cal-strip, .notices-clients, .ib-wait, .docs-clients, .people-table, .drop) { background: var(--surface); }
-:is(.clients-table, .client-card, .set-page .set-body > .panel, .people-table) { border-color: var(--edge); box-shadow: var(--shadow-1); }
+:is(.clients-table, .set-page .set-body > .panel, .cal-strip, .notices-clients, .ib-wait, .docs-clients, .people-table, .drop) { background: var(--surface); }
+:is(.clients-table, .set-page .set-body > .panel, .people-table) { border-color: var(--edge); box-shadow: var(--shadow-1); }
 
 /* Cards (ui.tsx Card): a surface with an icon tile, a title and a count pill, then rows. A card
    that is a link lifts a little under the pointer. */
@@ -647,10 +624,10 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .app-card-foot { padding: var(--s3) var(--s4); border-top: 1px solid var(--line); }
 .app-card-foot > .b-ghost { margin-left: calc(var(--s2) * -1); color: var(--accent); }
 .app-card-none { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin: 0; padding: 0 var(--s4) var(--s4); color: var(--ink-3); font-size: 13px; }
-a.app-card, .app-card.is-link { position: relative; text-decoration: none; transition: box-shadow var(--base) var(--out), transform var(--base) var(--out); }
+a.app-card { position: relative; text-decoration: none; transition: box-shadow var(--base) var(--out), transform var(--base) var(--out); }
 @media (hover: hover) and (pointer: fine) {
   .app-card:hover { border-color: var(--line-2); }
-  a.app-card:hover, .app-card.is-link:hover { box-shadow: var(--shadow-2); transform: translateY(-2px); }
+  a.app-card:hover { box-shadow: var(--shadow-2); transform: translateY(-2px); }
 }
 .icon-tile { display: inline-grid; flex: none; place-items: center; width: 28px; height: 28px; border-radius: var(--r2); background: var(--none-bg); color: var(--none-fg); }
 .icon-tile.k-reply { background: var(--k-reply-bg); color: var(--k-reply); }

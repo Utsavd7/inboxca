@@ -1,1 +1,0 @@
-Filing week, and the inbox has not stopped since 9 am. We are building InboxCA for Indian CA firms: it reads every client email, files every paper in the right folder, replies to clients on its own and reminds them only for what is missing. Nothing pending.

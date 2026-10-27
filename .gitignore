@@ -12,9 +12,13 @@ coverage/
 !.env.example
 .render/
 .dist/
-.claude/settings.local.json
-brag-output/brag-vscode-preview.mp4
-brag-output/composition/snapshots/
+.claude/
+
+# Business and marketing files stay on this computer, never on GitHub.
+/brag-output/
+/InboxCA-Paresh.pdf
+/Orelu-CA-Firms-Plan.pptx
+/InboxCA-Brand-Kit.png
 
 *.tsbuildinfo
 playwright-report/
