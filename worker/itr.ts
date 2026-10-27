@@ -53,12 +53,13 @@ export function itrEntries(template:Template) {
   for(const [key,node] of Object.entries(root.properties!)) walk(node,[key],!!root.required?.includes(key));
   // A part with many details is split by its next heading, so one page shows one part.
   const sizes=new Map<string,number>();for(const {path} of leaves) sizes.set(path[0],(sizes.get(path[0]) ?? 0)+1);
-  // That heading is the schema's own description of it, else InboxCA's name, else its key's words.
-  // A description two headings share, such as ITR-1's claimed and allowed deductions, names neither.
+  // That heading is InboxCA's name for it, else the schema's own description, else its key's words.
+  // A description two headings share, such as ITR-1's claimed and allowed deductions, names neither,
+  // and one holding a key ("Summary of NonResidentPLDetails") is no name.
   const headings=new Map<string,Record<string,string>>(),heading=(key:string,child:string)=>{
     if(!headings.has(key)) {
       const texts=Object.entries(resolve(root.properties![key]).properties ?? {}).map(([name,node])=>[name,described(node.description ?? resolve(node).description)]);
-      headings.set(key,Object.fromEntries(texts.map(([name,text])=>[name,text && texts.filter(other=>other[1]===text).length===1 ? text : group(name)])));
+      headings.set(key,Object.fromEntries(texts.map(([name,text])=>[name,groups[name] ?? (text && !/[a-z][A-Z]/.test(text) && texts.filter(other=>other[1]===text).length===1 ? text : group(name))])));
     }
     return headings.get(key)![child] ?? group(child);
   };
