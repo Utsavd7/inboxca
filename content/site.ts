@@ -25,7 +25,8 @@ export const demoSteps = [
 ] as const;
 
 // What InboxCA is built to work beside (PLAN.md 4.1, D21, D36). Each logo is the
-// owner's own file, unchanged: [name shown, file in /brand/tools, width, height, text beside it].
+// owner's own file, unchanged but for the pictures, saved at 3 times their shown size:
+// [name shown, file in /brand/tools, width, height, text beside it].
 // The Zoho Mail file already carries its name, so no text sits beside it.
 export const worksWith = [
   ["Gmail", "gmail.svg", 36, 28, "Gmail"],
@@ -33,37 +34,30 @@ export const worksWith = [
   ["Zoho Mail", "zoho-mail.svg", 78, 34, ""],
   ["OneDrive", "onedrive.svg", 46, 28, "OneDrive"],
   ["Dropbox", "dropbox.svg", 28, 28, "Dropbox"],
-  ["Tally", "tally.png", 44, 44, "exports"],
-  ["Excel", "excel.svg", 27, 28, "Excel and PDF"],
-  ["TaxPower GST", "taxpower.png", 28, 28, "TaxPower GST"],
-  ["KDK Spectrum", "kdk.png", 28, 28, "KDK Spectrum"],
+  ["Tally", "tally.webp", 44, 44, "exports"],
+  ["Excel", "excel.svg", 27, 28, "Excel, Word and PDF"],
+  ["TaxPower GST", "taxpower.webp", 28, 28, "TaxPower GST"],
+  ["KDK Spectrum", "kdk.webp", 28, 28, "KDK Spectrum"],
 ] as const;
 
-// PLAN.md D3, D6, D18, D19, D21, D36.
+// PLAN.md D3, D6, D18, D19, D21, D36. What the cards above already answer (emails kept, where
+// files live, portal passwords) is not asked again here.
 export const questions = [
   [
-    "Do you keep my emails?",
-    "No. Your emails stay in your mailbox, and InboxCA stores no email text.",
-  ],
-  [
-    "Where are my files kept?",
-    "In your firm's own OneDrive or Dropbox. Your old files stay there too.",
-  ],
-  [
     "How are my files arranged?",
-    "By year, then client, then work: FY 2026-27, Patel Textiles, GST. Each file is named like Patel Textiles - Purchase bills - Sep 2026.pdf. You can change the folder order in Settings.",
-  ],
-  [
-    "Do you need my GST or income tax portal password or OTP?",
-    "Never. InboxCA does not log in to the GST or income tax portal.",
-  ],
-  [
-    "Does InboxCA file returns?",
-    "No. It prepares the form. Your team checks every figure and files with its own OTP or digital signature.",
+    "In your firm's own OneDrive or Dropbox, by year, then client, then work: FY 2026-27, Patel Textiles, GST. Each file is named like Patel Textiles - Purchase bills - Sep 2026.pdf. You can change the folder order in Settings.",
   ],
   [
     "Does it work with my current software?",
-    "Yes. It reads Tally exports, Excel sheets and PDFs, and prepares files that TaxPower GST and KDK Spectrum can import. There is no live connection to Tally.",
+    "Yes. It reads Tally exports, every sheet of an Excel or OpenOffice workbook, old Excel files, Word files and PDFs. Scans and phone photos are read too, so you can search them by their words. It prepares files that TaxPower GST and KDK Spectrum can import. There is no live connection to Tally.",
+  ],
+  [
+    "Does InboxCA file returns?",
+    "No. It prepares the form. Your team checks every figure and files with its own OTP or digital signature. Each open ITR shows which of Form 16 or Form No. 130, Form 26AS or Form No. 168 and AIS are still needed, and adding the file ticks it off.",
+  ],
+  [
+    "What if a government form changes?",
+    "A new version with the same fields goes live by itself. One whose layout changed is checked and tested by us first.",
   ],
   [
     "What if someone deletes a file?",

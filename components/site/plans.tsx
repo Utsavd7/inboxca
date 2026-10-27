@@ -1,5 +1,5 @@
 "use client";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Minus, Plus } from "lucide-react";
 import { custom, planRows, plans, practices, rupees } from "@/content/plans";
@@ -38,6 +38,18 @@ export function Plans() {
   const result = estimate(clients, practice, team);
   const fit = result.index;
   const per = yearly ? "a year" : "a month";
+  const grid = useRef<HTMLUListElement>(null);
+
+  // On a phone the plans sit in a row; keep the one that fits in view without moving the page.
+  useEffect(() => {
+    const strip = grid.current;
+    const card = strip?.children[fit] as HTMLElement | undefined;
+    if (!strip || !card || strip.scrollWidth <= strip.clientWidth) return;
+    strip.scrollTo({
+      left: card.offsetLeft - (strip.clientWidth - card.clientWidth) / 2,
+      behavior: "smooth",
+    });
+  }, [fit]);
   const changeClients = (value: number) => {
     const next = Math.min(20000, Math.max(0, Math.round(value) || 0));
     setClients(next);
@@ -227,7 +239,7 @@ export function Plans() {
         </div>
       </div>
 
-      <ul className="plan-grid">
+      <ul className="plan-grid" ref={grid} tabIndex={0} aria-label="Plans">
         {plans.map((plan, index) => (
           <li key={plan.name} className={`plan ${fit === index ? "is-fit" : ""}`}>
             {fit === index && <FitTag />}
@@ -303,7 +315,7 @@ export function Plans() {
       </div>
       <p className="plan-guide">
         An estimate from your answers. Your exact plan is worked out from your
-        own client list once you join. Clients are unlimited on every plan.
+        own client list once you join.
       </p>
     </div>
   );
