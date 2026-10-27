@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { clientReplied, receiveAsked } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
-import { describeFile, folderFor, gstinFor, periodName, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
+import { describeFile, filePeriod, folderFor, gstinFor, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
 import type { FolderOrder, Naming } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { mailHealth, openMail } from "@/src/lib/firm-mail";
@@ -94,7 +94,7 @@ async function fileAttachments(
       const registration = gstinFor(about.work, (gstins ?? []).map((row) => row.id));
       const toCheck = !about.sure || again;
       const folder = await drive.ensureFolder(folderFor(order, client, { ...about, receivedAt: event.received_at, toCheck }));
-      const parts = { client, type: about.type, period: periodName(about.period), extension: path.extname(file.name) };
+      const parts = { client, type: about.type, period: filePeriod(about.period), extension: path.extname(file.name) };
       const saved = await placeUnderFreeName(parts, receivedLabel(event.received_at), (name) => drive.save(folder, name, file.bytes), naming);
       if (saved === "taken") throw new Error("name_taken");
       const id = randomUUID();

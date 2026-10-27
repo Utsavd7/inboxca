@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { kindChecklist, kindChecklists } from "@/src/lib/checklists";
-import { describeFile, gstinFor, workOfType } from "@/src/lib/documents";
+import { describeFile, filePeriod, gstinFor, periodName, workOfType } from "@/src/lib/documents";
 
 // Attachment names as clients send them, and where InboxCA files each one.
 describe("what an attachment is", () => {
@@ -17,6 +17,16 @@ describe("what an attachment is", () => {
     ["ledger.xlsx", "", "data_tax_audit", { type: "Ledger", work: "tax_audit", period: "", year: "FY 2026-27", sure: false }],
   ])("%s", (name, subject, label, expected) => {
     expect(describeFile(name, subject, label, received)).toEqual(expected);
+  });
+});
+
+describe("a period in words", () => {
+  it("names a year from April 2026 a tax year for people, while drive file names keep FY", () => {
+    expect(periodName("2026")).toBe("FY 2025-26");
+    expect(periodName("2027")).toBe("Tax year 2026-27");
+    expect(periodName("2026-09")).toBe("Sep 2026");
+    expect(filePeriod("2027")).toBe("FY 2026-27");
+    expect(filePeriod("2026-09")).toBe("Sep 2026");
   });
 });
 

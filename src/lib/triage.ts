@@ -98,7 +98,7 @@ export function classify(email: Email, today: string): { label: Label; reason: s
   }
   if (asks && !email.attachments.length) {
     // A year range mentioned, as FY or AY: an AY names the year after its FY.
-    const years = [...text.matchAll(/\b(a\.?y\.?|f\.?y\.?)?\s*(20\d\d)\s*[-/]\s*\d{2}\b/g)].map((match) =>
+    const years = [...text.matchAll(/\b(assessment year|a\.?y\.?|f\.?y\.?)?\s*(20\d\d)\s*[-/]\s*\d{2}\b/g)].map((match) =>
       Number(match[2]) - (match[1]?.startsWith("a") ? 1 : 0),
     );
     const past = count(text, "past") > 0 || years.some((year) => year < yearStart(today) - 1);

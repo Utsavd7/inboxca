@@ -20,6 +20,11 @@ describe("email triage by rules", () => {
       expect(email(text), text).toEqual({ label: "records_current", reason: "record_request" });
     expect(email("Form 16 attached. Please send the list of other papers.", ["form16.pdf"])).toEqual({ label: "data_income_tax", reason: "data_words_with_files" });
   });
+  it("reads an assessment year, written out or as A.Y., as the year after its financial year", () => {
+    const email = (text: string) => classify({ subject: "Request", text, attachments: [] }, "2026-10-17").label;
+    for (const text of ["Please send my ITR acknowledgement for Assessment Year 2025-26", "Please send the ITR-V for A.Y. 2025-26"]) expect(email(text), text).toBe("records_past");
+    for (const text of ["Please send my ITR acknowledgement for assessment year 2026-27", "Please send the ITR-V for A.Y. 2026-27"]) expect(email(text), text).toBe("records_current");
+  });
   it("keeps a notice that asks something for the team as well", () => {
     const notice = (text: string) => classify({ subject: "GST notice", text, attachments: [] }, "2026-10-17");
     expect(notice("Sir, we received a notice from the GST department. What should we do? Please call.")).toEqual({ label: "notice_received", reason: "notice_question" });
