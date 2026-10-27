@@ -15,6 +15,17 @@ const records: Record<string, ToolResult> = {
   list_upcoming_deadlines: { outcome: "found", lines: ["- GSTR-3B for Oct 2026: due on 20 Nov 2026"] },
   list_pending_documents: { outcome: "found", lines: ["We still need these papers for Oct 2026:", "- Sales bills", "Upload them here, no sign in needed: https://app.inboxca.test/u/invented-link"] },
 };
+// The eval key's own call (an evals project, PLAN.md 5.18), not a firm's credits: the model and
+// settings of a reply draft, kept nowhere by the provider.
+async function ask(instructions: string, text: string) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: process.env.AI_AGENT_MODEL || "gpt-5-mini", instructions, input: text, store: false, max_output_tokens: 1500, reasoning: { effort: "low" } }),
+  });
+  const data = (await response.json()) as { output?: { content?: { type: string; text?: string }[] }[] };
+  return data.output?.flatMap((item) => item.content ?? []).find((part) => part.type === "output_text")?.text ?? null;
+}
 const input = (subject: string, text: string): ReplyInput => ({
   firm: "Invented CA Firm",
   client: "Invented Textiles",
@@ -48,7 +59,7 @@ const cases: Case[] = [
 describe.skipIf(!process.env.OPENAI_API_KEY)("AI email assistant evals", { concurrent: true }, () => {
   for (const item of cases)
     it(item.name, async () => {
-      const result = await draftFrom("reply_draft", input(item.subject, item.text));
+      const result = await draftFrom(ask, input(item.subject, item.text));
       expect(result.outcome).not.toBe("blocked");
       if (item.expect) expect(result.outcome).toBe(item.expect);
       if (item.reason && result.outcome !== "draft") expect(result.reason).toBe(item.reason);

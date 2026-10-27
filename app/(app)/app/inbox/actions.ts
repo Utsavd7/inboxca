@@ -126,7 +126,7 @@ export async function draftEmail(_previous: Draft, form: FormData): Promise<Draf
   const subject = String(form.get("subject") ?? "").trim().slice(0, 300);
   const { data: client } = await supabase.from("clients").select("name").eq("id", String(form.get("client") ?? "")).maybeSingle();
   if (!client || !subject) return { error: "Write the subject first." };
-  const answer = await askAi("email_draft", "You draft a short, polite plain text email from an Indian CA firm to its client about the subject given. Never invent figures, dates or facts. Answer as JSON: {\"text\": string}", JSON.stringify({ firm: membership.firmName, client: client.name, subject }));
+  const answer = await askAi(membership.firmId, "email_draft", "You draft a short, polite plain text email from an Indian CA firm to its client about the subject given. Never invent figures, dates or facts. Answer as JSON: {\"text\": string}", JSON.stringify({ firm: membership.firmName, client: client.name, subject }));
   try {
     return { text: String((JSON.parse(answer ?? "") as { text?: unknown }).text ?? "").slice(0, 20_000) };
   } catch {

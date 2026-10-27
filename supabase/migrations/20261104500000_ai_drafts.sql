@@ -45,3 +45,10 @@ language sql security definer set search_path = '' as $$
 $$;
 revoke all on function private.purge_ai_drafts() from public, anon, authenticated, service_role;
 select cron.schedule('ai-draft-purge', '45 * * * *', 'select private.purge_ai_drafts()');
+
+-- The AI figures of the two new reasons (5.18, the credits table), merged under any the admin
+-- already set: a draft made by itself is an AI reply to a client email; a reminder's opening is
+-- a reminder personalised by AI, a sentence or two.
+update public.platform_settings
+set value = jsonb_set(value, '{ai,reasons}', '{"auto_draft": {"credits": 6, "tokens": 1500, "effort": "low"}, "reminder": {"credits": 1, "tokens": 300, "effort": "minimal"}}'::jsonb || coalesce(value #> '{ai,reasons}', '{}'))
+where key = 'plan_formula' and value ? 'ai';

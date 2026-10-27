@@ -36,7 +36,7 @@ const clientAddress = `ai-${firm.slice(0, 8)}@invented.test`;
 // An invented key made for this run; the fake takes only it.
 const key = randomBytes(24).toString("base64url");
 let db: Client;
-let ai: Awaited<ReturnType<typeof fakeOpenAi>>;
+const ai = fakeOpenAi(key);
 const day = (ahead: number) => new Date(Date.now() + ahead * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 const run = (request: string) => aiDraft({ entity_id: request } as Job, { markSending: async () => {} });
 // A client email waiting for a person; the trigger queues its AI draft.
@@ -50,6 +50,8 @@ async function waiting(subject: string, text: string, from: string | null = null
 const draftOf = async (request: string) => (await db.query("select status, draft_enc from public.requests where id = $1", [request])).rows[0] as { status: string; draft_enc: string | null };
 const leftFor = async (email: string) => (await db.query("select details->>'reason' reason from public.activity_log where firm_id = $1 and action = 'email.ai_left' and entity_id = $2 order by at desc limit 1", [firm, email])).rows[0]?.reason;
 const draft = (text: string) => JSON.stringify({ outcome: "draft", reply: text, papers: [] });
+// What the fake was last asked: the reason, the email and records sent, and whether it is kept.
+const lastAsked = () => ai.calls.at(-1) as { metadata: { reason: string }; input: string; store: boolean };
 
 beforeAll(async () => {
   vi.stubEnv("SUPABASE_URL", local.url);
@@ -57,8 +59,9 @@ beforeAll(async () => {
   vi.stubEnv("APP_BASE_URL", "https://app.invented.test");
   vi.stubEnv("LOCAL_KEK", randomBytes(32).toString("base64"));
   vi.stubEnv("OPENAI_API_KEY", key);
-  ai = await fakeOpenAi(key);
-  vi.stubGlobal("fetch", ai.route);
+  vi.stubEnv("AI_AGENT_MODEL", "");
+  await ai.listen();
+  vi.stubEnv("OPENAI_TEST_URL", ai.url);
   db = await connect();
   await db.query("insert into public.firms(id,name,state_code,status) values ($1,'AI Drafts Firm','24','active'),($2,'Other AI Firm','24','active')", [firm, other]);
   await db.query("insert into public.clients(id,firm_id,name,kind,email_enc,email_bidx) values ($1,$2,'Invented Drafts Client','business',$3,'x'),($4,$5,'Other Firm Client','business',null,'y')", [client, firm, await serverCrypto().encrypt(firm, `clients/${client}/email`, clientAddress), otherClient, other]);
@@ -80,7 +83,6 @@ afterAll(async () => {
   await db.query("delete from private.rate_limits where key = $1", [limitKey("ai", firm)]);
   await db.end();
   await ai.close();
-  vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
 
@@ -92,15 +94,17 @@ it("writes a draft only from the client's records, seals it, holds it for a pers
   vi.stubEnv("OPENAI_API_KEY", "");
   expect(await run(id)).toEqual({ done: true });
   vi.stubEnv("OPENAI_API_KEY", key);
-  expect(ai.asked).toHaveLength(0);
+  expect(ai.calls).toHaveLength(0);
   expect((await draftOf(id)).draft_enc).toBeNull();
 
   const text = `Dear Invented Drafts Client,\n\nYes, your GST return for September is filed, acknowledgement number ${ack}.\n\nRegards,\nAI Drafts Firm`;
-  ai.replies.push(draft(text));
+  ai.answer(draft(text), 900, 200);
   expect(await run(id)).toEqual({ done: true });
-  // The AI got the tools' results for this client only, and nothing is kept by the provider.
-  const asked = ai.asked.at(-1)!;
-  expect(asked).toMatchObject({ reason: "auto_draft", store: false });
+  // The AI got the tools' results for this client only, through the credit meter, and nothing
+  // is kept by the provider.
+  const asked = lastAsked();
+  expect(asked).toMatchObject({ metadata: { reason: "auto_draft" }, store: false });
+  expect((await db.query("select reason from public.ai_ledger where firm_id = $1", [firm])).rows).toEqual([{ reason: "auto_draft" }]);
   const input = JSON.parse(asked.input);
   expect(input.records.get_task_status).toEqual({ outcome: "found", lines: [expect.stringContaining(ack)] });
   expect(input.records.list_upcoming_deadlines).toEqual({ outcome: "found", lines: [expect.stringContaining("Invented checked return")] });
@@ -117,7 +121,7 @@ it("writes a draft only from the client's records, seals it, holds it for a pers
   expect(await db.query("select action from public.activity_log where firm_id = $1 and entity_id = $2 and action like 'email.ai%'", [firm, email]).then(({ rows }) => rows)).toEqual([{ action: "email.ai_drafted" }]);
   // A second run, as after a retry, asks nothing more.
   expect(await run(id)).toEqual({ done: true });
-  expect(ai.asked).toHaveLength(1);
+  expect(ai.calls).toHaveLength(1);
 
   // Answered: the draft goes with the wait.
   await db.query("update public.requests set status = 'done' where id = $1", [id]);
@@ -126,10 +130,8 @@ it("writes a draft only from the client's records, seals it, holds it for a pers
   // An email 7 days old loses its draft; a newer one keeps it.
   const old = await waiting("Thanks", "Thank you for your help.");
   const fresh = await waiting("Thanks again", "Thank you once more.");
-  for (const request of [old, fresh]) {
-    ai.replies.push(draft("Dear Invented Drafts Client,\n\nThank you for your kind words. Our team will be in touch.\n\nRegards,\nAI Drafts Firm"));
-    await run(request.id);
-  }
+  ai.answer(draft("Dear Invented Drafts Client,\n\nThank you for your kind words. Our team will be in touch.\n\nRegards,\nAI Drafts Firm"), 900, 200);
+  for (const request of [old, fresh]) await run(request.id);
   await db.query("update public.email_events set received_at = now() - interval '8 days' where id = $1", [old.email]);
   await db.query("select private.purge_ai_drafts()");
   expect((await draftOf(old.id)).draft_enc).toBeNull();
@@ -137,7 +139,6 @@ it("writes a draft only from the client's records, seals it, holds it for a pers
 });
 
 it("throws away a draft with advice, an invented figure, a tax number or an outside link, and leaves the email to the team with the reason", async () => {
-  const { id, email } = await waiting("Question", "Should I invest in PPF? Also what do I owe?");
   const pan = ["ABCDE", "1234", "F"].join("");
   const cases: [string | null, string][] = [
     [draft("Dear Invented Drafts Client,\n\nWe recommend you claim a deduction under section 80C.\n\nRegards,\nAI Drafts Firm"), "advice"],
@@ -146,11 +147,12 @@ it("throws away a draft with advice, an invented figure, a tax number or an outs
     [draft(`Dear Invented Drafts Client,\n\nYour PAN ${pan} is on our records.\n\nRegards,\nAI Drafts Firm`), "identifier"],
     [draft("Dear Invented Drafts Client,\n\nPlease pay here: https://pay.invented.test/now\n\nRegards,\nAI Drafts Firm"), "link"],
     [JSON.stringify({ outcome: "handoff", reason: "fees" }), "fees"],
-    // The provider fails or AI is paused for the firm (no answer): the team answers.
+    // The provider fails, or the credit meter pauses AI for the firm (no answer): the team answers.
     [null, "paused"],
   ];
   for (const [answer, reason] of cases) {
-    if (answer) ai.replies.push(answer);
+    const { id, email } = await waiting(`Question ${reason}`, "Should I invest in PPF? Also what do I owe?");
+    ai.answer(answer, 900, 200);
     expect(await run(id)).toEqual({ done: true, reason });
     expect(await leftFor(email)).toBe(reason);
     expect((await draftOf(id)).draft_enc).toBeNull();
@@ -159,7 +161,7 @@ it("throws away a draft with advice, an invented figure, a tax number or an outs
 });
 
 it("keeps to the firm's AI limit, and gives nothing to a sender who may not see the client's records", async () => {
-  const asked = ai.asked.length;
+  const asked = ai.calls.length;
   const contactMail = await waiting("Status", "Is it filed?", contact);
   expect(await run(contactMail.id)).toEqual({ done: true, reason: "not_allowed" });
   expect(await leftFor(contactMail.email)).toBe("not_allowed");
@@ -167,7 +169,7 @@ it("keeps to the firm's AI limit, and gives nothing to a sender who may not see 
   await db.query("select public.rate_limit($1, 120, 3600) from generate_series(1, 120)", [limitKey("ai", firm)]);
   const busy = await waiting("Status", "Is it filed?");
   expect(await run(busy.id)).toEqual({ done: true, reason: "busy" });
-  expect(ai.asked).toHaveLength(asked);
+  expect(ai.calls).toHaveLength(asked);
 });
 
 it("never lets one firm's tools reach another firm's client", async () => {

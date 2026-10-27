@@ -64,11 +64,12 @@ const INSTRUCTIONS = [
 ].join("\n");
 
 // One turn of the assistant: the tools' results and the email go in; a draft or a hand off
-// comes out, and a draft passes the output checks before anyone sees it. AI never sends. The
-// eval suite (tests/ai-evals) runs this on the sample emails.
+// comes out, and a draft passes the output checks before anyone sees it. AI never sends. ask is
+// askAi for the firm (null: no credits, paused or failed); the eval suite (tests/ai-evals) runs
+// this on the sample emails with its own key.
 export type ReplyInput = { firm: string; client: string; name: string; conversation: { from: "firm" | "client"; date: string; text: string }[]; records: Record<string, ToolResult>; papers: { id: string; name: string }[] };
-export async function draftFrom(reason: AiReason, input: ReplyInput): Promise<AiOutcome> {
-  const answer = await askAi(reason, INSTRUCTIONS, JSON.stringify(input));
+export async function draftFrom(ask: (instructions: string, input: string) => Promise<string | null>, input: ReplyInput): Promise<AiOutcome> {
+  const answer = await ask(INSTRUCTIONS, JSON.stringify(input));
   if (!answer) return { outcome: "blocked", reason: "paused" };
   let parsed: { outcome?: unknown; reply?: unknown; papers?: unknown; reason?: unknown };
   try {
@@ -100,7 +101,7 @@ export async function writeReply(db: Db, firm: string, firmName: string, mail: s
   if (records.get_client_overview.outcome === "unavailable") return null;
   if (records.get_client_overview.outcome !== "found") return { outcome: "blocked", reason: "not_allowed" };
   if (!(await withinLimit("ai", firm).catch(() => false))) return { outcome: "blocked", reason: "busy" };
-  return draftFrom(reason, {
+  return draftFrom((instructions, input) => askAi(firm, reason, instructions, input), {
     firm: firmName,
     client: open.client?.name ?? "",
     name: name || open.client?.name || "",
@@ -129,6 +130,7 @@ export async function aiDraftOf(firm: string, request: string, email: string): P
 export async function reminderOpening(firm: string, firmName: string, client: string) {
   if (!aiReady() || !(await withinLimit("ai", firm).catch(() => false))) return null;
   const answer = await askAi(
+    firm,
     "reminder",
     'You write one or two warm, polite sentences in English that open a reminder email from an Indian CA firm to its client. Say nothing about returns, taxes, papers, dates, amounts or deadlines, and give no advice: the rest of the email says what is due. Answer only with JSON: {"opening": string}',
     JSON.stringify({ firm: firmName, client }),

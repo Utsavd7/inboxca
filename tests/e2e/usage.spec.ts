@@ -3,7 +3,8 @@ import { test, expect, type Page } from "@playwright/test";
 import { todayInIndia } from "@/src/lib/calendar";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
-// The owner's InboxCA use: a line on Today and the two meters in Settings; staff see neither.
+// The owner's InboxCA use: a line on Today, the AI credits card and the two meters in Settings;
+// staff see none.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase");
 
@@ -14,7 +15,7 @@ const signIn = async (page: Page, email: string, key: string) => {
   await expect(page).toHaveURL(/\/app$/);
 };
 
-test("the owner sees returns and InboxCA storage used, staff do not", async ({ page, browser }) => {
+test("the owner sees returns, InboxCA storage and AI credits used, staff do not", async ({ page, browser }) => {
   test.setTimeout(90_000);
   const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
   const ownerEmail = `usage-owner-${randomUUID()}@invented.test`, staffEmail = `usage-staff-${randomUUID()}@invented.test`;
@@ -28,8 +29,11 @@ test("the owner sees returns and InboxCA storage used, staff do not", async ({ p
     // One return due today and one on the year's last day, 31 March.
     for (const due of [today, `${month < 4 ? year : year + 1}-03-31`])
       await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, 'GSTR1_M', $3, $4)", [firm.firmId, client, `p${due}`, due]);
+    // This month's AI credits used up (5.18): the smallest plan's, as no plan is paid.
+    await query(local.dbUrl, "insert into public.ai_ledger (firm_id, reason, credits, hash) select $1, 'reply_draft', (value #>> '{plans,0,aiCredits}')::int, 'e2e' from public.platform_settings where key = 'plan_formula'", [firm.firmId]);
 
     await signIn(page, ownerEmail, key);
+    await expect(page.getByRole("link", { name: /^Add AI credits/ })).toHaveAttribute("href", "/app/settings?group=billing#addons");
     await page.getByRole("link", { name: /^Returns this year: 2, [12] due so far$/ }).click();
     const use = page.getByRole("region", { name: "InboxCA use" });
     await expect(use.getByText("Returns this year")).toBeVisible();
@@ -41,6 +45,7 @@ test("the owner sees returns and InboxCA storage used, staff do not", async ({ p
     await signIn(person, staffEmail, key);
     await expect(person.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(person.getByRole("link", { name: /^Returns this year/ })).toHaveCount(0);
+    await expect(person.getByRole("link", { name: /^Add AI credits/ })).toHaveCount(0);
     await person.goto("/app/settings?group=data#use");
     await expect(person.getByText("This page is for the owner", { exact: true })).toBeVisible();
     await expect(person.getByRole("region", { name: "InboxCA use" })).toHaveCount(0);
