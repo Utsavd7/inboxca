@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { accessSetting, newRecoveryCodes, recoveryDigest, seenAt, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
+import { accessSetting, exceptionsOf, newRecoveryCodes, recoveryDigest, seenAt, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 
 const repeat = vi.hoisted(() => ({ count: 0, upsert: vi.fn() }));
 vi.mock("@/src/lib/supabase", () => ({
@@ -15,6 +15,24 @@ describe("signing in limits", () => {
     expect(accessSetting(settings, "staff", { idle_minutes: 60 }, "idle_minutes")).toBe(60);
     expect(accessSetting(settings, "staff", null, "idle_minutes")).toBe(15);
     expect(accessSetting(settings, "manager", null, "idle_minutes")).toBe(30);
+  });
+
+  // 5.17: every exception in force, a role's or a person's, with today's extra time only.
+  it("list every exception a role or a person has, in plain words", () => {
+    const settings = { access: { hours_only: true, roles: { partner: { hours_only: false, idle_minutes: 0 }, staff: {} } } };
+    const people = [
+      { user_id: "ravi", access: { session_hours: 8, always: ["download"], extra_time: { day: "2026-10-27", until: "19:30" } } },
+      { user_id: "asha", access: { india_only: true, extra_time: { day: "2026-10-26", until: "20:00" } } },
+      { user_id: "neha", access: null },
+    ];
+    expect(exceptionsOf(settings, people, "2026-10-27")).toEqual([
+      { role: "partner", rule: "hours_only", words: "Can work outside office hours" },
+      { role: "partner", rule: "idle_minutes", words: "Stays signed in when not in use" },
+      { person: "ravi", rule: "session_hours", words: "Asked for the 2 step code again after 8 hours" },
+      { person: "ravi", rule: "extra_time", words: "Extra time today, until 19:30" },
+      { person: "asha", rule: "india_only", words: "From India only" },
+    ]);
+    expect(exceptionsOf({}, [], "2026-10-27")).toEqual([]);
   });
 
   // #3, #4, #17: the browser cannot move its signed activity time forward.

@@ -25,7 +25,8 @@ import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetai
 import { onedriveReady, onedriveSignIn } from "@/src/lib/onedrive";
 import { askAway, firmAdmin, memberHours, officeApprover, officePc, requestLine, type Office } from "@/src/lib/office";
 import { presets, type Preset } from "@/src/lib/presets";
-import { CHALLENGE_COOKIE, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
+import { CHALLENGE_COOKIE, checkAdminKey, checkKeyUse, checkNewKey, newChallenge, totp } from "@/src/lib/pc-key";
+import { PASSKEY_FACTOR, sealFactor } from "@/src/lib/sign-in";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { recognisePortalPdf } from "@/src/lib/tax-papers";
 import { receive } from "@/src/lib/intake";
@@ -45,7 +46,7 @@ import { checkMailbox, detectSettings, providerFor } from "@/src/lib/mailbox";
 import { currentMember, currentWriter, FIRM_COOKIE, myQuestions } from "@/src/lib/member";
 import { activityNames } from "@/src/lib/activity";
 import { invitableRoles, personName } from "@/src/lib/roles";
-import { IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
+import { EXCEPTION_RULES, IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 import { sendSystemMail } from "@/src/lib/system-mail";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
@@ -103,15 +104,19 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
 }
 
 // The owner's controls on each person: save a new role, remove, or bring back. The
-// database checks that the caller is the owner and logs the change.
+// database checks that the caller is the owner and logs the change. Removing someone can take
+// their passkeys too (5.17), which ends every sign in made with them (passkey_removed).
 export async function manageMember(form: FormData) {
-  const { supabase, membership } = await currentWriter();
+  const { supabase, userId, membership } = await currentWriter();
   if (!membership) return;
   const args = { target_firm: membership.firmId, person: String(form.get("person") ?? "") };
   const intent = form.get("intent");
   const role = invitable.safeParse(form.get("role"));
-  if (intent === "remove") await supabase.rpc("remove_member", args);
-  else if (intent === "restore") await supabase.rpc("restore_member", args);
+  if (intent === "remove") {
+    const { data: removed } = await supabase.rpc("remove_member", args);
+    const { data: keys } = removed && form.get("passkeys") === "on" ? await supabaseAdmin().from("passkeys").delete().eq("user_id", args.person).select("id") : { data: null };
+    if (keys?.length) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "passkey.removed", entity_type: "user", entity_id: args.person, details: { removed: keys.length } });
+  } else if (intent === "restore") await supabase.rpc("restore_member", args);
   else if (role.success) {
     await supabase.rpc("change_role", { ...args, new_role: role.data });
     const group = (name: string) => String(form.get(name) ?? "") || null;
@@ -258,6 +263,75 @@ export async function choosePreset(form: FormData) {
   } }).eq("id", membership.firmId);
   revalidatePath("/app", "layout");
   redirect("/app/settings?group=access&saved=preset#preset");
+}
+
+// Settings → Your sign in (PLAN.md 5.17, 8.5): a passkey for the next sign in, in place of the 6
+// digit code, after a sign in with it. It gets its own 2 step factor, answered at once with the
+// code only the server can make; the factor's key is kept sealed. One passkey per name.
+export async function addPasskey(key: { id: string; clientDataJSON: string; authenticatorData: string; publicKey: string; name?: string }) {
+  const { supabase, userId, membership } = await currentMember();
+  if (!membership) redirect("/app");
+  const { data: claims } = await supabase.auth.getClaims();
+  if (claims?.claims.aal !== "aal2") return "Sign in with your 6 digit code first, then add a passkey.";
+  const parsed = z.object({ id: z.base64url().max(400), clientDataJSON: z.base64url().max(4000), authenticatorData: z.base64url().max(4000), publicKey: z.base64url().max(400), name: z.string().trim().min(1).max(40) }).safeParse(key);
+  const jar = await cookies();
+  const fail = "The passkey could not be added. Reload the page and try again.";
+  if (!parsed.success || !checkAdminKey(parsed.data, (await headers()).get("origin") ?? "", jar.get(CHALLENGE_COOKIE)?.value, userId, "passkey")) return fail;
+  jar.delete(CHALLENGE_COOKIE);
+  const { data: factor } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: `${PASSKEY_FACTOR}${parsed.data.id.slice(0, 24)}`, issuer: "InboxCA" });
+  if (!factor) return fail;
+  const admin = supabaseAdmin();
+  const verified = await supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code: totp(factor.totp.secret) });
+  const { error } = verified.error ? verified : await admin.from("passkeys").insert({ id: parsed.data.id, user_id: userId, factor_id: factor.id, name: parsed.data.name, public_key: parsed.data.publicKey, secret: await sealFactor(userId, factor.totp.secret) });
+  if (error) {
+    await admin.auth.admin.mfa.deleteFactor({ id: factor.id, userId });
+    return "code" in error && error.code === "23505" ? `You already have a passkey named ${parsed.data.name}. Choose another name.` : fail;
+  }
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "passkey.added", entity_type: "user", entity_id: userId });
+  revalidatePath("/app/settings");
+  return "";
+}
+
+// Settings → Your sign in: removes one of the person's own passkeys, say for a lost laptop. The
+// database removes its factor and ends every sign in made with it but this one (passkey_removed).
+export async function removePasskey(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  if (!membership) redirect("/app");
+  const { data: claims } = await supabase.auth.getClaims();
+  const { data: removed } = await supabaseAdmin({ "x-inboxca-keep-session": String(claims?.claims.session_id ?? "") })
+    .from("passkeys").delete().eq("user_id", userId).eq("id", String(form.get("passkey") ?? "")).select("id");
+  if (removed?.length) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "passkey.removed", entity_type: "user", entity_id: userId, details: { removed: removed.length } });
+  revalidatePath("/app/settings");
+}
+
+// Settings → Exceptions to the rules (5.17): the owner puts a role or a person back on the firm's
+// own rule. The database logs the firm's changed settings; this logs which exception went.
+export async function removeException(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (membership?.role !== "owner") redirect("/app");
+  const back = "/app/settings?group=people#exceptions";
+  const rule = String(form.get("rule") ?? "");
+  const role = String(form.get("role") ?? "");
+  const person = String(form.get("person") ?? "");
+  if (!(EXCEPTION_RULES as readonly string[]).includes(rule) && rule !== "extra_time") redirect(back);
+  const admin = supabaseAdmin();
+  if (role) {
+    const access = (membership.settings.access ?? {}) as { roles?: Record<string, Record<string, unknown>> };
+    const kept = { ...access.roles?.[role] };
+    if (!(rule in kept)) redirect(back);
+    delete kept[rule];
+    await supabase.from("firms").update({ settings: { ...membership.settings, access: { ...access, roles: { ...access.roles, [role]: kept } } } as NonNullable<Json> }).eq("id", membership.firmId);
+  } else {
+    if (!z.uuid().safeParse(person).success) redirect(back);
+    const { data: member } = await admin.from("firm_members").select("access").eq("firm_id", membership.firmId).eq("user_id", person).maybeSingle();
+    const kept = { ...(member?.access as Record<string, unknown> | null) };
+    if (!(rule in kept)) redirect(back);
+    delete kept[rule];
+    await admin.from("firm_members").update({ access: kept as Json }).eq("firm_id", membership.firmId).eq("user_id", person);
+  }
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "access.exception_removed", entity_type: role ? "firm" : "user", entity_id: role ? membership.firmId : person, details: role ? { rule, role } : { rule } });
+  revalidatePath("/app", "layout");
+  redirect("/app/settings?group=people&saved=exception#exceptions");
 }
 
 // The idle timer calls this while the person is active, so the server knows too.

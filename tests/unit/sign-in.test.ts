@@ -1,5 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
-import { providerChoices, refusal } from "@/src/lib/sign-in";
+import { totp } from "@/src/lib/pc-key";
+import { factorCode, providerChoices, refusal, sealFactor } from "@/src/lib/sign-in";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -22,4 +24,15 @@ it("names why Google or Microsoft did not sign the person in", () => {
   expect(why("error=access_denied&error_code=signup_disabled")).toBe("provider");
   expect(why("error=server_error&error_description=Unable+to+exchange+external+code")).toBe("provider");
   expect(why("")).toBe("provider");
+});
+
+// PLAN.md 5.17, 8.5: a passkey's factor key is sealed for its person, and opens to the app's code.
+it("seals a passkey's factor key for its person only", async () => {
+  vi.stubEnv("KMS_KEY_ID", "");
+  vi.stubEnv("LOCAL_KEK", randomBytes(32).toString("base64"));
+  const secret = Array.from(randomBytes(20), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+  const sealed = await sealFactor("person-a", secret);
+  expect(sealed).not.toContain(secret);
+  expect(await factorCode("person-a", sealed)).toBe(totp(secret));
+  await expect(factorCode("person-b", sealed)).rejects.toThrow();
 });

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { changeGroup, manageMember } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
+import { supabaseAdmin } from "@/src/lib/supabase";
 import { Avatar, Badge, Empty, IconTile, NotForYou, PageHead, SidePanel, Toast, type Tone } from "../ui";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
@@ -42,6 +43,8 @@ export default async function People({ searchParams }: { searchParams: Promise<{
   const isOwner = membership.role === "owner";
   const shownKinds = kinds.filter(({ kind }) => groupsOf(kind).length);
   const person = isOwner && chosen !== userId ? people?.find((one) => one.user_id === chosen) : undefined;
+  // How many passkeys removing them can take too (5.17); only the server reads passkeys.
+  const { count: passkeys } = person && confirm === "remove" ? await supabaseAdmin().from("passkeys").select("id", { count: "exact", head: true }).eq("user_id", person.user_id) : { count: 0 };
   const count = people?.filter((one) => one.status !== "deactivated").length ?? 0;
 
   return (
@@ -202,6 +205,12 @@ export default async function People({ searchParams }: { searchParams: Promise<{
               ) : confirm === "remove" ? (
                 <>
                   <p className="hint">Remove {personName(person.email)} from the firm? They lose access at once. You can restore them later.</p>
+                  {!!passkeys && (
+                    <label className="check">
+                      <input type="checkbox" name="passkeys" defaultChecked />
+                      Also remove their {passkeys === 1 ? "passkey" : `${passkeys} passkeys`}, so they sign in only with the 6 digit code if restored
+                    </label>
+                  )}
                   <Pending className="b b-danger" name="intent" value="remove" busy="Removing">
                     Yes, remove from the firm
                   </Pending>

@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
+import { serverKek } from "./crypto";
 import { chosenFirm, officeDeviceAccess } from "./office";
+import { totp } from "./pc-key";
 import { tellOwnerOnRepeat } from "./session";
 import { supabaseAdmin, supabaseServer } from "./supabase";
 
@@ -67,3 +69,12 @@ export async function afterFirstStep(supabase: Awaited<ReturnType<typeof supabas
   await oneSession(supabase, userId, email);
   return "/app";
 }
+
+// A firm person's passkey (PLAN.md 5.17, 8.5) has its own 2 step factor in Supabase Auth, named
+// so the 2 step page passes it by. Its key is kept sealed by the outer key, bound to the person,
+// and opened only to answer for the passkey once it checks out.
+export const PASSKEY_FACTOR = "Passkey ";
+export const sealFactor = async (userId: string, secret: string) =>
+  (await serverKek().wrap(Buffer.from(secret), `passkey:${userId}`)).toString("base64");
+export const factorCode = async (userId: string, sealed: string) =>
+  totp((await serverKek().unwrap(Buffer.from(sealed, "base64"), `passkey:${userId}`)).toString());

@@ -1,10 +1,11 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import { Client } from "pg";
+import { totp } from "@/src/lib/pc-key";
 import { localSupabase } from "../local-env";
 
 export { localSupabase };
@@ -32,20 +33,8 @@ export async function latestEmail(mailUrl: string, to: string, after = 0) {
   throw new Error(`No sign in email reached ${to}`);
 }
 
-// The 6 digit code an authenticator app shows for a key (RFC 6238, 30 second steps).
-export function totp(secret: string, at = Date.now()) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let bits = "";
-  for (const char of secret.replace(/=+$/, "").toUpperCase())
-    bits += alphabet.indexOf(char).toString(2).padStart(5, "0");
-  const key = Buffer.from(bits.match(/.{8}/g)!.map((byte) => parseInt(byte, 2)));
-  const counter = Buffer.alloc(8);
-  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30000)));
-  const hash = createHmac("sha1", key).update(counter).digest();
-  const offset = hash[hash.length - 1] & 0xf;
-  const value = (hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
-  return String(value).padStart(6, "0");
-}
+// The 6 digit code an authenticator app shows for a key.
+export { totp };
 
 export async function query(dbUrl: string, sql: string, params: unknown[] = []) {
   const client = new Client({ connectionString: dbUrl });

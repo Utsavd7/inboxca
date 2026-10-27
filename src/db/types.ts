@@ -489,6 +489,19 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"passkeys": {
+                  Row: {
+                    "counter": number,"factor_id": string,"id": string,"name": string,"public_key": string,"secret": string,"user_id": string
+                  }
+                  Insert: {
+                    "counter"?: number,"factor_id": string,"id": string,"name": string,"public_key": string,"secret": string,"user_id": string
+                  }
+                  Update: {
+                    "counter"?: number,"factor_id"?: string,"id"?: string,"name"?: string,"public_key"?: string,"secret"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"platform_settings": {
                   Row: {
                     "key": string,"value": NonNullable<Json>
