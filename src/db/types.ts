@@ -376,7 +376,7 @@ isOneToOne: false
                   ]
                 },"firms": {
                   Row: {
-                    "created_at": string,"gstin": string | null,"id": string,"name": string,"settings": NonNullable<Json>,"state_code": string | null,"status": string,"firm_state": string | null
+                    "created_at": string,"gstin": string | null,"id": string,"name": string,"settings": NonNullable<Json>,"state_code": string | null,"status": string
                   }
                   Insert: {
                     "created_at"?: string,"gstin"?: string | null,"id"?: string,"name": string,"settings"?: NonNullable<Json>,"state_code"?: string | null,"status"?: string
@@ -948,11 +948,6 @@ isOneToOne: false
               "client": string,"client_name": string,"code": string,"due_on": string,"filling": boolean,"missing": string,"open": number,"period_key": string,"ready": boolean,"reason": string,"stage": string,"task": string,"wrong": number
             }[]
                            },
-"due_soon":
-{ Args: { "target_firm": string }; Returns: {
-              "clients": number,"code": string,"due_on": string,"filed": number
-            }[]
-                           },
 "end_other_sessions":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
@@ -982,9 +977,6 @@ isOneToOne: false
               "branch_id": string,"email": string,"role": string,"status": string,"team_id": string,"user_id": string
             }[]
                            },
-"firm_state":
-{ Args: { "f": Database["public"]['Tables']["firms"]['Row'] }; Returns: string
-                           },
 "firm_usage":
 { Args: { "target_firm": string,"today"?: string }; Returns: {
               "returns_so_far": number,"returns_this_year": number,"workspace_by_march": number,"workspace_bytes": number
@@ -1012,11 +1004,6 @@ isOneToOne: false
               "client_id": string,"client_name": string,"code": string,"due_on": string,"period_key": string,"returns": number
             }[]
                            },
-"late_returns":
-{ Args: { "target_firm": string }; Returns: {
-              "client_name": string,"due_on": string,"id": string
-            }[]
-                           },
 "looked_after":
 { Args: { "clients": (string)[],"target_firm": string }; Returns: string[]
                            },
@@ -1037,16 +1024,6 @@ isOneToOne: false
                            },
 "money_back_claim":
 { Args: { "claim": boolean,"identities": (string)[] }; Returns: boolean
-                           },
-"month_by_return":
-{ Args: { "first_day": string }; Returns: {
-              "code": string,"due": number,"filed": number
-            }[]
-                           },
-"month_load":
-{ Args: { "first_day": string }; Returns: {
-              "codes": (string)[],"due": number,"due_on": string,"filed": number
-            }[]
                            },
 "my_clients":
 { Args: { "target_firm": string }; Returns: string[]

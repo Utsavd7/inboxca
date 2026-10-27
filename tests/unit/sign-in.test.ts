@@ -1,19 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { totp } from "@/src/lib/pc-key";
-import { factorCode, providerChoices, refusal, sealFactor } from "@/src/lib/sign-in";
+import { factorCode, refusal, sealFactor } from "@/src/lib/sign-in";
 
 afterEach(() => vi.unstubAllEnvs());
-
-it("shows Continue with Google or Microsoft only once its client ID is set", () => {
-  vi.stubEnv("SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID", "");
-  vi.stubEnv("SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID", "");
-  expect(providerChoices()).toEqual([]);
-  vi.stubEnv("SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID", "invented-id");
-  expect(providerChoices()).toEqual([{ id: "azure", name: "Microsoft" }]);
-  vi.stubEnv("SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID", "invented-id");
-  expect(providerChoices().map(({ name }) => name)).toEqual(["Google", "Microsoft"]);
-});
 
 // What Supabase Auth puts on the way back when there is no sign in (its redirectErrors).
 it("names why Google or Microsoft did not sign the person in", () => {

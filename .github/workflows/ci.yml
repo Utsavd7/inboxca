@@ -1,11 +1,13 @@
-# Every pull request and every change to main: lint, types, unit tests, build, browser tests.
+# Every pull request once it is ready for review (drafts run nothing): lint, types and unit
+# tests, then the database, one build and every browser test. A push to main is the tree its
+# pull request already tested, so it does not run again; Run workflow starts one by hand.
 # Nothing merges with a red run (PLAN.md section 13.1).
 name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -16,6 +18,8 @@ permissions:
 
 jobs:
   check:
+    # A run started by hand has no pull request, and counts as not a draft.
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -32,19 +36,11 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
-      - if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: test-results
-          retention-days: 7
 
-  # Migrations apply to a fresh database, one firm never reaches another's rows, and
-  # signing in works end to end against local Supabase (its sign in and mail catcher).
+  # Migrations apply to a fresh database, one firm never reaches another's rows, and every
+  # browser test runs end to end against local Supabase (its sign in and mail catcher).
   database:
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -64,10 +60,10 @@ jobs:
       - run: diff -q src/db/types.ts /tmp/types.ts || (echo "src/db/types.ts is out of date. Run npm run db:types." && exit 1)
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test tests/e2e/sign-in.spec.ts tests/e2e/invites.spec.ts tests/e2e/clients.spec.ts tests/e2e/jobs.spec.ts tests/e2e/viewer.spec.ts tests/e2e/datasets.spec.ts tests/e2e/prepared.spec.ts tests/e2e/permissions.spec.ts tests/e2e/documents.spec.ts tests/e2e/inbox.spec.ts tests/e2e/sign-up.spec.ts tests/e2e/admin.spec.ts tests/e2e/passkeys.spec.ts tests/e2e/access.spec.ts tests/e2e/firm-close.spec.ts tests/e2e/import-portal.spec.ts tests/e2e/mailbox.spec.ts tests/e2e/usage.spec.ts tests/e2e/versions.spec.ts tests/e2e/folders.spec.ts tests/e2e/itr.spec.ts tests/e2e/file-checks.spec.ts tests/e2e/rate-limits.spec.ts tests/e2e/branch-office.spec.ts tests/e2e/shell.spec.ts tests/e2e/work-pages.spec.ts tests/e2e/mail-sign-in.spec.ts tests/e2e/notices.spec.ts tests/e2e/settings.spec.ts tests/e2e/calendar.spec.ts tests/e2e/reminders.spec.ts tests/e2e/client-edits.spec.ts tests/e2e/people.spec.ts tests/e2e/inbox-triage.spec.ts tests/e2e/inbox-outcomes.spec.ts tests/e2e/papers.spec.ts tests/e2e/callbacks.spec.ts tests/e2e/drive-notices.spec.ts tests/e2e/papers-asked.spec.ts tests/e2e/itr-check.spec.ts tests/e2e/social-sign-in.spec.ts tests/e2e/inbox-answers.spec.ts tests/e2e/gst-match.spec.ts tests/e2e/today-by-role.spec.ts tests/e2e/bulk-fill.spec.ts tests/e2e/billing.spec.ts
+      - run: npx playwright test
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: sign-in-report
+          name: playwright-report
           path: test-results
           retention-days: 7

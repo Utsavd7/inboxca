@@ -1,7 +1,7 @@
 import { Lock, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { ViewTransition } from "react";
-import { Count, Draw, Item, PanelMotion, ToastMotion } from "./motion";
+import { Count, Item, PanelMotion, ToastMotion } from "./motion";
 import { PanelEscape } from "./panel-escape";
 import { HeadTools, MenuButton } from "./shell";
 import "./side-panel.css";
@@ -115,20 +115,6 @@ export function Row({ lead, title, meta, status, more, action }: { lead?: React.
         </span>
       )}
     </Item>
-  );
-}
-
-// How far through something is, as a ring that draws itself once.
-export function ProgressRing({ done, total, label }: { done: number; total: number; label: string }) {
-  const percent = total ? Math.min(100, Math.round((done * 100) / total)) : 0;
-  return (
-    <div className={`progress-ring${total && done >= total ? " is-done" : ""}`} role="img" aria-label={`${done} of ${total} ${label}`}>
-      <svg viewBox="0 0 88 88" aria-hidden>
-        <circle className="ring-track" cx="44" cy="44" r="36" />
-        {!!percent && <Draw className="ring-arc" cx={44} cy={44} r={36} progress={percent / 100} />}
-      </svg>
-      <strong aria-hidden>{percent}%</strong>
-    </div>
   );
 }
 

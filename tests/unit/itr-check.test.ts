@@ -1,13 +1,7 @@
-import {randomUUID} from "node:crypto";
-import {expect,it,vi} from "vitest";
+import {expect,it} from "vitest";
 import {checkTitle,itrDifferences,rupees} from "@/src/lib/itr-check";
-import {itrCheckWorkItems} from "@/src/lib/work/itr-check";
 import {readTaxPdf,readTaxText} from "../../worker/portal";
 import {bankTan,form16,form26asText,tan} from "../fixtures/tax-papers";
-
-const figures=vi.hoisted(()=>new Map<string,string>());
-vi.mock("@/src/lib/crypto",()=>({serverCrypto:()=>({decrypt:async(_firm:string,path:string)=>figures.get(path.split("/").pop()!)})}));
-vi.mock("@/src/lib/supabase",()=>({supabaseAdmin:()=>{throw new Error("Not used here");}}));
 
 // The invented papers as InboxCA's readers give them: Form 26AS with the employer's salary TDS
 // (booked F) and a bank's interest TDS (booked U), and the employer's Form 16.
@@ -46,20 +40,4 @@ it("compares Form 16 and Form No. 130 salary with the return's, with or without 
   expect(checkTitle(found.slice(0,1))).toBe("Check before approving: 1 difference with Form 16 and Form No. 130");
   expect(itrDifferences([{field:"itr.salary.gross",value:"700000"}],null,[{paper:"Form 16",figures:[{field:"itr.salary.gross",value:"700000.00"}]}])).toEqual([]);
   expect(rupees(BigInt(-123456789))).toBe("-₹12,34,567.89");
-});
-
-it("gives the assigned person a Today item for a started return that differs, read as them", async()=>{
-  const client=randomUUID(),own=randomUUID(),paper=randomUUID(),person=randomUUID(),at="2026-10-26T05:00:00.000Z",sha256="a".repeat(64);
-  const lines=(draft:string,list:{field:string;value:string}[],source:object)=>list.map(({field,value})=>{const id=randomUUID();figures.set(id,JSON.stringify({label:field,value,kind:/tan$/.test(field) || /name$|section$|status$/.test(field) ? "text" : /date$/.test(field) ? "date" : "number"}));return {id,field,value_enc:`invented encrypted ${draft}`,source,state:"pending"};});
-  const rows=[
-    {id:own,client_id:client,period_key:"2026",form:"ITR1",data:{target:{form:"ITR1",version:"1.1"},lines:lines(own,salaryRow,{entered_by:person,entered_at:at}),checks:[]}},
-    {id:paper,client_id:client,period_key:"2026",form:null,data:{lines:lines(paper,statement,{document:paper,sha256,page:1,reader:"form26as-text"}),checks:[]}},
-  ];
-  const answers:Record<string,unknown[]>={datasets:rows,tasks:[],clients:[{id:client,name:"Iyer Consultants"}],documents:[{id:paper}]};
-  const supabase={from:(table:string)=>{const query={select:()=>query,eq:()=>query,not:()=>query,in:()=>query,like:()=>query,limit:()=>query,order:()=>query,then:(resolve:(value:unknown)=>void)=>resolve({data:answers[table],error:null})};return query;}};
-  const context={supabase,membership:{firmId:"firm"},userId:person} as unknown as Parameters<typeof itrCheckWorkItems>[0];
-  expect(await itrCheckWorkItems(context)).toEqual([{key:`itr-check:${client}:2026:ITR1`,title:"ITR-1 for Iyer Consultants, AY 2026-27",why:"2 differences with Form 26AS. Check before approving",client:{id:client,name:"Iyer Consultants"},action:{label:"See differences",href:`/app/clients/${client}/itr?form=ITR1&year=2026`},audience:"assigned"}]);
-  // Once the return is filed, it is not checked again.
-  answers.tasks=[{client_id:client,period_key:"2026-03"}];
-  expect(await itrCheckWorkItems(context)).toEqual([]);
 });

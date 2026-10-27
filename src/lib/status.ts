@@ -18,7 +18,7 @@ export const lateState = (seconds = 0): State => (seconds >= 3600 ? "down" : sec
 export const timedState = (ok: boolean, ms: number): State => (!ok ? "down" : ms > 2000 ? "slow" : "working");
 
 // The file worker's own health check, or off when no file worker is set up.
-export async function workerState(fetcher: typeof fetch = fetch): Promise<State> {
+async function workerState(fetcher: typeof fetch = fetch): Promise<State> {
   const url = process.env.FILE_WORKER_URL;
   if (!url) return "off";
   const started = Date.now();

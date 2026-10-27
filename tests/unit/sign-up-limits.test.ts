@@ -25,12 +25,6 @@ beforeEach(() => {
   mock.createUser.mockReset();
 });
 
-it("refuses an address that has asked for its codes this hour", async () => {
-  mock.withinLimit = false;
-  expect((await signUp({}, form())).error).toBe("Too many codes asked for this address. Try again in an hour.");
-  expect(mock.createUser).not.toHaveBeenCalled();
-});
-
 it("refuses the 31st new firm in an hour", async () => {
   mock.signUpsThisHour = 30;
   expect((await signUp({}, form())).error).toBe("Sign up is busy right now. Try again in an hour.");

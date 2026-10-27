@@ -40,7 +40,7 @@ export function notReady(work:Work & {form:string|null},drafts:{wrong:number;nam
   return wrong.length ? `${wrong.map(draft=>`${figures(draft.wrong)} in ${draft.name}`).join(" and ")} ${one ? "is" : "are"} marked wrong. Correct ${one ? "it" : "them"} first.` : null;
 }
 
-export function dueWords(due:string,today:string) {
+function dueWords(due:string,today:string) {
   const days=Math.round((Date.parse(due)-Date.parse(today))/86_400_000);
   return days<=0 ? "due today" : days===1 ? "due tomorrow" : `due in ${days} days`;
 }
@@ -70,7 +70,7 @@ export const fillReasons:Record<string,string>={
 // not filled or being filled already; otherwise the line says why not. Only the file worker knows
 // whether an ITR has every detail its official form needs, so an ITR is filled where every detail
 // is there, none before InboxCA has its software ID (itrs false), and one the last fill left says why.
-export type DueFill=Work & {code:string;period_key:string;due_on:string;wrong:number;ready:boolean;filling:boolean;reason?:string|null};
+type DueFill=Work & {code:string;period_key:string;due_on:string;wrong:number;ready:boolean;filling:boolean;reason?:string|null};
 export function fillLine(row:DueFill,today:string,itrs=true) {
   const itr=/^ITR_/.test(row.code),held=itr && !itrs && row.ready && !row.filling,go=row.ready && !row.filling && !held;
   const why=held ? fillReasons.software : row.wrong ? `${figures(row.wrong)} marked wrong` : !row.ready && row.stage==="figures" && !row.missing ? "Corrected file to check first" : stageLine(row);

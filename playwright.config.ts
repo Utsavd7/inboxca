@@ -26,7 +26,7 @@ export const DROPBOX_TEST_SECRET = "invented-dropbox-app-secret";
 // with an invented app key.
 export const DROPBOX_TEST_URL = `http://127.0.0.1:${Number(process.env.PORT || 3000) + 4}`;
 // The fake Microsoft sign in and OneDrive (tests/fake-onedrive.ts, callbacks.spec.ts starts it),
-// with invented app keys. PORT+5 is social-sign-in.spec.ts's.
+// with invented app keys. PORT+5 is social-sign-in.spec.ts's and PORT+7 the fake Cashfree's, as every spec runs in one go.
 export const ONEDRIVE_TEST_URL = `http://127.0.0.1:${Number(process.env.PORT || 3000) + 6}`;
 // Invented client IDs, so the test server shows Continue with Google and Microsoft; the tests
 // answer Supabase's sign in themselves and never reach either (social-sign-in.spec.ts).
@@ -36,7 +36,7 @@ const ITR = { ITR_SOFTWARE_ID: "SW00000000", ITR_SOFTWARE_CITY: "Invented City" 
 // Orelu's Cashfree is a fake on this machine (tests/fake-cashfree.ts, started by billing.spec.ts),
 // so the test server takes payments. Its keys are made fresh for each run and reach the fake
 // and the test server alike through the environment.
-export const CASHFREE_TEST_URL = `http://127.0.0.1:${Number(process.env.PORT || 3000) + 5}`;
+export const CASHFREE_TEST_URL = `http://127.0.0.1:${Number(process.env.PORT || 3000) + 7}`;
 export const CASHFREE_KEYS = {
   CASHFREE_APP_ID: (process.env.CASHFREE_TEST_APP_ID ||= randomBytes(12).toString("base64url")),
   CASHFREE_SECRET_KEY: (process.env.CASHFREE_TEST_SECRET_KEY ||= randomBytes(24).toString("base64url")),

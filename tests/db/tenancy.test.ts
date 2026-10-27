@@ -197,14 +197,8 @@ describe("the activity log is append only", () => {
 });
 
 describe("nothing is stored twice", () => {
-  it("reads a firm's state from its GSTIN, and stores it only when there is none", () =>
+  it("stores a firm's state only when it has no GSTIN", () =>
     rollback(db, async () => {
-      await seed();
-      const states = await db.query(
-        "select id, public.firm_state(f) as state from public.firms f where id = any($1) order by name",
-        [[FIRM_A, FIRM_B]],
-      );
-      expect(states.rows.map((row) => row.state)).toEqual(["27", "24"]);
       const both = await attempt(
         db,
         "insert into public.firms (name, gstin, state_code) values ('C', '24ABCDE1234F1Z5', '24')",

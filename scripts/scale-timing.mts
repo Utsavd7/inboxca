@@ -57,7 +57,6 @@ if (countError) throw countError;
 if (clientCount !== 10_000) throw new Error(`Expected 10,000 scale clients, found ${clientCount ?? 0}.`);
 
 const today = todayInIndia();
-const month = today.slice(0, 7);
 const window = calendarViews.month.window(today);
 const shift = (days: number) => new Date(Date.parse(today) + days * 86_400_000).toISOString().slice(0, 10);
 const cards = () =>
@@ -76,8 +75,6 @@ const checks: [string, () => PromiseLike<{ error: unknown; data?: unknown } | un
     cards().eq("status", "in_progress"),
     cards().eq("status", "filed").gte("details->>filed_on", shift(-7)),
   ])],
-  ["Home month_load", () => owner.rpc("month_load", { first_day: `${month}-01` })],
-  ["Home month_by_return", () => owner.rpc("month_by_return", { first_day: `${month}-01` })],
   ["Calendar default view", () => owner
     .from("tasks")
     .select("id, client_id, code, period_key, due_on, status, details, clients!inner(name, archived_at)")
@@ -167,7 +164,6 @@ const explain = async (title: string, sql: string, values: unknown[]) => {
   console.log(`\n${title}`);
   for (const row of result.rows) console.log(row["QUERY PLAN"]);
 };
-await explain("EXPLAIN month_load", "select * from public.month_load($1::date)", [`${month}-01`]);
 await explain(
   "EXPLAIN Calendar default view",
   `select t.id, t.client_id, t.code, t.period_key, t.due_on, t.status, t.details, c.name, c.archived_at

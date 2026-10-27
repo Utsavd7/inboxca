@@ -20,17 +20,9 @@ it("alerts the assigned partner, falling back to the owner, once even after clea
   await db.query("select private.queue_return_alerts()");
   expect((await db.query("select count(*)::int n from public.jobs where entity_id=$1 and kind='return_alert'",[id])).rows[0].n).toBe(1);
   await actAs(db,OWNER);
-  expect((await db.query("select id from public.late_returns($1)",[FIRM])).rows).toEqual([{id}]);
   expect((await attempt(db,"select public.claim_return_alert($1)",[id])).ok).toBe(false);
   await asOwner(db);
   await db.query("insert into public.client_assignments(firm_id,client_id,user_id,role) values ($1,$2,$3,'partner_in_charge')",[FIRM,client,PARTNER]);
-  await actAs(db,OWNER);
-  expect((await db.query("select id from public.late_returns($1)",[FIRM])).rows).toEqual([]);
-  await actAs(db,PARTNER);
-  expect((await db.query("select id from public.late_returns($1)",[FIRM])).rows).toEqual([{id}]);
-  await actAs(db,STAFF);
-  expect((await db.query("select id from public.late_returns($1)",[FIRM])).rows).toEqual([]);
-  await asOwner(db);
   expect((await db.query("select public.claim_return_alert($1) people",[id])).rows[0].people).toEqual([PARTNER]);
   expect((await db.query("select public.claim_return_alert($1) people",[id])).rows[0].people).toBeNull();
   await db.query("delete from public.jobs where entity_id=$1",[id]);
@@ -46,16 +38,13 @@ it("drops a pending alert when filed and falls back from an inactive partner", (
   expect((await db.query("select public.claim_return_alert($1) people",[id])).rows[0].people).toEqual([OWNER]);
   await db.query("update public.tasks set status='filed',details=details || jsonb_build_object('filed_on',current_date) where id=$1",[id]);
   expect((await db.query("select public.claim_return_alert($1) people",[id])).rows[0].people).toBeNull();
-  await actAs(db,OWNER);
-  expect((await db.query("select id from public.late_returns($1)",[FIRM])).rows).toEqual([]);
 }));
-// Today: late returns are one row a client for everyone who can see the client, and the week ahead by form.
-it("groups late returns by client and counts the week's returns by form", () => rollback(db,async () => {
+// Today: late returns are one row a client for everyone who can see the client.
+it("groups late returns by client", () => rollback(db,async () => {
   const {client}=await seed();
   await db.query("insert into public.tasks(firm_id,client_id,kind,code,period_key,due_on,status,details) values ($1,$2,'compliance','GSTR1_M','2026-08',(now() at time zone 'Asia/Kolkata')::date-1,'upcoming','{}'),($1,$2,'compliance','GSTR1_M','2026-09',(now() at time zone 'Asia/Kolkata')::date+2,'upcoming','{}'),($1,$2,'compliance','GSTR3B_M','2026-09',(now() at time zone 'Asia/Kolkata')::date+2,'filed',jsonb_build_object('filed_on',current_date))",[FIRM,client]);
   await actAs(db,OWNER);
   expect((await db.query("select client_id,client_name,returns,code from public.late_clients($1)",[FIRM])).rows).toEqual([{client_id:client,client_name:"Invented Textiles",returns:2,code:null}]);
-  expect((await db.query("select code,clients,filed from public.due_soon($1) order by code",[FIRM])).rows).toEqual([{code:"GSTR1_M",clients:1,filed:0},{code:"GSTR3B_M",clients:1,filed:1}]);
   await actAs(db,STAFF);
   expect((await db.query("select returns from public.late_clients($1)",[FIRM])).rows).toEqual([{returns:2}]);
   await asOwner(db);
