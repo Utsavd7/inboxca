@@ -5,8 +5,7 @@ import catalog from "../../reference/official/templates.json";
 import {templateSchema} from "@/src/lib/templates";
 import {gstr1Workbook} from "../../worker/gstr1";
 import {xlsxEntries} from "@/src/lib/sheet";
-import type {Figure} from "@/src/lib/datasets";
-import {inventedGstin} from "../fixtures/portal";
+import {b2bRow,hsnRow,inventedGstin,salesRow as rows} from "@/src/lib/form-samples";
 
 // Each fill rewrites the 7 MB official workbook: its 60 MB of sheets are compressed again
 // (worker/workbook.ts), about 0.6 s a call on an idle laptop and several times that when
@@ -14,12 +13,12 @@ import {inventedGstin} from "../fixtures/portal";
 const slow=120_000;
 // Columns and choices: the blank official workbooks. JSON checks: the pinned GSTN schemas.
 const templates=catalog.filter(row=>row.form_code==="GSTR1").map(row=>templateSchema.parse(row));
-const rows=(section:string,values:string[]):Map<string,Figure>=>new Map(values.flatMap((value,column)=>value==="" ? [] : [[`${section}.r2.c${column}`,{label:"Invented register field",value,kind:"text"} as Figure] as const]));
-const b2b=()=>rows("b2b",[inventedGstin("ZZZPZ0002Z"),"Invented Recipient","INV/1","2026-09-10","118","24-Gujarat","N","","Regular B2B","","18","100","0"]);
+// The same invented rows the daily check fills a new version with (src/lib/form-samples.ts).
+const b2b=()=>b2bRow("2026-09");
 
 it("fills current and older official workbooks without changing their headings, choices or other parts",()=>{
   for(const template of templates) {
-    const period=template.version==="2.0" ? "2024-09" : "2026-09",draft=b2b();draft.get("b2b.r2.c3")!.value=`${period}-10`;
+    const period=template.version==="2.0" ? "2024-09" : "2026-09",draft=b2bRow(period);
     const output=gstr1Workbook(template,period,inventedGstin(),[draft]),files=xlsxEntries(output);
     const sheet=files.get("xl/worksheets/sheet2.xml")!().toString();
     expect(sheet).toContain('r="C5"');expect(sheet).toContain('>INV/1<');expect(sheet).toContain('<v>100</v>');
@@ -27,7 +26,7 @@ it("fills current and older official workbooks without changing their headings, 
     for(const [name,read] of original) if(name!=="xl/worksheets/sheet2.xml" && name!=="xl/workbook.xml") expect(files.get(name)!().equals(read())).toBe(true);
     expect(sheet).not.toMatch(/<f>[^<]*<\/f><v>/);
     expect(createHash("sha256").update(readFileSync(`reference/official/${template.source.file}`)).digest("hex")).toBe(template.source.sha256);
-    const hsn=rows(template.version==="2.0" ? "hsn" : "hsn_b2b",["1001","Invented goods","NOS-NUMBERS","1.25","118","18","100","0","9","9","0"]);
+    const hsn=hsnRow(template.version==="2.0" ? "hsn" : "hsn_b2b");
     expect(gstr1Workbook(template,period,inventedGstin(),[hsn]).length).toBeGreaterThan(1000);
   }
 },slow);

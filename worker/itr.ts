@@ -21,7 +21,9 @@ const group=(key:string)=>groups[key] ?? (/^(ITR\d)?Schedule/.test(key) ? `Sched
 const entries=new Map<string,ItrEntry[]>();
 const sourceFor=(template:Template)=>{
   const form=template.form_code as ItrForm,source=itrSources[form];
-  if(!/^ITR[1-4]$/.test(form) || !source || template.version!==source.version || template.source.file!==`itr/${source.file}` || template.source.sha256!==source.sha256) throw new Error("InboxCA does not have this official ITR form yet. Try again later.");
+  // The pinned schema, or another version of the same file for the same year: one the daily
+  // check found with the same fields, which InboxCA's own returns passed (D42).
+  if(!/^ITR[1-4]$/.test(form) || !source || template.source.file!==`itr/${source.file.replace(`V${source.version}.`,`V${template.version}.`)}` || template.version===source.version && template.source.sha256!==source.sha256) throw new Error("InboxCA does not have this official ITR form yet. Try again later.");
   return officialSchema(template.source.file,template.source.sha256);
 };
 const resolver=(schema:unknown)=>{

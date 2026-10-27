@@ -5,7 +5,7 @@ vi.mock("@/src/lib/crypto", async (actual) => {
   return { ...real, serverCrypto: () => crypto };
 });
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
@@ -13,6 +13,8 @@ import { expect, it, vi } from "vitest";
 import { localSupabase } from "../local-env";
 import { readDocument } from "@/src/jobs/read-document";
 import type { Job } from "@/src/jobs/runner";
+import { filePeriod, folderFor } from "@/src/lib/documents";
+import { fileName } from "@/src/lib/drive";
 import { searchTokens, words } from "@/src/lib/search";
 import { handle } from "@/worker/handler";
 import { connect } from "./db";
@@ -72,6 +74,33 @@ it("reads a paper's file once, and a new version for figures only when its conte
     expect(await readForFigures(changed)).toBe(1);
     // Another client's exact copy reuses nothing of this client's: it needs its own file.
     expect(await read(await add(other, register("1180"), null))).toEqual({ retry: "drive_unreachable", patient: true });
+
+    // A paper under To check with the same content is filed as this client's register is: in its
+    // folder, beside a file already under the plain name, which stays as it was; logged for Undo.
+    // Another client's paper with the same content stays under To check.
+    const waiting = async (owner: string, file: string) => {
+      const bytes = register("1180", "\n\n");
+      await writeFile(path.join(drive, file), bytes);
+      return (await db.query("insert into public.documents(firm_id,client_id,work_type,document_type,period_key,status,name,size,sha256,drive_file_id) values ($1,$2,'other','Document','','to_check',$3,$4,$5,$3) returning id", [firm, owner, file, bytes.length, createHash("sha256").update(bytes).digest("hex")])).rows[0].id as string;
+    };
+    const folder = path.join("InboxCA", ...folderFor("year_client_work", "Invented Traders", { work: "gst", period: "2026-09", receivedAt: "", toCheck: false }));
+    const plain = path.join(folder, fileName({ client: "Invented Traders", type: "Sales register", period: filePeriod("2026-09"), extension: ".csv" }));
+    await mkdir(path.join(drive, folder), { recursive: true });
+    await writeFile(path.join(drive, plain), "Invented file already there");
+    const [checked, others] = [await waiting(client, "scan.csv"), await waiting(other, "other-scan.csv")];
+    expect(await read(checked)).toEqual({ done: true });
+    expect(await read(others)).toEqual({ done: true });
+    const paper = async (id: string) => (await db.query("select status, work_type, document_type, period_key, name, drive_file_id from public.documents where id = $1", [id])).rows[0];
+    const filed = await paper(checked);
+    expect(filed).toMatchObject({ status: "filed", work_type: "gst", document_type: "Sales register", period_key: "2026-09" });
+    expect(path.dirname(filed.drive_file_id)).toBe(folder);
+    expect(filed.drive_file_id).not.toBe(plain);
+    expect(await readFile(path.join(drive, filed.drive_file_id))).toEqual(register("1180", "\n\n"));
+    expect(await readFile(path.join(drive, plain), "utf8")).toBe("Invented file already there");
+    expect((await db.query("select actor_id, details from public.activity_log where entity_id = $1 and action = 'document.renamed'", [checked])).rows).toEqual([
+      { actor_id: null, details: { from: { work_type: "other", document_type: "Document", period_key: "", status: "to_check", name: "scan.csv", drive_file_id: "scan.csv" }, to: filed.name } },
+    ]);
+    expect(await paper(others)).toMatchObject({ status: "to_check", drive_file_id: "other-scan.csv" });
 
     // A photo of a letter, drawn here with invented words, is found by them once read by OCR.
     // Its text is sealed and keyed like any other, with what read it; an exact copy reuses it.

@@ -156,9 +156,10 @@ it("lets only an admin use a same layout file in the store from a period of the 
       { ...compared("GSTR1_Excel_Workbook_Template_V9.9.xlsx", "GSTR1", "9.9", { same: true }), template: { form_code: "GSTR1", version: "9.9", source } },
       // Even with a version recorded beside it, a changed layout is never taken in one click.
       compared("GSTR1_Excel_Workbook_Template_V9.7.xlsx", "GSTR1", "9.7", { differences: ["Sheet added: hsn"], more: 0 }),
-      compared("ITR-1_2026_Main_V9.9.json", "ITR1", "9.9", { same: true }),
+      // Named for another year: used only once the admin says they checked the year.
+      compared("ITR-1_2026_Main_V9.9.json", "ITR1", "9.9", { same: true, renamed: true }),
     ] }])]);
-    const use = (file: string, starts: string, when = at) => attempt(db, "select public.admin_add_template('gst_offline_tool', $1, $2, $3) ok", [when, file, starts]);
+    const use = (file: string, starts: string, when = at, checked = false) => attempt(db, "select public.admin_add_template('gst_offline_tool', $1, $2, $3, $4) ok", [when, file, starts, checked]);
     await actAs(db, owner);
     expect((await use("GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-11-01")).error).toBe("Orelu admins only");
     expect((await attempt(db, "insert into public.templates (form_code, version, valid_from, status, source, mappings) values ('GSTR1', '9.9', '2026-11-01', 'active', $1, $2)", [source, mappings])).error).toContain("permission denied");
@@ -173,7 +174,8 @@ it("lets only an admin use a same layout file in the store from a period of the 
       expect((await use(file, starts, when)).rows).toEqual([{ ok: false }]);
     expect((await use("GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-11-01")).rows).toEqual([{ ok: true }]);
     expect((await use("GSTR1_Excel_Workbook_Template_V9.9.xlsx", "2026-12-01")).rows).toEqual([{ ok: false }]);
-    expect((await use("ITR-1_2026_Main_V9.9.json", "2027-04-01")).rows).toEqual([{ ok: true }]);
+    expect((await use("ITR-1_2026_Main_V9.9.json", "2027-04-01")).rows).toEqual([{ ok: false }]);
+    expect((await use("ITR-1_2026_Main_V9.9.json", "2027-04-01", at, true)).rows).toEqual([{ ok: true }]);
     await asOwner(db);
     const { rows } = await db.query("select form_code, version, valid_from::text, valid_until::text, status, source, mappings from public.templates where version in ('9.8', '9.9') order by form_code, version");
     expect(rows.filter((row) => row.version === "9.9")).toEqual([
