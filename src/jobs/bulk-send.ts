@@ -26,7 +26,7 @@ export const bulkSend: Handler = async (job) => {
     if (handled++ >= 25 || Date.now()-started>=30_000) return {retry:"more_clients",at:new Date(Date.now()+10*60_000)};
     const [{data: client,error: clientError},{data: papers,error: paperError},previous] = await Promise.all([
       admin.from("clients").select("name,email_enc,archived_at").eq("firm_id",firm).eq("id",entry.id).maybeSingle(),
-      admin.from("documents").select("id,name,document_type,period_key,status,share_policy").eq("firm_id",firm).eq("client_id",entry.id).eq("document_type",details.type).eq("status","filed"),
+      admin.from("documents").select("id,name,document_type,period_key,status,share_policy,prepared").eq("firm_id",firm).eq("client_id",entry.id).eq("document_type",details.type).eq("status","filed"),
       admin.from("shares").select("id,document_id,status,delivery").eq("firm_id",firm).eq("id",entry.share).maybeSingle(),
     ]);
     let prior=previous.data;

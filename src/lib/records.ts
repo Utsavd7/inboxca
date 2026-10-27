@@ -21,8 +21,12 @@ const asks: [RegExp, string[]][] = [
   [/audit report|\b3c[abd]\b|ऑडिट रिपोर्ट|ઓડિટ રિપોર્ટ/, ["Audit report"]],
   [/gstr[\s-]?3b/, ["GSTR-3B"]],
   [/gstr[\s-]?1\b/, ["GSTR-1"]],
-  [/form[\s-]?16/, ["Form 16"]],
-  [/26\s?as/, ["Form 26AS"]],
+  // Form No. 130 and Form No. 168 replace Form 16 and Form 26AS from tax year 2026-27, so
+  // either name finds either paper; the name the client wrote comes first.
+  [/form[\s-]?16\b/, ["Form 16", "Form 130"]],
+  [/form[\s-]?(no\.?\s?)?130\b/, ["Form 130", "Form 16"]],
+  [/26\s?as/, ["Form 26AS", "Form 168"]],
+  [/form[\s-]?(no\.?\s?)?168\b/, ["Form 168", "Form 26AS"]],
   [/computation/, ["Computation"]],
   [/challan|चालान|ચલણ/, ["Challan"]],
   [/certificate/, ["Certificate"]],
@@ -40,15 +44,20 @@ const inYear = (key: string, year: string) => key === year || (key.length === 7 
 
 // The one filed document that answers the request, or why there is none: the asked period
 // when one is named, otherwise the newest period on file. Two papers for the same period
-// are left to the team.
-export function pickPaper<T extends { document_type: string; period_key: string; status: string }>(documents: T[], asked: { types: string[]; period: string }) {
-  const candidates = documents.filter((document) => document.status === "filed" && asked.types.includes(document.document_type));
+// are left to the team. A return InboxCA prepared is its working file, not the filed copy, so it
+// never answers; with only that for the period, the team sends the filed copy. A month's
+// acknowledgement is a GST return's, so it answers a request for an ITR only for that month.
+export function pickPaper<T extends { document_type: string; period_key: string; status: string; prepared?: unknown }>(documents: T[], asked: { types: string[]; period: string }) {
+  const itr = asked.types.includes("ITR-V") && asked.period.length !== 7;
+  const filed = documents.filter((document) => document.status === "filed" && asked.types.includes(document.document_type) && !(itr && document.period_key.length === 7));
+  const candidates = filed.filter((document) => !document.prepared);
   const period = asked.period || candidates.map((document) => document.period_key).sort().at(-1) || "";
-  const matches = candidates.filter((document) => (asked.period.length === 4 ? inYear(document.period_key, asked.period) : document.period_key === period));
-  if (!matches.length) return { reason: "record_not_found" as const };
+  const inPeriod = (key: string) => (asked.period.length === 4 ? inYear(key, asked.period) : key === period);
+  const matches = candidates.filter((document) => inPeriod(document.period_key));
+  if (!matches.length) return { reason: filed.some((document) => document.prepared && (!asked.period || inPeriod(document.period_key))) ? ("record_prepared" as const) : ("record_not_found" as const) };
   if (matches.length > 1) return { reason: "record_unclear" as const };
   return { document: matches[0] };
 }
 
 export type BulkSend = { by: string; day: string; type: string; period: string; clients: { id: string; share: string; state?: "sent" | "waiting" | "skipped"; reason?: string }[] };
-export const sendSkip: Record<string,string> = { no_email: "No email address", record_not_found: "No saved paper of this type for this year", record_unclear: "More than one matching paper. Please choose on the client's page", record_internal: "Kept inside your firm", archived: "Client is archived or no longer available" };
+export const sendSkip: Record<string,string> = { no_email: "No email address", record_not_found: "No saved paper of this type for this year", record_unclear: "More than one matching paper. Please choose on the client's page", record_prepared: "Only the prepared return is saved, not the filed copy", record_internal: "Kept inside your firm", archived: "Client is archived or no longer available" };

@@ -21,9 +21,9 @@ const types: [RegExp, string, WorkType][] = [
   [/invoice/, "Invoices", "gst"],
   [/form[\s-]?16a?\b/, "Form 16", "income_tax"],
   // Form No. 130 and Form No. 168 replace Form 16 and Form 26AS from tax year 2026-27.
-  [/form[\s-]?(no\s?)?130\b/, "Form 130", "income_tax"],
+  [/form[\s-]?(no\.?\s*)?130\b/, "Form 130", "income_tax"],
   [/26\s?as/, "Form 26AS", "income_tax"],
-  [/form[\s-]?(no\s?)?168\b/, "Form 168", "income_tax"],
+  [/form[\s-]?(no\.?\s*)?168\b/, "Form 168", "income_tax"],
   [/\bais\b/, "AIS", "income_tax"],
   [/\btis\b/, "TIS", "income_tax"],
   [/salary|pay\s?slip/, "Salary slips", "income_tax"],
@@ -51,10 +51,11 @@ const labelWork: Partial<Record<Label, WorkType>> = { data_gst: "gst", data_inco
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const monthNames = months.map((month) => month[0].toUpperCase() + month.slice(1));
 
-// "2026-09" for a month, "2027" for FY 2026-27 (or AY 2027-28), or "" when none is named.
+// "2026-09" for a month, "2027" for FY 2026-27 (or tax year 2026-27, or AY 2027-28), or ""
+// when none is named.
 export function findPeriod(text: string) {
-  const year = text.match(/\b(fy|ay)?\s?(20\d\d)\s?[-/]\s?(\d\d)\b/);
-  if (year && (Number(year[2]) + 1) % 100 === Number(year[3])) return String(Number(year[2]) + (year[1] === "ay" ? 0 : 1));
+  const year = text.match(/\b(fy|a\.?y\.?|assessment year)?:?\s?(20\d\d)\s?[-/]\s?(?:20)?(\d\d)\b/);
+  if (year && (Number(year[2]) + 1) % 100 === Number(year[3])) return String(Number(year[2]) + (year[1]?.startsWith("a") ? 0 : 1));
   const named = text.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[\s-]?'?(20)?(\d\d)\b/);
   if (named) return `20${named[3]}-${String(months.indexOf(named[1].slice(0, 3)) + 1).padStart(2, "0")}`;
   const monthFirst = text.match(/\b(0?[1-9]|1[0-2])\s?[-/]\s?(20\d\d)\b/);
