@@ -10,12 +10,12 @@ import { supabaseAdmin } from "./supabase";
 // nothing is called and nothing is billed, and the buttons that need it say so.
 export const aiReady = () => !!process.env.OPENAI_API_KEY;
 
-export type AiReason = "reply_draft" | "email_draft";
+export type AiReason = "reply_draft" | "email_draft" | "auto_draft" | "reminder";
 // From 90% of the month's credits automatic work pauses, keeping the last 10% for sorting emails
 // and notices and for what a person starts (5.18): automatic extraction and AI-written reminders
 // are true here. At 100% all AI stops. A reason also needs its credits and tokens in
 // plan_formula.ai.reasons, or it is never called.
-const stopsAt90: Record<AiReason, boolean> = { reply_draft: false, email_draft: false };
+const stopsAt90: Record<AiReason, boolean> = { reply_draft: false, email_draft: false, auto_draft: true, reminder: true };
 
 // The admin's AI figures in plan_formula (5.18): what a credit is worth in rupees, the provider's
 // dollar prices a million tokens [input, output] by model, the rupees a dollar, and for each
