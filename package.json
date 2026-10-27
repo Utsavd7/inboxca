@@ -26,6 +26,7 @@
     "@napi-rs/canvas": "^1.0.11",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.2",
+    "@tesseract.js-data/eng": "1.0.0",
     "ajv": "6.15.0",
     "clsx": "^2.1.1",
     "imapflow": "2.2.1",

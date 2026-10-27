@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { createWorker, OEM } from "tesseract.js";
 import { ocrLimits, verifyIntake } from "../src/lib/file-worker.ts";
 import { pictureSize } from "./render.ts";
 
 // Tesseract, a non-generative open source engine, reads English only (PLAN.md 5.5.0, 26 Oct
-// 2026) with tessdata_best's integer model kept in worker/tessdata, so nothing is fetched.
-const engine = `tesseract.js ${createRequire(import.meta.url)("tesseract.js/package.json").version}`, languages = ["eng"];
+// 2026) with tessdata_best's integer model from the @tesseract.js-data/eng package, so nothing is fetched.
+const need = createRequire(import.meta.url), engine = `tesseract.js ${need("tesseract.js/package.json").version}`, languages = ["eng"];
+const langPath = join(dirname(need.resolve("@tesseract.js-data/eng/package.json")), "4.0.0_best_int");
 let turn: Promise<unknown> = Promise.resolve();
 
 // One-time OCR of a scan or a picture (PLAN.md 5.5.0, D29). The app sends the file and then a
@@ -54,7 +55,7 @@ async function read(file: Buffer, pages: number[] | null, password: string | und
   const stopped = new Promise<never>((_, reject) => stop.addEventListener("abort", () => reject(new Error("OCR stopped")), { once: true }));
   stopped.catch(() => {});
   // A failed read rejects its own promise; without errorHandler the engine would also throw.
-  const starting = createWorker(languages, OEM.LSTM_ONLY, { langPath: join(process.cwd(), "worker/tessdata"), cacheMethod: "none", gzip: true, errorHandler: () => {} });
+  const starting = createWorker(languages, OEM.LSTM_ONLY, { langPath, cacheMethod: "none", gzip: true, errorHandler: () => {} });
   try {
     const tesseract = await Promise.race([starting, stopped]);
     const recognise = async (image: Buffer): Promise<Page> => (await Promise.race([tesseract.recognize(image), stopped])).data;
