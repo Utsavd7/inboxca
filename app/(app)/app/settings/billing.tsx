@@ -184,10 +184,12 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
   const cycle = sub.cycle as Cycle;
   const priced = quote(formula, tax, state, plan, cycle, today);
   const admin = supabaseAdmin();
-  const [fit, raised] = await Promise.all([fitOf(admin, firmId, formula, sub, today), movingUp(admin, firmId)]);
+  const [fit, raised, { data: renewing }] = await Promise.all([fitOf(admin, firmId, formula, sub, today), movingUp(admin, firmId), admin.from("payments").select("basis:details->>basis").eq("firm_id", firmId).eq("kind", "renewal").eq("status", "created").limit(1).maybeSingle()]);
+  // A move down set after the renewal was raised starts from the renewal after it (billing.ts, paid).
+  const later = !!plan.next && typeof renewing?.basis === "string" && renewing.basis !== JSON.stringify(plan.next);
   // A monthly payer may switch to yearly payment; when the plan fit offers it, its card does.
   const yearly = cycle === "monthly" && sub.paid_until && sub.paid_until > today && !(fit?.notice && fit.yearly) ? toYearly(formula, plan, today, sub.paid_until) : null;
-  const coming = plan.next ? quote(formula, tax, state, plan.next, cycle, today) : priced;
+  const coming = plan.next && !later ? quote(formula, tax, state, plan.next, cycle, today) : priced;
   const due = !sub.paid_until || sub.paid_until <= addDays(today, 3);
   const overdue = !!sub.paid_until && sub.paid_until <= today;
   const autopay = sub.status === "active";
@@ -221,7 +223,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
         </p>
         {retry && <p className="alert" role="alert">A payment was for a plan that had changed, so it was returned. Please try again.</p>}
         {autopay && <p className="hint">Orelu will never take more than {rupees(plan.maxPaise)} at a time without asking you. You get an email 3 days before each payment.</p>}
-        {plan.next && <p className="hint">Moves to the {coming.price.name} plan, {rupees(coming.recurring.total)} {per}, at the renewal on {longDate(sub.paid_until!)}.</p>}
+        {plan.next && !later && <p className="hint">Moves to the {coming.price.name} plan, {rupees(coming.recurring.total)} {per}, at the renewal on {longDate(sub.paid_until!)}.</p>}
         {abovelimit ? (
           <Checkout action={approveCheckout} label="Approve the new AutoPay limit" busy="Opening the payment page">
             <p className="hint">Your plan now costs more than your AutoPay allows. Approve a new limit of {rupees(mandateMax(coming.price.paise, sub.method as Method))} once. Your work carries on meanwhile.</p>
@@ -263,6 +265,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
             <div className="set-foot"><Pending className="b b-primary" busy="Saving">Move down at renewal</Pending></div>
           </form>
         ) : <p className="hint">That is the plan you have now.</p>)}
+        {later && <p className="hint">Your renewal is already on its way, so the smaller plan starts from the next one.</p>}
         {plan.next && <form action={moveDown} className="set-foot"><input type="hidden" name="undo" value="yes" /><Pending className="b b-ghost" busy="Saving">Keep my plan as it is</Pending></form>}
       </Card>
       </>}

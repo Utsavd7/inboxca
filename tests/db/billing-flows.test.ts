@@ -130,6 +130,24 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     expect((await paymentsOf(firm.id, "renewal"))[0].doc).toMatchObject({ kind: "receipt" });
   });
 
+  it("takes a renewal at the plan it was priced on, and keeps a move down set after it was raised for the renewal after it", async () => {
+    const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
+    const firm = await activeFirm("down-late", { ...solo, clients: 150 });
+    const renewal = async (ahead: number) => {
+      await db.query("update public.subscriptions set paid_until = $2 where firm_id = $1", [firm.id, money.addDays(today(), ahead)]);
+      await billing.dailyBilling(firm.id);
+      return (await paymentsOf(firm.id, "renewal")).at(-1);
+    };
+    const growth = await renewal(2);
+    expect(growth.amount_paise).toBe(349_900);
+    expect(await billing.setDowngrade(firm.id, firm.owner, solo)).toBeNull();
+    await fake.charge(growth.id, "SUCCESS");
+    const { plan } = await subOf(firm.id);
+    expect(money.planPrice(formula, plan, "monthly").code).toBe("growth");
+    expect(plan.next).toMatchObject(solo);
+    expect((await renewal(3)).amount_paise).toBe(149_900);
+  });
+
   it("debits eNACH once the bank confirms, and after a failed renewal tries again on day 1, not day 2, then turns read only on day 8", async () => {
     const firm = await activeFirm("enach", { clients: 700, practice: "mixed", people: 40, aiBlocks: 0 }, "enach");
     expect(fake.subscriptions.get(firm.mandate)!.authorization_details.authorization_amount).toBe(0);

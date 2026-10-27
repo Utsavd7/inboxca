@@ -55,13 +55,13 @@ export async function mayDownload(firmId: string, count = 1) {
 
 // The downloads' log lines, added only while they fit this month's downloads: counted and added in
 // one database step under the firm's lock, so downloads at the same moment never pass the figure.
-// False, and nothing logged, when they do not fit; mayDownload is the quick check before the drive
-// is read.
+// False, and nothing logged, when they do not fit, and a client's share link (`share`) gets back the
+// download it used; mayDownload is the quick check before the drive is read.
 export type DownloadLine = { actor_id?: string | null; action: (typeof DOWNLOADED)[number]; entity_id: string; details?: Record<string, unknown> };
-export async function logDownloads(firmId: string, lines: DownloadLine[]) {
+export async function logDownloads(firmId: string, lines: DownloadLine[], share?: string) {
   const admin = supabaseAdmin();
   const { most } = await downloadUse(firmId, admin);
-  const { data, error } = await admin.rpc("claim_downloads", { target_firm: firmId, lines: lines as unknown as Json, ...(Number.isFinite(most) && { most }) });
+  const { data, error } = await admin.rpc("claim_downloads", { target_firm: firmId, lines: lines as unknown as Json, ...(Number.isFinite(most) && { most }), ...(share && { share }) });
   if (error) throw new Error(`Downloads not counted: ${error.code}`);
   return data;
 }

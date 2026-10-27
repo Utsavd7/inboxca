@@ -29,7 +29,8 @@ export type SubPlan = FirmPlan & { version: number; maxPaise: number; next?: Fir
 // authorisation, debited on it, or a one time order), the period it pays for and the plan or
 // add-on it brings.
 // `base`: the team the plan took when one more person was bought (its own people, or the more
-// the plan includes). `basis`: what a plan change was priced on (basisOf).
+// the plan includes). `basis`: what a plan change was priced on (basisOf); for a renewal, the move
+// down waiting when it was raised (waitingOf).
 export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number; basis?: string };
 export type Alert = { kind: string; ref?: string; at: string };
 
@@ -43,6 +44,7 @@ const basisOf = (sub: Subscription) => {
   const plan = planOf(sub);
   return JSON.stringify([sub.cycle, sub.paid_until, plan.clients, plan.practice, plan.people, plan.aiBlocks ?? 0, plan.returns ?? null]);
 };
+const waitingOf = (plan: SubPlan) => JSON.stringify(plan.next ?? null);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const mandateId = /^[A-Za-z0-9_-]{1,60}$/;
 const long = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
@@ -252,7 +254,7 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
     const period: [string, string] = [sub.paid_until, periodEnd(sub.paid_until, cycle)];
     const next = await renewalPlan(admin, firmId, formula, sub, today);
     lines = withPeriod(planPrice(formula, next, cycle).lines, period);
-    details = { period, plan: next };
+    details = { period, plan: next, basis: waitingOf(plan) };
   } else if (what.kind === "topup") {
     if (await blocksThisMonth(admin, firmId, plan, today) >= current.blockCap) return { error: "Your plan has all the extra AI it can take this month. Move to a bigger plan for more." };
     lines = [{ text: `AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits for this month`, paise: formula.aiBlock.price * 100 }];
@@ -453,7 +455,7 @@ async function paid(admin: Admin, id: string, ref?: string) {
   const { data: sub } = await admin.from("subscriptions").select("*").eq("firm_id", firmId).maybeSingle();
   const today = indiaDay(new Date());
   const email = await ownerOf(admin, firmId);
-  const stale = !!sub && !!details.basis && details.basis !== basisOf(sub);
+  const stale = !!sub && !!details.basis && payment.kind !== "renewal" && details.basis !== basisOf(sub);
   if (sub) {
     const plan = planOf(sub);
     if (payment.kind === "plan") {
@@ -464,7 +466,8 @@ async function paid(admin: Admin, id: string, ref?: string) {
       if (started) await mail(email, `InboxCA is ready for ${started.name}`, [`Your first payment is in and ${started.name} is ready on InboxCA.`, `Sign in to start: ${link("/sign-in")}`, `Changed your mind? Cancel by ${long(moneyBackLastDay(today))} in Settings, Billing and get this payment back in full.`]);
     }
     if (payment.kind === "renewal" && details.period) {
-      const rest = { ...plan, next: undefined };
+      // The plan it was priced on; a move down set after it was raised waits for the next renewal.
+      const rest = { ...plan, next: details.basis !== undefined && details.basis !== waitingOf(plan) ? plan.next : undefined };
       const { data: moved } = await admin.from("subscriptions").update({ paid_until: details.period[1], plan: json(details.plan ? { ...rest, ...details.plan } : rest) }).eq("firm_id", firmId).eq("paid_until", details.period[0]).select("mandate").maybeSingle();
       if (!moved) await alertAdmins(admin, "paid_twice", id);
       else {
@@ -700,7 +703,7 @@ export async function dailyBilling(firmId: string, now = new Date()) {
       await mail(email, "InboxCA: approve your new AutoPay limit", [`Your plan now costs ${rupees(priced.recurring.total)}, more than the ${rupees(plan.maxPaise)} your AutoPay allows. Approve the new limit once in Settings, Billing, or pay now: ${link(BILLING)}`]);
     } else {
       const at = new Date(Math.max(Date.parse(`${due}T10:00:00+05:30`), now.getTime() + NOTICE_MS));
-      const { data: row, error } = await admin.from("payments").insert({ firm_id: firmId, kind: "renewal", amount_paise: priced.recurring.total, gst_paise: priced.recurring.gst, due_at: at.toISOString(), details: json({ lines: withPeriod(priced.price.lines, period), via: "charge", period, plan: next } satisfies Details) }).select("id").single();
+      const { data: row, error } = await admin.from("payments").insert({ firm_id: firmId, kind: "renewal", amount_paise: priced.recurring.total, gst_paise: priced.recurring.gst, due_at: at.toISOString(), details: json({ lines: withPeriod(priced.price.lines, period), via: "charge", period, plan: next, basis: waitingOf(plan) } satisfies Details) }).select("id").single();
       if (error) throw new Error(`Saving the renewal failed: ${error.code}`);
       try {
         await provider.charge({ mandate: sub.mandate, id: row.id, paise: priced.recurring.total, at, note: `InboxCA plan, ${span(period)}` });

@@ -29,7 +29,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ token: str
   if (!document || !account) return back(410, "This paper is no longer available. Ask your CA's office to send it again.");
   const bytes = await openDrive(share.firm_id, account).then((drive) => drive.read(document.drive_file_id)).catch(() => null);
   if (!bytes) return back(503, "This paper could not be opened just now. Try again in a minute.");
-  if (!(await logDownloads(share.firm_id, [{ action: "document.downloaded_by_client", entity_id: share.document_id }]))) return back(429, PAUSED.client);
+  if (!(await logDownloads(share.firm_id, [{ action: "document.downloaded_by_client", entity_id: share.document_id }], locked!.id))) return back(429, PAUSED.client);
   return new Response(new Blob([new Uint8Array(bytes)]), {
     headers: {
       "Content-Type": "application/octet-stream",
