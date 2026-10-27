@@ -374,7 +374,7 @@ export async function applyEvent(event: BillingEvent) {
 // A payment captured: what it buys is added now, and not before (5.14.1).
 async function paid(admin: Admin, id: string, ref?: string) {
   const { data: payment } = await admin.from("payments").update({ status: "done", provider_ref: ref ?? null }).eq("id", id).neq("kind", "refund").in("status", ["created", "failed"]).select("*").maybeSingle();
-  if (!payment) return;
+  if (!payment) return landedAfterMoneyBack(admin, id, ref);
   const firmId = payment.firm_id;
   const details = detailsOf(payment);
   const { data: sub } = await admin.from("subscriptions").select("*").eq("firm_id", firmId).maybeSingle();
@@ -406,6 +406,21 @@ async function paid(admin: Admin, id: string, ref?: string) {
   }
   await note(admin, firmId, null, "billing.paid", { payment: id, kind: payment.kind });
   await issue(admin, id);
+}
+
+// A debit or order the money back called off that is taken all the same (D33): it is recorded
+// with its receipt or invoice, adds nothing, and goes back in full with the money back's credit
+// note or refund receipt.
+async function landedAfterMoneyBack(admin: Admin, id: string, ref?: string) {
+  const provider = billingProvider();
+  const { data: called } = await admin.from("payments").select("firm_id").eq("id", id).eq("status", "cancelled").neq("kind", "refund").maybeSingle();
+  if (!called || !provider || !["refunding", "refunded"].includes((await moneyBack(called.firm_id, indiaDay(new Date()), admin)).state)) return;
+  const { data: landed } = await admin.from("payments").update({ status: "done", provider_ref: ref ?? null }).eq("id", id).eq("status", "cancelled").select("*").maybeSingle();
+  if (!landed) return;
+  await note(admin, landed.firm_id, null, "billing.paid", { payment: id, kind: landed.kind });
+  await issue(admin, id);
+  const { data: sub } = await admin.from("subscriptions").select("mandate, method").eq("firm_id", landed.firm_id).maybeSingle();
+  await refund(admin, provider, landed, landed.amount_paise, "money_back", sub);
 }
 
 async function failed(admin: Admin, id: string, reason?: string) {
@@ -511,7 +526,9 @@ export async function claimMoneyBack(firmId: string, actor: string) {
   const { data: sub } = await admin.from("subscriptions").select("mandate, method").eq("firm_id", firmId).maybeSingle();
   await stopAutoPay(firmId, actor, "money_back");
   const { count: imported } = await admin.from("requests").select("id", { count: "exact", head: true }).eq("firm_id", firmId).eq("kind", "import");
-  const back = window.rows.filter((row) => row.status === "done" && ["plan", "extra_user", "ai_block", "topup"].includes(row.kind) && indiaDay(new Date(row.created_at)) <= window.lastDay);
+  // A move to a bigger plan in the 14 days, chosen or automatic, goes back with the plan; a move
+  // still being debited was called off with AutoPay, and goes back if it is taken all the same.
+  const back = window.rows.filter((row) => row.status === "done" && ["plan", "upgrade", "extra_user", "ai_block", "topup"].includes(row.kind) && indiaDay(new Date(row.created_at)) <= window.lastDay);
   const refunds: string[] = [];
   for (const row of back) {
     const setup = row.kind === "plan" && imported ? (detailsOf(row).setupPaise ?? 0) : 0;

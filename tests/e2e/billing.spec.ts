@@ -146,11 +146,12 @@ test("the owner gets the money back within 14 days with the 2 step code, and the
   await expect(page).toHaveURL(/saved=money_back/);
   await expect(page.getByText("Your firm can only view for now", { exact: false })).toBeVisible();
   expect((await firm()).status).toBe("read_only");
-  // The fake gives the refund back a moment later, by its signed webhook.
-  await expect.poll(async () => (await query(local.dbUrl, "select status from public.payments where kind = 'refund' and firm_id = $1", [(await firm()).id]))[0]?.status, { timeout: 15_000 }).toBe("done");
+  // The fake gives the refunds back a moment later, by its signed webhook: the first payment and
+  // the move up of the same 14 days.
+  await expect.poll(async () => (await query(local.dbUrl, "select status from public.payments where kind = 'refund' and firm_id = $1", [(await firm()).id])).map((row) => row.status).join(), { timeout: 15_000 }).toBe("done,done");
   await page.reload();
-  await expect(page.locator("section#receipts").getByText(/Refund receipt RFD\//)).toBeVisible();
-  await expect(page.locator("section#receipts").getByText("Given back")).toBeVisible();
+  await expect(page.locator("section#receipts").getByText(/Refund receipt RFD\//)).toHaveCount(2);
+  await expect(page.locator("section#receipts").getByText("Given back")).toHaveCount(2);
   await expect(page.locator("section#money_back").getByText("your money was given back")).toBeVisible();
 });
 
@@ -182,7 +183,7 @@ test("the admin console shows the refund by month and reason, and the tax detail
     const row = admin.page.locator("section[aria-label='Refunds by month'] tr").filter({ hasText: month });
     await expect(row).toBeVisible();
     const payments = admin.page.locator("section[aria-label='Payments'] tr").filter({ hasText: firmName });
-    await expect(payments.filter({ hasText: "Refund, Money back within 14 days of the first payment" })).toBeVisible();
+    await expect(payments.filter({ hasText: "Refund, Money back within 14 days of the first payment" })).toHaveCount(2);
     await expect(payments.filter({ hasText: /First payment/ })).toBeVisible();
     await expect(admin.page.getByLabel("Legal name")).toHaveValue(tax.legalName);
   } finally {

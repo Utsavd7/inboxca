@@ -280,6 +280,53 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     }
   });
 
+  it("gives back a move up of day 5 with the plan on day 10, calls off the move still being debited and gives it back when taken, each with a GST credit note", async () => {
+    const gst = { ...tax, gstin: "27AAAFI1234B1Z5", stateCode: "27", sac: "9983", rate: 18, gstFrom: today() };
+    await db.query("update public.platform_settings set value = $1 where key = 'tax'", [gst]);
+    await db.query("update public.platform_settings set value = value || '{\"fitEnforced\": true}' where key = 'plan_formula'");
+    try {
+      const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
+      const months = money.monthsBegun(today());
+      const firm = await activeFirm("back-up");
+      const due = (n: number) => db.query("insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [firm.id, today(), n]);
+      // Day 0, the first payment, was 10 days ago.
+      await db.query("update public.payments set created_at = now() - interval '10 days', details = jsonb_set(details, '{period,0}', to_jsonb($2::text)) where firm_id = $1 and kind = 'plan'", [firm.id, money.addDays(today(), -10)]);
+      // Day 5: past Solo, the move to Growth is debited on the mandate and taken.
+      const solo = Math.ceil((800 * months * 1.1) / 12) + 1;
+      await due(solo);
+      await billing.dailyBilling(firm.id);
+      const [move] = await paymentsOf(firm.id, "upgrade");
+      await fake.charge(move.id, "SUCCESS");
+      await db.query("update public.payments set created_at = now() - interval '5 days' where id = $1", [move.id]);
+      // Day 10: past Growth too, with a higher AutoPay limit approved, so the move to Scale is on its way.
+      await db.query("update public.subscriptions set plan = plan || '{\"maxPaise\": 1000000}' where firm_id = $1", [firm.id]);
+      await due(Math.ceil((2000 * months * 1.1) / 12) + 1 - solo);
+      await billing.dailyBilling(firm.id);
+      const pending = (await paymentsOf(firm.id, "upgrade")).find((row) => row.status === "created");
+      expect(pending).toBeDefined();
+
+      fake.settleRefunds(null);
+      expect(await billing.claimMoneyBack(firm.id, firm.owner)).toBeNull();
+      expect([(await paymentsOf(firm.id, "upgrade")).find((row) => row.id === pending.id).status, fake.charges.get(pending.id)!.status]).toEqual(["cancelled", "CANCELLED"]);
+      expect(await paymentsOf(firm.id, "refund")).toHaveLength(2);
+      // The bank takes it all the same: recorded, nothing added, and given back in full.
+      await fake.charge(pending.id, "SUCCESS");
+      expect(money.planPrice(formula, (await subOf(firm.id)).plan, "monthly").code).toBe("growth");
+      const taken = (await paymentsOf(firm.id)).filter((row) => row.kind !== "refund");
+      const refunds = await paymentsOf(firm.id, "refund");
+      expect(taken.map((row) => row.kind)).toEqual(["plan", "upgrade", "upgrade"]);
+      expect(taken.every((row) => row.status === "done" && row.gst_paise > 0)).toBe(true);
+      expect(refunds.map((row) => [row.refund_of, row.amount_paise, row.gst_paise, row.reason]).sort()).toEqual(taken.map((row) => [row.id, row.amount_paise, row.gst_paise, "money_back"]).sort());
+      for (const row of refunds) await fake.refund(row.id, "SUCCESS");
+      for (const row of await paymentsOf(firm.id, "refund"))
+        expect(row.doc).toMatchObject({ kind: "credit", no: expect.stringMatching(/^CN\//), total: row.amount_paise, of: { no: taken.find((paid) => paid.id === row.refund_of)!.doc.no } });
+      expect((await billing.moneyBack(firm.id)).state).toBe("refunded");
+    } finally {
+      await db.query("update public.platform_settings set value = value || '{\"fitEnforced\": false}' where key = 'plan_formula'");
+      await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);
+    }
+  });
+
   it("lets an admin give back a payment taken twice, keeps Cashfree's fees, and alerts on what does not match", async () => {
     const firm = await activeFirm("admin");
     await billing.buy(firm.id, firm.owner, { kind: "topup" }, returnUrl);
