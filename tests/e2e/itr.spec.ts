@@ -12,7 +12,7 @@ import {localDrive} from "@/src/lib/drive";
 import {itrFieldName} from "@/src/lib/itr-fields";
 import {itrRequest} from "../fixtures/itr";
 import {pdf} from "../fixtures/pdf";
-import {emailStep,localSupabase,query,seedFirm,totp} from "./local-supabase";
+import {emailStep,localSupabase,query,runJobs,seedFirm,totp} from "./local-supabase";
 const local=localSupabase();
 test.skip(!local.url || !local.mailUrl,"Needs local Supabase");
 
@@ -84,13 +84,17 @@ test("Form 16 figures, client details and entered details become an approved ITR
     const pending=own.data.lines.length;expect(pending).toBe(7);
     for(let n=0;n<pending;n++) {await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${rest.length+n+1} of ${rest.length+pending} checked`)).toBeVisible();}
     await page.goto(`/app/clients/${client}/itr`);await expect(page.getByText("Nothing left to fill.")).toBeVisible();
+    // Every figure checked: InboxCA fills the checked return by itself (the return is late), and
+    // Prepare opens that same file.
+    const checked="select * from public.documents where firm_id=$1 and prepared->>'form'='ITR1' and size>0 and not prepared ? 'filled' order by (prepared->>'version')::int desc";
+    await expect.poll(async()=>(await query(local.dbUrl,checked,[firm.firmId])).length,{timeout:60_000}).toBe(1);
     // Prepared forms: the approved file is in Prepared, downloaded once and logged.
     await page.goto(`/app/clients/${client}?tab=outputs`);
     const prepare=page.locator("form").filter({has:page.getByRole("group",{name:"ITR-1 AY 2026-27",exact:true})});
     await page.screenshot({path:test.info().outputPath("itr-prepare.png"),fullPage:true});
     await expect(prepare).toContainText("Invented Form 16.pdf");await prepare.getByRole("button",{name:"Prepare ITR-1 AY 2026-27"}).click();await expect(page).toHaveURL(/\/files\/.*\/view/);
-    let [prepared]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'='ITR1'",[firm.firmId]);
-    expect(prepared.prepared.status).toBe("approved");expect(prepared.name).toBe("Invented ITR Person - ITR-1 - AY 2026-27 - v1.json");expect(prepared.drive_file_id).toContain("Income tax/");expect(prepared.drive_file_id).toContain("/Prepared/");
+    let [prepared]=await query(local.dbUrl,checked,[firm.firmId]);
+    expect(prepared.prepared.status).toBe("approved");expect(prepared.name).toMatch(/^Invented ITR Person - ITR-1 - AY 2026-27 - v\d\.json$/);expect(prepared.drive_file_id).toContain("Income tax/");expect(prepared.drive_file_id).toContain("/Prepared/");
     expect(prepared.prepared.sources.map((source:{id:string})=>source.id).sort()).toEqual([own.id,paper].sort());
     expect((await page.request.get(`/app/files/${prepared.id}`)).status()).toBe(404);
     await page.goto(`/app/clients/${client}?tab=outputs`);let row=page.locator("li").filter({has:page.getByRole("link",{name:prepared.name,exact:true})});
@@ -104,7 +108,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     expect((await query(local.dbUrl,"select count(*)::int n from public.activity_log where firm_id=$1 and action='form.downloaded'",[firm.firmId]))[0].n).toBe(1);
     // Documents shows it like any prepared GST form.
     await page.goto("/app/documents?year=2025-26&kind=income_tax");await expect(page.getByText(prepared.name).first()).toBeVisible();await expect(page.getByText("Prepared in InboxCA").first()).toBeVisible();
-    // A change after approval clears it; the next check makes v2.
+    // A change after approval clears it; the next check makes the next version.
     const line=own.data.lines.find((item:Draft["lines"][number])=>item.field==="itr.personal.email");
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${own.id}&line=${line.id}`);
     await page.getByLabel("Correct figure").fill("invented.second@invented.test");await page.getByLabel("Why it changed").fill("Invented correction for the filing test");await page.getByRole("button",{name:"Save correction",exact:true}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
@@ -112,8 +116,8 @@ test("Form 16 figures, client details and entered details become an approved ITR
     // A correction clears the draft's checks; the other figures are checked again here directly.
     await query(local.dbUrl,"update public.datasets set revision=revision+1,data=jsonb_set(data,'{lines}',(select jsonb_agg(case when l->>'id'=$2 then l else l||jsonb_build_object('state','confirmed','by',$3::text,'at',$4::text) end) from jsonb_array_elements(data->'lines') l)) where id=$1",[own.id,line.id,firm.ownerId,new Date().toISOString()]);
     await page.reload();await page.getByRole("button",{name:"Yes, this is right"}).click();
-    await expect.poll(async()=>(await query(local.dbUrl,"select count(*)::int n from public.documents where firm_id=$1 and prepared->>'form'='ITR1' and prepared->>'version'='2' and size>0",[firm.firmId]))[0].n,{timeout:30_000}).toBe(1);
-    [prepared]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'='ITR1' and prepared->>'version'='2'",[firm.firmId]);
+    await expect.poll(async()=>(await query(local.dbUrl,checked,[firm.firmId])).length,{timeout:30_000}).toBe(2);
+    [prepared]=await query(local.dbUrl,checked,[firm.firmId]);
     await page.goto(`/app/clients/${client}?tab=outputs`);row=page.locator("li").filter({has:page.getByRole("link",{name:prepared.name,exact:true})});
     await row.locator("summary",{hasText:"Mark filed"}).click();await row.getByLabel("Acknowledgement number, if known").fill("INVENTED-ITR-ACK");await row.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select prepared->>'status' status from public.documents where id=$1",[prepared.id]))[0].status).toBe("filed");
@@ -153,6 +157,73 @@ test("ITR-2, ITR-3 and ITR-4 are prepared from checked figures, and a return cor
       await expect(page.getByRole("img",{name:"Page 1",exact:true})).toBeVisible();
       expect((await query(local.dbUrl,"select public.form_ready($1) ready",[external.id]))[0].ready).toBe(false);
     }
+  } finally {
+    for(const item of await query(local.dbUrl,"select drive_file_id from public.documents where firm_id=$1",[firm.firmId])) if(item.drive_file_id) await drive.trash(item.drive_file_id).catch(()=>{});
+    await firm.remove();
+  }
+});
+
+// Fill for an ITR (PLAN.md "Plain English and Fill"): with no form chosen it goes to the person;
+// pressed by hand it makes the draft from the year's figures with the one still to check shown;
+// the automatic fill finds that draft; the last check makes the checked return by itself; and a
+// Form 26AS that differs keeps the next one a draft for the CA. Invented data only.
+test("Fill makes an ITR draft to check, the last check fills the checked return, and a Form 26AS difference keeps it a draft",async({page})=>{
+  test.setTimeout(240_000);loadEnvConfig(process.cwd());
+  const {firm,owner,secret,client,registration}=await seedClient("Invented ITR Fill Firm","invented.fill@invented.test");
+  // A paper's figures carry its own id, as the readers save them.
+  const drive=localDrive(TEST_DRIVE),request=itrRequest("ITR1"),own=randomUUID(),paper=randomUUID(),statement=paper,bank="BLRZ99999Z"; // ggignore: invented bank TAN.
+  const prepared="select id,name,size,prepared from public.documents where firm_id=$1 and prepared is not null order by (prepared->>'version')::int";
+  try {
+    const [{id:task}]=await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,'ITR_NA','2026-03',(now() at time zone 'Asia/Kolkata')::date+3) returning id",[firm.firmId,client,registration]);
+    await signIn(page,owner,secret);
+    // Due in 3 days with no form chosen: Today sends the person to the return's own page.
+    const now=page.getByRole("region",{name:"Your list"});
+    await expect(now.getByText("Due in 3 days. Return not started")).toBeVisible();
+    await now.getByRole("link",{name:/Start the return/}).click();await expect(page).toHaveURL(/\/itr\?year=2026$/);
+    // The team's ITR-1 entries, every one checked but the email address. Due in 10 days, so InboxCA
+    // does not fill it by itself yet.
+    await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date+10 where id=$1",[task]);
+    const email=request.drafts[0].figures.filter(([field])=>field==="itr.personal.email"),others=request.drafts[0].figures.filter(([field])=>field!=="itr.personal.email"),entered={entered_by:firm.ownerId,entered_at:new Date().toISOString()};
+    await query(local.dbUrl,"insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values($1,$2,$3,'ITR','2026',$4)",[own,firm.firmId,client,{target:{form:"ITR1",version:request.template.version},lines:[...await lines(firm.firmId,own,others,entered,firm.ownerId),...await lines(firm.firmId,own,email,entered)],checks:[]}]);
+    // Fill by hand: one draft from every figure, the one still to check shown.
+    const returns=`/app/clients/${client}?tab=returns`;
+    await page.goto(returns);const row=page.locator("li").filter({hasText:"ITR (no business, no audit) FY 2025-26"});
+    await expect(row.getByText("Papers in, not filled yet. 1 figure not checked yet")).toBeVisible();
+    await row.getByRole("button",{name:/^Fill /}).click();await expect(page).toHaveURL(/\/files\/.*\/view/,{timeout:60_000});
+    const checks=page.getByRole("region",{name:"Figures not checked yet"});
+    await expect(checks).toContainText("1 figure not checked yet.");await expect(checks.getByRole("listitem")).toContainText("invented@invented.test");
+    await page.screenshot({path:test.info().outputPath("itr-fill.png"),fullPage:true});
+    let forms=await query(local.dbUrl,prepared,[firm.firmId]);
+    expect(forms).toHaveLength(1);expect(forms[0].name).toBe("Invented ITR Person - ITR-1 - AY 2026-27 - v1 (to check).json");expect(forms[0].prepared).toMatchObject({status:"draft",filled:true});expect(Number(forms[0].size)).toBeGreaterThan(0);
+    // Three days before the due date the automatic fill finds the same draft.
+    await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date+3 where id=$1",[task]);
+    await query(local.dbUrl,"insert into public.jobs(firm_id,kind,entity_type,entity_id,idempotency_key) values($1,'fill_return','task',$2,$3)",[firm.firmId,task,`fill_return:${task}:test`]);
+    await runJobs(page.request,firm.firmId);
+    expect(await query(local.dbUrl,prepared,[firm.firmId])).toHaveLength(1);
+    await page.goto(`/app/clients/${client}?tab=outputs`);
+    const draft=page.locator("li").filter({has:page.getByRole("link",{name:forms[0].name,exact:true})});
+    await expect(draft.getByRole("button",{name:"Download for filing"})).toBeDisabled();await expect(draft).toContainText("1 figure not checked yet.");
+    // The last check: InboxCA fills the checked return by itself, approved as Prepare would.
+    await page.goto(`/app/files/${forms[0].id}/view`);await checks.getByRole("link",{name:"Check"}).click();
+    await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
+    await expect.poll(async()=>(await query(local.dbUrl,prepared,[firm.firmId])).filter(form=>Number(form.size)>0).length,{timeout:60_000}).toBe(2);
+    forms=await query(local.dbUrl,prepared,[firm.firmId]);
+    expect(forms[1].name).toBe("Invented ITR Person - ITR-1 - AY 2026-27 - v2.json");expect(forms[1].prepared.status).toBe("approved");expect(forms[1].prepared.filled).toBeUndefined();
+    // Form 26AS arrives with TDS the return does not claim: the next fill waits for the CA.
+    const bytes=Buffer.from("Invented Form 26AS text for AY 2026-27"),sha256=createHash("sha256").update(bytes).digest("hex");
+    const saved=await drive.save(await drive.ensureFolder([firm.firmId,"Income tax"]),"Invented 26AS.txt",bytes);if(saved==="taken") throw new Error("Test collision");
+    await query(local.dbUrl,"insert into public.documents(id,firm_id,client_id,work_type,document_type,period_key,name,size,sha256,drive_file_id) values($1,$2,$3,'income_tax','Form 26AS','2026','Invented 26AS.txt',$4,$5,$6)",[paper,firm.firmId,client,bytes.length,sha256,saved.id]);
+    const tds:[string,Figure][]=[["f26as.tds.0.tan",{label:"TAN",value:bank,kind:"text"}],["f26as.tds.0.name",{label:"Deductor",value:"INVENTED BANK LIMITED",kind:"text"}],["f26as.tds.0.deducted",{label:"Total tax deducted",value:"1200.00",kind:"number"}]];
+    await query(local.dbUrl,"insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values($1,$2,$3,'ITR','2026',$4)",[statement,firm.firmId,client,{lines:await lines(firm.firmId,statement,tds,{document:paper,sha256,page:1,reader:"form26as-text"},randomUUID()),checks:[]}]);
+    await runJobs(page.request,firm.firmId);
+    await expect.poll(async()=>(await query(local.dbUrl,prepared,[firm.firmId])).length,{timeout:60_000}).toBe(3);
+    forms=await query(local.dbUrl,prepared,[firm.firmId]);
+    expect(forms[2].name).toBe("Invented ITR Person - ITR-1 - AY 2026-27 - v3.json");expect(forms[2].prepared.status).toBe("draft");
+    await page.goto(`/app/clients/${client}?tab=outputs`);
+    const held=page.locator("li").filter({has:page.getByRole("link",{name:forms[2].name,exact:true})});
+    await expect(held.getByRole("region",{name:"Differences with Form 26AS"})).toContainText("Check before approving: 1 difference with Form 26AS");
+    await expect(held.getByRole("button",{name:"Download for filing"})).toHaveCount(0);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   } finally {
     for(const item of await query(local.dbUrl,"select drive_file_id from public.documents where firm_id=$1",[firm.firmId])) if(item.drive_file_id) await drive.trash(item.drive_file_id).catch(()=>{});
     await firm.remove();

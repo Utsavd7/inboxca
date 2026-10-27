@@ -17,7 +17,8 @@ type Member=Awaited<ReturnType<typeof currentMember>>;
 // The one button for each pinned return: where it goes, and what it says.
 function action(pin:Pin):[string,string] {
   const client=`/app/clients/${pin.client}`;
-  if(pin.kind==="missing") return [`${client}?tab=documents`,"See papers"];
+  // An ITR not started yet has no form: its own page, where the person chooses one.
+  if(pin.kind==="missing") return pin.missing==="return" ? [`${client}/itr?year=${pin.period_key.slice(0,4)}`,"Start the return"] : [`${client}?tab=documents`,"See papers"];
   if(pin.kind==="fill") return [`${client}?tab=returns`,"See the return"];
   if(pin.kind==="check") return pin.stage==="filled" && pin.form ? [`/app/files/${pin.form}/view`,"Check figures"] : [`${client}?tab=outputs`,"See why"];
   return [`${client}?tab=outputs`,pin.kind==="approve" ? "Review and approve" : "Download and file"];
