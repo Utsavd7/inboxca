@@ -1014,20 +1014,19 @@ export async function findClients(text: string) {
   return data ?? [];
 }
 
-// Files whose words include every word typed, among the clients the person may see; one
-// client's files when a client is given. Words are matched by their keyed tokens.
-export async function findDocuments(text: string, client?: string) {
+// Files whose words include every word typed, among the clients the person may see. Words
+// are matched by their keyed tokens.
+export async function findDocuments(text: string) {
   const { supabase, membership } = await currentMember();
   const typed = words(text.slice(0, 200), 8);
   if (!membership || !typed.length) return [];
-  let query = supabase
+  const query = supabase
     .from("documents")
     .select("id, client_id, name, clients(name)")
     .contains("search_tokens", await searchTokens(membership.firmId, typed))
     .neq("status", "deleted")
     .order("received_at", { ascending: false })
-    .limit(client ? 200 : 8);
-  if (client) query = query.eq("client_id", client);
+    .limit(8);
   return (await query).data ?? [];
 }
 
