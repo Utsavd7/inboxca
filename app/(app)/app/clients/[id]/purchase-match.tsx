@@ -7,7 +7,7 @@ import {serverCrypto} from "@/src/lib/crypto";
 import {periodName} from "@/src/lib/documents";
 import {currentMember,currentWriter} from "@/src/lib/member";
 import {isRegister,matchPurchases,openMatch,savedPurchaseMappings,statementFor} from "@/src/lib/purchase-match";
-import {agrees,MatchProblem,matchLine,purchaseFields,rupees,suggestColumns,taxOf,totalOf,type Amounts,type Counts,type Entry} from "@/src/lib/purchase-register";
+import {agrees,changeOf,changeState,changeTotal,MatchProblem,matchLine,purchaseFields,rupees,suggestColumns,taxOf,totalOf,type Amounts,type Counts,type Entry} from "@/src/lib/purchase-register";
 import {sameHeadings} from "@/src/lib/sales-register";
 import {supabaseAdmin} from "@/src/lib/supabase";
 import {workerSheet} from "@/src/lib/worker-read";
@@ -61,6 +61,14 @@ const shown=(date:string)=>/^\d{4}-\d{2}-\d{2}$/.test(date) ? dueLabel(date) : d
 const figures=(amounts?:Amounts,portal?:Amounts)=>(["taxable","igst","cgst","sgst","cess"] as const).map((head)=><td key={head} className="num">{amounts ? rupees(amounts[head]) : ""}{portal && !agrees({...zero,[head]:amounts?.[head] ?? 0},{...zero,[head]:portal[head]}) && <span className="hint"><br/>GSTR-2B {rupees(portal[head])}</span>}</td>);
 const about=(entry:Entry)=>[entry.name,entry.note && (entry.note==="C" ? "Credit note" : "Debit note"),(entry.rows?.length ?? 0)>1 && `On rows ${entry.rows!.join(", ")} of the register`,entry.times && `${entry.times} times in GSTR-2B`].filter(Boolean).join(". ");
 const sum=(entries:Entry[],side:"books"|"portal")=>{const total=totalOf(entries,side);return `taxable value ₹${rupees(total.taxable)}, tax ₹${rupees(taxOf(total))}`;};
+// A change with its sign: "+100.00", "-50.00", "+₹100.00".
+const signed=(paise:number,unit="")=>`${paise>0 ? "+" : paise<0 ? "-" : ""}${unit}${rupees(Math.abs(paise))}`;
+// What to do about a bill or note the supplier corrected, by what the books show.
+const todo=(entry:Entry)=>{
+  const books=`Your books${entry.booked ? ` for ${periodName(entry.booked)}` : ""}`,kind=entry.note ? "note" : "bill",state=changeState(entry);
+  return state==="done" ? `${books} show the corrected amount. Nothing to do.` : state==="old" ? `${books} still show the old amount. Update them by the change.`
+    : state==="other" ? `${books} show ${sum([entry],"books")}. Change them to the corrected ${kind}.` : `Not in the books. Add the corrected ${kind}.`;
+};
 
 // GSTR-2B against the purchase register, on the client's Figures: the lists for the chosen
 // register's month, and the columns to confirm when it is not matched yet or a person asks.
@@ -90,9 +98,9 @@ export async function PurchaseMatch({clientId,searchParams}:{clientId:string;sea
   const {data:gstins}=choosing && !register.registration_id ? await supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("kind","gstin") : {data:null};
   const choices=(gstins?.length ?? 0)>1 ? await Promise.all(gstins!.map(async (reg)=>({id:reg.id,number:await serverCrypto().decrypt(membership.firmId,`clients/${clientId}/gstin`,reg.number_enc)}))) : [];
   const lists:[string,string,Entry[]][]=result ? [["missing","Not in GSTR-2B: ask the supplier",result.missing],["differ","Amounts that differ",result.differ],["extra","In GSTR-2B but not in the books",result.extra],["matched","Matched",result.matched]] : [];
-  const here=`?tab=extraction&purchases=${register.id}`,note=problem(message);
+  const here=`?tab=extraction&purchases=${register.id}`,note=problem(message),changes=result ? changeTotal(result.changed) : zero,unknown=result?.changed.filter((entry)=>!changeOf(entry)).length ?? 0;
   return <section className="section" id="gst-match" aria-labelledby="gst-match-title"><h2 id="gst-match-title">GSTR-2B and the purchase register</h2>
-    <p className="hint">InboxCA matches each bill in the client&apos;s purchase register with the month&apos;s GSTR-2B, by the supplier&apos;s GSTIN and the invoice number, and lists every amount that differs by more than ₹1. You decide what to claim. No GSTR-3B figure is changed.</p>
+    <p className="hint">InboxCA matches each bill in the client&apos;s purchase register with the month&apos;s GSTR-2B, by the supplier&apos;s GSTIN and the invoice number, and lists every amount that differs by more than ₹1. Bills and notes the supplier corrected are listed with the change they make this month. You decide what to claim. No GSTR-3B figure is changed.</p>
     {registers.length>1 && <nav className="pills" aria-label="Purchase registers">{registers.map((file)=><Link href={`?tab=extraction&purchases=${file.id}#gst-match`} key={file.id} aria-current={register.id===file.id ? "page" : undefined}>{file.name}</Link>)}</nav>}
     {(issue || note) && <p className="alert" role="alert">{issue || note}</p>}
     {message==="matched" && current && <p className="ok" role="status">Matched with the GSTR-2B for {month}.</p>}
@@ -106,7 +114,18 @@ export async function PurchaseMatch({clientId,searchParams}:{clientId:string;sea
         <div className="table-wrap"><table className="t"><thead><tr><th scope="col">Supplier GSTIN</th><th scope="col">Invoice</th><th scope="col">Date</th><th scope="col">Taxable value</th><th scope="col">IGST</th><th scope="col">CGST</th><th scope="col">SGST</th><th scope="col">Cess</th></tr></thead>
           <tbody>{entries.slice(0,100).map((entry,at)=><tr key={at}><td>{entry.gstin}{about(entry) && <span className="hint"><br/>{about(entry)}</span>}</td><td>{entry.number}</td><td>{shown(entry.date)}</td>{figures(key==="extra" ? entry.portal : entry.books,key==="differ" ? entry.portal : undefined)}</tr>)}</tbody></table></div>
         {entries.length>100 && <p className="hint">The first 100 are shown. Download the list for all {entries.length}.</p>}
-      </details>)}</div>
+      </details>)}
+      {result.changed.length>0 && <details>
+        <summary>Corrected by the supplier<span className="hint">{result.changed.length} {result.changed.length===1 ? "bill or note" : "bills and notes"}, change this month: taxable value {signed(changes.taxable,"₹")}, tax {signed(taxOf(changes),"₹")}{unknown>0 && `; ${unknown} not counted until the GSTR-2B with the original is added`}</span></summary>
+        <p className="hint">Each amount is what the correction changes this month: the corrected one less the original, with a credit note below zero.</p>
+        <div className="table-wrap"><table className="t"><thead><tr><th scope="col">Supplier GSTIN</th><th scope="col">Original</th><th scope="col">Corrected</th><th scope="col">Taxable value</th><th scope="col">IGST</th><th scope="col">CGST</th><th scope="col">SGST</th><th scope="col">Cess</th><th scope="col">Your books</th></tr></thead>
+          <tbody>{result.changed.slice(0,100).map((entry,at)=>{const change=changeOf(entry);return <tr key={at}><td>{entry.gstin}{about(entry) && <span className="hint"><br/>{about(entry)}</span>}</td>
+            <td>{entry.was?.number}<span className="hint"><br/>{shown(entry.was?.date ?? "")}<br/>{entry.was?.period ? `GSTR-2B ${periodName(entry.was.period)}` : "No earlier GSTR-2B"}</span></td>
+            <td>{entry.number}<span className="hint"><br/>{shown(entry.date)}</span></td>
+            {(["taxable","igst","cgst","sgst","cess"] as const).map((head)=><td key={head} className="num">{change && signed(change[head])}<span className="hint">{change && <br/>}Now {rupees(entry.portal?.[head] ?? 0)}</span></td>)}
+            <td className="clients-next">{todo(entry)}</td></tr>;})}</tbody></table></div>
+        {result.changed.length>100 && <p className="hint">The first 100 are shown. Download the list for all {result.changed.length}.</p>}
+      </details>}</div>
     </> : !choosing && <p className="hint">{match ? "Matched with an earlier GSTR-2B. Match it again with the current one." : statement ? "Not matched with GSTR-2B yet." : `Add the GSTR-2B for ${month || "this month"} to match this register.`}{canCheck && <> <Link href={`${here}#gst-match`}>Choose columns</Link></>}</p>}
     {choosing && rows.length>0 && <>
       <Form action={`/app/clients/${clientId}`} className="form-row" key={header}><input type="hidden" name="tab" value="extraction"/><input type="hidden" name="purchases" value={register.id}/><label>Column names are on row<input type="number" name="heading" min={1} max={40} defaultValue={header}/></label><button className="b b-secondary">Show columns</button></Form>

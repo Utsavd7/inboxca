@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test, expect } from "@playwright/test";
 import { emailStep, localSupabase, query, runJobs, seedFirm, totp } from "./local-supabase";
-import { inventedGstin, statement, supplierInvoices } from "../fixtures/portal";
+import { inventedGstin, statement, supplierChanges, supplierInvoices } from "../fixtures/portal";
 
 // GSTR-2B against the purchase register: an invented register uploaded on the client and an
 // invented GSTR-2B (the pinned GSTN layout) added as a portal file. The person confirms the
@@ -21,9 +21,10 @@ const register = (month: string) => Buffer.from([
   ",CASH-1,09-09-2026,100.00,0,0,0,0",
   "Total,,,3600.00,360.00,135.00,135.00,0",
 ].join("\n"));
-// Matches INV/001 as INV-0001, has INV/002 with less tax, and INV/003 the books do not have.
-const twoB = (rtnprd: string) => {
-  const value = statement(own, { b2b: [supplierInvoices(one, [{ number: "INV-0001", dt: "05-09-2026", txval: 1000, cgst: 90, sgst: 90 }, { number: "INV/002", dt: "06-09-2026", txval: 500, cgst: 40, sgst: 40 }, { number: "INV/003", dt: "07-09-2026", txval: 300, cgst: 27, sgst: 27 }])] });
+// Matches INV/001 as INV-0001, has INV/002 with less tax, and INV/003 the books do not have;
+// `changed` adds the supplier's corrections (docdata b2ba, cdnra).
+const twoB = (rtnprd: string, changed: Record<string, unknown> = {}) => {
+  const value = statement(own, { b2b: [supplierInvoices(one, [{ number: "INV-0001", dt: "05-09-2026", txval: 1000, cgst: 90, sgst: 90 }, { number: "INV/002", dt: "06-09-2026", txval: 500, cgst: 40, sgst: 40 }, { number: "INV/003", dt: "07-09-2026", txval: 300, cgst: 27, sgst: 27 }])], ...changed });
   return Buffer.from(JSON.stringify({ ...value, data: { ...value.data, rtnprd } }));
 };
 
@@ -103,22 +104,42 @@ test("lists the bills to ask suppliers about, the amounts that differ and what o
     const download = page.waitForEvent("download");
     await section.getByRole("link", { name: "Download the list" }).click();
     const file = await readFile((await (await download).path())!, "utf8");
-    expect(file.split("\r\n")[0]).toBe("List,Supplier GSTIN,Supplier name,Invoice number,Invoice date,Note,Taxable value in the books,IGST in the books,CGST in the books,SGST in the books,Cess in the books,Taxable value in GSTR-2B,IGST in GSTR-2B,CGST in GSTR-2B,SGST in GSTR-2B,Cess in GSTR-2B,Rows in the register");
+    expect(file.split("\r\n")[0]).toBe("List,Supplier GSTIN,Supplier name,Invoice number,Invoice date,Note,Taxable value in the books,IGST in the books,CGST in the books,SGST in the books,Cess in the books,Taxable value in GSTR-2B,IGST in GSTR-2B,CGST in GSTR-2B,SGST in GSTR-2B,Cess in GSTR-2B,Rows in the register,Register month,Original number,Original date,Original in GSTR-2B for,Taxable value change this month,IGST change this month,CGST change this month,SGST change this month,Cess change this month");
     expect(file).toContain(`Not in GSTR-2B,${two},,T-17,2026-09-08,,2000.00,360.00,0.00,0.00,0.00,,,,,,5`);
     expect(file).toContain(`Amount differs,${one},INVENTED SUPPLIER,INV/002,2026-09-06,,500.00,0.00,45.00,45.00,0.00,500.00,0.00,40.00,40.00,0.00,4`);
     expect(file).toContain(`Matched,${one},INVENTED SUPPLIER,INV/001,2026-09-05,,1000.00`);
     const [match] = await query(local.dbUrl, "select counts, result_enc from public.gst_matches where register_id = $1", [sep.id]);
-    expect(match.counts).toEqual({ matched: 1, missing: 1, extra: 1, differ: 1 });
+    expect(match.counts).toEqual({ matched: 1, missing: 1, extra: 1, differ: 1, changed: 0 });
     expect(match.result_enc).not.toContain(one.slice(2, 12));
     expect((await query(local.dbUrl, "select action, actor_id from public.activity_log where firm_id = $1 and action like 'gst_match.%' order by at", [firm.firmId])).map((row) => row.action)).toEqual(["gst_match.made", "gst_match.downloaded"]);
     // No GSTR-3B figure was changed: the credit draft holds only the statement's own figures.
     const [credit] = await query(local.dbUrl, "select data from public.datasets where client_id = $1 and form_code = 'GSTR3B'", [client]);
     expect(credit.data.lines.every((line: { state: string; source: { reader: string } }) => line.state === "pending" && line.source.reader === "gstr2b-v4.5")).toBe(true);
 
-    // October: same columns, matched by the jobs alone once both papers are in.
-    await add(twoB("102026"), "purchase_register_oct_2026.csv", 2);
+    // October: same columns, matched by the jobs alone once both papers are in. Its GSTR-2B also
+    // has two September bills the supplier corrected upwards (b2ba).
+    const corrections = { b2ba: [supplierChanges(one, [{ number: "INV-0001", dt: "05-09-2026", txval: 1100, cgst: 99, sgst: 99, was: { number: "INV-0001", dt: "05-09-2026" } }, { number: "INV/003", dt: "07-09-2026", txval: 350, cgst: 31.5, sgst: 31.5, was: { number: "INV/003", dt: "07-09-2026" } }])] };
+    await add(twoB("102026", corrections), "purchase_register_oct_2026.csv", 2);
     const [oct] = await query(local.dbUrl, "select id from public.documents where client_id = $1 and document_type = 'Purchase bills' and period_key = '2026-10'", [client]);
-    await expect.poll(async () => (await query(local.dbUrl, "select counts from public.gst_matches where register_id = $1", [oct.id]))[0]?.counts).toEqual({ matched: 1, missing: 1, extra: 1, differ: 1 });
+    await expect.poll(async () => (await query(local.dbUrl, "select counts from public.gst_matches where register_id = $1", [oct.id]))[0]?.counts).toEqual({ matched: 1, missing: 1, extra: 1, differ: 1, changed: 2 });
+    // Each correction's change this month is the corrected bill less the original in September's
+    // GSTR-2B; September's books still show INV/001's old amount and never had INV/003.
+    await page.goto(`/app/clients/${client}?tab=extraction&purchases=${oct.id}`);
+    await expect(section).toContainText("Oct 2026: 1 matched, 1 not in GSTR-2B: ask the supplier, 1 in GSTR-2B but not in the books, 1 amount differs, 2 corrected by the supplier: update the books");
+    const corrected = list("Corrected by the supplier");
+    await expect(corrected.locator("summary")).toContainText("2 bills and notes, change this month: taxable value +₹150.00, tax +₹27.00");
+    await corrected.locator("summary").click();
+    await expect(corrected.locator("tbody tr")).toHaveText([
+      new RegExp(`${one}.*INV-00015 Sep 2026GSTR-2B Sep 2026INV-00015 Sep 2026\\+100\\.00Now 1,100\\.000\\.00Now 0\\.00\\+9\\.00Now 99\\.00\\+9\\.00Now 99\\.000\\.00Now 0\\.00Your books for Sep 2026 still show the old amount\\. Update them by the change\\.$`),
+      /INV\/003.*GSTR-2B Sep 2026.*\+50\.00Now 350\.00.*Not in the books\. Add the corrected bill\.$/,
+    ]);
+    // A wide list scrolls in its own box; the page never scrolls sideways.
+    expect(await section.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    const octDownload = page.waitForEvent("download");
+    await section.getByRole("link", { name: "Download the list" }).click();
+    const octFile = await readFile((await (await octDownload).path())!, "utf8");
+    expect(octFile).toContain(`Corrected by the supplier,${one},INVENTED SUPPLIER,INV-0001,2026-09-05,,1000.00,0.00,90.00,90.00,0.00,1100.00,0.00,99.00,99.00,0.00,3,2026-09,INV-0001,2026-09-05,2026-09,100.00,0.00,9.00,9.00,0.00`);
+    expect(octFile).toContain(`Corrected by the supplier,${one},INVENTED SUPPLIER,INV/003,2026-09-07,,,,,,,350.00,0.00,31.50,31.50,0.00,,,INV/003,2026-09-07,2026-09,50.00,0.00,4.50,4.50,0.00`);
 
     // Staff see the lists but download only when the owner allows it.
     await query(local.dbUrl, "update public.firm_members set role = 'staff' where firm_id = $1 and user_id = $2", [firm.firmId, firm.ownerId]);

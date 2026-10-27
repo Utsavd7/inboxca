@@ -1,12 +1,13 @@
 import {z} from "zod";
 import {serverCrypto} from "./crypto";
-import {amountsSchema,countsOf,extractPurchases,matchBills,matchPlace,matchSchema,MatchProblem,purchaseMappingPlace,purchaseMappingSchema,readDate,type PurchaseMapping} from "./purchase-register";
+import {amountsSchema,changedKey,countsOf,extractPurchases,invoiceKey,matchBills,matchChanged,matchPlace,matchSchema,MatchProblem,purchaseMappingPlace,purchaseMappingSchema,readDate,type Changed,type Found,type PurchaseMapping} from "./purchase-register";
 import {sameHeadings} from "./sales-register";
 import {supabaseAdmin} from "./supabase";
 import {workerRead,workerSheet} from "./worker-read";
 
 type Register={id:string;firm_id:string;client_id:string;name:string;sha256:string;period_key:string;registration_id:string|null};
-const bills=z.object({gstin:z.string().length(15),period:z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/),bills:z.array(z.object({gstin:z.string().length(15),name:z.string().max(100),number:z.string().min(1).max(16),date:z.string().max(10),note:z.enum(["C","D"]).optional(),amounts:amountsSchema})).max(10000)}).nullable();
+const bill=z.object({gstin:z.string().length(15),name:z.string().max(100),number:z.string().min(1).max(16),date:z.string().max(10),note:z.enum(["C","D"]).optional(),amounts:amountsSchema});
+const bills=z.object({gstin:z.string().length(15),period:z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/),bills:z.array(bill).max(10000),changed:z.array(bill.extend({was:z.object({number:z.string().min(1).max(16),date:z.string().max(10)})})).max(10000).default([])}).nullable();
 export const isRegister=(paper:{name:string})=>/\.(xlsx?|csv)$/i.test(paper.name);
 
 export async function savedPurchaseMappings(firm:string,client:string) {
@@ -34,6 +35,37 @@ async function remember(firm:string,client:string,asked:PurchaseMapping) {
 export async function statementFor(register:Register) {
   const {data}=await supabaseAdmin().from("documents").select("id,firm_id,name,sha256,registration_id").eq("firm_id",register.firm_id).eq("client_id",register.client_id).eq("document_type","GSTR-2B").eq("status","filed").eq("period_key",register.period_key).ilike("name","%.json").order("received_at",{ascending:false}).limit(20);
   return data?.find((paper)=>register.registration_id && paper.registration_id===register.registration_id) ?? data?.find((paper)=>!register.registration_id || !paper.registration_id);
+}
+
+// For bills and notes the supplier corrected: each original as the client's earlier GSTR-2B
+// for the same GSTIN listed it (newest month first, an earlier correction before the bill, from
+// the month of the oldest original's date, at most 24 months), and the bills in the earlier
+// purchase registers' matches, newest first.
+async function earlier(register:Register,read:{gstin:string;changed:Changed[]}) {
+  const admin=supabaseAdmin(),from=read.changed.map((bill)=>bill.was.date.slice(0,7)).filter((month)=>/^20\d{2}-\d{2}$/.test(month)).sort()[0] ?? register.period_key;
+  const fits=(paper:{registration_id:string|null})=>!register.registration_id || !paper.registration_id || paper.registration_id===register.registration_id;
+  const papers=(type:string)=>admin.from("documents").select("id,name,sha256,period_key,registration_id").eq("firm_id",register.firm_id).eq("client_id",register.client_id).eq("document_type",type).eq("status","filed").gte("period_key",from).lt("period_key",register.period_key).order("period_key",{ascending:false}).order("received_at",{ascending:false}).limit(50);
+  const [{data:statements},{data:registers}]=await Promise.all([papers("GSTR-2B"),papers("Purchase bills")]);
+  const originals=new Map<string,Found>(),months=new Set<string>();
+  for(const paper of statements?.filter((paper)=>fits(paper) && /\.json$/i.test(paper.name)) ?? []) {
+    if(read.changed.every((one)=>originals.has(changedKey(one,one.was.number))) || months.size>=24) break;
+    if(months.has(paper.period_key)) continue;
+    months.add(paper.period_key);
+    const before=await workerRead(register.firm_id,paper,"portal").then((answer)=>bills.parse(answer.bills ?? null)).catch(()=>null);
+    if(before?.gstin!==read.gstin || before.period!==paper.period_key) continue;
+    for(const [one,number] of [...before.changed.flatMap((one)=>[[one,one.was.number],[one,one.number]] as const),...before.bills.map((one)=>[one,one.number] as const)])
+      if(!originals.has(changedKey(one,number))) originals.set(changedKey(one,number),{amounts:one.amounts,period:paper.period_key});
+  }
+  const ids=registers?.filter(fits).map((paper)=>paper.id) ?? [],books=new Map<string,Found>();
+  const {data:matches}=ids.length ? await admin.from("gst_matches").select("register_id,result_enc").eq("firm_id",register.firm_id).in("register_id",ids) : {data:null};
+  for(const paper of registers ?? []) {
+    const sealed=matches?.find((match)=>match.register_id===paper.id);
+    if(!sealed) continue;
+    const before=await openMatch(register.firm_id,paper.id,sealed.result_enc);
+    for(const entry of [...before.matched,...before.differ,...before.missing])
+      if(entry.books && !books.has(invoiceKey(entry.gstin,entry.number))) books.set(invoiceKey(entry.gstin,entry.number),{amounts:entry.books,period:paper.period_key,rows:entry.rows});
+  }
+  return {originals,books};
 }
 
 // Matches a purchase register with its month's GSTR-2B and keeps the lists. With `asked` (a
@@ -66,10 +98,15 @@ export async function matchPurchases(register:Register,person:string|null,asked?
   // The GSTR-2B must be for one of the client's GSTINs, and the register's own when it names one.
   const {data:own}=await admin.from("client_registrations").select("id").eq("firm_id",register.firm_id).eq("client_id",register.client_id).eq("kind","gstin").eq("number_bidx",await crypto.blindIndex(register.firm_id,"gstin",read.gstin)).maybeSingle();
   if(!own || register.registration_id && own.id!==register.registration_id) throw new MatchProblem("gstin");
-  const result=matchBills(books,read.bills.map((bill)=>({...bill,date:readDate(bill.date)})),skipped),counts=countsOf(result);
+  const result=matchBills(books,read.bills.map((bill)=>({...bill,date:readDate(bill.date)})),skipped);
+  if(read.changed.length) {
+    const changed=read.changed.map((bill)=>({...bill,date:readDate(bill.date),was:{...bill.was,date:readDate(bill.was.date)}})),found=await earlier(register,{gstin:read.gstin,changed});
+    matchChanged(result,changed,found.originals,found.books);
+  }
+  const counts=countsOf(result);
   const {error}=await admin.from("gst_matches").upsert({register_id:register.id,firm_id:register.firm_id,statement_id:statement.id,counts,result_enc:await crypto.encrypt(register.firm_id,matchPlace(register.id),JSON.stringify(result))},{onConflict:"register_id"});
   if(error) throw new Error("The match could not be saved.");
-  await admin.from("activity_log").insert({firm_id:register.firm_id,actor_id:person,action:"gst_match.made",entity_type:"client",entity_id:register.client_id,details:{register:register.id,statement:statement.id,differences:counts.missing+counts.extra+counts.differ}});
+  await admin.from("activity_log").insert({firm_id:register.firm_id,actor_id:person,action:"gst_match.made",entity_type:"client",entity_id:register.client_id,details:{register:register.id,statement:statement.id,differences:counts.missing+counts.extra+counts.differ+(counts.changed ?? 0)}});
   return "matched";
 }
 
