@@ -48,7 +48,7 @@ test("a new firm signs up, signs in with the email code and reaches the app", as
     "select f.status, f.state_code, l.details from public.firms f join public.activity_log l on l.firm_id = f.id and l.action = 'firm.signed_up' where f.name = $1",
     [firmName],
   );
-  expect(firm).toEqual({ status: "pending", state_code: "27", details: { accepted: { terms: "11 Oct 2026", privacy: "11 Oct 2026", dpa: "25 Oct 2026" } } });
+  expect(firm).toEqual({ status: "pending", state_code: "27", details: { accepted: { terms: "27 Oct 2026", privacy: "27 Oct 2026", dpa: "25 Oct 2026" } } });
 
   // The same email can not make a second firm, and the page does not say the address has an
   // account: it moves on to the ordinary sign in code.

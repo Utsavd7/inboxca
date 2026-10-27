@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { firmCrypto, kmsKek, localKek, serverKek, type KeyStore } from "@/src/lib/crypto";
+import { firmCrypto, kmsKek, localKek, numberIdentity, serverKek, type KeyStore } from "@/src/lib/crypto";
 import { fakeAws, testCredentials } from "@/tests/fixtures/aws";
 
 const FIRM = "firm-a";
@@ -78,6 +78,23 @@ describe("blind indexes", () => {
     expect(await index(FIRM, "email", "ram@example.com")).not.toBe(await index(OTHER, "email", "ram@example.com"));
     expect(await index(FIRM, "email", "x")).not.toBe(await index(FIRM, "pan", "x"));
     expect(await index(FIRM, "email", "ram@example.com")).not.toContain("ram");
+  });
+
+  // The split firms check (D38 (6)) finds one PAN in two firms by its identity hash, which no
+  // firm's key makes, so it can never be matched against a firm's blind index.
+  it("leave one identity hash for a PAN in every firm, keyed by the platform alone", async () => {
+    const { crypto } = setup();
+    vi.stubEnv("SUPABASE_SECRET_KEY", randomBytes(32).toString("base64url"));
+    const pan = numberIdentity("pan", "ABCDE1234F");
+    expect(numberIdentity("gstin", "24abcde1234f1Z5")).toBe(pan);
+    expect(numberIdentity("pan", "ABCDE1234G")).not.toBe(pan);
+    expect([await crypto.blindIndex(FIRM, "pan", "ABCDE1234F"), await crypto.blindIndex(OTHER, "pan", "ABCDE1234F")]).not.toContain(pan);
+    expect(pan).not.toContain("ABCDE");
+    vi.stubEnv("SUPABASE_SECRET_KEY", randomBytes(32).toString("base64url"));
+    expect(numberIdentity("pan", "ABCDE1234F")).not.toBe(pan);
+    vi.stubEnv("SUPABASE_SECRET_KEY", "");
+    expect(() => numberIdentity("pan", "ABCDE1234F")).toThrow();
+    vi.unstubAllEnvs();
   });
 });
 

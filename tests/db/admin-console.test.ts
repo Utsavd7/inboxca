@@ -1,6 +1,7 @@
-import { createHmac } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import type { Client } from "pg";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { accountIdentity, numberIdentity } from "@/src/lib/crypto";
 import { actAs, asOwner, attempt, connect, rollback } from "./db";
 
 // Orelu's admin console (M11): only a listed admin past the 2 step code and a passkey check in
@@ -135,6 +136,58 @@ it("shows an admin each firm's health and no client data, and lets them retry a 
     expect((await db.query("select value #> '{changes,0}' c from public.platform_settings where key = 'watch'")).rows[0].c).toMatchObject({ status: "reviewed", reviewed_by: admin });
     expect((await db.query("select details from public.activity_log where action = 'admin.change_reviewed' and actor_id = $1", [admin])).rows).toEqual([{ details: { source: "gstr1", at: "2026-10-25T00:00:00.000Z" } }]);
     expect((await db.query("select actor_id, firm_id, details from public.activity_log where action = 'admin.job_retried' and details ->> 'job' = $1", [String(job)])).rows).toEqual([{ actor_id: admin, firm_id: null, details: { job: Number(job) } }]);
+  }));
+
+it("finds the firms that may be one from identity hashes alone, as the check that opened every value did", () =>
+  rollback(db, async () => {
+    vi.stubEnv("SUPABASE_SECRET_KEY", randomBytes(32).toString("base64url"));
+    const [a, b, c, d, e, f, g, h, i, j, k, l, m, n, x] = Array.from({ length: 15 }, (_, at) => `00000000-0000-4000-8000-0000000005${(at + 1).toString(16).padStart(2, "0")}`);
+    const both = "00000000-0000-4000-8000-0000000005ff";
+    await asOwner(db);
+    for (const firm of [a, b, c, d, e, f, g, h, i, j, k, l, m, n, x])
+      await db.query("insert into public.firms(id,name,state_code,gstin,status) values ($1,'Invented Split Firm',$2,$3,$4)",
+        [firm, firm === c || firm === d ? null : "24", { [c]: "24AAAFZ9876Q1Z5", [d]: "27AAAFZ9876Q1Z5" }[firm] ?? null, firm === x ? "closed" : "active"]);
+    await db.query("insert into auth.users(id,email) values ($1,'both@split-firms.test')", [both]);
+    await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$3,'owner','active'),($2,$3,'owner','active')", [e, f, both]);
+    // A mailbox is the same over any provider, a drive account only on its own; a closed firm is left out.
+    const account = (firm: string, kind: string, provider: string, address: string) =>
+      db.query("insert into public.connected_accounts(firm_id,kind,provider,address_enc,credentials_enc,identity_hash) values ($1,$2,$3,'sealed','sealed',$4)", [firm, kind, provider, accountIdentity(kind, provider, address)]);
+    await account(a, "mail", "imap", "office@split-firms.test");
+    await account(b, "mail", "gmail", " Office@Split-Firms.test");
+    await account(x, "mail", "imap", "office@split-firms.test");
+    for (const [firm, provider] of [[g, "dropbox"], [h, "dropbox"], [i, "onedrive"]]) await account(firm, "drive", provider, "drive@split-firms.test");
+    // Client PANs, some held as a GSTIN. J's 12 are all K's; 12 of M's 40 are K's (30%); 10 of
+    // L's 40 are K's (25%); N's 9 are J's and K's (fewer than 10); A and B share 3.
+    const pan = (at: number) => `AAAPZ${String(at).padStart(4, "0")}Q`, gstin = (at: number) => `24${pan(at)}1Z5`;
+    const range = (from: number, to: number) => Array.from({ length: to - from }, (_, at) => pan(from + at));
+    const clients = async (firm: string, numbers: string[]) => {
+      const ids = numbers.map(() => randomUUID()), kinds = numbers.map((number) => (number.length === 15 ? "gstin" : "pan"));
+      await db.query("insert into public.clients(id,firm_id,name,kind) select id,$1,'Invented Split Client','individual' from unnest($2::uuid[]) id", [firm, ids]);
+      await db.query(`insert into public.client_registrations(firm_id,client_id,kind,number_enc,number_bidx,state_code,identity_hash)
+        select $1, id, kind, 'sealed', id::text, case when kind = 'gstin' then '24' end, hash from unnest($2::uuid[], $3::text[], $4::text[]) r(id, kind, hash)`,
+        [firm, ids, kinds, numbers.map((number, at) => numberIdentity(kinds[at], number))]);
+    };
+    await clients(a, range(300, 303));
+    await clients(b, range(300, 305));
+    await clients(j, [...range(0, 12), gstin(0)]);
+    await clients(k, [...[0, 1, 2, 3, 4, 5].map(gstin), ...range(6, 12), ...range(100, 128)]);
+    await clients(l, [...range(100, 110), ...range(200, 230)]);
+    await clients(m, [...range(100, 112), ...range(400, 428)]);
+    await clients(n, range(0, 9));
+    const invented = [a, b, c, d, e, f, g, h, i, j, k, l, m, n, x];
+    const found = ((await db.query("select public.split_firm_pairs(10, 0.3) p")).rows[0].p as { firms: string[] }[]).filter((pair) => pair.firms.every((firm) => invented.includes(firm)));
+    expect(found.sort((one, other) => one.firms.join().localeCompare(other.firms.join()))).toEqual([
+      { firms: [a, b], evidence: ["mail"], clients: 3, smaller: 3 },
+      { firms: [c, d], evidence: ["pan"], clients: 0, smaller: null },
+      { firms: [e, f], evidence: ["owner"], clients: 0, smaller: null },
+      { firms: [g, h], evidence: ["drive"], clients: 0, smaller: null },
+      { firms: [j, k], evidence: ["clients"], clients: 12, smaller: 12 },
+      { firms: [k, m], evidence: ["clients"], clients: 12, smaller: 40 },
+    ]);
+    // Only the server runs it.
+    await actAs(db, both, "aal2");
+    expect((await attempt(db, "select public.split_firm_pairs(10, 0.3)")).error).toContain("permission denied");
+    vi.unstubAllEnvs();
   }));
 
 it("shows anyone each part's waiting work and the incidents, and lets only an admin post, note, close and email one", () =>

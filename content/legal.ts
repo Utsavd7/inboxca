@@ -3,7 +3,7 @@
 // page says how things will work. A lawyer must review all three before the pilot.
 import { analyticsToken } from "@/src/lib/site";
 
-export const legalUpdated = "11 Oct 2026";
+export const legalUpdated = "27 Oct 2026";
 export const legalNote =
   "InboxCA is in development. This page says how things will work when it opens, and a lawyer will review it before the first firm joins.";
 
@@ -122,7 +122,7 @@ export const termsSections = [
       "Your firm owns its files and its clients' data. InboxCA works on them only as your firm instructs.",
       "InboxCA prepares forms. Your team checks every figure and files every return. InboxCA gives no tax advice.",
       "You connect your own mailbox and drive, and you can disconnect them at any time.",
-      "Plans are paid monthly or yearly through Razorpay AutoPay. The refund policy explains the 14 day money back.",
+      "Plans are paid monthly or yearly through Cashfree AutoPay. The refund policy explains the 14 day money back.",
     ],
   },
   {
@@ -199,7 +199,7 @@ export const refundSections = [
     id: "paid",
     title: "How a refund is paid",
     points: [
-      "Through Razorpay, to the same card, UPI or bank account that paid.",
+      "Through Cashfree, to the same card, UPI or bank account that paid.",
       "It usually arrives within 5 to 7 working days.",
     ],
   },
