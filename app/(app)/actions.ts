@@ -14,7 +14,7 @@ import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
-import { serverCrypto } from "@/src/lib/crypto";
+import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
 import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, renewDrive, saveDrive, unwatchDrive } from "@/src/lib/drive-account";
@@ -434,6 +434,7 @@ async function sealClient(firm: string, client: ClientInput) {
       kind,
       number_enc: await crypto.encrypt(firm, `clients/${id}/${kind}`, number),
       number_bidx: await crypto.blindIndex(firm, kind, number),
+      identity_hash: numberIdentity(kind, number),
       state_code,
     })),
   );
@@ -667,6 +668,7 @@ export async function manageClient(form: FormData) {
       kind,
       number_enc: await crypto.encrypt(firm, `clients/${id}/${kind}`, number),
       number_bidx: await crypto.blindIndex(firm, kind, number),
+      identity_hash: numberIdentity(kind, number),
       state_code: kind === "gstin" ? number.slice(0, 2) : null,
     });
     if (error) back(error.code === "23505" ? "taken" : "number");
@@ -861,7 +863,7 @@ export async function connectMailbox(_prev: MailboxState, form: FormData): Promi
   const id=prior?.id ?? randomUUID();
   const fields={
     id,firm_id:membership.firmId,kind:"mail",provider:"imap",status:"connected",
-    address_enc:await crypto.encrypt(membership.firmId,`accounts/${id}/address`,address),address_bidx:index,
+    address_enc:await crypto.encrypt(membership.firmId,`accounts/${id}/address`,address),address_bidx:index,identity_hash:accountIdentity("mail","imap",address),
     credentials_enc:await crypto.encrypt(membership.firmId,`accounts/${id}/credentials`,JSON.stringify({password})),
     sync_cursor:prior?.sync_cursor ?? checked.cursor,
     settings:{...(prior?.settings as Record<string,Json> ?? {}),imap:settings.imap,smtp:settings.smtp,mail_failures:{read:0,send:0}},

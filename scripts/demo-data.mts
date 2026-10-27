@@ -14,7 +14,7 @@ for (const line of readFileSync(".env.local", "utf8").split("\n")) {
 }
 const { default: pg } = await import("pg");
 const { createClient } = await import("@supabase/supabase-js");
-const { serverCrypto } = await import("../src/lib/crypto");
+const { accountIdentity, numberIdentity, serverCrypto } = await import("../src/lib/crypto");
 const { describeFile, filePeriod } = await import("../src/lib/documents");
 const { fileName, folderPath } = await import("../src/lib/drive");
 const { openDrive } = await import("../src/lib/drive-account");
@@ -99,8 +99,8 @@ for (const client of clients) {
   for (const [kind, number, services, state] of numbers) {
     const [{ id: registration }] = (
       await db.query(
-        "insert into public.client_registrations (firm_id, client_id, kind, number_enc, number_bidx, state_code) values ($1, $2, $3, $4, $5, $6) returning id",
-        [firm, id, kind, await crypto.encrypt(firm, `clients/${id}/${kind}`, number), await crypto.blindIndex(firm, kind, number), state],
+        "insert into public.client_registrations (firm_id, client_id, kind, number_enc, number_bidx, state_code, identity_hash) values ($1, $2, $3, $4, $5, $6, $7) returning id",
+        [firm, id, kind, await crypto.encrypt(firm, `clients/${id}/${kind}`, number), await crypto.blindIndex(firm, kind, number), state, numberIdentity(kind, number)],
       )
     ).rows;
     // Setting services makes the next 12 months of due dates (the calendar's own trigger).
@@ -153,8 +153,8 @@ for (const [name, email, forClients, relation] of contacts) {
 // The firm's mailbox, pointing at the local test mail server, and some sorted client mail.
 const account = randomUUID();
 await db.query(
-  "insert into public.connected_accounts (id, firm_id, kind, provider, address_enc, credentials_enc, sync_cursor, status, settings) values ($1, $2, 'mail', 'imap', $3, $4, null, 'connected', $5)",
-  [account, firm, await crypto.encrypt(firm, `accounts/${account}/address`, "office@demo-firm.example"), await crypto.encrypt(firm, `accounts/${account}/credentials`, JSON.stringify({ password: "demo" })), { imap: { host: "imap.demo-firm.example", port: 993 }, smtp: { host: "smtp.demo-firm.example", port: 465 } }],
+  "insert into public.connected_accounts (id, firm_id, kind, provider, address_enc, credentials_enc, sync_cursor, status, settings, identity_hash) values ($1, $2, 'mail', 'imap', $3, $4, null, 'connected', $5, $6)",
+  [account, firm, await crypto.encrypt(firm, `accounts/${account}/address`, "office@demo-firm.example"), await crypto.encrypt(firm, `accounts/${account}/credentials`, JSON.stringify({ password: "demo" })), { imap: { host: "imap.demo-firm.example", port: 993 }, smtp: { host: "smtp.demo-firm.example", port: 465 } }, accountIdentity("mail", "imap", "office@demo-firm.example")],
 );
 const mail = [
   ["Mehta Traders", "data_gst", 2],

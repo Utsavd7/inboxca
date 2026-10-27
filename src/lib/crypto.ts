@@ -93,6 +93,29 @@ export function serverKek(): Kek {
 // Same text, same index; different text, firm or field, different index.
 const normalise = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 
+// The same identity in any firm, the same hash (D38 (6)), so the nightly split firms check
+// compares firms in the database without opening anything. Keyed by Orelu's platform key, made
+// from the server secret like the server's other keyed digests, never by a firm's key, and
+// readable by nobody signed in. If that secret changes, every hash changes with it: run
+// scripts/identity-hashes.mts --yes to rebuild them all; until then the check misses matches,
+// and never invents one.
+function identityHash(value: string) {
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (!secret) throw new Error("SUPABASE_SECRET_KEY must be set");
+  return createHmac("sha256", createHmac("sha256", secret).update("identity hash").digest()).update(value).digest().subarray(0, 16).toString("base64url");
+}
+// A client's PAN or GSTIN: the hash of the PAN it holds. Other numbers have none.
+export function numberIdentity(kind: string, number: string) {
+  const pan = (kind === "gstin" ? number.slice(2, 12) : kind === "pan" ? number : "").toUpperCase();
+  return pan.length === 10 ? identityHash(`pan:${pan}`) : null;
+}
+// A connected account: a mailbox is the same over any provider, a drive account is its
+// provider's. The test drive on this computer has none.
+export function accountIdentity(kind: string, provider: string, address: string) {
+  const plain = address.trim().toLowerCase();
+  return plain && provider !== "local" ? identityHash(kind === "mail" ? `mail:${plain}` : `drive:${provider}:${plain}`) : null;
+}
+
 export function firmCrypto(kek: Kek, store: KeyStore, now = () => Date.now()) {
   const cache = new Map<string, { index: Buffer; keys: Buffer[]; until: number }>();
   const loading = new Map<string, ReturnType<typeof load>>();

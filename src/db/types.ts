@@ -95,13 +95,13 @@ isOneToOne: false
                   ]
                 },"client_registrations": {
                   Row: {
-                    "client_id": string,"firm_id": string,"id": string,"kind": string,"number_bidx": string,"number_enc": string,"services": (string)[],"state_code": string | null
+                    "client_id": string,"firm_id": string,"id": string,"identity_hash": string | null,"kind": string,"number_bidx": string,"number_enc": string,"services": (string)[],"state_code": string | null
                   }
                   Insert: {
-                    "client_id": string,"firm_id": string,"id"?: string,"kind": string,"number_bidx": string,"number_enc": string,"services"?: (string)[],"state_code"?: string | null
+                    "client_id": string,"firm_id": string,"id"?: string,"identity_hash"?: string | null,"kind": string,"number_bidx": string,"number_enc": string,"services"?: (string)[],"state_code"?: string | null
                   }
                   Update: {
-                    "client_id"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"number_bidx"?: string,"number_enc"?: string,"services"?: (string)[],"state_code"?: string | null
+                    "client_id"?: string,"firm_id"?: string,"id"?: string,"identity_hash"?: string | null,"kind"?: string,"number_bidx"?: string,"number_enc"?: string,"services"?: (string)[],"state_code"?: string | null
                   }
                   Relationships: [
                     {
@@ -158,13 +158,13 @@ isOneToOne: false
                   ]
                 },"connected_accounts": {
                   Row: {
-                    "address_bidx": string | null,"address_enc": string,"credentials_enc": string,"firm_id": string,"id": string,"kind": string,"provider": string,"settings": NonNullable<Json>,"status": string,"sync_cursor": string | null
+                    "address_bidx": string | null,"address_enc": string,"credentials_enc": string,"firm_id": string,"id": string,"identity_hash": string | null,"kind": string,"provider": string,"settings": NonNullable<Json>,"status": string,"sync_cursor": string | null
                   }
                   Insert: {
-                    "address_bidx"?: string | null,"address_enc": string,"credentials_enc": string,"firm_id": string,"id"?: string,"kind": string,"provider": string,"settings"?: NonNullable<Json>,"status"?: string,"sync_cursor"?: string | null
+                    "address_bidx"?: string | null,"address_enc": string,"credentials_enc": string,"firm_id": string,"id"?: string,"identity_hash"?: string | null,"kind": string,"provider": string,"settings"?: NonNullable<Json>,"status"?: string,"sync_cursor"?: string | null
                   }
                   Update: {
-                    "address_bidx"?: string | null,"address_enc"?: string,"credentials_enc"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"provider"?: string,"settings"?: NonNullable<Json>,"status"?: string,"sync_cursor"?: string | null
+                    "address_bidx"?: string | null,"address_enc"?: string,"credentials_enc"?: string,"firm_id"?: string,"id"?: string,"identity_hash"?: string | null,"kind"?: string,"provider"?: string,"settings"?: NonNullable<Json>,"status"?: string,"sync_cursor"?: string | null
                   }
                   Relationships: [
                     {
@@ -1192,6 +1192,9 @@ isOneToOne: false
                            },
 "sign_up_firm":
 { Args: { "accepted": Json,"firm_name": string,"owner": string,"state": string }; Returns: string
+                           },
+"split_firm_pairs":
+{ Args: { "least_clients": number,"least_share": number }; Returns: Json
                            },
 "stop_fills":
 { Args: { "batch": string,"first_job": number,"target_firm": string }; Returns: number

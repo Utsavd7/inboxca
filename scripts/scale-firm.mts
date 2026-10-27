@@ -9,7 +9,7 @@ for (const line of readFileSync(".env.local", "utf8").split("\n")) {
 }
 const { default: pg } = await import("pg");
 const { createClient } = await import("@supabase/supabase-js");
-const { serverCrypto } = await import("../src/lib/crypto");
+const { numberIdentity, serverCrypto } = await import("../src/lib/crypto");
 
 const OWNER = "scale-owner@inboxca.test";
 const FIRM_NAME = "Scale Test Firm";
@@ -112,15 +112,16 @@ for (let start = 0; start < CLIENTS; start += BATCH) {
         kind,
         number_enc: await crypto.encrypt(firm, `clients/${client.id}/${kind}`, number),
         number_bidx: await crypto.blindIndex(firm, kind, number),
+        identity_hash: numberIdentity(kind, number),
         state_code: state,
         services,
       });
     }
   }
   await db.query(
-    `insert into public.client_registrations (id, firm_id, client_id, kind, number_enc, number_bidx, state_code, services)
+    `insert into public.client_registrations (id, firm_id, client_id, kind, number_enc, number_bidx, state_code, services, identity_hash)
      select (row ->> 'id')::uuid, $1, (row ->> 'client_id')::uuid, row ->> 'kind', row ->> 'number_enc',
-       row ->> 'number_bidx', row ->> 'state_code', array(select jsonb_array_elements_text(row -> 'services'))
+       row ->> 'number_bidx', row ->> 'state_code', array(select jsonb_array_elements_text(row -> 'services')), row ->> 'identity_hash'
      from jsonb_array_elements($2::jsonb) row`,
     [firm, JSON.stringify(registrations)],
   );
