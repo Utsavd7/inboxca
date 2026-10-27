@@ -3,7 +3,7 @@ import {randomUUID} from "node:crypto";
 import {redirect} from "next/navigation";
 import {revalidatePath} from "next/cache";
 import {z} from "zod";
-import {fileForm,prepareDocument,recordFormDecision,savePrepared,uploadEditedForm,visibleForm} from "@/src/lib/prepared";
+import {fileForm,keepForDifferences,prepareDocument,recordFormDecision,savePrepared,uploadEditedForm,visibleForm} from "@/src/lib/prepared";
 import {formContext,requestFor} from "@/src/lib/prepare-form";
 import {fillWork} from "@/src/lib/fill";
 import {runJobsSoon} from "@/src/jobs/run-soon";
@@ -58,7 +58,10 @@ export async function fillNow(_:FillState,form:FormData):Promise<FillState> {
   let id:string;
   try {
     const context=await formContext({client:work.client,registration:work.registration,form:work.form,period:work.period});
+    // Fill has no tick for an ITR's differences with Form 26AS, so such a return stays a draft.
+    const keep=context.itr ? await keepForDifferences(membership.firmId,{client:work.client,period:work.period,form:work.form,sources:work.drafts.map(draft=>draft.id)}) : null;
     id=await savePrepared(requestFor(context,work.drafts),context.userId,context.permission,undefined,true);
+    await keep?.(id);
   } catch(error) {return {error:error instanceof Error && error.name==="Error" ? error.message : "The return could not be filled. Try again in a moment."};}
   revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
 }

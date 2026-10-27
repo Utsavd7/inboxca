@@ -16,7 +16,7 @@ export function chooseTemplate(templates:Template[],form:string,period:string,as
   const day=itr ? `${period}-04-01` : `${period}-01`,choices=templates.map((item)=>templateSchema.parse(item)).filter((item)=>item.form_code===form && item.status!=="draft" && item.valid_from && item.valid_from<=day && (!item.valid_until || day<item.valid_until)).sort((a,b)=>version(a.version,b.version));
   const usual=choices.find((item)=>item.status==="active") ?? choices[0];
   const selected=asked ? choices.find((item)=>item.version===asked) : usual;
-  if(!selected) throw new Error("The official form for this month is not ready yet.");
+  if(!selected) throw new Error(itr ? "The official form for this year is not ready yet." : "The official form for this month is not ready yet.");
   if(asked && selected.version!==usual?.version && !reason?.trim()) throw new Error("Say why you need the older form.");
   return selected;
 }

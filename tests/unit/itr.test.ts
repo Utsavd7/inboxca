@@ -68,6 +68,8 @@ it("pins the field choices, resolves official repeating entries and keeps assess
   const old={...request.template,version:"0.9",status:"retired" as const,valid_from:"2025-04-01",valid_until:"2026-04-01"};
   expect(chooseTemplate([request.template,old],"ITR1","2025")).toEqual(old);
   expect(chooseTemplate([old,request.template],"ITR1","2026")).toEqual(request.template);
+  // A year with no official schema yet: Fill says so, never a guess at the form.
+  expect(()=>chooseTemplate([old,request.template],"ITR1","2027")).toThrow("The official form for this year is not ready yet.");
   // Large parts are split by their next heading; schedules keep their official names.
   const three=itrEntries(itrRequest("ITR3").template);
   expect(new Set(three.map(entry=>entry.group)).size).toBeGreaterThan(40);
