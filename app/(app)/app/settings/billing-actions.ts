@@ -92,7 +92,7 @@ export async function moveDown(form: FormData) {
 export async function saveAutoTopUp(form: FormData) {
   const me = await owner();
   if (!me) redirect("/app");
-  await setAutoTopUp(me.firmId, Math.max(0, Math.min(25, Number(form.get("blocks")) || 0)));
+  await setAutoTopUp(me.firmId, Math.max(0, Math.min(25, Number(form.get("blocks")) || 0)), me.userId);
   revalidatePath("/app/settings");
   redirect("/app/settings?group=billing&saved=topup#addons");
 }

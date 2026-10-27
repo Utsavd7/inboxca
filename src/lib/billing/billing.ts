@@ -282,12 +282,12 @@ export async function setDowngrade(firmId: string, actor: string, plan: FirmPlan
   return null;
 }
 
-export async function setAutoTopUp(firmId: string, blocks: number) {
+export async function setAutoTopUp(firmId: string, blocks: number, actor: string | null = null) {
   const admin = supabaseAdmin();
   const { data: sub } = await admin.from("subscriptions").select("plan").eq("firm_id", firmId).maybeSingle();
   if (!sub) return false;
   await admin.from("subscriptions").update({ plan: json({ ...(sub.plan as object), autoTopUp: blocks }) }).eq("firm_id", firmId);
-  await note(admin, firmId, null, "billing.auto_topup", { blocks });
+  await note(admin, firmId, actor, "billing.auto_topup", { blocks });
   return true;
 }
 
