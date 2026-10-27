@@ -43,6 +43,25 @@ isOneToOne: false
       referencedColumns: ["user_id"]
     }
                   ]
+                },"ai_ledger": {
+                  Row: {
+                    "at": string,"cost": number | null,"credits": number,"firm_id": string,"hash": string,"id": number,"reason": string
+                  }
+                  Insert: {
+                    "at"?: string,"cost"?: number | null,"credits": number,"firm_id": string,"hash": string,"id"?: never,"reason": string
+                  }
+                  Update: {
+                    "at"?: string,"cost"?: number | null,"credits"?: number,"firm_id"?: string,"hash"?: string,"id"?: never,"reason"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_ledger_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"client_assignments": {
                   Row: {
                     "client_id": string,"firm_id": string,"role": string,"team_id": string | null,"user_id": string | null
@@ -766,6 +785,9 @@ isOneToOne: false
 "admin_add_template":
 { Args: { "change_at": string,"change_source": string,"file": string,"starts": string,"year_checked"?: boolean }; Returns: boolean
                            },
+"admin_ai_report":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "admin_ask_support":
 { Args: { "target": string }; Returns: boolean
                            },
@@ -852,6 +874,16 @@ isOneToOne: false
                            },
 "admin_watch":
 { Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"ai_credits":
+{ Args: { "block": number,"monthly": number,"target_firm": string }; Returns: {
+              "available": number,"used": number
+            }[]
+                           },
+"ai_reserve":
+{ Args: { "block": number,"digest": string,"monthly": number,"share": number,"target_firm": string,"want": number,"why": string }; Returns: {
+              "again": boolean,"available": number,"ticket": number,"used": number
+            }[]
                            },
 "answer_support":
 { Args: { "decision": string,"target": string }; Returns: boolean

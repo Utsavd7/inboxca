@@ -125,7 +125,7 @@ export async function draftEmail(_previous: Draft, form: FormData): Promise<Draf
   const subject = String(form.get("subject") ?? "").trim().slice(0, 300);
   const { data: client } = await supabase.from("clients").select("name").eq("id", String(form.get("client") ?? "")).maybeSingle();
   if (!client || !subject) return { error: "Write the subject first." };
-  const answer = await askAi("email_draft", "You draft a short, polite plain text email from an Indian CA firm to its client about the subject given. Never invent figures, dates or facts. Answer as JSON: {\"text\": string}", JSON.stringify({ firm: membership.firmName, client: client.name, subject }));
+  const answer = await askAi(membership.firmId, "email_draft", "You draft a short, polite plain text email from an Indian CA firm to its client about the subject given. Never invent figures, dates or facts. Answer as JSON: {\"text\": string}", JSON.stringify({ firm: membership.firmName, client: client.name, subject }));
   try {
     return { text: String((JSON.parse(answer ?? "") as { text?: unknown }).text ?? "").slice(0, 20_000) };
   } catch {
@@ -142,6 +142,7 @@ export async function draftReply(_previous: Draft, form: FormData): Promise<Draf
   if (!open?.event?.client_id || !open.messages.length) return { error: "The email could not be read just now." };
   const { data: documents } = await supabase.from("documents").select("id, name").eq("client_id", open.event.client_id).eq("status", "filed").order("received_at", { ascending: false }).limit(100);
   const answer = await askAi(
+    membership.firmId,
     "reply_draft",
     "You draft a short, polite plain text reply for an Indian CA firm to its client's email. Never invent figures, dates or facts that are not in the emails. Answer as JSON: {\"reply\": string, \"papers\": string[]} where papers are ids from the list that the client asked for.",
     JSON.stringify({

@@ -141,6 +141,12 @@ test("an Orelu admin signs in with a passkey, sees firm health and retries a fai
     await expect(row).toContainText("Not connected");
     await expect(page.getByText("Invented Admin Secret Client")).toHaveCount(0);
 
+    // D29: AI use in counts only. Two replies sent the same email, then the cache answered it.
+    await query(local.dbUrl, "insert into public.ai_ledger (firm_id, reason, credits, hash) values ($1, 'reply_draft', 6, 'same'), ($1, 'reply_draft', 5, 'same'), ($1, 'reply_draft', 0, 'same')", [firm.firmId]);
+    await page.getByRole("link", { name: "AI use" }).click();
+    await expect(page.getByRole("region", { name: "Avoidable calls" }).getByText(name)).toBeVisible();
+    await expect(page.getByRole("region", { name: "By firm" }).getByRole("row").filter({ hasText: name }).getByRole("cell")).toHaveText([name, "2", "1", "33%", "1", "11", ""]);
+
     await page.getByRole("link", { name: "Failed jobs" }).click();
     const failed = page.getByRole("row").filter({ hasText: name });
     await expect(failed).toContainText("mail_unreachable");
