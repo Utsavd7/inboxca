@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { promises as dns } from "node:dns";
 import { isIP } from "node:net";
 import { ImapFlow, type SearchObject } from "imapflow";
@@ -259,10 +260,43 @@ async function readItems(imap: ImapFlow, box: MailItem["box"], uids: number[], f
 
 const sentFolder = async (imap: ImapFlow) => (await imap.list()).find((box) => box.specialUse === "\\Sent")?.path;
 
-export async function listMail(address: string, password: string, server: Server, ask: ListAsk) {
-  const imap = imapClient(address, password, server);
+// The live reads keep each mailbox's signed in connection for a minute after a read, so the
+// next page view skips the TLS and sign in. Only an idle connection is kept, so each one runs
+// one read at a time; the key holds a hash of the password, never the password, so a changed
+// password never reuses an old session. A kept connection that fails may have gone stale, so
+// the read runs once more on a new one; a refused sign in is never tried again.
+const idle = new Map<string, { imap: ImapFlow; timer: NodeJS.Timeout }>();
+const take = (key: string) => {
+  const kept = idle.get(key);
+  idle.delete(key);
+  clearTimeout(kept?.timer);
+  return kept?.imap;
+};
+const park = (key: string, imap: ImapFlow) => {
+  if (idle.has(key) || !imap.usable) return void imap.logout().catch(() => {});
+  if (idle.size >= 50) take(idle.keys().next().value!)?.logout().catch(() => {});
+  idle.set(key, { imap, timer: setTimeout(() => take(key)?.logout().catch(() => {}), 60_000).unref() });
+};
+async function reuse<T>(address: string, password: string, server: Server, read: (imap: ImapFlow) => Promise<T>, fresh = false): Promise<T | { error: "sign_in" | "server" }> {
+  const key = [server.host, server.port, address, createHash("sha256").update(password).digest("hex")].join(" ");
+  const kept = fresh ? undefined : take(key);
+  // One the server dropped while kept is closed already: its error only closes it, so an
+  // idle connection's error never stops the worker.
+  const imap = kept?.usable ? kept : imapClient(address, password, server).on("error", () => {});
   try {
-    await imap.connect();
+    if (imap !== kept) await imap.connect();
+    const result = await read(imap);
+    park(key, imap);
+    return result;
+  } catch (error) {
+    imap.close();
+    if (imap === kept && !signInFailed(error)) return reuse(address, password, server, read, true);
+    return { error: signInFailed(error) ? "sign_in" : "server" };
+  }
+}
+
+export async function listMail(address: string, password: string, server: Server, ask: ListAsk) {
+  return reuse(address, password, server, async (imap) => {
     let inbox: MailItem[] = [];
     if (ask.inbox.length) {
       await imap.mailboxOpen("INBOX", { readOnly: true });
@@ -295,20 +329,14 @@ export async function listMail(address: string, password: string, server: Server
         sent = (await readItems(imap, "sent", uids)).filter((item) => (!want.since || item.date >= want.since) && (!want.before || item.date < want.before));
       }
     }
-    await imap.logout();
     return { inbox: inbox.map(({ box, messageId, from, to, date, subject, snippet }) => ({ box, messageId, from, to, date, subject, snippet })), sent: sent?.map(({ box, messageId, from, to, date, subject, snippet }) => ({ box, messageId, from, to, date, subject, snippet })) ?? null };
-  } catch (error) {
-    imap.close();
-    return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };
-  }
+  });
 }
 
 // One message and its conversation: every message in the inbox or the Sent folder that it
 // replies to or that replies to it, by Message-ID, In-Reply-To and References, oldest first.
 export async function readThread(address: string, password: string, server: Server, ask: ThreadAsk) {
-  const imap = imapClient(address, password, server);
-  try {
-    await imap.connect();
+  return reuse(address, password, server, async (imap) => {
     const boxes = { inbox: "INBOX", sent: await sentFolder(imap) };
     const open = async (box: MailItem["box"]) => !!boxes[box] && !!(await imap.mailboxOpen(boxes[box]!, { readOnly: true }));
     const messages = new Map<string, MailMessage>();
@@ -325,12 +353,8 @@ export async function readThread(address: string, password: string, server: Serv
         }
       }
     }
-    await imap.logout();
     return { messages: [...messages.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-mailLimits.thread) };
-  } catch (error) {
-    imap.close();
-    return { error: signInFailed(error) ? ("sign_in" as const) : ("server" as const) };
-  }
+  });
 }
 
 // A copy of a message the app sent, put in the Sent folder unless the provider already put
