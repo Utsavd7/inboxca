@@ -6,9 +6,11 @@ import { quickXorHash } from "../src/lib/onedrive-upload";
 // over one invented OneDrive kept in memory. InboxCA reaches it through ONEDRIVE_TEST_URL (with
 // MAIL_ALLOW_LOCAL), so no test touches the internet. Like OneDrive it refuses a name already
 // taken, keeps an item's id through renames and moves, takes big files in an upload session,
-// and pages its listings and its change list (delta), here three items a page.
+// and pages its listings and its change list (delta), here three items a page. Its watches for
+// change notices are only kept, never sent, and the address is not checked.
 export const fakeOneDriveKeys = { MS_DRIVE_CLIENT_ID: "test-onedrive-client", MS_DRIVE_CLIENT_SECRET: "test-onedrive-secret" };
 type Item = { id: string; name: string; parent: string | null; bytes?: Buffer; hash?: string; modified: string };
+type Watch = { id: string; changeType: string; resource: string; notificationUrl: string; lifecycleNotificationUrl?: string; expirationDateTime: string; clientState: string };
 const PAGE = 3;
 
 export function fakeOneDrive() {
@@ -21,6 +23,8 @@ export function fakeOneDrive() {
     remaining: 1024 ** 4 as number | undefined,
     // What a test can read back: the pieces each upload session was sent.
     pieces: [] as string[],
+    // The watches for change notices (subscriptions) InboxCA made, by id.
+    watches: new Map<string, Watch>(),
   };
   const codes = new Map<string, { challenge: string; redirect: string }>();
   const refresh = new Set<string>();
@@ -102,6 +106,26 @@ export function fakeOneDrive() {
     if (graph === "me") return Response.json({ mail: drive.email, userPrincipalName: drive.email });
     if (graph === "me/drive") return Response.json({ id: drive.id, quota: { remaining: drive.remaining } });
     if (graph === "me/drive/root/delta") return paged([...drive.items.values()].map(shown), url);
+
+    // Like Graph, one watch per resource and app, on an https address, for at most 42,300 minutes.
+    const watch = graph.match(/^subscriptions(?:\/([^/]+))?$/);
+    if (watch) {
+      const asked = ["POST", "PATCH"].includes(request.method) ? ((await request.json()) as Partial<Watch>) : {};
+      if (asked.expirationDateTime && !(Date.parse(asked.expirationDateTime) <= Date.now() + 42_300 * 60_000)) return Response.json({ error: { code: "InvalidRequest" } }, { status: 400 });
+      if (!watch[1] && request.method === "GET") return Response.json({ value: [...drive.watches.values()] });
+      if (!watch[1] && request.method === "POST") {
+        if (asked.resource !== "me/drive/root" || asked.changeType !== "updated" || !asked.notificationUrl?.startsWith("https://") || !asked.clientState || !asked.expirationDateTime) return Response.json({ error: { code: "InvalidRequest" } }, { status: 400 });
+        if ([...drive.watches.values()].some((kept) => kept.resource === asked.resource)) return Response.json({ error: { code: "ExtensionError" } }, { status: 409 });
+        const made = { ...asked, id: randomUUID() } as Watch;
+        drive.watches.set(made.id, made);
+        return Response.json(made, { status: 201 });
+      }
+      const kept = drive.watches.get(decodeURIComponent(watch[1] ?? ""));
+      if (!kept) return missing();
+      if (request.method === "DELETE") return (drive.watches.delete(kept.id), new Response(null, { status: 204 }));
+      if (request.method === "PATCH" && asked.expirationDateTime) return Response.json(Object.assign(kept, { expirationDateTime: asked.expirationDateTime }));
+      return Response.json(kept);
+    }
 
     const byId = graph.match(/^me\/drive\/items\/([^/]+)(\/content)?$/);
     if (byId) {
