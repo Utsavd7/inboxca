@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, FileText, Folder, KeyRound, MailCheck } from "lucide-react";
+import { Check, FileText, Folder, KeyRound, Laptop } from "lucide-react";
 
 const ease = [0.23, 1, 0.32, 1] as const;
 
@@ -22,7 +22,8 @@ function DriveCell() {
         <h3>Your files stay in your own drive</h3>
         <p>
           Every paper is saved in your firm&apos;s OneDrive or Dropbox, in
-          folders you can open any time. Your old files stay where they are.
+          folders you can open any time. Your old files stay where they are,
+          and a change you make there is picked up within minutes.
         </p>
         <div className="segment" role="group" aria-label="Choose a drive">
           {(["OneDrive", "Dropbox"] as const).map((name) => (
@@ -180,23 +181,23 @@ export function Control() {
       <ApproveCell />
       <li className="cell">
         <div className="cell-copy">
-          <h3>Your emails stay in your mailbox</h3>
+          <h3>Your login, on your computers only</h3>
           <p>
-            Clients hear from your firm&apos;s own address. InboxCA stores no
-            email text.
+            A new computer waits for your OK. Lost a laptop? Remove it and it is
+            signed out.
           </p>
         </div>
         <div className="widget never" aria-hidden>
-          <div className="never-row">
-            <MailCheck size={16} />
-            <span>Sent from</span>
-            <span className="never-tag is-good">Your own address</span>
-          </div>
-          <div className="never-row">
-            <MailCheck size={16} />
-            <span>Email text kept</span>
-            <span className="never-tag">None</span>
-          </div>
+          {[
+            ["This laptop", "Approved"],
+            ["New computer", "Waits for you"],
+          ].map(([name, state], index) => (
+            <div key={name} className="never-row">
+              <Laptop size={16} />
+              <span>{name}</span>
+              <span className={`never-tag ${index ? "" : "is-good"}`}>{state}</span>
+            </div>
+          ))}
         </div>
       </li>
     </ul>

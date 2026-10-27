@@ -696,7 +696,13 @@ li { text-wrap: pretty; }
   .dialog-content { padding: 26px 22px; }
 }
 @media (max-width: 520px) {
-  .plan-grid { grid-template-columns: 1fr; }
+  /* The plans sit in a row that scrolls sideways, so four cards do not fill two screens. */
+  .plan-grid {
+    position: relative; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 84%; margin-inline: -24px; padding: 16px 24px 24px;
+    overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 24px; scrollbar-width: none;
+  }
+  .plan-grid::-webkit-scrollbar { display: none; }
+  .plan { scroll-snap-align: center; }
   .plan.is-fit { transform: none; }
   .demo-stage { min-height: 540px; padding: 16px; }
   .card { padding: 16px; }

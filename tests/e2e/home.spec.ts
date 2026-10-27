@@ -177,9 +177,7 @@ test("questions open one at a time with the keyboard", async ({ page }) => {
   const first = page.locator("#questions summary").first();
   await first.focus();
   await page.keyboard.press("Enter");
-  await expect(
-    page.getByText("InboxCA stores no email text.").last(),
-  ).toBeVisible();
+  await expect(page.locator("#questions details[open]")).toHaveCount(1);
   await page.locator("#questions summary").nth(1).click();
   await expect(page.locator("#questions details[open]")).toHaveCount(1);
 });
