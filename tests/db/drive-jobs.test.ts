@@ -97,3 +97,19 @@ describe("the jobs that waited while the drive was away", () => {
       }
     }));
 });
+
+// The owner's folder order and a reconnect write the drive's settings at the same time: each
+// changes only its own keys, so both survive. Only the server writes them.
+describe("the drive's settings", () => {
+  it("keep two writers' different keys", () =>
+    rollback(db, async () => {
+      await seed();
+      const { rows: [{ id }] } = await db.query("insert into public.connected_accounts (firm_id, kind, provider, address_enc, credentials_enc, settings) values ($1, 'drive', 'local', 'x', 'x', '{\"folder_order\": \"year_client_work\"}') returning id", [FIRM]);
+      await asServer();
+      await db.query("select public.merge_account_settings($1, $2)", [id, { folder_order: "client_year_work", naming: "type_period" }]);
+      await db.query("select public.merge_account_settings($1, $2)", [id, { dropbox_account: "invented-account" }]);
+      expect((await db.query("select settings from public.connected_accounts where id = $1", [id])).rows[0].settings).toEqual({ folder_order: "client_year_work", naming: "type_period", dropbox_account: "invented-account" });
+      await actAs(db, OWNER);
+      expect((await attempt(db, "select public.merge_account_settings($1, $2)", [id, {}])).ok).toBe(false);
+    }));
+});
