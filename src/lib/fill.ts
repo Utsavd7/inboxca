@@ -1,7 +1,7 @@
 import type {SupabaseClient} from "@supabase/supabase-js";
 import type {Database} from "@/src/db/types";
 import {draftSchema,openFigures,verifySources,type Figure} from "./datasets";
-import {fills,notReady,returnPeriod} from "./return-work";
+import {fillReasons,fills,notReady,returnPeriod} from "./return-work";
 import {itrReady} from "./itr-fields";
 import {formName} from "./prepared";
 
@@ -27,8 +27,8 @@ export async function fillWork(db:SupabaseClient<Database>,firm:string,task:stri
   const refusal=notReady({...stages[0],form:(latest?.prepared as {external?:boolean} | null)?.external ? stages[0].form : null},(drafts ?? []).map(draft=>({wrong:draft.wrong,name:draft.form_code==="GSTR3B" ? "the GSTR-2B" : draft.target ? "your team's entries" : names?.find(paper=>paper.id===draft.document)?.name ?? (itr ? "a paper" : "the sales register")})),returnPeriod(row.code,row.period_key));
   if(refusal) return {refusal};
   // Never a guess between two forms, and no ITR file before the department's software ID.
-  if(forms.length>1) return {refusal:`Figures are entered for both ${forms.map(formName).join(" and ")}. Prepare the right one under Return files.`};
-  if(itr && !itrReady()) return {refusal:"InboxCA cannot make the return file for the income tax portal yet. It is waiting for its software ID from the Income Tax Department."};
+  if(forms.length>1) return {refusal:`Figures are entered for both ${forms.map(formName).join(" and ")}. Prepare the right one under Return files.`,why:"forms"};
+  if(itr && !itrReady()) return {refusal:fillReasons.software,why:"software"};
   const {data:rows}=await db.from("datasets").select("id,revision,data").eq("firm_id",firm).eq("client_id",row.client_id).in("id",drafts!.map(draft=>draft.id));
   if(rows?.length!==drafts!.length || rows.length>25) return {refusal:"The figures changed. Open the return again."};
   const filled=[];

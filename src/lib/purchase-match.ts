@@ -7,7 +7,7 @@ import {workerRead,workerSheet} from "./worker-read";
 
 type Register={id:string;firm_id:string;client_id:string;name:string;sha256:string;period_key:string;registration_id:string|null};
 const bill=z.object({gstin:z.string().length(15),name:z.string().max(100),number:z.string().min(1).max(16),date:z.string().max(10),note:z.enum(["C","D"]).optional(),amounts:amountsSchema});
-const bills=z.object({gstin:z.string().length(15),period:z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/),bills:z.array(bill).max(10000),changed:z.array(bill.extend({was:z.object({number:z.string().min(1).max(16),date:z.string().max(10)})})).max(10000).default([])}).nullable();
+const bills=z.object({gstin:z.string().length(15),period:z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/),bills:z.array(bill).max(10000),changed:z.array(bill.extend({was:z.object({number:z.string().min(1).max(16),date:z.string().max(10)})})).max(10000).default([]),official:matchSchema.shape.official}).nullable();
 export const isRegister=(paper:{name:string})=>/\.(xlsx?|csv)$/i.test(paper.name);
 
 export async function savedPurchaseMappings(firm:string,client:string) {
@@ -103,6 +103,7 @@ export async function matchPurchases(register:Register,person:string|null,asked?
     const changed=read.changed.map((bill)=>({...bill,date:readDate(bill.date),was:{...bill.was,date:readDate(bill.was.date)}})),found=await earlier(register,{gstin:read.gstin,changed});
     matchChanged(result,changed,found.originals,found.books);
   }
+  if(read.official) result.official=read.official;
   const counts=countsOf(result);
   const {error}=await admin.from("gst_matches").upsert({register_id:register.id,firm_id:register.firm_id,statement_id:statement.id,counts,result_enc:await crypto.encrypt(register.firm_id,matchPlace(register.id),JSON.stringify(result))},{onConflict:"register_id"});
   if(error) throw new Error("The match could not be saved.");

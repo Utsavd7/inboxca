@@ -7,7 +7,7 @@ import {serverCrypto} from "@/src/lib/crypto";
 import {periodName} from "@/src/lib/documents";
 import {currentMember,currentWriter} from "@/src/lib/member";
 import {isRegister,matchPurchases,openMatch,savedPurchaseMappings,statementFor} from "@/src/lib/purchase-match";
-import {agrees,changeOf,changeState,changeTotal,MatchProblem,matchLine,purchaseFields,rupees,suggestColumns,taxOf,totalOf,type Amounts,type Counts,type Entry} from "@/src/lib/purchase-register";
+import {agrees,changeGap,changeOf,changeState,changeTotal,MatchProblem,matchLine,purchaseFields,rupees,suggestColumns,taxOf,totalOf,type Amounts,type Counts,type Entry} from "@/src/lib/purchase-register";
 import {sameHeadings} from "@/src/lib/sales-register";
 import {supabaseAdmin} from "@/src/lib/supabase";
 import {workerSheet} from "@/src/lib/worker-read";
@@ -98,7 +98,7 @@ export async function PurchaseMatch({clientId,searchParams}:{clientId:string;sea
   const {data:gstins}=choosing && !register.registration_id ? await supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("kind","gstin") : {data:null};
   const choices=(gstins?.length ?? 0)>1 ? await Promise.all(gstins!.map(async (reg)=>({id:reg.id,number:await serverCrypto().decrypt(membership.firmId,`clients/${clientId}/gstin`,reg.number_enc)}))) : [];
   const lists:[string,string,Entry[]][]=result ? [["missing","Not in GSTR-2B: ask the supplier",result.missing],["differ","Amounts that differ",result.differ],["extra","In GSTR-2B but not in the books",result.extra],["matched","Matched",result.matched]] : [];
-  const here=`?tab=extraction&purchases=${register.id}`,note=problem(message),changes=result ? changeTotal(result.changed) : zero,unknown=result?.changed.filter((entry)=>!changeOf(entry)).length ?? 0;
+  const here=`?tab=extraction&purchases=${register.id}`,note=problem(message),changes=result ? changeTotal(result.changed) : zero,unknown=result?.changed.filter((entry)=>!changeOf(entry)).length ?? 0,gap=result && changeGap(result);
   return <section className="section" id="gst-match" aria-labelledby="gst-match-title"><h2 id="gst-match-title">GSTR-2B and the purchase register</h2>
     <p className="hint">InboxCA matches each bill in the client&apos;s purchase register with the month&apos;s GSTR-2B, by the supplier&apos;s GSTIN and the invoice number, and lists every amount that differs by more than ₹1. Bills and notes the supplier corrected are listed with the change they make this month. You decide what to claim. No GSTR-3B figure is changed.</p>
     {registers.length>1 && <nav className="pills" aria-label="Purchase registers">{registers.map((file)=><Link href={`?tab=extraction&purchases=${file.id}#gst-match`} key={file.id} aria-current={register.id===file.id ? "page" : undefined}>{file.name}</Link>)}</nav>}
@@ -108,6 +108,7 @@ export async function PurchaseMatch({clientId,searchParams}:{clientId:string;sea
     {result && match ? <>
       <p><strong>{month}: {matchLine(match.counts as unknown as Counts)}</strong></p>
       {result.skipped>0 && <p className="hint">{result.skipped} {result.skipped===1 ? "row has" : "rows have"} no supplier GSTIN or invoice number and {result.skipped===1 ? "was" : "were"} left out.</p>}
+      {gap && <p className="hint">GSTR-2B&apos;s own total for corrected bills is {signed(gap.official,"₹")}; the bills listed add to {signed(gap.listed,"₹")}. Check the bills not found in earlier GSTR-2B.</p>}
       <div className="form-row">{membership.may("download",clientId) && <a className="b b-secondary b-small" href={`/app/clients/${clientId}/gst-match?register=${register.id}`}>Download the list</a>}{canCheck && !choosing && <Link className="b b-ghost b-small" href={`${here}&heading=columns#gst-match`}>Change columns</Link>}</div>
       <div className="help-list">{lists.filter(([,,entries])=>entries.length).map(([key,title,entries])=><details key={key}>
         <summary>{title}<span className="hint">{entries.length} {entries.length===1 ? "bill" : "bills"}, {key==="extra" ? sum(entries,"portal") : key==="differ" ? `in the books ${sum(entries,"books")}; in GSTR-2B ${sum(entries,"portal")}` : sum(entries,"books")}</span></summary>

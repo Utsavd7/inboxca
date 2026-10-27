@@ -882,7 +882,7 @@ isOneToOne: false
                            },
 "due_fills":
 { Args: { "target_firm": string }; Returns: {
-              "client": string,"client_name": string,"code": string,"due_on": string,"filling": boolean,"missing": string,"open": number,"period_key": string,"ready": boolean,"stage": string,"task": string,"wrong": number
+              "client": string,"client_name": string,"code": string,"due_on": string,"filling": boolean,"missing": string,"open": number,"period_key": string,"ready": boolean,"reason": string,"stage": string,"task": string,"wrong": number
             }[]
                            },
 "due_soon":
@@ -1031,8 +1031,8 @@ isOneToOne: false
             }[]
                            },
 "queue_fills":
-{ Args: { "batch": string,"target_firm": string }; Returns: {
-              "clients": number,"first_job": number,"queued": number
+{ Args: { "batch": string,"target_firm": string,"with_itrs": boolean }; Returns: {
+              "clients": number,"first_job": number,"itrs": number,"queued": number
             }[]
                            },
 "rate_limit":

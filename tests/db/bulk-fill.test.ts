@@ -30,8 +30,8 @@ async function seed() {
 const lines=[randomUUID(),randomUUID()];
 const body=(states:string[],by:string,value="invented encrypted figure")=>({lines:lines.map((id,n)=>({id,field:`b2b.r2.c${n}`,value_enc:`${value} ${n}`,state:states[n],...(states[n]!=="pending" && {by,at:new Date().toISOString()})})),checks:[]});
 const as=async<T>(person:string,sql:string,params:unknown[])=>{await actAs(db,person);try {return (await db.query(sql,params)).rows as T[];} finally {await asOwner(db);}};
-const due=(firm:string,person:string)=>as<{task:string;ready:boolean;filling:boolean;stage:string;open:number}>(person,"select task,ready,filling,stage,open from public.due_fills($1)",[firm]);
-const queue=async(firm:string,person:string,batch=randomUUID())=>({batch,...(await as<{queued:number;clients:number;first_job:string|null}>(person,"select * from public.queue_fills($1,$2)",[firm,batch]))[0]});
+const due=(firm:string,person:string)=>as<{task:string;ready:boolean;filling:boolean;stage:string;open:number;reason:string|null}>(person,"select task,ready,filling,stage,open,reason from public.due_fills($1)",[firm]);
+const queue=async(firm:string,person:string,batch=randomUUID(),itrs=true)=>({batch,...(await as<{queued:number;clients:number;first_job:string|null;itrs:number}>(person,"select * from public.queue_fills($1,$2,$3)",[firm,batch,itrs]))[0]});
 const stop=async(firm:string,person:string,batch:string,job:string)=>(await as<{stopped:number}>(person,"select public.stop_fills($1,$2,$3) stopped",[firm,batch,job]))[0].stopped;
 const jobs=async(firm:string)=>(await db.query("select entity_id,state,run_at>now() later from public.jobs where firm_id=$1 and kind='fill_return' order by id",[firm])).rows;
 
@@ -112,4 +112,28 @@ it("gives a manager their team's people's clients, unless the firm shows staff o
   await db.query("update public.firms set settings=jsonb_build_object('client_visibility','restricted') where id=$1",[firm]);
   expect((await due(firm,manager)).map(row=>row.task)).toEqual([clients[0].task]);
   expect(await queue(firm,manager)).toMatchObject({queued:1,clients:1});
+}));
+
+// ITRs (20261102900000_fill_all_itr.sql): listed on the same rules, queued only once InboxCA can
+// make their files, and one the last fill left says why, by the code its job finished with.
+it("fills ITRs on the same rules, and says why the last fill left one",()=>rollback(db,async()=>{
+  const {firm,owner,clients}=await seed();
+  const client=randomUUID(),registration=randomUUID(),task=randomUUID(),draft=randomUUID();
+  await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented ITR Person','individual')",[client,firm]);
+  await db.query("insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values ($1,$2,$3,'pan','invented encrypted number',$4)",[registration,firm,client,randomUUID()]);
+  await db.query("insert into public.tasks(id,firm_id,client_id,registration_id,code,period_key,due_on) values ($1,$2,$3,$4,'ITR_NA','2026-03',(now() at time zone 'Asia/Kolkata')::date+3)",[task,firm,client,registration]);
+  await db.query("insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values ($1,$2,$3,'ITR','2026',$4)",[draft,firm,client,{...body(["confirmed","pending"],owner),target:{form:"ITR1",version:"1.0"}}]);
+  await db.query("delete from public.jobs where firm_id=$1",[firm]);
+  expect((await due(firm,owner)).map(row=>row.task)).toEqual([clients[0].task,task,clients[1].task]);
+  expect((await due(firm,owner)).find(row=>row.task===task)).toMatchObject({stage:"figures",ready:true,filling:false,reason:null});
+  // Before InboxCA has its software ID, the GST returns go and the ITR waits.
+  expect(await queue(firm,owner,randomUUID(),false)).toMatchObject({queued:2,clients:2,itrs:0});
+  expect((await jobs(firm)).map(row=>row.entity_id)).toEqual([clients[0].task,clients[1].task]);
+  expect(await queue(firm,owner)).toMatchObject({queued:1,clients:1,itrs:1});
+  // The fill left it for a person: the row says why, and Fill all may try it again.
+  await db.query("update public.jobs set state='done',last_error_code=case when entity_id=$2 then 'details' end where firm_id=$1",[firm,task]);
+  expect((await due(firm,owner)).map(row=>[row.task,row.reason,row.ready && !row.filling])).toEqual([[clients[0].task,null,true],[task,"details",true],[clients[1].task,null,true]]);
+  // A later fill that made its draft: no reason left.
+  await db.query("insert into public.jobs(firm_id,kind,entity_type,entity_id,idempotency_key,state) values ($1,'fill_return','task',$2,$3,'done')",[firm,task,`fill_return:${task}:invented`]);
+  expect((await due(firm,owner)).find(row=>row.task===task)?.reason).toBeNull();
 }));
