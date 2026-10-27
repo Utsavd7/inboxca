@@ -151,6 +151,9 @@ describe("the owner's computers (D38)", () => {
       expect(await reads(["approved"], wrong)).toEqual({ role: null, clients: 0 });
     // Only the owner's login is held to it.
     expect((await role(PARTNER, {})).role).toBe("partner");
+    // A computer removed has its sessions ended: its token and proof open nothing at once.
+    await db.query("delete from auth.sessions where id = $1", [SESSION(OWNER)]);
+    expect(await reads(["approved"], proof(key))).toEqual({ role: null, clients: 0 });
   }));
 
   it("the owner approves or refuses from an approved computer, never from the one asking, while the request is open", () => rollback(db, async () => {

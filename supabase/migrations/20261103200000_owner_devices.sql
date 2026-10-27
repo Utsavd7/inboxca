@@ -8,7 +8,8 @@
 --   session, open 30 minutes; no new table or column.
 
 -- The server's proof that this request comes from one of the owner's approved computers, good for
--- 5 minutes, for this person and session, signed like the office proof. An owner with no approved
+-- 5 minutes, for this person and a session that still exists, signed like the office proof, so a
+-- computer removed (its sessions ended) reaches nothing at once. An owner with no approved
 -- computer yet needs none: the first computer is approved by itself, as the server does.
 create or replace function private.device_allows(member_role text) returns boolean
 language plpgsql stable set search_path = '' as $$
@@ -24,6 +25,7 @@ begin
   end if;
   until := split_part(proof, '.', 1)::bigint;
   return until >= extract(epoch from now())
+    and public.session_live()
     and split_part(proof, '.', 2) = encode(extensions.hmac(
       'device:' || (select auth.uid())::text || ':' || coalesce((select auth.jwt() ->> 'session_id'), '') || ':' || until,
       public.office_proof_key(), 'sha256'), 'hex');
@@ -89,7 +91,8 @@ create trigger requests_notice after insert or update of status, details on publ
   execute function private.queue_request_notice();
 
 -- The owner's login in use on 2 or more computers within the hour: signed in sessions used in the
--- last hour, leaving out those on a computer still waiting or refused. Raised once a day.
+-- last hour, leaving out those on a computer still waiting, refused or never approved. Raised once
+-- a day.
 create or replace function private.owner_pcs_alerts() returns void
 language sql security definer set search_path = '' as $$
   insert into public.requests (firm_id, kind, entity_type, entity_id, reason_code, details)
@@ -100,7 +103,7 @@ language sql security definer set search_path = '' as $$
       where s.user_id = m.user_id and s.aal = 'aal2'
         and greatest(s.created_at, s.updated_at, s.refreshed_at at time zone 'UTC') > now() - interval '1 hour'
         and not exists (select from public.requests r where r.kind = 'alert' and r.entity_type = 'owner_device'
-          and r.entity_id = s.id and r.status <> 'approved')) used
+          and r.entity_id = s.id and r.status in ('pending', 'refused'))) used
   where m.role = 'owner' and m.status = 'active' and used.n >= 2
   order by m.user_id, m.firm_id
   on conflict (kind, entity_type, entity_id) do update set firm_id = excluded.firm_id, details = excluded.details, status = 'pending'

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { recoverComputer, signOut } from "@/app/(auth)/actions";
-import { reviewOwnerDevice } from "@/app/(app)/actions";
+import { removeComputer, reviewOwnerDevice } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
-import { ASK_MINUTES } from "@/src/lib/owner-device";
+import { ASK_MINUTES, computersOf, thisComputer } from "@/src/lib/owner-device";
+import { supabaseAdmin } from "@/src/lib/supabase";
 import { Pending } from "./pending";
 import { PageHead } from "./ui";
 
@@ -35,6 +36,31 @@ export async function NewComputers({ error = "", back = "" }: { error?: string; 
         );
       })}
     </>
+  );
+}
+
+// The computers approved for the owner's login, by when each was approved, this one marked. Any
+// other can be removed: as a session cannot be traced to its computer, every other computer is
+// signed out too.
+export async function YourComputers() {
+  const { userId } = await currentMember();
+  const [{ data }, mine] = await Promise.all([supabaseAdmin().auth.admin.getUserById(userId), thisComputer(userId)]);
+  const computers = computersOf(data.user?.app_metadata.devices).slice().reverse();
+  const when = (at: string) => at ? new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+  return (
+    <ul className="rows">
+      {computers.map((computer) => (
+        <li key={computer.id}>
+          <span className="grow"><strong>{computer.id === mine ? "This computer" : "Another computer"}</strong>, approved {when(computer.at)}</span>
+          {computer.id !== mine && (
+            <form action={removeComputer}>
+              <input type="hidden" name="computer" value={computer.id} />
+              <Pending className="b b-ghost b-small">Remove and sign out other computers</Pending>
+            </form>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
