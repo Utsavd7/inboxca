@@ -14,7 +14,7 @@ type Billing = {
   tax: Partial<Tax>;
   alerts: Alert[];
 };
-const kinds: Record<string, string> = { plan: "First payment", renewal: "Renewal", upgrade: "Upgrade", extra_user: "Extra person", ai_block: "AI block", topup: "AI top-up", setup: "Setup", refund: "Refund" };
+const kinds: Record<string, string> = { plan: "First payment", renewal: "Renewal", upgrade: "Upgrade", yearly: "Switch to yearly", extra_user: "Extra person", ai_block: "AI block", topup: "AI top-up", setup: "Setup", refund: "Refund" };
 const alertWords: Record<string, string> = {
   refund_failed: "A refund failed. InboxCA tries again in an hour, up to three times.",
   paid_twice: "A firm paid the same period twice. Give one back below as taken twice.",
