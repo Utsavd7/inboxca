@@ -37,8 +37,9 @@ const ocrRead = z.object({ pages: z.array(z.string().max(1_000_000)).max(ocrLimi
 
 // Pages without text and pictures, read once by OCR in the file worker (worker/ocr.ts), never
 // in this server: the file goes with a signed ticket, then a locked PDF's password. Without
-// the worker, or when it cannot read the file in time, there is no OCR text, and no retry.
-async function ocr(bytes: Uint8Array, pages: number[], password: string | undefined, scan: { ocr?: Ocr }) {
+// the worker there is no OCR text. When the worker is busy, away or out of time, scan.later
+// says so, and the read_document job tries again later.
+async function ocr(bytes: Uint8Array, pages: number[], password: string | undefined, scan: { ocr?: Ocr; later?: boolean }) {
   const url = process.env.FILE_WORKER_URL, secret = process.env.FILE_WORKER_SECRET;
   if (!url || !secret) return null;
   const tail = Buffer.from(password ?? ""), body = Buffer.concat([bytes, tail]);
@@ -51,6 +52,7 @@ async function ocr(bytes: Uint8Array, pages: number[], password: string | undefi
     if (!response.ok) {
       log.warn("ocr_failed", { status: response.status });
       await response.body?.cancel();
+      scan.later = response.status === 429 || response.status >= 500;
       return null;
     }
     const { pages: read, ...meta } = ocrRead.parse(await response.json());
@@ -58,6 +60,8 @@ async function ocr(bytes: Uint8Array, pages: number[], password: string | undefi
     return read;
   } catch (error) {
     log.warn("ocr_failed", { error: (error as Error).name });
+    // Out of time, or the worker could not be reached.
+    scan.later = ["TimeoutError", "TypeError"].includes((error as Error).name);
     return null;
   }
 }
@@ -72,10 +76,11 @@ export async function scanType(firmId: string, documentId: string, details: unkn
 
 // The text inside a file, read by rules, never by AI: PDF text (up to 200 pages), every sheet
 // of a workbook (an old .xls file's first), CSV, Word and OpenDocument text, and plain text,
-// JSON and XML. Given scan (the read_document job), PDF pages without text and JPEG, PNG and
-// WebP pictures are read by OCR, and scan.ocr says how; else a scan or a picture gives no
-// text. A damaged file, or a password-protected one without its saved password, gives none.
-export async function readText(name: string, bytes: Uint8Array, password?: string, scan?: { ocr?: Ocr }) {
+// JSON and XML. Given scan (the read_document job), PDF pages without text and JPEG, PNG, WebP
+// and GIF pictures are read by OCR, and scan.ocr says how; else a scan or a picture gives no
+// text (TIFF too: the worker's decoder cannot open it). A damaged file, or a password-protected
+// one without its saved password, gives none.
+export async function readText(name: string, bytes: Uint8Array, password?: string, scan?: { ocr?: Ocr; later?: boolean }) {
   const extension = name.split(".").pop()?.toLowerCase() ?? "";
   try {
     if (extension === "pdf") {
@@ -105,7 +110,7 @@ export async function readText(name: string, bytes: Uint8Array, password?: strin
     }
     if (["docx", "odt"].includes(extension)) return wordSource(Buffer.from(bytes), name).lines.join("\n");
     if (["txt", "json", "xml"].includes(extension)) return new TextDecoder().decode(bytes).replace(/<[^>]+>/g, " ");
-    if (scan && ["jpg", "jpeg", "png", "webp"].includes(extension)) return (await ocr(bytes, [], undefined, scan))?.[0] ?? "";
+    if (scan && ["jpg", "jpeg", "png", "webp", "gif"].includes(extension)) return (await ocr(bytes, [], undefined, scan))?.[0] ?? "";
   } catch (error) {
     // Expected for password-protected or damaged files; only the kind of error is logged.
     log.warn("read_text_failed", { kind: extension, error: (error as Error).name });

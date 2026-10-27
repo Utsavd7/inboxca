@@ -11,11 +11,10 @@
 .greet strong { margin-right: var(--s1); color: var(--ink); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
 .greet-wait { color: var(--ink-3); }
 
-/* The list and the week side by side; each section's title small and quiet. */
+/* The list and the week side by side; each section's head compact, its title on the app's scale. */
 .today-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(300px, 1fr); gap: var(--s4); align-items: start; }
 .today .app-card { overflow: hidden; }
 .today .app-card-head { min-height: 44px; padding-block: var(--s2); }
-.today .app-card-head h2 { font-size: 13px; }
 .today-calm { display: flex; align-items: center; gap: var(--s4); padding: var(--s2) var(--s4) var(--s5); }
 .today-calm svg { flex: none; width: 64px; height: 48px; }
 .today-calm > span { display: grid; gap: 2px; }

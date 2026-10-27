@@ -45,7 +45,8 @@ export async function ocr(request: Request, secret: string) {
   const run = turn.then(() => read(file, pdf ? ticket.pages! : null, password, request.signal));
   turn = run.catch(() => {});
   try { return Response.json(await run, { headers: { "Cache-Control": "private, no-store" } }); }
-  catch { return new Response("This file could not be read.", { status: 422 }); }
+  // Out of time is worth another try later (the app tries again); anything else is the file.
+  catch (error) { return (error as Error).message === "OCR stopped" || (error as Error).name === "TimeoutError" ? new Response("Out of time", { status: 503 }) : new Response("This file could not be read.", { status: 422 }); }
 }
 
 type Page = { text: string; confidence: number };
