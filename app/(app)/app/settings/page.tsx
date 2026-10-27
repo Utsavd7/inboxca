@@ -1,9 +1,11 @@
-import { BellRing, CalendarClock, CalendarOff, Check, Clock, Database, Download, Eye, FileCheck2, Gauge, HardDrive, Headset, KeyRound, LifeBuoy, LogIn, Mail, MailCheck, ShieldCheck, TriangleAlert, UserCheck, Users, type LucideIcon } from "lucide-react";
+import { BellRing, CalendarClock, CalendarOff, Check, Clock, Database, Download, Eye, FileCheck2, Fingerprint, Gauge, HardDrive, Headset, KeyRound, LifeBuoy, LogIn, Mail, MailCheck, ShieldCheck, TriangleAlert, UserCheck, UserCog, Users, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import Form from "next/form";
 import Link from "next/link";
-import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveAnswers, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding } from "@/app/(app)/actions";
+import { Passkey } from "@/app/(admin)/admin/passkey";
+import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveAnswers, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding, removeException, removePasskey } from "@/app/(app)/actions";
+import { roleLabel, roleNames } from "@/src/lib/roles";
 import { firmAdmin, HOURS_KEYS, memberHours, officeApprover, type Office } from "@/src/lib/office";
 import { presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
@@ -20,7 +22,7 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
-import { IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
+import { exceptionsOf, IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
 import { Badge, IconTile, NotForYou, PageHead, storage, Toast, type Kind } from "../ui";
 import { Item, List } from "../motion";
 import { Pending } from "../pending";
@@ -53,7 +55,7 @@ const problems: Record<string, [string, string]> = {
   special: ["special", "The To date must be the same as or after the From date, and Closes must be later than Opens."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { preset: "Saved. Your team now works this way.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Paper sending rules saved.", permissions: "Permissions saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", folders: "Folder order and file names saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", answers: "Replies saved.", replies: "Reply time saved." };
+const savedNames: Record<string, string> = { preset: "Saved. Your team now works this way.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Paper sending rules saved.", permissions: "Permissions saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", folders: "Folder order and file names saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", answers: "Replies saved.", replies: "Reply time saved.", exception: "Exception removed. The firm's rule applies again." };
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "replies", "drive"]],
@@ -62,18 +64,19 @@ const groups = [
   ["people", "People's access", ["permissions", "always", "visibility"]],
   ["reminders", "Reminders and papers", ["reminders", "answers", "records"]],
   ["data", "Your data", ["use", "data", "support", "close"]],
+  ["me", "Your sign in", ["passkeys"]],
 ] as const;
-const groupIcons: Record<string, LucideIcon> = { email: Mail, access: ShieldCheck, hours: Clock, people: Users, reminders: BellRing, data: Database };
+const groupIcons: Record<string, LucideIcon> = { email: Mail, access: ShieldCheck, hours: Clock, people: Users, reminders: BellRing, data: Database, me: Fingerprint };
 // Each card's tile: what it is about, in the colour of its kind.
 const cardIcons: Record<string, [LucideIcon, Kind]> = {
   mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], tester: [UserCheck, "approve"], notices: [BellRing, "approve"], recovery: [LifeBuoy, "approve"],
   hours: [Clock, "week"], special: [CalendarClock, "week"], holidays: [CalendarOff, "week"],
-  permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"],
+  permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"], exceptions: [UserCog, "papers"], passkeys: [Fingerprint, "approve"],
   reminders: [BellRing, "notice"], answers: [MailCheck, "notice"], records: [FileCheck2, "notice"],
   replies: [Clock, "reply"],
   use: [Gauge, "docs"], data: [Download, "docs"], support: [Headset, "approve"], close: [TriangleAlert, "late"],
 };
-const ownerOnly = ["mailbox", "replies", "drive", "recovery", "visibility", "reminders", "answers", "records", "use", "data", "support", "close"];
+const ownerOnly = ["mailbox", "replies", "drive", "recovery", "visibility", "exceptions", "reminders", "answers", "records", "use", "data", "support", "close"];
 const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
 
 function Card({ id, title, line, danger, children }: { id: string; title: string; line?: React.ReactNode; danger?: boolean; children: React.ReactNode }) {
@@ -92,6 +95,36 @@ function Card({ id, title, line, danger, children }: { id: string; title: string
   );
 }
 
+// Your sign in, for everyone in the firm (PLAN.md 5.17, 8.5): passkeys, used after the email code
+// in place of the 6 digit code. Only the server reads passkeys; these are the person's own.
+async function YourSignIn({ supabase, userId }: { supabase: Awaited<ReturnType<typeof currentMember>>["supabase"]; userId: string }) {
+  const [{ data: keys }, { data: claims }] = await Promise.all([
+    supabaseAdmin().from("passkeys").select("id, name").eq("user_id", userId).order("name"),
+    supabase.auth.getClaims(),
+  ]);
+  return (
+    <Card id="passkeys" title="Passkeys" line="Sign in with this laptop's fingerprint or PIN, your phone or a security key, in place of the 6 digit code. You still enter the code from your email.">
+      {!!keys?.length && (
+        <List className="set-rows" rise={false}>
+          {keys.map((key) => (
+            <Item key={key.id}>
+              <span className="grow"><strong>{key.name}</strong></span>
+              <form action={removePasskey}>
+                <input type="hidden" name="passkey" value={key.id} />
+                <Pending className="b b-ghost" busy="Removing" aria-label={`Remove the passkey ${key.name}`}>Remove</Pending>
+              </form>
+            </Item>
+          ))}
+        </List>
+      )}
+      {claims?.claims.aal === "aal2" ? (
+        <div className="set-fields set-key"><Passkey mode="add" kind="person" button="b b-primary" note="hint" /></div>
+      ) : <p className="hint set-key">To add a passkey, sign in with your 6 digit code.</p>}
+      <p className="hint set-key">Lost a device? Remove its passkey here: any computer that signed in with it is signed out. The 6 digit code still works.</p>
+    </Card>
+  );
+}
+
 // The owner's settings: the firm's email, who sees clients, office hours, holidays and
 // signing in limits (PLAN.md 5.13, 5.17).
 export default async function Settings({
@@ -101,8 +134,13 @@ export default async function Settings({
 }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
+  // Your sign in is everyone's own (5.17, 8.5); the owner and deputies are asked once, in one line.
+  const admins = firmAdmin(membership.role, userId, membership.settings);
+  if ((await searchParams).group === "me" && !admins) return <div className="set-page"><PageHead title="Your sign in" sub="How you sign in to InboxCA. Only you see this." /><div className="set-body set-alone page-in"><YourSignIn supabase={supabase} userId={userId} /></div></div>;
   if (!officeApprover(membership.role, userId, membership.settings)) return <NotForYou title="Settings" who="the owner" />;
-  if (!firmAdmin(membership.role, userId, membership.settings)) return <><PageHead title="Office approvals" sub="Approve your office internet connection and the PCs your staff use." /><OfficePanel branch={(await searchParams).branch} error={(await searchParams).error} /></>;
+  const { count: passkeys } = await supabaseAdmin().from("passkeys").select("id", { count: "exact", head: true }).eq("user_id", userId);
+  const nudge = !passkeys && <> <Link className="set-nudge" href="/app/settings?group=me">Add a passkey</Link> to sign in without the 6 digit code.</>;
+  if (!admins) return <><PageHead title="Office approvals" sub={<>Approve your office internet connection and the PCs your staff use.{nudge}</>} /><OfficePanel branch={(await searchParams).branch} error={(await searchParams).error} /></>;
   const owner = membership.role === "owner";
   const { saved, error, group: asked, branch, check, confirm } = await searchParams;
   // The co-admin sees only the groups about keeping client data safe.
@@ -118,8 +156,9 @@ export default async function Settings({
     supabase.from("activity_log").select("at").eq("entity_id", membership.firmId).eq("firm_id", membership.firmId).eq("action", "firm.closed").maybeSingle(),
     group === "email" ? supabase.from("connected_accounts").select("id, kind, provider, address_enc, status") : Promise.resolve({ data: null }),
     group === "people" ? supabase.rpc("firm_people", { target_firm: membership.firmId }) : Promise.resolve({ data: null }),
-    // People the owner or a deputy always allowed something, from a question in the Inbox.
-    group === "people" ? admin.from("firm_members").select("user_id, access").eq("firm_id", membership.firmId).not("access->always", "is", null) : Promise.resolve({ data: null }),
+    // People with their own access: what the owner or a deputy always allowed them, from a
+    // question in the Inbox, and their exceptions to the firm's rules.
+    group === "people" ? admin.from("firm_members").select("user_id, access").eq("firm_id", membership.firmId).not("access", "is", null) : Promise.resolve({ data: null }),
     // Each branch may keep its own hours (5.17.4 #13).
     group === "hours" ? supabase.from("groups").select("id, name, kind, settings").eq("firm_id", membership.firmId).eq("kind", "branch").order("name") : Promise.resolve({ data: null }),
   ]);
@@ -184,6 +223,8 @@ export default async function Settings({
   const namesOf=(ids?:string[])=>ids?.map(id=>scopeClients?.find(client=>client.id===id)?.name ?? "Client no longer available").join("\n") ?? "";
   const preset = presetOf(settings);
   const others = people?.filter((person) => person.role !== "owner" && person.status === "active") ?? [];
+  const exceptions = exceptionsOf(settings, (standing ?? []).filter((member) => people?.some((person) => person.user_id === member.user_id && person.status === "active")));
+  const whoIs = (one: { role?: string; person?: string }) => one.role ? `${one.role in roleNames ? roleLabel(one.role) : one.role} role` : people?.find((person) => person.user_id === one.person)?.email ?? "Someone";
   const problem = (section: string) => error && problems[error]?.[0] === section && <p className="alert" role="alert">{problems[error][1]}</p>;
   // Connect with Google, Microsoft or Zoho, each shown only once its app's keys are set.
   const signIn = (again?: MailApi) => {
@@ -204,7 +245,7 @@ export default async function Settings({
   };
   return (
     <div className="set-page">
-      <PageHead title="Settings" sub={owner ? "How your firm uses InboxCA. Only you, the owner, see this page." : "How your firm keeps client data safe. As second admin, you can change these, and so can the owner."} />
+      <PageHead title="Settings" sub={<>{owner ? "How your firm uses InboxCA. Only you, the owner, see this page." : "How your firm keeps client data safe. As second admin, you can change these, and so can the owner."}{group !== "me" && nudge}</>} />
       <GroupAnchor groupOf={groupOf} />
       <div className="set">
         <nav className="set-nav" aria-label="Settings">
@@ -654,7 +695,26 @@ export default async function Settings({
               <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save who sees clients</Pending></div>
             </form>
           </Card>}
+
+          {owner && <Card id="exceptions" title="Exceptions to the rules" line="Roles and people that follow their own office hours or signing in rule, not the firm's. Remove one to put them back on the firm's rule.">
+            {exceptions.length ? (
+              <List className="set-rows" rise={false}>
+                {exceptions.map((one) => (
+                  <Item key={`${one.role ?? one.person}-${one.rule}`}>
+                    <span className="grow"><strong>{whoIs(one)}</strong>: {one.words}</span>
+                    <form action={removeException}>
+                      <input type="hidden" name={one.role ? "role" : "person"} value={one.role ?? one.person} />
+                      <input type="hidden" name="rule" value={one.rule} />
+                      <Pending className="b b-ghost" busy="Removing" aria-label={`Remove ${one.words} for ${whoIs(one)}`}>Remove</Pending>
+                    </form>
+                  </Item>
+                ))}
+              </List>
+            ) : <p className="hint">None. Everyone follows the firm&apos;s rules.</p>}
+          </Card>}
           </>}
+
+          {group === "me" && <YourSignIn supabase={supabase} userId={userId} />}
 
           {group === "reminders" && <>
           <Card id="reminders" title="Reminders" line="InboxCA emails each client at most once a day, from your firm email, at the stages you choose. It reminds only for due dates it has checked against the government notification.">

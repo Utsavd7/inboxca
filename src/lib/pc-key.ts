@@ -61,13 +61,30 @@ export function checkKeyUse(response: Response & { signature: string }, publicKe
 // An Orelu admin's passkey (PLAN.md 8.1, 8.10): the same checks, with the admin's PIN or
 // fingerprint required every time. Unlike an office PC's key, a synced passkey is allowed: it
 // proves the person, not a place, so a passkey kept on both a phone and a laptop is still theirs.
-export function checkAdminKey(response: Response, origin: string, cookie: string | undefined, userId: string) {
-  const result = checked("webauthn.create", response, origin, cookie, `admin:${userId}`);
+// A firm person's passkey (5.17) is checked the same way, for its own question ("passkey").
+export function checkAdminKey(response: Response, origin: string, cookie: string | undefined, userId: string, scope = "admin") {
+  const result = checked("webauthn.create", response, origin, cookie, `${scope}:${userId}`);
   return !!result && !!(result.authData[32] & VERIFIED);
 }
 
 // The passkey's new signature counter when it signed this answer with the admin verified, else null.
-export function checkAdminKeyUse(response: Response & { signature: string }, publicKey: string, origin: string, cookie: string | undefined, userId: string) {
-  const result = checked("webauthn.get", response, origin, cookie, `admin:${userId}`);
+export function checkAdminKeyUse(response: Response & { signature: string }, publicKey: string, origin: string, cookie: string | undefined, userId: string, scope = "admin") {
+  const result = checked("webauthn.get", response, origin, cookie, `${scope}:${userId}`);
   return result && result.authData[32] & VERIFIED && signed(result, publicKey, response.signature) ? result.authData.readUInt32BE(33) : null;
+}
+
+// The 6 digit code an authenticator app shows for a base32 key (RFC 6238, 30 second steps): the
+// server's answer for a passkey's own 2 step factor, once the passkey checks out.
+export function totp(secret: string, at = Date.now()) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const char of secret.replace(/=+$/, "").toUpperCase())
+    bits += alphabet.indexOf(char).toString(2).padStart(5, "0");
+  const key = Buffer.from(bits.match(/.{8}/g)!.map((byte) => parseInt(byte, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30000)));
+  const hash = createHmac("sha1", key).update(counter).digest();
+  const offset = hash[hash.length - 1] & 0xf;
+  const value = (hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
+  return String(value).padStart(6, "0");
 }
