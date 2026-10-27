@@ -1708,9 +1708,9 @@ export async function setFolderOrder(form: FormData) {
   const naming = String(form.get("naming") ?? "client_type_period");
   if (membership?.role !== "owner" || !(folderOrders as readonly string[]).includes(order) || !(naming in namings)) redirect("/app/settings?group=email");
   const admin = supabaseAdmin();
-  const { data: account } = await admin.from("connected_accounts").select("id, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
+  const { data: account } = await admin.from("connected_accounts").select("id").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
   if (account) {
-    await admin.from("connected_accounts").update({ settings: { ...(account.settings as object), folder_order: order, naming } }).eq("id", account.id);
+    await admin.rpc("merge_account_settings", { account_id: account.id, patch: { folder_order: order, naming } });
     await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "drive.folder_order", entity_type: "account", entity_id: account.id, details: { order, naming } });
   }
   revalidatePath("/app/settings");

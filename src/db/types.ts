@@ -1031,6 +1031,9 @@ isOneToOne: false
 "member_role":
 { Args: { "target_firm": string }; Returns: string
                            },
+"merge_account_settings":
+{ Args: { "account_id": string,"patch": Json }; Returns: undefined
+                           },
 "money_back_claim":
 { Args: { "claim": boolean,"identities": (string)[] }; Returns: boolean
                            },

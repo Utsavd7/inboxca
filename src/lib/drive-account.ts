@@ -55,10 +55,10 @@ export async function renewDrive(firmId: string, accountId: string, actor: strin
       .update({
         address_enc: await crypto.encrypt(firmId, `accounts/${drive.id}/address`, signedIn.address),
         credentials_enc: await crypto.encrypt(firmId, `accounts/${drive.id}/credentials`, signedIn.credentials),
-        settings: { ...settings, [key]: signedIn.account },
       })
       .eq("id", drive.id);
-    if (error) return { error: "drive_failed" };
+    const { error: kept } = await admin.rpc("merge_account_settings", { account_id: drive.id, patch: { [key]: signedIn.account } });
+    if (error || kept) return { error: "drive_failed" };
   }
   await admin.from("activity_log").insert({ firm_id: firmId, actor_id: actor, action: "drive.reconnected", entity_type: "account", entity_id: drive.id, details: { provider: drive.provider } });
   await admin.from("jobs").insert({ firm_id: firmId, kind: "drive_check", entity_type: "account", entity_id: drive.id, idempotency_key: `drive_check:${drive.id}:${randomUUID()}` });
@@ -97,12 +97,12 @@ export async function watchDrive(firmId: string, account: Account & { settings: 
   try {
     const token = await driveToken(firmId, account);
     const watch = { ...kept, ...(await onedriveWatch(token, `${base}/api/drive/onedrive`, kept?.id)) };
-    // Saved over the settings as they are now, which the owner may have changed meanwhile; a drive
-    // disconnected meanwhile has its watch removed again.
+    // Only its own key is written, so an owner's change meanwhile stays; a drive disconnected
+    // meanwhile has its watch removed again.
     const admin = supabaseAdmin();
-    const { data: now } = await admin.from("connected_accounts").select("settings").eq("id", account.id).maybeSingle();
+    const { data: now } = await admin.from("connected_accounts").select("id").eq("id", account.id).maybeSingle();
     if (!now) return (await onedriveUnwatch(token, watch.id), false);
-    const { error } = await admin.from("connected_accounts").update({ settings: { ...(now.settings as Record<string, Json>), onedrive_notices: watch } }).eq("id", account.id);
+    const { error } = await admin.rpc("merge_account_settings", { account_id: account.id, patch: { onedrive_notices: watch } });
     return !error;
   } catch (error) {
     log.warn("drive.watch_failed", { error: (error as Error).message });

@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { addDays, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { periodName } from "@/src/lib/documents";
+import { downloadUse } from "@/src/lib/download-use";
 import { whenRange } from "@/src/lib/mail-view";
 import { currentMember, myQuestions } from "@/src/lib/member";
 import { formName, preparedSchema } from "@/src/lib/prepared";
@@ -126,13 +127,16 @@ export async function workFor(ctx: Context, late: number) {
     Promise.resolve(supabase.rpc("notice_alerts", { target_firm: firm }).limit(10)),
     lead ? Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, details").eq("kind", "alert").neq("entity_type", "papers_in").neq("entity_type", "owner_device").neq("reason_code", "drive_away").eq("status", "pending").limit(20)) : null,
     papers,
-  ]).then(async ([asks, devices, notices, alerts, calls]): Promise<Listed[]> => {
+    owner ? downloadUse(firm).catch(() => null) : null,
+  ]).then(async ([asks, devices, notices, alerts, calls, use]): Promise<Listed[]> => {
     const waitingIds = devices?.data?.map((device) => device.id) ?? [];
     const { count: seenToday } = waitingIds.length
       ? await supabase.from("activity_log").select("entity_id", { count: "exact", head: true }).eq("firm_id", firm).eq("action", "device.first_seen").in("entity_id", waitingIds).gte("at", dayStart)
       : { count: 0 };
     return tag("firm")([
       ...(asks.length ? [{ key: "questions", title: `Answer ${plural(asks.length, "permission request", "permission requests")}`, why: "Someone in your team is waiting for your yes or no", action: { label: "Answer", href: "/app/inbox" }, audience: "approver" as const }] : []),
+      // This month's downloads through InboxCA are used up and wait for the owner's OK (D26).
+      ...(use && use.used >= use.most ? [{ key: "downloads", title: "Allow more downloads", why: "This month's downloads through InboxCA are used up, so they are paused", action: { label: "Allow more", href: "/app/settings?group=data#caps" }, audience: "firm" as const }] : []),
       ...(waitingIds.length ? [{ key: "pcs", title: `Approve ${plural(waitingIds.length, "PC", "PCs")}`, why: seenToday === waitingIds.length ? "Signed in from your office today" : "Waiting for your approval before staff can use them", action: { label: "Approve", href: "/app/settings#office" }, audience: "firm" as const }] : []),
       ...(notices.data ?? []).map((notice) => ({
         key: `notice:${notice.id}`,
