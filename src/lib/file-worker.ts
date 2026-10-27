@@ -4,7 +4,7 @@ import type {Template} from "./templates.ts";
 export const intakeLimits = { bytes: 50 * 1024 * 1024, entries: 1000, unpacked: 500 * 1024 * 1024 };
 export const viewLimits = { bytes: intakeLimits.bytes, pages: 30, rows: 1000, columns: 26, rowsPerPage: 40, pixels: 40_000_000 };
 export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean };
-export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox"; token: string; purpose?: "sheet" | "portal" | "edited" | "copy"; sheet?: number; form?:{template:Template;period:string;gstin?:string;pan?:string;official?:string}; password?: string };
+export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox" | "onedrive"; token: string; purpose?: "sheet" | "portal" | "edited" | "copy"; sheet?: number; form?:{template:Template;period:string;gstin?:string;pan?:string;official?:string}; password?: string };
 const text = new TextEncoder();
 
 export function viewerLabel(person: string, firm: string, at = new Date()) {
@@ -31,7 +31,7 @@ export async function verifyView(body: string, signature: string, secret: string
   if (!value || value.purpose !== purpose || typeof value.firm !== "string" || !value.firm || value.file !== file || !file || file.length > 4096 ||
     typeof value.name !== "string" || value.name.length > 2000 || typeof value.label !== "string" || !value.label || value.label.length > 1000 ||
     !Number.isInteger(value.limit) || value.limit < 1 || value.limit > viewLimits.pages || !Number.isInteger(value.expires) || value.expires <= now || value.expires > now + 75 ||
-    !["local", "dropbox"].includes(value.provider) || typeof value.token !== "string" || (value.provider === "dropbox" && !value.token) ||
+    !["local", "dropbox", "onedrive"].includes(value.provider) || typeof value.token !== "string" || (value.provider !== "local" && !value.token) ||
     value.password !== undefined && (typeof value.password !== "string" || !value.password || value.password.length > 200)) throw new Error("Not allowed");
   return value;
 }

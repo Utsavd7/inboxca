@@ -1,7 +1,7 @@
 import { currentMember, currentWriter } from "@/src/lib/member";
 import {grantFor} from "@/src/lib/permission-grants";
 import { serverCrypto } from "@/src/lib/crypto";
-import { dropboxAccessToken } from "@/src/lib/dropbox";
+import { driveToken } from "@/src/lib/drive-account";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { signView, viewerLabel, viewLimits, type ViewRequest } from "@/src/lib/file-worker";
 import { plainPage } from "@/src/lib/plain-page";
@@ -36,9 +36,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!document) return fail(404, "This paper is not available. It may have been removed.", headers);
   if (!account) return fail(409, "Your firm's drive is not connected. Ask the owner to connect it in Settings.", headers);
   try {
-    if (!["local", "dropbox"].includes(account.provider)) throw new Error("Drive not supported");
-    const credentials = account.provider === "local" ? null : JSON.parse(await serverCrypto().decrypt(membership.firmId, `accounts/${account.id}/credentials`, account.credentials_enc));
-    const view: ViewRequest = { firm: membership.firmId, file: document.drive_file_id, name: document.name, label: viewerLabel(membership.email, membership.firmName), limit: thumb ? 1 : viewLimits.pages, expires: Math.floor(Date.now() / 1000) + 60, ...(sheet && {sheet:Number(sheet)}), ...(copy && {purpose:"copy" as const}), provider: account.provider as ViewRequest["provider"], token: credentials ? await dropboxAccessToken(credentials.refreshToken) : "",
+    if (!["local", "dropbox", "onedrive"].includes(account.provider)) throw new Error("Drive not supported");
+    const view: ViewRequest = { firm: membership.firmId, file: document.drive_file_id, name: document.name, label: viewerLabel(membership.email, membership.firmName), limit: thumb ? 1 : viewLimits.pages, expires: Math.floor(Date.now() / 1000) + 60, ...(sheet && {sheet:Number(sheet)}), ...(copy && {purpose:"copy" as const}), provider: account.provider as ViewRequest["provider"], token: await driveToken(membership.firmId, account),
       // A PDF's password, typed once by a person in the viewer, goes only to the worker.
       ...(document.password_enc && { password: await serverCrypto().decrypt(membership.firmId, `documents/${id}/password`, document.password_enc) }) };
     const body = JSON.stringify(view);

@@ -52,8 +52,9 @@ export const activityDetails: Record<string, readonly string[]> = {
   "mailbox.token_read": ["provider", "why"], "mailbox.token_saved": ["provider", "why"], "mailbox.token_deleted": ["provider", "revoked"], "drive.consent": ["provider", "level", "terms_version"], "drive.folder_order": ["order", "naming"],
   // What InboxCA set up in a newly connected drive (5.5.1), and the re-seal after a key rotation (8.4).
   "drive.setup": ["reached", "clients", "test_file", "shared", "free_bytes", "notices"], "keys.resealed": ["values", "key_number"],
-  // The owner signed in to the same drive again, and the jobs queued again once it was back.
-  "drive.reconnected": ["provider"], "drive.back": ["jobs"],
+  // The owner signed in to the same drive again, and the jobs queued again once it was back;
+  // OneDrive's renewed refresh token saved (never the token itself).
+  "drive.reconnected": ["provider"], "drive.back": ["jobs"], "drive.token_saved": ["provider"],
   "document.uploaded": ["from"], "document.filed": ["from"], "document.added": ["form", "kind"], "document.renamed": ["from", "to"], "document.removed": ["from"], "document.restored": ["from"],
   "document.viewed": ["thumb"], "document.downloaded": ["stamped", "limit", "sheet", "permission", "zip"], "document.downloaded_by_client": [], "document.sharing": ["policy"],
   "document.shared": ["share", "reply"], "document.missing": [], "document.safety_copy": [], "document.safety_restored": [],

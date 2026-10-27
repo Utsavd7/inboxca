@@ -22,6 +22,7 @@ import { DAYS, laterBy, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
 import { activeClients, importSince, inScope, planImport, type Planned, type Scope } from "@/src/lib/first-import";
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
+import { onedriveReady, onedriveSignIn } from "@/src/lib/onedrive";
 import { askAway, firmAdmin, memberHours, officeApprover, officePc, requestLine, type Office } from "@/src/lib/office";
 import { presets, type Preset } from "@/src/lib/presets";
 import { CHALLENGE_COOKIE, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
@@ -916,14 +917,15 @@ export async function manageEmail(form: FormData) {
 }
 
 // Settings → Firm drive: the owner connects the firm's drive after ticking the Drive
-// access terms. Dropbox signs in on its own page (the callback finishes in
+// access terms. Dropbox and OneDrive sign in on their own page (the callback finishes in
 // /api/drive/callback); the test drive exists only where the server has one.
 export async function connectDrive(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const provider = String(form.get("provider") ?? "");
   if (form.get("agree") !== "on") redirect("/app/settings?group=email&error=drive_terms#drive");
-  if (provider === "dropbox" && process.env.DROPBOX_APP_KEY) await dropboxStart();
+  if (provider === "dropbox" && process.env.DROPBOX_APP_KEY) await driveStart("dropbox");
+  if (provider === "onedrive" && onedriveReady()) await driveStart("onedrive");
   if (provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?group=email&error=drive_provider#drive");
   const { error } = await saveDrive(supabase, membership.firmId, "local", "Test drive on this computer", "{}");
   if (error) redirect(`/app/settings?group=email&error=${error}#drive`);
@@ -931,20 +933,20 @@ export async function connectDrive(form: FormData) {
   revalidatePath("/app/settings");
 }
 
-// Dropbox's own sign in page; a reconnect names the drive it signs in to again.
-async function dropboxStart(account?: string) {
+// The drive's own sign in page; a reconnect names the drive it signs in to again.
+async function driveStart(provider: "dropbox" | "onedrive", account?: string) {
   const { verifier, challenge } = pkce();
   const state = randomUUID();
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
-  (await cookies()).set(DRIVE_COOKIE, Buffer.from(JSON.stringify({ state, verifier, account })).toString("base64url"), {
+  (await cookies()).set(DRIVE_COOKIE, Buffer.from(JSON.stringify({ state, verifier, account, provider })).toString("base64url"), {
     httpOnly: true,
     secure: origin.startsWith("https"),
     sameSite: "lax",
     maxAge: 600,
     path: "/api/drive",
   });
-  redirect(dropboxSignIn(state, challenge, `${origin}/api/drive/callback`));
+  redirect((provider === "onedrive" ? onedriveSignIn : dropboxSignIn)(state, challenge, `${origin}/api/drive/callback`));
 }
 
 // Reconnect, beside the connected drive: the owner signs in to the same drive again, losing
@@ -953,7 +955,8 @@ export async function reconnectDrive() {
   const { supabase, userId, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
   const { data: drive } = await supabase.from("connected_accounts").select("id, provider").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
-  if (drive?.provider === "dropbox" && process.env.DROPBOX_APP_KEY) await dropboxStart(drive.id);
+  if (drive?.provider === "dropbox" && process.env.DROPBOX_APP_KEY) await driveStart("dropbox", drive.id);
+  if (drive?.provider === "onedrive" && onedriveReady()) await driveStart("onedrive", drive.id);
   if (drive?.provider !== "local" || !process.env.DRIVE_LOCAL_DIR) redirect("/app/settings?group=email&error=drive_provider#drive");
   const { error } = await renewDrive(membership.firmId, drive.id, userId);
   if (error) redirect(`/app/settings?group=email&error=${error}#drive`);
