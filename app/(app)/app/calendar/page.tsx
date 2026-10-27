@@ -109,7 +109,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     rest,
   ]);
   if (total && from >= total) redirect(href({ page: Math.ceil(total / pageSize) }));
-  // GST returns with figures in but not filled yet, for Fill.
+  // GST returns and ITRs with figures in but not filled yet, for Fill.
   const stages = await returnStages(supabase, membership.firmId, viewOnly ? [] : (tasks ?? []).filter((task) => task.status !== "filed" && fills(task.code)).map((task) => task.id));
   const rule = new Map(rules?.map((r) => [r.code, r]));
   const name = (task: { code: string | null; period_key: string | null }) => [rule.get(task.code ?? "")?.name ?? task.code, periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)] as const;
