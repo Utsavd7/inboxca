@@ -69,7 +69,6 @@ export function sentKind(messageId: string): "reminder" | "inboxca" | "team" {
 }
 
 export const whens = { today: "Today", week: "This week", month: "This month", older: "Older" } as const;
-export type When = keyof typeof whens;
 // The span of days a When choice covers, India time: from (inclusive) and until (exclusive).
 export function whenRange(when: string, today: string): { from?: string; until?: string } {
   const day = new Date(`${today}T00:00:00Z`);

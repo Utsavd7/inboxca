@@ -6,7 +6,7 @@ InboxCA is a product by Orelu for Indian CA firms. This repo contains the public
 
 ![InboxCA architecture: the firm team uses the app, Supabase and background jobs; a separate file worker handles the firm drive and planned workspace, with cloud deployment pending.](docs/assets/architecture.png)
 
-[Open the diagram source](docs/architecture.html). It shows the target design, with planned cloud services labelled. The web app, database, jobs and file worker run locally. Hosting for the mail library remains open under M11.
+[Open the diagram source](docs/architecture.html). It shows the target design, with planned cloud services labelled. The web app, database, jobs and file worker run locally. Hosting for the mail library remains open.
 
 The file worker receives signed, short lived requests after the app checks access. It receives a drive access token, never a Supabase key. A viewer opening downloads once and streams stamped page images, keeping no pages or cache. Backblaze is for the separate ingest, encrypted records, safety copies and backup paths. Client originals and prepared forms stay in the firm's own drive. Email subjects and bodies are never stored.
 
@@ -16,7 +16,7 @@ Supporting services are kept outside the overview so the main path stays readabl
 | --- | --- |
 | Amazon SES, Mumbai | System email from Orelu; client replies use the firm's mailbox |
 | Web Push | Staff phone notifications |
-| Razorpay hosted Checkout and verified webhooks | Orelu subscriptions and plan payments |
+| Cashfree hosted checkout, AutoPay and verified webhooks, behind a provider neutral billing core | Orelu plan payments, receipts and refunds; off until its keys are set |
 | Optional AI adapter | Off until the privacy and evaluation gates pass; confirmed records are still required for outputs |
 | Sentry server reporter | Error type, code frames and route pattern only; off without configuration |
 
@@ -40,7 +40,7 @@ Sign in is by invitation only: `tests/e2e/sign-in.spec.ts` shows how a person, a
 
 Run `npm run worker` in a separate terminal (Node 22 or newer). Export `FILE_WORKER_SECRET` there and set the same random secret in the app's `.env.local`, with `FILE_WORKER_URL=http://127.0.0.1:3101`. The worker does not read `.env.local` or need database credentials. For the local test drive, give it the same `DRIVE_LOCAL_DIR` as the app. Playwright starts both production servers with a fresh test secret automatically.
 
-Each opening downloads and parses once, then streams stamped page images. Nothing is written or cached by the viewer worker. Limits remain 25 MB, 30 PDF pages, or 1,000 rows and 12 columns of the first sheet. AWS Lambda setup waits for the AWS account. The existing background PDF text job remains a Node job and is outside the web bundle; moving extraction is separate work.
+Each opening downloads and parses once, then streams stamped page images. Nothing is written or cached by the viewer worker. Limits remain 25 MB, 30 PDF pages, or 1,000 rows and 12 columns of the first sheet. AWS Lambda setup waits for the AWS account. The background document text job remains a Node job outside the web bundle. Pages without text are read by OCR in the file worker (`/ocr`, Tesseract with the bundled English model, so nothing is fetched).
 
 Run `node --experimental-strip-types scripts/viewer-memory.mts` for a fresh worker memory check, or add `--scans` for the invented 30 page scanned PDF. These checks remove their synthetic files when finished.
 
@@ -60,18 +60,17 @@ npm run build
 npm run start
 ```
 
-Next.js App Router, strict TypeScript, Tailwind CSS, shadcn's Base UI dialog, Lucide and Motion for React. Production uses Next's supported Webpack build. The `/` route is prerendered. Page components use no Node APIs. Cloudflare Workers and OpenNext deployment are future work; nothing has been deployed.
+Next.js App Router, strict TypeScript, Tailwind CSS, shadcn's Base UI dialog, Lucide and Motion for React. Production uses Next's supported Webpack build. The `/` route is prerendered. Cloudflare Workers and OpenNext deployment are future work; nothing has been deployed.
 
 ## Files
 
 | Location | Purpose |
 | --- | --- |
-| `InboxCA-Paresh.pdf`, `Orelu-CA-Firms-Plan.pptx`, `InboxCA-Brand-Kit.png` | Business deck, client deck and brand sources |
-| `brag-output/` | Original film deliverables and source, preserved separately |
-| `reference/` | Original workflow reference, not a running integration |
+| `reference/official/` | Official government schemas, templates and notices that the forms library and tests read |
+| `reference/CA_Firm_Automation_n8n_workflow.json` | Original workflow reference, not a running integration |
 | `app/(site)/page.tsx` | Static page and section order |
 | `app/(site)/security/page.tsx`, `content/security.ts` | Security policy page. A lawyer must review it before the site is public |
-| `components/site/` | Floating navigation, the clickable demo, the control cards, the plan finder and the invite dialog |
+| `components/site/` | Floating navigation, the clickable demo, the cost calculator, the control cards, the plan finder and the invite dialog |
 | `components/ui/dialog.tsx` | Accessible shadcn dialog primitives |
 | `content/` | Source based copy and estimated plans |
 | `src/lib/submit-invite.ts` | Validation and the single `submitInvite()` connection point |
@@ -79,15 +78,16 @@ Next.js App Router, strict TypeScript, Tailwind CSS, shadcn's Base UI dialog, Lu
 | `public/brand/` | Only assets the page uses |
 | `public/brand/tools/` | Other companies' logos for the "built to work with" row, each the owner's own file, unchanged (Gmail, Outlook, OneDrive, Dropbox and Excel from svgl.app; Zoho Mail, Tally, TaxPower GST and KDK Spectrum from their own sites). Check each brand's usage rules before the site is public |
 | `docs/architecture.html`, `docs/assets/architecture.png` | Architecture source and README image |
-| `tests/e2e/`, `scripts/` | Browser checks, audit capture and social image generation |
+| `tests/` | Unit, database and browser tests |
+| `scripts/` | Local setup, the demo firm, page audit and timing, social image, secret scan, key rotation and restore drill |
 
-Every screen on the page is an original illustration with sample data. The page has five parts: a hero with a demo that follows one email through the five jobs, the control cards, plans, questions and a closing invite. The film in `brag-output/` is not used by the page.
+Every screen on the page is an original illustration with sample data. The page has a hero with a demo that follows one email through the five jobs, the tools it works with, a cost calculator, the control cards, plans, questions and a closing invite.
 
 ## Two switches
 
 `SITE_PUBLIC` defaults to `false`, even without an env file. It controls robots metadata, `robots.txt` and structured data. Copy `.env.example` to `.env.local` if needed. Rebuild after changing it. Before public use, confirm the domain and mark, and replace the local `metadataBase` in `app/layout.tsx`.
 
-Set `SHOW_PLANS` to `false` in `content/plans.ts` to hide the section and its navigation link. Every price and plan allowance is in that file. These are estimates from the business plan, not a live checkout or pricing engine. The estimator asks for clients, kind of practice and team size, and works out the plan and price in the browser with `src/lib/estimate.ts`, Custom included. The formula values (slab rates, rounding, floor) sit in `content/plans.ts` and must be kept in step with the business plan; a test checks them against its worked examples.
+Set `SHOW_PLANS` to `false` in `content/plans.ts` to hide the section and its navigation link. Every price and plan allowance is in that file. Billing charges from the server's own copy of these figures (the plan formula in the database, which an Orelu admin can change); `tests/db/billing.test.ts` keeps the two equal. The estimator asks for clients, kind of practice and team size, and works out the plan and price in the browser with `src/lib/estimate.ts`, Custom included. The formula values (slab rates, rounding, floor) sit in `content/plans.ts` and must be kept in step with the business plan; a test checks them against its worked examples.
 
 The invite form opens an email draft addressed to `orelu.team@gmail.com`. The visitor must send it. The future endpoint belongs in `submitInvite()`; the page never claims delivery.
 
@@ -111,7 +111,7 @@ Deploy it as a web app that runs as you and that anyone can reach, and use its a
 
 ## Policy pages
 
-`/security`, `/privacy`, `/terms` and `/refunds` share one layout (`components/site/policy.tsx`); their words are in `content/security.ts` and `content/legal.ts`. They are drafts and say that InboxCA is in development. A lawyer must review them before the site is public or takes a payment.
+`/security`, `/privacy`, `/terms`, `/refunds` and `/dpa` share one layout (`components/site/policy.tsx`); their words are in `content/security.ts` and `content/legal.ts`. They are drafts and say that InboxCA is in development. A lawyer must review them before the site is public or takes a payment.
 
 ## Browser review
 
