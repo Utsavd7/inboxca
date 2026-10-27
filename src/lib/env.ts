@@ -67,9 +67,11 @@ const schema = z
     SENTRY_DSN: url,
     MAIL_MODE: z.enum(["fake", "live"]).default("fake"),
 
-    ORELU_RAZORPAY_KEY_ID: secret,
-    ORELU_RAZORPAY_KEY_SECRET: secret,
-    ORELU_RAZORPAY_WEBHOOK_SECRET: secret,
+    // Orelu's own Cashfree account for plan payments (5.14.1); both keys, or billing is off.
+    // Cashfree signs its webhooks with the same secret key.
+    CASHFREE_APP_ID: secret,
+    CASHFREE_SECRET_KEY: secret,
+    CASHFREE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
   })
   // PLAN.md section 11: development and tests never send real email.
   .refine((env) => env.MAIL_MODE === "fake" || env.NODE_ENV === "production", {

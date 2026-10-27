@@ -150,3 +150,6 @@
 .ui input[type="checkbox"].toggle:checked:active::before { transform: translateX(12px); }
 .set-days { display: grid; gap: 4px; justify-items: start; }
 .set-days input { width: 96px; }
+
+/* Sign up's last step on Today: the plan card at the settings cards' width. */
+.set-start { max-width: 760px; margin-top: var(--s5); }

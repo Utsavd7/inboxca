@@ -102,7 +102,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <PcKey mode="setup" />
             </div>
           )}
-          {membership?.viewOnlyUntil && (
+          {membership?.billing && membership.billing !== "start" ? (
+            <div className="notice" role="status">
+              <span className="grow">{membership.billing === "grace" ? "The last payment for InboxCA did not go through. Everything works for now." : "Your firm can only view for now: its InboxCA plan is not paid, or was cancelled."}{!owner && " The owner can pay in Settings, Billing."}</span>
+              {owner && <Link className="b b-secondary" href="/app/settings?group=billing">Open Billing</Link>}
+            </div>
+          ) : membership?.viewOnlyUntil && membership.viewOnlyUntil !== "billing" && (
             <p className="notice" role="status">
               This laptop is away from the office, so it can only view papers until {longDate(membership.viewOnlyUntil)}.
             </p>

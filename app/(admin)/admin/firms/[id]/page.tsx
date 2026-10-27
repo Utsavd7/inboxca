@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { Badge, PageHead, storage } from "@/app/(app)/app/ui";
-import { askSupport, retryJob } from "../../actions";
+import { askSupport, retryJob, startPilot } from "../../actions";
 import { currentAdmin, when } from "../../admin";
 import { Submit } from "../../parts";
 
@@ -28,6 +28,15 @@ export default async function AdminFirm({ params }: { params: Promise<{ id: stri
   return (
     <>
       <PageHead title={firm.name} crumbs={[["/admin/firms", "Firms"]]} sub={`${firm.status[0].toUpperCase()}${firm.status.slice(1).replace("_", " ")}, started ${when(firm.created_at)}, ${firm.members === 1 ? "1 person" : `${firm.members} people`}.`} />
+      {firm.status === "pending" && (
+        <section className="admin-card" aria-label="Pilot">
+          <form action={startPilot} className="admin-row">
+            <input type="hidden" name="firm" value={id} />
+            <span className="grow sub">The firm has not paid yet. A pilot firm starts now, with no payment.</span>
+            <Submit>Start as a pilot</Submit>
+          </form>
+        </section>
+      )}
       <section className="admin-card" aria-label="Mailbox and drive">
         <h2>Mailbox and drive</h2>
         {firm.accounts.length ? firm.accounts.map((account) => (
