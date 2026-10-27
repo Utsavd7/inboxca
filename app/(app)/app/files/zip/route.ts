@@ -1,4 +1,4 @@
-import { mayDownload, PAUSED } from "@/src/lib/download-use";
+import { logDownloads, mayDownload, PAUSED } from "@/src/lib/download-use";
 import { openDrive } from "@/src/lib/drive-account";
 import { zip } from "@/src/lib/firm-download";
 import { currentMember } from "@/src/lib/member";
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     if (!text) return plainPage(503, `InboxCA could not read ${paper.name} from your firm's drive just now. Try again in a minute.`, "/app/documents", "Go to Documents");
     entries.push({ name: seen > 1 ? safe.replace(/(\.[^.]*)?$/, ` (${seen})$1`) : safe, text: new Uint8Array(text) });
   }
-  await admin.from("activity_log").insert(papers.map((paper) => ({ firm_id: membership.firmId, actor_id: userId, action: "document.downloaded", entity_type: "document", entity_id: paper.id, details: { zip: true } })));
+  if (!(await logDownloads(membership.firmId, papers.map((paper) => ({ actor_id: userId, action: "document.downloaded", entity_id: paper.id, details: { zip: true } }))))) return plainPage(429, PAUSED.owner, "/app/settings?group=data#caps", "Go to Settings");
   return new Response(new Blob([new Uint8Array(zip(entries))]), {
     headers: {
       "Content-Type": "application/zip",

@@ -1,4 +1,4 @@
-import { mayDownload, PAUSED } from "@/src/lib/download-use";
+import { logDownloads, mayDownload, PAUSED } from "@/src/lib/download-use";
 import { openDrive } from "@/src/lib/drive-account";
 import { currentMember } from "@/src/lib/member";
 import { plainPage } from "@/src/lib/plain-page";
@@ -23,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!document || !account) return plainPage(409, "Your firm's drive is not connected. Connect it in Settings, then try again.", "/app/settings?group=email#drive", "Go to Settings");
   const bytes = await openDrive(membership.firmId, account).then((drive) => drive.read(document.drive_file_id)).catch(() => null);
   if (!bytes) return plainPage(503, "InboxCA could not read this paper from your firm's drive just now. Try again in a minute.", `/app/files/${id}/view`, "Go back to the paper");
-  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.downloaded", entity_type: "document", entity_id: id });
+  if (!(await logDownloads(membership.firmId, [{ actor_id: userId, action: "document.downloaded", entity_id: id }]))) return plainPage(429, PAUSED.owner, "/app/settings?group=data#caps", "Go to Settings");
   const type = shown[extension];
   return new Response(new Blob([new Uint8Array(bytes)]), {
     headers: {

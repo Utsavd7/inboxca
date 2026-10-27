@@ -72,7 +72,18 @@ export function planFit(formula: PlanFormula, plan: FirmPlan, cycle: Cycle, usag
     const earned = allowance * share;
     return { measure, used, byMarch, allowance, earned, notice: used >= 0.8 * earned || byMarch > allowance, over: used > earned * (1 + formula.growthCushion), need: (Math.max(byMarch, used / share) / allowance) * returns };
   });
-  return { measures, notice: measures.some((m) => m.notice), over: measures.some((m) => m.over), yearly: cycle === "monthly" && measures.every((m) => m.byMarch <= m.allowance), next: { ...plan, returns: Math.ceil(Math.max(returns + 1, ...measures.map((m) => m.need))) } };
+  // `measured`: the year's work in returns a year, the larger of the two measures.
+  return { measures, measured: Math.ceil(Math.max(...measures.map((m) => m.need))), notice: measures.some((m) => m.notice), over: measures.some((m) => m.over), yearly: cycle === "monthly" && measures.every((m) => m.byMarch <= m.allowance), next: { ...plan, returns: Math.ceil(Math.max(returns + 1, ...measures.map((m) => m.need))) } };
+}
+
+// A plan year starts at each yearly renewal, and for a monthly payer at its renewal in April
+// (5.14): the floor the meters moved the plan up to is then reset to the work the year measured.
+export const newPlanYear = (cycle: Cycle, due: string) => cycle === "yearly" || due.slice(5, 7) === "04";
+// The plan sized by the work a year measured (returns a year) and not by the sign up answer: the
+// move down offered before a new plan year, when it costs less.
+export function sizedByWork(formula: PlanFormula, plan: FirmPlan, measured: number): FirmPlan {
+  const rate = formula.practices.find(([key]) => key === plan.practice)![2];
+  return { clients: Math.max(1, Math.min(plan.clients, Math.floor(measured / rate))), practice: plan.practice, people: plan.people, aiBlocks: plan.aiBlocks ?? 0, returns: measured };
 }
 
 // Orelu's tax details, from the admin console only (D32): never typed in code. GST is charged
