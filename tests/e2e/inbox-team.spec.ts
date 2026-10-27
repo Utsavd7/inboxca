@@ -150,6 +150,8 @@ test("AI's draft waits in the reply box, goes only when a person sends it, and i
   await query(local.dbUrl, "update public.requests set draft_enc = $2 where id = $1", [ask.id, await serverCrypto().encrypt(firm.firmId, `requests/${ask.id}/draft`, JSON.stringify({ text: draft, papers: [] }))]);
 
   await owner.goto("/app/inbox?show=reply");
+  // The row says a draft is ready before the email is opened.
+  await expect(row(`Diwali ${tag}`).getByText("AI draft ready")).toBeVisible();
   await row(`Diwali ${tag}`).getByText(`Diwali ${tag}`).click();
   await expect(owner.getByLabel("Your reply")).toHaveValue(draft);
   expect((await mailTexts(client.email)).some((text) => text.includes("Thank you for your wishes"))).toBe(false);

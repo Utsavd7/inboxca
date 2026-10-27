@@ -877,12 +877,12 @@ isOneToOne: false
                            },
 "ai_credits":
 { Args: { "block": number,"monthly": number,"target_firm": string }; Returns: {
-              "available": number,"used": number
+              "available": number,"topups": Json,"used": number
             }[]
                            },
 "ai_reserve":
-{ Args: { "block": number,"digest": string,"monthly": number,"share": number,"target_firm": string,"want": number,"why": string }; Returns: {
-              "again": boolean,"available": number,"ticket": number,"used": number
+{ Args: { "block": number,"cap"?: number,"day_share"?: number,"digest": string,"monthly": number,"share": number,"target_firm": string,"want": number,"why": string }; Returns: {
+              "again": boolean,"available": number,"paused": string,"ticket": number,"used": number
             }[]
                            },
 "answer_support":

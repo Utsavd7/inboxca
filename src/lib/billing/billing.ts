@@ -257,7 +257,7 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
     details = { period, plan: next, basis: waitingOf(plan), priced: basisOf(sub) };
   } else if (what.kind === "topup") {
     if (await blocksThisMonth(admin, firmId, plan, today) >= current.blockCap) return { error: "Your plan has all the extra AI it can take this month. Move to a bigger plan for more." };
-    lines = [{ text: `AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits for this month`, paise: formula.aiBlock.price * 100 }];
+    lines = [{ text: `AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits, good for 12 months`, paise: formula.aiBlock.price * 100 }];
     details = { add: 1 };
   } else if (what.kind === "yearly") {
     if (cycle === "yearly") return { error: "Your plan is paid yearly already." };
@@ -326,7 +326,7 @@ export async function autoTopUp(firmId: string) {
   const today = indiaDay(new Date());
   const { count } = await admin.from("payments").select("id", { count: "exact", head: true }).eq("firm_id", firmId).eq("kind", "topup").in("status", ["created", "done"]).gte("created_at", `${today.slice(0, 8)}01T00:00:00+05:30`);
   if ((count ?? 0) >= (plan.autoTopUp ?? 0) || (plan.aiBlocks ?? 0) + (count ?? 0) >= planPrice(formula, plan, sub.cycle as Cycle).blockCap) return false;
-  const lines = [{ text: `AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits for this month`, paise: formula.aiBlock.price * 100 }];
+  const lines = [{ text: `AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits, good for 12 months`, paise: formula.aiBlock.price * 100 }];
   const amount = withGst(lines[0].paise, tax, firm.stateCode, today);
   if (amount.total > plan.maxPaise) return false;
   const at = new Date(Date.now() + NOTICE_MS);
@@ -334,7 +334,7 @@ export async function autoTopUp(firmId: string) {
   if (!row) return false;
   await provider.charge({ mandate: sub.mandate, id: row.id, paise: amount.total, at, note: "InboxCA AI top-up" });
   await note(admin, firmId, null, "billing.auto_topup", { payment: row.id, blocks: 1 });
-  await mail(await ownerOf(admin, firmId), "InboxCA: an AI top-up is on its way", [`Your firm used 90% of its AI credits, so InboxCA will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })} for ${formula.aiBlock.credits.toLocaleString("en-IN")} more credits this month.`, `Turn auto top-up off in Settings, Billing: ${link(BILLING)}`]);
+  await mail(await ownerOf(admin, firmId), "InboxCA: an AI top-up is on its way", [`Your firm used 90% of its AI credits, so InboxCA will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })} for ${formula.aiBlock.credits.toLocaleString("en-IN")} more credits, good for 12 months.`, `Turn auto top-up off in Settings, Billing: ${link(BILLING)}`]);
   return true;
 }
 

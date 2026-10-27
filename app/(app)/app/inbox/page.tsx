@@ -145,7 +145,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       const { data: taken } = data?.length ? await supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("entity_type", "email").in("entity_id", data.map((row) => row.id)) : { data: [] };
       return (data ?? []).filter((row) => !taken?.some((ask) => ask.entity_id === row.id)).map((row) => ({ ...row, delivery: row.delivery as Delivery }));
     });
-  const [{ data: rows }, { count: needs }, { count: fromClients }, { data: pickList }, { data: waiting }, { data: toCheck }, { data: papers }, toAnswer, { data: people }, { data: accounts }, { data: decided }, { data: week }] = await Promise.all([
+  const [{ data: rows }, { count: needs }, { count: fromClients }, { data: pickList }, { data: waiting }, { data: toCheck }, { data: papers }, toAnswer, { data: people }, { data: accounts }, { data: decided }, { data: week }, { data: drafted }] = await Promise.all([
     wantIn && (!only || only.length) ? events.order("received_at", { ascending: false }).order("id").limit(q ? 500 : PAGE).overrideTypes<{ id: string; received_at: string; provider_message_id: string }[]>() : Promise.resolve({ data: [] as never[] }),
     needsCount,
     inCount,
@@ -164,6 +164,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         .in("action", ["permission.allowed", "permission.always", "device.approved", "office.confirm", "office.today"])
         .gt("at", addDays(today, -7)).order("at", { ascending: false }).limit(50)
       : Promise.resolve({ data: null }),
+    // Waiting emails with an AI draft kept: only whether one is there, never the draft.
+    supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "pending").not("draft_enc", "is", null).limit(1000),
   ]);
   const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
   // A question in words, with the person's name: "Sunil asks to upload a paper".
@@ -226,7 +228,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           messageId: event.provider_message_id,
           subject: "",
           snippet: "",
-          tags: [...tagsOf(event), ...waitTag(event.id)],
+          tags: [...tagsOf(event), ...(drafted?.some((ask) => ask.entity_id === event.id) ? [{ text: "AI draft ready", tone: "blue" as const }] : []), ...waitTag(event.id)],
           request: pending.get(event.id)?.id,
           assignee: forWho(event.id),
         };
