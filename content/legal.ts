@@ -23,8 +23,8 @@ export const privacySections = [
       analyticsToken
         ? "The website sets no cookies and shows no advertising. It counts visits without cookies and without knowing who you are."
         : "Nothing by itself. The website sets no cookies and has no advertising, tracking or analytics.",
-      "If you ask for an invite, you send us your name, firm name, city, email address and a rough number of clients.",
-      "We use those details only to reply to you about InboxCA. We do not sell them or pass them on.",
+      "If you sign up, you give us your firm's name, your work email and your firm's state.",
+      "We use those details to run your firm's account and to email you sign in codes. We do not sell them or pass them on.",
       "Ask us at any time and we will delete them.",
     ],
   },
@@ -82,7 +82,6 @@ export const privacySections = [
     points: [
       "You can ask to see, correct or delete the personal data we hold about you.",
       "If you are a client of a CA firm, ask your firm first. It decides what happens to your data, and InboxCA helps it answer.",
-      "You can take back an invite request at any time.",
       "If we do not settle a complaint, you can take it to the Data Protection Board of India.",
     ],
   },
@@ -111,7 +110,6 @@ export const termsSections = [
       "InboxCA is in development. The website describes what it is being built to do.",
       "The screens are illustrations, and the firms, names and figures in them are sample data.",
       "Prices are estimates, before GST. They are not an offer and may change before InboxCA opens.",
-      "Asking for an invite is not a contract and does not promise a place.",
     ],
   },
   {
