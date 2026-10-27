@@ -9,6 +9,7 @@ export const LIMITS = {
   check: { most: 10, seconds: 3600 }, // email codes tried for one address
   twoStep: { most: 10, seconds: 3600 }, // authenticator app codes tried by one person
   recovery: { most: 5, seconds: 3600 }, // recovery codes tried by one person
+  notice: { most: 1000, seconds: 3600 }, // OneDrive change notices posted from one internet address
 } as const;
 
 // The database's key for a limit: a keyed digest, never the address or the person's id.

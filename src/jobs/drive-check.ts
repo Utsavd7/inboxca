@@ -1,5 +1,5 @@
 import { settleVersions } from "@/src/lib/documents";
-import { openDrive } from "@/src/lib/drive-account";
+import { openDrive, watchDrive } from "@/src/lib/drive-account";
 import { intakeLimits } from "@/src/lib/file-worker";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { MAX_ATTEMPTS, type Handler } from "./runner";
@@ -18,10 +18,11 @@ export const lowSpace = async (firm: string) => {
 // one renamed or moved in the drive is followed to its new name and logged. The owner gets
 // one alert per problem (the folder is shared or has a link, the drive is nearly full,
 // files are missing, the drive cannot be reached), cleared by the next check that finds all
-// well. Dropbox's change notices also queue it (app/api/drive/dropbox).
+// well. Dropbox's and OneDrive's change notices also queue it (app/api/drive/dropbox and
+// onedrive), and it keeps OneDrive's watch for them renewed (watchDrive).
 export const driveCheck: Handler = async (job) => {
   const admin = supabaseAdmin();
-  const { data: account } = await admin.from("connected_accounts").select("id, firm_id, provider, credentials_enc").eq("id", job.entity_id ?? "").eq("kind", "drive").maybeSingle();
+  const { data: account } = await admin.from("connected_accounts").select("id, firm_id, provider, credentials_enc, settings").eq("id", job.entity_id ?? "").eq("kind", "drive").maybeSingle();
   if (!account) return { done: true };
   const firm = account.firm_id;
   const drive = await openDrive(firm, account);
@@ -72,5 +73,6 @@ export const driveCheck: Handler = async (job) => {
         .upsert({ firm_id: firm, kind: "alert", entity_type: reason, entity_id: firm, reason_code: reason, status: "pending", details }, { onConflict: "kind,entity_type,entity_id" });
     else await admin.from("requests").update({ status: "done" }).eq("kind", "alert").eq("entity_type", reason).eq("entity_id", firm);
   }
+  await watchDrive(firm, account);
   return { done: true };
 };

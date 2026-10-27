@@ -4,7 +4,8 @@ import type { Database, Json } from "@/src/db/types";
 import { serverCrypto } from "./crypto";
 import { DRIVE_TERMS_VERSION, localDrive, type Drive } from "./drive";
 import { dropboxAccessToken, dropboxDrive } from "./dropbox";
-import { onedriveAccessToken, onedriveDrive } from "./onedrive";
+import { log } from "./logger";
+import { onedriveAccessToken, onedriveDrive, onedriveUnwatch, onedriveWatch, WATCH_FOR } from "./onedrive";
 import { supabaseAdmin } from "./supabase";
 
 // Holds the PKCE verifier, the state and the drive between the Connect press and the callback.
@@ -78,6 +79,43 @@ export async function driveToken(firmId: string, account: Account) {
   if (account.provider === "local") return "";
   const saved = await credentials(firmId, account);
   return account.provider === "onedrive" ? onedriveAccessToken(saved.refreshToken, keepToken(firmId, account, saved.at)) : dropboxAccessToken(saved.refreshToken);
+}
+
+// OneDrive's change notices (PLAN.md 5.5.1): Microsoft says within minutes that something in the
+// drive changed, and the drive check reads what. Microsoft reaches only a public https address,
+// so on any other APP_BASE_URL nothing is asked and the nightly check alone remains. The watch is
+// made at setup and renewed by each drive check, at most every 10 minutes: the nightly one, so it
+// never runs out, and those its notices start, which also answer Microsoft's calls to authorize
+// it again. It is kept in the drive's settings with only its secret's hash, by the server's key.
+// Says whether notices are on; when Microsoft cannot be asked, the nightly check remains.
+type Watch = { id: string; until: string; check: string };
+export async function watchDrive(firmId: string, account: Account & { settings: Json }) {
+  const base = process.env.APP_BASE_URL ?? "";
+  if (account.provider !== "onedrive" || !base.startsWith("https://")) return false;
+  const kept = (account.settings as { onedrive_notices?: Watch }).onedrive_notices;
+  if (kept && Date.parse(kept.until) - WATCH_FOR > Date.now() - 10 * 60_000) return true;
+  try {
+    const token = await driveToken(firmId, account);
+    const watch = { ...kept, ...(await onedriveWatch(token, `${base}/api/drive/onedrive`, kept?.id)) };
+    // Saved over the settings as they are now, which the owner may have changed meanwhile; a drive
+    // disconnected meanwhile has its watch removed again.
+    const admin = supabaseAdmin();
+    const { data: now } = await admin.from("connected_accounts").select("settings").eq("id", account.id).maybeSingle();
+    if (!now) return (await onedriveUnwatch(token, watch.id), false);
+    const { error } = await admin.from("connected_accounts").update({ settings: { ...(now.settings as Record<string, Json>), onedrive_notices: watch } }).eq("id", account.id);
+    return !error;
+  } catch (error) {
+    log.warn("drive.watch_failed", { error: (error as Error).message });
+    return false;
+  }
+}
+
+// Disconnect: Microsoft stops the drive's notices. One still sent finds no drive and queues
+// nothing, and a watch not removed ends by itself within 30 days.
+export async function unwatchDrive(firmId: string) {
+  const { data: drive } = await supabaseAdmin().from("connected_accounts").select("id, provider, credentials_enc, settings").eq("firm_id", firmId).eq("kind", "drive").maybeSingle();
+  const kept = (drive?.settings as { onedrive_notices?: Watch } | undefined)?.onedrive_notices;
+  if (drive?.provider === "onedrive" && kept) await onedriveUnwatch(await driveToken(firmId, drive), kept.id);
 }
 
 const credentials = async (firmId: string, account: Account) =>

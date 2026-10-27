@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { todayInIndia } from "@/src/lib/calendar";
 import { financialYear, folderPath } from "@/src/lib/drive";
-import { openDrive } from "@/src/lib/drive-account";
+import { openDrive, watchDrive } from "@/src/lib/drive-account";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { MAX_ATTEMPTS, type Handler } from "./runner";
 
@@ -46,7 +46,7 @@ export const driveSetup: Handler = async (job) => {
     const readBack = saved !== "taken" && Buffer.from(await drive.read(saved.id)).equals(Buffer.from(test));
     if (saved !== "taken") await drive.trash(saved.id);
     const seen = await drive.check();
-    const notices = account.provider === "dropbox" && !!process.env.DROPBOX_APP_SECRET && !!(account.settings as { dropbox_account?: string }).dropbox_account;
+    const notices = (account.provider === "dropbox" && !!process.env.DROPBOX_APP_SECRET && !!(account.settings as { dropbox_account?: string }).dropbox_account) || (await watchDrive(firm, account));
     await logged({ reached: true, clients: clients?.length ?? 0, test_file: readBack, shared: seen.shared, free_bytes: seen.freeBytes, notices });
     return { done: true };
   } catch {

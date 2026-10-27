@@ -17,7 +17,7 @@ import { assignmentRoles, canManageClients, checkClient, readKind, type ClientIn
 import { serverCrypto } from "@/src/lib/crypto";
 import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
-import { DRIVE_COOKIE, openDrive, renewDrive, saveDrive } from "@/src/lib/drive-account";
+import { DRIVE_COOKIE, openDrive, renewDrive, saveDrive, unwatchDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
 import { DAYS, laterBy, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { cleanNumber, numberKinds, panOfGstin, type NumberKind } from "@/src/lib/identifiers";
@@ -1050,6 +1050,8 @@ export async function reconnectDrive() {
 export async function disconnectDrive() {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
+  // OneDrive's change notices end first, while the sign in to end them is still kept.
+  await unwatchDrive(membership.firmId).catch(() => log.warn("drive.unwatch_failed"));
   await supabase.from("connected_accounts").delete().eq("firm_id", membership.firmId).eq("kind", "drive");
   revalidatePath("/app/settings");
   redirect("/app/settings?group=email&saved=drive_off#drive");
