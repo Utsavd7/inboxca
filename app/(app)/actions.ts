@@ -1,4 +1,5 @@
 "use server";
+import { stopAutoPay, teamSize } from "@/src/lib/billing/billing";
 import { grantFor } from "@/src/lib/permission-grants";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -67,6 +68,12 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
     return { error: "This is the firm email. Invite each person with their own email address.", values };
   const role = invitable.safeParse(form.get("role"));
   if (!role.success) return { error: "Choose a role.", values };
+  // A paid plan's team, the owner included (5.14): a removed person frees the place at once.
+  const team = await teamSize(membership.firmId);
+  if (team !== null) {
+    const { count } = await supabase.from("firm_members").select("user_id", { count: "exact", head: true }).eq("firm_id", membership.firmId).in("status", ["active", "invited"]);
+    if ((count ?? 0) >= team) return { error: `Your plan has a team of ${team}. Add a person in Settings, Billing first, then invite them.`, values };
+  }
 
   const admin = supabaseAdmin();
   let { data: personId } = await admin.rpc("user_id_for_email", { address: email });
@@ -981,6 +988,8 @@ export async function closeFirm(form: FormData) {
   const forget = await mailTokenForget(membership.firmId, userId).catch(() => null);
   const { data } = await supabase.rpc("close_firm", { target_firm: membership.firmId, typed_name: String(form.get("name") ?? "") });
   if (data) await forget?.().catch(() => log.warn("mail_token_not_revoked", {}));
+  // A closed firm pays nothing more (5.14.1).
+  if (data) await stopAutoPay(membership.firmId, userId, "closed").catch(() => log.warn("close.autopay_not_stopped"));
   // The notice before deletion, by Orelu's system email once it is set up.
   if (data) await sendSystemMail(membership.email, `${membership.firmName} is closed on InboxCA`, [
     `You closed ${membership.firmName} on InboxCA. Your team can no longer sign in.`,

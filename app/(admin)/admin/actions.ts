@@ -3,7 +3,10 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import type { Json } from "@/src/db/types";
 import { runJobsSoon } from "@/src/jobs/run-soon";
+import { adminRefund } from "@/src/lib/billing/billing";
+import { financialYear, indiaDay, taxSchema, type Tax } from "@/src/lib/billing/money";
 import { officeProof } from "@/src/lib/office";
 import { CHALLENGE_COOKIE, checkAdminKey, checkAdminKeyUse, newChallenge } from "@/src/lib/pc-key";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -192,6 +195,43 @@ export async function checkPasskey(key: { id: string; clientDataJSON: string; au
   await admin.from("activity_log").insert({ actor_id: userId, action: "admin.passkey_used", entity_type: "admin", entity_id: userId });
   await prove(userId, session);
   redirect("/admin");
+}
+
+// Orelu's tax details for receipts and invoices (D32): checked here, saved and logged by the
+// database. Nothing about GST is typed in code.
+export async function saveTax(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const text = (name: string) => String(form.get(name) ?? "").trim() || undefined;
+  const { data: before } = await supabase.rpc("admin_billing");
+  const turnover = { ...((before as { tax?: Tax } | null)?.tax?.turnover ?? {}), ...(text("turnover") && { [financialYear(indiaDay(new Date()))]: Math.round(Number(text("turnover")) * 100) }) };
+  const asked = taxSchema.safeParse({
+    legalName: text("legalName"), address: text("address"), pan: text("pan")?.toUpperCase(), gstin: text("gstin")?.toUpperCase(), stateCode: text("stateCode"),
+    sac: text("sac"), rate: text("rate") ? Number(text("rate")) : undefined, gstFrom: text("gstFrom"), signatory: text("signatory"), turnover,
+  });
+  // GST needs all of its details, and the GSTIN starts with its state code and holds the PAN.
+  const gst = asked.success && [asked.data.gstin, asked.data.stateCode, asked.data.sac, asked.data.rate, asked.data.gstFrom];
+  if (!asked.success || (gst && gst.some(Boolean) && !gst.every(Boolean)) || (asked.data.gstin && (!asked.data.gstin.startsWith(asked.data.stateCode ?? "") || asked.data.gstin.slice(2, 12) !== asked.data.pan))) return fail("/admin/billing", "tax");
+  const { error } = await supabase.rpc("admin_set_tax", { tax: asked.data as unknown as Json });
+  if (error) throw new Error(`Saving the tax details failed: ${error.code}`);
+  revalidatePath("/admin/billing");
+}
+
+// A payment taken twice or in error, given back in full (5.14.1); the admin is logged with it.
+export async function refundPayment(form: FormData) {
+  const { userId } = await currentAdmin();
+  const reason = z.enum(["duplicate", "charge_error"]).safeParse(form.get("reason"));
+  if (!reason.success) return fail("/admin/billing", "reason");
+  if (!(await adminRefund(z.uuid().parse(form.get("payment")), userId, reason.data))) return fail("/admin/billing", "refund");
+  revalidatePath("/admin/billing");
+}
+
+// A pilot firm starts without a payment (M0 "admin override for pilots").
+export async function startPilot(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const firm = z.uuid().parse(form.get("firm"));
+  const { error } = await supabase.rpc("admin_pilot", { target: firm });
+  if (error) throw new Error(`Starting the pilot failed: ${error.code}`);
+  revalidatePath(`/admin/firms/${firm}`);
 }
 
 // Recovery: removes another admin's passkeys and signs them out (the database logs it).

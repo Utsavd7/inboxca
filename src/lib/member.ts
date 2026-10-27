@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { billingReady } from "./billing/provider";
 import { closingToday } from "./hours";
 import { may, mayDecide, type Permissions, type Right, type Standing } from "./rights";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
@@ -35,7 +36,7 @@ export const currentMember = cache(async () => {
   const anyFirm = Object.keys(proof).length ? await supabaseServer(proof) : signedIn;
   const { data: rows } = await anyFirm
     .from("firm_members")
-    .select("firm_id, role, access, firms(name, settings), branch:groups!firm_members_firm_id_branch_id_fkey(kind, settings)")
+    .select("firm_id, role, access, firms(name, settings, status), branch:groups!firm_members_firm_id_branch_id_fkey(kind, settings)")
     .eq("user_id", userId)
     .order("firm_id")
     .limit(20);
@@ -69,13 +70,20 @@ export const currentMember = cache(async () => {
   // Closing time today for anyone office hours bind, by their branch's hours if it has its own,
   // for the warning before it.
   const closing = data.role !== "owner" && accessSetting(settings, data.role, data.access, "hours_only") ? closingToday(memberHours(settings, data.branch), data.access) : null;
+  // The plan (5.14.1): a firm signed up but not yet paid, once payments are set up, waits for its
+  // first payment; days 0 to 7 unpaid show a banner; read only after that and after a money back.
+  // Read only keeps each person's own view and changes nothing; the owner can still pay.
+  const status = data.firms?.status;
+  const billing = status === "pending" && billingReady() ? "start" : status === "grace" || status === "read_only" ? status : null;
+  const viewOnlyUntil = office.remoteUntil ?? (billing === "start" || billing === "read_only" ? "billing" : undefined);
   const membership = {
     firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, access, idleMinutes, closing, email: String(claims.claims.email ?? ""),
     // Every firm the person may open now, for the sidebar's switcher.
     firms: rows!.map((row) => ({ id: row.firm_id, name: row.firms?.name ?? "" })),
     // On a personal device allowed away from the office the person only views, until its end date.
-    viewOnlyUntil: office.remoteUntil,
-    may: (right: Right, client?: string) => !office.remoteUntil && may(data.role, right, settings.permissions as Permissions, (access.always ?? []) as Standing[], client),
+    viewOnlyUntil,
+    billing,
+    may: (right: Right, client?: string) => !viewOnlyUntil && may(data.role, right, settings.permissions as Permissions, (access.always ?? []) as Standing[], client),
   };
   return { supabase, userId, membership, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting, pcKey: office.pcKey };
 });
@@ -97,6 +105,6 @@ export const myQuestions = cache(async () => {
 // For actions that change anything: a view only device gets no further.
 export async function currentWriter() {
   const member = await currentMember();
-  if (member.membership?.viewOnlyUntil) redirect("/app?error=view_only");
+  if (member.membership?.viewOnlyUntil) redirect(`/app?error=${member.membership.viewOnlyUntil === "billing" ? "billing" : "view_only"}`);
   return member;
 }
