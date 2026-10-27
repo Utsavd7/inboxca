@@ -79,6 +79,12 @@
 .set-rows li:first-child { border-top: 0; }
 .set-rows .grow { flex: 1; min-width: 0; }
 .set-rows + form { margin-top: 16px; }
+/* Your sign in: a passkey's name and Add a passkey on one line; the card alone for staff. */
+.set-page .panel > .set-key { margin-top: 16px; }
+.set-key > .b { justify-self: start; }
+.set-alone { max-width: 760px; margin-top: var(--s5); }
+.set-nudge { color: var(--accent); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line-2); }
+.set-nudge:hover { text-decoration-color: var(--accent); }
 /* Replies by InboxCA: what each answers, and Auto, Ask me first or Off beside it. */
 .set-answers { margin: 0; }
 .set-answers .grow { display: grid; gap: 2px; padding-block: 4px; }

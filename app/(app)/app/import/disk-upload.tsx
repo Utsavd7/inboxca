@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { checkIncoming, describeDiskFiles, incomingLinks } from "@/app/(app)/actions";
 import { contentHash } from "@/src/lib/content-hash";
+import { quickXorHash, sendPieces } from "@/src/lib/onedrive-upload";
 
 type Picked = { file: File; path: string; final: boolean; year: string };
 const LIMIT = 150 * 1024 * 1024;
@@ -14,8 +15,9 @@ const time = (seconds: number) =>
 // Files still on a computer or hard disk (PLAN.md 5.16): the owner chooses a folder, sees what
 // each choice holds and how long it takes on this line, and each file then goes from this
 // browser straight into the drive's Incoming folder, checked against its checksum. Choosing
-// the same folder again after a break sends only what is not there yet.
-export function DiskUpload({ incoming }: { incoming?: string }) {
+// the same folder again after a break sends only what is not there yet. OneDrive keeps its own
+// checksum and takes a file in pieces.
+export function DiskUpload({ incoming, onedrive }: { incoming?: string; onedrive?: boolean }) {
   const router = useRouter();
   const [files, setFiles] = useState<Picked[] | null>(null);
   const [speed, setSpeed] = useState(0);
@@ -50,7 +52,7 @@ export function DiskUpload({ incoming }: { incoming?: string }) {
     let bytes = 0;
     setSending({ ...state });
     for (let at = 0; at < chosen.length; at += 10) {
-      const batch = await Promise.all(chosen.slice(at, at + 10).map(async (file) => ({ ...file, hash: await contentHash(file.file) })));
+      const batch = await Promise.all(chosen.slice(at, at + 10).map(async (file) => ({ ...file, hash: await (onedrive ? quickXorHash : contentHash)(file.file) })));
       let waiting = batch;
       // Up to three tries; a file whose checksum does not match in the drive is sent again.
       for (let round = 0; round < 3 && waiting.length; round++) {
@@ -58,7 +60,7 @@ export function DiskUpload({ incoming }: { incoming?: string }) {
         const tries = waiting.map((file, index) => ({ ...file, link: links[index] }));
         state.taken.push(...tries.filter((file) => file.link === "taken").map((file) => file.path));
         const trying = tries.filter((file) => file.link !== "taken");
-        await Promise.all(trying.map((file) => file.link && file.link !== "done" && fetch(file.link, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file.file }).catch(() => null)));
+        await Promise.all(trying.map((file) => file.link && file.link !== "done" && (onedrive ? sendPieces(file.link, file.file) : fetch(file.link, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file.file })).catch(() => null)));
         const checked = await checkIncoming(trying.map(({ path, hash }) => ({ path, hash }))).catch(() => []);
         waiting = trying.filter((_, index) => !checked[index]);
       }

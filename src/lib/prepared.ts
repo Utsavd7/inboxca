@@ -14,6 +14,7 @@ import {workerRead} from "./worker-read";
 import {grantFor} from "./permission-grants";
 import {chooseTemplate,templateSchema} from "./templates";
 import {receive,unsafeText} from "./intake";
+import {itrChecks,type ItrWork} from "./itr-check";
 
 export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
 export type Prepared=z.infer<typeof preparedSchema>;
@@ -65,6 +66,20 @@ export async function savePrepared(request:FormRequest,userId:string|null,permis
     if(error || !finished) throw new Error("The figures or your permission changed. Open the page again and try again.");
   } catch(error) {await drive.trash(file.id);throw error;}
   return saved.id;
+}
+
+// An ITR that differs from Form 26AS or Form 16 is approved only by a person who ticks that they
+// looked at the differences (form-actions.ts), so one InboxCA made without that tick (a fill, a
+// correction) stays a draft for the CA. Checked before the return is saved, so the step after it
+// is one change. Read as the server: the check needs every paper.
+export async function keepForDifferences(firm:string,work:ItrWork) {
+  const admin=supabaseAdmin(),[check]=await itrChecks(admin,firm,[work]);
+  return async(id:string)=>{
+    if(!check?.differences.length) return;
+    const {data:made}=await admin.from("documents").select("prepared").eq("firm_id",firm).eq("id",id).single();
+    if(made && preparedSchema.parse(made.prepared).status==="approved")
+      await admin.from("documents").update({prepared:{...(made.prepared as object),status:"draft"}}).eq("firm_id",firm).eq("id",id).throwOnError();
+  };
 }
 
 // A person may only act on a form their own database client can see.

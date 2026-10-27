@@ -43,6 +43,11 @@ it("puts a month with differences on the list of whoever looks after the client,
   await db.query("update public.documents set status='filed' where id=$1",[statement]);
   await db.query("update public.gst_matches set counts='{\"matched\":16,\"missing\":0,\"extra\":0,\"differ\":0}' where firm_id=$1",[firm]);
   expect(await items(firm,staff)).toEqual([]);
+  // A bill the supplier corrected that the books do not show yet is something to look at too.
+  await db.query("update public.gst_matches set counts='{\"matched\":16,\"missing\":0,\"extra\":0,\"differ\":0,\"changed\":0}' where firm_id=$1",[firm]);
+  expect(await items(firm,staff)).toEqual([]);
+  await db.query("update public.gst_matches set counts='{\"matched\":16,\"missing\":0,\"extra\":0,\"differ\":0,\"changed\":1}' where firm_id=$1",[firm]);
+  expect(await items(firm,staff)).toHaveLength(1);
   await db.query("update public.gst_matches set counts='{\"matched\":16,\"missing\":0,\"extra\":2,\"differ\":0}' where firm_id=$1",[firm]);
   expect(await items(firm,staff)).toHaveLength(1);
   await db.query("update public.tasks set status='filed',details=jsonb_build_object('filed_on','2026-10-19') where id=$1",[task]);

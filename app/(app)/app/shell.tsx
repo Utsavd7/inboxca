@@ -10,6 +10,7 @@ import {
   ChevronsUpDown,
   CircleHelp,
   FileText,
+  Fingerprint,
   Inbox,
   Keyboard,
   LogOut,
@@ -341,6 +342,12 @@ export function AccountMenu({ place }: { place: "side" | "head" }) {
               </Menu.RadioGroup>
             </Menu.Group>
             <div className="menu-sep" />
+            {me.member && (
+              <Menu.LinkItem className="menu-item" closeOnClick render={<Link href="/app/settings?group=me" />}>
+                <Fingerprint size={16} aria-hidden />
+                Your sign in
+              </Menu.LinkItem>
+            )}
             <Menu.Item className="menu-item" onClick={() => shell.open("keys")}>
               <Keyboard size={16} aria-hidden />
               Keyboard shortcuts

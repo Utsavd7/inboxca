@@ -44,10 +44,11 @@ export function supabaseAnonymous() {
 }
 
 // The server's own access, past row level security. Only for work no person may do
-// themselves: creating people, accepting invites, running jobs.
-export function supabaseAdmin() {
+// themselves: creating people, accepting invites, running jobs. `headers` as for supabaseServer.
+export function supabaseAdmin(headers?: Record<string, string>) {
   const { url, value } = connection("SUPABASE_SECRET_KEY");
   return createClient<Database>(url, value, {
     auth: { persistSession: false, autoRefreshToken: false },
+    ...(headers && { global: { headers } }),
   });
 }

@@ -1,6 +1,6 @@
 import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { checkAdminKey, checkAdminKeyUse, checkKeyUse, checkNewKey, newChallenge } from "@/src/lib/pc-key";
+import { checkAdminKey, checkAdminKeyUse, checkKeyUse, checkNewKey, newChallenge, totp } from "@/src/lib/pc-key";
 
 // An office PC's key answering InboxCA's question, as a browser would send it.
 const origin = "https://inboxca.example";
@@ -54,5 +54,24 @@ describe("an Orelu admin's passkey", () => {
       const tampered = signed(answer("webauthn.get", challenge, 0x05, 1), privateKey);
       expect(checkAdminKeyUse({ ...tampered, authenticatorData: answer("webauthn.get", challenge, 0x05, 9).response.authenticatorData }, spki, origin, cookie, "a-1")).toBeNull();
     }
+  });
+});
+
+describe("a firm person's passkey", () => {
+  // PLAN.md 5.17: the admin's checks, for its own question, so neither answers for the other.
+  it("answers only the question asked for a firm person, not an admin's", () => {
+    const person = newChallenge("passkey:p-1");
+    expect(checkAdminKey(answer("webauthn.create", person.challenge, 0x05).response, origin, person.cookie, "p-1", "passkey")).toBe(true);
+    expect(checkAdminKey(answer("webauthn.create", person.challenge, 0x05).response, origin, person.cookie, "p-1")).toBe(false);
+    const admin = newChallenge("admin:p-1");
+    expect(checkAdminKey(answer("webauthn.create", admin.challenge, 0x05).response, origin, admin.cookie, "p-1", "passkey")).toBe(false);
+  });
+
+  // RFC 6238's SHA-1 test key (its codes 94287082 and 07081804; an app shows the last 6 digits).
+  it("makes the authenticator app's code for the passkey's own factor", () => {
+    // RFC 6238 appendix B: the SHA-1 key is the ASCII text 12345678901234567890, here in base32.
+    const key = [...Buffer.from("12345678901234567890")].map((byte) => byte.toString(2).padStart(8, "0")).join("").match(/.{5}/g)!.map((bits) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[parseInt(bits, 2)]).join("");
+    expect(totp(key, 59_000)).toBe("287082");
+    expect(totp(key, 1_111_111_109_000)).toBe("081804");
   });
 });

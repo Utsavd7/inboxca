@@ -9,7 +9,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { Suspense, ViewTransition } from "react";
-import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, findDocuments, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
+import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
 import { addDays, dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
 import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
 import { checklists, kindChecklist, workOfService, type DocumentRequest } from "@/src/lib/checklists";
@@ -26,6 +26,7 @@ import { mailLive } from "@/src/lib/mail-live";
 import { currentMember } from "@/src/lib/member";
 import { paperOrigins } from "@/src/lib/paper-origin";
 import { personName } from "@/src/lib/roles";
+import { searchTokens, words } from "@/src/lib/search";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { labels, type Label } from "@/src/lib/triage";
 import { workspaceStore } from "@/src/lib/workspace";
@@ -127,14 +128,22 @@ export default async function Client({ params, searchParams }: { params: Promise
   const viewOnly = !!membership.viewOnlyUntil;
   const canFile = !viewOnly && membership.may("mark_filed", id);
   const doneIds = markedIds?.split(".").filter((taskId) => uuid.test(taskId)).slice(0, 100) ?? [];
-  // Everything the page reads goes at once. Lists that only one tab shows are read in full on
-  // that tab and only counted on the others; the live email subjects and the activity stream in
-  // below (Suspense), so the page shows without waiting for them.
-  const needFiles = tab === "documents" || tab === "returns" || panel === "activity";
+  // Everything the page reads goes at once. Lists that only one tab shows are read a page at a
+  // time on that tab and only counted on the others; the live email subjects and the activity
+  // stream in below (Suspense), so the page shows without waiting for them.
+  const files = tab === "documents";
   const listsMail = tab === "overview" || tab === "emails";
   const mailRange = tab === "emails" ? start : 0;
-  const fileQuery = supabase.from("documents").select("id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at, prepared, email_event_id, registration_id", { count: "exact", head: !needFiles }).eq("client_id", id);
-  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: allFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, found] = await Promise.all([
+  // Papers 50 at a time with their true count; a search keeps only the files whose words
+  // include every word typed. The paper open in a panel, or just sent or changed, and the
+  // owner's removed papers are read by themselves.
+  const fileColumns = "id, name, document_type, work_type, period_key, status, share_policy, sha256, received_at, prepared, email_event_id, registration_id";
+  const fileQuery = supabase.from("documents").select(fileColumns, { count: "exact", head: !files }).eq("firm_id", firm).eq("client_id", id).not("status", "in", "(deleted,earlier)");
+  const typed = files && find?.trim() ? words(find.slice(0, 200), 8) : [];
+  const tokens = typed.length ? await searchTokens(firm, typed) : null;
+  const owner = membership.role === "owner";
+  const namedIds = [edit ?? send, shared, renamed ?? saved ?? removed ?? restored].filter((file): file is string => uuid.test(file ?? ""));
+  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: sheets }] = await Promise.all([
     supabase
       .from("clients")
       .select(
@@ -147,7 +156,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on, client_kinds").eq("period_key", "").order("code"),
     supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact", head: sub !== "returns"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
-    needFiles ? fileQuery.order("received_at", { ascending: false }).limit(500) : fileQuery.not("status", "in", "(deleted,earlier)"),
+    files ? (tokens ? fileQuery.contains("search_tokens", tokens) : fileQuery).order("received_at", { ascending: false }).order("id", { ascending: false }).range(start, start + 49) : fileQuery,
     supabase.from("requests").select("id, status, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
     supabase.from("tasks").select("id,due_on,status,details",{count:"exact", head: tab !== "overview" && tab !== "notices"}).eq("firm_id",firm).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
     supabase.from("tasks").select("id, code, due_on",{count:"exact"}).eq("firm_id",firm).eq("kind","compliance").eq("client_id",id).neq("status","filed").lt("due_on",today).order("due_on").limit(3),
@@ -165,8 +174,9 @@ export default async function Client({ params, searchParams }: { params: Promise
     tab === "returns" && taskChanges[marked ?? ""] && doneIds.length ? supabase.from("tasks").select("id, code, period_key").eq("firm_id", firm).eq("client_id", id).in("id", doneIds) : Promise.resolve({ data: null }),
     // Asking is for the month of the next return due for this client, else last month.
     ask ? supabase.from("tasks").select("period_key").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(12) : Promise.resolve({ data: [] }),
-    // A search keeps only the files whose words include every word typed.
-    tab === "documents" && find?.trim() ? findDocuments(find, id) : Promise.resolve(null),
+    files && (namedIds.length || owner) ? supabase.from("documents").select(fileColumns).eq("firm_id", firm).eq("client_id", id).or([...(namedIds.length ? [`id.in.(${namedIds})`] : []), ...(owner ? ["status.eq.deleted"] : [])].join(",")).order("received_at", { ascending: false }) : Promise.resolve({ data: [] }),
+    // Whether Returns offers Figures: a GST spreadsheet or JSON file filed for this client.
+    tab === "returns" ? supabase.from("documents").select("id").eq("firm_id", firm).eq("client_id", id).eq("work_type", "gst").eq("status", "filed").filter("name", "imatch", "\\.(xlsx?|csv|json)$").limit(1) : Promise.resolve({ data: [] }),
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
@@ -202,10 +212,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   const confirmedBy = new Map([...confirmers(confirms ?? [])].map(([notice, by]) => [notice, personName(people?.find((person) => person.user_id === by)?.email)]));
   // The lists for the work this client's services need are ticked when asking for files.
   const usualWork = new Set(client.client_registrations.flatMap((registration) => (registration.services ?? []).map(workOfService)));
-  const matching = found ? new Set(found.map((file) => file.id)) : null;
-  const documents = (allFiles ?? []).filter((file) => file.status !== "deleted" && file.status !== "earlier" && (!matching || matching.has(file.id)));
-  const removedFiles = (allFiles ?? []).filter((file) => file.status === "deleted");
-  const owner = membership.role === "owner";
+  const documents = pageFiles ?? [];
+  const removedFiles = (namedFiles ?? []).filter((file) => file.status === "deleted");
+  const live = (fileId?: string) => (namedFiles ?? []).find((file) => file.id === fileId && file.status !== "deleted" && file.status !== "earlier");
   // Requests stay listed until every file the client sent has been checked.
   const asking = (asks ?? []).filter((request) => ((request.details as unknown as DocumentRequest).items ?? []).some((item) => !item.checked));
   const firmTypes = (membership.settings.document_types ?? []) as string[];
@@ -223,26 +232,34 @@ export default async function Client({ params, searchParams }: { params: Promise
         <input type="hidden" name="client" value={client.id} />
         <input type="hidden" name="right" value={right} />
         {documentId && <input type="hidden" name="document" value={documentId} />}
-        <Pending className="b b-secondary" aria-label={documentId ? `${label}: ${documents.find((file) => file.id === documentId)?.name}` : label}>
+        <Pending className="b b-secondary" aria-label={documentId ? `${label}: ${live(documentId)?.name}` : label}>
           {label}
         </Pending>
       </form>
     );
-  // A file waiting to be checked because the client already has it, or one like it.
+  // A file waiting to be checked because the client already has it, or one like it, on any page.
   const sameAs = (file: (typeof documents)[number]) => {
-    const twin = documents.find((other) => other.id !== file.id && other.sha256 === file.sha256);
+    const twin = twins?.find((other) => other.id !== file.id && other.sha256 === file.sha256);
     if (twin) return `Same file as ${twin.name}`;
-    const like = file.period_key && documents.find((other) => other.id !== file.id && other.document_type === file.document_type && other.period_key === file.period_key);
+    const like = file.period_key && twins?.find((other) => other.id !== file.id && other.document_type === file.document_type && other.period_key === file.period_key);
     return like ? `Same type and period as ${like.name}` : "";
   };
   // One paper's panel: correct it, send it, remove it. A send that failed comes back to it.
-  const paper = documents.find((file) => file.id === (edit ?? send));
-  // Where each listed paper and the open one came from, and when (src/lib/paper-origin.ts).
-  const listed = tab === "documents" ? [...documents.slice(start, start + 50), ...(paper ? [paper] : [])] : [];
-  const origins = await paperOrigins(supabase, firm, listed.map((file) => ({ ...file, client_id: id, clients: client })), paper?.id);
-  const earlier = (allFiles ?? []).filter((file) => paper && file.status === "earlier" && file.document_type === paper.document_type && file.period_key === paper.period_key && file.registration_id === paper.registration_id);
-  const noticeFile = (allFiles ?? []).find((file) => file.id === (renamed ?? saved ?? removed ?? restored));
-  const sharedFile = documents.find((file) => file.id === shared);
+  const paper = live(edit ?? send);
+  // Where each listed paper and the open one came from, and when (src/lib/paper-origin.ts);
+  // the papers like those waiting to be checked, and the open paper's earlier versions.
+  const listed = tab === "documents" ? [...documents, ...(paper ? [paper] : [])] : [];
+  const checking = documents.filter((file) => file.status === "to_check");
+  const periods = checking.flatMap((file) => (file.period_key ? [`"${file.period_key}"`] : []));
+  const versions = supabase.from("documents").select(fileColumns).eq("firm_id", firm).eq("client_id", id).eq("status", "earlier");
+  const [origins, { data: twins }, { data: earlierFiles }] = await Promise.all([
+    paperOrigins(supabase, firm, listed.map((file) => ({ ...file, client_id: id, clients: client })), paper?.id),
+    checking.length ? supabase.from("documents").select("id, name, sha256, document_type, period_key").eq("firm_id", firm).eq("client_id", id).not("status", "in", "(deleted,earlier)").or([`sha256.in.(${checking.map((file) => file.sha256)})`, ...(periods.length ? [`period_key.in.(${periods})`] : [])].join(",")) : Promise.resolve({ data: [] }),
+    paper ? (paper.registration_id ? versions.eq("registration_id", paper.registration_id) : versions.is("registration_id", null)).eq("document_type", paper.document_type).eq("period_key", paper.period_key).order("received_at", { ascending: false }) : Promise.resolve({ data: [] }),
+  ]);
+  const earlier = earlierFiles ?? [];
+  const noticeFile = (namedFiles ?? []).find((file) => file.id === (renamed ?? saved ?? removed ?? restored));
+  const sharedFile = live(shared);
   const receivers = contacts.filter((contact) => contact.can_receive_documents);
   // Who a filed paper can go to. Sending is its own step that names the paper and the address.
   const recipients = [...(email ? [{ value: "client", name: client.name, email }] : []), ...receivers.map((contact) => ({ value: contact.contact_id, name: contact.name, email: contact.email }))];
@@ -301,9 +318,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   );
   const askPeriod = due?.map((task) => task.period_key).find((key) => periodChoices(today).includes(key ?? "")) ?? periodChoices(today)[1];
   const openNotices = (notices ?? []).filter((notice) => ["upcoming", "in_progress"].includes(notice.status));
-  const showExtraction = !!drafts || !!pan || documents.some((file)=>file.work_type==="gst" && file.status==="filed" && /\.(xlsx?|csv|json)$/i.test(file.name));
+  const showExtraction = !!drafts || !!pan || !!sheets?.length;
   const showOutputs = !!draftForms?.some(row=>["GSTR1","GSTR3B","ITR"].includes(row.form_code)) || !!outputs;
-  const counts: Record<Main, number | undefined> = { overview: undefined, emails: mailCount ?? 0, documents: needFiles ? documents.length : fileCount ?? 0, returns: show === "filed" ? undefined : taskCount ?? 0, notices: noticeCount ?? 0 };
+  const counts: Record<Main, number | undefined> = { overview: undefined, emails: mailCount ?? 0, documents: fileCount ?? 0, returns: show === "filed" ? undefined : taskCount ?? 0, notices: noticeCount ?? 0 };
   const base = `/app/clients/${client.id}`;
   const here = `${base}${tab === "overview" ? "" : `?tab=${tab}`}`;
   // The Returns tab as it is, for the filing panel and each filing form to come back to.
@@ -694,7 +711,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                       </tr>
                     </thead>
                     <tbody className="stagger">
-                      {documents.slice(start, start + 50).map((document) => {
+                      {documents.map((document) => {
                         const twin = document.status === "to_check" && sameAs(document);
                         const path = folderFor(order, client.name, { work: document.work_type as WorkType, period: document.period_key, receivedAt: document.received_at, toCheck: document.status === "to_check" }).join(" / ");
                         return (
@@ -747,7 +764,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 </Empty>
               )}
             </section>
-            {documents.length > 50 && pager(documents.length, documents.slice(start, start + 50).length, "Papers", "documents")}
+            {(fileCount ?? 0) > 50 && pager(fileCount ?? 0, documents.length, "Papers", "documents")}
             {owner && !!removedFiles.length && (
               <Card id="removed" title="Removed in the last 30 days" Icon={Trash2} count={removedFiles.length}>
                 <ul className="app-rows">
@@ -1108,7 +1125,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         <SidePanel key="client-activity" id="client-activity" title="Activity" close={base}>
           <p className="hint">The latest 50 changes for this client.</p>
           <Suspense fallback={<SkeletonRows rows={6} />}>
-            <Activity client={id} people={people ?? []} undoable={manage && !viewOnly ? documents.filter((file) => !file.prepared).map((file) => file.id) : []} />
+            <Activity client={id} people={people ?? []} undo={manage && !viewOnly} />
           </Suspense>
         </SidePanel>
       )}
@@ -1421,11 +1438,15 @@ async function MailRows({ firm, clientName, mails, className }: { firm: string; 
 
 // A client's latest 50 changes as a timeline, each kind with its own icon. It streams in after
 // the panel opens.
-async function Activity({ client, people, undoable }: { client: string; people: { user_id: string; email: string }[]; undoable: string[] }) {
+async function Activity({ client, people, undo }: { client: string; people: { user_id: string; email: string }[]; undo: boolean }) {
   const { supabase } = await currentMember();
   const activity = await supabase.rpc("client_activity", { target_client: client });
   if (activity.error) throw new Error("Client activity could not be read");
   if (!activity.data.length) return <p className="hint">No changes recorded yet.</p>;
+  // A rename can be put back while its paper is still in use and was not made by InboxCA.
+  const renamed = [...new Set(activity.data.flatMap((entry) => (entry.document_id ? [entry.document_id] : [])))];
+  const { data: files } = undo && renamed.length ? await supabase.from("documents").select("id").eq("client_id", client).in("id", renamed).is("prepared", null).not("status", "in", "(deleted,earlier)") : { data: [] };
+  const undoable = files?.map((file) => file.id) ?? [];
   return (
     <ol className="timeline stagger">
       {activity.data.map((entry, index) => {

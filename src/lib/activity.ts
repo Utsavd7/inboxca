@@ -35,7 +35,8 @@ export const activityDetails: Record<string, readonly string[]> = {
     .flatMap((thing) => [[`${thing}.added`, ["kind"]], [`${thing}.removed`, ["kind"]], [`${thing}.changed`, ["changed"]]])),
   "firm.signed_up": ["accepted"], "firm.changed": ["name", "settings"], "firm.downloaded": [], "firm.closed": ["reason"], "firm.data_deleted": [],
   "member.invited": ["role"], "member.joined": [], "member.role_changed": ["role"], "member.removed": [], "member.invite_withdrawn": [], "member.restored": [],
-  "session.ended_other": ["ended"], "recovery.codes_made": [], "recovery.used": ["left"], "hours.extended": ["until"],
+  "session.ended_other": ["ended"], "recovery.codes_made": [], "recovery.used": ["left", "passkeys"], "hours.extended": ["until"],
+  "passkey.added": [], "passkey.removed": ["removed"], "passkey.copied": [], "access.exception_removed": ["rule", "role"],
   "admin.passkey_added": [], "admin.passkey_copied": [], "admin.passkey_used": [], "admin.passkeys_removed": ["removed"], "admin.job_retried": ["job"],
   "admin.incident_posted": ["parts", "level"], "admin.incident_updated": [], "admin.incident_closed": [], "admin.incident_emailed": ["firms"],
   "admin.rule_verified": ["code", "period", "by"], "admin.extension_added": ["code", "period", "on"], "admin.office_thresholds": ["taps", "days"], "admin.change_reviewed": ["source", "at"], "admin.template_added": ["form", "version", "from", "sha256"],
@@ -52,8 +53,9 @@ export const activityDetails: Record<string, readonly string[]> = {
   "mailbox.token_read": ["provider", "why"], "mailbox.token_saved": ["provider", "why"], "mailbox.token_deleted": ["provider", "revoked"], "drive.consent": ["provider", "level", "terms_version"], "drive.folder_order": ["order", "naming"],
   // What InboxCA set up in a newly connected drive (5.5.1), and the re-seal after a key rotation (8.4).
   "drive.setup": ["reached", "clients", "test_file", "shared", "free_bytes", "notices"], "keys.resealed": ["values", "key_number"],
-  // The owner signed in to the same drive again, and the jobs queued again once it was back.
-  "drive.reconnected": ["provider"], "drive.back": ["jobs"],
+  // The owner signed in to the same drive again, and the jobs queued again once it was back;
+  // OneDrive's renewed refresh token saved (never the token itself).
+  "drive.reconnected": ["provider"], "drive.back": ["jobs"], "drive.token_saved": ["provider"],
   "document.uploaded": ["from"], "document.filed": ["from"], "document.added": ["form", "kind"], "document.renamed": ["from", "to"], "document.removed": ["from"], "document.restored": ["from"],
   "document.viewed": ["thumb"], "document.downloaded": ["stamped", "limit", "sheet", "permission", "zip"], "document.downloaded_by_client": [], "document.sharing": ["policy"],
   "document.shared": ["share", "reply"], "document.missing": [], "document.safety_copy": [], "document.safety_restored": [],

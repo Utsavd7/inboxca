@@ -1,8 +1,9 @@
 import {expect,it} from "vitest";
 import {readSheet} from "@/src/lib/sheet";
-import {countsOf,extractPurchases,invoiceKey,matchBills,matchLine,suggestColumns,totalOf,type Bill,type PurchaseMapping} from "@/src/lib/purchase-register";
+import {changedKey,changeOf,changeState,changeTotal,countsOf,extractPurchases,invoiceKey,matchBills,matchChanged,matchLine,suggestColumns,totalOf,type Bill,type Changed,type PurchaseMapping} from "@/src/lib/purchase-register";
+import {gstMatchWorkItems} from "@/src/lib/work/gst-match";
 import {gstr2bBills} from "../../worker/portal";
-import {inventedGstin,statement,supplierInvoices,supplierNotes} from "../fixtures/portal";
+import {inventedGstin,statement,supplierChangedNotes,supplierChanges,supplierInvoices,supplierNotes} from "../fixtures/portal";
 
 // Invented suppliers and bills only.
 const one=inventedGstin("ZZZPZ0002Z"),two=inventedGstin("ZZZPZ0003Z");
@@ -63,7 +64,7 @@ it("matches within one rupee on every amount, adds up a bill on several rows, an
   expect(totalOf(result.matched,"books")).toEqual({taxable:160000,igst:0,cgst:14400,sgst:14400,cess:0});
   expect(totalOf(result.extra,"portal").taxable).toBe(10000);
   expect(matchBills([book("INV/5",100000,9000,9000)],[{...portal[0],number:"INV/5",amounts:amounts(100101,9000,9000)}]).differ).toHaveLength(1);
-  expect(countsOf(result)).toEqual({matched:3,missing:1,extra:1,differ:1});
+  expect(countsOf(result)).toEqual({matched:3,missing:1,extra:1,differ:1,changed:0});
   expect(matchLine(countsOf(result))).toBe("3 matched, 1 not in GSTR-2B: ask the supplier, 1 in GSTR-2B but not in the books, 1 amount differs");
   expect(matchLine({matched:12,missing:3,extra:0,differ:2})).toBe("12 matched, 3 not in GSTR-2B: ask the supplier, 2 amounts differ");
   expect(result.skipped).toBe(2);
@@ -91,4 +92,66 @@ it("reads GSTR-2B invoices and notes through the pinned official schema, a credi
   // Not the official layout, or not a GSTR-2B: nothing is read.
   expect(gstr2bBills(Buffer.from(JSON.stringify({...input,data:{...input.data,rtnprd:"132026"}})))).toBeNull();
   expect(gstr2bBills(Buffer.from("not json"))).toBeNull();
+});
+
+it("reads the invoices and notes a supplier corrected, each with the original's number and date",()=>{
+  const input=statement(inventedGstin(),{
+    b2b:[supplierInvoices(one,[{number:"INV/009",dt:"02-10-2026",txval:100,cgst:9,sgst:9}])],
+    b2ba:[supplierChanges(one,[{number:"INV/001A",dt:"05-09-2026",txval:1100,cgst:99,sgst:99,was:{number:"INV/001",dt:"05-09-2026"}}])],
+    cdnra:[supplierChangedNotes(two,[{number:"CN/7",dt:"20-09-2026",txval:80,cgst:7.2,sgst:7.2,was:{number:"CN/7",dt:"20-09-2026"}}])],
+  });
+  const read=gstr2bBills(Buffer.from(JSON.stringify(input)))!;
+  expect(read.bills.map((bill)=>bill.number)).toEqual(["INV/009"]);
+  expect(read.changed).toEqual([
+    {gstin:one,name:"INVENTED SUPPLIER",number:"INV/001A",date:"05-09-2026",amounts:{taxable:110000,igst:0,cgst:9900,sgst:9900,cess:0},was:{number:"INV/001",date:"05-09-2026"}},
+    {gstin:two,name:"INVENTED SUPPLIER",number:"CN/7",date:"20-09-2026",note:"C",amounts:{taxable:-8000,igst:0,cgst:-720,sgst:-720,cess:0},was:{number:"CN/7",date:"20-09-2026"}},
+  ]);
+  // A record marked as an ITC reversal amendment is not read.
+  const corrected=supplierChanges(one,[{number:"INV/001A",dt:"05-09-2026",txval:1100,was:{number:"INV/001",dt:"05-09-2026"}}]);
+  expect(gstr2bBills(Buffer.from(JSON.stringify(statement(inventedGstin(),{b2ba:[{...corrected,inv:[{...corrected.inv[0],isITCRevAmd:"Y"}]}]}))))!.changed).toEqual([]);
+});
+
+it("lists what each correction changes this month, by GSTN's rule, and what the books still show",()=>{
+  const was=(number:string,date="2026-08-05")=>({number,date});
+  const changed:Changed[]=[
+    // Up: 1,000 and 180 tax corrected to 1,100 and 198; the books still show the old amount.
+    {gstin:one,number:"INV/1",date:"2026-08-05",amounts:amounts(110000,9900,9900),was:was("INV/1")},
+    // Down, under a new number: 500 and 90 tax to 400 and 72; the books show the corrected one.
+    {gstin:one,number:"INV/2R",date:"2026-08-06",amounts:amounts(40000,3600,3600),was:was("INV/2")},
+    // A credit note of 100 and 18 tax corrected to 80 and 14.40, in August's books.
+    {gstin:two,number:"CN/7",date:"2026-08-20",note:"C",amounts:amounts(-8000,-720,-720),was:was("CN/7")},
+    // In an earlier GSTR-2B but not in the books.
+    {gstin:two,number:"T-9",date:"2026-08-08",amounts:amounts(12000,1080,1080),was:was("T-9")},
+    // No earlier GSTR-2B has the original, and the books show another amount.
+    {gstin:two,number:"T-12",date:"2026-08-09",amounts:amounts(6000,540,540),was:was("T-12")},
+  ];
+  const august=(value:ReturnType<typeof amounts>)=>({amounts:value,period:"2026-08"});
+  const originals=new Map([[changedKey(changed[0],"INV/1"),august(amounts(100000,9000,9000))],[changedKey(changed[1],"INV/2"),august(amounts(50000,4500,4500))],
+    [changedKey(changed[2],"CN/7"),august(amounts(-10000,-900,-900))],[changedKey(changed[3],"T-9"),august(amounts(10000,900,900))]]);
+  // A note's original is a note, never an invoice of the same number.
+  expect(changedKey(changed[2],"CN/7")).not.toBe(changedKey({gstin:two},"CN/7"));
+  const books=[book("inv 1",100000,9000,9000,3),book("INV/2R",40000,3600,3600,4),book("T-12",5000,450,450,5,two)];
+  const result=matchChanged(matchBills(books,[]),changed,originals,new Map([[invoiceKey(two,"CN/7"),{...august(amounts(10000,900,900)),rows:[7]}]]));
+  // Bills the correction explains are no longer "not in GSTR-2B".
+  expect(result.missing).toEqual([]);
+  expect(result.changed.map((entry)=>[entry.number,changeState(entry),changeOf(entry)])).toEqual([
+    ["INV/1","old",amounts(10000,900,900)],
+    ["INV/2R","done",amounts(-10000,-900,-900)],
+    ["CN/7","old",amounts(2000,180,180)],
+    ["T-9","absent",amounts(2000,180,180)],
+    ["T-12","other",undefined],
+  ]);
+  expect(result.changed[2]).toMatchObject({books:amounts(10000,900,900),booked:"2026-08",rows:[7],was:{number:"CN/7",period:"2026-08"}});
+  expect(result.changed[0]).toMatchObject({rows:[3],was:{number:"INV/1",date:"2026-08-05",period:"2026-08",amounts:amounts(100000,9000,9000)}});
+  expect(result.changed[4].was).toEqual(was("T-12"));
+  // Corrected less original, a credit note's below zero, and only those whose original is known.
+  expect(changeTotal(result.changed)).toEqual(amounts(4000,360,360));
+  expect(countsOf(result)).toEqual({matched:0,missing:0,extra:0,differ:0,changed:4});
+  expect(matchLine(countsOf(result))).toBe("0 matched, 4 corrected by the supplier: update the books");
+});
+
+it("puts the corrections the books do not show yet on Today",async()=>{
+  const row={register_id:"register",client_id:"client",client_name:"Invented Traders",period_key:"2026-10",due_on:"2099-11-20",counts:{matched:1,missing:1,extra:0,differ:0,changed:2}};
+  const context={supabase:{rpc:async()=>({data:[row]})},membership:{firmId:"firm"}} as unknown as Parameters<typeof gstMatchWorkItems>[0];
+  expect((await gstMatchWorkItems(context))[0].why).toBe("Oct 2026: 1 bill not in GSTR-2B, 2 bills corrected by the supplier");
 });

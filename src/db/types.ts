@@ -502,6 +502,19 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"passkeys": {
+                  Row: {
+                    "counter": number,"factor_id": string,"id": string,"name": string,"public_key": string,"secret": string,"user_id": string
+                  }
+                  Insert: {
+                    "counter"?: number,"factor_id": string,"id": string,"name": string,"public_key": string,"secret": string,"user_id": string
+                  }
+                  Update: {
+                    "counter"?: number,"factor_id"?: string,"id"?: string,"name"?: string,"public_key"?: string,"secret"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"payments": {
                   Row: {
                     "amount_paise": number,"created_at": string,"details": NonNullable<Json>,"doc": Json | null,"due_at": string | null,"fee_paise": number | null,"fee_tax_paise": number | null,"firm_id": string,"gst_paise": number,"id": string,"kind": string,"provider_ref": string | null,"reason": string | null,"refund_of": string | null,"settled_at": string | null,"status": string

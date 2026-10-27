@@ -2,6 +2,7 @@ import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { defineConfig } from "@playwright/test";
 import { fakeKeyValues } from "./tests/fake-mail";
+import { fakeOneDriveKeys } from "./tests/fake-onedrive";
 // PORT lets the checks run beside a server that is already using 3000.
 const origin = `http://127.0.0.1:${process.env.PORT || 3000}`;
 // The job worker's secret for the test server only; never a real one.
@@ -24,6 +25,9 @@ export const DROPBOX_TEST_SECRET = "invented-dropbox-app-secret";
 // The fake Dropbox (drive-reconnect.spec.ts starts it) that Connect and Reconnect sign in to,
 // with an invented app key.
 export const DROPBOX_TEST_URL = `http://127.0.0.1:${Number(process.env.PORT || 3000) + 4}`;
+// The fake Microsoft sign in and OneDrive (tests/fake-onedrive.ts, callbacks.spec.ts starts it),
+// with invented app keys. PORT+5 is social-sign-in.spec.ts's.
+export const ONEDRIVE_TEST_URL = `http://127.0.0.1:${Number(process.env.PORT || 3000) + 6}`;
 // Invented client IDs, so the test server shows Continue with Google and Microsoft; the tests
 // answer Supabase's sign in themselves and never reach either (social-sign-in.spec.ts).
 export const SIGN_IN_IDS = { SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: "invented-google-sign-in", SUPABASE_AUTH_EXTERNAL_AZURE_CLIENT_ID: "invented-microsoft-sign-in" };
@@ -57,6 +61,6 @@ export default defineConfig({
     command: "npm run start",
     url: origin,
     reuseExistingServer: !process.env.CI,
-    env: { FILE_WORKER_SECRET, FILE_WORKER_URL, JOB_WORKER_SECRET: TEST_WORKER_SECRET, MAIL_ALLOW_LOCAL: "1", REMINDERS_ANY_HOUR: "1", APP_BASE_URL: origin, OFFICE_IP_HEADER: "x-test-ip", COUNTRY_HEADER: "x-test-country", DRIVE_LOCAL_DIR: TEST_DRIVE, WORKSPACE_LOCAL_DIR: TEST_WORKSPACE, JOB_FIRMS_TEST: TEST_RUN, VAPID_PUBLIC_KEY: pushPublic, VAPID_PRIVATE_KEY: push.d!, SYSTEM_MAIL_URL: "smtp://127.0.0.1:3025/?ignoreTLS=true", EMAIL_FROM_DOMAIN: "invented.test", MAIL_API_TEST_URL: MAIL_API_URL, DROPBOX_APP_SECRET: DROPBOX_TEST_SECRET, DROPBOX_APP_KEY: "invented-dropbox-app-key", DROPBOX_TEST_URL, ...fakeKeyValues, ...ITR, ...SIGN_IN_IDS, ...CASHFREE_KEYS, CASHFREE_ENV: "sandbox", CASHFREE_TEST_URL },
+    env: { FILE_WORKER_SECRET, FILE_WORKER_URL, JOB_WORKER_SECRET: TEST_WORKER_SECRET, MAIL_ALLOW_LOCAL: "1", REMINDERS_ANY_HOUR: "1", APP_BASE_URL: origin, OFFICE_IP_HEADER: "x-test-ip", COUNTRY_HEADER: "x-test-country", DRIVE_LOCAL_DIR: TEST_DRIVE, WORKSPACE_LOCAL_DIR: TEST_WORKSPACE, JOB_FIRMS_TEST: TEST_RUN, VAPID_PUBLIC_KEY: pushPublic, VAPID_PRIVATE_KEY: push.d!, SYSTEM_MAIL_URL: "smtp://127.0.0.1:3025/?ignoreTLS=true", EMAIL_FROM_DOMAIN: "invented.test", MAIL_API_TEST_URL: MAIL_API_URL, DROPBOX_APP_SECRET: DROPBOX_TEST_SECRET, DROPBOX_APP_KEY: "invented-dropbox-app-key", DROPBOX_TEST_URL, ONEDRIVE_TEST_URL, ...fakeOneDriveKeys, ...fakeKeyValues, ...ITR, ...SIGN_IN_IDS, ...CASHFREE_KEYS, CASHFREE_ENV: "sandbox", CASHFREE_TEST_URL },
   }],
 });

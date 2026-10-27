@@ -17,11 +17,14 @@ const heads=["taxable","igst","cgst","sgst","cess"] as const;
 export const amountsSchema=z.object({taxable:z.number().int(),igst:z.number().int(),cgst:z.number().int(),sgst:z.number().int(),cess:z.number().int()});
 export type Amounts=z.infer<typeof amountsSchema>;
 export type Bill={gstin:string;number:string;date:string;amounts:Amounts;row?:number;name?:string;note?:"C"|"D"};
-export const entrySchema=z.object({gstin:z.string().max(15),number:z.string().max(40),date:z.string().max(20),name:z.string().max(100).optional(),note:z.enum(["C","D"]).optional(),books:amountsSchema.optional(),portal:amountsSchema.optional(),rows:z.array(z.number().int()).max(1000).optional(),times:z.number().int().optional()});
+// A bill or note the supplier corrected also keeps the original's number and date, the month and
+// amounts of the earlier GSTR-2B it was in, and the month of the earlier books that have it.
+const wasSchema=z.object({number:z.string().max(40),date:z.string().max(20),period:z.string().max(7).optional(),amounts:amountsSchema.optional()});
+export const entrySchema=z.object({gstin:z.string().max(15),number:z.string().max(40),date:z.string().max(20),name:z.string().max(100).optional(),note:z.enum(["C","D"]).optional(),books:amountsSchema.optional(),portal:amountsSchema.optional(),rows:z.array(z.number().int()).max(1000).optional(),times:z.number().int().optional(),was:wasSchema.optional(),booked:z.string().max(7).optional()});
 export type Entry=z.infer<typeof entrySchema>;
-export const matchSchema=z.object({matched:z.array(entrySchema),missing:z.array(entrySchema),extra:z.array(entrySchema),differ:z.array(entrySchema),skipped:z.number().int().min(0)});
+export const matchSchema=z.object({matched:z.array(entrySchema),missing:z.array(entrySchema),extra:z.array(entrySchema),differ:z.array(entrySchema),changed:z.array(entrySchema).default([]),skipped:z.number().int().min(0)});
 export type Match=z.infer<typeof matchSchema>;
-export type Counts={matched:number;missing:number;extra:number;differ:number};
+export type Counts={matched:number;missing:number;extra:number;differ:number;changed?:number};
 
 // A reason a person can fix, as a short code the page turns into words.
 export class MatchProblem extends Error {code:string;constructor(code:string) {super(code);this.code=code;}}
@@ -78,7 +81,7 @@ function grouped(bills:Bill[]) {
   return map;
 }
 export function matchBills(books:Bill[],portal:Bill[],skipped=0):Match {
-  const ours=grouped(books),theirs=grouped(portal),result:Match={matched:[],missing:[],extra:[],differ:[],skipped};
+  const ours=grouped(books),theirs=grouped(portal),result:Match={matched:[],missing:[],extra:[],differ:[],changed:[],skipped};
   const listed=(from:{bill:Bill;times:number})=>({...(from.bill.name && {name:from.bill.name}),...(from.bill.note && {note:from.bill.note}),...(from.times>1 && {times:from.times})});
   for(const [key,book] of ours) {
     const statement=theirs.get(key);
@@ -89,7 +92,34 @@ export function matchBills(books:Bill[],portal:Bill[],skipped=0):Match {
   return result;
 }
 
-export const countsOf=(match:Match):Counts=>({matched:match.matched.length,missing:match.missing.length,extra:match.extra.length,differ:match.differ.length});
+// Bills and notes the supplier corrected (GSTR-2B b2ba and cdnra), with the original's number and
+// date. GSTN's help for GSTR-3B Table 4 (tutorial.gst.gov.in/contextualhelp/3BV1/
+// Help_Text_table4.htm, read 27 Oct 2026) counts B2BA and CDNRA with the note "In case of
+// amendments only differential amount (Amended – Original) are considered" and "In case of
+// debit/credit notes, only net amount is considered (Debit notes – credit notes)". So each one's
+// change this month is the corrected amounts less the original's, as the earlier GSTR-2B listed
+// it (`originals`, by changedKey), a credit note's below zero. The books are this register's
+// bills not in GSTR-2B, then earlier registers' (`earlier`, by invoiceKey), by either number.
+export type Changed=Bill&{was:{number:string;date:string}};
+export type Found={amounts:Amounts;period:string;rows?:number[]};
+export const changedKey=(bill:{gstin:string;note?:string},number:string)=>`${bill.note ? "note" : "bill"}|${invoiceKey(bill.gstin,number)}`;
+export function matchChanged(result:Match,changed:Changed[],originals:Map<string,Found>,earlier=new Map<string,Found>()) {
+  for(const bill of changed) {
+    const keys=[invoiceKey(bill.gstin,bill.was.number),invoiceKey(bill.gstin,bill.number)],original=originals.get(changedKey(bill,bill.was.number));
+    const at=result.missing.findIndex((entry)=>keys.includes(invoiceKey(entry.gstin,entry.number)));
+    const books=at<0 ? undefined : result.missing.splice(at,1)[0],before=books ? undefined : earlier.get(keys[0]) ?? earlier.get(keys[1]);
+    result.changed.push({gstin:bill.gstin,number:bill.number,date:bill.date,...(bill.name && {name:bill.name}),...(bill.note && {note:bill.note}),portal:bill.amounts,
+      was:{...bill.was,...(original && {period:original.period,amounts:original.amounts})},...(books ? {books:books.books,rows:books.rows} : before && {books:before.amounts,rows:before.rows,booked:before.period})});
+  }
+  return result;
+}
+// What the books show for a corrected one: the corrected amounts, still the original's, another
+// amount, or nothing. Its change this month, when the original is known.
+export const changeState=(entry:Entry)=>!entry.books ? "absent" : agrees(entry.books,entry.portal ?? zero) ? "done" : entry.was?.amounts && agrees(entry.books,entry.was.amounts) ? "old" : "other";
+export const changeOf=(entry:Entry)=>entry.was?.amounts && Object.fromEntries(heads.map((head)=>[head,(entry.portal ?? zero)[head]-entry.was!.amounts![head]])) as Amounts;
+export const changeTotal=(entries:Entry[])=>entries.reduce((sum,entry)=>add(sum,changeOf(entry) ?? zero),zero);
+
+export const countsOf=(match:Match):Counts=>({matched:match.matched.length,missing:match.missing.length,extra:match.extra.length,differ:match.differ.length,changed:match.changed.filter((entry)=>changeState(entry)!=="done").length});
 export const totalOf=(entries:Entry[],side:"books"|"portal")=>entries.reduce((sum,entry)=>entry[side] ? add(sum,entry[side]!) : sum,zero);
 export const taxOf=(amounts:Amounts)=>amounts.igst+amounts.cgst+amounts.sgst+amounts.cess;
 export const rupees=(paise:number)=>(paise/100).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -97,5 +127,5 @@ export const rupees=(paise:number)=>(paise/100).toLocaleString("en-IN",{minimumF
 // "12 matched, 3 not in GSTR-2B: ask the supplier, 1 amount differs".
 export function matchLine(counts:Counts) {
   return [`${counts.matched} matched`,counts.missing && `${counts.missing} not in GSTR-2B: ask the supplier`,counts.extra && `${counts.extra} in GSTR-2B but not in the books`,
-    counts.differ && `${counts.differ} ${counts.differ===1 ? "amount differs" : "amounts differ"}`].filter(Boolean).join(", ");
+    counts.differ && `${counts.differ} ${counts.differ===1 ? "amount differs" : "amounts differ"}`,counts.changed && `${counts.changed} corrected by the supplier: update the books`].filter(Boolean).join(", ");
 }

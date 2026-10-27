@@ -5,10 +5,10 @@ import {periodLabel} from "./calendar";
 export type Work={stage:string;open:number|null;missing:string|null;form?:string|null};
 export type Pin=Work & {kind:string;task:string;form:string|null;client:string;client_name:string;code:string;period_key:string;due_on:string};
 
-// The return a calendar task is, and the ones Fill makes (an ITR needs its details filled on
-// its own page first).
+// The return a calendar task is, and the ones Fill makes (an ITR in the form chosen on its own
+// page).
 export const returnOf=(code:string|null)=>/^GSTR1_/.test(code ?? "") ? "GSTR-1" : /^GSTR3B_/.test(code ?? "") ? "GSTR-3B" : /^ITR_/.test(code ?? "") ? "ITR" : null;
-export const fills=(code:string|null)=>/^GSTR(1|3B)_/.test(code ?? "");
+export const fills=(code:string|null)=>/^(GSTR1|GSTR3B|ITR)_/.test(code ?? "");
 export const returnPeriod=(code:string,period:string)=>periodLabel(/_Q$/.test(code) ? "quarterly" : /^ITR_/.test(code) ? "yearly" : "monthly",period);
 // Fill is offered while a return has figures but no draft made from them.
 export const fillable=(work?:Work)=>!!work && ["figures","checked"].includes(work.stage) && !work.missing;
@@ -33,6 +33,7 @@ export function notReady(work:Work & {form:string|null},drafts:{wrong:number;nam
   if(work.stage==="filed") return "This return is filed already.";
   if(work.stage==="rejected") return "This draft was sent back. Correct the figures first.";
   if(work.stage==="figures" && work.form) return "Check the figures of the corrected file first.";
+  if(work.missing==="return") return "Start this return on its income tax page first, so InboxCA knows its form.";
   if(!drafts.length || work.missing==="sales") return `Add the sales register for ${period} first.`;
   if(work.missing==="credit") return `Add the GSTR-2B for ${period} first.`;
   const wrong=drafts.filter(draft=>draft.wrong),one=wrong.length===1 && wrong[0].wrong===1;
