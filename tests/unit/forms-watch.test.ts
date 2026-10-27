@@ -154,4 +154,11 @@ it("keeps a same layout ITR schema of a new version under its own link", async (
   watch = await checkSources(watch, day(1), fetcher, [downloads], templates, store);
   expect(watch.changes).toMatchObject([{ compared: [{ file: "ITR-1_2026_Main_V1.3.json", with: "1.1", same: true, live: true, template: { form_code: "ITR1", version: "1.3", source: { file: "itr/ITR-1_2026_Main_V1.3.json", url: "https://official.invalid/f/ITR-1_2026_Main_V1.3.json", sha256: sha256(schema) } } }] }]);
   expect(kept.map(sha256)).toEqual([sha256(schema)]);
+  // One whose name is for another year never goes live, and is marked for the admin to confirm.
+  pages.set("https://official.invalid/f/ITR-1_2027_Main_V1.4.json", new Uint8Array(schema));
+  pages.set(downloads.url, '<a href="/f/ITR-1_2026_Main_V1.3.json">Schema</a><a href="/f/ITR-1_2027_Main_V1.4.json">Schema</a>');
+  watch = await checkSources(watch, day(2), fetcher, [downloads], templates, store);
+  const [other] = (watch.changes.at(-1) as { compared: { live?: true; renamed?: true; template?: { version: string } }[] }).compared;
+  expect(other).toMatchObject({ renamed: true, template: { version: "1.4" } });
+  expect(other.live).toBeUndefined();
 });

@@ -104,9 +104,11 @@ async function compareFile(compare: Compare, name: string, bytes: Buffer, templa
     if (compare.current || !/^\d+(\.\d+){0,3}$/.test(next) || sha(file) === current.sha256 || templates.some((template) => template.form_code === form && template.version === next)) return { file: found, with: current.version, same: true };
     await store.keep(file);
     // A newer version named as the one it matches but for its number (so for the same year) goes
-    // live by itself for that one's periods (D42, forms_go_live).
-    const live = version(current.version, next) > 0 && basename(current.file).replace(`V${current.version}.`, `V${next}.`) === found;
-    return { file: found, with: current.version, same: true, ...(live ? { live } : {}), template: { form_code: form, version: next, source: { file: `${dirname(current.file).replace(/-v[\d.]+$/, `-v${next}`)}/${found}`, url, sha256: sha(file) } } };
+    // live by itself for that one's periods (D42, forms_go_live). One named otherwise (an ITR
+    // schema for another year) is marked, so Orelu's admin confirms the year before using it.
+    const named = basename(current.file).replace(`V${current.version}.`, `V${next}.`) === found;
+    const live = version(current.version, next) > 0 && named;
+    return { file: found, with: current.version, same: true, ...(live ? { live } : {}), ...(named ? {} : { renamed: true }), template: { form_code: form, version: next, source: { file: `${dirname(current.file).replace(/-v[\d.]+$/, `-v${next}`)}/${found}`, url, sha256: sha(file) } } };
   } catch (error) {
     return { file: name, with: current.version, error: error instanceof Error ? error.message.slice(0, 120) : "unreadable" };
   }

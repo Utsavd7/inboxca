@@ -55,10 +55,10 @@ export async function renewDrive(firmId: string, accountId: string, actor: strin
       .update({
         address_enc: await crypto.encrypt(firmId, `accounts/${drive.id}/address`, signedIn.address),
         credentials_enc: await crypto.encrypt(firmId, `accounts/${drive.id}/credentials`, signedIn.credentials),
-        settings: { ...settings, [key]: signedIn.account },
       })
       .eq("id", drive.id);
-    if (error) return { error: "drive_failed" };
+    const { error: kept } = await admin.rpc("merge_account_settings", { account_id: drive.id, patch: { [key]: signedIn.account } });
+    if (error || kept) return { error: "drive_failed" };
   }
   await admin.from("activity_log").insert({ firm_id: firmId, actor_id: actor, action: "drive.reconnected", entity_type: "account", entity_id: drive.id, details: { provider: drive.provider } });
   await admin.from("jobs").insert({ firm_id: firmId, kind: "drive_check", entity_type: "account", entity_id: drive.id, idempotency_key: `drive_check:${drive.id}:${randomUUID()}` });

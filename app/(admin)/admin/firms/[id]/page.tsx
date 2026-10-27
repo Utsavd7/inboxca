@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { Badge, PageHead, storage } from "@/app/(app)/app/ui";
+import { downloadUse } from "@/src/lib/download-use";
 import { askSupport, retryJob, startPilot } from "../../actions";
 import { currentAdmin, when } from "../../admin";
 import { Submit } from "../../parts";
@@ -18,7 +19,7 @@ export default async function AdminFirm({ params }: { params: Promise<{ id: stri
   const { supabase } = await currentAdmin();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
-  const [{ data, error }, { data: usage }] = await Promise.all([supabase.rpc("admin_firm", { target: id }), supabase.rpc("firm_usage", { target_firm: id })]);
+  const [{ data, error }, { data: usage }, downloads] = await Promise.all([supabase.rpc("admin_firm", { target: id }), supabase.rpc("firm_usage", { target_firm: id }), downloadUse(id).catch(() => null)]);
   if (error) throw new Error(`Admin firm failed: ${error.code}`);
   const firm = data as Firm | null;
   if (!firm) notFound();
@@ -58,6 +59,10 @@ export default async function AdminFirm({ params }: { params: Promise<{ id: stri
         <div className="admin-row">
           <strong className="grow">InboxCA storage</strong>
           <span className="sub">{year ? `${storage(year.workspace_bytes)}, about ${storage(year.workspace_by_march)} by March` : "Not counted"}</span>
+        </div>
+        <div className="admin-row">
+          <strong className="grow">Downloads this month</strong>
+          <span className="sub">{downloads ? `${downloads.used.toLocaleString("en-IN")}${Number.isFinite(downloads.most) ? ` of ${downloads.most.toLocaleString("en-IN")}` : ""}` : "Not counted"}</span>
         </div>
         <div className="admin-row">
           <strong className="grow">AI use</strong>
