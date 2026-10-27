@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/src/db/types";
-import { serverCrypto } from "./crypto";
+import { accountIdentity, serverCrypto } from "./crypto";
 import { DRIVE_TERMS_VERSION, localDrive, type Drive } from "./drive";
 import { dropboxAccessToken, dropboxDrive } from "./dropbox";
 import { log } from "./logger";
@@ -29,7 +29,8 @@ export async function saveDrive(supabase: SupabaseClient<Database>, firmId: stri
     terms_version: DRIVE_TERMS_VERSION,
   });
   if (!connected) return { error: "drive_taken" };
-  // Jobs are the server's own.
+  // Jobs and the identity hash are the server's own.
+  await supabaseAdmin().from("connected_accounts").update({ identity_hash: accountIdentity("drive", provider, address) }).eq("id", id);
   await supabaseAdmin().from("jobs").insert({ firm_id: firmId, kind: "drive_setup", entity_type: "account", entity_id: id, idempotency_key: `drive_setup:${id}` });
   return { id };
 }
@@ -54,6 +55,7 @@ export async function renewDrive(firmId: string, accountId: string, actor: strin
       .from("connected_accounts")
       .update({
         address_enc: await crypto.encrypt(firmId, `accounts/${drive.id}/address`, signedIn.address),
+        identity_hash: accountIdentity("drive", drive.provider, signedIn.address),
         credentials_enc: await crypto.encrypt(firmId, `accounts/${drive.id}/credentials`, signedIn.credentials),
       })
       .eq("id", drive.id);

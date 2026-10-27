@@ -11,7 +11,7 @@ for (const line of readFileSync(".env.local", "utf8").split("\n")) {
 const { default: pg } = await import("pg");
 const { default: nodemailer } = await import("nodemailer");
 const { ImapFlow } = await import("imapflow");
-const { serverCrypto } = await import("../src/lib/crypto");
+const { accountIdentity, serverCrypto } = await import("../src/lib/crypto");
 
 const OFFICE = "office@demo-firm.example";
 const local = { imap: { host: "127.0.0.1", port: 3143 }, smtp: { host: "127.0.0.1", port: 3025 } };
@@ -25,11 +25,12 @@ if (!account) throw new Error("No demo mailbox: run npm run demo:data first");
 // The local server makes a mailbox for any address it receives mail for, with the address as
 // its password.
 const crypto = serverCrypto();
-await db.query("update public.connected_accounts set address_enc = $2, credentials_enc = $3, settings = $4, status = 'connected' where id = $1", [
+await db.query("update public.connected_accounts set address_enc = $2, credentials_enc = $3, settings = $4, identity_hash = $5, status = 'connected' where id = $1", [
   account.id,
   await crypto.encrypt(firm, `accounts/${account.id}/address`, OFFICE),
   await crypto.encrypt(firm, `accounts/${account.id}/credentials`, JSON.stringify({ password: OFFICE })),
   local,
+  accountIdentity("mail", "imap", OFFICE),
 ]);
 
 // One invented email for each sorted email the demo data made, with the same Message-ID, so
