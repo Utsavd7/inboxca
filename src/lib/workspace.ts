@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { awsFetch, type AwsCredentials } from "./aws";
 import { serverCrypto, type firmCrypto } from "./crypto";
@@ -7,13 +7,16 @@ import { serverCrypto, type firmCrypto } from "./crypto";
 // Orelu's workspace store (PLAN.md D12, 5.5.1): one private bucket on Backblaze B2, reached
 // through its S3 API. Rules made once on the bucket keep its areas: tmp/ holds files in
 // transit and empties after 24 hours; safety/ holds the 30-day safety copies, each locked
-// against removal for 30 days, then removed. What goes in is sealed with the firm's key.
+// against removal for 30 days, then removed; text/ holds the text read from files until their
+// paper is removed (B2 then hides it, and the rule deletes what is hidden after a day). What
+// goes in is sealed with the firm's key.
 // Off until all four B2 settings are set; a folder on this computer in development and
 // tests (WORKSPACE_LOCAL_DIR), which does not lock.
 export interface WorkspaceStore {
   // lockedUntil: until then nobody can remove or replace it, InboxCA's own key included.
   put(key: string, body: Uint8Array, lockedUntil?: Date): Promise<void>;
   get(key: string): Promise<Uint8Array | null>;
+  remove(key: string): Promise<void>;
 }
 
 // B2's S3 API, path style. The region is in B2's endpoint (s3.<region>.backblazeb2.com). The
@@ -37,6 +40,10 @@ export function b2Store({ endpoint, bucket, credentials }: { endpoint: string; b
       if (!response.ok) throw new Error(`The workspace store did not read: ${response.status}`);
       return new Uint8Array(await response.arrayBuffer());
     },
+    async remove(key) {
+      const response = await awsFetch("DELETE", at(key), {}, "", scope);
+      if (!response.ok && response.status !== 404) throw new Error(`The workspace store did not remove: ${response.status}`);
+    },
   };
 }
 
@@ -55,6 +62,7 @@ export function localStore(root: string): WorkspaceStore {
       if ((error as { code?: string }).code === "ENOENT") return null;
       throw error;
     }),
+    remove: (key) => rm(file(key), { force: true }),
   };
 }
 
@@ -92,4 +100,26 @@ export async function keepSafetyCopy(firmId: string, documentId: string, read: (
 export async function openSafetyCopy(firmId: string, documentId: string, store = workspaceStore(), crypto?: ReturnType<typeof firmCrypto>) {
   const sealed = await store?.get(safetyKey(firmId, documentId));
   return sealed ? joined((crypto ?? serverCrypto()).decryptChunks(firmId, place(documentId), inChunks(sealed))) : null;
+}
+
+// The text read from a file (D29), kept so search and extraction reuse it instead of reading the
+// file again: sealed with the firm's key and bound to that one paper, never kept as plain text,
+// removed with the paper. What documents.details.text holds; null when the store is not set up.
+const textPlace = (documentId: string) => `documents/${documentId}/text`;
+const textKey = (details: unknown) => (details as { text?: { key?: string } } | null)?.text?.key;
+export async function keepText(firmId: string, documentId: string, text: string, store = workspaceStore(), crypto?: ReturnType<typeof firmCrypto>) {
+  if (!store) return null;
+  const key = `text/${firmId}/${documentId}`;
+  await store.put(key, await joined((crypto ?? serverCrypto()).encryptChunks(firmId, textPlace(documentId), inChunks(Buffer.from(text)))));
+  return { kind: "parsed_text", key };
+}
+
+export async function openText(firmId: string, documentId: string, details: unknown, store = workspaceStore(), crypto?: ReturnType<typeof firmCrypto>) {
+  const key = textKey(details), sealed = key && (await store?.get(key));
+  return sealed ? (await joined((crypto ?? serverCrypto()).decryptChunks(firmId, textPlace(documentId), inChunks(sealed)))).toString() : null;
+}
+
+export async function forgetText(details: unknown, store = workspaceStore()) {
+  const key = textKey(details);
+  if (key) await store?.remove(key);
 }

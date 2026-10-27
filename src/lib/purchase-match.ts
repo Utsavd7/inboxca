@@ -8,7 +8,7 @@ import {workerRead,workerSheet} from "./worker-read";
 type Register={id:string;firm_id:string;client_id:string;name:string;sha256:string;period_key:string;registration_id:string|null};
 const bill=z.object({gstin:z.string().length(15),name:z.string().max(100),number:z.string().min(1).max(16),date:z.string().max(10),note:z.enum(["C","D"]).optional(),amounts:amountsSchema});
 const bills=z.object({gstin:z.string().length(15),period:z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/),bills:z.array(bill).max(10000),changed:z.array(bill.extend({was:z.object({number:z.string().min(1).max(16),date:z.string().max(10)})})).max(10000).default([]),official:matchSchema.shape.official}).nullable();
-export const isRegister=(paper:{name:string})=>/\.(xlsx?|csv)$/i.test(paper.name);
+export const isRegister=(paper:{name:string})=>/\.(xlsx?|ods|csv)$/i.test(paper.name);
 
 export async function savedPurchaseMappings(firm:string,client:string) {
   const {data}=await supabaseAdmin().from("clients").select("purchase_mapping_enc").eq("firm_id",firm).eq("id",client).single();

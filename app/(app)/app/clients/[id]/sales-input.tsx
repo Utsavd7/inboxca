@@ -44,7 +44,7 @@ export async function SalesInput({clientId,source,section:asked,header:askedHead
   const {supabase,membership,userId}=await currentMember();
   if(!membership) return null;
   const {data:files}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,registration_id").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("work_type","gst").eq("status","filed").neq("document_type","Purchase bills").order("received_at",{ascending:false}).limit(100);
-  const registers=files?.filter((file)=>/\.(xlsx?|csv)$/i.test(file.name)) ?? [];
+  const registers=files?.filter((file)=>/\.(xlsx?|ods|csv)$/i.test(file.name)) ?? [];
   if(!registers.length) return null;
   const selected=registers.find((file)=>file.id===source);
   let rows:string[][]=[],issue="";
