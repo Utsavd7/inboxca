@@ -29,13 +29,20 @@ export type SubPlan = FirmPlan & { version: number; maxPaise: number; next?: Fir
 // authorisation, debited on it, or a one time order), the period it pays for and the plan or
 // add-on it brings.
 // `base`: the team the plan took when one more person was bought (its own people, or the more
-// the plan includes).
-export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number };
+// the plan includes). `basis`: what a plan change was priced on (basisOf).
+export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number; basis?: string };
 export type Alert = { kind: string; ref?: string; at: string };
 
 const json = (value: unknown) => value as NonNullable<Json>;
 const planOf = (sub: Subscription) => sub.plan as unknown as SubPlan;
 const detailsOf = (payment: Payment) => payment.details as unknown as Details;
+// What a move up, a switch to yearly payment, one more person or one more AI block is priced on:
+// the plan's priced parts, the cycle and the paid period. One that arrives after any of them
+// changed (two checkouts paid out of order) is not applied and goes back in full.
+const basisOf = (sub: Subscription) => {
+  const plan = planOf(sub);
+  return JSON.stringify([sub.cycle, sub.paid_until, plan.clients, plan.practice, plan.people, plan.aiBlocks ?? 0, plan.returns ?? null]);
+};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const mandateId = /^[A-Za-z0-9_-]{1,60}$/;
 const long = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
@@ -223,7 +230,7 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
     if (sub.paid_until <= addDays(today, 6)) return { error: `Your plan renews on ${long(sub.paid_until)}. Switch to yearly payment after that.` };
     const year = toYearly(formula, plan, today, sub.paid_until);
     lines = [{ text: `InboxCA ${current.name} plan, yearly, ${long(today)} to ${long(addDays(year.until, -1))}, less what is left of the month paid`, paise: year.paise }];
-    details = { period: [sub.paid_until, year.until] };
+    details = { period: [sub.paid_until, year.until], basis: basisOf(sub) };
   } else {
     if (sub.paid_until <= today) return { error: "Pay for your plan first." };
     const team = Math.max(plan.people, current.people);
@@ -235,7 +242,7 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
     const until = addDays(sub.paid_until, -1);
     const words = what.kind === "upgrade" ? `Move to the ${moved.name} plan` : what.kind === "extra_user" ? "One more person in the team" : `One more AI block of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits a month`;
     lines = [{ text: `${words}, ${long(today)} to ${long(until)}`, paise: prorate(moved.paise - current.paise, today, sub.paid_until, cycle) }];
-    details = what.kind === "upgrade" ? { plan: next } : what.kind === "extra_user" ? { add: 1, base: team } : { add: 1 };
+    details = { ...(what.kind === "upgrade" ? { plan: next } : what.kind === "extra_user" ? { add: 1, base: team } : { add: 1 }), basis: basisOf(sub) };
     if (!lines[0].paise) return { error: "Your plan renews today. Make the change at renewal." };
   }
   const amount = withGst(lines.reduce((sum, line) => sum + line.paise, 0), tax, firm.stateCode, today);
@@ -408,6 +415,7 @@ async function paid(admin: Admin, id: string, ref?: string) {
   const { data: sub } = await admin.from("subscriptions").select("*").eq("firm_id", firmId).maybeSingle();
   const today = indiaDay(new Date());
   const email = await ownerOf(admin, firmId);
+  const stale = !!sub && !!details.basis && details.basis !== basisOf(sub);
   if (sub) {
     const plan = planOf(sub);
     if (payment.kind === "plan") {
@@ -428,17 +436,16 @@ async function paid(admin: Admin, id: string, ref?: string) {
         for (const other of others ?? []) if (moved.mandate && detailsOf(other as Payment).via === "charge") await billingProvider()?.cancelCharge({ mandate: moved.mandate, id: other.id }).catch(() => log.warn("billing.charge_cancel_failed"));
       }
     }
-    if (payment.kind === "upgrade" && details.plan) await admin.from("subscriptions").update({ plan: json({ ...plan, ...details.plan }) }).eq("firm_id", firmId);
-    // The switch to yearly payment, only from the month it was priced on.
-    if (payment.kind === "yearly" && details.period) {
-      const { data: moved } = await admin.from("subscriptions").update({ cycle: "yearly", paid_until: details.period[1] }).eq("firm_id", firmId).eq("cycle", "monthly").eq("paid_until", details.period[0]).select("firm_id").maybeSingle();
-      if (!moved) await alertAdmins(admin, "paid_twice", id);
-    }
-    if (payment.kind === "extra_user") await admin.from("subscriptions").update({ plan: json({ ...plan, people: Math.max(plan.people, details.base ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
-    if (payment.kind === "ai_block") await admin.from("subscriptions").update({ plan: json({ ...plan, aiBlocks: (plan.aiBlocks ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
+    // A plan change priced on what has changed since is not applied: it goes back in full below.
+    if (!stale && payment.kind === "upgrade" && details.plan) await admin.from("subscriptions").update({ plan: json({ ...plan, ...details.plan }) }).eq("firm_id", firmId);
+    if (!stale && payment.kind === "yearly" && details.period) await admin.from("subscriptions").update({ cycle: "yearly", paid_until: details.period[1] }).eq("firm_id", firmId);
+    if (!stale && payment.kind === "extra_user") await admin.from("subscriptions").update({ plan: json({ ...plan, people: Math.max(plan.people, details.base ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
+    if (!stale && payment.kind === "ai_block") await admin.from("subscriptions").update({ plan: json({ ...plan, aiBlocks: (plan.aiBlocks ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
   }
   await note(admin, firmId, null, "billing.paid", { payment: id, kind: payment.kind });
   await issue(admin, id);
+  const provider = billingProvider();
+  if (stale && provider) await note(admin, firmId, null, "billing.refund_asked", { payment: (await refund(admin, provider, payment, payment.amount_paise, "priced_on_old_plan", sub)) ?? undefined, reason: "priced_on_old_plan" });
 }
 
 // A debit or order the money back called off that is taken all the same (D33): it is recorded
@@ -575,7 +582,7 @@ export async function claimMoneyBack(firmId: string, actor: string) {
   return null;
 }
 
-async function refund(admin: Admin, provider: PaymentProvider, of: Payment, amount: number, reason: "money_back" | "duplicate" | "charge_error", sub?: { mandate: string | null; method: string | null } | null) {
+async function refund(admin: Admin, provider: PaymentProvider, of: Payment, amount: number, reason: "money_back" | "duplicate" | "charge_error" | "priced_on_old_plan", sub?: { mandate: string | null; method: string | null } | null) {
   if (amount <= 0) return null;
   const gst = Math.round((of.gst_paise * amount) / of.amount_paise);
   const { data: row, error } = await admin.from("payments").insert({ firm_id: of.firm_id, kind: "refund", refund_of: of.id, reason, amount_paise: amount, gst_paise: gst, details: json({ lines: [], via: detailsOf(of).via } satisfies Details) }).select("id").single();
@@ -736,7 +743,7 @@ async function fitDay(admin: Admin, provider: PaymentProvider, formula: PlanForm
     return;
   }
   const at = new Date(now.getTime() + 3 * 86_400_000);
-  const { data: row, error } = await admin.from("payments").insert({ firm_id: firm.id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge", plan: fit.next } satisfies Details) }).select("id").single();
+  const { data: row, error } = await admin.from("payments").insert({ firm_id: firm.id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge", plan: fit.next, basis: basisOf(sub) } satisfies Details) }).select("id").single();
   if (error) throw new Error(`Saving the move up failed: ${error.code}`);
   try {
     await provider.charge({ mandate: sub.mandate, id: row.id, paise: amount.total, at, note: lines[0].text });

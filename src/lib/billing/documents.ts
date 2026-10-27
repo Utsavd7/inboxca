@@ -28,7 +28,7 @@ export type Doc = {
 };
 
 export const docTitles: Record<DocKind, string> = { receipt: "Payment receipt", invoice: "Tax invoice", credit: "Credit note", refund: "Refund receipt" };
-export const reasonWords: Record<string, string> = { money_back: "Money back within 14 days of the first payment", duplicate: "A payment taken twice", charge_error: "A payment taken in error" };
+export const reasonWords: Record<string, string> = { money_back: "Money back within 14 days of the first payment", duplicate: "A payment taken twice", priced_on_old_plan: "A payment for a plan that had changed", charge_error: "A payment taken in error" };
 
 // GST of a document: CGST and SGST halves for a firm in Orelu's state, IGST otherwise (the place
 // of supply is the firm's state).

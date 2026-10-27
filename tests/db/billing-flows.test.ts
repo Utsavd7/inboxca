@@ -385,6 +385,35 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     }
   });
 
+  it("gives back in full, with GST and a credit note, a plan change paid after the plan it was priced on changed, and changes nothing", async () => {
+    const gst = { ...tax, gstin: "27AAAFI1234B1Z5", stateCode: "27", sac: "9983", rate: 18, gstFrom: today() };
+    await db.query("update public.platform_settings set value = $1 where key = 'tax'", [gst]);
+    try {
+      const firm = await activeFirm("stale");
+      // Two checkouts open at once, both priced on Solo for one person.
+      await billing.buy(firm.id, firm.owner, { kind: "upgrade", plan: { clients: 150, practice: "mixed", people: 4, aiBlocks: 0 } }, returnUrl);
+      await billing.buy(firm.id, firm.owner, { kind: "extra_user" }, returnUrl);
+      const [upgrade] = await paymentsOf(firm.id, "upgrade");
+      await fake.pay((await paymentsOf(firm.id, "extra_user"))[0].id);
+      const before = await subOf(firm.id);
+      expect(before.plan.people).toBe(2);
+      fake.settleRefunds(null);
+      await fake.pay(upgrade.id);
+      expect(await subOf(firm.id)).toEqual(before);
+      const [back] = await paymentsOf(firm.id, "refund");
+      expect(upgrade.gst_paise).toBeGreaterThan(0);
+      expect(back).toMatchObject({ refund_of: upgrade.id, reason: "priced_on_old_plan", amount_paise: upgrade.amount_paise, gst_paise: upgrade.gst_paise });
+      expect(fake.refunds.get(back.id)).toMatchObject({ via: "order", order_id: upgrade.id, refund_amount: upgrade.amount_paise / 100 });
+      await fake.refund(back.id, "SUCCESS");
+      const [invoice] = await paymentsOf(firm.id, "upgrade");
+      expect((await paymentsOf(firm.id, "refund"))[0].doc).toMatchObject({ kind: "credit", total: upgrade.amount_paise, cgst: upgrade.gst_paise / 2, of: { no: invoice.doc.no }, reason: "priced_on_old_plan" });
+      const alerts = (await one("select value from public.platform_settings where key = 'billing'"))?.value.alerts ?? [];
+      expect(alerts.some((alert: { ref?: string }) => alert.ref === upgrade.id)).toBe(false);
+    } finally {
+      await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);
+    }
+  });
+
   it("lets an admin give back a payment taken twice, keeps Cashfree's fees, and alerts on what does not match", async () => {
     const firm = await activeFirm("admin");
     await billing.buy(firm.id, firm.owner, { kind: "topup" }, returnUrl);

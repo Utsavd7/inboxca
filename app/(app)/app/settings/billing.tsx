@@ -185,6 +185,9 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
   const abovelimit = autopay && coming.recurring.total > plan.maxPaise;
   const per = cycle === "monthly" ? "a month" : "a year";
   const gst = gstOn(tax, today) ? " with GST" : "";
+  // A plan change paid after the plan changed was given back: said until anything is paid again.
+  const returned = (payments ?? []).findIndex((row) => row.reason === "priced_on_old_plan");
+  const retry = returned >= 0 && payments!.slice(0, returned).every((row) => row.kind === "refund" || row.status !== "done");
   const shown = (payments ?? []).filter((row) => row.status === "done" || (row.kind === "refund" && row.status !== "cancelled") || (row.status === "failed" && row.kind === "renewal"));
   // What each add-on costs now, for the rest of the paid period.
   const left = (more: FirmPlan) => (sub.paid_until && sub.paid_until > today ? withGst(prorate(planPrice(formula, more, cycle).paise - priced.price.paise, today, sub.paid_until, cycle), tax, state, today).total : 0);
@@ -207,6 +210,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
           {overdue ? <Badge tone="late">Not paid since {longDate(sub.paid_until!)}</Badge> : sub.paid_until ? <Badge tone="done">Paid until {last(sub.paid_until)}</Badge> : <Badge tone="warn">Waiting for the first payment</Badge>}{" "}
           {autopay ? `AutoPay is on with your ${methodWords[sub.method as Method]}${sub.paid_until ? `. Next payment ${rupees(coming.recurring.total)} on ${longDate(sub.paid_until)}` : ""}.` : sub.status === "created" ? "AutoPay is waiting for your bank or payment page." : "AutoPay is off. Nothing more will be taken."}
         </p>
+        {retry && <p className="alert" role="alert">A payment was for a plan that had changed, so it was returned. Please try again.</p>}
         {autopay && <p className="hint">Orelu will never take more than {rupees(plan.maxPaise)} at a time without asking you. You get an email 3 days before each payment.</p>}
         {plan.next && <p className="hint">Moves to the {coming.price.name} plan, {rupees(coming.recurring.total)} {per}, at the renewal on {longDate(sub.paid_until!)}.</p>}
         {abovelimit ? (
