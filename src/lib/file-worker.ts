@@ -3,6 +3,10 @@ import type {Template} from "./templates.ts";
 // A file sent in (PLAN.md 5.15): up to 50 MB; a ZIP up to 1,000 files and 500 MB unpacked.
 export const intakeLimits = { bytes: 50 * 1024 * 1024, entries: 1000, unpacked: 500 * 1024 * 1024 };
 export const viewLimits = { bytes: intakeLimits.bytes, pages: 30, rows: 1000, columns: 26, rowsPerPage: 40, pixels: 40_000_000 };
+// One-time OCR (PLAN.md 5.5.0, D29), sized for a small worker: the first 20 pages without
+// text a file, a picture up to 25 megapixels by its header, a page drawn at 300 dots an
+// inch within that, a minute a file, one file at a time.
+export const ocrLimits = { pages: 20, pixels: 25_000_000, seconds: 60 };
 export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean };
 export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox" | "onedrive"; token: string; purpose?: "sheet" | "portal" | "edited" | "copy"; sheet?: number; form?:{template:Template;period:string;gstin?:string;pan?:string;official?:string}; password?: string };
 const text = new TextEncoder();
