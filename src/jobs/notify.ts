@@ -22,10 +22,15 @@ async function approvers(firmId: string, route: "owner" | "manager", teamId: str
 const nameOf = async (userId?: string) => personName((await supabaseAdmin().auth.admin.getUserById(userId ?? "")).data.user?.email);
 
 export const notifyRequest: Handler = async (job) => {
-  const { data: request } = await supabaseAdmin().from("requests").select("firm_id, kind, reason_code, status, details").eq("id", job.entity_id!).maybeSingle();
+  const { data: request } = await supabaseAdmin().from("requests").select("firm_id, kind, entity_type, reason_code, status, details").eq("id", job.entity_id!).maybeSingle();
   if (!request || request.status !== "pending") return { done: true };
-  const details = request.details as { by?: string; person?: string; route?: "owner" | "manager"; team_id?: string | null };
-  if (request.kind === "permission") {
+  const details = request.details as { by?: string; person?: string; route?: "owner" | "manager"; team_id?: string | null; name?: string; count?: number };
+  // The owner's own login (D38): a new computer asking, or the login on several computers at once.
+  if (request.entity_type === "owner_device") {
+    await notify([details.by!], { title: "A new computer wants to use your login", body: `${details.name} signed in with your login and waits for you. Approve or refuse it on Today, on a computer you already use. If it was not you, refuse it.`, url: "/app" });
+  } else if (request.entity_type === "owner_pcs") {
+    await notify([details.by!], { title: "Your login is in use on more than one computer", body: `Your InboxCA login was used on ${details.count} computers within one hour. Each person in your firm needs their own login.`, url: "/app/people" });
+  } else if (request.kind === "permission") {
     const what = request.reason_code === "time" ? "asks to keep using InboxCA after office hours today" : `asks to ${rightWords[request.reason_code as Right]}`;
     await notify(await approvers(request.firm_id, details.route ?? "owner", details.team_id ?? null, details.by ?? ""), { title: "A permission request for you", body: `${await nameOf(details.by)} ${what}.`, url: "/app/inbox" }, request.firm_id);
   } else {

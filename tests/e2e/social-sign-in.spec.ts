@@ -212,8 +212,9 @@ test("a new owner signs up with Google, and the email code later opens the same 
     const rows = await query(local.dbUrl, "select f.status, f.state_code, m.role from public.firms f join public.firm_members m on m.firm_id = f.id where f.name = $1", [firmName]);
     expect(rows).toEqual([{ status: "pending", state_code: "24", role: "owner" }]);
 
-    // The other order: the email code for the same address is the same account and firm.
-    await page.context().clearCookies();
+    // The other order: the email code for the same address is the same account and firm, on the
+    // same computer (a new one would wait for the owner's approval, D38).
+    await page.context().clearCookies({ name: /^sb-/ });
     await emailStep(page, email);
     await expect(page.getByRole("heading", { name: "Enter your 2 step code" })).toBeVisible();
     await page.getByLabel("6 digit code from the app").fill(await freshTotp(secret, first));

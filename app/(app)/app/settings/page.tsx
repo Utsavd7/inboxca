@@ -1,4 +1,4 @@
-import { BellRing, CalendarClock, CalendarOff, Check, Clock, CreditCard, Database, Download, Eye, FileCheck2, Fingerprint, Gauge, HardDrive, Headset, KeyRound, LifeBuoy, LogIn, Mail, MailCheck, Receipt, RotateCcw, ShieldCheck, SlidersHorizontal, TriangleAlert, UserCheck, UserCog, UserPlus, Users, type LucideIcon } from "lucide-react";
+import { BellRing, CalendarClock, CalendarOff, Check, Clock, CreditCard, Database, Download, Eye, FileCheck2, Fingerprint, Gauge, HardDrive, Headset, KeyRound, Laptop, LifeBuoy, LogIn, Mail, MailCheck, Receipt, RotateCcw, ShieldCheck, SlidersHorizontal, TriangleAlert, UserCheck, UserCog, UserPlus, Users, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import Form from "next/form";
@@ -34,6 +34,7 @@ import { MailboxForm } from "./mailbox-form";
 import { GroupAnchor } from "./group-anchor";
 import { saveReplies } from "@/app/(app)/actions";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
+import { NewComputers, YourComputers } from "../new-computers";
 import { PushSwitch } from "../push-switch";
 import { BillingCards } from "./billing";
 import { FairUse } from "./fair-use";
@@ -58,11 +59,11 @@ const problems: Record<string, [string, string]> = {
   special: ["special", "The To date must be the same as or after the From date, and Closes must be later than Opens."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { checkout: "Thank you. The payment shows here as soon as your bank confirms it.", autopay_off: "AutoPay is off. Nothing more will be taken.", down: "Your plan moves down at the next renewal.", down_undone: "Your plan stays as it is.", topup: "Auto top-up saved.", money_back: "Your plan is cancelled and your money is on its way back.",preset: "Saved. Your team now works this way.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Paper sending rules saved.", permissions: "Permissions saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", folders: "Folder order and file names saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", answers: "Replies saved.", replies: "Reply time saved.", exception: "Exception removed. The firm's rule applies again." };
+const savedNames: Record<string, string> = { checkout: "Thank you. The payment shows here as soon as your bank confirms it.", autopay_off: "AutoPay is off. Nothing more will be taken.", down: "Your plan moves down at the next renewal.", down_undone: "Your plan stays as it is.", topup: "Auto top-up saved.", money_back: "Your plan is cancelled and your money is on its way back.",preset: "Saved. Your team now works this way.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Paper sending rules saved.", permissions: "Permissions saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", folders: "Folder order and file names saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", answers: "Replies saved.", replies: "Reply time saved.", exception: "Exception removed. The firm's rule applies again.", computer_removed: "Computer removed. Your other computers are signed out and can sign in again as usual." };
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "replies", "drive"]],
-  ["access", "Office and sign in", ["preset", "office", "limits", "tester", "notices", "recovery"]],
+  ["access", "Office and sign in", ["preset", "office", "limits", "tester", "notices", "recovery", "computers"]],
   ["hours", "Hours and holidays", ["hours", "special", "holidays"]],
   ["people", "People's access", ["permissions", "always", "visibility"]],
   ["reminders", "Reminders and papers", ["reminders", "answers", "records"]],
@@ -73,7 +74,7 @@ const groups = [
 const groupIcons: Record<string, LucideIcon> = { email: Mail, access: ShieldCheck, hours: Clock, people: Users, reminders: BellRing, data: Database, me: Fingerprint, billing: CreditCard };
 // Each card's tile: what it is about, in the colour of its kind.
 const cardIcons: Record<string, [LucideIcon, Kind]> = {
-  mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], tester: [UserCheck, "approve"], notices: [BellRing, "approve"], recovery: [LifeBuoy, "approve"],
+  mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], tester: [UserCheck, "approve"], notices: [BellRing, "approve"], recovery: [LifeBuoy, "approve"], computers: [Laptop, "approve"],
   hours: [Clock, "week"], special: [CalendarClock, "week"], holidays: [CalendarOff, "week"],
   permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"], exceptions: [UserCog, "papers"], passkeys: [Fingerprint, "approve"],
   reminders: [BellRing, "notice"], answers: [MailCheck, "notice"], records: [FileCheck2, "notice"],
@@ -81,7 +82,7 @@ const cardIcons: Record<string, [LucideIcon, Kind]> = {
   use: [Gauge, "docs"], data: [Download, "docs"], support: [Headset, "approve"], close: [TriangleAlert, "late"],
   fit: [Gauge, "approve"], plan: [CreditCard, "approve"], change: [SlidersHorizontal, "approve"], addons: [UserPlus, "papers"], receipts: [Receipt, "docs"], money_back: [RotateCcw, "late"],
 };
-const ownerOnly = ["mailbox", "replies", "drive", "recovery", "visibility", "exceptions", "reminders", "answers", "records", "use", "data", "support", "close", "plan", "change", "addons", "receipts", "money_back"];
+const ownerOnly = ["mailbox", "replies", "drive", "recovery", "computers", "visibility", "exceptions", "reminders", "answers", "records", "use", "data", "support", "close", "plan", "change", "addons", "receipts", "money_back"];
 const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
 
 function Card({ id, title, line, danger, children }: { id: string; title: string; line?: React.ReactNode; danger?: boolean; children: React.ReactNode }) {
@@ -433,6 +434,7 @@ export default async function Settings({
           </>}
 
           {group === "access" && <>
+          {owner && <NewComputers error={error} back="settings" />}
           <Card id="preset" title="How your team works" line="One choice sets Office only, office hours and signing out. You can change each of them after.">
             <form id="preset-form" action={choosePreset} className="set-stack">
               <fieldset className="set-choices">
@@ -500,6 +502,9 @@ export default async function Settings({
             ) : (
               <div className="set-foot"><Link className="b b-secondary" href="/app/settings?group=access&confirm=codes#recovery" scroll={false}>Download 10 new codes</Link></div>
             )}
+          </Card>}
+          {owner && <Card id="computers" title="Your computers" line="The computers that can use your login. Remove a lost or old one. Every other computer is signed out too, and the ones still here sign in again as usual.">
+            <YourComputers />
           </Card>}
           </>}
 

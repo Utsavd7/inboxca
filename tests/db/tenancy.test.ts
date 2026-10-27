@@ -351,6 +351,7 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["remove_member", "select public.remove_member($1, $2) r", ["firm", "staff"], true],
   ["restore_member", "select public.restore_member($1, $2) r", ["firm", "staff"], true],
   ["review_firms", "select * from public.review_firms()", [], false],
+  ["review_owner_device", "select public.review_owner_device($1, 'approve') r", ["request"], true],
   ["service_status", "select public.service_status() r", [], false],
   ["session_live", "select public.session_live() r", [], false],
 ];
@@ -431,7 +432,7 @@ describe("every table and function, from the catalog", () => {
         from pg_constraint c join pg_class t on t.oid = c.conrelid join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
         where c.contype in ('p', 'u') and c.connamespace = 'public'::regnamespace and a.attname <> 'firm_id'`);
       const { rows: [{ id: job }] } = await db.query("select id::text from public.jobs where firm_id = $1 limit 1", [b.firm]);
-      const values: Record<string, string> = { firm: b.firm, client: b.client, name: b.name, owner: b.people.owner, staff: b.people.staff, job, outsider: randomUUID() };
+      const values: Record<string, string> = { firm: b.firm, client: b.client, name: b.name, owner: b.people.owner, staff: b.people.staff, job, request: b.request, outsider: randomUUID() };
       const secretsOf = (firm: typeof b) => [firm.firm, firm.name, ...Object.values(firm.people), ...ROWS.map((key) => firm[key])];
       const secrets = secretsOf(b);
       const fingerprint = async () => {

@@ -1,10 +1,12 @@
 "use server";
+import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { log } from "@/src/lib/logger";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
 import { chosenFirm } from "@/src/lib/office";
+import { withThisComputer } from "@/src/lib/owner-device";
 import { CHALLENGE_COOKIE, checkAdminKeyUse, newChallenge } from "@/src/lib/pc-key";
 import { withinLimit } from "@/src/lib/rate-limit";
 import { recoveryDigest, SEEN_COOKIE } from "@/src/lib/session";
@@ -175,19 +177,47 @@ export async function recoverTwoStep(_prev: StepState, form: FormData): Promise<
   if (!claims) redirect("/sign-in");
   const userId = claims.claims.sub;
   if (!(await withinLimit("recovery", userId))) return { error: "Too many tries. Wait an hour, then try again." };
+  const left = await spendRecoveryCode(userId, String(form.get("recovery") ?? ""));
+  if (typeof left === "string") return { error: left };
   const admin = supabaseAdmin();
-  const { data } = await admin.auth.admin.getUserById(userId);
-  const saved = (data.user?.app_metadata.recovery ?? []) as string[];
-  const digest = recoveryDigest(userId, String(form.get("recovery") ?? ""));
-  if (!saved.includes(digest)) return { error: "That recovery code did not work. Check it, or use another one." };
-  const { error } = await admin.auth.admin.updateUserById(userId, { app_metadata: { recovery: saved.filter((code) => code !== digest) } });
-  if (error) return { error: "That recovery code could not be used just now. Try again in a minute." };
   const { data: factors } = await admin.auth.admin.mfa.listFactors({ userId });
   const { count: passkeys } = await admin.from("passkeys").select("id", { count: "exact", head: true }).eq("user_id", userId);
   for (const factor of factors?.factors ?? []) await admin.auth.admin.mfa.deleteFactor({ id: factor.id, userId });
   const member = await chosenFirm((await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
-  if (member) await admin.from("activity_log").insert({ firm_id: member.firm_id, actor_id: userId, action: "recovery.used", entity_type: "user", entity_id: userId, details: { left: saved.length - 1, passkeys: passkeys ?? 0 } });
+  if (member) await admin.from("activity_log").insert({ firm_id: member.firm_id, actor_id: userId, action: "recovery.used", entity_type: "user", entity_id: userId, details: { left, passkeys: passkeys ?? 0 } });
   redirect("/sign-in/two-step");
+}
+
+// Uses up one of the owner's recovery codes: the codes left, or why not. The computer it is used
+// on is approved for the owner's login too (D38), as a recovery code is the way in when every
+// other device is lost.
+async function spendRecoveryCode(userId: string, code: string) {
+  const admin = supabaseAdmin();
+  const { data } = await admin.auth.admin.getUserById(userId);
+  const saved = (data.user?.app_metadata.recovery ?? []) as string[];
+  const digest = recoveryDigest(userId, code);
+  if (!saved.includes(digest)) return "That recovery code did not work. Check it, or use another one.";
+  const { error } = await admin.auth.admin.updateUserById(userId, { app_metadata: { recovery: saved.filter((kept) => kept !== digest), devices: await withThisComputer(userId, data.user?.app_metadata.devices) } });
+  return error ? "That recovery code could not be used just now. Try again in a minute." : saved.length - 1;
+}
+
+// A new computer on the owner's login with no other computer to approve it (D38): after the
+// email code and the 2 step code, one recovery code approves it.
+export async function recoverComputer(form: FormData) {
+  const { data: claims } = await (await supabaseServer()).auth.getClaims();
+  if (!claims) redirect("/sign-in");
+  const userId = claims.claims.sub;
+  if (claims.claims.aal !== "aal2") redirect("/sign-in/two-step");
+  if (!(await withinLimit("recovery", userId))) redirect("/app?error=recovery_limit");
+  const left = await spendRecoveryCode(userId, String(form.get("recovery") ?? ""));
+  if (typeof left === "string") redirect("/app?error=recovery");
+  const admin = supabaseAdmin();
+  // Its request is answered, so no other computer is asked any more.
+  await admin.from("requests").update({ status: "approved" }).eq("kind", "alert").eq("entity_type", "owner_device").eq("entity_id", String(claims.claims.session_id ?? "")).eq("status", "pending");
+  const member = await chosenFirm((await admin.from("firm_members").select("firm_id").eq("user_id", userId).eq("status", "active").order("firm_id").limit(20)).data);
+  if (member) await admin.from("activity_log").insert({ firm_id: member.firm_id, actor_id: userId, action: "recovery.used", entity_type: "user", entity_id: userId, details: { left } });
+  revalidatePath("/app", "layout");
+  redirect("/app");
 }
 
 // Signs out this browser only; the person's other devices stay signed in.
