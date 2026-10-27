@@ -1126,7 +1126,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await visitor.reload();
   await expect(paper).toContainText("5 downloads left");
   const page = owner.url();
-  await owner.goto("/app/settings?group=data#caps");
+  await owner.goto("/app");
+  await owner.getByRole("link", { name: "Allow more downloads" }).click();
   await owner.getByRole("button", { name: "Allow more downloads this month" }).click();
   await expect(owner.getByRole("button", { name: "Allow more downloads this month" })).toHaveCount(0);
   await owner.goto(page);

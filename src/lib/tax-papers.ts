@@ -45,6 +45,10 @@ export async function pdfLines(bytes: Uint8Array, pages = 30, password?: string)
   return lines;
 }
 
+// A scan's OCR text as lines for the same rules, only to suggest its type and period: with no
+// cell positions a value counts only beside its label, and no figure is ever read from it.
+export const textLines = (text: string): Line[] => text.split("\n").map((line) => ({ page: 1, text: plain(line), cells: [] }));
+
 // The lines from the first one matching from (or the start) up to the next matching to.
 export function region(lines: Line[], from?: RegExp, to?: RegExp) {
   const start = from ? lines.findIndex((line) => from.test(line.text)) : 0;

@@ -5,7 +5,7 @@ import type { Json } from "@/src/db/types";
 import { serverCrypto } from "@/src/lib/crypto";
 import { openDrive } from "@/src/lib/drive-account";
 import { readsFigures } from "@/src/lib/portal-files";
-import { fingerprint, readText, searchTokens, words } from "@/src/lib/search";
+import { fingerprint, readText, searchTokens, words, type Ocr } from "@/src/lib/search";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { keepText, openText } from "@/src/lib/workspace";
 import type { Handler } from "./runner";
@@ -24,6 +24,10 @@ export const readDocument: Handler = async (job) => {
   let content = copy ? await openText(firm, copy.id, copy.details).catch(() => null) : null;
   let mark = content === null ? null : copy!.fingerprint;
   const own = content !== null && copy!.id === document.id;
+  // A scan's pages and a picture are read by OCR once (D29); its engine, languages and mean
+  // confidence go beside the sealed text, an exact copy's too. Figures are never read from it.
+  const scan: { ocr?: Ocr } = {}, kept = (copy?.details as { text?: Ocr } | null)?.text;
+  if (content !== null && !own && kept?.kind === "ocr_text") scan.ocr = { kind: kept.kind, engine: kept.engine, languages: kept.languages, confidence: kept.confidence };
   if (content === null) {
     const { data: account } = await admin.from("connected_accounts").select("id, provider, credentials_enc").eq("firm_id", firm).eq("kind", "drive").maybeSingle();
     if (!account) return { done: true };
@@ -34,14 +38,14 @@ export const readDocument: Handler = async (job) => {
       return { retry: "drive_unreachable", patient: true };
     }
     const password = document.password_enc ? await serverCrypto().decrypt(firm, `documents/${document.id}/password`, document.password_enc) : undefined;
-    content = await readText(document.name, bytes, password);
+    content = await readText(document.name, bytes, password, scan);
     // Only text read from the bytes this paper arrived with is fingerprinted and kept.
     if (createHash("sha256").update(bytes).digest("hex") === document.sha256) mark = await fingerprint(firm, content);
   }
   const original = document.original_name_enc ? await serverCrypto().decrypt(firm, `documents/${document.id}/original_name`, document.original_name_enc) : "";
   const text = [document.name, document.document_type, original, content].join("\n");
   const saved = mark && !own ? await keepText(firm, document.id, content).catch(() => null) : null;
-  await admin.from("documents").update({ search_tokens: await searchTokens(firm, words(text)), ...(mark && { fingerprint: mark }), ...(saved && { details: { ...(document.details as Record<string, Json>), text: saved } }) }).eq("id", document.id);
+  await admin.from("documents").update({ search_tokens: await searchTokens(firm, words(text)), ...(mark && { fingerprint: mark }), ...(saved && { details: { ...(document.details as Record<string, Json>), text: { ...saved, ...scan.ocr } } }) }).eq("id", document.id);
   // A new version with the same content as an earlier one (the paper saved again) keeps that
   // one's figures, and is not read for them again.
   const earlier = admin.from("documents").select("id").eq("firm_id", firm).eq("client_id", document.client_id).eq("document_type", document.document_type).eq("period_key", document.period_key).eq("fingerprint", mark ?? "").in("status", ["filed", "earlier"]).lt("received_at", document.received_at).limit(1);
