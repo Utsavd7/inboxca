@@ -1040,6 +1040,9 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(visitor.getByText(`Papers for ${mailClient}`)).toBeVisible();
   await expect(visitor.getByRole("region", { name: "Progress" })).toContainText("0 of 2 papers received");
   await expect(visitor.getByText(`Questions? Email ${mailboxEmail}`)).toBeVisible();
+  // This month's downloads through InboxCA are used up (D26, 5.14); what the client sends still arrives.
+  const [{ most }] = await query(local.dbUrl, "select (value #>> '{plans,0,maxReturns}')::int * (value #>> '{fairUse,downloadsAMonthPerReturn}')::int most from public.platform_settings where key = 'plan_formula'");
+  await query(local.dbUrl, "insert into public.activity_log (firm_id, action, entity_type) select $1, 'document.downloaded', 'document' from generate_series(1, $2)", [firm.firmId, most]);
   // One button an item: choosing files sends them at once, with no second step.
   const loan = visitor.getByRole("listitem").filter({ hasText: "Loan statement" });
   const loanPdf = Buffer.from(pdf("Invented loan account 99231"));
@@ -1118,6 +1121,15 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await stranger.getByRole("button", { name: "Email me a code" }).click();
   await expect(stranger.getByRole("status")).toContainText("Too many codes asked for today");
   await stranger.close();
+  // Until the owner allows more downloads this month the link waits, with none of its 5 spent.
+  expect((await visitor.request.get(`${shared}/file`)).status()).toBe(429);
+  await visitor.reload();
+  await expect(paper).toContainText("5 downloads left");
+  const page = owner.url();
+  await owner.goto("/app/settings?group=data#caps");
+  await owner.getByRole("button", { name: "Allow more downloads this month" }).click();
+  await expect(owner.getByRole("button", { name: "Allow more downloads this month" })).toHaveCount(0);
+  await owner.goto(page);
   for (let download = 0; download < 5; download++) expect(Buffer.from(await (await visitor.request.get(`${shared}/file`)).body())).toEqual(loanPdf);
   expect((await visitor.request.get(`${shared}/file`)).status()).toBe(410);
 

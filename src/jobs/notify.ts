@@ -27,17 +27,17 @@ export const notifyRequest: Handler = async (job) => {
   const details = request.details as { by?: string; person?: string; route?: "owner" | "manager"; team_id?: string | null };
   if (request.kind === "permission") {
     const what = request.reason_code === "time" ? "asks to keep using InboxCA after office hours today" : `asks to ${rightWords[request.reason_code as Right]}`;
-    await notify(await approvers(request.firm_id, details.route ?? "owner", details.team_id ?? null, details.by ?? ""), { title: "A permission request for you", body: `${await nameOf(details.by)} ${what}.`, url: "/app/inbox" });
+    await notify(await approvers(request.firm_id, details.route ?? "owner", details.team_id ?? null, details.by ?? ""), { title: "A permission request for you", body: `${await nameOf(details.by)} ${what}.`, url: "/app/inbox" }, request.firm_id);
   } else {
     const body = request.reason_code === "office_changed" ? "Your office internet connection changed today." : `${await nameOf(details.person)}'s PC is on a different internet connection.`;
-    await notify(await approvers(request.firm_id, "owner", null, details.person ?? ""), { title: "Office internet connection", body, url: "/app" });
+    await notify(await approvers(request.firm_id, "owner", null, details.person ?? ""), { title: "Office internet connection", body, url: "/app" }, request.firm_id);
   }
   return { done: true };
 };
 
 export const notifyDevices: Handler = async (job) => {
   const { count } = await supabaseAdmin().from("devices").select("id", { count: "exact", head: true }).eq("firm_id", job.firm_id!).eq("status", "waiting");
-  if (count) await notify(await approvers(job.firm_id!, "owner", null, ""), { title: "PCs to approve", body: `${count} ${count === 1 ? "PC is" : "PCs are"} waiting for your approval.`, url: "/app/settings#office" });
+  if (count) await notify(await approvers(job.firm_id!, "owner", null, ""), { title: "PCs to approve", body: `${count} ${count === 1 ? "PC is" : "PCs are"} waiting for your approval.`, url: "/app/settings#office" }, job.firm_id!);
   return { done: true };
 };
 
@@ -45,7 +45,7 @@ export const notifyDevices: Handler = async (job) => {
 export const approvalNudge: Handler = async (job) => {
   const { data: request } = await supabaseAdmin().from("requests").select("firm_id, status, details").eq("id", job.entity_id!).maybeSingle();
   const by = (request?.details as { by?: string } | undefined)?.by;
-  if (request?.status === "pending") await notify(await approvers(request.firm_id, "owner", null, by ?? ""), { title: "A permission request is waiting", body: `${await nameOf(by)}'s permission request has waited 30 minutes. Their manager has not answered yet.`, url: "/app/inbox" });
+  if (request?.status === "pending") await notify(await approvers(request.firm_id, "owner", null, by ?? ""), { title: "A permission request is waiting", body: `${await nameOf(by)}'s permission request has waited 30 minutes. Their manager has not answered yet.`, url: "/app/inbox" }, request.firm_id);
   return { done: true };
 };
 
@@ -55,7 +55,7 @@ export const approvalSummary: Handler = async (job) => {
   const { count } = await admin.from("activity_log").select("at", { count: "exact", head: true }).eq("firm_id", job.firm_id!)
     .in("action", ["permission.allowed", "permission.always", "device.approved", "office.confirm", "office.today"]).gt("at", new Date(Date.now() - 7 * 86_400_000).toISOString());
   const { data: owner } = await admin.from("firm_members").select("user_id").eq("firm_id", job.firm_id!).eq("role", "owner").eq("status", "active");
-  if (count) await notify((owner ?? []).map((person) => person.user_id), { title: "Your week's approvals", body: `${count} ${count === 1 ? "approval" : "approvals"} this week. See who approved what.`, url: "/app/inbox#approved" });
+  if (count) await notify((owner ?? []).map((person) => person.user_id), { title: "Your week's approvals", body: `${count} ${count === 1 ? "approval" : "approvals"} this week. See who approved what.`, url: "/app/inbox#approved" }, job.firm_id!);
   return { done: true };
 };
 
@@ -76,14 +76,14 @@ export const noticeAlert: Handler = async (job) => {
   if (!data) return { done: true };
   const recipients = (people ?? []).filter((person) => ["owner","partner"].includes(person.role) || assignments?.some((a) => a.user_id === person.user_id || (a.team_id && a.team_id === person.team_id))).map((person) => person.user_id);
   const when = stage.endsWith("late") ? "has passed" : stage.endsWith("due") ? "is today" : "is within 3 days";
-  await notify(recipients, { title: "A notice needs attention", body: stage.startsWith("action_") ? `A notice's action date ${when}.` : `A notice still needs its action date checked. Your firm's deadline for this ${when}.`, url: "/app/notices" });
+  await notify(recipients, { title: "A notice needs attention", body: stage.startsWith("action_") ? `A notice's action date ${when}.` : `A notice still needs its action date checked. Your firm's deadline for this ${when}.`, url: "/app/notices" }, notice.firm_id);
   return { done: true };
 };
 
 export const returnAlert: Handler = async (job) => {
   const { data, error } = await supabaseAdmin().rpc("claim_return_alert", { task_id: job.entity_id! });
   if (error) return { retry: "return_not_claimed" };
-  if (data?.length) await notify(data, { title: "A return needs attention", body: "A return is 3 or more days late. Please check with the client.", url: "/app/calendar?view=overdue" });
+  if (data?.length) await notify(data, { title: "A return needs attention", body: "A return is 3 or more days late. Please check with the client.", url: "/app/calendar?view=overdue" }, job.firm_id!);
   return { done: true };
 };
 
@@ -94,7 +94,7 @@ export const mailboxReconnect:Handler=async(job)=>{
   if (account?.status==="needs_reconnect") {
     const {data:owners,error}=await admin.from("firm_members").select("user_id").eq("firm_id",account.firm_id).eq("role","owner").eq("status","active");
     if (error) return {retry:"owner_not_read"};
-    await notify((owners ?? []).map((owner)=>owner.user_id),{title:"Connect the firm email again",body:"InboxCA cannot sign in to your firm email. It cannot read or send emails until you connect it again.",url:"/app/settings#mailbox"});
+    await notify((owners ?? []).map((owner)=>owner.user_id),{title:"Connect the firm email again",body:"InboxCA cannot sign in to your firm email. It cannot read or send emails until you connect it again.",url:"/app/settings#mailbox"},account.firm_id);
   }
   return {done:true};
 };

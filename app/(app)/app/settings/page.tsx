@@ -36,6 +36,7 @@ import { saveReplies } from "@/app/(app)/actions";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
 import { PushSwitch } from "../push-switch";
 import { BillingCards } from "./billing";
+import { FairUse } from "./fair-use";
 import "./settings.css";
 
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
@@ -794,6 +795,11 @@ export default async function Settings({
               </Suspense>
             )}
             <p className="hint set-after">Shown for your information. Plans and their limits come later; nothing is limited or charged by these figures yet.</p>
+          </Card>
+          <Card id="caps" title="Downloads and emails" line="Papers downloaded through InboxCA and InboxCA's own emails, up to a fair amount for your plan. Papers and emails your clients send always arrive.">
+            <Suspense fallback={<div className="set-meters" aria-busy="true"><span className="skel" /><span className="skel" /></div>}>
+              <FairUse firmId={membership.firmId} />
+            </Suspense>
           </Card>
           <Card id="data" title="Your data" line="Your client list, returns and notices, the list of papers and the activity log, as spreadsheet files in one ZIP. The papers themselves are already in your firm's drive.">
             <div className="set-foot">{download}</div>
