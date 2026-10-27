@@ -1,4 +1,5 @@
-// Page copy. Every fact follows PLAN.md. Nothing here says the product is live.
+// Page copy. Every fact follows PLAN.md.
+import { extraPerson, rupees } from "./plans";
 
 // The five jobs shown in the demo, in the order they happen to one email.
 export const demoSteps = [
@@ -66,15 +67,27 @@ export const questions = [
   ["Is there WhatsApp?", "Email only for now. WhatsApp is planned for later."],
   [
     "How do I start?",
-    "You set it up yourself on the website: connect your firm's email, link your OneDrive or Dropbox, and upload your client list. Nothing is installed, and help is one message away.",
+    "Sign up on this website with your firm's name and your work email. Choose your plan and pay, then connect your firm's email, link your OneDrive or Dropbox and upload your client list. Nothing is installed, and help is one message away.",
   ],
   [
-    "Can I use it today?",
-    "Not yet. InboxCA is in development and the first firms join by invitation.",
+    "How do I pay?",
+    `Monthly or yearly, by UPI, card or AutoPay. Cancel within 14 days of your first plan payment and get it back in full. One more person or more AI is ${rupees(extraPerson)} a month each, and a one time setup fee is shown before you pay.`,
+  ],
+  [
+    "Do my own files count towards storage?",
+    "No. They stay in your own drive. InboxCA storage is only its working space for your client list and the figures it reads. At 80% of your plan you hear about it, with the plan that fits.",
   ],
 ] as const;
 
-// Shown beside every invite button. From the business plan: the first plan payment
+// How a firm starts, shown under the plans. The order is the product's: the plan is paid
+// before the firm's email and drive are connected.
+export const startSteps = [
+  ["Sign up", "Your firm's name and your work email. A code by email signs you in."],
+  ["Choose your plan and pay", "Monthly or yearly, by UPI, card or AutoPay, with 14 day money back."],
+  ["Connect email and drive", "Your firm's Gmail, Outlook or Zoho Mail, and your OneDrive or Dropbox."],
+] as const;
+
+// Shown beside every start button. From the business plan: the first plan payment
 // comes back in full if the firm cancels within 14 days.
 export const guarantee = "14 day money back when you join";
 
@@ -84,12 +97,3 @@ export const makers = [
   ["Ria Chheda", "Cofounder and CMO"],
 ] as const;
 
-// Rough invite ranges, matching the plan sizes.
-export const clientRanges = [
-  "Up to 70",
-  "71 to 170",
-  "171 to 340",
-  "341 to 700",
-  "More than 700",
-  "Not sure",
-] as const;

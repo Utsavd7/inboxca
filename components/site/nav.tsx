@@ -77,13 +77,8 @@ export function Nav({ home = true }: { home?: boolean }) {
         <a className="nav-sign-in" href="/sign-in">
           Sign in
         </a>
-        <a
-          className="btn btn-small"
-          href={`${base}#invite`}
-          data-open-dialog="invite"
-          aria-haspopup="dialog"
-        >
-          Ask for an invite
+        <a className="btn btn-small" href="/sign-up">
+          Get started
         </a>
         <button
           type="button"

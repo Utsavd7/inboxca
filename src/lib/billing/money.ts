@@ -51,6 +51,26 @@ export function planPrice(formula: PlanFormula, plan: FirmPlan, cycle: Cycle) {
   return { code: preset?.code ?? "custom", name, lines, paise: lines.reduce((sum, line) => sum + line.paise, 0), people: preset?.people ?? formula.custom.includedPeople, blockCap: cap, aiCredits: preset?.aiCredits ?? fit.aiCredits ?? 0 };
 }
 
+// A plan chosen on the site's price list, from plain query parameters (plan, cycle and the
+// estimator's answers): the visitor's answers when they name that plan, else that plan's size
+// in their kind of practice. Null when the link names no plan the formula prices.
+export function chosenPlan(formula: PlanFormula, query: Record<string, string | string[] | undefined>) {
+  const one = (key: string) => { const value = query[key]; return typeof value === "string" ? value : undefined; };
+  const code = one("plan");
+  const cycle: Cycle = one("cycle") === "yearly" ? "yearly" : "monthly";
+  const answers = planSchema.safeParse({ clients: Number(one("clients")), practice: one("practice"), people: Number(one("people")) });
+  let plan = answers.success ? answers.data : null;
+  const preset = formula.plans.find((each) => each.code === code);
+  if (preset && (!plan || planPrice(formula, plan, cycle).code !== code)) {
+    const practice = plan?.practice ?? "mixed";
+    const rate = formula.practices.find(([key]) => key === practice)![2];
+    plan = { clients: Math.floor(preset.maxReturns / rate), practice, people: Math.min(plan?.people ?? 1, formula.custom.includedPeople), aiBlocks: 0 };
+  }
+  if (!plan) return null;
+  const price = planPrice(formula, plan, cycle);
+  return price.code === code ? { plan, cycle, price } : null;
+}
+
 // The plan fit (5.14, D38): the firm's two yearly measures, used so far and projected to March,
 // against its plan. A plan's InboxCA storage is its returns at the formula's rate (returnsPerStep
 // returns to a GB). Monthly payers earn the year's allowance a twelfth a month, unused amounts

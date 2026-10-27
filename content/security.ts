@@ -111,7 +111,6 @@ export const securitySections = [
         ? "This website sets no cookies. It counts visits without cookies and without knowing who you are."
         : "This website sets no cookies and has no tracking or analytics.",
       "Other companies' names and logos belong to their owners. They are shown only to say what InboxCA is built to work with, and do not mean a partnership.",
-      "The invite form opens a draft in your own email app. Nothing is sent until you send it.",
     ],
   },
 ] as const;
