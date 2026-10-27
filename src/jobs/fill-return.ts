@@ -37,7 +37,9 @@ export const fillReturn:Handler=async(job)=>{
     // to fill on its page: nothing is guessed, and no hourly retry.
     if(itr) {const review=itrReviewSchema.parse(await (await workerForm({...request,purpose:"check"})).json());if(review.missing.length || review.issues.length) return {done:true};}
     const keep=itr ? await keepForDifferences(firm,{client:work.client,period:work.period,form:work.form,sources:work.drafts.map(draft=>draft.id)}) : null;
-    await keep?.(await savePrepared(request,null,null,undefined,true));
+    // Saved first: an optional call skips its arguments, so a GST return (no keep) must not be saved inside one.
+    const saved=await savePrepared(request,null,null,undefined,true);
+    await keep?.(saved);
     return {done:true};
   } catch {return {retry:"form_not_filled",patient:true};}
 };
