@@ -192,10 +192,14 @@ test("a request for Form No. 130 or a filed GST return is answered from the driv
     await row(owner, subject).getByText(subject).click();
     await expect(pane(owner)).toContainText(`InboxCA sent ${name} as a secure link.`);
   }
-  // The reply names the paper as it is called now.
-  await expect.poll(async () => (await mailTexts(shah.email)).join("\n")).toContain("has shared Form No. 130 (was Form 16) for FY 2026-27 with you.");
+  // The reply names the paper and its year as they are called now.
+  await expect.poll(async () => (await mailTexts(shah.email)).join("\n")).toContain("has shared Form No. 130 (was Form 16) for Tax year 2026-27 with you.");
   await owner.goto("/app/inbox?status=reply");
   await row(owner, `GSTR-1 ${tag}`).getByText(`GSTR-1 ${tag}`).click();
   await expect(pane(owner)).toContainText("Asks for a filed return. Only the prepared return is saved, not the filed copy");
+  // The team may still attach a prepared return as a draft to check, named so they can tell.
+  const attach = pane(owner).getByLabel("Add a paper from the drive");
+  await expect(attach.locator("option", { hasText: "Shah GSTR-1 Sep 2026" })).toHaveText("Shah GSTR-1 Sep 2026 - v1.json (Prepared by InboxCA, not the filed copy)");
+  await expect(attach.locator("option", { hasText: "filed.pdf" })).toHaveText("Shah GSTR-3B Sep 2026 filed.pdf");
   expect(await query(local.dbUrl, "select s.id from public.shares s join public.documents d on d.id = s.document_id where d.client_id = $1 and d.prepared is not null", [shah.id])).toEqual([]);
 });

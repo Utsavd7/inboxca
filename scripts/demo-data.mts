@@ -15,7 +15,7 @@ for (const line of readFileSync(".env.local", "utf8").split("\n")) {
 const { default: pg } = await import("pg");
 const { createClient } = await import("@supabase/supabase-js");
 const { serverCrypto } = await import("../src/lib/crypto");
-const { describeFile, periodName } = await import("../src/lib/documents");
+const { describeFile, filePeriod } = await import("../src/lib/documents");
 const { fileName, folderPath } = await import("../src/lib/drive");
 const { openDrive } = await import("../src/lib/drive-account");
 const { demoFiles, gstin } = await import("./demo-files.mts");
@@ -194,7 +194,7 @@ if (driveAccount) {
     const event = events.get(client)!;
     const about = describeFile(original, "", event.label, new Date().toISOString());
     const folder = await drive.ensureFolder([...folderPath("year_client_work", about.year, client, about.work), ...(about.sure ? [] : ["To check"])]);
-    const name = fileName({ client, type: about.type, period: periodName(about.period), extension: original.split(".").pop()! });
+    const name = fileName({ client, type: about.type, period: filePeriod(about.period), extension: original.split(".").pop()! });
     // Already there from an earlier run: the same file, used again.
     const saved = await drive.save(folder, name, bytes);
     const id = randomUUID();

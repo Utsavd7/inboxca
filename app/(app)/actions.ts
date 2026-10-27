@@ -14,7 +14,7 @@ import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { describeFile, documentTypes, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
+import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, renewDrive, saveDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
@@ -1110,7 +1110,7 @@ export async function manageDocument(form: FormData) {
   const placed =
     before !== "taken"
       ? { id: before.id, name: next.name! }
-      : await placeUnderFreeName({ client, type: next.document_type, period: periodName(next.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place, naming);
+      : await placeUnderFreeName({ client, type: next.document_type, period: filePeriod(next.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place, naming);
   if (placed === "taken") redirect(`${back}&error=drive`);
   await supabaseAdmin().rpc("rename_document", {
     target: id,
@@ -1150,7 +1150,7 @@ async function saveForClient(
   const now = new Date().toISOString();
   const folder = await opened.drive.ensureFolder(folderFor(opened.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: values.status === "to_check" }));
   const placed = await placeUnderFreeName(
-    { client: client.name, type: values.document_type, period: periodName(values.period_key), extension: path.extname(file.name) },
+    { client: client.name, type: values.document_type, period: filePeriod(values.period_key), extension: path.extname(file.name) },
     receivedLabel(now),
     (name) => opened.drive.save(folder, name, file.bytes),
     opened.naming,
@@ -1325,7 +1325,7 @@ async function fileUnlocked(membership: NonNullable<Awaited<ReturnType<typeof cu
   const { data: own } = portal ? await admin.from("client_registrations").select("id").eq("firm_id", membership.firmId).eq("client_id", paper.client_id).eq("kind", "pan").eq("number_bidx", await serverCrypto().blindIndex(membership.firmId, "pan", portal.pan)).maybeSingle() : { data: null };
   if (!portal || !own) return;
   const client = paper.clients.name, folder = await opened.drive.ensureFolder(folderFor(opened.order, client, { work: "income_tax", period: portal.period, receivedAt: paper.received_at, toCheck: false }));
-  const placed = await placeUnderFreeName({ client, type: portal.type, period: periodName(portal.period), extension: path.extname(paper.name) }, receivedLabel(paper.received_at), (name) => opened.drive.move(paper.drive_file_id, folder, name), opened.naming);
+  const placed = await placeUnderFreeName({ client, type: portal.type, period: filePeriod(portal.period), extension: path.extname(paper.name) }, receivedLabel(paper.received_at), (name) => opened.drive.move(paper.drive_file_id, folder, name), opened.naming);
   if (placed === "taken") return;
   await admin.rpc("rename_document", { target: id, actor: userId, new_work: "income_tax", new_type: portal.type, new_period: portal.period, new_status: "filed", new_name: placed.name, new_file: placed.id });
   await settleVersions(admin, { client_id: paper.client_id, work_type: "income_tax", document_type: portal.type, period_key: portal.period, registration_id: null });
@@ -1383,7 +1383,7 @@ export async function removeDocument(form: FormData) {
   const placed =
     first !== "taken"
       ? { id: first.id, name: wanted }
-      : await placeUnderFreeName({ client, type: document.document_type, period: periodName(document.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place, naming);
+      : await placeUnderFreeName({ client, type: document.document_type, period: filePeriod(document.period_key), extension: path.extname(document.name) }, receivedLabel(document.received_at), place, naming);
   if (placed === "taken") redirect(`${back}&error=drive`);
   await supabaseAdmin().rpc("remove_document", { target: id, actor: userId, new_status: status, new_name: placed.name, new_file: placed.id });
   if (copy && (await copy)) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.safety_restored", entity_type: "document", entity_id: id });

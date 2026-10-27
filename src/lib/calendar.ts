@@ -6,12 +6,13 @@ const monthOf = (key: string, offset = 0) => {
   return `${months[index % 12]} ${Math.floor(index / 12)}`;
 };
 
-// "Sep 2026", "Jul to Sep 2026", or "FY 2025-26" for a year ending in March 2026.
+// "Sep 2026", "Jul to Sep 2026", or "FY 2025-26" for a year ending in March 2026. A year from
+// 1 April 2026 is a tax year under the Income-tax Act, 2025: "Tax year 2026-27".
 export function periodLabel(frequency: string | null, key: string | null) {
   if (!key) return "";
   if (frequency === "yearly") {
     const end = Number(key.slice(0, 4));
-    return `FY ${end - 1}-${String(end).slice(2)}`;
+    return `${end >= 2027 ? "Tax year" : "FY"} ${end - 1}-${String(end).slice(2)}`;
   }
   if (frequency === "quarterly") return `${monthOf(key, -2).split(" ")[0]} to ${monthOf(key)}`;
   return monthOf(key);

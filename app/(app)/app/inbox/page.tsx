@@ -65,6 +65,9 @@ const shortTime = (at: string, today: string) => {
 const longTime = (at: string) => india(at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const dayName = (day: string) => india(`${day}T12:00:00+05:30`, { weekday: "short", day: "numeric", month: "short" });
 const uuid = /^[0-9a-f-]{36}$/;
+// Papers to attach. InboxCA's own prepared returns stay (a CA often sends a draft to check), named so staff can tell.
+const attachable = (papers: { id: string; name: string; prepared: unknown }[] | null) =>
+  (papers ?? []).map(({ id, name, prepared }) => ({ id, name: prepared ? `${name} (Prepared by InboxCA, not the filed copy)` : name }));
 
 type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "compose" | "approved" | "error" | "replied" | "written" | "unsent" | "answer" | "decided" | "cleared" | "confirm" | "file" | "snoozed" | "assigned" | "filed" | "edit" | "went" | "stopped", string | undefined>;
 
@@ -307,7 +310,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       ]
     : [];
   const mayWriteAttach = !!writeTo && membership.may("send", writeTo.id);
-  const { data: writePapers } = mayWriteAttach ? await supabase.from("documents").select("id, name").eq("client_id", writeTo.id).eq("status", "filed").order("received_at", { ascending: false }).limit(50) : { data: [] };
+  const { data: writePapers } = mayWriteAttach ? await supabase.from("documents").select("id, name, prepared").eq("client_id", writeTo.id).eq("status", "filed").order("received_at", { ascending: false }).limit(50) : { data: [] };
   // The paging client picker, for the filter, for writing and for filing: a search, eight
   // names a page.
   const clientPicker = (summary: string, keep: Partial<Search>, link: (id: string) => string, current?: string, open = !!cq || !!sp.cpage) => (
@@ -406,7 +409,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const inIds = open.messages.filter((message) => message.box === "inbox").map((message) => message.messageId);
     const [{ data: threadEvents }, { data: clientPapers }, { data: links }, { data: fileTo }, { data: what }, { data: sends }, { data: notice }, sender] = await Promise.all([
       inIds.length ? supabase.from("email_events").select("id, provider_message_id").eq("firm_id", firm).in("provider_message_id", inIds) : Promise.resolve({ data: [] as { id: string; provider_message_id: string }[] }),
-      clientId && event ? supabase.from("documents").select("id, name, document_type, period_key").eq("client_id", clientId).eq("status", "filed").order("received_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] as { id: string; name: string; document_type: string; period_key: string }[] }),
+      clientId && event ? supabase.from("documents").select("id, name, document_type, period_key, prepared").eq("client_id", clientId).eq("status", "filed").order("received_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] as { id: string; name: string; document_type: string; period_key: string; prepared: null }[] }),
       request?.reason_code === "client_unclear" && event ? supabase.from("contact_clients").select("client_id, clients(name)").eq("contact_id", event.contact_id ?? "") : Promise.resolve({ data: [] as { client_id: string; clients: { name: string } | null }[] }),
       // File to a client, for mail InboxCA could not match: the client picked, then confirmed.
       event && !event.client_id && sp.file && uuid.test(sp.file) ? supabase.from("clients").select("id, name").eq("id", sp.file).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
@@ -614,7 +617,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           ) : event?.client_id && connected && (
             // An email waiting for a person gets a reply suggested by why it waits; a paper not in the drive, the client's Ask for papers too.
             // Once it no longer waits, the box starts empty again.
-            <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : undefined} mail={event.id} papers={(clientPapers ?? []).map(({ id, name }) => ({ id, name }))} suggested={suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
+            <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : undefined} mail={event.id} papers={attachable(clientPapers)} suggested={suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
               suggestion={request ? suggestedReply(request.reason_code, { name: sender || open.client?.name || "", client: open.client?.name ?? "", firm: membership.firmName, paper: asked }) : undefined}
               askPapers={request?.reason_code === "record_not_found" && !membership.viewOnlyUntil ? `/app/clients/${event.client_id}?tab=documents&ask=1` : undefined} />
           )}
@@ -835,7 +838,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             </div>
             {writeTo &&
               (recipients.length ? (
-                <ComposeBox key={writeTo.id} client={writeTo.id} recipients={recipients} papers={writePapers ?? []} ai={aiReady()} mayAttach={mayWriteAttach} name={writeTo.name} firm={membership.firmName} />
+                <ComposeBox key={writeTo.id} client={writeTo.id} recipients={recipients} papers={attachable(writePapers)} ai={aiReady()} mayAttach={mayWriteAttach} name={writeTo.name} firm={membership.firmName} />
               ) : (
                 <p className="ib-note">
                   {writeTo.name} has no email address yet. Add one on <Link href={`/app/clients/${writeTo.id}?tab=details`}>the client&apos;s page</Link>.
