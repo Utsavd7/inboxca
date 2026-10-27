@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
+import { mayDownload, PAUSED } from "@/src/lib/download-use";
 import { openDrive } from "@/src/lib/drive-account";
 import { openCookie, opens } from "@/src/lib/share-codes";
 import { plainPage } from "@/src/lib/plain-page";
@@ -14,8 +15,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ token: str
   const back = (status: number, words: string) => plainPage(status, words, `/s/${encodeURIComponent(token)}`, "Go back to the page");
   const hash = createHash("sha256").update(token).digest("hex");
   // A private paper downloads only in a browser that entered its one-time code.
-  const { data: locked } = await admin.from("shares").select("id, needs_code").eq("link_token_hash", hash).maybeSingle();
+  const { data: locked } = await admin.from("shares").select("id, firm_id, needs_code").eq("link_token_hash", hash).maybeSingle();
   if (locked?.needs_code && !opens(locked.id, (await cookies()).get(openCookie(locked.id).name)?.value)) return back(403, "This paper is private. Enter the code from your email first.");
+  // Past the firm's downloads this month the link waits, with none of its downloads used.
+  if (locked && !(await mayDownload(locked.firm_id))) return back(429, PAUSED.client);
   const { data: used } = await admin.rpc("use_share", { token_hash: hash });
   const share = used?.[0];
   if (!share) return back(410, "This link has ended, or all its downloads have been used. Ask your CA's office to send the paper again.");

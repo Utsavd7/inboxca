@@ -1,3 +1,4 @@
+import { mayDownload, PAUSED } from "@/src/lib/download-use";
 import { openDrive } from "@/src/lib/drive-account";
 import { zip } from "@/src/lib/firm-download";
 import { currentMember } from "@/src/lib/member";
@@ -16,6 +17,7 @@ export async function GET(request: Request) {
   if (!papers.length) return plainPage(404, "These papers cannot be downloaded. Return files InboxCA prepared are not added to a ZIP.", "/app/documents", "Go to Documents");
   // The ZIP is built in the server's memory, so one holds at most 200 MB of papers.
   if (papers.reduce((sum, paper) => sum + (paper.size ?? 0), 0) > 200 * 1024 * 1024) return plainPage(413, "Choose fewer papers: one ZIP holds up to 200 MB.", "/app/documents", "Go to Documents");
+  if (!(await mayDownload(membership.firmId, papers.length))) return plainPage(429, PAUSED.owner, "/app/settings?group=data#caps", "Go to Settings");
   const admin = supabaseAdmin();
   const [{ data: files }, { data: account }] = await Promise.all([
     admin.from("documents").select("id, drive_file_id").in("id", papers.map((paper) => paper.id)),

@@ -47,9 +47,10 @@ function vapid(endpoint: string) {
 
 // Sends one message to every browser these people turned notifications on in; a browser
 // that no longer exists is forgotten. Message text never names a client. Each person also
-// gets an email copy once Orelu's system email is set up, sent alongside so the phone is not kept waiting.
-export async function notify(userIds: string[], message: Message) {
-  return (await Promise.all([pushTo(userIds, message), mailCopy(userIds, message)]))[0];
+// gets an email copy once Orelu's system email is set up, sent alongside so the phone is not kept waiting;
+// copies count against the firm's emails for the day (5.14).
+export async function notify(userIds: string[], message: Message, firmId?: string) {
+  return (await Promise.all([pushTo(userIds, message), mailCopy(userIds, message, firmId)]))[0];
 }
 async function pushTo(userIds: string[], message: Message) {
   if (!pushReady() || !userIds.length) return 0;

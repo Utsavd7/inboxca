@@ -5,6 +5,7 @@ import { driveToken } from "@/src/lib/drive-account";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { signView, viewerLabel, viewLimits, type ViewRequest } from "@/src/lib/file-worker";
 import { plainPage } from "@/src/lib/plain-page";
+import { mayDownload, PAUSED } from "@/src/lib/download-use";
 
 // Every opening checks the person's access before the worker sees a drive token.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -28,6 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const headers = { "Cache-Control": "private, no-store", Vary: "Cookie", "X-Content-Type-Options": "nosniff" };
   if (!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) return fail(503, "InboxCA cannot show or download papers here yet. Ask the owner for the paper.", headers);
   if (visible.size > viewLimits.bytes) return fail(413, "This file is too large for InboxCA to show or download. Ask the owner for it.", headers);
+  if (copy && !(await mayDownload(membership.firmId))) return fail(429, membership.role === "owner" ? PAUSED.owner : PAUSED.staff, headers);
   const admin = supabaseAdmin();
   const [{ data: document }, { data: account }] = await Promise.all([
     admin.from("documents").select("drive_file_id, name, password_enc").eq("firm_id", membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle(),

@@ -1,3 +1,4 @@
+import { mayDownload, PAUSED } from "@/src/lib/download-use";
 import { openDrive } from "@/src/lib/drive-account";
 import { currentMember } from "@/src/lib/member";
 import { plainPage } from "@/src/lib/plain-page";
@@ -13,6 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { data: visible } = await supabase.from("documents").select("id, name, prepared").eq("firm_id",membership?.firmId ?? "00000000-0000-0000-0000-000000000000").eq("id", id).neq("status", "deleted").maybeSingle();
   const extension = visible?.name.split(".").pop()?.toLowerCase() ?? "";
   if (!membership || !visible || visible.prepared || membership.role !== "owner") return plainPage(404, "This paper is not available. It may have been removed, or only the owner can download it.", "/app/documents", "Go to Documents");
+  if (!(await mayDownload(membership.firmId))) return plainPage(429, PAUSED.owner, "/app/settings?group=data#caps", "Go to Settings");
   const admin = supabaseAdmin();
   const [{ data: document }, { data: account }] = await Promise.all([
     admin.from("documents").select("drive_file_id, name").eq("id", id).single(),
