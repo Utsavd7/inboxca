@@ -100,7 +100,7 @@ const manyAPeriod = new Set(["Acknowledgement", "Challan", "Notice", "Order", "C
 // spreadsheet of them (a register InboxCA reads for a return) replaces an earlier spreadsheet, so a
 // corrected register is read once and never added to the one it corrects.
 const loose = new Set(["Purchase bills", "Sales bills", "E-way bills", "Invoices", "Salary slips", "Rent receipts", "Investment proofs", "Bank statement", "Interest certificate", "Capital gains statement", "Ledger"]);
-const spreadsheet = (name: string) => /\.(xlsx?|csv)$/i.test(name);
+const spreadsheet = (name: string) => /\.(xlsx?|ods|csv)$/i.test(name);
 
 // Versions (decided 24 Oct 2026): of a client's filed papers of one type, period and GSTIN,
 // the latest to arrive is current and the others are kept as earlier versions, their files

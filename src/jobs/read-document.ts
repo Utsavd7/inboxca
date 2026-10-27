@@ -47,7 +47,7 @@ export const readDocument: Handler = async (job) => {
   const earlier = admin.from("documents").select("id").eq("firm_id", firm).eq("client_id", document.client_id).eq("document_type", document.document_type).eq("period_key", document.period_key).eq("fingerprint", mark ?? "").in("status", ["filed", "earlier"]).lt("received_at", document.received_at).limit(1);
   const { data: same } = mark ? await (document.registration_id ? earlier.eq("registration_id", document.registration_id) : earlier.is("registration_id", null)) : { data: [] };
   if (same?.length) return { done: true };
-  if(document.status==="filed" && document.work_type==="gst" && /\.(xlsx?|csv)$/i.test(document.name)) {const {error}=await queueSales(firm,document.id);if(error) throw new Error("sales_not_queued");}
+  if(document.status==="filed" && document.work_type==="gst" && /\.(xlsx?|ods|csv)$/i.test(document.name)) {const {error}=await queueSales(firm,document.id);if(error) throw new Error("sales_not_queued");}
   if(document.status==="filed" && readsFigures(document)) {const {error}=await queuePortal(firm,document.id);if(error) throw new Error("portal_not_queued");}
   return { done: true };
 };

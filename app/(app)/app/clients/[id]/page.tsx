@@ -87,7 +87,7 @@ const reminderNote = (details: { reminded?: string[]; skipped?: { reason: string
 const mailTime = (at: string) => new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
 // A paper's icon, by what kind of file it is.
 const fileIcon = (name: string) =>
-  /\.(xlsx?|csv)$/i.test(name) ? FileSpreadsheet : /\.(jpe?g|png|webp|heic|gif)$/i.test(name) ? FileImage : /\.(json|xml)$/i.test(name) ? FileCode2 : /\.zip$/i.test(name) ? FileArchive : FileText;
+  /\.(xlsx?|ods|csv)$/i.test(name) ? FileSpreadsheet : /\.(jpe?g|png|webp|heic|gif)$/i.test(name) ? FileImage : /\.(json|xml)$/i.test(name) ? FileCode2 : /\.zip$/i.test(name) ? FileArchive : FileText;
 // Each kind of change in the Activity timeline has its own icon and tint.
 const activityIcons: Record<string, [LucideIcon, Kind]> = {
   client: [UserRound, "approve"], registration: [Hash, "approve"], contact_link: [Contact, "approve"], assignment: [UserPlus, "papers"],
@@ -176,7 +176,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     ask ? supabase.from("tasks").select("period_key").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(12) : Promise.resolve({ data: [] }),
     files && (namedIds.length || owner) ? supabase.from("documents").select(fileColumns).eq("firm_id", firm).eq("client_id", id).or([...(namedIds.length ? [`id.in.(${namedIds})`] : []), ...(owner ? ["status.eq.deleted"] : [])].join(",")).order("received_at", { ascending: false }) : Promise.resolve({ data: [] }),
     // Whether Returns offers Figures: a GST spreadsheet or JSON file filed for this client.
-    tab === "returns" ? supabase.from("documents").select("id").eq("firm_id", firm).eq("client_id", id).eq("work_type", "gst").eq("status", "filed").filter("name", "imatch", "\\.(xlsx?|csv|json)$").limit(1) : Promise.resolve({ data: [] }),
+    tab === "returns" ? supabase.from("documents").select("id").eq("firm_id", firm).eq("client_id", id).eq("work_type", "gst").eq("status", "filed").filter("name", "imatch", "\\.(xlsx?|ods|csv|json)$").limit(1) : Promise.resolve({ data: [] }),
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
