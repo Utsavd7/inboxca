@@ -1,4 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { Client } from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { chooseTemplate } from "@/src/lib/templates";
@@ -187,6 +188,41 @@ it("lets only an admin use a same layout file in the store from a period of the 
     expect((await db.query("select firm_id, entity_type, details from public.activity_log where action = 'admin.template_added' and actor_id = $1 order by details ->> 'form'", [admin])).rows).toEqual([
       { firm_id: null, entity_type: "rule", details: { form: "GSTR1", version: "9.9", from: "2026-11-01", sha256: sha(bytes) } },
       { firm_id: null, entity_type: "rule", details: { form: "ITR1", version: "9.9", from: "2027-04-01", sha256: sha(bytes) } },
+    ]);
+  }));
+
+it("puts a newer version with the same layout live by itself for the periods of the version it matches, once, logged; a changed layout stays a draft", () =>
+  rollback(db, async () => {
+    await seed();
+    // The official ITR-1 schema written on one line as version 1.3: the same fields, its own hash.
+    const bytes = Buffer.from(JSON.stringify(JSON.parse(readFileSync("reference/official/itr/ITR-1_2026_Main_V1.1.json", "utf8"))));
+    const source = (file: string) => ({ file, url: `https://official.invalid/f/${file.split("/").pop()}`, sha256: sha(bytes) });
+    await db.query("update public.platform_settings set value = value || jsonb_build_object('changes', $1::jsonb) where key = 'watch'", [JSON.stringify([{ source: "itr_downloads", at: "2026-10-27T03:00:00.000Z", status: "draft", compared: [
+      { file: "ITR-1_2026_Main_V1.3.json", with: "1.1", same: true, live: true, template: { form_code: "ITR1", version: "1.3", source: source("itr/ITR-1_2026_Main_V1.3.json") } },
+      // The GSTR-1 v2.0 workbook beside v2.2: a changed layout never goes live, even with a version recorded beside it.
+      { file: "GSTR1_Excel_Workbook_Template_V9.10.xlsx", with: "2.2", differences: ["Sheet added: hsn"], more: 0, live: true, template: { form_code: "GSTR1", version: "9.10", source: source("gstr1-v9.10/GSTR1_Excel_Workbook_Template_V9.10.xlsx") } },
+    ] }])]);
+    await db.query("insert into public.official_files (sha256, bytes) values ($1, $2) on conflict do nothing", [sha(bytes), bytes]);
+    for (const person of [owner, admin]) {
+      if (person === admin) await asAdmin();
+      else await actAs(db, person);
+      expect((await attempt(db, "select public.forms_go_live()")).error).toContain("permission denied");
+    }
+    await asOwner(db);
+    await db.query("set local role service_role");
+    expect((await db.query("select public.forms_go_live() n")).rows).toEqual([{ n: 1 }]);
+    expect((await db.query("select public.forms_go_live() n")).rows).toEqual([{ n: 0 }]);
+    await asOwner(db);
+    const { rows } = await db.query("select form_code, version, valid_from::text, valid_until::text, status, source, mappings from public.templates where form_code in ('ITR1', 'GSTR1') order by form_code, version");
+    expect(rows.filter((row) => ["1.3", "9.10"].includes(row.version))).toEqual([
+      { form_code: "ITR1", version: "1.3", valid_from: "2026-04-01", valid_until: "2027-04-01", status: "active", source: source("itr/ITR-1_2026_Main_V1.3.json"), mappings: { format: "json" } },
+    ]);
+    // Both work for AY 2026-27, the newer by default.
+    const itr = rows.filter((row) => row.form_code === "ITR1");
+    expect(chooseTemplate(itr, "ITR1", "2026").version).toBe("1.3");
+    expect(chooseTemplate(itr, "ITR1", "2026", "1.1", "Filing software needs the earlier version").version).toBe("1.1");
+    expect((await db.query("select firm_id, actor_id, entity_type, details from public.activity_log where action = 'form.went_live' and details ->> 'sha256' = $1", [sha(bytes)])).rows).toEqual([
+      { firm_id: null, actor_id: null, entity_type: "rule", details: { form: "ITR1", version: "1.3", with: "1.1", sha256: sha(bytes) } },
     ]);
   }));
 

@@ -40,7 +40,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "admin.passkey_added": [], "admin.passkey_copied": [], "admin.passkey_used": [], "admin.passkeys_removed": ["removed"], "admin.job_retried": ["job"],
   "admin.incident_posted": ["parts", "level"], "admin.incident_updated": [], "admin.incident_closed": [], "admin.incident_emailed": ["firms"],
   "admin.rule_verified": ["code", "period", "by"], "admin.extension_added": ["code", "period", "on"], "admin.office_thresholds": ["taps", "days"], "admin.change_reviewed": ["source", "at"], "admin.template_added": ["form", "version", "from", "sha256"],
-  "admin.update_noted": ["item", "uses", "keeps"], "admin.template_ended": ["form", "version", "until", "link"],
+  "admin.update_noted": ["item", "uses", "keeps"], "admin.template_ended": ["form", "version", "until", "link"], "form.went_live": ["form", "version", "with", "sha256"],
   "support.asked": [], "support.approved": [], "support.refused": [], "support.ended": [], "support.viewed": [],
   "office.learned": [], "office.refused": ["reason"], "office.no_fixed": [], "branch.hours": ["settings"],
   ...Object.fromEntries(["on", "off", "forget", "fixed", "here", "confirm", "today", "refuse", "deputies", "follow"].map((decision) => [`office.${decision}`, ["deputies", "co_admin", "branch", ...(decision === "refuse" ? ["device", "unmarked"] : [])]])),
