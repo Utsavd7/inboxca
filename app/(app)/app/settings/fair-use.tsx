@@ -1,4 +1,6 @@
+import { aiCredits } from "@/src/lib/ai";
 import { downloadUse } from "@/src/lib/download-use";
+import { supabaseAdmin } from "@/src/lib/supabase";
 import { systemMailReady, systemMailUse } from "@/src/lib/system-mail";
 import { Badge } from "../ui";
 import { Pending } from "../pending";
@@ -39,5 +41,30 @@ export async function FairUse({ firmId }: { firmId: string }) {
         </form>
       )}
     </>
+  );
+}
+
+// The owner's AI meter (PLAN.md 5.18): this month's credits used of all the firm has, what is
+// left of each top-up and when it ends, and whether auto top-up is on.
+export async function AiUse({ firmId }: { firmId: string }) {
+  const [credits, { data: sub }] = await Promise.all([aiCredits(firmId), supabaseAdmin().from("subscriptions").select("plan").eq("firm_id", firmId).maybeSingle()]);
+  if (!credits) return null;
+  const auto = (sub?.plan as { autoTopUp?: number } | null)?.autoTopUp ?? 0;
+  const left = credits.topups.reduce((sum, topup) => sum + topup.left, 0);
+  const until = (at: string) => new Date(at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "long", year: "numeric" });
+  return (
+    <dl className="set-meters">
+      <div>
+        <dt>AI credits this month {level(credits.used, credits.available)}</dt>
+        <dd>{figure(credits.used, credits.available)}</dd>
+        <dd className="set-bar"><span style={{ width: `${Math.min(100, Math.round((100 * credits.used) / Math.max(1, credits.available)))}%` }} /></dd>
+        <dd className="set-meter-note">{auto ? `Auto top-up is on, up to ${auto} a month` : "Auto top-up is off"}</dd>
+      </div>
+      <div>
+        <dt>Top-ups left</dt>
+        <dd>{left ? `${left.toLocaleString("en-IN")} credits` : "None"}</dd>
+        <dd className="set-meter-note">{credits.topups.length ? credits.topups.map((topup) => `${topup.left.toLocaleString("en-IN")} until ${until(topup.until)}`).join(", ") : "A top-up lasts 12 months and is used after the month's own credits"}</dd>
+      </div>
+    </dl>
   );
 }

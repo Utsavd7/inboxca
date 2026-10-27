@@ -11,6 +11,7 @@ const words: Record<string, { title: string; body: string; url?: string }> = {
   downloads_100: { title: "Downloads are paused", body: "Your firm has used this month's downloads through InboxCA. Allow more in Settings, Your data, or open papers in your drive." },
   ai_80: { title: "AI credits this month", body: "Your firm has used 80% of this month's AI credits. At 90% automatic reading pauses. Add credits in Settings, Billing.", url: "/app/settings?group=billing#addons" },
   ai_100: { title: "AI is paused", body: "Your firm has used this month's AI credits, so AI is paused until next month. Emails are still filed by your rules. Add credits in Settings, Billing.", url: "/app/settings?group=billing#addons" },
+  ai_day: { title: "Automatic AI is paused for today", body: "Your firm used more than 20% of its monthly AI credits today, so automatic AI is paused until tomorrow. Your team can still ask AI for a reply.", url: "/app/settings?group=data#ai" },
 };
 export const usageAlert: Handler = async (job) => {
   const message = words[job.idempotency_key.split(":")[1]];
