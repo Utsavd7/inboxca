@@ -23,6 +23,7 @@ const alertWords: Record<string, string> = {
   unknown_at_provider: "Cashfree has a payment InboxCA does not know.",
   not_settled: "A payment has not settled in 7 days.",
   mandate_cancel_failed: "A firm's AutoPay could not be cancelled at Cashfree. Cancel it in Cashfree's dashboard.",
+  ai_repeated: "A firm sent AI the same email or paper twice. See AI use.",
 };
 // D32: Orelu registers for GST before its turnover across all its products passes the threshold;
 // the admin console alerts at ₹15 lakh in a financial year.

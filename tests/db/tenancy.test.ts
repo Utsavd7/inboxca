@@ -261,6 +261,7 @@ async function seedEvery(tag: string) {
   await run("insert into public.firm_keys (firm_id, wrapped_key) values ($1, 'sealed')", []);
   await run("insert into public.jobs (firm_id, kind, entity_type, entity_id, idempotency_key) values ($1, 'reminders', 'client', $2, $2::uuid::text)", [ids.client]);
   await run("insert into public.usage_ledger (firm_id, due_on, ref) values ($1, current_date, $2)", [ids.ledger]);
+  await run("insert into public.ai_ledger (firm_id, reason, credits, hash) values ($1, 'reply_draft', 1, 'hash')", []);
   await run("insert into public.subscriptions (firm_id, cycle, plan) values ($1, 'monthly', '{}')", []);
   await run("insert into public.payments (firm_id, kind, amount_paise) values ($1, 'plan', 100)", []);
   return { ...ids, name, people };
@@ -296,6 +297,7 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["add_clients", `select public.add_clients($1, '[{"name": "Taken", "kind": "business"}]') r`, ["firm"], true],
   ["admin_accounts", "select * from public.admin_accounts()", [], false],
   ["admin_add_extension", "select public.admin_add_extension('GSTR1', '2026-09', current_date, 'https://example.test') r", [], true],
+  ["admin_ai_report", "select public.admin_ai_report() r", [], false],
   ["admin_billing", "select public.admin_billing() r", [], false],
   ["admin_check_split", "select public.admin_check_split($1, $1, 'separate') r", ["firm"], true],
   ["admin_pilot", "select public.admin_pilot($1) r", ["firm"], true],
