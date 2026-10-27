@@ -68,6 +68,7 @@ function alertItem(alert: { id: string; entity_id: string; client_id: string | n
     case "renames": return { title: `Check what ${details.email} renamed`, why: `Renamed ${details.count} files today. Each file's history has the changes`, action: { label: "See papers", href: "/app/documents" } };
     case "captures": return { title: `Ask ${details.email} about screen captures`, why: `Tried to capture a paper's screen ${details.count} times today. Each try is logged`, action: { label: "See people", href: "/app/people" } };
     case "parallel": return { title: `Ask whether ${details.email}'s login is shared`, why: `Signed in on another PC ${details.count} times today, which ends the other session each time`, action: { label: "See people", href: "/app/people" } };
+    case "owner_pcs": return { title: `Your login was used on ${details.count} computers at once`, why: "Within one hour today. Each person in your firm needs their own login", action: { label: "Invite people", href: "/app/people" } };
     case "request_stalled": return { ...client, title: `Call ${details.client}`, why: "Three reminders went, and the papers asked for are still missing", action: { label: "See papers", href: `/app/papers/${alert.entity_id}` } };
     case "drive_missing": return { title: "Find the papers missing from your drive", why: `${details.files} ${details.files === 1 ? "paper is" : "papers are"} missing from your drive`, action: { label: "See missing papers", href: "/app/documents?year=all&show=missing" } };
     case "virus": return { title: `${details.name} had a virus`, why: "Nobody can open it in InboxCA. It is in the Files with a virus folder of your drive", urgent: true, action: { label: "Got it", href: "" } };
@@ -123,7 +124,7 @@ export async function workFor(ctx: Context, late: number) {
     myQuestions(),
     owner ? Promise.resolve(supabase.from("devices").select("id").eq("firm_id", firm).eq("status", "waiting")) : null,
     Promise.resolve(supabase.rpc("notice_alerts", { target_firm: firm }).limit(10)),
-    lead ? Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, details").eq("kind", "alert").neq("entity_type", "papers_in").neq("reason_code", "drive_away").eq("status", "pending").limit(20)) : null,
+    lead ? Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, details").eq("kind", "alert").neq("entity_type", "papers_in").neq("entity_type", "owner_device").neq("reason_code", "drive_away").eq("status", "pending").limit(20)) : null,
     papers,
   ]).then(async ([asks, devices, notices, alerts, calls]): Promise<Listed[]> => {
     const waitingIds = devices?.data?.map((device) => device.id) ?? [];
@@ -144,9 +145,9 @@ export async function workFor(ctx: Context, late: number) {
         audience: "assigned" as const,
       })),
       ...(alerts?.data ?? [])
-        // Missing papers and files with a virus are the owner's to sort out; a person's day of
-        // renames, captures or second sign ins only that day.
-        .filter((alert) => (owner || !["drive_missing", "virus"].includes(alert.reason_code ?? "")) && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames"].includes(alert.reason_code ?? "") || (alert.details as AlertDetails).day === today))
+        // Missing papers, files with a virus and the owner's own login on several computers are the
+        // owner's to sort out; a person's day of renames, captures or second sign ins only that day.
+        .filter((alert) => (owner || !["drive_missing", "virus", "owner_pcs"].includes(alert.reason_code ?? "")) && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames", "owner_pcs"].includes(alert.reason_code ?? "") || (alert.details as AlertDetails).day === today))
         .filter((alert) => alert.reason_code !== "request_stalled" || !calls.some((item) => item.key === `call:${alert.entity_id}`))
         .map((alert) => ({ ...alertItem(alert), key: `${alert.reason_code === "virus" ? "virus" : "alert"}:${alert.id}`, audience: "firm" as const })),
     ]);

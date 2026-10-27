@@ -11,6 +11,7 @@ import { currentMember } from "@/src/lib/member";
 import { personName, roleNames } from "@/src/lib/roles";
 import { isLead } from "@/src/lib/work/today";
 import { OfficePanel } from "./office-panel";
+import { ComputerWaits, NewComputers } from "./new-computers";
 import { GovLine } from "./gov-line";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { Count, Presence, Press } from "./motion";
@@ -37,7 +38,8 @@ type Context = Parameters<typeof workFor>[0];
 // clients. Every query starts at once and each part shows as soon as its data is in.
 export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
   const { dropped, error, asked, panel, ...plan } = await searchParams;
-  const { supabase, userId, membership, deviceStatus, connectionWaiting, pcKey } = await currentMember();
+  const { supabase, userId, membership, deviceStatus, connectionWaiting, pcKey, ownerDevice } = await currentMember();
+  if (ownerDevice) return <ComputerWaits state={ownerDevice} codes={!!((await supabase.auth.getClaims()).data?.claims.app_metadata as { recovery?: string[] } | undefined)?.recovery?.length} error={error} />;
   if (!membership) {
     const [{ data: invites }, { data: closedFirms }] = await Promise.all([supabase.rpc("my_invites"), supabase.rpc("closed_firms")]);
     const closed = closedFirms?.[0];
@@ -101,6 +103,9 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
           {todayErrors[error]}
         </p>
       )}
+      <Suspense fallback={null}>
+        <NewComputers error={error} />
+      </Suspense>
       <Suspense fallback={null}>
         <OfficePanel compact />
       </Suspense>

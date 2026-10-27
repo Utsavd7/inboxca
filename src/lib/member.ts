@@ -6,6 +6,7 @@ import { closingToday } from "./hours";
 import { may, mayDecide, type Permissions, type Right, type Standing } from "./rights";
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
 import { chosenFirm, memberHours, officeDeviceAccess, officeProof } from "./office";
+import { newComputer } from "./owner-device";
 import { supabaseAdmin, supabaseServer } from "./supabase";
 
 // The signed in person and their firm, for every product page and action; cached for the
@@ -24,6 +25,9 @@ export const currentMember = cache(async () => {
   const office = await officeDeviceAccess(userId);
   if (claims.claims.aal !== "aal2" && (!office.approved || office.anywhere)) redirect("/sign-in/two-step");
   const session = String(claims.claims.session_id ?? "");
+  // The owner's login on a computer the owner has not approved reaches nothing of the firm (D38).
+  const ownerDevice = office.ownerOf ? await newComputer(userId, office.ownerOf, claims.claims) : null;
+  if (ownerDevice) return { supabase: signedIn, userId, membership: null, deviceStatus: null, connectionWaiting: false, pcKey: null, ownerDevice };
   // India only (5.17, Remote friendly): the country the host vouches for, from the header
   // COUNTRY_HEADER names (Cloudflare's CF-IPCountry); unset, the check is off. The database
   // refuses those it binds without this proof (country_allows); the owner works from anywhere.
@@ -32,6 +36,7 @@ export const currentMember = cache(async () => {
   const proof = {
     ...(office.approved || office.remoteUntil ? { "x-inboxca-office": await officeProof(userId, session) } : {}),
     ...(inIndia && { "x-inboxca-country": await officeProof(`country:${userId}`, session) }),
+    ...(office.ownerOf && { "x-inboxca-device": await officeProof(`device:${userId}`, session) }),
   };
   const anyFirm = Object.keys(proof).length ? await supabaseServer(proof) : signedIn;
   const { data: rows } = await anyFirm

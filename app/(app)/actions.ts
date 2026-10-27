@@ -25,6 +25,7 @@ import { activeClients, importSince, inScope, planImport, type Planned, type Sco
 import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetails } from "@/src/lib/notices";
 import { onedriveReady, onedriveSignIn } from "@/src/lib/onedrive";
 import { askAway, firmAdmin, memberHours, officeApprover, officePc, requestLine, type Office } from "@/src/lib/office";
+import { computersOf, thisComputer } from "@/src/lib/owner-device";
 import { presets, type Preset } from "@/src/lib/presets";
 import { CHALLENGE_COOKIE, checkAdminKey, checkKeyUse, checkNewKey, newChallenge, totp } from "@/src/lib/pc-key";
 import { PASSKEY_FACTOR, sealFactor } from "@/src/lib/sign-in";
@@ -1990,6 +1991,44 @@ export async function reviewDevice(form: FormData) {
   if (error) throw new Error(`Device review failed: ${error.code}`);
   revalidatePath("/app");
   redirect(back);
+}
+
+// A new computer on the owner's login (D38): approved or refused by the owner from a computer
+// already signed in, never a phone (laptop only, 26 Oct 2026). The database checks that it is the
+// owner, on an approved computer other than the one asking, and that the request is still open.
+export async function reviewOwnerDevice(form: FormData) {
+  const { supabase, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const back = (error?: string) => (form.get("back") === "settings" ? `/app/settings?group=access${error ? `&error=${error}` : ""}` : `/app${error ? `?error=${error}` : ""}`);
+  const request = String(form.get("request") ?? "");
+  if (/Android|iPhone|iPad/.test((await headers()).get("user-agent") ?? "")) redirect(back("phone"));
+  if (!z.uuid().safeParse(request).success) redirect(back());
+  const { data, error } = await supabase.rpc("review_owner_device", { request, decision: form.get("decision") === "approve" ? "approve" : "refuse" });
+  if (error) throw new Error(`Computer review failed: ${error.code}`);
+  revalidatePath("/app");
+  redirect(back(data ? undefined : "computer_ended"));
+}
+
+// An approved computer taken off the owner's login (D38), such as a lost laptop, never the one in
+// use. A session cannot be traced to its computer, so every other session of the owner ends at
+// once too, its refresh token with it; the database then refuses their tokens (session_live), and
+// the computers still approved sign in again as usual. Logged.
+export async function removeComputer(form: FormData) {
+  const { supabase, userId, membership } = await currentMember();
+  if (membership?.role !== "owner") redirect("/app");
+  const id = String(form.get("computer") ?? "");
+  const admin = supabaseAdmin();
+  const [{ data: user, error: unread }, mine, { data: { session } }] = await Promise.all([admin.auth.admin.getUserById(userId), thisComputer(userId), supabase.auth.getSession()]);
+  if (unread) throw new Error(`Owner computers not read: ${unread.code}`);
+  const computers = computersOf(user.user?.app_metadata.devices);
+  if (!id || id === mine || !computers.some((computer) => computer.id === id) || !computers.some((computer) => computer.id === mine) || !session) redirect("/app/settings?group=access#computers");
+  const { error } = await admin.auth.admin.updateUserById(userId, { app_metadata: { devices: computers.filter((computer) => computer.id !== id) } });
+  if (error) throw new Error(`Owner computer not removed: ${error.code}`);
+  const { error: still } = await admin.auth.admin.signOut(session.access_token, "others");
+  if (still) throw new Error(`Other sessions not ended: ${still.code}`);
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "device.removed", entity_type: "user", entity_id: userId });
+  revalidatePath("/app/settings");
+  redirect("/app/settings?group=access&saved=computer_removed#computers");
 }
 
 // Permission requests (PLAN.md 5.17.2): asked by an employee or manager who may not do it
