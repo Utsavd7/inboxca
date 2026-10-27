@@ -6,19 +6,20 @@ import { addVersion, noteUpdate, reviewChange } from "./actions";
 import { currentAdmin, when } from "./admin";
 import { Submit } from "./parts";
 
-type Compared = { file: string; with?: string; same?: true; differences?: string[]; more?: number; error?: string; template?: { form_code: string; version: string } };
+type Compared = { file: string; with?: string; same?: true; live?: true; differences?: string[]; more?: number; error?: string; template?: { form_code: string; version: string } };
 type Change = { source: string; name: string; url: string; at: string; added?: string[]; removed?: string[]; status: string; compared?: Compared[] };
 type Alert = { source: string; name: string; url: string; at: string; reason: string };
 type Update = { id: string; source: string; area: string; title: string; date?: string; link: string; seen: string; note?: { uses?: string; keeps?: string } };
 type Watch = { sources?: Record<string, { checked?: string }>; changes?: Change[]; alerts?: Alert[]; items?: Update[] };
 const areas: Record<string, string> = { gst: "GST", income_tax: "Income tax", tds: "TDS", company_law: "Company law" };
 
-// A new official file beside the copy InboxCA fills today. One with the same layout, kept in
-// the store, is used from a period in one click; one with a changed layout never is.
+// A new official file beside the copy InboxCA fills today. A newer version of it with the same
+// layout goes live by itself; another kept in the store is used from a period in one click; one
+// with a changed layout never is.
 function Comparison({ compared, change, used }: { compared: Compared; change: Change; used?: { valid_from: string | null } }) {
   if (compared.error) return <span className="sub">{compared.file}: could not compare ({compared.error}).</span>;
   const next = compared.template;
-  if (compared.same && next && used) return <span className="sub">{compared.file}: same layout as {compared.with}. In use as version {next.version}{used.valid_from && ` from ${dueLabel(used.valid_from)}`}.</span>;
+  if (compared.same && next && used) return <span className="sub">{compared.file}: same layout as {compared.with}. {compared.live ? "Went live by itself" : "In use"} as version {next.version}{used.valid_from && ` from ${dueLabel(used.valid_from)}`}.</span>;
   if (compared.same && next) return (
     <form action={addVersion} className="admin-form">
       <input type="hidden" name="source" value={change.source} />

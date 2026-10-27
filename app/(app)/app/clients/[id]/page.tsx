@@ -187,12 +187,14 @@ export default async function Client({ params, searchParams }: { params: Promise
   const dated = tab === "notices" ? (notices ?? []).filter((notice) => (notice.details as unknown as NoticeDetails).action_date).map((notice) => notice.id) : [];
   // The portal file each open monthly GSTR-3B is read from (PLAN.md 5.3.1): the month's GSTR-2B.
   const months = sub === "returns" ? (tasks ?? []).flatMap((task) => (task.code === "GSTR3B_M" && task.status !== "filed" && task.period_key ? [task.period_key] : [])) : [];
+  // And each open ITR's, for its year: Form 16, Form 26AS and AIS.
+  const itrYears = sub === "returns" ? (tasks ?? []).flatMap((task) => (task.code?.startsWith("ITR") && task.status !== "filed" && task.period_key ? [task.period_key.slice(0, 4)] : [])) : [];
   // The latest open request's upload link, opened with the firm's key for those who may ask,
   // to copy and send by hand.
   const openAsk = viewOnly ? undefined : (asks ?? []).filter((request) => request.status === "pending" && (request.details as unknown as DocumentRequest).link_enc).sort((a, b) => (b.expires_at ?? "").localeCompare(a.expires_at ?? ""))[0];
   // The second and last round: the client's own numbers and contacts opened with the firm's key,
   // and what the shown lists need from them.
-  const [numbers, email, contacts, { data: confirms }, { data: statements }, uploadLink] = await Promise.all([
+  const [numbers, email, contacts, { data: confirms }, { data: statements }, uploadLink, { data: taxPapers }] = await Promise.all([
     Promise.all(client.client_registrations.map(async (registration) => ({ ...registration, number: await crypto.decrypt(firm, `clients/${client.id}/${registration.kind}`, registration.number_enc) }))),
     client.email_enc ? crypto.decrypt(firm, `clients/${client.id}/email`, client.email_enc) : "",
     Promise.all(
@@ -205,6 +207,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     dated.length ? supabaseAdmin().from("activity_log").select("entity_id, action, actor_id").eq("firm_id", firm).in("entity_id", dated).in("action", confirmAction) : Promise.resolve({ data: [] }),
     months.length ? supabase.from("documents").select("period_key").eq("client_id", id).eq("document_type", "GSTR-2B").neq("status", "deleted").in("period_key", months) : Promise.resolve({ data: [] }),
     openAsk && (async () => `${process.env.APP_BASE_URL ?? `${(await headers()).get("x-forwarded-proto") ?? "http"}://${(await headers()).get("host")}`}/u/${await crypto.decrypt(firm, `requests/${openAsk.id}/link`, (openAsk.details as unknown as DocumentRequest).link_enc!)}`)(),
+    itrYears.length ? supabase.from("documents").select("document_type, period_key").eq("client_id", id).in("document_type", ["Form 16", "Form 130", "Form 26AS", "Form 168", "AIS"]).neq("status", "deleted") : Promise.resolve({ data: [] }),
   ]);
   const manage = canManageClients(membership.role);
   // Send reminder now on the Returns tab: those who manage clients and those who look after this one.
@@ -268,6 +271,17 @@ export default async function Client({ params, searchParams }: { params: Promise
   const order = ((drive?.settings as { folder_order?: FolderOrder } | undefined)?.folder_order ?? "year_client_work") as FolderOrder;
   const rule = new Map(rules?.map((r) => [r.code, r]));
   const needs2b = new Set(months.filter((month) => !statements?.some((row) => row.period_key === month)));
+  // Form No. 130 and Form No. 168 replace Form 16 and Form 26AS from tax year 2026-27, and either
+  // name answers either. Only a salary has a Form 16, so it is listed for an individual on the
+  // non-business return (ITR_NA) or a client with one on file.
+  const newer: Record<string, string> = { "Form 16": "Form 130", "Form 26AS": "Form 168" };
+  const held = new Set((taxPapers ?? []).map((paper) => `${paper.period_key}:${Object.keys(newer).find((type) => newer[type] === paper.document_type) ?? paper.document_type}`));
+  const salaried = (client.kind === "individual" && !!tasks?.some((task) => task.code === "ITR_NA")) || [...held].some((paper) => paper.endsWith(":Form 16"));
+  const itrNeeds = new Map(itrYears.map((year) => {
+    const papers = (salaried ? ["Form 16", "Form 26AS", "AIS"] : ["Form 26AS", "AIS"]).map((type) => ({ name: paperType(year >= "2027" ? newer[type] ?? type : type), added: held.has(`${year}:${type}`) }));
+    const missing = papers.filter((paper) => !paper.added), names = (missing.length ? missing : papers).map((paper) => paper.name).join(", ").replace(/, ([^,]*)$/, " and $1");
+    return [year, { missing: !!missing.length, line: `. ${names} for ${periodName(year)}: ${missing.length ? "not added yet" : "added"}` }];
+  }));
   // Services sit on a number: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN.
   // Only those for this kind of client, and any already chosen, are offered.
   const servicesFor = ({ kind, services }: { kind: string; services: string[] }) =>
@@ -826,7 +840,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                         meta={
                           task.status === "filed"
                             ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}</>
-                            : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}<StageLine code={task.code} work={stages.get(task.id)} /></>
+                            : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}{task.code?.startsWith("ITR") && itrNeeds.get(task.period_key?.slice(0, 4) ?? "")?.line}<StageLine code={task.code} work={stages.get(task.id)} /></>
                         }
                         status={
                           <Badge tone={task.status === "filed" ? "done" : overdue ? "late" : task.status === "in_progress" ? "blue" : ""}>
@@ -866,7 +880,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               )}
               {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="app-card-foot hint">InboxCA has not yet checked dates marked * against the government notification.</p>}
             </Card>
-            {!!needs2b.size && membership.may("portal_files", client.id) && <PortalDrop clientId={client.id} back="returns" />}
+            {(!!needs2b.size || [...itrNeeds.values()].some((needs) => needs.missing)) && membership.may("portal_files", client.id) && <PortalDrop clientId={client.id} back="returns" />}
             {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns","returns")}
           </>
         )}

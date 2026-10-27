@@ -985,6 +985,9 @@ isOneToOne: false
 "form_ready":
 { Args: { "target": string }; Returns: boolean
                            },
+"forms_go_live":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "gov_updates":
 { Args: { "target_firm": string }; Returns: Json
                            },

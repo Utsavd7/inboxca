@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Json } from "@/src/db/types";
 import { officialFile, officialStore, type Store } from "@/src/lib/official-files";
@@ -12,9 +12,10 @@ import type { Handler } from "./runner";
 // The daily check of official forms (PLAN.md D42, 5.7.3): public pages only, no sign in. Each
 // source is fingerprinted; a change is recorded with the old and new fingerprints (and, for a
 // downloads page, the links added and removed) as a draft for Orelu's admin, and a source that
-// cannot be read two days running raises an alert. Nothing goes live here: Orelu's admin adds
-// a new version to the template library (one with the same layout is kept in the store for
-// that); one with a changed layout is mapped and tested first. Each source
+// cannot be read two days running raises an alert. A newer version of a file InboxCA fills, with
+// the same layout, goes live by itself and the admin sees it on the change; another kept with the
+// same layout is added by Orelu's admin from a period; one with a changed layout is mapped and
+// tested first. Each source
 // names the calendar's returns its forms are for, so the admin sees the firms a change touches,
 // and its work area, so a firm sees what is new only for the work its clients have.
 // A listing page is read for its entries; one not seen before is new from the government and
@@ -102,7 +103,10 @@ async function compareFile(compare: Compare, name: string, bytes: Buffer, templa
     const next = compare.file.exec(found)?.at(-1) ?? "";
     if (compare.current || !/^\d+(\.\d+){0,3}$/.test(next) || sha(file) === current.sha256 || templates.some((template) => template.form_code === form && template.version === next)) return { file: found, with: current.version, same: true };
     await store.keep(file);
-    return { file: found, with: current.version, same: true, template: { form_code: form, version: next, source: { file: `${dirname(current.file).replace(/-v[\d.]+$/, `-v${next}`)}/${found}`, url, sha256: sha(file) } } };
+    // A newer version named as the one it matches but for its number (so for the same year) goes
+    // live by itself for that one's periods (D42, forms_go_live).
+    const live = version(current.version, next) > 0 && basename(current.file).replace(`V${current.version}.`, `V${next}.`) === found;
+    return { file: found, with: current.version, same: true, ...(live ? { live } : {}), template: { form_code: form, version: next, source: { file: `${dirname(current.file).replace(/-v[\d.]+$/, `-v${next}`)}/${found}`, url, sha256: sha(file) } } };
   } catch (error) {
     return { file: name, with: current.version, error: error instanceof Error ? error.message.slice(0, 120) : "unreadable" };
   }
@@ -151,5 +155,7 @@ export const formsWatch: Handler = async () => {
   const previous = (data?.value ?? {}) as Partial<Watch>;
   const next = await checkSources({ sources: previous.sources ?? {}, changes: previous.changes ?? [], alerts: previous.alerts ?? [], items: previous.items ?? [] }, new Date(), fetch, sources, (templates ?? []) as Template[], officialStore());
   const { error: saved } = await admin.from("platform_settings").upsert({ key: "watch", value: next as unknown as NonNullable<Json> });
-  return saved ? { retry: "watch_not_saved" } : { done: true };
+  if (saved) return { retry: "watch_not_saved" };
+  const { error: live } = await admin.rpc("forms_go_live");
+  return live ? { retry: "forms_not_live" } : { done: true };
 };
