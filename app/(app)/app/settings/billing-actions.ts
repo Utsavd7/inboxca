@@ -82,15 +82,17 @@ export async function turnOffAutoPay() {
   redirect("/app/settings?group=billing&saved=autopay_off");
 }
 
-// A smaller plan from the next renewal, or that change taken back.
+// A smaller plan from the next renewal (the one the year's work fits, or one the owner chose), or
+// that change taken back.
 export async function moveDown(form: FormData) {
   const me = await owner();
   if (!me) redirect("/app");
-  const plan = form.get("undo") === "yes" ? null : planIn(form);
+  const fit = form.get("fit") === "yes";
+  const plan = form.get("undo") === "yes" || fit ? null : planIn(form);
   if (plan && !plan.success) redirect("/app/settings?group=billing&error=plan#change");
-  const problem = await setDowngrade(me.firmId, me.userId, plan ? { ...plan.data!, aiBlocks: Number(form.get("aiBlocks")) || 0 } : null);
+  const problem = await setDowngrade(me.firmId, me.userId, fit ? "fit" : plan ? { ...plan.data!, aiBlocks: Number(form.get("aiBlocks")) || 0 } : null);
   if (problem) redirect("/app/settings?group=billing&error=down#change");
-  redirect(`/app/settings?group=billing&saved=${plan ? "down" : "down_undone"}`);
+  redirect(`/app/settings?group=billing&saved=${plan || fit ? "down" : "down_undone"}`);
 }
 
 export async function saveAutoTopUp(form: FormData) {

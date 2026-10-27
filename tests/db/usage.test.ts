@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { actAs, asOwner, connect, rollback } from "./db";
@@ -107,6 +108,28 @@ describe("the owner's meters", () => {
       await paper("00000000-0000-4000-8000-000000000e77", "2026-10-20");
       expect(Number((await usage()).workspace_bytes)).toBeGreaterThan(Number(before.workspace_bytes));
     }));
+
+  it("never let downloads at the same moment pass the month's downloads, and give a client's link back the download a refusal took", async () => {
+    const firm = randomUUID();
+    await db.query("insert into public.firms (id, name, state_code, status) values ($1, 'Usage Claims', '24', 'active')", [firm]);
+    try {
+      const lines = JSON.stringify([{ action: "document.downloaded", entity_id: randomUUID() }]);
+      const people = await Promise.all(Array.from({ length: 12 }, () => connect()));
+      const claimed = await Promise.all(people.map((person) => person.query("select public.claim_downloads($1, $2, 5) ok", [firm, lines]).then((result) => result.rows[0].ok)));
+      await Promise.all(people.map((person) => person.end()));
+      expect(claimed.filter(Boolean)).toHaveLength(5);
+      expect((await db.query("select count(*)::int n from public.activity_log where firm_id = $1 and action = 'document.downloaded'", [firm])).rows[0].n).toBe(5);
+      // The link's use_share already counted this download.
+      const [client, paper] = [randomUUID(), randomUUID()];
+      await db.query("insert into public.clients (id, firm_id, name, kind) values ($1, $2, 'Claims Client', 'business')", [client, firm]);
+      await db.query("insert into public.documents (id, firm_id, client_id, work_type, document_type, name, size, sha256, drive_file_id, received_at) values ($1, $2, $3, 'gst', 'Sales', 'sales.pdf', 1, 'x', 'drive', now())", [paper, firm, client]);
+      const { id: share } = (await db.query("insert into public.shares (firm_id, document_id, link_token_hash, link_expires_at, downloads) values ($1, $2, $3, now() + interval '7 days', 1) returning id", [firm, paper, randomUUID()])).rows[0];
+      expect((await db.query("select public.claim_downloads($1, $2, 5, $3) ok", [firm, lines, share])).rows[0].ok).toBe(false);
+      expect((await db.query("select downloads from public.shares where id = $1", [share])).rows[0].downloads).toBe(0);
+    } finally {
+      await db.query("with gone as (select set_config('app.log_purge', 'on', true)) delete from public.firms where id = $1 and exists (select 1 from gone)", [firm]);
+    }
+  });
 
   it("keep papers, email records and client records counted in InboxCA storage after they are deleted", () =>
     rollback(db, async () => {
