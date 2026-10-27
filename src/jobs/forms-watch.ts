@@ -101,7 +101,7 @@ async function compareFile(compare: Compare, name: string, bytes: Buffer, templa
     const differences = layoutDifferences(layout(await officialFile(current.file, current.sha256, store)), layout(file));
     if (differences.length) return { file: found, with: current.version, differences: differences.slice(0, 40), more: Math.max(0, differences.length - 40) };
     const next = compare.file.exec(found)?.at(-1) ?? "";
-    if (compare.current || !/^\d+(\.\d+){0,3}$/.test(next) || sha(file) === current.sha256 || templates.some((template) => template.form_code === form && template.version === next)) return { file: found, with: current.version, same: true };
+    if (compare.current || !/^\d+(\.\d+){0,3}$/.test(next) || sha(file) === current.sha256 || templates.some((template) => template.form_code === form && (template.source.sha256 === sha(file) || (template.version === next && basename(template.source.file) === found)))) return { file: found, with: current.version, same: true };
     await store.keep(file);
     // A newer version named as the one it matches but for its number (so for the same year) goes
     // live by itself for that one's periods (D42, forms_go_live). One named otherwise (an ITR

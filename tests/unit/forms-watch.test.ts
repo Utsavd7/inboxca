@@ -161,4 +161,10 @@ it("keeps a same layout ITR schema of a new version under its own link", async (
   const [other] = (watch.changes.at(-1) as { compared: { live?: true; renamed?: true; template?: { version: string } }[] }).compared;
   expect(other).toMatchObject({ renamed: true, template: { version: "1.4" } });
   expect(other.live).toBeUndefined();
+  // Next year's schema may start again at a version number this year's already has; it is still offered.
+  pages.set("https://official.invalid/f/ITR-1_2027_Main_V1.1.json", new Uint8Array(schema));
+  pages.set(downloads.url, '<a href="/f/ITR-1_2026_Main_V1.3.json">Schema</a><a href="/f/ITR-1_2027_Main_V1.1.json">Schema</a>');
+  watch = await checkSources(watch, day(3), fetcher, [downloads], templates, store);
+  const [again] = (watch.changes.at(-1) as { compared: { file: string; renamed?: true; template?: { version: string } }[] }).compared;
+  expect(again).toMatchObject({ file: "ITR-1_2027_Main_V1.1.json", renamed: true, template: { version: "1.1" } });
 });
