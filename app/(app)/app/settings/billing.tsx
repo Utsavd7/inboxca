@@ -3,7 +3,7 @@ import Form from "next/form";
 import Link from "next/link";
 import { billingSettings, fitOf, methodWords, moneyBack, movingUp, quote, type SubPlan } from "@/src/lib/billing/billing";
 import { docTitles, type Doc } from "@/src/lib/billing/documents";
-import { addDays, GB, gstOn, indiaDay, mandateMax, planPrice, planSchema, prorate, rupees, withGst, type Cycle, type FirmPlan, type Method } from "@/src/lib/billing/money";
+import { addDays, GB, gstOn, indiaDay, mandateMax, planPrice, planSchema, prorate, rupees, toYearly, withGst, type Cycle, type FirmPlan, type Method } from "@/src/lib/billing/money";
 import { billingProvider } from "@/src/lib/billing/provider";
 import { longDate } from "@/src/lib/hours";
 import type { currentMember } from "@/src/lib/member";
@@ -24,7 +24,7 @@ export type PlanAsk = { clients?: string; practice?: string; people?: string; cy
 
 const last = (until: string) => longDate(addDays(until, -1));
 const askedPlan = (ask: PlanAsk, fallback?: FirmPlan) => planSchema.safeParse({ clients: Number(ask.clients ?? fallback?.clients), practice: ask.practice ?? fallback?.practice, people: Number(ask.people ?? fallback?.people), aiBlocks: fallback?.aiBlocks ?? 0, returns: fallback?.returns });
-const kindWords: Record<string, string> = { plan: "First payment", renewal: "Plan renewal", upgrade: "Move to a bigger plan", extra_user: "One more person", ai_block: "One more AI block", topup: "AI top-up", setup: "Setup", refund: "Money given back" };
+const kindWords: Record<string, string> = { plan: "First payment", renewal: "Plan renewal", upgrade: "Move to a bigger plan", yearly: "Switch to yearly payment", extra_user: "One more person", ai_block: "One more AI block", topup: "AI top-up", setup: "Setup", refund: "Money given back" };
 
 // The two questions and the team, as on the site's price list: the plan is named from them.
 function PlanQuestions({ ask, practices, action, hidden, button }: { ask: PlanAsk & { group?: string }; practices: [string, string, number][]; action: string; hidden?: Record<string, string>; button: string }) {
@@ -91,25 +91,39 @@ export async function StartPlan({ supabase, firmId, ask }: { supabase: Supabase;
   );
 }
 
+// A move up or a switch to yearly payment debited on the mandate, on its way.
+const OnItsWay = ({ raised }: { raised: NonNullable<Awaited<ReturnType<typeof movingUp>>> }) =>
+  <p className="hint">{rupees(raised.amount_paise)} will be taken on {longDate(indiaDay(new Date(raised.due_at!)))} to {raised.kind === "yearly" ? "switch to yearly payment" : "move you up"}.</p>;
+
+// A monthly payer's switch to yearly payment (D38), one payment: debited on the mandate within its
+// maximum, paid in checkout above it; not in the days a renewal may be raised.
+const ToYearly = ({ pay, paidUntil, today }: { pay: number; paidUntil: string; today: string }) => paidUntil <= addDays(today, 6)
+  ? <p className="hint">Switch to yearly payment after your renewal on {longDate(paidUntil)}.</p>
+  : <Checkout action={buyCheckout} label={`Pay ${rupees(pay)} and switch to yearly payment`} busy="Switching" className=""><input type="hidden" name="kind" value="yearly" /></Checkout>;
+
 // The plan fit (PLAN.md 5.14, D38), on the owner's Today and at the top of Settings, Billing:
 // shown when either yearly measure reaches 80% of the plan or is on course to pass it. The plan
 // that fits and every amount are the server's; the one action pays the difference for the rest
-// of the paid period.
-export async function PlanFit({ firmId, Card }: { firmId: string; Card?: (props: CardProps) => React.ReactNode }) {
+// of the paid period. A monthly payer whose year still fits its plan is offered yearly payment
+// instead, never a bigger plan.
+export async function PlanFit({ firmId, Card, fit: known }: { firmId: string; Card?: (props: CardProps) => React.ReactNode; fit?: Awaited<ReturnType<typeof fitOf>> }) {
   if (!billingProvider()) return null;
   const admin = supabaseAdmin();
   const today = indiaDay(new Date());
   const [{ formula, tax }, { data: sub }, { data: firm }] = await Promise.all([billingSettings(admin), admin.from("subscriptions").select("cycle, paid_until, plan").eq("firm_id", firmId).maybeSingle(), admin.from("firms").select("gstin, state_code, status").eq("id", firmId).single()]);
   if (!formula || !sub?.paid_until || sub.paid_until <= today || firm?.status !== "active") return null;
-  const fit = await fitOf(admin, firmId, formula, sub, today);
+  const fit = known ?? (await fitOf(admin, firmId, formula, sub, today));
   if (!fit?.notice) return null;
   const cycle = sub.cycle as Cycle;
   const state = firm.gstin?.slice(0, 2) ?? firm.state_code ?? "";
   const moved = quote(formula, tax, state, fit.next, cycle, today);
-  const pay = withGst(prorate(moved.price.paise - planPrice(formula, sub.plan as unknown as SubPlan, cycle).paise, today, sub.paid_until, cycle), tax, state, today).total;
+  const current = planPrice(formula, sub.plan as unknown as SubPlan, cycle);
+  const year = fit.yearly ? toYearly(formula, sub.plan as unknown as SubPlan, today, sub.paid_until) : null;
+  const pay = withGst(year ? year.paise : prorate(moved.price.paise - current.paise, today, sub.paid_until, cycle), tax, state, today).total;
   const raised = await movingUp(admin, firmId);
-  const plan = `The ${moved.price.name} plan fits your firm's work: ${rupees(moved.recurring.total)} ${cycle === "monthly" ? "a month" : "a year"}${moved.recurring.gst ? " with GST" : ""}`;
-  const action = raised ? <p className="hint">{rupees(raised.amount_paise)} will be taken on {longDate(indiaDay(new Date(raised.due_at!)))} to move you up.</p>
+  const plan = year ? `Its year still fits the ${current.name} plan, so it needs no bigger plan. Paid yearly, your plan gives the whole year's returns and InboxCA storage at once: ${rupees(pay)}${moved.recurring.gst ? " with GST" : ""} now pays for it until ${last(year.until)}`
+    : `The ${moved.price.name} plan fits your firm's work: ${rupees(moved.recurring.total)} ${cycle === "monthly" ? "a month" : "a year"}${moved.recurring.gst ? " with GST" : ""}`;
+  const action = raised ? <OnItsWay raised={raised} /> : year ? <ToYearly pay={pay} paidUntil={sub.paid_until} today={today} />
     : pay > 0 ? <Checkout action={buyCheckout} label={`Pay ${rupees(pay)} and ${moved.price.code === "custom" ? "switch to Custom" : "move up"}`} busy="Opening the payment page" className=""><input type="hidden" name="kind" value="fit" /></Checkout> : null;
   const share = (m: (typeof fit.measures)[number]) => Math.round((100 * m.used) / m.earned);
   if (!Card) {
@@ -118,14 +132,14 @@ export async function PlanFit({ firmId, Card }: { firmId: string; Card?: (props:
     return (
       <div className="today-line" role="region" aria-label="Your plan">
         <Gauge size={16} aria-hidden />
-        <span className="grow"><strong>{share(first) >= 80 ? `Your firm has used ${share(first)}% of its plan's ${words}.` : `Your firm's ${words} ${first.measure === "returns" ? "are" : "is"} on course to pass its plan by March.`}</strong> {plan}.</span>
+        <span className="grow"><strong>{year ? `Your firm has used ${share(first)}% of the ${words} its plan gives by this month.` : share(first) >= 80 ? `Your firm has used ${share(first)}% of its plan's ${words}.` : `Your firm's ${words} ${first.measure === "returns" ? "are" : "is"} on course to pass its plan by March.`}</strong> {plan}.</span>
         {action}
       </div>
     );
   }
   const figure = (m: (typeof fit.measures)[number], value: number) => (m.measure === "returns" ? Math.round(value).toLocaleString("en-IN") : `${(value / GB).toFixed(1)} GB`);
   return (
-    <Card id="fit" title="Your firm is outgrowing its plan" line={`${plan}, a team of up to ${Math.max(fit.next.people, moved.price.people)} and ${moved.price.aiCredits.toLocaleString("en-IN")} AI credits a month.`}>
+    <Card id="fit" title={year ? "Your firm is ahead of its monthly share" : "Your firm is outgrowing its plan"} line={year ? `${plan}.` : `${plan}, a team of up to ${Math.max(fit.next.people, moved.price.people)} and ${moved.price.aiCredits.toLocaleString("en-IN")} AI credits a month.`}>
       <dl className="set-meters">
         {fit.measures.map((m) => (
           <div key={m.measure}>
@@ -137,7 +151,7 @@ export async function PlanFit({ firmId, Card }: { firmId: string; Card?: (props:
         ))}
       </dl>
       {cycle === "monthly" && <p className="hint set-after">Paid monthly, your plan gives a twelfth of the year each month. What you do not use carries forward to March.</p>}
-      <p className="hint set-after">{formula.fitEnforced ? "When your firm passes its plan, InboxCA moves it to the plan that fits and takes the difference, with an email 3 days before." : "Nothing changes until you choose."}</p>
+      <p className="hint set-after">{formula.fitEnforced && !year ? "When your firm passes its plan, InboxCA moves it to the plan that fits and takes the difference, with an email 3 days before." : "Nothing changes until you choose."}</p>
       {action}
     </Card>
   );
@@ -160,6 +174,10 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
   const plan = sub.plan as unknown as SubPlan;
   const cycle = sub.cycle as Cycle;
   const priced = quote(formula, tax, state, plan, cycle, today);
+  const admin = supabaseAdmin();
+  const [fit, raised] = await Promise.all([fitOf(admin, firmId, formula, sub, today), movingUp(admin, firmId)]);
+  // A monthly payer may switch to yearly payment; when the plan fit offers it, its card does.
+  const yearly = cycle === "monthly" && sub.paid_until && sub.paid_until > today && !(fit?.notice && fit.yearly) ? toYearly(formula, plan, today, sub.paid_until) : null;
   const coming = plan.next ? quote(formula, tax, state, plan.next, cycle, today) : priced;
   const due = !sub.paid_until || sub.paid_until <= addDays(today, 3);
   const overdue = !!sub.paid_until && sub.paid_until <= today;
@@ -183,7 +201,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
   return (
     <>
       {ended ? <Card id="plan" title="Your plan" line="Your plan is cancelled with its money back. Your firm can view everything and download its data in Settings, Your data, for 30 days."><span /></Card> : <>
-      <PlanFit firmId={firmId} Card={Card} />
+      <PlanFit firmId={firmId} Card={Card} fit={fit} />
       <Card id="plan" title="Your plan" line={`${priced.price.name} plan, ${rupees(priced.recurring.total)} ${per}${gst}. A team of up to ${team}, ${priced.price.aiCredits.toLocaleString("en-IN")} AI credits a month${plan.aiBlocks ? ` and ${plan.aiBlocks} more AI ${plan.aiBlocks === 1 ? "block" : "blocks"}` : ""}.`}>
         <p role="status">
           {overdue ? <Badge tone="late">Not paid since {longDate(sub.paid_until!)}</Badge> : sub.paid_until ? <Badge tone="done">Paid until {last(sub.paid_until)}</Badge> : <Badge tone="warn">Waiting for the first payment</Badge>}{" "}
@@ -210,6 +228,12 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
         ) : null}
         {due && overdue && autopay && <Checkout action={buyCheckout} label={`Pay ${rupees(coming.recurring.total)} now`} busy="Opening the payment page">{hidden({ kind: "renewal" })}<p className="hint">The last payment did not go through. Pay now, or InboxCA tries again.</p></Checkout>}
       </Card>
+
+      {yearly && (
+        <Card id="yearly" title="Pay yearly" line={`Paid yearly, your plan gives the whole year's returns and InboxCA storage at once. ${rupees(withGst(yearly.paise, tax, state, today).total)}${gst} now pays for it until ${last(yearly.until)}, less what is left of the month paid. Then ${rupees(quote(formula, tax, state, plan.next ?? plan, "yearly", today).recurring.total)} a year${gst}.`}>
+          {raised ? <OnItsWay raised={raised} /> : <ToYearly pay={withGst(yearly.paise, tax, state, today).total} paidUntil={sub.paid_until!} today={today} />}
+        </Card>
+      )}
 
       <Card id="change" title="Change your plan" line="Moving up starts at once: you pay the difference for the rest of this period. Moving down starts at your next renewal.">
         {(ask.error === "plan" || ask.error === "down") && <p className="alert" role="alert">{ask.error === "down" ? "Your team has more people than that plan takes. Remove people in People first, or keep a bigger team." : "Enter your clients, kind of practice and team size."}</p>}

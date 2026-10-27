@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cashfree } from "@/src/lib/billing/cashfree";
 import { docHtml, docNotes, docRows, taxLines, type Doc } from "@/src/lib/billing/documents";
 import {
-  addMonths, financialYear, formulaSchema, GB, gstOn, gstSplit, mandateMax, methodsFor, moneyBackLastDay, overdueState, planFit, planPrice, prorate, serialNumber, taxSchema, withGst,
+  addMonths, financialYear, formulaSchema, GB, gstOn, gstSplit, mandateMax, methodsFor, moneyBackLastDay, overdueState, planFit, planPrice, prorate, serialNumber, taxSchema, toYearly, withGst,
 } from "@/src/lib/billing/money";
 import { custom, extraPerson, plans, practices } from "@/content/plans";
 
@@ -60,14 +60,22 @@ describe("the plan fit from the meters (5.14, D38)", () => {
     const past = fit({ returns: 881, returnsByMarch: 1200 });
     expect(past.over).toBe(true);
     expect(planPrice(formula, past.next, "monthly")).toMatchObject({ code: "growth", paise: 349_900 });
-    // A monthly payer's 600 returns by October are 1,029 at a full year's pace: still Growth.
-    expect(planPrice(formula, fit({ returns: 600, returnsByMarch: 600 }, "monthly").next, "monthly").code).toBe("growth");
+    // A monthly payer whose year passes Solo: 600 returns by October are 1,029 at a full year's pace, still Growth.
+    expect(planPrice(formula, fit({ returns: 600, returnsByMarch: 900 }, "monthly").next, "monthly").code).toBe("growth");
     // At 80% the plan offered is the next one up even when the year still fits.
     expect(planPrice(formula, fit({ returns: 700, returnsByMarch: 700 }).next, "monthly").code).toBe("growth");
     // 9,000 returns: 45 GB at 200 returns a GB, Enterprise's ₹15,499 + 5 × ₹305, rounded to end in 499.
     expect(planPrice(formula, fit({ returns: 9000, returnsByMarch: 9000 }).next, "monthly")).toMatchObject({ code: "custom", paise: 1_749_900 });
     // Storage decides when it is the bigger measure: 11 GB is past Growth's 10 GB.
     expect(planPrice(formula, fit({ bytes: 11 * GB, bytesByMarch: 11 * GB }).next, "monthly").code).toBe("scale");
+  });
+
+  it("offers a monthly payer past its share whose year still fits the plan yearly payment, not a bigger plan", () => {
+    // 600 returns by October are past 7 twelfths of Solo's 800 and its cushion, but the year's 600 fit.
+    expect(fit({ returns: 600, returnsByMarch: 600 }, "monthly")).toMatchObject({ notice: true, over: true, yearly: true });
+    expect(fit({ returns: 600, returnsByMarch: 801 }, "monthly").yearly).toBe(false);
+    expect(fit({ returns: 600, returnsByMarch: 600, bytesByMarch: 4 * GB + 1 }, "monthly").yearly).toBe(false);
+    expect(fit({ returns: 700, returnsByMarch: 700 }).yearly).toBe(false);
   });
 });
 
@@ -111,6 +119,16 @@ describe("dates, proration and the overdue states", () => {
     // Paid 15 Oct to 15 Nov (31 days); 14 days left on 1 Nov.
     expect(prorate(310_000, "2026-11-01", "2026-11-15", "monthly")).toBe(140_000);
     expect(prorate(310_000, "2026-11-15", "2026-11-15", "monthly")).toBe(0);
+  });
+
+  it("switches a monthly payer to yearly payment: the rest of the year at the yearly price, less what is left of the month paid", () => {
+    const solo = { clients: 60, practice: "mixed" as const, people: 1, aiBlocks: 0 };
+    // Paid 15 Oct to 14 Nov 2027: 157 of the year's 366 days at ₹16,499, less 19 of the month's 31 days at ₹1,499.
+    const year = toYearly(formula, solo, "2027-10-27", "2027-11-15");
+    expect(year).toEqual({ until: "2028-04-01", paise: 707_744 - 91_874 });
+    expect(withGst(year.paise, tax, "27", "2027-10-27")).toEqual({ taxable: 615_870, gst: 110_856, total: 726_726 });
+    // In March, with the month paid running into April, the whole next year is paid too.
+    expect(toYearly(formula, solo, "2027-03-20", "2027-04-05")).toEqual({ until: "2028-04-01", paise: 1_649_900 + 54_243 - 77_368 });
   });
 
   it("keeps a firm working for 7 days, then view only to day 30, then closing", () => {

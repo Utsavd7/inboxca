@@ -35,6 +35,8 @@ const made: { id: string; owner: string }[] = [];
 let db: Client;
 let saved: { key: string; value: unknown }[] = [];
 const today = () => money.indiaDay(new Date());
+// The last day of this April to March year, for returns still due by March.
+const yearEnd = () => `${Number(money.financialYear(today()).slice(0, 4)) + 1}-03-31`;
 const one = async (sql: string, params: unknown[] = []) => (await db.query(sql, params)).rows[0];
 const returnUrl = "http://127.0.0.1:9600/api/billing/return";
 const tax = { legalName: "Invented Orelu Partners", address: "1 Invented Road, Pune", pan: "AAAFI1234B", turnover: {} };
@@ -233,12 +235,14 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
       const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
       // Returns due so far, against a monthly plan's twelfths of the year so far.
       const months = money.monthsBegun(today());
-      const due = (firm: string, n: number) => db.query("insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [firm, today(), n]);
+      const due = (firm: string, n: number, on = today()) => db.query("insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [firm, on, n]);
       const planOf = async (firm: string) => money.planPrice(formula, (await subOf(firm)).plan, "monthly").code;
       const told = (firm: string) => db.query("select entity_type, details from public.requests where firm_id = $1 and reason_code = 'plan_upgrade_suggested'", [firm]).then((result) => result.rows);
 
       const firm = await activeFirm("fit");
       await due(firm.id, Math.ceil((800 * months * 1.1) / 12) + 1);
+      // Its year passes Solo too, with returns still due by March: a seasonal firm is not moved.
+      await due(firm.id, 300, yearEnd());
       await billing.dailyBilling(firm.id);
       await billing.dailyBilling(firm.id);
       expect(await told(firm.id)).toEqual([{ entity_type: `plan_fit_returns_${money.financialYear(today())}`, details: {} }]);
@@ -288,12 +292,13 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
       const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
       const months = money.monthsBegun(today());
       const firm = await activeFirm("back-up");
-      const due = (n: number) => db.query("insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [firm.id, today(), n]);
+      const due = (n: number, on = today()) => db.query("insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [firm.id, on, n]);
       // Day 0, the first payment, was 10 days ago.
       await db.query("update public.payments set created_at = now() - interval '10 days', details = jsonb_set(details, '{period,0}', to_jsonb($2::text)) where firm_id = $1 and kind = 'plan'", [firm.id, money.addDays(today(), -10)]);
       // Day 5: past Solo, the move to Growth is debited on the mandate and taken.
       const solo = Math.ceil((800 * months * 1.1) / 12) + 1;
       await due(solo);
+      await due(300, yearEnd());
       await billing.dailyBilling(firm.id);
       const [move] = await paymentsOf(firm.id, "upgrade");
       await fake.charge(move.id, "SUCCESS");
@@ -301,6 +306,7 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
       // Day 10: past Growth too, with a higher AutoPay limit approved, so the move to Scale is on its way.
       await db.query("update public.subscriptions set plan = plan || '{\"maxPaise\": 1000000}' where firm_id = $1", [firm.id]);
       await due(Math.ceil((2000 * months * 1.1) / 12) + 1 - solo);
+      await due(500, yearEnd());
       await billing.dailyBilling(firm.id);
       const pending = (await paymentsOf(firm.id, "upgrade")).find((row) => row.status === "created");
       expect(pending).toBeDefined();
@@ -321,6 +327,58 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
       for (const row of await paymentsOf(firm.id, "refund"))
         expect(row.doc).toMatchObject({ kind: "credit", no: expect.stringMatching(/^CN\//), total: row.amount_paise, of: { no: taken.find((paid) => paid.id === row.refund_of)!.doc.no } });
       expect((await billing.moneyBack(firm.id)).state).toBe("refunded");
+    } finally {
+      await db.query("update public.platform_settings set value = value || '{\"fitEnforced\": false}' where key = 'plan_formula'");
+      await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);
+    }
+  });
+
+  it("offers a seasonal monthly payer yearly payment and never moves it up; the switch is paid in checkout above the mandate's maximum, debited on it within, and changes the cycle only once paid", async () => {
+    const gst = money.taxSchema.parse({ ...tax, gstin: "27AAAFI1234B1Z5", stateCode: "27", sac: "9983", rate: 18, gstFrom: today() });
+    await db.query("update public.platform_settings set value = $1 where key = 'tax'", [gst]);
+    await db.query("update public.platform_settings set value = value || '{\"fitEnforced\": true}' where key = 'plan_formula'");
+    try {
+      const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
+      // Past its monthly share of Solo and the cushion, while the year's returns still fit Solo's 800.
+      const seasonal = async (tag: string) => {
+        const firm = await activeFirm(tag);
+        await db.query("insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [firm.id, today(), Math.min(800, Math.ceil((800 * money.monthsBegun(today()) * 1.1) / 12) + 1)]);
+        const sub = await subOf(firm.id);
+        const year = money.toYearly(formula, sub.plan, today(), sub.paid_until);
+        return { ...firm, sub, year, amount: money.withGst(year.paise, gst, "27", today()) };
+      };
+      const maxPaise = (firm: string, paise: number) => db.query("update public.subscriptions set plan = plan || jsonb_build_object('maxPaise', $2::int) where firm_id = $1", [firm, paise]);
+
+      const firm = await seasonal("yearly");
+      await billing.dailyBilling(firm.id);
+      await billing.dailyBilling(firm.id);
+      expect(await paymentsOf(firm.id, "upgrade")).toHaveLength(0);
+      expect((await db.query("select id from public.requests where firm_id = $1 and reason_code = 'plan_upgrade_suggested'", [firm.id])).rows).toHaveLength(1);
+      // The plan fit's one payment is the switch: a paisa above the maximum, so in checkout.
+      await maxPaise(firm.id, firm.amount.total - 1);
+      expect(await billing.buy(firm.id, firm.owner, { kind: "fit" }, returnUrl)).toMatchObject({ kind: "order" });
+      const [order] = await paymentsOf(firm.id, "yearly");
+      expect(order).toMatchObject({ amount_paise: firm.amount.total, gst_paise: firm.amount.gst, details: { via: "order", period: [firm.sub.paid_until, firm.year.until] } });
+      expect(fake.orders.get(order.id)).toMatchObject({ order_amount: firm.amount.total / 100 });
+      expect(await subOf(firm.id)).toMatchObject({ cycle: "monthly", paid_until: firm.sub.paid_until });
+      await fake.pay(order.id);
+      expect(await subOf(firm.id)).toMatchObject({ cycle: "yearly", paid_until: firm.year.until });
+      expect((await paymentsOf(firm.id, "yearly"))[0].doc).toMatchObject({ kind: "invoice", cgst: firm.amount.gst / 2, sgst: firm.amount.gst / 2, total: firm.amount.total });
+      // The whole year's allowance at once.
+      expect((await billing.fitOf(supabaseAdmin(), firm.id, formula, await subOf(firm.id), today()))!.measures[0].earned).toBe(800);
+
+      // At the maximum: debited on the mandate after the notice, once; a failed debit changes nothing.
+      const near = await seasonal("yearly-mandate");
+      await maxPaise(near.id, near.amount.total);
+      expect(await billing.buy(near.id, near.owner, { kind: "yearly" }, returnUrl)).toEqual({ due: expect.any(String) });
+      expect(await billing.buy(near.id, near.owner, { kind: "yearly" }, returnUrl)).toMatchObject({ error: expect.stringContaining("on its way") });
+      const [debit] = await paymentsOf(near.id, "yearly");
+      expect(debit.due_at.getTime() - Date.now()).toBeGreaterThanOrEqual(25 * 3_600_000);
+      expect(fake.charges.get(debit.id)).toMatchObject({ subscription_id: near.mandate, payment_type: "CHARGE", payment_amount: near.amount.total / 100 });
+      await fake.charge(debit.id, "FAILED");
+      expect((await subOf(near.id)).cycle).toBe("monthly");
+      await fake.charge(debit.id, "SUCCESS");
+      expect(await subOf(near.id)).toMatchObject({ cycle: "yearly", paid_until: near.year.until });
     } finally {
       await db.query("update public.platform_settings set value = value || '{\"fitEnforced\": false}' where key = 'plan_formula'");
       await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);
