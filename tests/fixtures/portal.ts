@@ -16,6 +16,11 @@ const bill=(one:Bill)=>{
 };
 export const supplierInvoices=(ctin:string,bills:Bill[])=>({ctin,trdnm:"INVENTED SUPPLIER",supfildt:"11-10-2026",supprd:"092026",inv:bills.map((one)=>({inum:one.number,typ:"R",...bill(one)}))});
 export const supplierNotes=(ctin:string,bills:Bill[])=>({ctin,trdnm:"INVENTED SUPPLIER",supfildt:"11-10-2026",supprd:"092026",nt:bills.map((one)=>({ntnum:one.number,typ:one.typ ?? "C",suptyp:"R",...bill(one)}))});
+// The same for invoices and notes the supplier corrected (docdata b2ba and cdnra): the corrected
+// one, with the original's number and date (oinum, oidt; onttyp, ontnum, ontdt).
+type Change=Bill&{was:{number:string;dt:string;typ?:"C"|"D"}};
+export const supplierChanges=(ctin:string,bills:Change[])=>({ctin,trdnm:"INVENTED SUPPLIER",supfildt:"11-10-2026",supprd:"092026",inv:bills.map((one)=>({oinum:one.was.number,oidt:one.was.dt,inum:one.number,typ:"R",...bill(one)}))});
+export const supplierChangedNotes=(ctin:string,bills:Change[])=>({ctin,trdnm:"INVENTED SUPPLIER",supfildt:"11-10-2026",supprd:"092026",nt:bills.map((one)=>({onttyp:one.was.typ ?? "C",ontnum:one.was.number,ontdt:one.was.dt,ntnum:one.number,typ:one.typ ?? "C",suptyp:"R",...bill(one)}))});
 // Structure: GSTN GSTR2A v2.3 response schema (B2B), with the download's own gstin and fp as the drop box reads them.
 export function gstr2a(gstin=inventedGstin()) {
   return {gstin,fp:"092026",b2b:[{ctin:inventedGstin("ZZZPZ0002Z"),cfs:"Y",inv:[{chksum:"inventedinvoice",inum:"INV-1",idt:"05-09-2026",val:1180,pos:"24",rchrg:"N",inv_typ:"R",itms:[{num:1,itm_det:{txval:1000,rt:18,camt:90,samt:90,csamt:0}}]}]}]};
