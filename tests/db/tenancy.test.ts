@@ -224,6 +224,7 @@ const NOT_FIRM: Record<string, string> = {
   templates: "the government form catalog every firm reads",
   orelu_admins: "Orelu's own admins, server only",
   admin_passkeys: "Orelu's own admins, server only",
+  passkeys: "a person's own passkeys, used for every firm they are in, server only",
   platform_settings: "Orelu's own settings, server only",
   push_subscriptions: "a person's phones, server only",
   incidents: "Orelu's outage notes for the status page, server only",

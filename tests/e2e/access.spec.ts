@@ -87,6 +87,37 @@ test("the owner names a co-admin, who changes the access settings but not the ow
   expect((await settings()).office.lines).toEqual(lines);
 });
 
+test("the owner sees every exception to the firm's rules in one place and removes them, each logged", async () => {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  await query(local.dbUrl, `update public.firms set settings = settings || jsonb_build_object('access', coalesce(settings -> 'access', '{}') || '{"roles": {"partner": {"hours_only": false}}}') where id = $1`, [firm.firmId]);
+  await query(local.dbUrl, "update public.firm_members set access = $3 where firm_id = $1 and user_id = $2", [firm.firmId, partnerId, { session_hours: 8, extra_time: { day: today, until: "19:30" } }]);
+  try {
+    await owner.goto("/app/settings?group=people#exceptions");
+    const card = owner.locator("section#exceptions");
+    await expect(card.getByRole("listitem")).toHaveText([
+      "Partner role: Can work outside office hoursRemove",
+      `${partnerEmail}: Asked for the 2 step code again after 8 hoursRemove`,
+      `${partnerEmail}: Extra time today, until 19:30Remove`,
+    ]);
+    await card.getByRole("button", { name: `Remove Asked for the 2 step code again after 8 hours for ${partnerEmail}` }).click();
+    await expect(owner.getByRole("status").filter({ hasText: "Exception removed. The firm's rule applies again." })).toBeVisible();
+    await expect(card.getByRole("listitem")).toHaveCount(2);
+    await card.getByRole("button", { name: "Remove Can work outside office hours for Partner role" }).click();
+    await expect(card.getByRole("listitem")).toHaveCount(1);
+    expect((await query(local.dbUrl, "select access from public.firm_members where firm_id = $1 and user_id = $2", [firm.firmId, partnerId]))[0].access).toEqual({ extra_time: { day: today, until: "19:30" } });
+    expect((await settings()).access.roles).toEqual({ partner: {} });
+    expect(await query(local.dbUrl, "select actor_id, entity_id, details from public.activity_log where firm_id = $1 and action = 'access.exception_removed' order by at", [firm.firmId])).toEqual([
+      { actor_id: firm.ownerId, entity_id: partnerId, details: { rule: "session_hours" } },
+      { actor_id: firm.ownerId, entity_id: firm.firmId, details: { rule: "hours_only", role: "partner" } },
+    ]);
+    // Only the owner: the second admin does not see them.
+    await partner.goto("/app/settings?group=people");
+    await expect(partner.getByRole("heading", { name: "Exceptions to the rules" })).toHaveCount(0);
+  } finally {
+    await query(local.dbUrl, "update public.firm_members set access = null where firm_id = $1 and user_id = $2", [firm.firmId, partnerId]);
+  }
+});
+
 test("staff are told People and Settings are not theirs, and only see a notice's date", async () => {
   // Office only, left on by the co-admin's preset, would keep staff out of this test PC.
   await query(local.dbUrl, "update public.firms set settings = jsonb_set(settings, '{office,on}', 'false') where id = $1", [firm.firmId]);
