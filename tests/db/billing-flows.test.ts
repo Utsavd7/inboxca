@@ -148,6 +148,31 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     expect((await renewal(3)).amount_paise).toBe(149_900);
   });
 
+  it("keeps a person paid for after the renewal was raised, and debits that person for the new period with GST", async () => {
+    const gst = money.taxSchema.parse({ ...tax, gstin: "27AAAFI1234B1Z5", stateCode: "27", sac: "9983", rate: 18, gstFrom: today() });
+    await db.query("update public.platform_settings set value = $1 where key = 'tax'", [gst]);
+    try {
+      const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
+      const firm = await activeFirm("grown", { ...solo, clients: 150 });
+      const due = money.addDays(today(), 2);
+      await db.query("update public.subscriptions set paid_until = $2 where firm_id = $1", [firm.id, due]);
+      await billing.dailyBilling(firm.id);
+      const [renewal] = await paymentsOf(firm.id, "renewal");
+      expect(await billing.buy(firm.id, firm.owner, { kind: "extra_user" }, returnUrl)).toMatchObject({ kind: "order" });
+      await fake.pay((await paymentsOf(firm.id, "extra_user"))[0].id);
+      await fake.charge(renewal.id, "SUCCESS");
+      const sub = await subOf(firm.id);
+      expect(sub).toMatchObject({ paid_until: money.addMonths(due, 1), plan: { people: 11 } });
+      const added = money.withGst(money.prorate(formula.extraPerson * 100, today(), sub.paid_until, "monthly"), gst, "27", today());
+      const differences = await paymentsOf(firm.id, "upgrade");
+      expect(differences).toHaveLength(1);
+      expect(differences[0]).toMatchObject({ status: "created", amount_paise: added.total, gst_paise: added.gst, details: { via: "charge" } });
+      expect(fake.charges.get(differences[0].id)).toMatchObject({ subscription_id: firm.mandate, payment_type: "CHARGE", payment_amount: added.total / 100 });
+    } finally {
+      await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);
+    }
+  });
+
   it("debits eNACH once the bank confirms, and after a failed renewal tries again on day 1, not day 2, then turns read only on day 8", async () => {
     const firm = await activeFirm("enach", { clients: 700, practice: "mixed", people: 40, aiBlocks: 0 }, "enach");
     expect(fake.subscriptions.get(firm.mandate)!.authorization_details.authorization_amount).toBe(0);

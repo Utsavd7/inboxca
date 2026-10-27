@@ -30,8 +30,8 @@ export type SubPlan = FirmPlan & { version: number; maxPaise: number; next?: Fir
 // add-on it brings.
 // `base`: the team the plan took when one more person was bought (its own people, or the more
 // the plan includes). `basis`: what a plan change was priced on (basisOf); for a renewal, the move
-// down waiting when it was raised (waitingOf).
-export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number; basis?: string };
+// down waiting when it was raised (waitingOf). `priced`: a renewal's plan when it was raised (basisOf).
+export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number; basis?: string; priced?: string };
 export type Alert = { kind: string; ref?: string; at: string };
 
 const json = (value: unknown) => value as NonNullable<Json>;
@@ -254,7 +254,7 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
     const period: [string, string] = [sub.paid_until, periodEnd(sub.paid_until, cycle)];
     const next = await renewalPlan(admin, firmId, formula, sub, today);
     lines = withPeriod(planPrice(formula, next, cycle).lines, period);
-    details = { period, plan: next, basis: waitingOf(plan) };
+    details = { period, plan: next, basis: waitingOf(plan), priced: basisOf(sub) };
   } else if (what.kind === "topup") {
     if (await blocksThisMonth(admin, firmId, plan, today) >= current.blockCap) return { error: "Your plan has all the extra AI it can take this month. Move to a bigger plan for more." };
     lines = [{ text: `AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits for this month`, paise: formula.aiBlock.price * 100 }];
@@ -466,15 +466,18 @@ async function paid(admin: Admin, id: string, ref?: string) {
       if (started) await mail(email, `InboxCA is ready for ${started.name}`, [`Your first payment is in and ${started.name} is ready on InboxCA.`, `Sign in to start: ${link("/sign-in")}`, `Changed your mind? Cancel by ${long(moneyBackLastDay(today))} in Settings, Billing and get this payment back in full.`]);
     }
     if (payment.kind === "renewal" && details.period) {
-      // The plan it was priced on; a move down set after it was raised waits for the next renewal.
-      const rest = { ...plan, next: details.basis !== undefined && details.basis !== waitingOf(plan) ? plan.next : undefined };
-      const { data: moved } = await admin.from("subscriptions").update({ paid_until: details.period[1], plan: json(details.plan ? { ...rest, ...details.plan } : rest) }).eq("firm_id", firmId).eq("paid_until", details.period[0]).select("mandate").maybeSingle();
+      // The plan it was priced on. A move down set after it was raised waits for the next renewal; a
+      // plan grown since (a move up, a person or an AI block paid in between) stays, never shrunk.
+      const grown = !!details.priced && details.priced !== basisOf(sub);
+      const rest = { ...plan, next: grown || (details.basis !== undefined && details.basis !== waitingOf(plan)) ? plan.next : undefined };
+      const { data: moved } = await admin.from("subscriptions").update({ paid_until: details.period[1], plan: json(details.plan && !grown ? { ...rest, ...details.plan } : rest) }).eq("firm_id", firmId).eq("paid_until", details.period[0]).select("mandate").maybeSingle();
       if (!moved) await alertAdmins(admin, "paid_twice", id);
       else {
         await admin.from("firms").update({ status: "active" }).eq("id", firmId).in("status", ["grace", "read_only"]);
         // Any other debit raised for the same period is called off.
         const { data: others } = await admin.from("payments").update({ status: "cancelled" }).eq("firm_id", firmId).eq("kind", "renewal").eq("status", "created").eq("details->period->>0", details.period[0]).select("id, details");
         for (const other of others ?? []) if (moved.mandate && detailsOf(other as Payment).via === "charge") await billingProvider()?.cancelCharge({ mandate: moved.mandate, id: other.id }).catch(() => log.warn("billing.charge_cancel_failed"));
+        if (grown && details.plan) await addedSince(admin, { ...sub, paid_until: details.period[1] }, details.plan);
       }
     }
     // A plan change priced on what has changed since is not applied: it goes back in full below.
@@ -703,7 +706,7 @@ export async function dailyBilling(firmId: string, now = new Date()) {
       await mail(email, "InboxCA: approve your new AutoPay limit", [`Your plan now costs ${rupees(priced.recurring.total)}, more than the ${rupees(plan.maxPaise)} your AutoPay allows. Approve the new limit once in Settings, Billing, or pay now: ${link(BILLING)}`]);
     } else {
       const at = new Date(Math.max(Date.parse(`${due}T10:00:00+05:30`), now.getTime() + NOTICE_MS));
-      const { data: row, error } = await admin.from("payments").insert({ firm_id: firmId, kind: "renewal", amount_paise: priced.recurring.total, gst_paise: priced.recurring.gst, due_at: at.toISOString(), details: json({ lines: withPeriod(priced.price.lines, period), via: "charge", period, plan: next, basis: waitingOf(plan) } satisfies Details) }).select("id").single();
+      const { data: row, error } = await admin.from("payments").insert({ firm_id: firmId, kind: "renewal", amount_paise: priced.recurring.total, gst_paise: priced.recurring.gst, due_at: at.toISOString(), details: json({ lines: withPeriod(priced.price.lines, period), via: "charge", period, plan: next, basis: waitingOf(plan), priced: basisOf(sub) } satisfies Details) }).select("id").single();
       if (error) throw new Error(`Saving the renewal failed: ${error.code}`);
       try {
         await provider.charge({ mandate: sub.mandate, id: row.id, paise: priced.recurring.total, at, note: `InboxCA plan, ${span(period)}` });
@@ -816,6 +819,35 @@ async function downDay(admin: Admin, formula: PlanFormula, tax: Tax | null, firm
     `${firm.name}'s work this year fits the ${then.name} plan, ${price(then.paise)}, in place of the ${now.name} plan, ${price(now.paise)}.`,
     `To move down at your renewal on ${long(down.on)}, choose Move down in Settings, Billing by ${long(addDays(down.on, -4))}: ${link(BILLING)}`,
     "Nothing changes unless you choose.",
+  ]);
+}
+
+// What a plan grown after its renewal was raised added, for the new period: pro-rated as a move up,
+// with GST, debited on the mandate after the notice and within its maximum. Above it, or with
+// AutoPay off, the owner is asked to approve a new limit and Orelu's admins collect it.
+async function addedSince(admin: Admin, sub: Subscription, priced: FirmPlan) {
+  const [provider, { formula, tax }, firm, email] = [billingProvider(), await billingSettings(admin), await firmOf(admin, sub.firm_id), await ownerOf(admin, sub.firm_id)];
+  if (!provider || !formula || !firm || !sub.paid_until) return;
+  const cycle = sub.cycle as Cycle;
+  const today = indiaDay(new Date());
+  const now = planPrice(formula, planOf(sub), cycle);
+  const lines = [{ text: `Added to your ${now.name} plan, ${long(today)} to ${long(addDays(sub.paid_until, -1))}`, paise: prorate(now.paise - planPrice(formula, priced, cycle).paise, today, sub.paid_until, cycle) }];
+  if (lines[0].paise <= 0) return;
+  const amount = withGst(lines[0].paise, tax, firm.stateCode, today);
+  if (sub.status !== "active" || !sub.mandate || amount.total > planOf(sub).maxPaise) {
+    await alertAdmins(admin, "added_above_limit", sub.firm_id);
+    return void (await mail(email, "InboxCA: approve your new AutoPay limit", [`${firm.name}'s plan grew after its renewal was raised. What was added costs ${rupees(amount.total)} for ${long(today)} to ${long(addDays(sub.paid_until, -1))}, more than your AutoPay allows. Approve the new limit once in Settings, Billing: ${link(BILLING)}`]));
+  }
+  const at = new Date(Date.now() + NOTICE_MS);
+  const { data: row, error } = await admin.from("payments").insert({ firm_id: sub.firm_id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge" } satisfies Details) }).select("id").single();
+  if (error) throw new Error(`Saving what was added failed: ${error.code}`);
+  await provider.charge({ mandate: sub.mandate, id: row.id, paise: amount.total, at, note: lines[0].text });
+  await note(admin, sub.firm_id, null, "billing.moved_up", { payment: row.id });
+  // Orelu's own notice, as for a renewal (RBI E-mandate Framework 2026, para 6).
+  await mail(email, `InboxCA: ${rupees(amount.total)} will be taken on ${long(indiaDay(at))}`, [
+    `Orelu (InboxCA) will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, for what was added to ${firm.name}'s plan after its renewal was raised: ${lines[0].text}.`,
+    `AutoPay reference: ${sub.mandate}.`,
+    `To stop it, turn AutoPay off in Settings, Billing before then: ${link(BILLING)}`,
   ]);
 }
 
