@@ -1,5 +1,5 @@
 import { Lock, Mail } from "lucide-react";
-import { initials } from "@/app/(app)/app/ui";
+import { initials } from "@/src/lib/utils";
 import { firmAddress } from "@/src/lib/firm-mail";
 import "./(app)/app/app.css";
 import "./public-link.css";
