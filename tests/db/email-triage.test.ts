@@ -72,7 +72,7 @@ it("triages 50 invented emails and keeps their subjects and bodies out of saved 
     // The jobs the poll queued open each email again in memory (filing, notices, records
     // replies); what they keep must hold no subject or body text either.
     const queued=(await db.query("select * from public.jobs where firm_id=$1 and state='pending' and kind<>'mail_poll' order by id",[firm])).rows as Job[];
-    expect(new Set(queued.map((job)=>job.kind))).toEqual(new Set(["file_mail","notice_from_mail","records_reply"]));
+    expect(new Set(queued.map((job)=>job.kind))).toEqual(new Set(["file_mail","notice_from_mail","records_reply","ai_draft"]));
     for (const job of queued) expect(await handlers[job.kind](job,{markSending:async()=>{}})).toEqual({done:true});
     expect((await db.query("select (select count(*)::int from public.documents where firm_id=$1) documents,(select count(*)::int from public.tasks where firm_id=$1 and kind='notice') notices",[firm])).rows[0]).toEqual({documents:22,notices:7});
     const files=(await readdir(dir,{recursive:true,withFileTypes:true})).filter((entry)=>entry.isFile());
