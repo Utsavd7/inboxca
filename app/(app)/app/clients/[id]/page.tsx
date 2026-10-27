@@ -272,11 +272,11 @@ export default async function Client({ params, searchParams }: { params: Promise
   const rule = new Map(rules?.map((r) => [r.code, r]));
   const needs2b = new Set(months.filter((month) => !statements?.some((row) => row.period_key === month)));
   // Form No. 130 and Form No. 168 replace Form 16 and Form 26AS from tax year 2026-27, and either
-  // name answers either. Only a salary has a Form 16, so it is listed for an individual or a
-  // client with one on file.
+  // name answers either. Only a salary has a Form 16, so it is listed for an individual on the
+  // non-business return (ITR_NA) or a client with one on file.
   const newer: Record<string, string> = { "Form 16": "Form 130", "Form 26AS": "Form 168" };
   const held = new Set((taxPapers ?? []).map((paper) => `${paper.period_key}:${Object.keys(newer).find((type) => newer[type] === paper.document_type) ?? paper.document_type}`));
-  const salaried = client.kind === "individual" || [...held].some((paper) => paper.endsWith(":Form 16"));
+  const salaried = (client.kind === "individual" && !!tasks?.some((task) => task.code === "ITR_NA")) || [...held].some((paper) => paper.endsWith(":Form 16"));
   const itrNeeds = new Map(itrYears.map((year) => {
     const papers = (salaried ? ["Form 16", "Form 26AS", "AIS"] : ["Form 26AS", "AIS"]).map((type) => ({ name: paperType(year >= "2027" ? newer[type] ?? type : type), added: held.has(`${year}:${type}`) }));
     const missing = papers.filter((paper) => !paper.added), names = (missing.length ? missing : papers).map((paper) => paper.name).join(", ").replace(/, ([^,]*)$/, " and $1");
