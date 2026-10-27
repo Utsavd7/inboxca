@@ -6,7 +6,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { TEST_DRIVE } from "../../playwright.config";
 import { emailStep, localSupabase, query, runJobs, seedFirm, totp } from "./local-supabase";
 import { gstr2a, inventedGstin } from "../fixtures/portal";
-import { form16, form26asText, itrVerification, pan, tan } from "../fixtures/tax-papers";
+import { ais, form16, form26asText, itrVerification, pan, tan } from "../fixtures/tax-papers";
 import { localDrive } from "@/src/lib/drive";
 
 // Portal files dropped in from Documents and from a client's Returns, and old files sent from
@@ -92,7 +92,7 @@ test("a GSTR-2A added on Documents closes the GSTR-2A asked for", async () => {
   expect(document).toEqual({ document_type: "GSTR-2A", period_key: "2026-09" });
 });
 
-test("a Form 26AS text file and a Form 16 added on Documents are filed under the client by PAN, and the 26AS rows reach the year's figures", async ({ request }) => {
+test("a Form 26AS text file and a Form 16 added on Documents are filed under the client by PAN, and the 26AS rows reach the year's figures; each ITR lists what its year still needs", async ({ request }) => {
   const name = `Iyer Consultants ${tag}`;
   await owner.goto("/app/clients?panel=add");
   await owner.getByLabel("Name", { exact: true }).fill(name);
@@ -128,6 +128,16 @@ test("a Form 26AS text file and a Form 16 added on Documents are filed under the
   await expect(held).toContainText(`${name} - Form 26AS - FY 2025-26.txt`);
   await expect(held).toContainText(`${name} - Form 16 - FY 2025-26.pdf`);
   await expect(owner.getByText("Choose a field from this official form")).toHaveCount(0);
+  // Each open ITR lists the portal files its year still needs, by that year's names; the AIS dropped on Returns closes its item.
+  await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, 'ITR_NA', '2026-03', current_date + 5), ($1, $2, 'ITR_NA', '2027-03', current_date + 270)", [firm.firmId, client]);
+  await owner.goto(`/app/clients/${client}?tab=returns`);
+  const itr = owner.locator("section[aria-labelledby=due] li");
+  await expect(itr.filter({ hasText: "AIS for FY 2025-26: not added yet" })).toHaveCount(1);
+  await expect(itr.filter({ hasText: "Form No. 130 (was Form 16), Form No. 168 (was Form 26AS) and AIS for Tax year 2026-27: not added yet" })).toHaveCount(1);
+  await owner.getByLabel("Add portal files").setInputFiles({ name: "ais.pdf", mimeType: "application/pdf", buffer: Buffer.from(ais()) });
+  await owner.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(owner).toHaveURL(/tab=returns&dropped=1-0-0$/);
+  await expect(itr.filter({ hasText: "Form 16, Form 26AS and AIS for FY 2025-26: added" })).toHaveCount(1);
 });
 
 test("a locked ITR-V under a client's To check is filed as soon as a person types its password", async () => {
