@@ -36,6 +36,13 @@ const week = (page: Page) => page.getByRole("region", { name: "This week" });
 const oneScreen = (page: Page) => page.locator(".stage-panel").evaluate((panel) => panel.scrollHeight <= panel.clientHeight + 1);
 
 test.beforeAll(async ({ browser }) => {
+  // Every date below counts from today in India, as Today does: a run that would cross midnight
+  // there (the GSTR-3B due today turning late) starts just after it instead.
+  const left = 86_400_000 - ((Date.now() + 19_800_000) % 86_400_000);
+  if (left < 180_000) {
+    test.setTimeout(left + 120_000);
+    await new Promise((done) => setTimeout(done, left + 1_000));
+  }
   firm = await seedFirm(`Invented Today Firm ${tag}`, emails.owner, keys.owner);
   const [manager, staff, other] = [await addPerson(firm.firmId, emails.manager, "manager", keys.manager), await addPerson(firm.firmId, emails.staff, "staff", keys.staff), await addPerson(firm.firmId, emails.other, "staff", keys.other)];
   const [{ id: team }] = await query(local.dbUrl, "insert into public.groups (firm_id, kind, name) values ($1, 'team', 'Invented GST team') returning id", [firm.firmId]);
