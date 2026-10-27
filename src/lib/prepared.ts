@@ -17,7 +17,6 @@ import {receive,unsafeText} from "./intake";
 import {itrChecks,type ItrWork} from "./itr-check";
 
 export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
-export type Prepared=z.infer<typeof preparedSchema>;
 export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : "GSTR-3B";
 
 const formPeriod=(period:string)=>period.length===4 ? itrYear(period) : periodName(period);
