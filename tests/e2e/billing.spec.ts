@@ -7,9 +7,10 @@ import { appKey, emailStep, latestEmail, localSupabase, query, seedFirm, systemM
 // Orelu's billing through the real pages, with payments on and Cashfree a fake on this machine
 // (PLAN.md 5.14.1, D33): a new firm signs up, chooses its plan and sets up AutoPay in the fake's
 // checkout, and the signed webhook makes it active; Settings, Billing lists its receipt and turns
-// AutoPay off; near its plan's returns, Today offers the plan that fits and one payment moves it
-// up; the money comes back within 14 days with the 2 step code; the admin console
-// shows the refund by month and reason. Skipped when local Supabase is not running.
+// AutoPay off; past its monthly share of returns with its year still within the plan, Today offers
+// yearly payment and one payment switches it; once the year passes the plan, Today offers the plan
+// that fits and one payment moves it up; the money comes back within 14 days with the 2 step code;
+// the admin console shows the refund by month and reason. Skipped when local Supabase is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 // One worker, as the fake Cashfree has one port.
@@ -112,16 +113,26 @@ test("Settings, Billing lists the receipt and turns AutoPay off", async ({ page 
   await expect(page.getByRole("button", { name: "Turn AutoPay on" })).toBeVisible();
 });
 
-test("Today shows the owner the plan that fits once the returns near the plan, and one payment moves the firm up", async ({ page }) => {
-  // Returns due so far: all that a Solo plan paid monthly has given by this month (5.14, D38).
+test("Today offers a seasonal monthly payer yearly payment, not a bigger plan; once its year passes the plan, one payment moves it up", async ({ page }) => {
+  // Returns due so far: all that a Solo plan paid monthly has given by this month, and the year's
+  // returns within Solo's 800 (5.14, D38).
   const day = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const months = ((Number(day.slice(5, 7)) + 8) % 12) + 1;
-  await query(local.dbUrl, "insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [(await firm()).id, day, Math.ceil((800 * months) / 12)]);
+  const due = async (n: number, on = day) => query(local.dbUrl, "insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [(await firm()).id, on, n]);
+  await due(Math.ceil((800 * months) / 12));
   await emailStep(page, email);
   await page.getByLabel("6 digit code from the app").fill(await code());
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/app$/);
   const card = page.getByRole("region", { name: "Your plan" });
+  await expect(card.getByRole("button", { name: /move up/ })).toHaveCount(0);
+  await card.getByRole("button", { name: /switch to yearly payment/ }).click();
+  await expect(page).toHaveURL(/\/app\/settings\?group=billing&saved=checkout/);
+  await expect.poll(async () => (await query(local.dbUrl, "select s.cycle from public.subscriptions s join public.payments p on p.firm_id = s.firm_id and p.kind = 'yearly' and p.status = 'done' where s.firm_id = $1", [(await firm()).id]))[0]?.cycle).toBe("yearly");
+
+  // Returns still due by March take the year past Solo.
+  await due(400, `${Number(day.slice(0, 4)) + (months > 9 ? 0 : 1)}-03-31`);
+  await page.goto("/app");
   await expect(card).toContainText("Growth");
   await card.getByRole("button", { name: /move up/ }).click();
   await expect(page).toHaveURL(/\/app\/settings\?group=billing&saved=checkout/);
@@ -148,12 +159,12 @@ test("the owner gets the money back within 14 days with the 2 step code, and the
   await expect(page).toHaveURL(/saved=money_back/);
   await expect(page.getByText("Your firm can only view for now", { exact: false })).toBeVisible();
   expect((await firm()).status).toBe("read_only");
-  // The fake gives the refunds back a moment later, by its signed webhook: the first payment and
-  // the move up of the same 14 days.
-  await expect.poll(async () => (await query(local.dbUrl, "select status from public.payments where kind = 'refund' and firm_id = $1", [(await firm()).id])).map((row) => row.status).join(), { timeout: 15_000 }).toBe("done,done");
+  // The fake gives the refunds back a moment later, by its signed webhook: the first payment, the
+  // switch to yearly payment and the move up of the same 14 days.
+  await expect.poll(async () => (await query(local.dbUrl, "select status from public.payments where kind = 'refund' and firm_id = $1", [(await firm()).id])).map((row) => row.status).join(), { timeout: 15_000 }).toBe("done,done,done");
   await page.reload();
-  await expect(page.locator("section#receipts").getByText(/Refund receipt RFD\//)).toHaveCount(2);
-  await expect(page.locator("section#receipts").getByText("Given back")).toHaveCount(2);
+  await expect(page.locator("section#receipts").getByText(/Refund receipt RFD\//)).toHaveCount(3);
+  await expect(page.locator("section#receipts").getByText("Given back")).toHaveCount(3);
   await expect(page.locator("section#money_back").getByText("your money was given back")).toBeVisible();
 });
 
@@ -185,7 +196,7 @@ test("the admin console shows the refund by month and reason, and the tax detail
     const row = admin.page.locator("section[aria-label='Refunds by month'] tr").filter({ hasText: month });
     await expect(row).toBeVisible();
     const payments = admin.page.locator("section[aria-label='Payments'] tr").filter({ hasText: firmName });
-    await expect(payments.filter({ hasText: "Refund, Money back within 14 days of the first payment" })).toHaveCount(2);
+    await expect(payments.filter({ hasText: "Refund, Money back within 14 days of the first payment" })).toHaveCount(3);
     await expect(payments.filter({ hasText: /First payment/ })).toBeVisible();
     await expect(admin.page.getByLabel("Legal name")).toHaveValue(tax.legalName);
   } finally {

@@ -8,7 +8,7 @@ import { sendSystemMail } from "@/src/lib/system-mail";
 import { docText, docTitles, taxLines, type Doc } from "./documents";
 import {
   addDays, daysBetween, financialYear, formulaSchema, GB, gstOn, indiaDay, mandateMax, methodsFor, moneyBackLastDay, overdueState, periodEnd, planFit, planPrice, prorate,
-  RETRY_DAYS, rupees, serialNumber, taxSchema, withGst, type Cycle, type DocKind, type FirmPlan, type Method, type PlanFormula, type Tax,
+  RETRY_DAYS, rupees, serialNumber, taxSchema, toYearly, withGst, type Cycle, type DocKind, type FirmPlan, type Method, type PlanFormula, type Tax,
 } from "./money";
 import { billingProvider, type BillingEvent, type Checkout, type PaymentProvider } from "./provider";
 
@@ -29,13 +29,20 @@ export type SubPlan = FirmPlan & { version: number; maxPaise: number; next?: Fir
 // authorisation, debited on it, or a one time order), the period it pays for and the plan or
 // add-on it brings.
 // `base`: the team the plan took when one more person was bought (its own people, or the more
-// the plan includes).
-export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number };
+// the plan includes). `basis`: what a plan change was priced on (basisOf).
+export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number; basis?: string };
 export type Alert = { kind: string; ref?: string; at: string };
 
 const json = (value: unknown) => value as NonNullable<Json>;
 const planOf = (sub: Subscription) => sub.plan as unknown as SubPlan;
 const detailsOf = (payment: Payment) => payment.details as unknown as Details;
+// What a move up, a switch to yearly payment, one more person or one more AI block is priced on:
+// the plan's priced parts, the cycle and the paid period. One that arrives after any of them
+// changed (two checkouts paid out of order) is not applied and goes back in full.
+const basisOf = (sub: Subscription) => {
+  const plan = planOf(sub);
+  return JSON.stringify([sub.cycle, sub.paid_until, plan.clients, plan.practice, plan.people, plan.aiBlocks ?? 0, plan.returns ?? null]);
+};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const mandateId = /^[A-Za-z0-9_-]{1,60}$/;
 const long = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
@@ -105,9 +112,9 @@ export async function fitOf(admin: Admin, firmId: string, formula: PlanFormula, 
   return used ? planFit(formula, sub.plan as unknown as SubPlan, sub.cycle as Cycle, { returns: used.returns_so_far, returnsByMarch: used.returns_this_year, bytes: Number(used.workspace_bytes), bytesByMarch: Number(used.workspace_by_march) }, day) : null;
 }
 
-// A move to a bigger plan raised on the mandate and not taken yet.
+// A move to a bigger plan or a switch to yearly payment raised on the mandate and not taken yet.
 export const movingUp = async (admin: Admin, firmId: string) =>
-  (await admin.from("payments").select("amount_paise, due_at").eq("firm_id", firmId).eq("kind", "upgrade").eq("status", "created").eq("details->>via", "charge").limit(1).maybeSingle()).data;
+  (await admin.from("payments").select("kind, amount_paise, due_at").eq("firm_id", firmId).in("kind", ["upgrade", "yearly"]).eq("status", "created").eq("details->>via", "charge").limit(1).maybeSingle()).data;
 
 const withPeriod = (lines: Details["lines"], period: [string, string]) => lines.map((line, at) => (at ? line : { ...line, text: `${line.text}, ${span(period)}` }));
 
@@ -187,9 +194,11 @@ export async function approveLimit(firmId: string, actor: string, returnUrl: str
 
 // One time payments, paid before anything is added (5.14.1): an overdue renewal paid now, an
 // upgrade's difference for the rest of the paid period (to a plan the owner chose, or to the one
-// the meters say fits), one more person, one more AI block a month, or a one time AI top-up.
-export type Buy = { kind: "renewal" } | { kind: "upgrade"; plan: FirmPlan } | { kind: "fit" } | { kind: "extra_user" } | { kind: "ai_block" } | { kind: "topup" };
-export async function buy(firmId: string, actor: string, what: Buy, returnUrl: string): Promise<Checkout | { error: string }> {
+// the meters say fits), a monthly payer's switch to yearly payment, one more person, one more AI
+// block a month, or a one time AI top-up. The switch is debited on the mandate within its maximum
+// (`due`: nothing to open), and paid in checkout above it.
+export type Buy = { kind: "renewal" } | { kind: "upgrade"; plan: FirmPlan } | { kind: "fit" } | { kind: "yearly" } | { kind: "extra_user" } | { kind: "ai_block" } | { kind: "topup" };
+export async function buy(firmId: string, actor: string, what: Buy, returnUrl: string): Promise<Checkout | { error: string } | { due: string }> {
   const provider = billingProvider();
   const admin = supabaseAdmin();
   const [{ formula, tax }, { data: sub }, firm, email] = await Promise.all([billingSettings(admin), admin.from("subscriptions").select("*").eq("firm_id", firmId).maybeSingle(), firmOf(admin, firmId), ownerOf(admin, firmId)]);
@@ -200,9 +209,9 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
   if (what.kind === "fit") {
     const fit = await fitOf(admin, firmId, formula, sub, today);
     if (!fit?.notice) return { error: "Your plan fits your firm's work." };
-    what = { kind: "upgrade", plan: fit.next };
+    what = fit.yearly ? { kind: "yearly" } : { kind: "upgrade", plan: fit.next };
   }
-  if (what.kind === "upgrade" && (await movingUp(admin, firmId))) return { error: "Your move to a bigger plan is on its way already. Its payment is shown in Settings, Billing." };
+  if ((what.kind === "upgrade" || what.kind === "yearly") && (await movingUp(admin, firmId))) return { error: "A change to your plan is on its way already. Its payment is shown in Settings, Billing." };
   const current = planPrice(formula, plan, cycle);
   let lines: Details["lines"];
   let details: Partial<Details> = {};
@@ -215,6 +224,13 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
     if (await blocksThisMonth(admin, firmId, plan, today) >= current.blockCap) return { error: "Your plan has all the extra AI it can take this month. Move to a bigger plan for more." };
     lines = [{ text: `AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits for this month`, paise: formula.aiBlock.price * 100 }];
     details = { add: 1 };
+  } else if (what.kind === "yearly") {
+    if (cycle === "yearly") return { error: "Your plan is paid yearly already." };
+    // As for the automatic move up: never in the days a renewal may be raised.
+    if (sub.paid_until <= addDays(today, 6)) return { error: `Your plan renews on ${long(sub.paid_until)}. Switch to yearly payment after that.` };
+    const year = toYearly(formula, plan, today, sub.paid_until);
+    lines = [{ text: `InboxCA ${current.name} plan, yearly, ${long(today)} to ${long(addDays(year.until, -1))}, less what is left of the month paid`, paise: year.paise }];
+    details = { period: [sub.paid_until, year.until], basis: basisOf(sub) };
   } else {
     if (sub.paid_until <= today) return { error: "Pay for your plan first." };
     const team = Math.max(plan.people, current.people);
@@ -226,10 +242,29 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
     const until = addDays(sub.paid_until, -1);
     const words = what.kind === "upgrade" ? `Move to the ${moved.name} plan` : what.kind === "extra_user" ? "One more person in the team" : `One more AI block of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits a month`;
     lines = [{ text: `${words}, ${long(today)} to ${long(until)}`, paise: prorate(moved.paise - current.paise, today, sub.paid_until, cycle) }];
-    details = what.kind === "upgrade" ? { plan: next } : what.kind === "extra_user" ? { add: 1, base: team } : { add: 1 };
+    details = { ...(what.kind === "upgrade" ? { plan: next } : what.kind === "extra_user" ? { add: 1, base: team } : { add: 1 }), basis: basisOf(sub) };
     if (!lines[0].paise) return { error: "Your plan renews today. Make the change at renewal." };
   }
   const amount = withGst(lines.reduce((sum, line) => sum + line.paise, 0), tax, firm.stateCode, today);
+  if (what.kind === "yearly" && sub.status === "active" && sub.mandate && amount.total <= plan.maxPaise) {
+    const at = new Date(Date.now() + NOTICE_MS);
+    const { data: debit, error } = await admin.from("payments").insert({ firm_id: firmId, kind: "yearly", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ ...details, lines, via: "charge" } satisfies Details) }).select("id").single();
+    if (error) throw new Error(`Saving the debit failed: ${error.code}`);
+    try {
+      await provider.charge({ mandate: sub.mandate, id: debit.id, paise: amount.total, at, note: lines[0].text });
+    } catch (problem) {
+      await admin.from("payments").update({ status: "cancelled" }).eq("id", debit.id);
+      throw problem;
+    }
+    await note(admin, firmId, actor, "billing.order_started", { payment: debit.id, kind: what.kind });
+    // Orelu's own notice, as for a renewal (RBI E-mandate Framework 2026, para 6).
+    await mail(email, `InboxCA: ${rupees(amount.total)} will be taken on ${long(indiaDay(at))}`, [
+      `Orelu (InboxCA) will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, for ${firm.name}'s switch to yearly payment: ${lines[0].text}.`,
+      `AutoPay reference: ${sub.mandate}.`,
+      `To stop it, turn AutoPay off in Settings, Billing before then: ${link(BILLING)}`,
+    ]);
+    return { due: at.toISOString() };
+  }
   const { data: row, error } = await admin.from("payments").insert({ firm_id: firmId, kind: what.kind, amount_paise: amount.total, gst_paise: amount.gst, details: json({ ...details, lines, via: "order" } satisfies Details) }).select("id").single();
   if (error) throw new Error(`Saving the order failed: ${error.code}`);
   const phone = await serverCrypto().decrypt(firmId, `subscriptions/${firmId}/phone`, sub.phone_enc);
@@ -380,6 +415,7 @@ async function paid(admin: Admin, id: string, ref?: string) {
   const { data: sub } = await admin.from("subscriptions").select("*").eq("firm_id", firmId).maybeSingle();
   const today = indiaDay(new Date());
   const email = await ownerOf(admin, firmId);
+  const stale = !!sub && !!details.basis && details.basis !== basisOf(sub);
   if (sub) {
     const plan = planOf(sub);
     if (payment.kind === "plan") {
@@ -400,12 +436,16 @@ async function paid(admin: Admin, id: string, ref?: string) {
         for (const other of others ?? []) if (moved.mandate && detailsOf(other as Payment).via === "charge") await billingProvider()?.cancelCharge({ mandate: moved.mandate, id: other.id }).catch(() => log.warn("billing.charge_cancel_failed"));
       }
     }
-    if (payment.kind === "upgrade" && details.plan) await admin.from("subscriptions").update({ plan: json({ ...plan, ...details.plan }) }).eq("firm_id", firmId);
-    if (payment.kind === "extra_user") await admin.from("subscriptions").update({ plan: json({ ...plan, people: Math.max(plan.people, details.base ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
-    if (payment.kind === "ai_block") await admin.from("subscriptions").update({ plan: json({ ...plan, aiBlocks: (plan.aiBlocks ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
+    // A plan change priced on what has changed since is not applied: it goes back in full below.
+    if (!stale && payment.kind === "upgrade" && details.plan) await admin.from("subscriptions").update({ plan: json({ ...plan, ...details.plan }) }).eq("firm_id", firmId);
+    if (!stale && payment.kind === "yearly" && details.period) await admin.from("subscriptions").update({ cycle: "yearly", paid_until: details.period[1] }).eq("firm_id", firmId);
+    if (!stale && payment.kind === "extra_user") await admin.from("subscriptions").update({ plan: json({ ...plan, people: Math.max(plan.people, details.base ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
+    if (!stale && payment.kind === "ai_block") await admin.from("subscriptions").update({ plan: json({ ...plan, aiBlocks: (plan.aiBlocks ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
   }
   await note(admin, firmId, null, "billing.paid", { payment: id, kind: payment.kind });
   await issue(admin, id);
+  const provider = billingProvider();
+  if (stale && provider) await note(admin, firmId, null, "billing.refund_asked", { payment: (await refund(admin, provider, payment, payment.amount_paise, "priced_on_old_plan", sub)) ?? undefined, reason: "priced_on_old_plan" });
 }
 
 // A debit or order the money back called off that is taken all the same (D33): it is recorded
@@ -526,9 +566,10 @@ export async function claimMoneyBack(firmId: string, actor: string) {
   const { data: sub } = await admin.from("subscriptions").select("mandate, method").eq("firm_id", firmId).maybeSingle();
   await stopAutoPay(firmId, actor, "money_back");
   const { count: imported } = await admin.from("requests").select("id", { count: "exact", head: true }).eq("firm_id", firmId).eq("kind", "import");
-  // A move to a bigger plan in the 14 days, chosen or automatic, goes back with the plan; a move
-  // still being debited was called off with AutoPay, and goes back if it is taken all the same.
-  const back = window.rows.filter((row) => row.status === "done" && ["plan", "upgrade", "extra_user", "ai_block", "topup"].includes(row.kind) && indiaDay(new Date(row.created_at)) <= window.lastDay);
+  // A move to a bigger plan in the 14 days, chosen or automatic, or to yearly payment, goes back
+  // with the plan; a move still being debited was called off with AutoPay, and goes back if it is
+  // taken all the same.
+  const back = window.rows.filter((row) => row.status === "done" && ["plan", "upgrade", "yearly", "extra_user", "ai_block", "topup"].includes(row.kind) && indiaDay(new Date(row.created_at)) <= window.lastDay);
   const refunds: string[] = [];
   for (const row of back) {
     const setup = row.kind === "plan" && imported ? (detailsOf(row).setupPaise ?? 0) : 0;
@@ -541,7 +582,7 @@ export async function claimMoneyBack(firmId: string, actor: string) {
   return null;
 }
 
-async function refund(admin: Admin, provider: PaymentProvider, of: Payment, amount: number, reason: "money_back" | "duplicate" | "charge_error", sub?: { mandate: string | null; method: string | null } | null) {
+async function refund(admin: Admin, provider: PaymentProvider, of: Payment, amount: number, reason: "money_back" | "duplicate" | "charge_error" | "priced_on_old_plan", sub?: { mandate: string | null; method: string | null } | null) {
   if (amount <= 0) return null;
   const gst = Math.round((of.gst_paise * amount) / of.amount_paise);
   const { data: row, error } = await admin.from("payments").insert({ firm_id: of.firm_id, kind: "refund", refund_of: of.id, reason, amount_paise: amount, gst_paise: gst, details: json({ lines: [], via: detailsOf(of).via } satisfies Details) }).select("id").single();
@@ -659,7 +700,8 @@ export async function dailyBilling(firmId: string, now = new Date()) {
 // the plan sizes are measured), a firm past its plan and its growth cushion moves to the plan that
 // fits: the difference for the rest of the period is debited on the mandate after Orelu's notice
 // 3 days before, taken before the next renewal is raised, and never above the mandate's maximum.
-// Above it the owner approves once, by paying the same amount in Settings, Billing.
+// Above it the owner approves once, by paying the same amount in Settings, Billing. A monthly payer
+// whose year fits its plan is offered yearly payment instead, and is never moved up.
 async function fitDay(admin: Admin, provider: PaymentProvider, formula: PlanFormula, tax: Tax | null, firm: Firm, sub: Subscription, email: string | null, now: Date) {
   const today = indiaDay(now);
   const fit = await fitOf(admin, firm.id, formula, sub, today);
@@ -670,6 +712,7 @@ async function fitDay(admin: Admin, provider: PaymentProvider, formula: PlanForm
   const moved = planPrice(formula, fit.next, cycle);
   const per = `${cycle === "monthly" ? "a month" : "a year"}${gstOn(tax, today) ? " with GST" : ""}`;
   const year = financialYear(today);
+  const yearly = fit.yearly && toYearly(formula, plan, today, sub.paid_until!);
   for (const measure of fit.measures.filter((m) => m.notice)) {
     // Once a year for each measure: the row is the record that the owner was told.
     const { data: first } = await admin.from("requests").upsert({ firm_id: firm.id, kind: "alert", entity_type: `plan_fit_${measure.measure}_${year}`, entity_id: firm.id, reason_code: "plan_upgrade_suggested", status: "done" }, { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true }).select("id");
@@ -677,14 +720,19 @@ async function fitDay(admin: Admin, provider: PaymentProvider, formula: PlanForm
     const figure = (value: number) => (measure.measure === "returns" ? `${Math.round(value).toLocaleString("en-IN")} returns` : `${(value / GB).toFixed(1)} GB of InboxCA storage`);
     await mail(email, `InboxCA: ${firm.name} is close to its plan's ${measure.measure === "returns" ? "returns" : "InboxCA storage"}`, [
       `${firm.name} has ${figure(measure.used)} ${measure.measure === "returns" ? "due so far" : "used"} this year, ${Math.round((100 * measure.used) / measure.earned)}% of the ${figure(measure.earned)} its ${current.name} plan gives ${cycle === "monthly" ? "by this month, as a plan paid monthly gives a twelfth of the year each month" : "a year"}. At this pace it reaches about ${figure(measure.byMarch)} by March.`,
-      `The ${moved.name} plan fits your firm's work: ${rupees(withGst(moved.paise, tax, firm.stateCode, today).total)} ${per}.`,
-      formula.fitEnforced ? "When your firm passes its plan, InboxCA moves it to the plan that fits and takes the difference for the rest of the period, with a notice 3 days before." : "Nothing changes until you choose.",
-      `Move up in Settings, Billing: ${link(BILLING)}`,
+      ...(yearly ? [
+        `Its year still fits the ${current.name} plan, so it needs no bigger plan. Paid yearly, the plan gives the whole year's returns and InboxCA storage at once: ${rupees(withGst(yearly.paise, tax, firm.stateCode, today).total)}${gstOn(tax, today) ? " with GST" : ""} now pays for the plan until ${long(addDays(yearly.until, -1))}, less what is left of the month paid.`,
+        `Switch to yearly payment in Settings, Billing: ${link(BILLING)}`,
+      ] : [
+        `The ${moved.name} plan fits your firm's work: ${rupees(withGst(moved.paise, tax, firm.stateCode, today).total)} ${per}.`,
+        formula.fitEnforced ? "When your firm passes its plan, InboxCA moves it to the plan that fits and takes the difference for the rest of the period, with a notice 3 days before." : "Nothing changes until you choose.",
+        `Move up in Settings, Billing: ${link(BILLING)}`,
+      ]),
     ]);
   }
-  if (!formula.fitEnforced || !fit.over || moved.paise <= current.paise || sub.status !== "active" || !sub.mandate || !sub.paid_until || sub.paid_until <= addDays(today, 6)) return;
+  if (yearly || !formula.fitEnforced || !fit.over || moved.paise <= current.paise || sub.status !== "active" || !sub.mandate || !sub.paid_until || sub.paid_until <= addDays(today, 6)) return;
   // Not again within a week of a move raised, ordered or failed.
-  const { count } = await admin.from("payments").select("id", { count: "exact", head: true }).eq("firm_id", firm.id).eq("kind", "upgrade").in("status", ["created", "failed"]).gte("created_at", new Date(now.getTime() - 7 * 86_400_000).toISOString());
+  const { count } = await admin.from("payments").select("id", { count: "exact", head: true }).eq("firm_id", firm.id).in("kind", ["upgrade", "yearly"]).in("status", ["created", "failed"]).gte("created_at", new Date(now.getTime() - 7 * 86_400_000).toISOString());
   if (count) return;
   const until = addDays(sub.paid_until, -1);
   const lines = [{ text: `Move to the ${moved.name} plan, ${long(today)} to ${long(until)}`, paise: prorate(moved.paise - current.paise, today, sub.paid_until, cycle) }];
@@ -695,7 +743,7 @@ async function fitDay(admin: Admin, provider: PaymentProvider, formula: PlanForm
     return;
   }
   const at = new Date(now.getTime() + 3 * 86_400_000);
-  const { data: row, error } = await admin.from("payments").insert({ firm_id: firm.id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge", plan: fit.next } satisfies Details) }).select("id").single();
+  const { data: row, error } = await admin.from("payments").insert({ firm_id: firm.id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge", plan: fit.next, basis: basisOf(sub) } satisfies Details) }).select("id").single();
   if (error) throw new Error(`Saving the move up failed: ${error.code}`);
   try {
     await provider.charge({ mandate: sub.mandate, id: row.id, paise: amount.total, at, note: lines[0].text });
