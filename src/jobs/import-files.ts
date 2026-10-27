@@ -7,6 +7,7 @@ import type { FolderOrder, Naming, WorkType } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import type { Planned } from "@/src/lib/first-import";
 import { supabaseAdmin } from "@/src/lib/supabase";
+import { forgetText } from "@/src/lib/workspace";
 import { queueRead } from "./read-document";
 import type { Handler } from "./runner";
 
@@ -88,7 +89,8 @@ export const undoImport: Handler = async (job) => {
   const drive = await openDrive(firm, account);
   try {
     for (const moved of plan.moved.splice(-BATCH)) {
-      const { data: document } = await admin.from("documents").select("drive_file_id").eq("id", moved.document).maybeSingle();
+      const { data: document } = await admin.from("documents").select("drive_file_id, details").eq("id", moved.document).maybeSingle();
+      await forgetText(document?.details);
       if (document) await drive.move(document.drive_file_id, path.posix.dirname(moved.from), path.posix.basename(moved.from));
       await admin.from("documents").delete().eq("id", moved.document);
     }

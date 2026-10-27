@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { firmCrypto, localKek, type KeyStore } from "@/src/lib/crypto";
-import { b2Store, keepSafetyCopy, localStore, openSafetyCopy, workspaceStore } from "@/src/lib/workspace";
+import { b2Store, forgetText, keepSafetyCopy, keepText, localStore, openSafetyCopy, openText, workspaceStore } from "@/src/lib/workspace";
 import { fakeAws, testCredentials } from "@/tests/fixtures/aws";
 
 const FIRM = "firm-a";
@@ -23,6 +23,7 @@ beforeAll(async () => {
       objects.set(path, { body, lock: headers["x-amz-object-lock-mode"], until: headers["x-amz-object-lock-retain-until-date"] });
       return {};
     }
+    if (method === "DELETE") return objects.delete(path), { status: 204 };
     const found = objects.get(path);
     return found ? { body: found.body } : { status: 404, body: Buffer.from("<Error><Code>NoSuchKey</Code></Error>") };
   });
@@ -134,5 +135,19 @@ describe("safety copies", () => {
     expect(await keepSafetyCopy(FIRM, "doc-1", read, null, crypto)).toBe(false);
     expect(read).not.toHaveBeenCalled();
     expect(await openSafetyCopy(FIRM, "doc-1", null, crypto)).toBeNull();
+  });
+});
+
+describe("the text read from a paper (D29)", () => {
+  const crypto = firmCrypto(localKek(randomBytes(32)), memoryKeys());
+
+  it("is kept sealed, opens for that paper of that firm only, and goes with the paper", async () => {
+    const details = { text: await keepText(FIRM, "doc-1", "Invented Traders PAN ABCDE1234F", store(), crypto) };
+    expect(objects.get(`/orelu-workspace/text/${FIRM}/doc-1`)!.body.includes(Buffer.from("ABCDE1234F"))).toBe(false);
+    expect(await openText(FIRM, "doc-1", details, store(), crypto)).toBe("Invented Traders PAN ABCDE1234F");
+    await expect(openText("firm-b", "doc-1", details, store(), crypto)).rejects.toThrow();
+    await expect(openText(FIRM, "doc-2", details, store(), crypto)).rejects.toThrow();
+    await forgetText(details, store());
+    expect(await openText(FIRM, "doc-1", details, store(), crypto)).toBeNull();
   });
 });
