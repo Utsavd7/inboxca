@@ -43,13 +43,15 @@ async function planOf(admin: Admin, firmId: string) {
   return { monthly, block: formula.data.aiBlock.credits, figures: figures.data };
 }
 
-// This India month's AI credits (plan, rollover and top-ups) and what is used, for the owner.
+// This India month's AI credits (plan, rollover and top-ups) and what is used, with what is left
+// of each top-up and when it ends, for the owner.
 export async function aiCredits(firmId: string) {
   const admin = supabaseAdmin();
   const plan = await planOf(admin, firmId);
   if (!plan) return null;
   const { data, error } = await admin.rpc("ai_credits", { target_firm: firmId, monthly: plan.monthly, block: plan.block });
-  return error ? null : (data?.[0] ?? null);
+  const credits = error ? null : data?.[0];
+  return credits ? { ...credits, topups: credits.topups as { left: number; until: string }[] } : null;
 }
 
 // The cache (D29): an answer kept in this server's memory for a day, under a hash keyed by the
@@ -65,8 +67,9 @@ type Answer = { usage?: Usage; output?: { content?: { type: string; text?: strin
 
 // The one place the app calls the AI provider. Every call names its firm and reason: an answer in
 // the cache costs nothing; otherwise the most the call may take is reserved first, and with no
-// reservation (credits used, automatic work past 90%, a reason with no figures) nothing is called
-// and the answer is null, so the caller falls back to rules or templates. After the call the
+// reservation (credits used, automatic work past 90% or paused for the day, a reason with no
+// figures) nothing is called and the answer is null, so the caller falls back to rules or
+// templates. After the call the
 // reservation settles to what the provider reported, never above it; a call that fails costs
 // nothing. The owner is told at 80% and 100%, auto top-up runs from 90%, and Orelu's admins are
 // told when a firm sends the same thing to AI twice. The provider keeps nothing (store off). What
@@ -87,7 +90,11 @@ export async function askAi(firmId: string, reason: AiReason, instructions: stri
     return null;
   }
   const share = stopsAt90[reason] === false ? 1 : 0.9;
-  const { data, error } = await admin.rpc("ai_reserve", { target_firm: firmId, monthly: plan.monthly, block: plan.block, why: reason, want: rule.credits, share, digest: hash });
+  // The runaway guards (5.18) hold back automatic work only: 20% of the monthly credits in a
+  // day for the firm, and Orelu's daily spend cap in dollars, off when unset.
+  const capUsd = Number(process.env.AI_GLOBAL_DAILY_CAP_USD);
+  const guards = share < 1 ? { day_share: 0.2, ...(capUsd > 0 && { cap: capUsd * plan.figures.usdInr }) } : {};
+  const { data, error } = await admin.rpc("ai_reserve", { target_firm: firmId, monthly: plan.monthly, block: plan.block, why: reason, want: rule.credits, share, digest: hash, ...guards });
   const held = data?.[0];
   if (error || !held) {
     log.warn("ai.not_reserved", { code: error?.code });
@@ -96,6 +103,14 @@ export async function askAi(firmId: string, reason: AiReason, instructions: stri
   const month = todayInIndia().slice(0, 7);
   // Once a month for each figure of credits, so a top-up paid can be told about again.
   const queue = (kind: string, key: string) => admin.from("jobs").upsert({ firm_id: firmId, kind, entity_type: "firm", entity_id: firmId, idempotency_key: `${key}:${firmId}:${month}:${held.available}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+  // Paused by a guard until the next India day: the owner (for the firm's own) and Orelu's
+  // admins are told once that day.
+  if (held.paused) {
+    const day = todayInIndia();
+    if (held.paused === "firm") await admin.from("jobs").upsert({ firm_id: firmId, kind: "usage_alert", entity_type: "firm", entity_id: firmId, idempotency_key: `usage_alert:ai_day:${firmId}:${day}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
+    await alertAdmins(admin, held.paused === "firm" ? "ai_day_cap" : "ai_global_cap", held.paused === "firm" ? `${firmId}:${day}` : day);
+    return null;
+  }
   const stage = !held.ticket && held.used + rule.credits > held.available ? "ai_100" : held.used >= 0.8 * held.available ? "ai_80" : null;
   if (stage) await queue("usage_alert", `usage_alert:${stage}`);
   if (!held.ticket || held.used >= 0.9 * held.available) await queue("ai_topup", "ai_topup");

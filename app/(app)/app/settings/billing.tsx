@@ -273,7 +273,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
       {!ended && sub.paid_until && sub.paid_until > today && (
         <Card id="addons" title="Add to your plan" line="Paid first: each one is added as soon as its payment is in.">
           <List className="set-rows" rise={false}>
-            {[["extra_user", "One more person in your team", person], ["ai_block", `One more AI block of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits every month`, block], ["topup", `An AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits for this month`, topup]].map(([kind, words, amount]) => (
+            {[["extra_user", "One more person in your team", person], ["ai_block", `One more AI block of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits every month`, block], ["topup", `An AI top-up of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits, good for 12 months`, topup]].map(([kind, words, amount]) => (
               <Item key={kind as string}>
                 <span className="grow">{words} <span className="hint">{rupees(amount as number)} now{gst}{kind === "topup" ? "" : `, for the rest of this period`}</span></span>
                 <Checkout action={buyCheckout} label="Pay and add" busy="Opening" className="">{hidden({ kind: kind as string })}</Checkout>

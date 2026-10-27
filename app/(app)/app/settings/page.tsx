@@ -37,7 +37,8 @@ import { REPLY_DAYS } from "@/src/lib/team-replies";
 import { NewComputers, YourComputers } from "../new-computers";
 import { PushSwitch } from "../push-switch";
 import { BillingCards } from "./billing";
-import { FairUse } from "./fair-use";
+import { AiUse, FairUse } from "./fair-use";
+import { aiReady } from "@/src/lib/ai";
 import "./settings.css";
 
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
@@ -79,7 +80,7 @@ const cardIcons: Record<string, [LucideIcon, Kind]> = {
   permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"], exceptions: [UserCog, "papers"], passkeys: [Fingerprint, "approve"],
   reminders: [BellRing, "notice"], answers: [MailCheck, "notice"], records: [FileCheck2, "notice"],
   replies: [Clock, "reply"],
-  use: [Gauge, "docs"], data: [Download, "docs"], support: [Headset, "approve"], close: [TriangleAlert, "late"],
+  use: [Gauge, "docs"], ai: [Gauge, "docs"], data: [Download, "docs"], support: [Headset, "approve"], close: [TriangleAlert, "late"],
   fit: [Gauge, "approve"], plan: [CreditCard, "approve"], change: [SlidersHorizontal, "approve"], addons: [UserPlus, "papers"], receipts: [Receipt, "docs"], money_back: [RotateCcw, "late"],
 };
 const ownerOnly = ["mailbox", "replies", "drive", "recovery", "computers", "visibility", "exceptions", "reminders", "answers", "records", "use", "data", "support", "close", "plan", "change", "addons", "receipts", "money_back"];
@@ -806,6 +807,11 @@ export default async function Settings({
               <FairUse firmId={membership.firmId} />
             </Suspense>
           </Card>
+          {aiReady() && <Card id="ai" title="AI credits" line="What InboxCA's AI used this month. Add credits in Billing.">
+            <Suspense fallback={<div className="set-meters" aria-busy="true"><span className="skel" /><span className="skel" /></div>}>
+              <AiUse firmId={membership.firmId} />
+            </Suspense>
+          </Card>}
           <Card id="data" title="Your data" line="Your client list, returns and notices, the list of papers and the activity log, as spreadsheet files in one ZIP. The papers themselves are already in your firm's drive.">
             <div className="set-foot">{download}</div>
           </Card>
