@@ -772,6 +772,9 @@ isOneToOne: false
 "admin_billing":
 { Args: Record<PropertyKey, never>; Returns: Json
                            },
+"admin_check_split":
+{ Args: { "first": string,"second": string,"verdict": string }; Returns: boolean
+                           },
 "admin_email_incident":
 { Args: { "incident": string }; Returns: number
                            },
@@ -834,6 +837,9 @@ isOneToOne: false
                            },
 "admin_set_tax":
 { Args: { "tax": Json }; Returns: boolean
+                           },
+"admin_split_firms":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "admin_support_view":
 { Args: { "target": string }; Returns: Json
@@ -1148,6 +1154,9 @@ isOneToOne: false
                            },
 "stop_fills":
 { Args: { "batch": string,"first_job": number,"target_firm": string }; Returns: number
+                           },
+"system_mail_use":
+{ Args: { "send"?: boolean,"target_firm": string }; Returns: Json
                            },
 "take_form_download":
 { Args: { "person": string,"ticket": string,"token_hash": string }; Returns: string

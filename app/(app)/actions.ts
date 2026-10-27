@@ -49,7 +49,7 @@ import { activityNames } from "@/src/lib/activity";
 import { invitableRoles, personName } from "@/src/lib/roles";
 import { EXCEPTION_RULES, IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
-import { sendSystemMail } from "@/src/lib/system-mail";
+import { sendSystemMail, systemMailReady, systemMailUse } from "@/src/lib/system-mail";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
 import { keepSafetyCopy, openSafetyCopy } from "@/src/lib/workspace";
 
@@ -76,6 +76,9 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
     const { count } = await supabase.from("firm_members").select("user_id", { count: "exact", head: true }).eq("firm_id", membership.firmId).in("status", ["active", "invited"]);
     if ((count ?? 0) >= team) return { error: `Your plan has a team of ${team}. Add a person in Settings, Billing first, then invite them.`, values };
   }
+  // Orelu's own emails a day for one firm (5.14): at the limit an invite waits for tomorrow.
+  const mails = systemMailReady() ? await systemMailUse(membership.firmId) : null;
+  if (mails && mails.used >= mails.most) return { error: "InboxCA has sent all of today's emails for your firm. Invite them tomorrow.", values };
 
   const admin = supabaseAdmin();
   let { data: personId } = await admin.rpc("user_id_for_email", { address: email });
@@ -105,7 +108,7 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
     `${membership.firmName} uses InboxCA for its clients' papers and returns. It has invited you to join its team.`,
     `To join, go to ${origin}/sign-in and enter this email address. InboxCA emails you a code to sign in. There is no password.`,
     "If you did not expect this, you can ignore this email.",
-  ].join("\n\n")).catch(() => log.warn("invite.system_mail_failed"));
+  ].join("\n\n"), membership.firmId).catch(() => log.warn("invite.system_mail_failed"));
   revalidatePath("/app/people");
   return { done: `Invited ${email}. They have an email with a sign in code.` };
 }

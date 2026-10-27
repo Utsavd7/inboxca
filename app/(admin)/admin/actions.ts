@@ -234,6 +234,15 @@ export async function startPilot(form: FormData) {
   revalidatePath(`/admin/firms/${firm}`);
 }
 
+// The admin's verdict on two firms that may be one (D38 (6)); the database logs it.
+export async function checkSplit(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const asked = z.object({ first: z.uuid(), second: z.uuid(), verdict: z.enum(["separate", "one"]) }).parse(Object.fromEntries(form));
+  const { error } = await supabase.rpc("admin_check_split", asked);
+  if (error) throw new Error(`Saving the verdict failed: ${error.code}`);
+  revalidatePath("/admin/firms");
+}
+
 // Recovery: removes another admin's passkeys and signs them out (the database logs it).
 export async function removePasskeys(form: FormData) {
   const { supabase } = await currentAdmin();

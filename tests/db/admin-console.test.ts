@@ -13,7 +13,8 @@ const session = (id: string) => `${id.slice(0, -3)}c${id.slice(-2)}`;
 const calls = ["admin_firms()", "admin_accounts()", "admin_failed_jobs()", "admin_watch()", "admin_retry_job(0)", "admin_review_change('gstr1', 'x')", "admin_people()", `admin_remove_passkeys('${other}')`,
   "admin_post_incident('x', '{app}', 'down')", `admin_update_incident('${firm}', 'x', true)`, `admin_email_incident('${firm}')`, "admin_incidents()", `admin_firm('${firm}')`,
   "admin_reach('{GSTR1_M}')", "admin_verify_rule('GSTR1_M', '', 'https://example.test', 'CA Invented')", "admin_add_extension('GSTR1_M', '2026-09', '2026-10-30', 'https://example.test')",
-  "admin_set_office(3, 14)", "admin_office(14)", `admin_ask_support('${firm}')`, `admin_support_view('${firm}')`, "admin_billing()", "admin_set_tax('{}')", `admin_pilot('${firm}')`];
+  "admin_set_office(3, 14)", "admin_office(14)", `admin_ask_support('${firm}')`, `admin_support_view('${firm}')`, "admin_billing()", "admin_set_tax('{}')", `admin_pilot('${firm}')`,
+  "admin_split_firms()", `admin_check_split('${firm}', '${other}', 'separate')`];
 
 // Acts as a person in their session, with the passkey proof the server sends after a check.
 async function asAdmin(person: string, { seconds = 3600, key = "", forSession = session(person) } = {}) {
@@ -100,6 +101,12 @@ it("lets an admin remove another admin's passkeys, which signs them out and is l
 it("shows an admin each firm's health and no client data, and lets them retry a job and review a change", () =>
   rollback(db, async () => {
     const { job } = await seed();
+    // Two firms the nightly check found may be one (D38 (6)): kinds and counts only.
+    const twin = "00000000-0000-4000-8000-000000000ad4";
+    await db.query("insert into public.firms(id,name,state_code,status) values ($1,'Admin Console Twin Firm','24','active')", [twin]);
+    await db.query("insert into public.platform_settings(key,value) values ('split_firms',$1) on conflict (key) do update set value=excluded.value", [
+      JSON.stringify({ flags: [{ firms: [firm, twin], evidence: ["mail", "pan"], clients: 3, share: 10, since: "2026-10-26T21:30:00.000Z" }] }),
+    ]);
     await asAdmin(admin);
     const firms = (await db.query("select * from public.admin_firms()")).rows;
     expect(firms.find((row) => row.id === firm)).toMatchObject({ name: "Admin Console Test Firm", members: 1, mailbox: true, drive: false });
@@ -115,7 +122,15 @@ it("shows an admin each firm's health and no client data, and lets them retry a 
     expect((await db.query("select public.admin_retry_job($1) ok", [job])).rows[0].ok).toBe(true);
     expect((await db.query("select public.admin_review_change('gstr1', '2026-10-25T00:00:00.000Z') ok")).rows[0].ok).toBe(true);
     expect((await db.query("select public.admin_review_change('gstr1', '2026-10-25T00:00:00.000Z') ok")).rows[0].ok).toBe(false);
+    expect((await db.query("select public.admin_split_firms() s")).rows[0].s).toMatchObject([{ evidence: ["mail", "pan"], clients: 3, names: [{ name: "Admin Console Test Firm" }, { name: "Admin Console Twin Firm" }] }]);
+    expect((await db.query("select public.admin_check_split($1, $2, 'separate') ok", [twin, firm])).rows[0].ok).toBe(true);
+    // Neither firm reads the flag or the verdict.
+    await actAs(db, owner, "aal2", session(owner));
+    expect((await attempt(db, "select * from public.platform_settings")).error).toContain("permission denied");
+    expect((await db.query("select count(*)::int n from public.activity_log where action = 'admin.split_checked' or details::text like '%' || $1 || '%'", [twin])).rows[0].n).toBe(0);
     await asOwner(db);
+    expect((await db.query("select value #> '{flags,0,checked}' c from public.platform_settings where key = 'split_firms'")).rows[0].c).toMatchObject({ verdict: "separate", by: admin, evidence: ["mail", "pan"] });
+    expect((await db.query("select firm_id, details from public.activity_log where action = 'admin.split_checked' and actor_id = $1", [admin])).rows).toEqual([{ firm_id: null, details: { firms: [firm, twin], verdict: "separate" } }]);
     expect((await db.query("select state, attempts from public.jobs where id = $1", [job])).rows[0]).toEqual({ state: "pending", attempts: 0 });
     expect((await db.query("select value #> '{changes,0}' c from public.platform_settings where key = 'watch'")).rows[0].c).toMatchObject({ status: "reviewed", reviewed_by: admin });
     expect((await db.query("select details from public.activity_log where action = 'admin.change_reviewed' and actor_id = $1", [admin])).rows).toEqual([{ details: { source: "gstr1", at: "2026-10-25T00:00:00.000Z" } }]);
