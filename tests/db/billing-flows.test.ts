@@ -130,6 +130,49 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     expect((await paymentsOf(firm.id, "renewal"))[0].doc).toMatchObject({ kind: "receipt" });
   });
 
+  it("takes a renewal at the plan it was priced on, and keeps a move down set after it was raised for the renewal after it", async () => {
+    const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
+    const firm = await activeFirm("down-late", { ...solo, clients: 150 });
+    const renewal = async (ahead: number) => {
+      await db.query("update public.subscriptions set paid_until = $2 where firm_id = $1", [firm.id, money.addDays(today(), ahead)]);
+      await billing.dailyBilling(firm.id);
+      return (await paymentsOf(firm.id, "renewal")).at(-1);
+    };
+    const growth = await renewal(2);
+    expect(growth.amount_paise).toBe(349_900);
+    expect(await billing.setDowngrade(firm.id, firm.owner, solo)).toBeNull();
+    await fake.charge(growth.id, "SUCCESS");
+    const { plan } = await subOf(firm.id);
+    expect(money.planPrice(formula, plan, "monthly").code).toBe("growth");
+    expect(plan.next).toMatchObject(solo);
+    expect((await renewal(3)).amount_paise).toBe(149_900);
+  });
+
+  it("keeps a person paid for after the renewal was raised, and debits that person for the new period with GST", async () => {
+    const gst = money.taxSchema.parse({ ...tax, gstin: "27AAAFI1234B1Z5", stateCode: "27", sac: "9983", rate: 18, gstFrom: today() });
+    await db.query("update public.platform_settings set value = $1 where key = 'tax'", [gst]);
+    try {
+      const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
+      const firm = await activeFirm("grown", { ...solo, clients: 150 });
+      const due = money.addDays(today(), 2);
+      await db.query("update public.subscriptions set paid_until = $2 where firm_id = $1", [firm.id, due]);
+      await billing.dailyBilling(firm.id);
+      const [renewal] = await paymentsOf(firm.id, "renewal");
+      expect(await billing.buy(firm.id, firm.owner, { kind: "extra_user" }, returnUrl)).toMatchObject({ kind: "order" });
+      await fake.pay((await paymentsOf(firm.id, "extra_user"))[0].id);
+      await fake.charge(renewal.id, "SUCCESS");
+      const sub = await subOf(firm.id);
+      expect(sub).toMatchObject({ paid_until: money.addMonths(due, 1), plan: { people: 11 } });
+      const added = money.withGst(money.prorate(formula.extraPerson * 100, today(), sub.paid_until, "monthly"), gst, "27", today());
+      const differences = await paymentsOf(firm.id, "upgrade");
+      expect(differences).toHaveLength(1);
+      expect(differences[0]).toMatchObject({ status: "created", amount_paise: added.total, gst_paise: added.gst, details: { via: "charge" } });
+      expect(fake.charges.get(differences[0].id)).toMatchObject({ subscription_id: firm.mandate, payment_type: "CHARGE", payment_amount: added.total / 100 });
+    } finally {
+      await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);
+    }
+  });
+
   it("debits eNACH once the bank confirms, and after a failed renewal tries again on day 1, not day 2, then turns read only on day 8", async () => {
     const firm = await activeFirm("enach", { clients: 700, practice: "mixed", people: 40, aiBlocks: 0 }, "enach");
     expect(fake.subscriptions.get(firm.mandate)!.authorization_details.authorization_amount).toBe(0);
@@ -381,6 +424,55 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
       expect(await subOf(near.id)).toMatchObject({ cycle: "yearly", paid_until: near.year.until });
     } finally {
       await db.query("update public.platform_settings set value = value || '{\"fitEnforced\": false}' where key = 'plan_formula'");
+      await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);
+    }
+  });
+
+  it("resets the floor the meters moved a plan up to at a new plan year, and moves down only when the owner takes the smaller plan offered, at its price with GST", async () => {
+    const gst = money.taxSchema.parse({ ...tax, gstin: "27AAAFI1234B1Z5", stateCode: "27", sac: "9983", rate: 18, gstFrom: today() });
+    await db.query("update public.platform_settings set value = $1 where key = 'tax'", [gst]);
+    try {
+      const formula = money.formulaSchema.parse((await one("select value from public.platform_settings where key = 'plan_formula'")).value);
+      const yearly = (code: string) => money.withGst(formula.plans.find((plan) => plan.code === code)!.yearly * 100, gst, "27", today());
+      // A yearly payer moved up to 1,800 returns (Growth) whose year measured `work` returns, 20 days before its renewal.
+      const movedUp = async (tag: string, work: number) => {
+        const firm = await activeFirm(tag);
+        await db.query("update public.subscriptions set cycle = 'yearly', paid_until = $2, plan = plan || '{\"returns\": 1800, \"maxPaise\": 100000000}' where firm_id = $1", [firm.id, money.addDays(today(), 20)]);
+        await db.query("insert into public.usage_ledger (firm_id, due_on) select $1, $2::date from generate_series(1, $3)", [firm.id, today(), work]);
+        await billing.dailyBilling(firm.id);
+        await billing.dailyBilling(firm.id);
+        return firm;
+      };
+      const offered = (firm: string) => db.query("select id from public.requests where firm_id = $1 and reason_code = 'plan_down_suggested'", [firm]).then((result) => result.rows.length);
+      const renew = async (firm: string) => {
+        await db.query("update public.subscriptions set paid_until = $2 where firm_id = $1", [firm, money.addDays(today(), 2)]);
+        await billing.dailyBilling(firm);
+        const [renewal] = await paymentsOf(firm, "renewal");
+        await fake.charge(renewal.id, "SUCCESS");
+        return { renewal, plan: (await subOf(firm)).plan };
+      };
+
+      // 1,500 returns still need Growth: the floor comes down to them at Growth's price, and no smaller plan is offered.
+      const kept = await movedUp("year-kept", 1500);
+      expect(await offered(kept.id)).toBe(0);
+      const growth = await renew(kept.id);
+      expect(growth.renewal).toMatchObject({ amount_paise: yearly("growth").total, gst_paise: yearly("growth").gst });
+      expect(growth.plan.returns).toBe(1500);
+
+      // 500 returns fit Solo: offered once, and without the owner's yes the firm stays on Growth.
+      const stays = await movedUp("year-stays", 500);
+      expect(await offered(stays.id)).toBe(1);
+      const unchanged = await renew(stays.id);
+      expect(unchanged.renewal.amount_paise).toBe(yearly("growth").total);
+      expect(unchanged.plan.returns).toBe(1800);
+
+      // With it, the renewal takes Solo's yearly price with GST, and Solo is the plan from then.
+      const down = await movedUp("year-down", 500);
+      expect(await billing.setDowngrade(down.id, down.owner, "fit")).toBeNull();
+      const solo = await renew(down.id);
+      expect(solo.renewal).toMatchObject({ amount_paise: yearly("solo").total, gst_paise: yearly("solo").gst });
+      expect(money.planPrice(formula, solo.plan, "yearly").code).toBe("solo");
+    } finally {
       await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);
     }
   });

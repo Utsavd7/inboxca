@@ -1,3 +1,4 @@
+import type { Json } from "@/src/db/types";
 import { formulaSchema, planSchema } from "./billing/money";
 import { todayInIndia } from "./calendar";
 import { estimate, type Formula, type Practice } from "./estimate";
@@ -9,7 +10,7 @@ import { supabaseAdmin } from "./supabase";
 // India time, from the activity log that already records every one; nothing else is stored.
 // Views in the viewer, approved filing files and the firm's own data download are never
 // counted or paused, and papers opened in the drive itself never pass through InboxCA.
-const DOWNLOADED = ["document.downloaded", "document.downloaded_by_client"];
+const DOWNLOADED = ["document.downloaded", "document.downloaded_by_client"] as const;
 
 export async function downloadUse(firmId: string, admin = supabaseAdmin()) {
   const month = todayInIndia().slice(0, 7);
@@ -32,7 +33,7 @@ export async function downloadUse(firmId: string, admin = supabaseAdmin()) {
   }
   // The plan's returns a year: a preset's, Custom's work size, or the smallest plan's before one is paid.
   const plan = planSchema.safeParse(sub?.plan);
-  const fit = plan.success ? estimate(plan.data.clients, plan.data.practice as Practice, plan.data.people, formula.data as unknown as Formula) : null;
+  const fit = plan.success ? estimate(plan.data.clients, plan.data.practice as Practice, plan.data.people, formula.data as unknown as Formula, plan.data.returns) : null;
   const returns = !fit ? formula.data.plans[0].maxReturns : fit.custom ? fit.storageGb * formula.data.custom.returnsPerStep : formula.data.plans[fit.index].maxReturns;
   // Each OK the owner gives in Settings adds another month's downloads.
   return { used, most: Math.round(returns * perReturn) * (1 + okays), okays, month, next };
@@ -50,6 +51,19 @@ export async function mayDownload(firmId: string, count = 1) {
     if (error) log.warn("downloads.alert_not_queued", { code: error.code });
   }
   return fits;
+}
+
+// The downloads' log lines, added only while they fit this month's downloads: counted and added in
+// one database step under the firm's lock, so downloads at the same moment never pass the figure.
+// False, and nothing logged, when they do not fit, and a client's share link (`share`) gets back the
+// download it used; mayDownload is the quick check before the drive is read.
+export type DownloadLine = { actor_id?: string | null; action: (typeof DOWNLOADED)[number]; entity_id: string; details?: Record<string, unknown> };
+export async function logDownloads(firmId: string, lines: DownloadLine[], share?: string) {
+  const admin = supabaseAdmin();
+  const { most } = await downloadUse(firmId, admin);
+  const { data, error } = await admin.rpc("claim_downloads", { target_firm: firmId, lines: lines as unknown as Json, ...(Number.isFinite(most) && { most }), ...(share && { share }) });
+  if (error) throw new Error(`Downloads not counted: ${error.code}`);
+  return data;
 }
 
 // What a download address answers once this month's downloads are used.

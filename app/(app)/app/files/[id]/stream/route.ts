@@ -5,7 +5,7 @@ import { driveToken } from "@/src/lib/drive-account";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { signView, viewerLabel, viewLimits, type ViewRequest } from "@/src/lib/file-worker";
 import { plainPage } from "@/src/lib/plain-page";
-import { mayDownload, PAUSED } from "@/src/lib/download-use";
+import { logDownloads, mayDownload, PAUSED } from "@/src/lib/download-use";
 
 // Every opening checks the person's access before the worker sees a drive token.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -54,8 +54,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const {data:spent,error}=await admin.from("requests").update({status:"used"}).eq("id",permission).eq("firm_id",membership.firmId).eq("status","approved").gt("expires_at",new Date().toISOString()).select("id").maybeSingle();
       if(error || !spent) {await response.body.cancel();return fail(403,"Your permission to download has ended. Go back and ask again.",headers);}
     }
-    const { error } = await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: copy ? "document.downloaded" : "document.viewed", entity_type: "document", entity_id: id, ...(copy && {details:{stamped:true,limit:viewLimits.pages,...(sheet && {sheet:Number(sheet)}),permission}}), ...(thumb && {details:{thumb:true}}) });
-    if (error) { await response.body.cancel(); throw error; }
+    const line = { actor_id: userId, entity_id: id, ...(copy && {details:{stamped:true,limit:viewLimits.pages,...(sheet && {sheet:Number(sheet)}),permission}}), ...(thumb && {details:{thumb:true}}) };
+    // A download is logged only while it fits this month's downloads, counted in the same step.
+    const logged = copy ? await logDownloads(membership.firmId, [{ ...line, action: "document.downloaded" }]).catch(() => null)
+      : !(await admin.from("activity_log").insert({ ...line, firm_id: membership.firmId, action: "document.viewed", entity_type: "document" })).error || null;
+    if (!logged) { await response.body.cancel(); if (logged === false) return fail(429, membership.role === "owner" ? PAUSED.owner : PAUSED.staff, headers); throw new Error("Not logged"); }
     // Do not collect the body. Cancellation and backpressure reach the worker through fetch.
     return new Response(response.body, { headers: { ...headers, "Content-Type": copy ? "application/pdf" : "application/x-inboxca-pages", ...(copy && {"Content-Disposition":"attachment; filename=\"document-pages.pdf\""}) } });
   } catch { return fail(422, "This file could not be opened. It may have been moved or removed in the drive.", headers); }
