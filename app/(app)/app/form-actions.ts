@@ -10,7 +10,7 @@ import {runJobsSoon} from "@/src/jobs/run-soon";
 import {draftSchema,saveDraft} from "@/src/lib/datasets";
 import {currentMember,currentWriter} from "@/src/lib/member";
 import {grantFor} from "@/src/lib/permission-grants";
-import {itrReturns} from "@/src/lib/itr-fields";
+import {itrReady,itrReturns} from "@/src/lib/itr-fields";
 import {itrChecks,type ItrWork} from "@/src/lib/itr-check";
 import {supabaseAdmin} from "@/src/lib/supabase";
 
@@ -66,18 +66,19 @@ export async function fillNow(_:FillState,form:FormData):Promise<FillState> {
   revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
 }
 
-// Fill all, from the full list (/app/work) after its preview: InboxCA fills every GSTR-1 and
-// GSTR-3B late or due in the next 7 days that this person may fill, as it fills them by itself before
-// the due date (public.queue_fills picks them; one fill a return, none twice). Every draft still
-// waits for its checks. The fills start in 20 seconds, so Undo can stop them.
+// Fill all, from the full list (/app/work) after its preview: InboxCA fills every GSTR-1, GSTR-3B
+// and ITR late or due in the next 7 days that this person may fill, as it fills them by itself
+// before the due date (public.queue_fills picks them; one fill a return, none twice; an ITR once
+// InboxCA has its software ID). Every draft still waits for its checks. The fills start in 20
+// seconds, so Undo can stop them.
 export async function fillAll() {
   const {supabase,membership}=await currentWriter();
   if(!membership) redirect("/app");
-  const batch=randomUUID(),{data,error}=await supabase.rpc("queue_fills",{target_firm:membership.firmId,batch});
+  const batch=randomUUID(),{data,error}=await supabase.rpc("queue_fills",{target_firm:membership.firmId,batch,with_itrs:itrReady()});
   const asked=data?.[0];
   if(error || !asked) redirect("/app/work?show=returns&error=fill");
   if(!asked.queued) redirect("/app/work?show=returns&error=fill_none");
-  redirect(`/app/work?show=returns&filling=${asked.queued}&clients=${asked.clients}&batch=${batch}&job=${asked.first_job}`);
+  redirect(`/app/work?show=returns&filling=${asked.queued}&clients=${asked.clients}&itrs=${asked.itrs}&batch=${batch}&job=${asked.first_job}`);
 }
 
 // Undo on its toast: the whole batch stops while none of it has started (public.stop_fills).
