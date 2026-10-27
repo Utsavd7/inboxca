@@ -1,10 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { loadEnvConfig } from "@next/env";
 import { test, expect, type Page } from "@playwright/test";
-import { addPerson, appKey, connectTestMailbox, localSupabase, query, seedFirm, signIn } from "./local-supabase";
+import { ONEDRIVE_TEST_URL } from "../../playwright.config";
+import { serverCrypto } from "@/src/lib/crypto";
+import { fakeOneDrive } from "../fake-onedrive";
+import { pdf } from "../fixtures/pdf";
+import { addPerson, appKey, connectTestMailbox, localSupabase, query, runJobs, seedFirm, signIn } from "./local-supabase";
 
 // The links that leave InboxCA or come back to it: Dropbox's return after Connect, refused
-// whenever it is not the owner's own Connect (no real Dropbox is asked), and an email opened in
-// the firm's own mailbox. Skipped when local Supabase is not running.
+// whenever it is not the owner's own Connect (no real Dropbox is asked), an email opened in
+// the firm's own mailbox, and OneDrive's Connect, against the fake Microsoft in
+// tests/fake-onedrive.ts. Skipped when local Supabase is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 test.describe.configure({ mode: "serial", timeout: 90_000 });
@@ -18,6 +24,7 @@ let firm: Awaited<ReturnType<typeof seedFirm>>;
 let other: Awaited<ReturnType<typeof seedFirm>>;
 let owner: Page;
 let staff: Page;
+const onedrive = fakeOneDrive();
 
 // What Connect keeps in the browser for Dropbox's return: its state and the PKCE verifier.
 const connectCookie = (value: string) => ({ name: "inboxca_drive_connect", value, domain: "127.0.0.1", path: "/api/drive", httpOnly: true });
@@ -25,6 +32,7 @@ const asConnect = (state: string) => Buffer.from(JSON.stringify({ state, verifie
 const drives = async () => (await query(local.dbUrl, "select provider from public.connected_accounts where firm_id = $1 and kind = 'drive'", [firm.firmId])).length;
 
 test.beforeAll(async ({ browser }) => {
+  await onedrive.listen(Number(new URL(ONEDRIVE_TEST_URL).port));
   firm = await seedFirm(`Callbacks Firm ${tag}`, ownerEmail, key);
   other = await seedFirm(`Callbacks Other Firm ${tag}`, `callbacks-other-${tag}@example.test`);
   await addPerson(firm.firmId, staffEmail, "staff", key);
@@ -36,6 +44,7 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(async () => {
   await firm.remove(staffEmail);
   await other.remove();
+  await onedrive.close();
 });
 
 test("Dropbox's return connects nothing unless it answers the owner's own Connect", async () => {
@@ -98,4 +107,59 @@ test("an email opens in the firm's own mailbox, and only the firm's own email op
   await visitor.goto(`/app/inbox/${mail}/open`);
   await expect(visitor).toHaveURL(/\/sign-in/);
   await visitor.context().close();
+});
+
+test("OneDrive connects on Microsoft's own page, saves a paper in the client's folder, and keeps its sign in fresh", async ({ request }) => {
+  const card = owner.locator("section#drive");
+  const drive = async () => (await query(local.dbUrl, "select id, credentials_enc, settings ->> 'onedrive_account' as account from public.connected_accounts where firm_id = $1 and kind = 'drive' and provider = 'onedrive'", [firm.firmId]))[0];
+  await owner.goto("/app/settings?group=email");
+  await card.getByLabel("OneDrive").check();
+  await card.getByLabel(/I have read this and I agree/).check();
+  await card.getByRole("button", { name: "Connect drive" }).click();
+  await expect(card.getByRole("status")).toContainText(`Connected: OneDrive, ${onedrive.drive.email}`);
+  const connected = await drive();
+  expect(connected.account).toBe(createHash("sha256").update(onedrive.drive.id).digest("hex"));
+  expect(onedrive.file("/InboxCA")).toBeDefined();
+  // InboxCA sets it up by itself, with a test file saved, read back and removed.
+  await runJobs(request, firm.firmId);
+  await owner.reload();
+  await expect(card.getByRole("list", { name: "What InboxCA set up" })).toContainText("Saved a test file, read it back and removed it");
+
+  // A paper uploaded on the client's page goes into their folder in the drive, under InboxCA's name.
+  const client = `OneDrive Client ${tag}`;
+  const [{ id }] = await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, $2, 'business') returning id", [firm.firmId, client]);
+  const bills = Buffer.from(pdf("Invented sales bills"));
+  await owner.goto(`/app/clients/${id}?tab=documents`);
+  await owner.getByRole("link", { name: "Upload papers" }).click();
+  await owner.getByRole("dialog").getByLabel("Files", { exact: true }).setInputFiles([{ name: "sales_bills_sep_2026.pdf", mimeType: "application/pdf", buffer: bills }]);
+  await owner.getByRole("dialog").getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(owner.locator("section[aria-labelledby=files] tbody tr").filter({ hasText: "Sales bills - Sep 2026.pdf" })).toContainText("Saved");
+  const [paper] = await query(local.dbUrl, "select name, drive_file_id from public.documents where firm_id = $1", [firm.firmId]);
+  expect(paper.name).toBe(`${client} - Sales bills - Sep 2026.pdf`);
+  const saved = onedrive.file(`/InboxCA/FY 2026-27/${client}/GST/${paper.name}`);
+  expect(saved?.id).toBe(paper.drive_file_id);
+  expect(saved?.bytes?.equals(bills)).toBe(true);
+
+  // Microsoft renews the refresh token at each use; the newest is saved once a day, and logged.
+  loadEnvConfig(process.cwd());
+  const crypto = serverCrypto();
+  const sealed = JSON.parse(await crypto.decrypt(firm.firmId, `accounts/${connected.id}/credentials`, connected.credentials_enc));
+  await query(local.dbUrl, "update public.connected_accounts set credentials_enc = $2 where id = $1", [connected.id, await crypto.encrypt(firm.firmId, `accounts/${connected.id}/credentials`, JSON.stringify({ ...sealed, at: 0 }))]);
+  await query(local.dbUrl, "insert into public.jobs (firm_id, kind, entity_type, entity_id, idempotency_key) values ($1, 'drive_check', 'account', $2, $3)", [firm.firmId, connected.id, `drive_check:${randomUUID()}`]);
+  await runJobs(request, firm.firmId);
+  const renewed = JSON.parse(await crypto.decrypt(firm.firmId, `accounts/${connected.id}/credentials`, (await drive()).credentials_enc));
+  expect(renewed.refreshToken).not.toBe(sealed.refreshToken);
+  expect(renewed.at).toBeGreaterThan(0);
+  expect(await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'drive.token_saved'", [firm.firmId])).toEqual([{ details: { provider: "onedrive" } }]);
+  expect(await query(local.dbUrl, "select status from public.documents where firm_id = $1", [firm.firmId])).toEqual([{ status: "filed" }]);
+
+  // Reconnect signs in to the same OneDrive again and keeps its record; another account is refused.
+  await owner.goto("/app/settings?group=email");
+  await card.getByRole("button", { name: "Connect again" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Drive connected again." })).toBeVisible();
+  expect(await drive()).toMatchObject({ id: connected.id, account: connected.account });
+  onedrive.drive.id = `invented-other-drive-${tag}`;
+  await card.getByRole("button", { name: "Connect again" }).click();
+  await expect(card.getByRole("alert")).toHaveText("That is a different account from the one connected. Sign in with the one already connected, or disconnect it first.");
+  expect((await drive()).account).toBe(connected.account);
 });
