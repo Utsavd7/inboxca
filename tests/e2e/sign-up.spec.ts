@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { test, expect } from "@playwright/test";
 import { latestEmail, localSupabase, query, totp } from "./local-supabase";
 
-// Public sign up through the real pages: firm details and acceptance, the email code,
-// the 2 step setup, then the app. Billing is left out, so the firm stays pending.
+// Public sign up through the real pages: a plan chosen on the site, firm details and acceptance,
+// the email code, the 2 step setup, then the app, where the plan choice waits with that plan.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 test.describe.configure({ timeout: 90_000 });
@@ -20,8 +20,13 @@ test.afterAll(async () => {
   await query(local.dbUrl, "delete from auth.users where email = $1", [email]);
 });
 
-test("a new firm signs up, signs in with the email code and reaches the app", async ({ page }) => {
-  await page.goto("/sign-up");
+test("a new firm chooses Growth yearly on the site, signs up, signs in with the email code and reaches the app", async ({ page }) => {
+  await page.goto("/");
+  const plans = page.locator("#plans");
+  await plans.getByRole("button", { name: /Yearly/ }).click();
+  await plans.getByRole("list", { name: "Plans" }).getByRole("link", { name: "Start with Growth" }).click();
+  await expect(page).toHaveURL(/\/sign-up\?plan=growth&cycle=yearly/);
+  await expect(page.locator(".auth-note")).toContainText("Growth plan");
   await page.getByLabel("Firm name").fill(firmName);
   await page.getByLabel("Your work email").fill(email);
   await page.getByLabel("State").selectOption({ label: "Maharashtra" });
@@ -42,6 +47,10 @@ test("a new firm signs up, signs in with the email code and reaches the app", as
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.locator(".rail-firm")).toContainText(firmName);
+  // The site's answers and payment period are already in Today's plan choice, priced by the server.
+  await expect(page.getByLabel("Clients", { exact: true })).toHaveValue("120");
+  await expect(page.getByLabel("Pay", { exact: true })).toHaveValue("yearly");
+  await expect(page.getByText("Growth plan", { exact: true })).toBeVisible();
 
   const [firm] = await query(
     local.dbUrl,

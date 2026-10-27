@@ -1,7 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { estimate } from "../../src/lib/estimate";
-import { inviteMailto, sendInvite } from "../../src/lib/submit-invite";
 
 const axe = async (page: Page) =>
   (
@@ -154,18 +153,16 @@ test("the cost section multiplies out the visitor's own numbers", async ({
   );
 });
 
-test("on a phone the invite button follows the scroll", async ({ page }) => {
+test("on a phone the start button follows the scroll", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/", { waitUntil: "networkidle" });
-  const bar = page.locator(".sticky-invite");
+  const bar = page.locator(".sticky-start");
   await expect(bar).toHaveCount(0);
   await page.locator("#control").scrollIntoViewIfNeeded();
   await expect(bar).toBeVisible();
   await expect(bar).toContainText("14 day money back when you join");
-  await bar.getByRole("link", { name: "Ask for an invite" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await page.locator("#invite").scrollIntoViewIfNeeded();
+  await expect(bar.getByRole("link")).toHaveAttribute("href", "/sign-up");
+  await page.locator("#start").scrollIntoViewIfNeeded();
   await expect(bar).toHaveCount(0);
 });
 
@@ -177,49 +174,6 @@ test("questions open one at a time with the keyboard", async ({ page }) => {
   await expect(page.locator("#questions details[open]")).toHaveCount(1);
   await page.locator("#questions summary").nth(1).click();
   await expect(page.locator("#questions details[open]")).toHaveCount(1);
-});
-
-test("invite links open the form and return focus on close", async ({
-  page,
-}) => {
-  // Before the page script loads, the link is a plain jump to the contact details.
-  await page.goto("/", { waitUntil: "networkidle" });
-  const link = page
-    .getByRole("link", { name: "Ask for an invite", exact: true })
-    .first();
-  await link.click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel("Your name", { exact: true })).toBeVisible();
-  await expect(dialog).toHaveCSS("opacity", "1");
-  expect(await axe(page)).toEqual([]);
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(link).toBeFocused();
-});
-
-test("invite validation focuses the error and never claims delivery", async ({
-  page,
-}) => {
-  await page.goto("/", { waitUntil: "networkidle" });
-  await page
-    .getByRole("link", { name: "Ask for an invite", exact: true })
-    .first()
-    .click();
-  await page.getByRole("button", { name: "Open email draft" }).click();
-  await expect(page.getByLabel("Your name", { exact: true })).toBeFocused();
-  await page.getByLabel("Your name", { exact: true }).fill("Sample CA");
-  await page.getByLabel("Firm name", { exact: true }).fill("Sample Firm");
-  await page.getByLabel("City", { exact: true }).fill("Mumbai");
-  await page.getByLabel("Email", { exact: true }).fill("sample@example.com");
-  await page.getByLabel("Number of clients, roughly").selectOption("Up to 70");
-  await page.getByRole("button", { name: "Open email draft" }).click();
-  await expect(page.getByRole("status")).toContainText(
-    "No email has been sent by this page.",
-  );
-  await expect(
-    page.getByRole("link", { name: "Open the draft again" }),
-  ).toHaveAttribute("href", /mailto:orelu.team@gmail.com/);
 });
 
 test("the security policy is linked, private and accessible", async ({
@@ -243,34 +197,6 @@ test("the security policy is linked, private and accessible", async ({
   expect(await axe(page)).toEqual([]);
   await page.getByRole("link", { name: "How it works" }).click();
   await expect(page).toHaveURL(/\/#how-it-works$/);
-});
-
-test("the invite request is marked sent only when the server confirms it", async () => {
-  const values = {
-    name: "Sample CA",
-    firm: "A & B",
-    city: "Mumbai",
-    email: "sample@example.com",
-    clients: "Not sure",
-  } as const;
-  let posted = "";
-  const ok = (async (_url: unknown, init?: RequestInit) => {
-    posted = String(init?.body);
-    return new Response("{}", { status: 200 });
-  }) as typeof fetch;
-  expect(await sendInvite("https://example.test/invite", values, ok)).toBe(true);
-  expect(JSON.parse(posted)).toMatchObject({ firm: "A & B", city: "Mumbai" });
-  const refused = (async () =>
-    new Response("no", { status: 500 })) as typeof fetch;
-  expect(await sendInvite("https://example.test/invite", values, refused)).toBe(
-    false,
-  );
-  const offline = (async () => {
-    throw new Error("offline");
-  }) as typeof fetch;
-  expect(await sendInvite("https://example.test/invite", values, offline)).toBe(
-    false,
-  );
 });
 
 test("the phone menu opens, jumps to a section and closes", async ({ page }) => {
@@ -321,19 +247,6 @@ test("the data processing agreement is linked from sign up, private and accessib
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
   await expect(page.getByText("a lawyer will review it")).toBeVisible();
   expect(await axe(page)).toEqual([]);
-});
-
-test("the invite draft has readable answers and safe encoding", () => {
-  const url = inviteMailto({
-    name: "Sample CA",
-    firm: "A & B",
-    city: "Mumbai",
-    email: "sample@example.com",
-    clients: "Not sure",
-  });
-  const body = decodeURIComponent(url.split("&body=")[1]);
-  expect(body).toContain("\nFirm name: A & B\nCity: Mumbai");
-  expect(url).toContain("A%20%26%20B");
 });
 
 for (const [name, width, height] of [
