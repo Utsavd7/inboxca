@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
+import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import { appKey, connectTestMailbox, localSupabase, mailTexts, makeMailbox, query, runJobs, seedFirm, signIn } from "./local-supabase";
 
 // The Calendar's daily steps: a return marked filed and undone from the toast, Mark in
@@ -17,6 +18,7 @@ const office = `calendar-office-${tag}@firm.test`;
 const clientEmail = `calendar-client-${tag}@patel.test`;
 const clientName = `Calendar Client ${tag}`;
 const code = `CL${tag.toUpperCase()}`;
+const paging = `CP${tag.toUpperCase()}`;
 let firm: Awaited<ReturnType<typeof seedFirm>>;
 let owner: Page;
 let clientId = "";
@@ -45,7 +47,7 @@ test.beforeAll(async ({ browser }) => {
 });
 test.afterAll(async () => {
   await firm.remove();
-  await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
+  await query(local.dbUrl, "delete from public.compliance_types where code = any($1)", [[code, paging]]);
 });
 
 test("a return marked filed from its row is put back by the toast's Undo", async () => {
@@ -117,4 +119,42 @@ test("Remind client sends one email from the firm's mailbox, and Undo stops it i
   const panel = owner.getByRole("dialog", { name: `Remind ${clientName}` });
   await expect(panel.getByRole("alert")).toContainText("already reminded today");
   await expect(panel.getByRole("button", { name: "Send reminder" })).toBeDisabled();
+});
+
+test("the list shows 100 returns a page with true counts, and the days and the month count every return", async () => {
+  // 230 invented clients, each with one return due 1 to 30 days from today.
+  await query(local.dbUrl, "insert into public.compliance_types (code, name, frequency, due_rule, source_url, verified_on, approved_by) values ($1, 'Calendar paging return', 'monthly', '{\"for\": \"pan\"}', 'https://example.test/notification', current_date, 'test')", [paging]);
+  await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) select $1, 'Calendar Paging ' || $2 || ' ' || lpad(n::text, 3, '0'), 'individual' from generate_series(1, 230) n", [firm.firmId, tag]);
+  await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) select firm_id, id, $2, '2026-09', (now() at time zone 'Asia/Kolkata')::date + right(name, 3)::int % 30 + 1 from public.clients where firm_id = $1 and name like 'Calendar Paging %'", [firm.firmId, paging]);
+  const today = todayInIndia();
+  const due = Array.from({ length: 230 }, (_, at) => ((at + 1) % 30) + 1);
+  const on = (days: number) => due.filter((day) => day === days).length;
+  const pager = owner.getByRole("navigation", { name: "Calendar pages" });
+  const pills = owner.getByRole("navigation", { name: "Show" });
+  await owner.goto(`/app/calendar?view=month&code=${paging}`);
+  await expect(owner.locator(".page-head")).toContainText(": 230 returns.");
+  await expect(pills.getByRole("link", { name: "Due in 30 days 230" })).toBeVisible();
+  await expect(pills.getByRole("link", { name: `Due in 7 days ${due.filter((day) => day <= 7).length}` })).toBeVisible();
+  await expect(owner.getByRole("navigation", { name: "Days" }).getByRole("link", { name: `${dueLabel(addDays(today, 1))}: ${on(1)} to file`, exact: true })).toBeVisible();
+  await expect(owner.locator(".cal-table tbody tr")).toHaveCount(100);
+  await expect(pager).toContainText("1 to 100 of 230 returns");
+  await pager.getByRole("link", { name: "Next" }).click();
+  await expect(pager).toContainText("101 to 200 of 230 returns");
+  await pager.getByRole("link", { name: "Next" }).click();
+  await expect(pager).toContainText("201 to 230 of 230 returns");
+  await expect(owner.locator(".cal-table tbody tr")).toHaveCount(30);
+  await expect(pager.getByRole("link", { name: "Next" })).toHaveCount(0);
+
+  // The month's day shows every return due on it, and that day lists them.
+  const day = addDays(today, 10);
+  await owner.goto(`/app/calendar?view=month&code=${paging}&month=${day.slice(0, 7)}`);
+  await owner.getByRole("link", { name: `${dueLabel(day)}: ${on(10)} to file`, exact: true }).click();
+  await expect(owner.locator(".page-head")).toContainText(`Due on ${dueLabel(day)}: ${on(10)} returns.`);
+
+  // An archived client's return leaves every count.
+  await query(local.dbUrl, "update public.clients set archived_at = now() where firm_id = $1 and name = $2", [firm.firmId, `Calendar Paging ${tag} 001`]);
+  await owner.goto(`/app/calendar?view=month&code=${paging}`);
+  await expect(owner.locator(".page-head")).toContainText(": 229 returns.");
+  await expect(owner.getByRole("navigation", { name: "Days" }).getByRole("link", { name: `${dueLabel(addDays(today, 2))}: ${on(2) - 1} to file`, exact: true })).toBeVisible();
+  await query(local.dbUrl, "delete from public.clients where firm_id = $1 and name like 'Calendar Paging %'", [firm.firmId]);
 });
