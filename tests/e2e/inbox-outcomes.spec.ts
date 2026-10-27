@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
-import { addPerson, appKey, connectTestMailbox, localSupabase, pollFirmMail, query, runJobs, seedFirm, signIn, testSmtp as smtp } from "./local-supabase";
+import { addPerson, appKey, connectTestMailbox, localSupabase, mailTexts, pollFirmMail, query, runJobs, seedFirm, signIn, testSmtp as smtp } from "./local-supabase";
 
 // Every email InboxCA read, with what it did: answered with a paper, waiting for approval,
 // papers filed, a notice recorded, waiting for a person and why, answered by the team, or no
@@ -168,4 +168,34 @@ test("a person sees only the email of clients they may see, everywhere", async (
   await staff.goto("/app/inbox?status=reply");
   await expect(list(staff).getByRole("listitem")).toHaveCount(1);
   await expect(row(staff, `Meeting ${tag}`)).toContainText("Needs reply");
+});
+
+test("a request for Form No. 130 or a filed GST return is answered from the drive, never with a return InboxCA prepared", async () => {
+  // Shah's Form No. 130, which the owner lets go at once; September's GSTR-3B as filed, beside the
+  // return InboxCA prepared for it, marked filed; and for GSTR-1 only the prepared return.
+  const prepared = (form: string, status: string) => ({ form, version: 1, template: "invented", sources: [], status });
+  for (const [work, type, period, name, policy, made] of [
+    ["income_tax", "Form 130", "2027", "Shah Form No. 130 FY 2026-27.pdf", "auto", null],
+    ["gst", "GSTR-3B", "2026-09", "Shah GSTR-3B Sep 2026 filed.pdf", null, null],
+    ["gst", "GSTR-3B", "2026-09", "Shah GSTR-3B Sep 2026 - v1.json", null, prepared("GSTR3B", "filed")],
+    ["gst", "GSTR-1", "2026-09", "Shah GSTR-1 Sep 2026 - v1.json", null, prepared("GSTR1", "draft")],
+  ] as const)
+    await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, period_key, drive_file_id, name, size, sha256, share_policy, prepared) values ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9, $10)", [firm.firmId, shah.id, work, type, period, `nowhere-${randomUUID()}`, name, randomUUID(), policy, made]);
+  await smtp.sendMail({ from: shah.email, to: office, subject: `Form 130 ${tag}`, text: "Please send Form No. 130 for tax year 2026-27." });
+  await smtp.sendMail({ from: shah.email, to: office, subject: `GSTR-3B ${tag}`, text: "Please send the filed GSTR-3B for September 2026." });
+  await smtp.sendMail({ from: shah.email, to: office, subject: `GSTR-1 ${tag}`, text: "Please send the filed GSTR-1 for September 2026." });
+  await pollFirmMail(owner.request, firm.firmId);
+  await runJobs(owner.request, firm.firmId);
+
+  await owner.goto("/app/inbox?status=answered");
+  for (const [subject, name] of [[`Form 130 ${tag}`, "Shah Form No. 130 FY 2026-27.pdf"], [`GSTR-3B ${tag}`, "Shah GSTR-3B Sep 2026 filed.pdf"]]) {
+    await row(owner, subject).getByText(subject).click();
+    await expect(pane(owner)).toContainText(`InboxCA sent ${name} as a secure link.`);
+  }
+  // The reply names the paper as it is called now.
+  await expect.poll(async () => (await mailTexts(shah.email)).join("\n")).toContain("has shared Form No. 130 (was Form 16) for FY 2026-27 with you.");
+  await owner.goto("/app/inbox?status=reply");
+  await row(owner, `GSTR-1 ${tag}`).getByText(`GSTR-1 ${tag}`).click();
+  await expect(pane(owner)).toContainText("Asks for a filed return. Only the prepared return is saved, not the filed copy");
+  expect(await query(local.dbUrl, "select s.id from public.shares s join public.documents d on d.id = s.document_id where d.client_id = $1 and d.prepared is not null", [shah.id])).toEqual([]);
 });

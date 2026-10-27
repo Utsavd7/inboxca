@@ -53,7 +53,7 @@ export const recordsReply: Handler = async (job) => {
     await toTeam("record_unclear");
     return { done: true };
   }
-  const { data: documents, error: documentsError } = await admin.from("documents").select("id, name, document_type, period_key, status, share_policy").eq("client_id", event.client_id).in("document_type", asked.types);
+  const { data: documents, error: documentsError } = await admin.from("documents").select("id, name, document_type, period_key, status, share_policy, prepared").eq("client_id", event.client_id).in("document_type", asked.types);
   if (documentsError) return {retry:"papers_not_read"};
   const picked = pickPaper(prior ? (documents ?? []).filter((paper) => paper.id === prior.document_id) : documents ?? [], asked);
   if (!("document" in picked) || !picked.document) {

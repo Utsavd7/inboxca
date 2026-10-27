@@ -19,6 +19,7 @@ export function suggestedReply(reason: string | null | undefined, { name, client
     notice_question: "Thank you for sending the notice. We have received it and our team is going through it. We will get back to you soon about what is needed.",
     record_internal: `Thank you for your email. We have your request for ${asked}. Someone from our team will look at it and get back to you.`,
     record_not_found: `Thank you for your email. We could not find ${asked} in our records just now. We will look for it and send it to you as soon as we have it.`,
+    record_prepared: `Thank you for your email. We have your request for ${asked}. We will send you the filed copy as soon as we have it.`,
     record_unclear: "Thank you for your email. Could you tell us which paper you need, and for which year? We will send it once we know.",
     not_allowed: `Thank you for your email. For safety, we send the papers of ${client} only to the email addresses on our records. Please ask ${client} to write to us, or to tell us to add your address.`,
     data_unclear: "Thank you for sending these papers. Could you tell us what they are for, such as GST or income tax, and for which month or year?",
