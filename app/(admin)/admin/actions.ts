@@ -128,14 +128,15 @@ export async function endTemplate(form: FormData) {
 
 // A new official file the daily check found with the same layout, used from a period without an
 // app release. The database takes the file, its hash and link only from what the check
-// recorded, and logs it.
+// recorded, refuses one named for another year unless the admin ticked that they checked
+// it, and logs it.
 export async function addVersion(form: FormData) {
   const { supabase } = await currentAdmin();
   const asked = z.object({ source: z.string().min(1).max(100), at: z.iso.datetime(), file: z.string().min(1).max(200), form: z.string().regex(/^[A-Z0-9_]{2,30}$/), from: z.string().max(7) })
     .safeParse({ source: form.get("source"), at: form.get("at"), file: form.get("file"), form: form.get("form"), from: form.get("from") });
   const starts = asked.success ? startOf(asked.data.form, asked.data.from) : null;
   if (!asked.success || !starts) return fail("/admin", "use");
-  const { data, error } = await supabase.rpc("admin_add_template", { change_source: asked.data.source, change_at: asked.data.at, file: asked.data.file, starts });
+  const { data, error } = await supabase.rpc("admin_add_template", { change_source: asked.data.source, change_at: asked.data.at, file: asked.data.file, starts, year_checked: form.get("year") === "checked" });
   if (error || !data) return fail("/admin", "use");
   revalidatePath("/admin", "layout");
 }

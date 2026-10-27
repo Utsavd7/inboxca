@@ -6,7 +6,7 @@ import { addVersion, noteUpdate, reviewChange } from "./actions";
 import { currentAdmin, when } from "./admin";
 import { Submit } from "./parts";
 
-type Compared = { file: string; with?: string; same?: true; live?: true; renamed?: true; differences?: string[]; more?: number; error?: string; template?: { form_code: string; version: string } };
+type Compared = { file: string; with?: string; same?: true; live?: true; failed?: string; renamed?: true; differences?: string[]; more?: number; error?: string; template?: { form_code: string; version: string } };
 type Change = { source: string; name: string; url: string; at: string; added?: string[]; removed?: string[]; status: string; compared?: Compared[] };
 type Alert = { source: string; name: string; url: string; at: string; reason: string };
 type Update = { id: string; source: string; area: string; title: string; date?: string; link: string; seen: string; note?: { uses?: string; keeps?: string } };
@@ -14,8 +14,8 @@ type Watch = { sources?: Record<string, { checked?: string }>; changes?: Change[
 const areas: Record<string, string> = { gst: "GST", income_tax: "Income tax", tds: "TDS", company_law: "Company law" };
 
 // A new official file beside the copy InboxCA fills today. A newer version of it with the same
-// layout goes live by itself; another kept in the store is used from a period in one click; one
-// with a changed layout never is.
+// layout goes live by itself when InboxCA's own returns pass with it; another kept in the store
+// is used from a period in one click; one with a changed layout never is.
 function Comparison({ compared, change, used }: { compared: Compared; change: Change; used?: { valid_from: string | null } }) {
   if (compared.error) return <span className="sub">{compared.file}: could not compare ({compared.error}).</span>;
   const next = compared.template;
@@ -27,7 +27,8 @@ function Comparison({ compared, change, used }: { compared: Compared; change: Ch
       <input type="hidden" name="file" value={compared.file} />
       <input type="hidden" name="form" value={next.form_code} />
       <span className="sub">{compared.file}: same layout as {compared.with}. InboxCA has kept the file, so it can be used without an app update.</span>
-      {compared.renamed && <label><input type="checkbox" required /> Its name is for another year than version {compared.with}. I have checked the year it is for</label>}
+      {compared.failed && <span className="sub">It did not go live by itself: a return InboxCA made with it failed a check. {compared.failed}</span>}
+      {compared.renamed && <label><input type="checkbox" name="year" value="checked" required /> Its name is for another year than version {compared.with}. I have checked the year it is for</label>}
       <label>Use this version from {/^ITR/.test(next.form_code) ? <input name="from" inputMode="numeric" pattern="20[0-9]{2}" placeholder="2026 for AY 2026-27" required /> : <input name="from" type="month" required />}</label>
       <Submit>Use this version</Submit>
     </form>

@@ -1,8 +1,12 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname } from "node:path";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Json } from "@/src/db/types";
+import { b2bRow, hsnRow, inventedGstin, inventedPan, itrFigures } from "@/src/lib/form-samples";
+import { itrReviewSchema, type FormRequest } from "@/src/lib/form-worker";
+import type { ItrForm } from "@/src/lib/itr-fields";
 import { officialFile, officialStore, type Store } from "@/src/lib/official-files";
+import { workerForm } from "@/src/lib/prepare-form";
 import { layoutDifferences, schemaLayout, workbookLayout } from "@/src/lib/official-layout";
 import { xlsxEntries } from "@/src/lib/sheet";
 import { version, type Template } from "@/src/lib/templates";
@@ -150,12 +154,53 @@ export async function checkSources(previous: Watch, now: Date, fetcher: typeof f
   return next;
 }
 
+// Before a newer version goes live by itself (D42), the invented returns InboxCA's tests fill
+// (src/lib/form-samples.ts) are made again with it by the file worker, and so checked against
+// the new file: a GSTR-1 workbook's headings, choices and rows against GSTN's schema, an ITR
+// against the new schema and InboxCA's rules. One that fails, or cannot be checked, stays with
+// Orelu's admin with the failed check named. Only the changes found at this check are checked.
+type Kept = { with?: string; live?: true; failed?: string; template?: Pick<Template, "form_code" | "version" | "source"> };
+export async function checkLive(watch: Watch, at: string, templates: Template[]) {
+  for (const change of watch.changes as { at?: string; compared?: Kept[] }[])
+    for (const kept of change.at === at ? (change.compared ?? []) : []) {
+      if (!kept.live || !kept.template) continue;
+      const twin = templates.find((template) => template.form_code === kept.template!.form_code && template.version === kept.with && template.status === "active");
+      const failed = twin ? await ownReturn({ ...twin, ...kept.template }, twin).then(fillAtWorker).catch((error: Error) => error.message.slice(0, 200) || "It could not be checked") : "No version in use to check it with";
+      if (failed) {
+        delete kept.live;
+        kept.failed = failed;
+      }
+    }
+}
+
+// InboxCA's own return of a form, made with a new version from the figures of the one in use.
+async function ownReturn(template: Template, twin: Template): Promise<FormRequest> {
+  const base = { firm: randomUUID(), client: randomUUID(), registration: randomUUID(), expires: Math.floor(Date.now() / 1000) + 60, template }, from = twin.valid_from ?? "";
+  if (template.form_code === "GSTR1") return { ...base, purpose: "prepare", gstin: inventedGstin(), period: from.slice(0, 7), drafts: [{ id: randomUUID(), revision: 1, figures: [...b2bRow(from.slice(0, 7)), ...hsnRow(template.mappings.sheets?.hsn_b2b ? "hsn_b2b" : "hsn")] }] };
+  if (!/^ITR[1-4]$/.test(template.form_code)) throw new Error("InboxCA makes no return of this form to check it with");
+  const schema = JSON.parse((await officialFile(twin.source.file, twin.source.sha256)).toString("utf8"));
+  return { ...base, purpose: "check", pan: inventedPan, period: from.slice(0, 4), drafts: [{ id: randomUUID(), revision: 1, figures: itrFigures(schema, template.form_code as ItrForm) }] };
+}
+
+// Null when the file worker made the return and it passed every check.
+async function fillAtWorker(request: FormRequest) {
+  const response = await workerForm(request);
+  if (request.purpose === "prepare") {
+    await response.body?.cancel();
+    return null;
+  }
+  const { missing, issues } = itrReviewSchema.parse(await response.json());
+  return issues[0] ?? (missing.length ? `Still to fill: ${missing[0].label}.` : null);
+}
+
 export const formsWatch: Handler = async () => {
   const admin = supabaseAdmin();
   const [{ data, error }, { data: templates }] = await Promise.all([admin.from("platform_settings").select("value").eq("key", "watch").maybeSingle(), admin.from("templates").select("*")]);
   if (error) return { retry: "watch_not_read" };
   const previous = (data?.value ?? {}) as Partial<Watch>;
-  const next = await checkSources({ sources: previous.sources ?? {}, changes: previous.changes ?? [], alerts: previous.alerts ?? [], items: previous.items ?? [] }, new Date(), fetch, sources, (templates ?? []) as Template[], officialStore());
+  const now = new Date();
+  const next = await checkSources({ sources: previous.sources ?? {}, changes: previous.changes ?? [], alerts: previous.alerts ?? [], items: previous.items ?? [] }, now, fetch, sources, (templates ?? []) as Template[], officialStore());
+  await checkLive(next, now.toISOString(), (templates ?? []) as Template[]);
   const { error: saved } = await admin.from("platform_settings").upsert({ key: "watch", value: next as unknown as NonNullable<Json> });
   if (saved) return { retry: "watch_not_saved" };
   const { error: live } = await admin.rpc("forms_go_live");

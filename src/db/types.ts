@@ -764,7 +764,7 @@ isOneToOne: false
 { Args: { "link": string,"new_date": string,"rule_code": string,"rule_period": string }; Returns: boolean
                            },
 "admin_add_template":
-{ Args: { "change_at": string,"change_source": string,"file": string,"starts": string }; Returns: boolean
+{ Args: { "change_at": string,"change_source": string,"file": string,"starts": string,"year_checked"?: boolean }; Returns: boolean
                            },
 "admin_ask_support":
 { Args: { "target": string }; Returns: boolean

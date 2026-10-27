@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { expect, it } from "vitest";
-import { checkSources, type Source, type Watch } from "@/src/jobs/forms-watch";
+import { expect, it, vi } from "vitest";
+import { checkLive, checkSources, type Source, type Watch } from "@/src/jobs/forms-watch";
+import { handle } from "@/worker/handler";
 import { gstNews } from "@/src/jobs/gov-pages";
 import { zip } from "@/src/lib/firm-download";
 import type { Template } from "@/src/lib/templates";
@@ -168,3 +169,41 @@ it("keeps a same layout ITR schema of a new version under its own link", async (
   const [again] = (watch.changes.at(-1) as { compared: { file: string; renamed?: true; template?: { version: string } }[] }).compared;
   expect(again).toMatchObject({ file: "ITR-1_2027_Main_V1.1.json", renamed: true, template: { version: "1.1" } });
 });
+
+// Before going live by itself, the file worker makes InboxCA's own returns with the new version
+// (it fetches the kept file from the app by a signed link); one that fails a check stays a draft.
+it("goes live by itself only when InboxCA's own returns pass every official check with the new file", async () => {
+  const kept = new Map<string, Buffer>(), at = "2026-10-26T03:00:00.000Z";
+  const live = (file: string, bytes: Buffer, form: string, version: string, current: string) => {
+    kept.set(sha256(bytes), bytes);
+    return { file: file.split("/").pop()!, with: current, same: true, live: true, template: { form_code: form, version, source: { file, url: "https://official.invalid/f", sha256: sha256(bytes) } } };
+  };
+  // The ITR-1 schema written on one line, and again with a tighter rule on a field it has.
+  const schema = JSON.parse(readFileSync("reference/official/itr/ITR-1_2026_Main_V1.1.json", "utf8")), same = Buffer.from(JSON.stringify(schema));
+  schema.definitions.Address.properties.EmailAddress.maxLength = 10;
+  const watch: Watch = { sources: {}, alerts: [], changes: [{ source: "tool", at, compared: [
+    live("gstr1-v9.9/GSTR1_Excel_Workbook_Template_V9.9.xlsx", resavedWorkbook(), "GSTR1", "9.9", "2.2"),
+    live("itr/ITR-1_2026_Main_V1.3.json", same, "ITR1", "1.3", "1.1"),
+    live("itr/ITR-1_2026_Main_V1.4.json", Buffer.from(JSON.stringify(schema)), "ITR1", "1.4", "1.1"),
+  ] }] };
+  vi.stubEnv("FILE_WORKER_URL", "http://worker");
+  vi.stubEnv("FILE_WORKER_SECRET", randomBytes(32).toString("hex"));
+  vi.stubEnv("APP_BASE_URL", "http://app");
+  const fetched = globalThis.fetch;
+  const worker = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    const address = String(url), file = kept.get(/^http:\/\/app\/api\/official\/([a-f0-9]{64})\?/.exec(address)?.[1] ?? "");
+    if (address.startsWith("http://worker/")) return handle(new Request(address, { ...init, duplex: "half" } as RequestInit));
+    return file ? new Response(new Uint8Array(file)) : fetched(url, init);
+  });
+  try {
+    await checkLive(watch, at, templates);
+  } finally {
+    worker.mockRestore();
+    vi.unstubAllEnvs();
+  }
+  const [gst, itr, stricter] = (watch.changes[0] as { compared: { live?: true; failed?: string }[] }).compared;
+  expect([gst, itr]).toEqual([expect.objectContaining({ live: true }), expect.objectContaining({ live: true })]);
+  expect(gst.failed ?? itr.failed).toBeUndefined();
+  expect(stricter.live).toBeUndefined();
+  expect(stricter.failed).toMatch(/10 characters/);
+}, 60_000); // A 7 MB workbook is filled.
