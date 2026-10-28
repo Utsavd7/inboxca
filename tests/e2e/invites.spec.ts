@@ -547,9 +547,12 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await owner.goto("/app/inbox?panel=asks");
   await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a paper" }).getByRole("link", { name: "Answer" }).click();
   await owner.getByRole("dialog").getByRole("button", { name: "Always allow New" }).click();
-  await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
-  await person.goto(files);
-  await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
+  // The answer lands before the request leaves the panel; then the person may upload.
+  await expect(owner.getByText("asks to upload a paper")).toHaveCount(0);
+  await expect(async () => {
+    await person.goto(files);
+    await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
   await owner.goto("/app/settings#permissions");
   const standing = owner.getByRole("listitem").filter({ hasText: /may upload papers.*without asking/ });
   await standing.getByRole("button", { name: "Withdraw" }).click();
@@ -808,7 +811,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
     await waiting.getByText(subject, { exact: true }).click();
     // The shared test mailbox holds thousands of emails, so a live read can take seconds.
     await expect(open.getByRole("heading", { name: subject })).toBeVisible({ timeout: 15_000 });
-    reasons.push(await open.locator(".ib-actions + .ib-note").textContent());
+    reasons.push(await open.locator(".ib-did").textContent());
     await open.getByRole("button", { name: "Mark done" }).click();
     await expect(open.getByRole("button", { name: "Mark done" })).toHaveCount(0, { timeout: 15_000 });
   }
@@ -819,7 +822,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await owner.goto("/app/inbox?show=in");
   await expect(waiting).toHaveCount(2);
   await waiting.first().locator(".ib-subject").click();
-  await open.getByText("Change", { exact: true }).click();
+  await open.getByLabel("Change label").click();
   await open.getByRole("form", { name: "What this email is" }).getByRole("button", { name: "Asks for this year's papers" }).click();
   await expect(open.getByText("Corrected")).toBeVisible({ timeout: 15_000 });
 });
