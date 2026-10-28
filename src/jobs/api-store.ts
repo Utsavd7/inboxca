@@ -18,18 +18,21 @@ export function apiJobStore(supabase: SupabaseClient<Database>): JobStore {
       return data;
     },
     async markSending(id) {
-      const { error } = await supabase.rpc("mark_job_sending", { job_id: id });
+      const { data, error } = await supabase.rpc("mark_job_sending", { job_id: id });
       if (error) throw new Error(`mark_job_sending failed: ${error.code}`);
+      return data === true;
     },
     async finish(id, outcome, errorCode, retryAt) {
-      const { data, error } = await supabase.rpc("finish_job", {
-        job_id: id,
-        outcome,
-        error_code: errorCode,
-        retry_at: retryAt?.toISOString(),
-      });
+      const { data, error } = outcome === "wait"
+        ? await supabase.rpc("wait_job", { job_id: id, error_code: errorCode!, retry_at: retryAt!.toISOString() })
+        : await supabase.rpc("finish_job", {
+          job_id: id,
+          outcome,
+          error_code: errorCode,
+          retry_at: retryAt?.toISOString(),
+        });
       if (error) throw new Error(`finish_job failed: ${error.code}`);
-      return data;
+      return data === true;
     },
   };
 }
