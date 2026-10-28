@@ -75,7 +75,9 @@
 .avatar-stack .avatar { width: 24px; height: 24px; box-shadow: 0 0 0 2px var(--canvas); }
 .avatar-stack .avatar + .avatar { margin-left: calc(var(--s2) * -1); }
 .client-due { display: flex; flex-wrap: wrap; gap: var(--s2); }
-.client-due .badge { height: auto; min-height: 22px; white-space: normal; text-decoration: none; transition: box-shadow var(--fast) var(--out); }
+.client-due .badge { flex-shrink: 1; height: auto; min-height: 22px; white-space: normal; text-decoration: none; transition: box-shadow var(--fast) var(--out); }
+/* On a phone a row's words wrap instead of being cut off. */
+@media (max-width: 720px) { .client-record .app-row :is(strong, .sub) { white-space: normal; overflow-wrap: anywhere; } }
 .client-due .badge:hover { box-shadow: 0 0 0 1px currentColor; }
 .client-head .page-actions .b svg { flex: none; }
 /* Copy upload link: the shared Copy button drawn as a secondary button with its words. */

@@ -113,10 +113,10 @@ const changes: Record<string, string> = {
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; task?: string; marked?: string; t?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; task?: string; marked?: string; t?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
   const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "overview";
   const sub = asked === "extraction" || asked === "outputs" ? asked : tab;
   const panel = panels.includes(asked ?? "") ? asked! : "";
@@ -887,7 +887,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns","returns")}
           </>
         )}
-        {sub === "extraction" && <><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><div className="fig-tools">{pan && <Card id="itr-return" className="tool" title="Income tax return" Icon={FileText} kind="docs" end={<Link className="b b-secondary" href={`${base}/itr`}>Open the return</Link>}><p className="app-card-none">ITR-1 to ITR-4, filled with the client&apos;s PAN and the figures InboxCA already holds for the year. The rest is listed for you to fill.</p></Card>}<PortalInput clientId={id} message={portal}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/><PurchaseMatch clientId={id} searchParams={searchParams}/></div></>}
+        {sub === "extraction" && <><DatasetReview clientId={id} draftId={draft} lineId={line} check={check} view={view}/><div className="fig-tools">{pan && <Card id="itr-return" className="tool" title="Income tax return" Icon={FileText} kind="docs" end={<Link className="b b-secondary" href={`${base}/itr`}>Open the return</Link>}><p className="app-card-none">ITR-1 to ITR-4, filled with the client&apos;s PAN and the figures InboxCA already holds for the year. The rest is listed for you to fill.</p></Card>}<PortalInput clientId={id} message={portal}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/><PurchaseMatch clientId={id} searchParams={searchParams}/></div></>}
         {sub === "outputs" && <PreparedForms client={id} message={formMessage}/>}
 
         {tab === "notices" && (

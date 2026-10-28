@@ -32,6 +32,13 @@ export const itrFieldName=(form:ItrForm,path:string)=>Object.entries(itrFields).
 // The software ID the Income Tax Department gives a registered software, and its city. Off until both are set.
 export const itrReady=()=>/^SW\d{8}$/.test(process.env.ITR_SOFTWARE_ID ?? "") && /^.{1,25}$/.test(process.env.ITR_SOFTWARE_CITY?.trim() ?? "");
 
+// The official schema's top level parts by the names CA staff know, shared by the worker's form
+// entries and the figures laid out as the return.
+export const itrWords=(value:string)=>value.replace(/([a-z])([A-Z])/g,"$1 $2").replace(/_/g," ");
+export const itrGroups:Record<string,string>={PersonalInfo:"Client details",FilingStatus:"Filing details",ITR1_IncomeDeductions:"Income and deductions",IncomeDeductions:"Income and deductions",ITR1_TaxComputation:"Tax amounts",TaxComputation:"Tax amounts",TaxPaid:"Taxes paid",Refund:"Refund and bank details",Verification:"Declaration",TDSonSalaries:"TDS on salary",TDSonOthThanSals:"Other TDS",ScheduleTCS:"TCS",TaxPayments:"Tax challans",ScheduleIT:"Tax challans",ScheduleBP:"Business details",
+  PartA_GEN1:"Client and filing details",PartA_GEN2:"Business and audit details",PARTA_BS:"Balance sheet",ManufacturingAccount:"Manufacturing account",TradingAccount:"Trading account",PARTA_PL:"Profit and loss account",PARTA_OI:"Other information",PARTA_QD:"Quantity details","PartB-TI":"Total income",PartB_TTI:"Tax, taxes paid and refund",ScheduleTDS1:"TDS on salary",ScheduleTDS2:"Other TDS",ScheduleCGFor23:"Schedule CG",ScheduleTDS3Dtls:"Schedule TDS3",ScheduleTDS3:"Schedule TDS3",ScheduleEA10_13A:"House rent allowance"};
+// Schedules keep the official names CA staff know, such as Schedule HP or Schedule 80C.
+export const itrGroup=(key:string)=>itrGroups[key] ?? (/^(ITR\d)?Schedule/.test(key) ? `Schedule ${key.replace(/^(ITR\d)?Schedule_?/,"").replace(/_/g,"-")}` : itrWords(key));
 export const itrFields={
   // Client details InboxCA holds: the PAN registration and the client's email address.
   "itr.personal.pan":{label:"PAN",paths:{ITR1:"PersonalInfo.PAN",ITR4:"PersonalInfo.PAN",ITR2:"PartA_GEN1.PersonalInfo.PAN",ITR3:"PartA_GEN1.PersonalInfo.PAN"}},

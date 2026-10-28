@@ -124,7 +124,7 @@ export async function handle(request: Request): Promise<Response> {
       if([first,...more].some(({rows})=>rows.length>viewLimits.rows || rows.some((row)=>row.length>viewLimits.columns || row.some((cell)=>cell.length>2000))) || JSON.stringify([first,...more]).length>3_000_000) throw new Error("Split this register into smaller files");
       return Response.json({rows:first.rows,sheet:first.sheet,more,sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
     }
-    const opened = await openView(Buffer.from(data.buffer, data.byteOffset, data.byteLength), view.name, view.label, view.limit, request.signal, view.sheet, view.password);
+    const opened = await openView(Buffer.from(data.buffer, data.byteOffset, data.byteLength), view.name, view.label, view.limit, request.signal, view.sheet, view.password, view.find);
     let disposed = false;
     const dispose = async () => { if (!disposed) { disposed = true; await opened.dispose(); } };
     async function* frames() {

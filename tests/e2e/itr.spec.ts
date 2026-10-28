@@ -111,8 +111,8 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await page.goto("/app/documents?year=2025-26&kind=income_tax");await expect(page.getByText(prepared.name).first()).toBeVisible();await expect(page.getByText("Prepared in InboxCA").first()).toBeVisible();
     // A change after approval clears it; the next check makes the next version.
     const line=own.data.lines.find((item:Draft["lines"][number])=>item.field==="itr.personal.email");
-    await page.goto(`/app/clients/${client}?tab=extraction&draft=${own.id}&line=${line.id}`);
-    await page.getByLabel("Correct figure").fill("invented.second@invented.test");await page.getByLabel("Why it changed").fill("Invented correction for the filing test");await page.getByRole("button",{name:"Save correction",exact:true}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
+    await page.goto(`/app/clients/${client}?tab=extraction&draft=${own.id}&line=${line.id}&view=list`);
+    await page.getByRole("button",{name:"No, this is wrong"}).click();await page.getByLabel("Correct figure").fill("invented.second@invented.test");await page.getByLabel("Why it changed").fill("Invented correction for the filing test");await page.getByRole("button",{name:"Save correction",exact:true}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
     expect((await query(local.dbUrl,"select public.form_ready($1) ready",[prepared.id]))[0].ready).toBe(false);
     // A correction clears the draft's checks; the other figures are checked again here directly.
     await query(local.dbUrl,"update public.datasets set revision=revision+1,data=jsonb_set(data,'{lines}',(select jsonb_agg(case when l->>'id'=$2 then l else l||jsonb_build_object('state','confirmed','by',$3::text,'at',$4::text) end) from jsonb_array_elements(data->'lines') l)) where id=$1",[own.id,line.id,firm.ownerId,new Date().toISOString()]);
