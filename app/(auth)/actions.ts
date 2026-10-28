@@ -60,6 +60,15 @@ export async function verifyCode(_prev: CodeState, form: FormData): Promise<Code
   redirect(data.user ? await afterFirstStep(supabase, data.user.id, email) : "/sign-in/two-step");
 }
 
+// The 2 step page once the owner has approved this PC and it is on the office connection:
+// carry on as after the first step, which checks the PC and its connection again.
+export async function officeContinue() {
+  const supabase = await supabaseServer();
+  const { data } = await supabase.auth.getClaims();
+  if (!data) redirect("/sign-in");
+  redirect(await afterFirstStep(supabase, data.claims.sub, String(data.claims.email ?? "")));
+}
+
 // Continue with Google or Microsoft, by Supabase Auth: the PKCE verifier waits in a cookie
 // for /auth/callback, which carries on as after the email code.
 export async function continueWith(form: FormData) {

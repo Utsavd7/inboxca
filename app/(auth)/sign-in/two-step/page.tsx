@@ -2,6 +2,7 @@ import { officeDeviceAccess } from "@/src/lib/office";
 import { redirect } from "next/navigation";
 import { Passkey } from "@/app/(admin)/admin/passkey";
 import { PASSKEY_FACTOR } from "@/src/lib/sign-in";
+import { officeContinue } from "../../actions";
 import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
 import { TwoStepForm } from "./two-step-form";
 
@@ -25,6 +26,13 @@ export default async function TwoStep() {
     <>
       <h1>{passkeys ? "Confirm it is you" : ready ? "Enter your 2 step code" : "Set up your 2 step code"}</h1>
       {office.connectionWaiting && <p className="auth-note" role="status">Your firm has not yet approved this internet connection as the office. Enter your 2 step code to sign in.</p>}
+      {/* Approved after the email code was entered: in the office the email code is enough. */}
+      {office.approved && (
+        <form action={officeContinue} className="auth-form">
+          <p className="auth-note" role="status">Your firm approved this PC, and it is on the office internet connection, so the email code is enough here.</p>
+          <button className="btn" type="submit">Sign in without the code</button>
+        </form>
+      )}
       {!!passkeys && (
         <>
           <div className="auth-form">
