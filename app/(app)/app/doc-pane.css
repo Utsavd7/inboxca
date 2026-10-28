@@ -1,0 +1,77 @@
+/* Back, at the start of every page's header (shell.tsx BackButton): its arrow lines up with
+   the page's left edge. */
+.topbar .head-back { flex: none; margin-left: -6px; color: var(--ink-3); }
+.topbar .head-back:hover:not(:disabled) { color: var(--ink); }
+
+/* The paper pane (doc-pane.tsx): a paper beside the page it was opened from. The app's grid
+   (app.css .ui) has a third column for it, nothing until a paper opens; it then eases to the
+   pane's width with the grid's own transition, so the page narrows as the pane slides in from
+   the right. The card inside keeps its full width meanwhile, so nothing in it reflows. By
+   default the pane takes 52% of the room beside the sidebar's icons, at least 520 px, and
+   leaves the page at least 420 px; dragging its edge sets --doc-w on .ui instead. */
+.ui { --doc-w: min(calc(100vw - 484px), max(520px, calc((100vw - 64px) * 0.52))); }
+.ui:has(.doc-pane:not(.is-leaving)) { --doc-col: var(--doc-w); }
+.ui:has(.doc-pane.is-dragging) { cursor: col-resize; transition: none; user-select: none; }
+.doc-pane { position: relative; grid-row: 1; grid-column: 3; min-width: 0; height: 100dvh; overflow: hidden; border-left: 1px solid var(--line); background: var(--surface); }
+.doc-pane:focus { outline: none; box-shadow: none; }
+.doc-card { display: flex; flex-direction: column; width: var(--doc-w); height: 100%; }
+
+/* Its header: the paper's name and Close, level with the page's own header; then who and
+   what it is, and what can be done with it. */
+.doc-head { flex: none; padding: var(--s2) var(--s3) var(--s3) var(--s5); border-bottom: 1px solid var(--line); }
+.doc-title { display: flex; align-items: center; gap: var(--s2); min-height: 40px; }
+.doc-title h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.doc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s1); }
+.doc-chips { display: flex; flex: 1 1 auto; flex-wrap: wrap; gap: var(--s1); min-width: 0; }
+.doc-chips a.badge { max-width: 100%; overflow: hidden; text-decoration: none; text-overflow: ellipsis; transition: background-color var(--fast) var(--out), color var(--fast) var(--out); }
+.doc-chips a.badge:hover { background: var(--press); color: var(--ink); }
+.doc-actions { display: flex; flex: none; align-items: center; gap: var(--s1); margin-left: auto; }
+.doc-actions form { display: flex; }
+
+/* The pages on a tray of their own, scrolling apart from the page on the left. */
+.doc-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--s3) var(--s5) var(--s6); background: var(--surface-2); }
+.doc-body > .head-meta { margin: 0; }
+.doc-body > .head-meta .hint { font-size: 12px; }
+.doc-body > :is(.pills, .panel, form) { margin-top: var(--s3); }
+.doc-body .viewer { margin-top: var(--s3); }
+.doc-body .viewer-pages { padding: 0; background: none; }
+.doc-body .viewer-pages img { box-shadow: 0 0 0 1px var(--line), var(--shadow-2); }
+
+/* The row on the page whose paper is open beside it. */
+.stage :is(tr, li):has(> a[data-open], > * > a[data-open]) { background: var(--accent-soft); }
+
+/* Its left edge: drag it, or use the arrow keys on it, to give the paper more or less room. */
+.doc-edge { position: absolute; inset: 0 auto 0 0; z-index: 2; width: 6px; cursor: col-resize; touch-action: none; }
+.doc-edge::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--accent); opacity: 0; transition: opacity var(--fast) var(--out); }
+.doc-edge:hover::after, .doc-edge:focus-visible::after, .is-dragging .doc-edge::after { opacity: 1; }
+.ui .doc-edge:focus-visible { box-shadow: none; }
+
+/* Beside a paper the page has about half the room, so it lays out as on a smaller screen: its
+   header's actions go under the title, Today's cards stack, and the busiest pages leave out
+   what the paper shows. The Inbox keeps the open email (the list is back when the paper
+   closes); Documents keeps the papers by name and the chosen one's facts, without the kinds
+   of work, the folder tree or a first page. */
+@media (min-width: 1001px) {
+  .ui:has(.doc-pane) .stage-body { padding-inline: var(--s5); }
+  .ui:has(.doc-pane) .stage .topbar { flex-wrap: wrap; }
+  .ui:has(.doc-pane) .stage .page-actions { order: 3; justify-content: flex-start; width: 100%; }
+  .ui:has(.doc-pane) .stage .page-actions + .head-tools { margin-left: 0; padding-left: 0; border-left: 0; }
+  .ui:has(.doc-pane) .ib .split:has(.ib-convo) .ib-list { display: none; }
+  .ui:has(.doc-pane) :is(.docs-folders, .docs-preview) { display: none; }
+  .ui:has(.doc-pane) .docs-table table { min-width: 0; }
+  .ui:has(.doc-pane) .docs-table :is(th, td):nth-child(n+2 of :not(.docs-pick)) { display: none; }
+  .ui:has(.doc-pane) .fb-split { grid-template-columns: minmax(0, 1fr) 260px; }
+  .ui:has(.doc-pane) :is(.fb-tree, .fb-preview) { display: none; }
+  .ui:has(.doc-pane) .fb-table :is(th, td):nth-child(2) { display: none; }
+  .ui:has(.doc-pane) .today-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* A narrow window has no room beside the page: the paper comes over it from the right. */
+@media (max-width: 1000px) {
+  .ui:has(.doc-pane:not(.is-leaving)) { --doc-col: 0px; }
+  .doc-pane { position: fixed; inset: 0 0 0 auto; z-index: var(--z-panel); width: min(100vw, 640px); height: auto; box-shadow: var(--shadow-float); animation: doc-in var(--slow) var(--out); transition: transform var(--slow) var(--out); }
+  .doc-pane.is-leaving { transform: translateX(100%); }
+  .doc-card { width: 100%; }
+  .doc-edge { display: none; }
+}
+@keyframes doc-in { from { transform: translateX(100%); } }

@@ -3,14 +3,14 @@ import Link from "next/link";
 import { ViewTransition } from "react";
 import { Count, Item, PanelMotion, ToastMotion } from "./motion";
 import { PanelEscape } from "./panel-escape";
-import { HeadTools, MenuButton } from "./shell";
+import { BackButton, HeadTools, MenuButton } from "./shell";
 import "./side-panel.css";
 import { initials } from "@/src/lib/utils";
 
 // The app's small shared pieces, so every page speaks the same visual language.
 
-// The top of every page: the sticky header, with the breadcrumbs (the places above this page,
-// then its title), the page's actions, notifications and help; then the line under it (sub).
+// The top of every page: the sticky header, with Back, the breadcrumbs (the places above this
+// page, then its title), the page's actions, notifications and help; then the line under it (sub).
 // - crumbs: the places above, as [href, label] pairs, e.g. [["/app/clients", "Clients"]] on a
 //   client's page; each is a link named "Back to Clients" for screen readers.
 // - actions: the page's main actions (one primary, one or two secondary). They sit on the right
@@ -22,6 +22,7 @@ export function PageHead({ title, sub, crumb, crumbs = [], actions }: { title: R
       <ViewTransition name="page-bar" share="auto" default="none">
         <header className="topbar">
           <MenuButton />
+          <BackButton />
           <div className="crumbs">
             {crumbs.map(([href, label]) => (
               <Link key={href} href={href} aria-label={`Back to ${label}`}>

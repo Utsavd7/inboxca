@@ -22,6 +22,7 @@ export default function GlobalError({ retry }: { error: unknown; retry: () => vo
                 <button className="b b-primary" type="button" onClick={() => retry()}>
                   Try again
                 </button>
+                {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a fresh load, as the app around this page is what failed */}
                 <a className="b b-secondary" href="/app">
                   Go to Today
                 </a>

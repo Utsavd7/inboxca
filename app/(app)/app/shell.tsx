@@ -3,6 +3,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { Menu } from "@base-ui/react/menu";
 import { Popover } from "@base-ui/react/popover";
 import {
+  ArrowLeft,
   Bell as BellIcon,
   CalendarDays,
   Check,
@@ -28,7 +29,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
 import { Suspense, createContext, startTransition, use, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { switchFirm } from "@/app/(app)/actions";
 import { signOut } from "@/app/(auth)/actions";
@@ -55,6 +56,7 @@ type Shell = {
   setTheme: (theme: Theme) => void;
   rail: boolean;
   fold: () => void;
+  paper: boolean;
   drawer: boolean;
   setDrawer: (open: boolean) => void;
   open: (panel: Panel) => void;
@@ -74,12 +76,20 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
   const [newsFresh, setNewsFresh] = useState(newsSeen < newsLatest);
   const [tip, setTip] = useState<{ text: string; top: number } | null>(null);
   const path = usePathname();
+  const router = useRouter();
   // The drawer closes when a link in it is followed.
   const [shownPath, setShownPath] = useState(path);
   if (shownPath !== path) {
     setShownPath(path);
     setDrawer(false);
   }
+  // A paper open beside the page (@doc): the sidebar folds to its icons until the paper
+  // closes, unless it is opened again by hand meanwhile.
+  const paper = useSelectedLayoutSegments("doc").some((segment) => segment.startsWith("(.)"));
+  const page = usePagePath();
+  const [unfolded, setUnfolded] = useState(false);
+  if (!paper && unfolded) setUnfolded(false);
+  const folded = paper ? !unfolded : rail;
   // One value while nothing it holds changes: a new one would redraw the parts of the page
   // still streaming in (shown twice for a moment) and every header tool.
   const shell = useMemo<Shell>(() => ({
@@ -92,12 +102,14 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
       setTimeout(() => root.classList.remove("theme-fade"), 260);
       setThemeState(next);
     },
-    rail,
+    rail: folded,
     fold: () => {
-      remember("side", rail ? "full" : "rail");
       setTip(null);
+      if (paper) return setUnfolded(!unfolded);
+      remember("side", rail ? "full" : "rail");
       setRail(!rail);
     },
+    paper,
     drawer,
     setDrawer,
     open: (next) => {
@@ -110,11 +122,11 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
     },
     newsFresh,
     bell,
-  }), [me, theme, rail, drawer, newsFresh, bell]);
+  }), [me, theme, rail, folded, paper, unfolded, drawer, newsFresh, bell]);
   // The folded sidebar names what is under the pointer or the keyboard beside it.
   const point = (target: EventTarget) => {
     const item = target instanceof Element ? target.closest<HTMLElement>(".side [data-tip]") : null;
-    if (!rail || !item || window.matchMedia("(max-width: 720px)").matches) return setTip(null);
+    if (!folded || !item || window.matchMedia("(max-width: 720px)").matches) return setTip(null);
     const box = item.getBoundingClientRect();
     setTip({ text: item.dataset.tip!, top: box.top + box.height / 2 });
   };
@@ -124,8 +136,17 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
         <div
           className="ui"
           data-theme={theme}
-          data-side={rail ? "rail" : "full"}
+          data-side={folded ? "rail" : "full"}
           data-drawer={drawer ? "open" : undefined}
+          onClickCapture={(event) => {
+            // Beside a paper the address is the paper's, so a link on the page that changes
+            // only its query (?tab=...) is followed from the page's own address.
+            const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(".stage a[href^='?']") : null;
+            if (!paper || !paperPath.test(path) || !link || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            event.stopPropagation();
+            router.push(`${page}${link.getAttribute("href")}`);
+          }}
           onPointerOver={(event) => point(event.target)}
           onPointerLeave={() => setTip(null)}
           onFocus={(event) => point(event.target)}
@@ -199,6 +220,48 @@ export function MenuButton() {
       <MenuIcon size={18} aria-hidden />
     </button>
   );
+}
+
+// Back, at the start of every page's header: to the page before when it was InboxCA's (as the
+// browser's Back does), otherwise up to the page above (the last crumb), or Today.
+export function BackButton() {
+  const router = useRouter();
+  const back = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const before = tabHistory().behind[0]?.url;
+    if (before && /^\/app(\/|$)/.test(new URL(before).pathname)) return router.back();
+    const crumbs = event.currentTarget.closest(".topbar")?.querySelectorAll<HTMLAnchorElement>(".crumbs a");
+    router.push(crumbs?.length ? crumbs[crumbs.length - 1].getAttribute("href")! : "/app");
+  };
+  return (
+    <button type="button" className="b b-ghost b-icon head-back" aria-label="Back" title="Back" onClick={back}>
+      <ArrowLeft size={18} aria-hidden />
+    </button>
+  );
+}
+
+// This tab's history from the browser's Navigation API: the entry shown, and those behind it
+// nearest first (none where a browser has no such API).
+type Entry = { key: string; url: string | null };
+export function tabHistory() {
+  const nav = (window as Window & { navigation?: { currentEntry: (Entry & { index: number }) | null; entries: () => Entry[] } }).navigation;
+  const here = nav?.currentEntry ?? null;
+  return { here, behind: here ? nav!.entries().slice(0, here.index).reverse() : [] };
+}
+
+// While a paper is open beside a page, the address is the paper's. The page keeps its own:
+// its path from the app's own segments (for a part of the frame, which sits in the app's
+// layout), and the query it had when the paper opened (for any part of the page).
+export const paperPath = /^\/app\/files\/[^/]+\/view$/;
+export function usePagePath() {
+  return ["/app", ...useSelectedLayoutSegments().filter((segment) => !segment.startsWith("("))].join("/");
+}
+export function usePageParams() {
+  const params = useSearchParams();
+  const path = usePathname();
+  const paper = !!useShell()?.paper && paperPath.test(path);
+  const [kept, setKept] = useState(params);
+  if (!paper && kept.toString() !== params.toString()) setKept(params);
+  return paper ? kept : params;
 }
 
 // The header's tools on every page: notifications, help, and on a phone the account menu.

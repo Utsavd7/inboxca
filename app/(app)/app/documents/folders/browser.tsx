@@ -1,12 +1,12 @@
 "use client";
 import { ChevronRight, Download, ExternalLink, Eye, File as FileIcon, FileImage, FileJson, FileSpreadsheet, FileText, Folder, FolderOpen, LayoutGrid, List, Search, Send, Upload, UserRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { findClients } from "@/app/(app)/actions";
 import { FileViewer } from "../../files/[id]/view/file-viewer";
 import { Badge, Empty, type Tone } from "../../ui";
 import { CopyButton } from "../../ui-client";
+import { usePageParams } from "../../shell";
 import { fileDrivePaper, uploadToFolder } from "./actions";
 import type { Origin } from "@/src/lib/paper-origin";
 import { CameFrom } from "../came-from";
@@ -187,7 +187,7 @@ type Props = { initial: Record<string, Listing>; home: string[]; asked: string; 
 // The address holds the open folder and file, so links and Back work; each folder is read
 // once and kept, read again after 15 seconds, and read ahead when pointed at.
 export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hideInactive }: Props) {
-  const params = useSearchParams();
+  const params = usePageParams();
   const homeKey = home.join("/");
   // A folder the server could not open shows the nearest one above it.
   const raw = params.get("path") ?? "";
