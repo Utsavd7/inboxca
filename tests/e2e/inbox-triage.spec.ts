@@ -92,7 +92,7 @@ test("a snoozed email is brought back to Needs reply at once", async () => {
   await readMail();
   const mail = await open(`Question ${tag}`);
   const [{ id: request }] = await query(local.dbUrl, "select id from public.requests where entity_id = $1", [mail]);
-  await pane().locator("summary", { hasText: "Snooze" }).click();
+  await pane().getByLabel("Snooze", { exact: true }).click();
   await pane().getByRole("group", { name: "Snooze until" }).getByRole("button", { name: /^Tomorrow/ }).click();
   await expect(owner.getByRole("status").filter({ hasText: /^Snoozed until/ })).toBeVisible();
   await owner.goto(`/app/inbox?status=snoozed&mail=${mail}`);

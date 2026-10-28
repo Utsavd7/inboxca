@@ -64,7 +64,7 @@ const status = async (request: string) => (await query(local.dbUrl, "select stat
 const asked = async (right: string) => (await query(local.dbUrl, "select id, details from public.requests where firm_id = $1 and kind = 'permission' and reason_code = $2 order by expires_at desc limit 1", [firm.firmId, right]))[0];
 const panelOf = (client: { id: string }, file: { id: string }) => `/app/clients/${client.id}?tab=documents&edit=${file.id}`;
 const answer = async (page: Page, what: string) => {
-  await page.goto("/app/inbox");
+  await page.goto("/app/inbox?panel=asks");
   await page.locator("section[aria-labelledby=questions] li").filter({ hasText: `Sunil asks to ${what}` }).getByRole("link", { name: "Answer Sunil" }).click();
   return page.getByRole("dialog", { name: new RegExp(`^Sunil asks to ${what}`) });
 };
@@ -159,8 +159,8 @@ test("a private paper waiting in the Inbox is not sent when someone chooses Don'
   // A client's request for it, waiting for one approval.
   const [{ id: share }] = await query(local.dbUrl, "insert into public.shares (firm_id, document_id, status) values ($1, $2, 'waiting') returning id", [firm.firmId, balance.id]);
   const before = await mailCount(secret.email);
-  const approve = await actionFields(owner, "/app/inbox", { share });
-  await owner.goto("/app/inbox");
+  const approve = await actionFields(owner, "/app/inbox?panel=papers", { share });
+  await owner.goto("/app/inbox?panel=papers");
   const waiting = owner.locator("section[aria-labelledby=papers]");
   await expect(waiting.getByRole("listitem").filter({ hasText: balance.name })).toContainText(`Asked for by ${secret.name}`);
   await waiting.getByRole("button", { name: "Don't send" }).click();
@@ -218,7 +218,7 @@ test("Ask to remove goes to the owner alone, who refuses, then allows it once; t
   expect(first.details).toMatchObject({ by: staffId, route: "owner", document_id: rent.id });
 
   // Not the manager's to answer: it is not listed for them, and their answer is refused.
-  await manager.goto("/app/inbox");
+  await manager.goto("/app/inbox?panel=asks");
   await expect(manager.locator("section[aria-labelledby=questions]")).toHaveCount(0);
   const fields = await actionFields(owner, `/app/inbox?answer=${first.id}`, { request: first.id });
   await manager.request.post("/app/inbox", { multipart: { ...fields, intent: "allow" }, headers: { Origin: new URL(manager.url()).origin } });
@@ -258,7 +258,7 @@ test("Ask to download expires unanswered; asked again, the manager allows one ma
   expect(stale.details).toMatchObject({ by: staffId, route: "manager", document_id: balance.id });
   // Four hours on, nobody can answer it any more.
   await query(local.dbUrl, "update public.requests set expires_at = now() - interval '1 second' where id = $1", [stale.id]);
-  await manager.goto("/app/inbox");
+  await manager.goto("/app/inbox?panel=asks");
   await expect(manager.locator("section[aria-labelledby=questions]")).toHaveCount(0);
 
   await staff.goto(viewer);

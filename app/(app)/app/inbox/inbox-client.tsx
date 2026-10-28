@@ -1,4 +1,5 @@
 "use client";
+import { ChevronDown, Reply, Sparkles } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
@@ -8,6 +9,17 @@ import { draftEmail, draftReply, sendEmail, sendReply, type Draft } from "./acti
 
 type Paper = { id: string; name: string };
 
+// The open email's reply box opens and takes the cursor (the r key, the toolbar's Reply).
+const REPLY_EVENT = "inboxca:reply";
+const openReply = () => window.dispatchEvent(new Event(REPLY_EVENT));
+export function ReplyButton() {
+  return (
+    <button type="button" className="b b-ghost b-icon" aria-label="Reply" data-tip="Reply (r)" onClick={openReply}>
+      <Reply size={16} aria-hidden />
+    </button>
+  );
+}
+
 // Inside a link: a small spinner from the click until the page it opens is ready.
 export function LinkBusy() {
   return useLinkStatus().pending ? <span className="ib-busy" aria-hidden /> : null;
@@ -15,12 +27,22 @@ export function LinkBusy() {
 
 // The Inbox's keys, never required: j and k move through the list, Enter opens, r goes to the
 // reply, e takes the open email out of Needs reply, h opens Snooze, / goes to search, Esc
-// leaves the reply, then closes the open email back to the list.
+// closes an open menu, leaves the reply, then closes the open email back to the list. A click
+// outside an open menu closes it too.
 export function InboxKeys() {
   const router = useRouter();
   useEffect(() => {
+    const menus = () => [...document.querySelectorAll<HTMLDetailsElement>(".ib details.ib-menu[open]")];
+    const outside = (event: MouseEvent) => menus().forEach((menu) => !menu.contains(event.target as Node) && menu.removeAttribute("open"));
     const keys = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
+      const open = menus();
+      if (event.key === "Escape" && open.length && !document.querySelector(".side-panel")) {
+        // Only the menu closes, not a paper open beside the Inbox too.
+        event.stopPropagation();
+        open.forEach((menu) => menu.removeAttribute("open"));
+        return open[0].querySelector("summary")?.focus();
+      }
       if (event.key === "Escape" && target.id === "reply-text") return target.blur();
       if (event.metaKey || event.ctrlKey || event.altKey || target.closest("input, textarea, select, [contenteditable]")) return;
       const rows = [...document.querySelectorAll<HTMLAnchorElement>(".ib-row > a")];
@@ -28,15 +50,15 @@ export function InboxKeys() {
       const pick: Record<string, () => void> = {
         j: () => rows[Math.min(rows.length - 1, at + 1)]?.focus(),
         k: () => rows[Math.max(0, at === -1 ? 0 : at - 1)]?.focus(),
-        r: () => document.getElementById("reply-text")?.focus(),
+        r: openReply,
         e: () => document.querySelector<HTMLButtonElement>("[data-key=e]")?.click(),
         h: () => document.querySelector<HTMLElement>("[data-key=h]")?.click(),
         "/": () => document.querySelector<HTMLInputElement>("#mail-search")?.focus(),
         Escape: () => {
           const url = new URL(location.href);
-          // Never with a side panel open, nor over a reply being written (a suggested one unchanged is not).
+          // Never with a side panel or a paper open, nor over a reply being written (a suggested one unchanged is not).
           const box = document.querySelector<HTMLTextAreaElement>("#reply-text");
-          if (document.querySelector(".side-panel") || (box && box.value !== box.defaultValue) || !(url.searchParams.has("mail") || url.searchParams.has("sent"))) return;
+          if (document.querySelector(".side-panel, .doc-pane") || (box && box.value !== box.defaultValue) || !(url.searchParams.has("mail") || url.searchParams.has("sent"))) return;
           url.searchParams.delete("mail");
           url.searchParams.delete("sent");
           going(url.href);
@@ -48,7 +70,11 @@ export function InboxKeys() {
       pick[event.key]();
     };
     document.addEventListener("keydown", keys);
-    return () => document.removeEventListener("keydown", keys);
+    document.addEventListener("click", outside);
+    return () => {
+      document.removeEventListener("keydown", keys);
+      document.removeEventListener("click", outside);
+    };
   }, [router]);
   return null;
 }
@@ -184,11 +210,15 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
 }
 
 // The reply under an open conversation: quick replies, plain text, papers and files, and an
-// AI draft only once AI is set up. It starts from InboxCA's own answer when a person edits it;
-// an email waiting for a person opens with AI's draft or a suggested reply written in (note
-// says which), and, for a paper not in the drive, a way to ask the client for papers.
-export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, start, suggestion, askPapers, note }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; start?: string; suggestion?: string; askPapers?: string; note?: string }) {
+// AI draft only once AI is set up. It waits as one Reply bar until clicked (or r), so the email
+// has the room; it starts open on InboxCA's own answer when a person edits it. AI's draft
+// (aiDraft) shows as a card to send as it is or edit. An email waiting for a person opens with
+// a suggested reply written in (note says which), and, for a paper not in the drive, a way to
+// ask the client for papers.
+export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, start, aiDraft, suggestion, askPapers, note }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; start?: string; aiDraft?: boolean; suggestion?: string; askPapers?: string; note?: string }) {
   const [chosen, setChosen] = useState<string[]>([]);
+  const [view, setView] = useState<"bar" | "card" | "open">(aiDraft ? "card" : start ? "open" : "bar");
+  const focus = useRef(false);
   const text = useRef<HTMLTextAreaElement>(null);
   const [draft, ask, drafting] = useActionState<Draft, FormData>(async (previous, form) => {
     const next = await draftReply(previous, form);
@@ -196,26 +226,66 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, s
     if (next.papers?.length) setChosen((now) => [...new Set([...now, ...next.papers!])]);
     return next;
   }, {});
+  useEffect(() => {
+    const write = () => {
+      focus.current = true;
+      setView("open");
+    };
+    window.addEventListener(REPLY_EVENT, write);
+    return () => window.removeEventListener(REPLY_EVENT, write);
+  }, []);
+  useEffect(() => {
+    if (view !== "open" || !focus.current) return;
+    focus.current = false;
+    text.current?.focus();
+  }, [view]);
   return (
-    <form action={sendReply} className="ib-reply" aria-label="Reply">
+    <form action={sendReply} className="ib-reply" data-view={view} aria-label="Reply">
       <input type="hidden" name="mail" value={mail} />
-      <Templates name={name} firm={firm} />
-      {(note || (suggestion && !start)) && (
-        <p className="ib-note ib-suggest">
-          <span className="grow">{note ?? "A suggested reply is written in. Change what you need, then send it."}</span>
-          {askPapers && <Link className="ib-chip" href={askPapers}>Ask for papers</Link>}
-        </p>
+      {view === "bar" && (
+        <button type="button" className="ib-reply-bar" onClick={openReply}>
+          <Reply size={16} aria-hidden />
+          <span className="grow">Reply to {name}</span>
+          {suggestion && !start && <span className="ib-note">Suggested reply ready</span>}
+          <kbd className="kbd" aria-hidden>r</kbd>
+        </button>
       )}
-      <textarea id="reply-text" ref={text} name="text" rows={start ? 10 : suggestion ? 7 : 4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." defaultValue={start ?? suggestion} onKeyDown={sendKey} />
-      {mayAttach && <Attach papers={papers} chosen={chosen} setChosen={setChosen} offered={[...suggested, ...(draft.papers ?? [])]} />}
-      <div className="ib-reply-foot">
-        {draft.error && <span className="ib-note" role="status">{draft.error}</span>}
-        {ai && (
-          <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={drafting} aria-busy={drafting || undefined} title="A draft for you to check. AI never sends.">
-            {drafting ? "Writing a draft" : "Write a reply with AI"}
-          </button>
+      {view === "card" && (
+        <div className="ib-card">
+          <p className="ib-card-head">
+            <Sparkles size={14} aria-hidden />
+            <strong>AI draft</strong>
+            <span>{note}</span>
+          </p>
+          <pre className="ib-draft-text">{start}</pre>
+          <div className="ib-reply-foot">
+            <button type="button" className="b b-secondary" onClick={openReply}>Edit</button>
+            <Send>Send reply</Send>
+          </div>
+        </div>
+      )}
+      <div className="ib-write-reply" hidden={view !== "open"}>
+        <Templates name={name} firm={firm} />
+        {((note && !aiDraft) || (suggestion && !start)) && (
+          <p className="ib-note ib-suggest">
+            <span className="grow">{(!aiDraft && note) || "A suggested reply is written in. Change what you need, then send it."}</span>
+            {askPapers && <Link className="ib-chip" href={askPapers}>Ask for papers</Link>}
+          </p>
         )}
-        <Send>Send reply</Send>
+        <textarea id="reply-text" ref={text} name="text" rows={start ? 8 : suggestion ? 6 : 4} required maxLength={20_000} aria-label="Your reply" placeholder="Write your reply. Press r to come here, Esc to leave." defaultValue={start ?? suggestion} onKeyDown={sendKey} />
+        <div className="ib-reply-foot">
+          <button type="button" className="b b-ghost b-icon" onClick={() => setView("bar")} aria-label="Hide the reply" title="Hides the reply. What you wrote stays.">
+            <ChevronDown size={16} aria-hidden />
+          </button>
+          {mayAttach && <Attach papers={papers} chosen={chosen} setChosen={setChosen} offered={[...suggested, ...(draft.papers ?? [])]} />}
+          {draft.error && <span className="ib-note" role="status">{draft.error}</span>}
+          {ai && (
+            <button type="submit" className="b b-secondary" formAction={ask} formNoValidate disabled={drafting} aria-busy={drafting || undefined} title="A draft for you to check. AI never sends.">
+              {drafting ? "Writing a draft" : "Write a reply with AI"}
+            </button>
+          )}
+          <Send>Send reply</Send>
+        </div>
       </div>
     </form>
   );
