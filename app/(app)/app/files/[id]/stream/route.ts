@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { signView, viewerLabel, viewLimits, type ViewRequest } from "@/src/lib/file-worker";
 import { plainPage } from "@/src/lib/plain-page";
 import { logDownloads, mayDownload, PAUSED } from "@/src/lib/download-use";
+import { draftSchema, place } from "@/src/lib/datasets";
 
 // Every opening checks the person's access before the worker sees a drive token.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,6 +22,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // logged, marked as a thumbnail, so every page anyone sees has a record.
   const thumb=!copy && sheet===null && new URL(request.url).searchParams.get("thumb")==="1";
   if(sheet!==null && !/^(?:[1-9]|[1-9][0-9]|100)$/.test(sheet)) return new Response("Not found",{status:404});
+  // Check on the form: the figures of this set that came from this paper, so the worker sends back their spots.
+  const marks=copy || thumb ? null : new URL(request.url).searchParams.get("marks");
+  if(marks!==null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(marks)) return new Response("Not found",{status:404});
   if (!membership) return fail(404,"This paper is not available. It may have been removed.");
   const { data: visible } = await supabase.from("documents").select("id, size, client_id, prepared").eq("firm_id", membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle();
   if (!visible) return fail(404,"This paper is not available. It may have been removed.");
@@ -39,9 +43,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!account) return fail(409, "Your firm's drive is not connected. Ask the owner to connect it in Settings.", headers);
   try {
     if (!["local", "dropbox", "onedrive"].includes(account.provider)) throw new Error("Drive not supported");
+    const { data: set } = marks ? await supabase.from("datasets").select("data").eq("firm_id", membership.firmId).eq("client_id", visible.client_id).eq("id", marks).maybeSingle() : { data: null };
+    const lines = set ? draftSchema.parse(set.data).lines.filter((line) => line.source.document === id && (line.source.sheet ?? 1) === Number(sheet ?? 1)).slice(0, 300) : [];
+    // A PDF's or text file's figure is found by its value, read here and sent only to the worker.
+    const valued = /\.(pdf|txt)$/i.test(document.name);
+    const find = await Promise.all(lines.map(async (line) => ({ id: line.id, page: line.source.page!, ...(line.source.path && { path: line.source.path }), ...(line.source.cell && { cell: line.source.cell }),
+      ...(valued && { value: String(JSON.parse(await serverCrypto().decrypt(membership.firmId, place(marks!, line.id), line.value_enc)).value).slice(0, 200) }) })));
     const view: ViewRequest = { firm: membership.firmId, file: document.drive_file_id, name: document.name, label: viewerLabel(membership.email, membership.firmName), limit: thumb ? 1 : viewLimits.pages, expires: Math.floor(Date.now() / 1000) + 60, ...(sheet && {sheet:Number(sheet)}), ...(copy && {purpose:"copy" as const}), provider: account.provider as ViewRequest["provider"], token: await driveToken(membership.firmId, account),
       // A PDF's password, typed once by a person in the viewer, goes only to the worker.
-      ...(document.password_enc && { password: await serverCrypto().decrypt(membership.firmId, `documents/${id}/password`, document.password_enc) }) };
+      ...(document.password_enc && { password: await serverCrypto().decrypt(membership.firmId, `documents/${id}/password`, document.password_enc) }), ...(find.length ? { find } : {}) };
     const body = JSON.stringify(view);
     const response = await fetch(`${process.env.FILE_WORKER_URL.replace(/\/$/, "")}/${copy ? "copy" : "view"}/${encodeURIComponent(view.file)}`, {
       method: "POST", headers: { Authorization: await signView(body, process.env.FILE_WORKER_SECRET), "Content-Type": "application/json" }, body,

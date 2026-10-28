@@ -1,7 +1,7 @@
 import { createCanvas, loadImage, type Canvas } from "@napi-rs/canvas";
 import { join } from "node:path";
 import { readSheet } from "../src/lib/sheet.ts";
-import { viewLimits, type ViewHeader } from "../src/lib/file-worker.ts";
+import { viewLimits, type ViewFind, type ViewHeader, type ViewMark } from "../src/lib/file-worker.ts";
 import { jsonSource } from "./json-source.ts";
 import { wordSource } from "./word-source.ts";
 
@@ -39,7 +39,18 @@ export function tiles(width: number, height: number, textWidth: number, size: nu
 // Parse once, measure pages without rendering, then reuse one canvas for this opening. A PDF
 // with a password opens only with the one a person typed; a wrong or missing one throws
 // pdf.js's PasswordException, and nothing is ever guessed.
-export async function openView(bytes: Buffer, name: string, label: string, limit = viewLimits.pages, signal = new AbortController().signal, sheet?:number, password?:string) {
+// A printed value equals a figure: amounts by their digits (8,32,545.00 is 832545), words as they are.
+const same = (printed: string, value: string) => {
+  const digits = (text: string) => text.replace(/^(₹|Rs\.?)\s*/i, "").replace(/,/g, "");
+  return /^-?\d+(\.\d+)?$/.test(digits(printed)) && /^-?\d+(\.\d+)?$/.test(value) ? Number(digits(printed)).toFixed(2) === Number(value).toFixed(2) : printed.trim() === value.trim();
+};
+const spot = (id: string, page: number, x: number, y: number, width: number, height: number, size: { width: number; height: number }): ViewMark => {
+  const part = (value: number, of: number) => Math.round(Math.min(1, Math.max(0, value / of)) * 10_000) / 10_000;
+  return { id, page, x: part(x, size.width), y: part(y, size.height), width: part(width, size.width), height: part(height, size.height) };
+};
+
+// find: figures whose spots go back in the header (ViewFind), by the same layout as the pages.
+export async function openView(bytes: Buffer, name: string, label: string, limit = viewLimits.pages, signal = new AbortController().signal, sheet?:number, password?:string, find: ViewFind[] = []) {
   signal.throwIfAborted();
   if (bytes.length > viewLimits.bytes) throw new Error("File too large");
   const fit = (width: number, height: number) => {
@@ -51,7 +62,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
   let photograph = false;
   let draw: (number: number) => Promise<Canvas>;
   let dispose = async () => {};
-  const header: ViewHeader = { pages: [], limited: false };
+  const header: ViewHeader = { pages: [], limited: false }, marks: ViewMark[] = [];
   if (/\.pdf$/i.test(name)) {
     const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const root = join(process.cwd(), "node_modules/pdfjs-dist");
@@ -70,6 +81,16 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
         signal.throwIfAborted();
         const page = await pdf.getPage(number);
         header.pages.push(fit(page.getViewport({ scale: 1 }).width, page.getViewport({ scale: 1 }).height));
+        const wanted = find.filter((one) => one.page === number && one.value);
+        if (wanted.length) {
+          const items = (await page.getTextContent()).items, viewport = page.getViewport({ scale: 1 });
+          for (const one of wanted) {
+            const hit = items.find((item) => "str" in item && (same(item.str, one.value!) || item.str.split(/\s+/).some((word) => same(word, one.value!))));
+            if (!hit || !("str" in hit)) continue;
+            const [x0, y0] = viewport.convertToViewportPoint(hit.transform[4], hit.transform[5]), [x1, y1] = viewport.convertToViewportPoint(hit.transform[4] + hit.width, hit.transform[5] + (hit.height || Math.abs(hit.transform[3]) || 10));
+            marks.push(spot(one.id, number, Math.min(x0, x1) - 3, Math.min(y0, y1) - 3, Math.abs(x1 - x0) + 6, Math.abs(y1 - y0) + 6, viewport));
+          }
+        }
         page.cleanup();
       }
       draw = async (number) => {
@@ -92,6 +113,19 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
     const count=Math.max(1,Math.min(limit,Math.ceil(lines.length/40)));
     header.limited=source.limited || lines.length>count*40;
     for(let number=1;number<=count;number++) header.pages.push({width:1200,height:1320});
+    // A JSON figure's line by its path, a text file's by its number (/line/12); the value itself is
+    // boxed when it can be found on that line, else the whole line.
+    if(!word && find.length) {
+      const measure=createCanvas(1,1).getContext("2d"),positions="positions" in source ? source.positions as Map<string,number> : null;measure.font="18px monospace";
+      for(const one of find) {
+        const at=positions ? positions.get(one.path ?? "") : Number(/^\/line\/(\d+)$/.exec(one.path ?? "")?.[1]);
+        if(!at || at>count*40 || Math.ceil(at/40)!==one.page) continue;
+        const text=`${at} ${lines[at-1]}`,start=positions ? text.search(/-?[\d.eE+]+,?$/) : one.value ? text.indexOf(one.value,String(at).length+1) : -1;
+        const shown=start<0 ? text : positions ? text.slice(start).replace(/,$/,"") : one.value!;
+        const x=20+(start<0 ? 0 : measure.measureText(text.slice(0,start)).width);
+        marks.push(spot(one.id,one.page,x-4,40+((at-1)%40)*30-21,Math.min(measure.measureText(shown).width,1180-x)+8,28,{width:1200,height:1320}));
+      }
+    }
     draw=async(number)=>{
       canvas ??= createCanvas(1200,1320);const context=canvas.getContext("2d");
       context.fillStyle="white";context.fillRect(0,0,1200,1320);context.fillStyle="#17202f";context.font=word ? "20px sans-serif" : "18px monospace";
@@ -108,6 +142,13 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
     const columns = Math.max(1, ...rows.map((row) => Math.min(viewLimits.columns, row.length)));
     const count = Math.max(1, Math.ceil(rows.length / viewLimits.rowsPerPage));
     for (let number = 1; number <= count; number++) header.pages.push({ width: Math.max(800, columns * 180), height: 110 + Math.max(1, rows.slice((number - 1) * viewLimits.rowsPerPage, number * viewLimits.rowsPerPage).length) * 34 });
+    // A cell's box, where draw below puts it.
+    for (const one of find) {
+      const column = (one.cell ?? "").charCodeAt(0) - 65, row = Number((one.cell ?? "").slice(1));
+      if (!one.cell || column >= columns || row > rows.length || Math.ceil(row / viewLimits.rowsPerPage) !== one.page) continue;
+      const size = header.pages[one.page - 1], cellWidth = (size.width - 84) / columns;
+      marks.push(spot(one.id, one.page, 60 + column * cellWidth, 60 + ((row - 1) % viewLimits.rowsPerPage) * 34, cellWidth, 34, size));
+    }
     draw = async (number) => {
       canvas ??= createCanvas(1, 1);
       canvas.width = header.pages[number - 1].width;
@@ -151,6 +192,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
       return canvas;
     };
   } else throw new Error("File not supported");
+  if (marks.length) header.marks = marks;
   return { header, dispose: async () => { if (canvas) { canvas.width = 1; canvas.height = 1; } await dispose(); },
     async render(number: number, jpegOnly=false) {
       signal.throwIfAborted();

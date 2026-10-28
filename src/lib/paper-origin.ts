@@ -12,7 +12,7 @@ type Line = { action: string; actor_id: string | null; details: unknown };
 
 const whose = (name: string) => `${name}${name.endsWith("s") ? "'" : "'s"}`;
 // "26 Oct, 10:42" in India, with the year when it is not this one.
-const when = (at: string) =>
+export const when = (at: string) =>
   new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: at.slice(0, 4) === new Date().toISOString().slice(0, 4) ? undefined : "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 
 // Why a paper waits under To check (PLAN.md 5.5.0): the same file came in before, else what

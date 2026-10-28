@@ -47,7 +47,7 @@ test("staff check figures beside the source; totals, edit rights and stale revie
     expect(blocked.url()).toContain("check=totals");
     await page.getByRole("button",{name:"Ask to edit figures"}).click();await expect(page).toHaveURL(/asked_right=edit_figures/);
     const [{id:permission}]=await query(local.dbUrl,"update public.requests set status='approved' where firm_id=$1 and kind='permission' returning id",[firm.firmId]);
-    await page.goto(url);await page.getByLabel("Correct figure").fill("300.00");
+    await page.goto(url);await page.getByRole("button",{name:"No, this is wrong"}).click();await page.getByLabel("Correct figure").fill("300.00");
     const keptResponse=page.waitForResponse(response=>response.request().method()==="POST" && !!response.request().postData()?.includes("The source total was wrong"),{timeout:15_000});
     await page.getByLabel("Why it changed").fill("The source total was wrong");
     expect((await keptResponse).ok()).toBe(true);
@@ -73,7 +73,7 @@ test("staff check figures beside the source; totals, edit rights and stale revie
     expect(checked.data.lines.every((line:{state:string;by:string})=>line.state==="confirmed" && line.by===firm.ownerId)).toBe(true);
     expect((await query(local.dbUrl,"select count(*)::int n from public.activity_log where firm_id=$1 and action='dataset.checked'",[firm.firmId]))[0].n).toBe(3);
     await query(local.dbUrl,"insert into public.requests(id,firm_id,client_id,kind,entity_type,entity_id,reason_code,status,expires_at,details) values ($4,$1,$2,'permission','permission',$4,'edit_figures','approved',now()+interval '1 hour',jsonb_build_object('by',$3::text))",[firm.firmId,client,firm.ownerId,randomUUID()]);
-    await page.goto(url);await page.getByLabel("Correct figure").fill("301.00");await page.getByLabel("Why it changed").fill("Recheck this corrected total");await page.getByRole("button",{name:"Save correction",exact:true}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
+    await page.goto(url);await page.getByRole("button",{name:"No, this is wrong"}).click();await page.getByLabel("Correct figure").fill("301.00");await page.getByLabel("Why it changed").fill("Recheck this corrected total");await page.getByRole("button",{name:"Save correction",exact:true}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
     const [reset]=await query(local.dbUrl,"select data from public.datasets where id=$1",[id]);
     expect(reset.data.lines.every((line:{state:string;by?:string})=>line.state==="pending" && !line.by)).toBe(true);
     await page.getByRole("button",{name:"No, this is wrong"}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
@@ -83,7 +83,7 @@ test("staff check figures beside the source; totals, edit rights and stale revie
 });
 
 test("a portal statement becomes encrypted pending figures beside its source, with the client checked and reviewed figures preserved",async({page})=>{
-  test.setTimeout(90_000);loadEnvConfig(process.cwd());process.env.FILE_WORKER_URL=FILE_WORKER_URL;
+  test.setTimeout(180_000);loadEnvConfig(process.cwd());process.env.FILE_WORKER_URL=FILE_WORKER_URL;
   const email=`portal-${randomUUID()}@invented.test`,key=Array.from(randomBytes(16),(byte)=>"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte%32]).join("");
   const firm=await seedFirm("Portal Test Firm",email,key),crypto=serverCrypto(),client=randomUUID(),account=randomUUID();
   const drive=localDrive(TEST_DRIVE),artifacts:string[]=[];
@@ -123,6 +123,21 @@ test("a portal statement becomes encrypted pending figures beside its source, wi
     expect(own.data.lines).toHaveLength(6);expect(own.data.lines[0].source).toMatchObject({document:informational,path:"/b2b/0/inv/0/val",reader:"gstr2a-v2.3",page:1});
     expect((await query(local.dbUrl,"select data from public.datasets where id=$1",[draft.id]))[0].data.lines).toHaveLength(16);
     await page.goto(`/app/clients/${client}?tab=extraction`);await expect(page.getByText("never used for GSTR-3B")).toBeVisible();
+    // Check on the form, by keyboard: Y says yes and moves on, N opens the correction, and the
+    // return is prepared only once every figure is checked.
+    await query(local.dbUrl,"insert into public.requests(id,firm_id,client_id,kind,entity_type,entity_id,reason_code,status,expires_at,details) values ($4,$1,$2,'permission','permission',$4,'edit_figures','approved',now()+interval '1 hour',jsonb_build_object('by',$3::text))",[firm.firmId,client,firm.ownerId,randomUUID()]);
+    const confirmed=async()=>(await query(local.dbUrl,"select count(*)::int n from public.datasets d,jsonb_array_elements(d.data->'lines') l where d.id=$1 and l->>'state'='confirmed'",[draft.id]))[0].n;
+    await page.goto(`/app/clients/${client}?tab=extraction&draft=${draft.id}`);
+    const form=page.getByRole("region",{name:"Check the figures"}),chosen=form.getByRole("button",{pressed:true});
+    await expect(chosen).toHaveAccessibleName(/^4\(A\)\(5\) All other ITC, Central Tax: 20\. To check\./);
+    await page.keyboard.press("y");await expect.poll(confirmed).toBe(2);
+    await expect(chosen).toHaveAccessibleName(/^4\(A\)\(5\) All other ITC, State\/UT Tax: 20\. To check\./);await expect(chosen).toBeFocused();
+    await page.keyboard.press("n");await expect(page.getByLabel("Correct figure")).toBeFocused();
+    await page.getByLabel("Correct figure").fill("21");await page.getByLabel("Why it changed").fill("Invented correction on the form");await page.keyboard.press("Enter");
+    await expect(chosen).toHaveAccessibleName(/State\/UT Tax: 21\. Corrected, check again\./);expect(await confirmed()).toBe(0);
+    await expect(page.getByRole("link",{name:"Prepare the return"})).toHaveCount(0);
+    for(let done=1;done<=16;done++) {const before=await chosen.getAttribute("aria-label");await page.keyboard.press("y");await expect.poll(confirmed).toBe(done);await expect(chosen).not.toHaveAttribute("aria-label",before!);}
+    await expect(page.getByRole("link",{name:"Prepare the return"})).toBeVisible();
   } finally {for(const id of artifacts) await drive.trash(id);await firm.remove();}
 });
 

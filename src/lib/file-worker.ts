@@ -7,8 +7,13 @@ export const viewLimits = { bytes: intakeLimits.bytes, pages: 30, rows: 1000, co
 // text a file, a picture up to 25 megapixels by its header, a page drawn at 300 dots an
 // inch within that, a minute a file, one file at a time.
 export const ocrLimits = { pages: 20, pixels: 25_000_000, seconds: 60 };
-export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean };
-export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox" | "onedrive"; token: string; purpose?: "sheet" | "portal" | "edited" | "copy"; sheet?: number; form?:{template:Template;period:string;gstin?:string;pan?:string;official?:string}; password?: string };
+// A figure's spot on a page, as parts of the page's width and height, so the viewer can mark it.
+export type ViewMark = { id: string; page: number; x: number; y: number; width: number; height: number };
+export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean; marks?: ViewMark[] };
+// Figures to find on their pages: a JSON figure by its path, a text file's line, a sheet's cell
+// or a PDF's printed value. Only the spots go back to the browser, never the file's text.
+export type ViewFind = { id: string; page: number; path?: string; cell?: string; value?: string };
+export type ViewRequest = { firm: string; file: string; name: string; label: string; limit: number; expires: number; provider: "local" | "dropbox" | "onedrive"; token: string; purpose?: "sheet" | "portal" | "edited" | "copy"; sheet?: number; form?:{template:Template;period:string;gstin?:string;pan?:string;official?:string}; password?: string; find?: ViewFind[] };
 const text = new TextEncoder();
 
 export function viewerLabel(person: string, firm: string, at = new Date()) {
@@ -28,7 +33,7 @@ export async function validSignature(body:string,signature:string,secret:string)
 }
 
 export async function verifyView(body: string, signature: string, secret: string, file: string, now = Date.now() / 1000, purpose?: ViewRequest["purpose"]): Promise<ViewRequest> {
-  if (!secret || body.length > 16_384 || !/^[a-f0-9]{64}$/.test(signature)) throw new Error("Not allowed");
+  if (!secret || body.length > 65_536 || !/^[a-f0-9]{64}$/.test(signature)) throw new Error("Not allowed");
   if (!await validSignature(body,signature,secret)) throw new Error("Not allowed");
   const value = JSON.parse(body) as ViewRequest;
   if (value && value.sheet!==undefined && (!Number.isInteger(value.sheet) || value.sheet<1 || value.sheet>100 || value.purpose!==undefined && value.purpose!=="copy" || !/\.xlsx$/i.test(value.name))) throw new Error("Not allowed");
@@ -36,7 +41,9 @@ export async function verifyView(body: string, signature: string, secret: string
     typeof value.name !== "string" || value.name.length > 2000 || typeof value.label !== "string" || !value.label || value.label.length > 1000 ||
     !Number.isInteger(value.limit) || value.limit < 1 || value.limit > viewLimits.pages || !Number.isInteger(value.expires) || value.expires <= now || value.expires > now + 75 ||
     !["local", "dropbox", "onedrive"].includes(value.provider) || typeof value.token !== "string" || (value.provider !== "local" && !value.token) ||
-    value.password !== undefined && (typeof value.password !== "string" || !value.password || value.password.length > 200)) throw new Error("Not allowed");
+    value.password !== undefined && (typeof value.password !== "string" || !value.password || value.password.length > 200) ||
+    value.find !== undefined && (value.purpose !== undefined || !Array.isArray(value.find) || value.find.length > 300 || value.find.some((one) => !one || typeof one.id !== "string" || !/^[0-9a-f-]{36}$/.test(one.id) || !Number.isInteger(one.page) || one.page < 1 || one.page > viewLimits.pages ||
+      one.path !== undefined && (typeof one.path !== "string" || one.path.length > 256) || one.cell !== undefined && (typeof one.cell !== "string" || !/^[A-Z][1-9]\d{0,3}$/.test(one.cell)) || one.value !== undefined && (typeof one.value !== "string" || one.value.length > 200)))) throw new Error("Not allowed");
   return value;
 }
 

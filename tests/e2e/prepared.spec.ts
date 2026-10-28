@@ -51,7 +51,7 @@ test("prepared files keep versions and checked sources, then file with an acknow
     expect(first.prepared.status).toBe("approved");expect(first.drive_file_id).toContain("/Prepared/");expect((await page.request.get(`/app/files/${first.id}`)).status()).toBe(404);
     // Changing a figure clears approval; the final check regenerates the next version.
     const line=lines.find(line=>line.field==="b2b.r2.c11")!;
-    await page.goto(`/app/clients/${client}?tab=extraction&draft=${draft}&line=${line.id}`);await page.getByLabel("Correct figure").fill("101.00");await page.getByLabel("Why it changed").fill("Invented register correction");await page.getByRole("button",{name:"Save correction",exact:true}).click();
+    await page.goto(`/app/clients/${client}?tab=extraction&draft=${draft}&line=${line.id}&view=list`);await page.getByRole("button",{name:"No, this is wrong"}).click();await page.getByLabel("Correct figure").fill("101.00");await page.getByLabel("Why it changed").fill("Invented register correction");await page.getByRole("button",{name:"Save correction",exact:true}).click();
     await expect(page.getByRole("status")).toContainText("Your check was saved");
     expect((await query(local.dbUrl,"select prepared->>'status' status from public.documents where id=$1",[first.id]))[0].status).toBe("draft");
     await query(local.dbUrl,"update public.datasets set revision=revision+1,data=jsonb_set(data,'{lines}',(select jsonb_agg(case when l->>'id'=$2 then l else l||jsonb_build_object('state','confirmed','by',$3::text,'at',$4::text) end) from jsonb_array_elements(data->'lines') l)) where id=$1",[draft,line.id,firm.ownerId,new Date().toISOString()]);
