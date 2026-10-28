@@ -410,18 +410,32 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await reception.getByLabel("6 digit code from the app").fill(totp(deputyKey));
   await reception.getByRole("button", { name: "Continue" }).click();
   await expect(reception.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  // Signing in again while it waits, the 2 step code is asked.
+  await reception.goto("/auth/sign-out");
+  await emailStep(reception, laptopEmail);
+  await expect(reception).toHaveURL(/\/sign-in\/two-step$/);
+  await expect(reception.getByRole("button", { name: "Sign in without the code" })).toHaveCount(0);
   await owner.reload();
   const waitingPc = owner.getByRole("listitem").filter({ hasText: "Laptop on Chrome on Windows, first seen today" });
   await waitingPc.getByRole("button", { name: "Approve as office PC" }).click();
   await expect(waitingPc).toHaveCount(0);
 
-  await reception.goto("/app");
+  // Approved while its 2 step page waits: in the office, the email code is then enough.
+  await reception.reload();
+  await reception.getByRole("button", { name: "Sign in without the code" }).click();
+  await expect(reception).toHaveURL(/\/app$/);
   await reception.getByRole("button", { name: "Set up this office PC" }).click();
   await expect(reception.getByRole("button", { name: "Set up this office PC" })).toHaveCount(0);
   expect(await query(local.dbUrl, "select count(*)::int as count from public.devices where firm_id = $1 and kind = 'office' and key_public is not null", [firm.firmId])).toEqual([{ count: 1 }]);
 
   // The office connection changes overnight: the PC confirms it with its key and the owner is told.
   await reception.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.40" });
+  // Signed in with the email code alone, a connection the office does not know asks for the 2 step code.
+  await reception.goto("/app/clients");
+  await expect(reception).toHaveURL(/\/sign-in\/two-step$/);
+  await reception.getByLabel("6 digit code from the app").fill(totp(deputyKey));
+  await reception.getByRole("button", { name: "Continue" }).click();
+  await expect(reception).toHaveURL(/\/app$/);
   await reception.goto("/app/clients");
   await reception.getByRole("button", { name: "Confirm from this PC" }).click();
   await expect(reception.getByRole("button", { name: "Confirm from this PC" })).toHaveCount(0);
@@ -736,7 +750,10 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
   await person.clock.install();
   await person.goto("/app");
   await expect(person.locator(".rail-firm")).toContainText("Invite Test Firm");
-  await person.clock.fastForward("16:00");
+  // A minute before, the screen says so.
+  await person.clock.fastForward("14:30");
+  await expect(person.getByRole("alert").getByRole("button", { name: "Stay signed in" })).toBeVisible();
+  await person.clock.fastForward("01:30");
   await expect(person).toHaveURL(/\/sign-in\?reason=idle$/);
   await expect(person.getByRole("status")).toContainText("signed out after a while without activity");
   await person.goto("/app");

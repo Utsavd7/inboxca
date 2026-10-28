@@ -1,14 +1,16 @@
+import { randomUUID } from "node:crypto";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { actAs, asOwner, attempt, connect, rollback } from "./db";
 
 // The client register. Numbers arrive already encrypted by the app; here they are stand-ins.
-const FIRM = "00000000-0000-4000-8000-0000000004a0";
-const OTHER = "00000000-0000-4000-8000-0000000004b0";
-const OWNER = "00000000-0000-4000-8000-0000000004a1";
-const STAFF = "00000000-0000-4000-8000-0000000004a2";
-const OUTSIDER = "00000000-0000-4000-8000-0000000004b1";
-const CLIENT = "00000000-0000-4000-8000-0000000004c1";
+// New ids each run, so nothing left in the shared database by an earlier run collides.
+const FIRM = randomUUID();
+const OTHER = randomUUID();
+const OWNER = randomUUID();
+const STAFF = randomUUID();
+const OUTSIDER = randomUUID();
+const CLIENT = randomUUID();
 const pan = (index: string) => [{ kind: "pan", number_enc: "sealed", number_bidx: index, state_code: null }];
 
 let db: Client;
@@ -22,7 +24,7 @@ afterAll(async () => {
 async function seed() {
   await asOwner(db);
   for (const id of [OWNER, STAFF, OUTSIDER])
-    await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `${id.slice(-2)}@clients.test`]);
+    await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `${id}@clients.test`]);
   await db.query(
     "insert into public.firms (id, name, state_code, status) values ($1, 'Client Firm', '27', 'active'), ($2, 'Other', '24', 'active')",
     [FIRM, OTHER],
@@ -62,7 +64,7 @@ describe("the client register", () => {
       await seed();
       await actAs(db, OWNER);
       await add(FIRM, CLIENT, pan("i1"));
-      expect(await add(OTHER, "00000000-0000-4000-8000-0000000004c2", pan("i2"))).toBe(false);
+      expect(await add(OTHER, randomUUID(), pan("i2"))).toBe(false);
       await actAs(db, OUTSIDER);
       expect((await db.query("select 1 from public.clients")).rowCount).toBe(0);
       expect((await db.query("select 1 from public.client_registrations")).rowCount).toBe(0);
@@ -75,7 +77,7 @@ describe("the client register", () => {
       await add(FIRM, CLIENT, pan("same"));
       const again = await attempt(db, "select public.add_clients($1, $2)", [
         FIRM,
-        JSON.stringify([{ id: "00000000-0000-4000-8000-0000000004c3", name: "Copy", kind: "individual", registrations: pan("same") }]),
+        JSON.stringify([{ id: randomUUID(), name: "Copy", kind: "individual", registrations: pan("same") }]),
       ]);
       expect(again).toMatchObject({ ok: false });
     }));
@@ -133,7 +135,7 @@ describe("the client register", () => {
       await seed();
       await actAs(db, OWNER);
       await add(FIRM, CLIENT, pan("i1"));
-      await add(FIRM, "00000000-0000-4000-8000-0000000004c4", pan("i4"));
+      await add(FIRM, randomUUID(), pan("i4"));
       const seen = async (person: string) => {
         await actAs(db, person);
         return [(await db.query("select 1 from public.clients")).rowCount, (await db.query("select 1 from public.client_registrations")).rowCount];
@@ -156,7 +158,7 @@ describe("the client register", () => {
   it("in restricted mode shows a client assigned to a team to everyone in that team", () =>
     rollback(db, async () => {
       await seed();
-      const TEAM = "00000000-0000-4000-8000-0000000004d0";
+      const TEAM = randomUUID();
       await db.query("insert into public.groups (id, firm_id, kind, name) values ($1, $2, 'team', 'GST team')", [TEAM, FIRM]);
       await db.query("update public.firms set settings = '{\"client_visibility\": \"restricted\"}' where id = $1", [FIRM]);
       await actAs(db, OWNER);
@@ -209,20 +211,20 @@ describe("the client register", () => {
   it("links one contact to several clients, refuses a second contact with the same email, and follows client visibility", () =>
     rollback(db, async () => {
       await seed();
-      const OTHER_CLIENT = "00000000-0000-4000-8000-0000000004c5";
-      const CONTACT = "00000000-0000-4000-8000-0000000004e1";
+      const OTHER_CLIENT = randomUUID();
+      const CONTACT = randomUUID();
       await actAs(db, OWNER);
       await add(FIRM, CLIENT, pan("i1"));
       await add(FIRM, OTHER_CLIENT, pan("i5"));
       const contact = (id: string) =>
         attempt(db, "insert into public.contacts (id, firm_id, name_enc, email_enc, email_bidx) values ($1, $2, 'n', 'e', 'same')", [id, FIRM]);
       expect((await contact(CONTACT)).ok).toBe(true);
-      expect((await contact("00000000-0000-4000-8000-0000000004e2")).ok).toBe(false);
+      expect((await contact(randomUUID())).ok).toBe(false);
       for (const client of [CLIENT, OTHER_CLIENT])
         await db.query("insert into public.contact_clients (firm_id, contact_id, client_id, can_receive_documents) values ($1, $2, $3, true)", [FIRM, CONTACT, client]);
 
       await actAs(db, STAFF);
-      expect((await contact("00000000-0000-4000-8000-0000000004e3")).ok).toBe(false);
+      expect((await contact(randomUUID())).ok).toBe(false);
       expect((await db.query("select 1 from public.contact_clients")).rowCount).toBe(2);
       await actAs(db, OWNER);
       await db.query("update public.firms set settings = '{\"client_visibility\": \"restricted\"}' where id = $1", [FIRM]);

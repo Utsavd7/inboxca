@@ -1,6 +1,7 @@
 import Form from "next/form";
 import Link from "next/link";
-import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { cookies, headers } from "next/headers";
 import { reviewDevice, setOfficeOnly } from "@/app/(app)/actions";
 import { addDays, todayInIndia, dueLabel } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
@@ -27,6 +28,14 @@ const refusedNotes: Record<string, string> = {
 };
 // What a refusal of the day was about (office_refused's reason); anything else is the connection.
 const refusedWhere: Record<string, string> = { hours: "outside office hours", pc: "on a computer you have not approved" };
+// Today's notes of who was kept out, dismissed on Today until a new one comes: when, in a cookie,
+// as the bell's (layout.tsx).
+const REFUSALS_SEEN = "refusals_seen";
+async function dismissRefusals() {
+  "use server";
+  (await cookies()).set(REFUSALS_SEEN, new Date().toISOString(), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/app", maxAge: 86_400 });
+  revalidatePath("/app");
+}
 
 export async function OfficePanel({ compact = false, error = "", inPreset = false, branch = "" }: { compact?: boolean; error?: string; inPreset?: boolean; branch?: string }) {
   const { supabase, userId, membership } = await currentMember();
@@ -59,7 +68,14 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const first = new Map(activity?.filter((entry) => entry.action === "device.first_seen").map((entry) => [entry.entity_id, entry]));
   const waiting = officePcs.filter((pc) => pc.status === "waiting");
   const approved = officePcs.filter((pc) => pc.status === "approved" && (pc.kind !== "personal" || (pc.ends_on ?? "") >= today));
-  const refusals = (activity ?? []).filter((entry) => entry.action === "office.refused" && Date.parse(entry.at) >= Date.parse(`${today}T00:00:00+05:30`));
+  const seen = compact ? Date.parse((await cookies()).get(REFUSALS_SEEN)?.value ?? "") || 0 : 0;
+  const refusals = (activity ?? []).filter((entry) => entry.action === "office.refused" && Date.parse(entry.at) >= Date.parse(`${today}T00:00:00+05:30`) && Date.parse(entry.at) > seen);
+  // One line for each reason, naming each person once.
+  const refusedBy = new Map<string, Set<string>>();
+  for (const entry of refusals) {
+    const where = refusedWhere[(entry.details as { reason?: string } | null)?.reason ?? ""] ?? "from outside the office";
+    refusedBy.set(where, (refusedBy.get(where) ?? new Set()).add(personName(emails.get(entry.actor_id ?? ""))));
+  }
   const here = onOfficeLine(requestAddress(await headers()), office);
   // Self-adjusting (5.8): after 3 office confirmations in 14 days (the admin console's numbers),
   // or with no PC that stays in the office, the owner is told once how to get a fixed connection.
@@ -117,7 +133,10 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
           </form>
         </div>;
       })}
-      {refusals.map((entry) => <p className="alert" key={entry.actor_id}>{personName(emails.get(entry.actor_id ?? ""))} tried to use InboxCA {refusedWhere[(entry.details as { reason?: string } | null)?.reason ?? ""] ?? "from outside the office"} today.</p>)}
+      {!!refusedBy.size && <div className="alert office-refused">
+        <span className="grow">{[...refusedBy].map(([where, names]) => `${new Intl.ListFormat("en-GB").format(names)} tried to use InboxCA ${where} today.`).join(" ")}</span>
+        {compact && <form action={dismissRefusals}><Pending className="b b-ghost b-small">Dismiss</Pending></form>}
+      </div>}
       {compact && !owner && !!waiting.length && <p>{waiting.length === 1 ? "1 PC is" : `${waiting.length} PCs are`} waiting for approval. <Link href="/app/settings#office">Approve PCs</Link></p>}
       {!compact && <>
         {anyOn && !!waiting.length && <div className="device-list">

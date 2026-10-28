@@ -12,13 +12,26 @@ export const presets = {
 };
 export type Preset = keyof typeof presets;
 
-// The preset a firm's rules match now, if any.
-export function presetOf(settings: Record<string, unknown>) {
+// The firm's rules now, in the presets' terms.
+function rulesOf(settings: Record<string, unknown>) {
   const office = (settings.office ?? {}) as Office;
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; india_only?: boolean };
+  return { office: !!office.on, away: office.away ?? true, anywhere: !!office.anywhere, hours_only: !!access.hours_only, idle_minutes: Number(access.idle_minutes) || 0, india_only: !!access.india_only };
+}
+
+// The preset a firm's rules match now, if any.
+export function presetOf(settings: Record<string, unknown>) {
+  const rules = rulesOf(settings);
   return (Object.keys(presets) as Preset[]).find((key) => {
     const preset = presets[key];
-    return !!office.on === preset.office && (!preset.office || (office.away ?? true) === preset.away && !!office.anywhere === preset.anywhere)
-      && !!access.hours_only === preset.hours_only && (Number(access.idle_minutes) || 0) === preset.idle_minutes && !!access.india_only === preset.india_only;
+    return rules.office === preset.office && (!preset.office || rules.away === preset.away && rules.anywhere === preset.anywhere)
+      && rules.hours_only === preset.hours_only && rules.idle_minutes === preset.idle_minutes && rules.india_only === preset.india_only;
   });
+}
+
+// For rules that match none: the preset they differ from least, the first such in the list.
+export function closestPreset(settings: Record<string, unknown>) {
+  const rules = rulesOf(settings);
+  const same = (key: Preset) => (Object.keys(rules) as (keyof typeof rules)[]).filter((rule) => presets[key][rule] === rules[rule]).length;
+  return (Object.keys(presets) as Preset[]).reduce((best, key) => (same(key) > same(best) ? key : best));
 }

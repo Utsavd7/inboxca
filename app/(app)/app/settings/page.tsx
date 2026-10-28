@@ -7,7 +7,7 @@ import { Passkey } from "@/app/(admin)/admin/passkey";
 import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveAnswers, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding, removeException, removePasskey } from "@/app/(app)/actions";
 import { roleLabel, roleNames } from "@/src/lib/roles";
 import { firmAdmin, HOURS_KEYS, memberHours, officeApprover, type Office } from "@/src/lib/office";
-import { presetOf, presets } from "@/src/lib/presets";
+import { closestPreset, presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
 import { AutoSelect } from "../auto-select";
 import { AccessCheck } from "./access-check";
@@ -229,6 +229,7 @@ export default async function Settings({
   const records = (settings.records ?? {}) as RecordsSettings;
   const namesOf=(ids?:string[])=>ids?.map(id=>scopeClients?.find(client=>client.id===id)?.name ?? "Client no longer available").join("\n") ?? "";
   const preset = presetOf(settings);
+  const closest = closestPreset(settings);
   const others = people?.filter((person) => person.role !== "owner" && person.status === "active") ?? [];
   const exceptions = exceptionsOf(settings, (standing ?? []).filter((member) => people?.some((person) => person.user_id === member.user_id && person.status === "active")));
   const whoIs = (one: { role?: string; person?: string }) => one.role ? `${one.role in roleNames ? roleLabel(one.role) : one.role} role` : people?.find((person) => person.user_id === one.person)?.email ?? "Someone";
@@ -440,6 +441,13 @@ export default async function Settings({
             <form id="preset-form" action={choosePreset} className="set-stack">
               <fieldset className="set-choices">
                 <legend className="sr-only">How your team works</legend>
+                {/* Rules changed one by one since: shown as their own choice, with the way back. */}
+                {!preset && (
+                  <div className="set-custom">
+                    <span><strong>Custom rules</strong> <span className="hint">Your own mix of the rules below. Choose one of these to start again from it.</span></span>
+                    <Pending busy="Saving" className="b b-secondary b-small" type="submit" name="preset" value={closest} formNoValidate>Back to {presets[closest].name}</Pending>
+                  </div>
+                )}
                 {Object.entries(presets).map(([key, { name, line }]) => (
                   <label key={key}>
                     <input type="radio" name="preset" value={key} required defaultChecked={preset === key} aria-label={`${name}: ${line}`} />
@@ -453,7 +461,6 @@ export default async function Settings({
               </fieldset>}
               <div className="set-foot">
                 <Pending busy="Saving" className="b b-primary" type="submit">Use this choice</Pending>
-                {!preset && <p className="hint">Your rules no longer match one of these choices.</p>}
               </div>
             </form>
             <OfficePanel error={error} inPreset branch={branch} />
@@ -487,7 +494,7 @@ export default async function Settings({
               <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save signing in limits</Pending></div>
             </form>
           </Card>
-          <Card id="tester" title="Check someone's access" line="Can a person use InboxCA now, from here, on this PC? InboxCA answers with the same checks it makes on every page.">
+          <Card id="tester" title="Check someone's access" line="Where and when a person can use InboxCA under your rules, and whether they can now, from here, on this PC. InboxCA answers with the same checks it makes on every page.">
             <AccessCheck person={check} />
           </Card>
           <Card id="notices" title="Notices on this computer" line="Show a notice on this computer when someone needs your approval. Off until you turn it on here.">

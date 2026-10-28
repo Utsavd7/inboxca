@@ -67,6 +67,20 @@
 .set-choices label:has(:checked) { background: var(--accent-soft); }
 .set-choices input { margin-top: 4px; }
 .set-choices strong { display: block; font-weight: 600; }
+/* Rules that match no preset: their own row on top, marked as the current one, with the way
+   back to the nearest preset. It gives up its mark once a preset below is picked. */
+.set-custom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px 8px 37px; border-bottom: 1px solid var(--line); background: var(--accent-soft); transition: background var(--fast) var(--out); }
+.set-custom > span { flex: 1 1 260px; }
+.set-choices:has(input:checked) .set-custom { background: none; }
+
+/* The access tester's answer: where and when, then right now from here. */
+.set-access { display: grid; gap: 8px; margin-top: 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; }
+.set-access > p { margin: 0; }
+.set-access ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.set-access li { display: flex; align-items: flex-start; gap: 8px; }
+.set-access li svg { flex: none; margin-top: 3px; color: var(--accent); }
+.set-access li.no { color: var(--ink-2); }
+.set-access li.no svg { color: var(--ink-3); }
 
 /* Office hours: one row a day. */
 .set-hours { border-collapse: collapse; }

@@ -184,8 +184,10 @@ test("the owner checks whether someone can use InboxCA now, from here, on this P
   await tester.getByRole("button", { name: "Check" }).click();
   await expect(owner).toHaveURL(new RegExp(`check=${staffId}`));
   // The owner's own browser is not one of the firm's approved devices.
-  await expect(tester.getByRole("status")).toHaveText("No. Branch cannot use InboxCA now, from here, on this PC. This PC is not approved for your firm yet.");
+  // Under Remote friendly: anywhere in India, on approved computers only.
+  await expect(tester.getByRole("list", { name: "Where and when Branch can use InboxCA" })).toContainText("only on computers you approved");
+  await expect(tester.getByRole("status")).toHaveText("Right now, from here, on this PC: no. This PC is not approved for your firm yet.");
   await tester.getByLabel("Person").selectOption({ label: ownerEmail });
   await tester.getByRole("button", { name: "Check" }).click();
-  await expect(tester.getByRole("status")).toHaveText("Yes. Branch can use InboxCA now, from here, on this PC.");
+  await expect(tester.getByRole("status")).toHaveText("Right now, from here, on this PC: yes.");
 });

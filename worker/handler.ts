@@ -111,8 +111,13 @@ export async function handle(request: Request): Promise<Response> {
     if(sheet) {
       if(!/\.(xlsx?|ods|csv)$/i.test(view.name)) throw new Error("Not a sheet");
       // The official GSTR-1 workbook opens with its help sheet: read every sheet whose headings
-      // are a register's and that has rows under them, else the first sheet.
-      const bytes=Buffer.from(data.buffer,data.byteOffset,data.byteLength),read=(sheet?:number)=>readSheet(bytes,view.name,{rows:viewLimits.rows+1,columns:viewLimits.columns,keepEmpty:true,sheet});
+      // are a register's and that has rows under them, else the first sheet. Its sheets are
+      // formatted to row 1,004, so blank rows after the last filled one do not count.
+      const bytes=Buffer.from(data.buffer,data.byteOffset,data.byteLength),read=(sheet?:number)=>{
+        const rows=readSheet(bytes,view.name,{rows:viewLimits.rows+1,columns:viewLimits.columns,keepEmpty:true,sheet});
+        while(rows.length && !rows.at(-1)!.some((cell)=>cell.trim())) rows.pop();
+        return rows;
+      };
       const found:{sheet:number;rows:string[][]}[]=[];
       if(/\.(xlsx|ods)$/i.test(view.name)) for(let sheet=1;sheet<=40;sheet++) {
         let candidate:string[][];
