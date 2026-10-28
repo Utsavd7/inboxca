@@ -22,24 +22,8 @@ export function TwoStepForm({ factorId, codes = false }: { factorId?: string; co
     );
   const id = factorId ?? (setup as Exclude<Enrollment, { error: string }>).factorId;
 
-  return (
+  const fields = (
     <>
-    <form action={verify} className="auth-form" noValidate>
-      {setup && !("error" in setup) ? (
-        <>
-          <p className="auth-lead">
-            Scan this with an authenticator app, such as Google Authenticator or Microsoft
-            Authenticator. You do this once.
-          </p>
-          {/* eslint-disable-next-line @next/next/no-img-element -- a data URL, nothing to optimise */}
-          <img className="qr" src={setup.qr} alt="QR code for your authenticator app" width={176} height={176} />
-          <p className="auth-small">
-            Cannot scan? Type this key into the app: <span className="num secret">{setup.secret}</span>
-          </p>
-        </>
-      ) : (
-        <p className="auth-lead">Open your authenticator app and type the code shown for InboxCA.</p>
-      )}
       <input type="hidden" name="factorId" value={id} />
       <label htmlFor="code">6 digit code from the app</label>
       <input
@@ -61,6 +45,33 @@ export function TwoStepForm({ factorId, codes = false }: { factorId?: string; co
       <button className="btn" type="submit" disabled={verifying}>
         {verifying ? "Checking" : "Continue"}
       </button>
+    </>
+  );
+
+  return (
+    <>
+    <form action={verify} className="auth-form" noValidate>
+      {setup && !("error" in setup) ? (
+        <>
+          <p className="auth-lead">
+            Scan this with an authenticator app, such as Google Authenticator or Microsoft
+            Authenticator. You do this once.
+          </p>
+          <div className="auth-setup">
+            {/* eslint-disable-next-line @next/next/no-img-element -- a data URL, nothing to optimise */}
+            <img className="qr" src={setup.qr} alt="QR code for your authenticator app" width={152} height={152} />
+            <div className="auth-form">{fields}</div>
+          </div>
+          <p className="auth-small">
+            Cannot scan? Type this key into the app: <span className="num secret">{setup.secret}</span>
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="auth-lead">Open your authenticator app and type the code shown for InboxCA.</p>
+          {fields}
+        </>
+      )}
     </form>
     {factorId && !codes && <p className="auth-small">Lost your phone? Ask your firm&apos;s owner for help.</p>}
     {factorId && codes && (
