@@ -189,6 +189,8 @@ a.fig-from:hover { border-color: var(--accent); color: var(--accent); }
 .fc-keys span { display: inline-flex; align-items: center; gap: 3px; }
 .fs { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
 .fs .t.fs-grid { min-width: 0; }
+/* Words for screen readers in a box stay inside the table's own scrolling. */
+.fs .table-wrap { position: relative; }
 /* The client page pins table headings (clients.css); a form keeps its own in place. */
 .fs-grid th { position: static; backdrop-filter: none; }
 .fs-grid thead th { background: var(--surface-2); line-height: 1.3; white-space: normal; }
