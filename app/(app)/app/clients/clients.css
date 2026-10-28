@@ -62,11 +62,15 @@
 /* One client: a record header (avatar and name, numbers, who looks after it, what is due next,
    quick actions), the five tabs, then the tab's content, which crossfades on a tab change. */
 .client-head { position: static; padding-bottom: var(--s2); }
-/* The name shows once, in the header: when it and the actions do not fit on one line, the
-   actions move under it, on the right, rather than cut it short. */
-.client-record .topbar { flex-wrap: wrap; }
-.client-record .crumbs { flex: 1 0 auto; max-width: 100%; }
-.client-record .page-actions { margin-left: auto; }
+/* The name shows once, in the header. Where it and the actions would not share one line (a
+   laptop with the full sidebar), the actions take a line of their own under it, as beside an
+   open paper (doc-pane.css), rather than cut the name short. */
+.client-record { container-type: inline-size; }
+@container (max-width: 1100px) {
+  .client-record .topbar { flex-wrap: wrap; }
+  .client-record .page-actions { order: 3; justify-content: flex-start; width: 100%; }
+  .client-record .page-actions + .head-tools { margin-left: 0; padding-left: 0; border-left: 0; }
+}
 .client-who { display: flex; align-items: center; gap: var(--s4); }
 .client-who > div { display: grid; gap: var(--s2); min-width: 0; }
 .client-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); color: var(--ink-2); font-size: 13px; }
