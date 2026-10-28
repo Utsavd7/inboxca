@@ -228,6 +228,14 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .stage-notes:empty { display: none; }
 .stage-notes { display: grid; gap: var(--s2); padding: var(--s2) var(--s6) 0; }
 .stage-notes > * { margin: 0; }
+/* An office PC still to set up (layout.tsx): one slim line with its button and a close. Today
+   shows it as a card instead, so the strip steps aside there. */
+.pc-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); min-height: 36px; padding: 2px 2px 2px var(--s3); border: 1px solid var(--edge); border-radius: var(--r2); background: var(--accent-soft); color: var(--ink-2); font-size: 13px; }
+.pc-strip > svg { flex: none; color: var(--accent); }
+.pc-strip .grow { flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-strip .form-row { flex-wrap: nowrap; align-items: center; gap: var(--s2); margin: 0; }
+.pc-strip form { display: flex; }
+.ui:has(.today-pc) .pc-strip { display: none; }
 .stage-panel { flex: 1; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .stage-body { max-width: 1440px; margin-inline: auto; padding: 0 var(--s6) var(--s7); }
 /* The bar along the top of the stage while the next page loads (nav-progress.tsx): it creeps
@@ -338,6 +346,8 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .b-ghost:hover:not(:disabled) { background: var(--press); color: var(--ink); }
 .b-danger { border-color: var(--red-fg); background: var(--red-fg); color: var(--white); }
 .b-danger:hover:not(:disabled) { background: var(--red-fg); opacity: 0.9; }
+/* Back with nowhere to go (Today, opened afresh): dimmed, and still in its place. */
+.topbar .head-back[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
 @media (hover: hover) and (pointer: fine) {
   /* The lifted card still covers the spot it left, so a pointer on its edge does not flicker. */
   a.app-card::after { content: ""; position: absolute; inset: 0 0 -2px; }
@@ -469,6 +479,9 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .viewer-none { margin-top: var(--s5); }
 .viewer-pages.is-blank img { visibility: hidden; }
 .viewer-blank { margin-top: var(--s3); }
+/* A paper that could not be opened: its words, then Try again; a Download would fail too. */
+.viewer-failed > span { flex: 1; }
+:is(.doc-card, .page-in):has(.viewer-failed) .doc-get { display: none; }
 /* Printing is off: a printed viewer page comes out blank. */
 @media print {
   .viewer-pages, .viewer-pages img { display: none !important; }
@@ -565,8 +578,10 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
   .stage, .stage-panel, .stage-panel:has(.fill) { height: auto; overflow: visible; }
   .nav-bar { left: 0; }
   .stage-body:has(.fill) { height: auto; padding-inline: var(--s4); }
-  /* The header scrolls away on a phone, so a tall one with wrapped actions never covers the page. */
-  .topbar { position: static; flex-wrap: wrap; gap: var(--s2); }
+  /* The header scrolls away on a phone, so a tall one with wrapped actions never covers the page.
+     It stays the box its backdrop is drawn in: left static, the backdrop's reach past the page's
+     sides made the whole page wider than the screen. */
+  .topbar { position: relative; flex-wrap: wrap; gap: var(--s2); }
   .topbar::before { inset: 0 calc(var(--s4) * -1); }
   .crumbs h1 { font-size: 20px; }
   .page-actions { order: 3; justify-content: flex-start; width: 100%; }
@@ -595,8 +610,19 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .skeleton .skeleton-title { width: 240px; height: var(--control); margin-bottom: var(--s3); }
 @keyframes shimmer { to { background-position: 0 0; } }
 
-/* A note after an action (ui.tsx Toast): springs up, then leaves the way it came. */
-.toast { position: fixed; bottom: calc(var(--s5) + 28px); left: 50%; z-index: var(--z-toast); display: flex; align-items: center; gap: var(--s3); max-width: calc(100vw - 32px); min-height: 40px; padding: var(--s1) var(--s1) var(--s1) var(--s4); border-radius: var(--r2); background: var(--navy); color: var(--on-navy); font-size: 13px; box-shadow: var(--shadow-float); translate: -50% 0; }
+/* A note after an action (ui.tsx Toast): springs up, then leaves the way it came. The app's
+   notes stack at the bottom right of the page, newest at the foot, over the status line's
+   right end and clear of the page's own controls; beside an open paper, side panel or sheet,
+   and above a bulk bar, rather than over them. */
+.toasts, .toast { position: fixed; right: var(--s4); bottom: calc(var(--s3) + 28px); z-index: var(--z-toast); }
+.toasts { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s2); width: min(400px, calc(100vw - 32px)); pointer-events: none; }
+.toasts:empty { display: none; }
+.toasts .toast { position: static; pointer-events: auto; }
+.ui:has(.doc-pane:not(.is-leaving)) .toasts { right: calc(var(--doc-w) + var(--s4)); }
+.ui:has(.side-panel) .toasts { right: calc(min(440px, 100vw - var(--s4)) + var(--s4)); }
+.ui:has(.sheet) .toasts { right: calc(min(420px, 100vw - var(--s4)) + var(--s4)); }
+.ui:has(.has-bulk input.pick:checked, .clients-page input[name="client"]:checked) .toasts { bottom: calc(var(--s5) + 72px); }
+.toast { display: flex; align-items: center; gap: var(--s3); max-width: min(400px, calc(100vw - 32px)); min-height: 40px; padding: var(--s1) var(--s1) var(--s1) var(--s4); border-radius: var(--r2); background: var(--navy); color: var(--on-navy); font-size: 13px; box-shadow: var(--shadow-float); }
 .toast:has(> :only-child) { padding-right: var(--s4); }
 .toast .b { height: var(--control); padding: 0 var(--s3); border-color: transparent; background: none; color: var(--nav-icon); font-weight: 600; box-shadow: none; }
 .toast .b:hover:not(:disabled) { background: var(--on-dark); color: var(--on-navy); }

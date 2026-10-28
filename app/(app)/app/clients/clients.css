@@ -15,9 +15,12 @@
 
 /* Tables in a white card that scrolls on its own, the head kept in view on a light blur. */
 .clients-table { overflow: auto; border: 1px solid var(--edge); border-radius: var(--r3); }
-.clients-page .t { min-width: 760px; }
+/* Only the Clients list keeps its columns on one line and scrolls sideways when narrow; a
+   client's own tables (documents, the 2B match) wrap to the page. */
+.clients-page:not(.client-record) .t { min-width: 760px; }
+.clients-page:not(.client-record) .t td { white-space: nowrap; }
 .clients-page .t th { position: sticky; top: 0; z-index: 2; height: var(--row); padding: 0 var(--s3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 82%, transparent); color: var(--ink-3); font-size: 12px; font-weight: 600; backdrop-filter: blur(8px); }
-.clients-page .t td { height: 56px; padding: var(--s2) var(--s3); font-size: 14px; white-space: nowrap; }
+.clients-page .t td { height: 56px; padding: var(--s2) var(--s3); font-size: 14px; }
 .clients-page .t th:first-child, .clients-page .t td:first-child { padding-left: var(--s4); }
 .clients-page .t tbody tr { position: relative; transition: background var(--fast) var(--out); }
 .clients-page .t tbody tr:hover { background: var(--hover); }
@@ -59,12 +62,20 @@
 .clients-bulk .b-ghost:hover:not(:disabled) { background: var(--on-dark); color: var(--white); }
 .clients-bulk .bulk-ask { flex: 1 1 320px; max-width: 560px; }
 
-/* One client: a record header (big avatar, name, numbers, who looks after it, what is due next,
+/* One client: a record header (avatar and name, numbers, who looks after it, what is due next,
    quick actions), the five tabs, then the tab's content, which crossfades on a tab change. */
 .client-head { position: static; padding-bottom: var(--s2); }
+/* The name shows once, in the header. Where it and the actions would not share one line (a
+   laptop with the full sidebar), the actions take a line of their own under it, as beside an
+   open paper (doc-pane.css), rather than cut the name short. */
+.client-record { container-type: inline-size; }
+@container (max-width: 1100px) {
+  .client-record .topbar { flex-wrap: wrap; }
+  .client-record .page-actions { order: 3; justify-content: flex-start; width: 100%; }
+  .client-record .page-actions + .head-tools { margin-left: 0; padding-left: 0; border-left: 0; }
+}
 .client-who { display: flex; align-items: center; gap: var(--s4); }
 .client-who > div { display: grid; gap: var(--s2); min-width: 0; }
-.client-who .avatar.big { width: 56px; height: 56px; font-size: 20px; box-shadow: var(--shadow-1); }
 .client-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); color: var(--ink-2); font-size: 13px; }
 .client-id { display: inline-flex; align-items: center; gap: var(--s1); }
 .client-id-kind { color: var(--ink-3); font-size: 12px; font-weight: 600; }
@@ -78,11 +89,6 @@
 .client-due .badge { height: auto; min-height: 22px; white-space: normal; text-decoration: none; transition: box-shadow var(--fast) var(--out); }
 .client-due .badge:hover { box-shadow: 0 0 0 1px currentColor; }
 .client-head .page-actions .b svg { flex: none; }
-/* Copy upload link: the shared Copy button drawn as a secondary button with its words. */
-.copy-words .copy { display: inline-flex; align-items: center; gap: var(--s2); width: auto; height: var(--control); margin: 0; padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; box-shadow: var(--shadow-button); }
-.copy-words .copy::after { content: "Copy upload link"; }
-.copy-words .copy:hover { border-color: var(--line-3); background: var(--hover); }
-.copy-words .copy.is-done { color: var(--done-fg); }
 .clients-page .tabs { flex: none; gap: var(--s5); border-bottom-color: var(--line-2); }
 .clients-page .tabs a { display: inline-flex; align-items: center; height: var(--row); padding: 0; color: var(--ink-3); font-weight: 600; }
 .clients-page .tabs a[aria-current="page"] { color: var(--ink); }
@@ -177,7 +183,6 @@
 /* Each file in two short rows: its type, then its work and period side by side. */
 .side-panel .upload-file.fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2) var(--s3); }
 .upload-file > legend, .upload-file > div:first-of-type, .upload-file > .upload-name { grid-column: 1 / -1; }
-.client-name { color: var(--ink); font-size: 20px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.25; }
 /* An income tax return's cards: their lists and forms sit inside the card's padding. */
 .itr-body { padding: 0 var(--s4) var(--s4); }
 .itr-body > .form-row:first-child { margin-top: 0; }

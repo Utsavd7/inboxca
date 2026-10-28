@@ -25,7 +25,7 @@ async function readRegister(form:FormData) {
   const back=`/app/clients/${client}?tab=extraction&source=${id}`;
   const permission=membership.may("edit_figures", client) ? null : await grantFor(membership.firmId,userId,"edit_figures",client);
   if(!membership.may("edit_figures", client) && !permission) redirect(`${back}&read=permission`);
-  const {data:doc}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,work_type,status").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).eq("work_type","gst").eq("status","filed").single();
+  const {data:doc}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,work_type,status").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).eq("work_type","gst").eq("status","filed").is("prepared",null).single();
   if(!doc) redirect(`${back}&read=source`);
   let draft:string|null=null;
   try {
@@ -46,7 +46,7 @@ async function readRegister(form:FormData) {
 export async function SalesInput({clientId,source,section:asked,header:askedHeader,read}:{clientId:string;source?:string;section?:string;header?:string;read?:string}) {
   const {supabase,membership,userId}=await currentMember();
   if(!membership) return null;
-  const {data:files}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,registration_id").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("work_type","gst").eq("status","filed").neq("document_type","Purchase bills").order("received_at",{ascending:false}).limit(100);
+  const {data:files}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,registration_id").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("work_type","gst").eq("status","filed").neq("document_type","Purchase bills").is("prepared",null).order("received_at",{ascending:false}).limit(100);
   const registers=files?.filter((file)=>/\.(xlsx?|ods|csv)$/i.test(file.name)) ?? [];
   if(!registers.length) return null;
   const selected=registers.find((file)=>file.id===source);

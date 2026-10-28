@@ -184,7 +184,7 @@ export default async function Clients({
     <div className="fill clients-page">
       <PageHead
         title="Clients"
-        sub={q ? `${plural(countOf.all)} matching “${q}”.` : groupName ? `${groupName}: ${plural(countOf.all)}.` : `${plural(countOf.all)}. Click a client to see its emails, papers and returns.`}
+        sub={q ? `${plural(countOf.all)} matching “${q}”.` : groupName ? `${groupName}: ${plural(countOf.all)}.` : `${plural(countOf.all)}.`}
         actions={
           manage && (
             <>

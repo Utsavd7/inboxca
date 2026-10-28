@@ -1,4 +1,4 @@
-import { CalendarDays, ListChecks, Rocket, TriangleAlert } from "lucide-react";
+import { CalendarDays, KeyRound, ListChecks, Rocket, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -60,7 +60,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         sub={
           <p className="greet">
             <strong>
-              {greeting}, {personName(membership.email)}.
+              {greeting}, {membership.name}.
             </strong>{" "}
             {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" })}.{" "}
             <Suspense fallback={<span className="greet-wait">Looking at what needs you</span>}>
@@ -102,6 +102,15 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       <Suspense fallback={null}>
         <OfficePanel compact />
       </Suspense>
+      {pcKey === "needed" && (
+        <div className="today-line today-pc" role="region" aria-label="Set up this office PC">
+          <KeyRound size={16} aria-hidden />
+          <span className="grow">
+            <strong>Set up this office PC.</strong> One check with its PIN or fingerprint, then it confirms a new office internet connection by itself.
+          </span>
+          <PcKey mode="setup" />
+        </div>
+      )}
       <Suspense fallback={null}>
         <Attention ctx={ctx} />
       </Suspense>

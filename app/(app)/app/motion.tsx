@@ -2,7 +2,8 @@
 import { AnimatePresence, LazyMotion, MotionConfig, MotionGlobalConfig, animate, domMax, m, useIsPresent, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Children, Fragment, cloneElement, createContext, isValidElement, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
+import { Children, Fragment, cloneElement, createContext, isValidElement, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 
 // The app's motion, in a few small pieces every page can reuse (Motion, from "motion/react").
 // The shell wraps everything in <MotionRoot>, so:
@@ -87,14 +88,20 @@ export function PanelMotion({ children, labelledBy }: { children: React.ReactNod
   );
 }
 
+const noChange = () => () => {};
+export const toastStack = () => document.querySelector(".toasts");
+const noStack = () => null;
 // A toast (ui.tsx Toast): springs up from the bottom, then leaves downwards after five seconds.
+// In the app it joins the stack at the bottom right (layout.tsx .toasts), one over another,
+// clear of the page's controls; elsewhere it shows on its own in the same place.
 export function ToastMotion({ children }: { children: React.ReactNode }) {
   const [shown, setShown] = useState(true);
+  const stack = useSyncExternalStore(noChange, toastStack, noStack);
   useEffect(() => {
     const timer = setTimeout(() => setShown(false), 5000);
     return () => clearTimeout(timer);
   }, []);
-  return (
+  const toast = (
     <AnimatePresence>
       {shown && (
         <m.div className="toast" role="status" initial={{ opacity: 0, y: 24, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, transition: { duration: 0.18 } }} transition={springSoft}>
@@ -103,6 +110,7 @@ export function ToastMotion({ children }: { children: React.ReactNode }) {
       )}
     </AnimatePresence>
   );
+  return stack ? createPortal(toast, stack) : toast;
 }
 
 // Rows fade up on the page's first showing with CSS (.stagger: 25 ms apart for the first

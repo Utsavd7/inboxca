@@ -102,9 +102,14 @@ function readXlsx(data: Buffer, limit?: { rows: number; columns: number; keepEmp
   if (!sheet) throw new Error("No sheet in the file");
   const result:string[][]=[];
   for(const [,attributes,cells] of sheet().toString().matchAll(/<row([^>]*)>([\s\S]*?)<\/row>/g)) {
-    const at=limit?.keepEmpty ? Number(/r="(\d+)"/.exec(attributes)?.[1] ?? result.length+1)-1 : result.length;
+    let at=limit?.keepEmpty ? Number(/r="(\d+)"/.exec(attributes)?.[1] ?? result.length+1)-1 : result.length;
     if(!Number.isSafeInteger(at) || at<0) throw new Error("Invalid Excel row");
-    if(limit && at>=limit.rows) break;
+    // With empty rows kept, a formatted but blank row past the limit is no more of the sheet
+    // (the official GSTR-1 workbook runs to row 1,004); a filled one takes the last place
+    // read, so the caller still sees the sheet runs past its limit.
+    const over=!!limit && at>=limit.rows;
+    if(over && !limit!.keepEmpty) break;
+    if(over && !/<v>|<is>/.test(cells)) continue;
     const row: string[] = [];
     for (const [, attributes, body = ""] of cells.matchAll(/<c([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const column = [.../r="([A-Z]+)/.exec(attributes)?.[1] ?? ""].reduce((sum, letter) => sum * 26 + letter.charCodeAt(0) - 64, 0) - 1;
@@ -114,8 +119,11 @@ function readXlsx(data: Buffer, limit?: { rows: number; columns: number; keepEmp
       if (!Number.isSafeInteger(at) || at >= 16384) throw new Error("Invalid Excel column");
       row[Math.min(at, limit ? limit.columns : at)] = type === "s" ? shared[Number(value)] : type === "inlineStr" ? texts(body) : unescape(value);
     }
+    if(over && !row.some((cell)=>cell?.trim())) continue;
+    if(over) at=limit!.rows-1;
     while(result.length<at) result.push([]);
     result[at]=Array.from(row, (cell) => cell ?? "");
+    if(over) break;
   }
   return result;
 }

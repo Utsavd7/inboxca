@@ -619,12 +619,13 @@ test("a client's row offers Write and Ask for papers; its header copies numbers 
   await row.getByRole("link", { name: "Ask for papers" }).click();
   await expect(owner).toHaveURL(new RegExp(`/app/clients/${id}\\?tab=documents&ask=1$`));
 
-  // With no firm email the link is shown once; the header keeps a Copy for it while it is open.
+  // With no firm email the link is shown once; the header's More keeps a Copy for it while it is open.
   await owner.getByLabel("Anything else, by name").fill("Loan statement");
   await owner.getByRole("dialog").getByRole("button", { name: "Ask for papers" }).click();
   const link = (await owner.locator(".link-once").textContent())!;
   const head = owner.locator(".page-head");
-  await head.getByRole("button", { name: "Copy upload link" }).click();
+  await head.getByRole("button", { name: "More" }).click();
+  await owner.getByRole("menuitem", { name: "Copy upload link" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Upload link copied" })).toBeVisible();
   expect(await copied()).toBe(link);
   await head.getByRole("button", { name: "Copy GSTIN" }).click();

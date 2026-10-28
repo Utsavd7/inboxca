@@ -27,7 +27,7 @@ import { onedriveReady, onedriveSignIn } from "@/src/lib/onedrive";
 import { askAway, firmAdmin, memberHours, officeApprover, officePc, requestLine, type Office } from "@/src/lib/office";
 import { computersOf, thisComputer } from "@/src/lib/owner-device";
 import { presets, type Preset } from "@/src/lib/presets";
-import { CHALLENGE_COOKIE, checkAdminKey, checkKeyUse, checkNewKey, newChallenge, totp } from "@/src/lib/pc-key";
+import { CHALLENGE_COOKIE, PC_LATER_COOKIE, checkAdminKey, checkKeyUse, checkNewKey, newChallenge, totp } from "@/src/lib/pc-key";
 import { PASSKEY_FACTOR, sealFactor } from "@/src/lib/sign-in";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { recognisePortalPdf } from "@/src/lib/tax-papers";
@@ -2221,6 +2221,12 @@ export async function savePushSubscription(json: string) {
   const parsed = z.object({ endpoint: z.url({ protocol: process.env.NODE_ENV === "production" ? /^https$/ : /^https?$/ }).max(1000), keys: z.object({ p256dh: z.base64url().max(200), auth: z.base64url().max(100) }) }).safeParse((() => { try { return JSON.parse(json); } catch { return null; } })());
   if (!membership || !parsed.success) return;
   await supabaseAdmin().from("push_subscriptions").upsert({ user_id: userId, endpoint: parsed.data.endpoint, keys: parsed.data.keys }, { onConflict: "endpoint" });
+  revalidatePath("/app", "layout");
+}
+
+// The office PC strip's close: hidden until the browser closes; Today keeps its card.
+export async function pcKeyLater() {
+  (await cookies()).set(PC_LATER_COOKIE, "1", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/" });
   revalidatePath("/app", "layout");
 }
 

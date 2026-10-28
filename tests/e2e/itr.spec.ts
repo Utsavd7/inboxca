@@ -117,8 +117,14 @@ test("Form 16 figures, client details and entered details become an approved ITR
     // A correction clears the draft's checks; the other figures are checked again here directly.
     await query(local.dbUrl,"update public.datasets set revision=revision+1,data=jsonb_set(data,'{lines}',(select jsonb_agg(case when l->>'id'=$2 then l else l||jsonb_build_object('state','confirmed','by',$3::text,'at',$4::text) end) from jsonb_array_elements(data->'lines') l)) where id=$1",[own.id,line.id,firm.ownerId,new Date().toISOString()]);
     await page.reload();await page.getByRole("button",{name:"Yes, this is right"}).click();
-    await expect.poll(async()=>(await query(local.dbUrl,checked,[firm.firmId])).length,{timeout:30_000}).toBe(2);
-    [prepared]=await query(local.dbUrl,checked,[firm.firmId]);
+    // A fill that a job sweep ran while figures were still unchecked leaves drafts of its own, and
+    // the correction clears their fill mark: once the firm's jobs have run, the latest version is
+    // the file the last check made.
+    await expect.poll(async()=>(await query(local.dbUrl,"select bool_and(l->>'state'='confirmed') done from public.datasets,jsonb_array_elements(data->'lines') l where id=$1",[own.id]))[0].done).toBe(true);
+    await runJobs(page.request,firm.firmId);
+    const latest="select * from public.documents where firm_id=$1 and prepared->>'form'='ITR1' order by (prepared->>'version')::int desc limit 1",approved=prepared.prepared.version;
+    await expect.poll(async()=>(await query(local.dbUrl,latest,[firm.firmId]))[0].prepared.status,{timeout:30_000}).toBe("approved");
+    [prepared]=await query(local.dbUrl,latest,[firm.firmId]);expect(prepared.prepared.version).toBeGreaterThan(approved);
     await page.goto(`/app/clients/${client}?tab=outputs`);row=page.locator("li").filter({has:page.getByRole("link",{name:prepared.name,exact:true})});
     await row.locator("summary",{hasText:"Mark filed"}).click();await row.getByLabel("Acknowledgement number, if known").fill("INVENTED-ITR-ACK");await row.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select prepared->>'status' status from public.documents where id=$1",[prepared.id]))[0].status).toBe("filed");

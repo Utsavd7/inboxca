@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
+import { KeyRound, X } from "lucide-react";
+import { pcKeyLater } from "@/app/(app)/actions";
+import { PC_LATER_COOKIE } from "@/src/lib/pc-key";
 import { todayInIndia } from "@/src/lib/calendar";
 import { longDate } from "@/src/lib/hours";
 import { currentMember, myQuestions } from "@/src/lib/member";
@@ -86,7 +89,7 @@ export default async function AppLayout({ children, doc }: { children: React.Rea
   );
   return (
     <ShellFrame
-      me={{ member: !!membership, name: personName(email), email, role: role && roleLabel(role), firm: membership?.firmName ?? "", firmId: membership?.firmId ?? "", firms: membership?.firms ?? [], owner, people: ["owner", "partner", "manager"].includes(role) }}
+      me={{ member: !!membership, name: membership?.name ?? personName(email), email, role: role && roleLabel(role), firm: membership?.firmName ?? "", firmId: membership?.firmId ?? "", firms: membership?.firms ?? [], owner, people: ["owner", "partner", "manager"].includes(role) }}
       theme={theme}
       rail={jar.get("side")?.value === "rail"}
       newsSeen={jar.get("news_seen")?.value ?? ""}
@@ -98,10 +101,16 @@ export default async function AppLayout({ children, doc }: { children: React.Rea
           <NavProgress />
         </Suspense>
         <div className="stage-notes">
-          {membership && pcKey === "needed" && (
-            <div className="notice">
-              <span className="grow">The owner marked this PC as an office PC. Set it up once: this PC asks for its PIN or fingerprint. Then it can confirm a change in the office internet connection without the owner.</span>
+          {/* One slim line until the office PC is set up, or hidden until the browser closes;
+              Today shows it as a card instead (today.css). */}
+          {membership && pcKey === "needed" && !jar.has(PC_LATER_COOKIE) && (
+            <div className="pc-strip" role="region" aria-label="Set up this office PC">
+              <KeyRound size={14} aria-hidden />
+              <span className="grow">Set up this office PC once, so it can confirm a new office internet connection by itself.</span>
               <PcKey mode="setup" />
+              <form action={pcKeyLater}>
+                <button className="b b-ghost b-small b-icon" type="submit" aria-label="Hide until the browser is closed" title="Hide until the browser is closed"><X size={14} aria-hidden /></button>
+              </form>
             </div>
           )}
           {membership?.billing && membership.billing !== "start" ? (
@@ -128,6 +137,8 @@ export default async function AppLayout({ children, doc }: { children: React.Rea
         )}
       </main>
       {doc}
+      {/* Toasts (motion.tsx) and the idle warning stack here, at the bottom right. */}
+      <div className="toasts" />
       {!!membership?.idleMinutes && <IdleWatch minutes={membership.idleMinutes} />}
     </ShellFrame>
   );

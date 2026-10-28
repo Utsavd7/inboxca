@@ -72,7 +72,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <PageHead title="Add old files" sub="You do not have to do this. InboxCA handles new papers from the first day. Here you can move old files that are already in your drive into each client's folder." />
+      <PageHead title="Add old files" sub="Optional: move old drive files into each client's folder." />
       {typeof params.error === "string" && errors[params.error] && (
         <p className="alert" role="alert">
           {errors[params.error]}

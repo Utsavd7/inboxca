@@ -3,7 +3,7 @@ import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
 import { PurchaseMatch } from "./purchase-match";
 import { DatasetReview } from "./dataset-review";
-import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
+import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, Copy, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -40,7 +40,7 @@ import { fillable, fills } from "@/src/lib/return-work";
 import { Presence } from "../../motion";
 import { Pending } from "../../pending";
 import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Kind } from "../../ui";
-import { CopyButton } from "../../ui-client";
+import { CopyButton, MoreMenu } from "../../ui-client";
 import { CameFrom } from "../../documents/came-from";
 import { UploadForm } from "./upload-form";
 import { remindClient } from "@/app/(app)/actions";
@@ -388,22 +388,27 @@ export default async function Client({ params, searchParams }: { params: Promise
     </span>
   );
   const lateTotal = lateCount ?? 0;
+  const canWrite = (!!email || contacts.length > 0) && !client.archived_at;
   const undated = openNotices.filter((notice) => !(notice.details as unknown as NoticeDetails).action_date);
   const attention = Math.min(lateTotal, 3) + (lateTotal > 3 ? 1 : 0) + asking.length + undated.length;
 
   return (
     <div className="fill clients-page client-record">
-      {/* The header: Clients / the client's name, and the quick actions. Under it the record:
-          big avatar, name, numbers, who looks after it and what is due next. */}
+      {/* The header: Clients / the client's avatar and name, and the quick actions (one blue
+          button, the rarer ones under More). Under it the record: numbers, who looks after it
+          and what is due next. */}
       <PageHead
         crumbs={[["/app/clients", "Clients"]]}
-        title={client.name}
+        title={
+          <span className="who">
+            <Avatar name={client.name} square />
+            {client.name}
+          </span>
+        }
         sub={
         <div className="client-head">
           <div className="client-who">
-            <Avatar name={client.name} square big />
             <div>
-              <p className="client-name">{client.name}</p>
               <div className="client-meta">
                 <Badge plain>{clientKinds[client.kind as ClientKind]}</Badge>
                 {client.archived_at && <Badge>Archived</Badge>}
@@ -455,36 +460,31 @@ export default async function Client({ params, searchParams }: { params: Promise
         }
         actions={
         <>
-          {!viewOnly && (
-            <Link className="b b-secondary" href={`${here}${here.includes("?") ? "&" : "?"}ask=1`} scroll={false}>
-              <FilePlus2 size={15} aria-hidden />
-              Ask for papers
-            </Link>
-          )}
           {canUpload && (
             <Link className="b b-secondary" href={`${base}?tab=documents&upload=1`} scroll={false}>
               <FileUp size={15} aria-hidden />
               Upload papers
             </Link>
           )}
-          {/* The shared Copy button, given its words by clients.css. */}
-          {uploadLink && (
-            <span className="copy-words">
-              <CopyButton text={uploadLink} label="Upload link" />
-            </span>
-          )}
+          {/* Blue when the client has no email to write to, so the header keeps one blue button. */}
           {!viewOnly && (
-            <Link className="b b-secondary" href={`${base}?tab=notice`} scroll={false}>
-              <Scale size={15} aria-hidden />
-              Add a notice
+            <Link className={`b ${canWrite || client.archived_at ? "b-secondary" : "b-primary"}`} href={`${here}${here.includes("?") ? "&" : "?"}ask=1`} scroll={false}>
+              <FilePlus2 size={15} aria-hidden />
+              Ask for papers
             </Link>
           )}
-          {(email || contacts.length > 0) && !client.archived_at && (
+          {canWrite && (
             <Link className="b b-primary" href={`/app/inbox?compose=${client.id}`}>
               <Mail size={15} aria-hidden />
               Write to client
             </Link>
           )}
+          <MoreMenu
+            items={[
+              ...(viewOnly ? [] : [{ label: "Add a notice", icon: <Scale size={16} aria-hidden />, href: `${base}?tab=notice` }]),
+              ...(uploadLink ? [{ label: "Copy upload link", icon: <Copy size={16} aria-hidden />, copy: { text: uploadLink, what: "Upload link" } }] : []),
+            ]}
+          />
         </>
         }
       />
@@ -646,7 +646,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               {!canUpload && <span className="page-actions">{askButton("upload", "Ask to upload")}</span>}
             </div>
             <DroppedNotice value={dropped} />
-            {askedRight && <Toast>Permission asked. Your manager or the owner answers in their Inbox. Once they allow it, the button appears here and works once, within one hour.</Toast>}
+            {askedRight && <Toast>Permission asked. Once allowed, it works here once, within an hour.</Toast>}
             {sharedFile && <Toast>Sent {sharedFile.name}. The link works for 7 days and 5 downloads.</Toast>}
             {askedFor === "sent" && <Toast>The client was emailed a private upload link. What they upload is saved here.</Toast>}
             {askedFor && askedFor !== "sent" && (
