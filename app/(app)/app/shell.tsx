@@ -30,7 +30,7 @@ import {
 import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
-import { Suspense, createContext, startTransition, use, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Suspense, createContext, startTransition, use, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { switchFirm } from "@/app/(app)/actions";
 import { signOut } from "@/app/(auth)/actions";
 import { bellItems, markBellRead } from "@/app/(app)/actions";
@@ -231,17 +231,25 @@ export function MenuButton() {
 }
 
 // Back, at the start of every page's header: to the page before when it was InboxCA's (as the
-// browser's Back does), otherwise up to the page above (the last crumb), or Today.
+// browser's Back does), otherwise up to the page above (the last crumb), or Today. On Today
+// with no page of InboxCA's before it, there is nowhere to go, so it shows dimmed.
+const inAppBefore = () => {
+  const before = tabHistory().behind[0]?.url;
+  return !!before && /^\/app(\/|$)/.test(new URL(before).pathname);
+};
+const noChange = () => () => {};
 export function BackButton() {
   const router = useRouter();
+  const path = usePathname();
+  const stuck = useSyncExternalStore(noChange, () => path === "/app" && !inAppBefore(), () => false);
   const back = (event: React.MouseEvent<HTMLButtonElement>) => {
-    const before = tabHistory().behind[0]?.url;
-    if (before && /^\/app(\/|$)/.test(new URL(before).pathname)) return router.back();
+    if (stuck) return;
+    if (inAppBefore()) return router.back();
     const crumbs = event.currentTarget.closest(".topbar")?.querySelectorAll<HTMLAnchorElement>(".crumbs a");
     router.push(crumbs?.length ? crumbs[crumbs.length - 1].getAttribute("href")! : "/app");
   };
   return (
-    <button type="button" className="b b-ghost b-icon head-back" aria-label="Back" title="Back" onClick={back}>
+    <button type="button" className="b b-ghost b-icon head-back" aria-label="Back" title="Back" aria-disabled={stuck || undefined} onClick={back}>
       <ArrowLeft size={18} aria-hidden />
     </button>
   );
@@ -373,11 +381,11 @@ export function AccountMenu({ place }: { place: "side" | "head" }) {
     <Menu.Root>
       {side ? (
         <Menu.Trigger className="b b-ghost b-icon head-me" aria-label={`Account, ${me.name}`}>
-          <Avatar name={me.email || "?"} />
+          <Avatar name={me.name} />
         </Menu.Trigger>
       ) : (
         <Menu.Trigger className="side-item rail-me" data-tip={me.name}>
-          <Avatar name={me.email || "?"} />
+          <Avatar name={me.name} />
           <span className="side-who side-text">
             <strong title={me.email}>{me.name}</strong>
             {me.role && <small>{me.role}</small>}
@@ -389,7 +397,7 @@ export function AccountMenu({ place }: { place: "side" | "head" }) {
         <Menu.Positioner side={side ? "bottom" : shell.rail ? "right" : "top"} align={side ? "end" : shell.rail ? "end" : "start"} sideOffset={6} className="menu-layer">
           <Menu.Popup className="menu-pop">
             <div className="menu-me">
-              <Avatar name={me.email || "?"} />
+              <Avatar name={me.name} />
               <span>
                 <strong>{me.name}</strong>
                 <small>

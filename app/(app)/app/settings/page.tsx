@@ -253,7 +253,7 @@ export default async function Settings({
   };
   return (
     <div className="set-page">
-      <PageHead title="Settings" sub={<>{owner ? "How your firm uses InboxCA. Only you, the owner, see this page." : "How your firm keeps client data safe. As second admin, you can change these, and so can the owner."}{group !== "me" && nudge}</>} />
+      <PageHead title="Settings" sub={<>{owner ? "Only you, the owner, see this page." : "You and the owner can change these."}{group !== "me" && nudge}</>} />
       <GroupAnchor groupOf={groupOf} />
       <div className="set">
         <nav className="set-nav" aria-label="Settings">

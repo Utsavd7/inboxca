@@ -89,7 +89,7 @@ export default async function AppLayout({ children, doc }: { children: React.Rea
   );
   return (
     <ShellFrame
-      me={{ member: !!membership, name: personName(email), email, role: role && roleLabel(role), firm: membership?.firmName ?? "", firmId: membership?.firmId ?? "", firms: membership?.firms ?? [], owner, people: ["owner", "partner", "manager"].includes(role) }}
+      me={{ member: !!membership, name: membership?.name ?? personName(email), email, role: role && roleLabel(role), firm: membership?.firmName ?? "", firmId: membership?.firmId ?? "", firms: membership?.firms ?? [], owner, people: ["owner", "partner", "manager"].includes(role) }}
       theme={theme}
       rail={jar.get("side")?.value === "rail"}
       newsSeen={jar.get("news_seen")?.value ?? ""}

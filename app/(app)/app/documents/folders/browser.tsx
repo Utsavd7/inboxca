@@ -353,7 +353,8 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
             </div>
             {listing?.upload && (
               <>
-                <button type="button" className="b b-primary" onClick={() => chooser.current?.click()} disabled={busy}>
+                {/* Not blue: the page's header has the one blue button, Upload papers. */}
+                <button type="button" className="b b-secondary" onClick={() => chooser.current?.click()} disabled={busy}>
                   <Upload size={16} aria-hidden />
                   {busy ? "Uploading" : "Upload"}
                 </button>

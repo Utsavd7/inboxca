@@ -13,7 +13,7 @@ import { emailTemplates } from "@/src/lib/email-templates";
 import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
-import { assignmentRoles, canManageClients, checkClient, readKind, type ClientInput } from "@/src/lib/clients";
+import { assignmentRoles, canManageClients, checkClient, exampleClient, readKind, type ClientInput } from "@/src/lib/clients";
 import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
 import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
@@ -462,14 +462,16 @@ export async function addClient(_prev: ClientState, form: FormData): Promise<Cli
 export type ImportRow = ClientInput & { line: number; error?: string };
 export type ImportState = { rows?: ImportRow[]; error?: string; done?: number };
 
-// Column headings people use, as InboxCA reads them (any case).
+// Column headings people use, Tally's among them, as InboxCA reads them (any case, without
+// dots or colons: "PAN/IT No." is "pan/it no").
 const headings: Record<keyof ClientInput, string[]> = {
-  name: ["name", "client name", "client", "party name"],
-  kind: ["kind", "type", "client type", "constitution", "category"],
-  pan: ["pan", "pan no", "pan number"],
-  gstin: ["gstin", "gst", "gst no", "gst number", "gstin/uin"],
-  email: ["email", "e-mail", "email id", "email address", "mail"],
+  name: ["name", "client name", "client", "party name", "ledger name", "name of party"],
+  kind: ["kind", "type", "client type", "constitution", "constitution of business", "category"],
+  pan: ["pan", "pan no", "pan number", "it pan", "pan/it no"],
+  gstin: ["gstin", "gst", "gst no", "gst number", "gstin/uin", "gstin no", "gstin number"],
+  email: ["email", "e-mail", "email id", "email address", "mail", "mail id", "e-mail id"],
 };
+const heading = (cell: string) => cell.toLowerCase().replace(/[.:]/g, "").replace(/\s+/g, " ").trim();
 
 // Import from a CSV or Excel file, in two passes: the first reads and checks every row and
 // shows the problems; the second (with the checked rows) checks them again and adds the
@@ -488,25 +490,31 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
     if (!/\.(csv|xlsx)$/i.test(file.name)) return { error: "Choose a .csv or .xlsx file. For an old .xls file, save it as .xlsx first." };
     let table: string[][];
     try {
-      table = readSheet(Buffer.from(await file.arrayBuffer()), file.name);
+      // Empty rows are kept here, so each row's number is the one Excel shows.
+      table = readSheet(Buffer.from(await file.arrayBuffer()), file.name, { rows: 100_000, columns: 16_384, keepEmpty: true });
     } catch {
       return { error: "That file could not be read. Save it again as .xlsx or .csv and try once more." };
     }
-    const [header = [], ...body] = table;
+    // The headings may sit below a few title rows, as in a Tally export.
+    const top = Math.max(0, table.slice(0, 10).findIndex((cells) => cells.some((cell) => headings.name.includes(heading(cell)))));
+    const [header = [], ...body] = table.slice(top);
     const at = Object.fromEntries(
-      Object.entries(headings).map(([field, names]) => [field, header.findIndex((cell) => names.includes(cell.trim().toLowerCase()))]),
+      Object.entries(headings).map(([field, names]) => [field, header.findIndex((cell) => names.includes(heading(cell)))]),
     ) as Record<keyof ClientInput, number>;
     if (at.name < 0) return { error: "The first row must name the columns, with one called Name or Client name." };
-    if (body.length > 2000) return { error: "Import at most 2,000 clients at a time." };
     const cell = (cells: string[], field: keyof ClientInput) => (at[field] < 0 ? "" : (cells[at[field]] ?? "").trim());
-    rows = body.map((cells, index) => ({
-      line: index + 2,
-      name: cell(cells, "name"),
-      kind: cell(cells, "kind"),
-      pan: cell(cells, "pan"),
-      gstin: cell(cells, "gstin"),
-      email: cell(cells, "email"),
-    }));
+    rows = body
+      .map((cells, index) => ({
+        line: top + index + 2,
+        name: cell(cells, "name"),
+        kind: cell(cells, "kind"),
+        pan: cell(cells, "pan"),
+        gstin: cell(cells, "gstin"),
+        email: cell(cells, "email"),
+      }))
+      // An empty row, and the template's example row copied in, are left out.
+      .filter((row) => (row.name || row.kind || row.pan || row.gstin || row.email) && row.name !== exampleClient.name);
+    if (rows.length > 2000) return { error: "Import at most 2,000 clients at a time." };
   }
 
   // Each row on its own, then numbers repeated in the file, then numbers already in the firm.

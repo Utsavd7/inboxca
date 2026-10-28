@@ -1,6 +1,6 @@
 "use client";
 import { Menu } from "@base-ui/react/menu";
-import { Check, Copy, FilePlus2, FileUp, Mail, Plus, Scale, UserPlus, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Copy, FilePlus2, FileUp, Mail, Plus, Scale, UserPlus, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -65,6 +65,48 @@ export function NewMenu({ manage, write }: { manage: boolean; write: boolean }) 
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
+// More, beside a header's buttons: the page's less used actions, each a link or a copy (with
+// the same short note as CopyButton), so the header keeps one blue button.
+type MoreItem = { label: string; icon: React.ReactNode; href?: string; copy?: { text: string; what: string } };
+export function MoreMenu({ items }: { items: MoreItem[] }) {
+  const [copied, setCopied] = useState<{ at: number; what: string }>();
+  if (!items.length) return null;
+  return (
+    <Menu.Root>
+      <Menu.Trigger className="b b-secondary">
+        More
+        <ChevronDown size={15} aria-hidden />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner side="bottom" align="end" sideOffset={6} className="menu-layer">
+          <Menu.Popup className="menu-pop">
+            {items.map(({ label, icon, href, copy }) =>
+              href ? (
+                <Menu.LinkItem key={label} className="menu-item" closeOnClick render={<Link href={href} scroll={false} />}>
+                  {icon}
+                  {label}
+                </Menu.LinkItem>
+              ) : (
+                <Menu.Item key={label} className="menu-item" onClick={() => copy && navigator.clipboard.writeText(copy.text).then(() => setCopied({ at: Date.now(), what: copy.what }))}>
+                  {icon}
+                  {label}
+                </Menu.Item>
+              ),
+            )}
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+      {copied &&
+        createPortal(
+          <ToastMotion key={copied.at}>
+            <span>{copied.what} copied</span>
+          </ToastMotion>,
+          document.body,
+        )}
     </Menu.Root>
   );
 }
