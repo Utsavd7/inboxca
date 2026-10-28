@@ -498,14 +498,14 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await query(local.dbUrl, "update public.requests set expires_at=now()-interval '1 second' where id=$1", [expired]);
   await owner.request.post("/app/inbox", { multipart: { ...staleFields, intent: "allow" }, headers: { Origin: new URL(owner.url()).origin } });
   expect((await query(local.dbUrl, "select status from public.requests where id=$1", [expired]))[0].status).toBe("pending");
-  await owner.goto("/app/inbox");
+  await owner.goto("/app/inbox?panel=asks");
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
   await person.goto(files);
   await person.getByRole("button", { name: "Ask to upload" }).click();
   await expect(person.getByText("Asked", { exact: true })).toBeVisible();
 
   // The person has no team manager, so the question goes to the owner.
-  await owner.goto("/app/inbox");
+  await owner.goto("/app/inbox?panel=asks");
   const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "New asks to upload a paper" });
   await expect(question).toContainText(`Ask Client ${tag}`);
   // #42, #44, #57: copying an approval form or visiting its address cannot approve it.
@@ -525,8 +525,8 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   const toast = owner.getByRole("status").filter({ hasText: "Refused." });
   await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
   await toast.getByRole("button", { name: "Undo" }).click();
-  await expect(question).toBeVisible();
-  expect((await query(local.dbUrl, "select status from public.requests where id=$1", [fields.request]))[0].status).toBe("pending");
+  await expect.poll(async () => (await query(local.dbUrl, "select status from public.requests where id=$1", [fields.request]))[0].status).toBe("pending");
+  await owner.goto("/app/inbox?panel=asks");
   await question.getByRole("link", { name: "Answer" }).click();
   await answer.getByRole("button", { name: "Allow once" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "New may upload a paper once, within an hour." })).toBeVisible();
@@ -544,12 +544,15 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
   await person.goto(files);
   await person.getByRole("button", { name: "Ask to upload" }).click();
   await expect(person.getByText("Asked", { exact: true })).toBeVisible();
-  await owner.goto("/app/inbox");
+  await owner.goto("/app/inbox?panel=asks");
   await owner.locator("section[aria-labelledby=questions] li").filter({ hasText: "asks to upload a paper" }).getByRole("link", { name: "Answer" }).click();
   await owner.getByRole("dialog").getByRole("button", { name: "Always allow New" }).click();
-  await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
-  await person.goto(files);
-  await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
+  // The answer lands before the request leaves the panel; then the person may upload.
+  await expect(owner.getByText("asks to upload a paper")).toHaveCount(0);
+  await expect(async () => {
+    await person.goto(files);
+    await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
   await owner.goto("/app/settings#permissions");
   const standing = owner.getByRole("listitem").filter({ hasText: /may upload papers.*without asking/ });
   await standing.getByRole("button", { name: "Withdraw" }).click();
@@ -669,12 +672,13 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await warning.getByLabel("How much more time").selectOption("2");
   await warning.getByRole("button", { name: "Ask the owner" }).click();
   await expect(person.getByRole("status").filter({ hasText: "The owner is asked for more time today." })).toBeVisible();
-  await owner.goto("/app/inbox");
+  await owner.goto("/app/inbox?panel=asks");
   const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: `asks to work until ${laterBy(close, 120)} today` });
   await question.getByRole("link", { name: "Answer" }).click();
   await owner.getByRole("dialog").getByRole("button", { name: "Allow today" }).click();
-  await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
-  expect(await query(local.dbUrl, "select access -> 'extra_time' ->> 'until' as until from public.firm_members where user_id = $1", [personId])).toEqual([{ until: laterBy(close, 120) }]);
+  // The answer saves before the panel lets the question go.
+  await expect.poll(async () => await query(local.dbUrl, "select access -> 'extra_time' ->> 'until' as until from public.firm_members where user_id = $1", [personId]), { timeout: 15_000 }).toEqual([{ until: laterBy(close, 120) }]);
+  await expect(question).toHaveCount(0);
   await query(local.dbUrl, "update public.firms set settings = jsonb_set(settings, '{special_hours,0,close}', '\"23:59\"') where id = $1", [firm.firmId]);
   await query(local.dbUrl, "update public.firm_members set access = access - 'extra_time' where user_id = $1", [personId]);
 });
@@ -808,18 +812,18 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
     await waiting.getByText(subject, { exact: true }).click();
     // The shared test mailbox holds thousands of emails, so a live read can take seconds.
     await expect(open.getByRole("heading", { name: subject })).toBeVisible({ timeout: 15_000 });
-    reasons.push(await open.locator(".ib-actions + .ib-note").textContent());
+    reasons.push(await open.locator(".ib-did").textContent());
     await open.getByRole("button", { name: "Mark done" }).click();
     await expect(open.getByRole("button", { name: "Mark done" })).toHaveCount(0, { timeout: 15_000 });
   }
   // Each waiting email is given to someone; here the owner is the only person.
-  expect(reasons.sort()).toEqual(["Asks for a paper that is not in the drive. Given to you", "Asks something InboxCA could not answer. Given to you"]);
+  expect(reasons.sort()).toEqual(["Asks for a paper that is not in the drive. Given to you.", "Asks something InboxCA could not answer. Given to you."]);
   await owner.goto("/app/inbox?show=reply");
   await expect(owner.getByText("No email needs a reply")).toBeVisible();
   await owner.goto("/app/inbox?show=in");
   await expect(waiting).toHaveCount(2);
   await waiting.first().locator(".ib-subject").click();
-  await open.getByText("Change", { exact: true }).click();
+  await open.getByLabel("Change label").click();
   await open.getByRole("form", { name: "What this email is" }).getByRole("button", { name: "Asks for this year's papers" }).click();
   await expect(open.getByText("Corrected")).toBeVisible({ timeout: 15_000 });
 });
@@ -1188,8 +1192,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect(await opened.text()).toContain("Download");
   expect((await (await request.get(`${routineLink}/file`)).body()).toString()).toContain("invented ITR-V");
   await ask("Financial statements", "Can you share the financial statements for FY 2025-26?");
-  await owner.goto("/app/inbox");
-  const papers = owner.locator("section[aria-labelledby=papers]");
+  await owner.goto("/app/inbox?panel=papers");
+  const papers = owner.locator("section[aria-labelledby=papers]:not([role=dialog])");
   await expect(papers).toContainText(`${mailClient} - Balance sheet - FY 2025-26.pdf`);
   await papers.getByRole("button", { name: "Approve and send" }).click();
   await expect(owner.getByRole("status")).toContainText("Sent");
@@ -1407,8 +1411,8 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await expect(progress).toContainText("Skipped. No saved paper of this type for this year");
   await send("Balance sheet","2026");
   await expect(progress).toContainText("Waiting for approval in the Inbox");
-  await owner.goto("/app/inbox");
-  await owner.locator("section[aria-labelledby=papers]").getByRole("button",{name:"Approve and send"}).click();
+  await owner.goto("/app/inbox?panel=papers");
+  await owner.locator("section[aria-labelledby=papers]:not([role=dialog])").getByRole("button",{name:"Approve and send"}).click();
   await expect(owner.getByRole("status")).toContainText("Sent");
   const [{id:client}] = await query(local.dbUrl,"select id from public.clients where firm_id=$1 and name=$2",[firm.firmId,mailClient]);
   const [{id:doc,name}] = await query(local.dbUrl,"select id,name from public.documents where client_id=$1 and document_type='ITR-V' and status='filed'",[client]);
