@@ -24,7 +24,7 @@ const bills = (count: number, words: string) => `${count} ${count === 1 ? "bill"
 // GSTR-3B is filed, due on the GSTR-3B's date and red in its last 3 days or once late. The CA
 // decides what to claim; the button opens the lists on the client's Figures.
 export async function gstMatchWorkItems(ctx: { supabase: SupabaseClient<Database>; membership: { firmId: string }; userId?: string }): Promise<WorkItem[]> {
-  const { data: rows } = await ctx.supabase.rpc("gst_match_items", { target_firm: ctx.membership.firmId });
+  const { data: rows } = await ctx.supabase.rpc("gst_match_items", { target_firm: ctx.membership.firmId }).throwOnError();
   const soon = new Date(Date.parse(`${todayInIndia()}T00:00:00Z`) + 3 * 86_400_000).toISOString().slice(0, 10);
   return (rows ?? []).map((row): WorkItem => {
     const counts = row.counts as unknown as Counts;

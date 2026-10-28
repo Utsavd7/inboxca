@@ -9,9 +9,10 @@ import { chosenFirm } from "@/src/lib/office";
 import { withThisComputer } from "@/src/lib/owner-device";
 import { CHALLENGE_COOKIE, checkAdminKeyUse, newChallenge } from "@/src/lib/pc-key";
 import { withinLimit } from "@/src/lib/rate-limit";
-import { recoveryDigest, SEEN_COOKIE } from "@/src/lib/session";
+import { recoveryDigests, SEEN_COOKIE } from "@/src/lib/session";
 import { afterFirstStep, factorCode, isProvider, oneSession, providers, readyProviders } from "@/src/lib/sign-in";
 import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
+import { finishSignUp } from "./sign-up/finish";
 
 // Sign in: an email code, or Google or Microsoft, first; then a code from an authenticator
 // app (PLAN.md 4.4).
@@ -57,6 +58,7 @@ export async function verifyCode(_prev: CodeState, form: FormData): Promise<Code
   if (error)
     return { step: "code", email, error: "That code did not work. Check it, or ask for a new one." };
   if (before.session) await supabaseAdmin().auth.admin.signOut(before.session.access_token, "local");
+  if (data.user) await finishSignUp(data.user.id, data.user.email ?? "");
   redirect(data.user ? await afterFirstStep(supabase, data.user.id, email) : "/sign-in/two-step");
 }
 
@@ -195,8 +197,8 @@ async function spendRecoveryCode(userId: string, code: string) {
   const admin = supabaseAdmin();
   const { data } = await admin.auth.admin.getUserById(userId);
   const saved = (data.user?.app_metadata.recovery ?? []) as string[];
-  const digest = recoveryDigest(userId, code);
-  if (!saved.includes(digest)) return "That recovery code did not work. Check it, or use another one.";
+  const digest = recoveryDigests(userId, code).find((made) => saved.includes(made));
+  if (!digest) return "That recovery code did not work. Check it, or use another one.";
   const { error } = await admin.auth.admin.updateUserById(userId, { app_metadata: { recovery: saved.filter((kept) => kept !== digest), devices: await withThisComputer(userId, data.user?.app_metadata.devices) } });
   return error ? "That recovery code could not be used just now. Try again in a minute." : saved.length - 1;
 }

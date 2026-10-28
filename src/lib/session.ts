@@ -1,5 +1,6 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { todayInIndia } from "./calendar";
+import { hmacKey, hmacKeys } from "./env";
 import { supabaseAdmin } from "./supabase";
 
 // A firm's access setting for one person: their own, else their role's, else the firm's,
@@ -36,21 +37,21 @@ export function exceptionsOf(settings: Record<string, unknown>, people: { user_i
 }
 
 // When a person was last active, for the idle limit: only the app sees activity, so it is
-// kept in a cookie, signed with a key derived from the server's secret and tied to the
-// person, so it can be neither moved forward nor reused by someone else.
+// kept in a cookie, signed with the server's own key (src/lib/env.ts) and tied to the person,
+// so it can be neither moved forward nor reused by someone else.
 export const SEEN_COOKIE = "inboxca_seen";
-const sign = (userId: string, at: number) =>
-  createHmac("sha256", createHmac("sha256", process.env.SUPABASE_SECRET_KEY ?? "").update("idle cookie").digest())
-    .update(`${userId}:${at}`)
-    .digest("base64url");
+const sign = (userId: string, at: number, key = hmacKey("idle cookie")) => createHmac("sha256", key).update(`${userId}:${at}`).digest("base64url");
 
 export const seenCookie = (userId: string, at = Date.now()) => `${at}.${sign(userId, at)}`;
 
 // The time in a valid cookie for this person, else 0.
 export function seenAt(userId: string, value: string | undefined) {
   const [at, mac = ""] = (value ?? "").split(".");
-  const expected = sign(userId, Number(at));
-  return mac.length === expected.length && timingSafeEqual(Buffer.from(mac), Buffer.from(expected)) ? Number(at) : 0;
+  const signed = hmacKeys("idle cookie").some((key) => {
+    const expected = sign(userId, Number(at), key);
+    return mac.length === expected.length && timingSafeEqual(Buffer.from(mac), Buffer.from(expected));
+  });
+  return signed ? Number(at) : 0;
 }
 
 // The owner's recovery codes (PLAN.md 5.17.3, 5.17.4 #23): 10 codes of 10 letters and
@@ -59,11 +60,11 @@ export function seenAt(userId: string, value: string | undefined) {
 const RECOVERY_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const newRecoveryCodes = () =>
   Array.from({ length: 10 }, () => Array.from({ length: 10 }, () => RECOVERY_LETTERS[randomInt(RECOVERY_LETTERS.length)]).join(""));
-export const recoveryDigest = (userId: string, code: string) =>
-  createHmac("sha256", createHmac("sha256", process.env.SUPABASE_SECRET_KEY ?? "").update("recovery code").digest())
-    .update(`${userId}:${code.toUpperCase().replace(/[^A-Z0-9]/g, "")}`)
-    .digest("base64url")
-    .slice(0, 22);
+const digestWith = (key: Buffer, userId: string, code: string) =>
+  createHmac("sha256", key).update(`${userId}:${code.toUpperCase().replace(/[^A-Z0-9]/g, "")}`).digest("base64url").slice(0, 22);
+export const recoveryDigest = (userId: string, code: string) => digestWith(hmacKey("recovery code"), userId, code);
+// What a code entered may match: its digest under each key in use (src/lib/env.ts hmacKeys).
+export const recoveryDigests = (userId: string, code: string) => hmacKeys("recovery code").map((key) => digestWith(key, userId, code));
 
 // The third time in a day one person does something worth a look (a screen capture, a sign
 // in that ends their other session) tells the owner and partners on Home, for that day.

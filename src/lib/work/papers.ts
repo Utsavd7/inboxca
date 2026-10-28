@@ -22,7 +22,7 @@ const times = (count: number) => (count === 2 ? "twice" : `${count} times`);
 // client): call a client asked twice with nothing back, and check the figures once every
 // paper is in. Each opens the request's own page, which has its actions.
 export async function papersWorkItems(ctx: { supabase: SupabaseClient<Database>; membership: { firmId: string }; userId: string }): Promise<WorkItem[]> {
-  const { data: rows } = await ctx.supabase.rpc("paper_items", { target_firm: ctx.membership.firmId });
+  const { data: rows } = await ctx.supabase.rpc("paper_items", { target_firm: ctx.membership.firmId }).throwOnError();
   const codes = [...new Set((rows ?? []).flatMap((row) => (row.details as unknown as DocumentRequest).returns ?? []))];
   const { data: rules } = codes.length ? await ctx.supabase.from("compliance_types").select("code, name").eq("period_key", "").in("code", codes) : { data: [] };
   const names = new Map(rules?.map((rule) => [rule.code, rule.name]));

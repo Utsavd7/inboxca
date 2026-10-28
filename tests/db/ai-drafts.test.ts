@@ -56,6 +56,7 @@ const lastAsked = () => ai.calls.at(-1) as { metadata: { reason: string }; input
 beforeAll(async () => {
   vi.stubEnv("SUPABASE_URL", local.url);
   vi.stubEnv("SUPABASE_SECRET_KEY", local.secretKey);
+  vi.stubEnv("APP_HMAC_KEY", randomBytes(32).toString("base64url"));
   vi.stubEnv("APP_BASE_URL", "https://app.invented.test");
   vi.stubEnv("LOCAL_KEK", randomBytes(32).toString("base64"));
   vi.stubEnv("OPENAI_API_KEY", key);

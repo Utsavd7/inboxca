@@ -5,7 +5,7 @@ vi.mock("@/src/lib/firm-mail",()=>({firmMailer:async()=>({send:mock.send,sentAlr
 vi.mock("@/src/lib/crypto",()=>({serverCrypto:()=>({decrypt:async()=>"client@invented.test"})}));
 vi.mock("@/src/lib/supabase",()=>({supabaseAdmin:()=>({from:(table:string)=>({
   columns:"",write:false,
-  select(columns:string){this.columns=columns;return this;},eq(){return this;},is(){return this;},gte(){return this;},lte(){return this;},in(){return this;},neq(){return this;},gt(){return this;},
+  select(columns:string){this.columns=columns;return this;},eq(){return this;},is(){return this;},gte(){return this;},lte(){return this;},in(){return this;},neq(){return this;},gt(){return this;},order(){return this;},range(){return this;},
   update(value:{details?:Record<string,unknown>}){if(table==="tasks")mock.details=value.details ?? {};this.write=true;return this;},
   insert(){this.write=true;return this;},
   async maybeSingle(){return {data:{name:"Invented Firm",settings:{reminders:mock.on}}};},

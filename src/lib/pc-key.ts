@@ -1,4 +1,5 @@
 import { createHash, createHmac, createPublicKey, randomBytes, timingSafeEqual, verify } from "node:crypto";
+import { hmacKey } from "./env";
 
 // An office PC's own key (WebAuthn; PLAN.md 5.17, 5.17.4 #32, #50): made on the PC by its
 // built in authenticator (Windows Hello and the like), kept there, and used to prove that a
@@ -11,7 +12,7 @@ const VERIFIED = 0x04;
 type Response = { clientDataJSON: string; authenticatorData: string };
 
 const mac = (value: string) =>
-  createHmac("sha256", createHmac("sha256", process.env.SUPABASE_SECRET_KEY ?? "").update("pc key challenge").digest()).update(value).digest("base64url");
+  createHmac("sha256", hmacKey("pc key challenge")).update(value).digest("base64url");
 
 // A one-time question for this PC, good for 5 minutes, kept in a signed cookie.
 export function newChallenge(deviceId: string) {

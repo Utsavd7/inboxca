@@ -12,7 +12,7 @@ test.describe.configure({ mode: "serial", timeout: 90_000 });
 
 // The key src/lib/rate-limit.ts keeps for a limit, and a limit filled to its last try.
 const key = (kind: string, who: string) =>
-  createHmac("sha256", createHmac("sha256", local.secretKey).update("rate limit").digest()).update(`${kind}:${who.trim().toLowerCase()}`).digest("base64url");
+  createHmac("sha256", createHmac("sha256", local.hmacKey).update("rate limit").digest()).update(`${kind}:${who.trim().toLowerCase()}`).digest("base64url");
 const keys: string[] = [];
 const fill = async (kind: string, who: string, hits: number) => {
   keys.push(key(kind, who));
