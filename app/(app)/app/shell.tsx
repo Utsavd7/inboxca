@@ -56,7 +56,7 @@ type Shell = {
   setTheme: (theme: Theme) => void;
   rail: boolean;
   fold: () => void;
-  paper: boolean;
+  paper: string;
   drawer: boolean;
   setDrawer: (open: boolean) => void;
   open: (panel: Panel) => void;
@@ -83,9 +83,11 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
     setShownPath(path);
     setDrawer(false);
   }
-  // A paper open beside the page (@doc): the sidebar folds to its icons until the paper
-  // closes, unless it is opened again by hand meanwhile.
-  const paper = useSelectedLayoutSegments("doc").some((segment) => segment.startsWith("(.)"));
+  // The paper open beside the page (@doc), by its id: the sidebar folds to its icons until the
+  // paper closes, unless it is opened again by hand meanwhile.
+  const docSegments = useSelectedLayoutSegments("doc");
+  const at = docSegments.findIndex((segment) => segment.startsWith("(.)"));
+  const paper = at < 0 ? "" : (docSegments[at + 1] ?? "");
   const page = usePagePath();
   const [unfolded, setUnfolded] = useState(false);
   if (!paper && unfolded) setUnfolded(false);
@@ -139,13 +141,19 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
           data-side={folded ? "rail" : "full"}
           data-drawer={drawer ? "open" : undefined}
           onClickCapture={(event) => {
-            // Beside a paper the address is the paper's, so a link on the page that changes
-            // only its query (?tab=...) is followed from the page's own address.
-            const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(".stage a[href^='?']") : null;
-            if (!paper || !paperPath.test(path) || !link || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            // Beside a paper, what on the page picks a paper (data-paper) opens that one in its
+            // place, and the paper already open stays as it is (following it again would empty
+            // the page). As the address is the paper's, a link on the page that changes only its
+            // query (?tab=...) is followed from the page's own address.
+            const target = event.target instanceof Element ? event.target : null;
+            const pick = target?.closest<HTMLElement>(".stage [data-paper]");
+            const href = target?.closest(".stage a[href]")?.getAttribute("href") ?? "";
+            const same = pick ? pick.dataset.paper === paper : href === path;
+            const query = !pick && href.startsWith("?") && paperPath.test(path);
+            if (!paper || !(pick || same || query) || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             event.stopPropagation();
-            router.push(`${page}${link.getAttribute("href")}`);
+            if (!same) router.push(pick ? `/app/files/${pick.dataset.paper}/view` : `${page}${href}`);
           }}
           onPointerOver={(event) => point(event.target)}
           onPointerLeave={() => setTip(null)}
@@ -248,13 +256,14 @@ export function tabHistory() {
   return { here, behind: here ? nav!.entries().slice(0, here.index).reverse() : [] };
 }
 
-// While a paper is open beside a page, the address is the paper's. The page keeps its own:
-// its path from the app's own segments (for a part of the frame, which sits in the app's
-// layout), and the query it had when the paper opened (for any part of the page).
+// While a paper is open beside a page (usePaperOpen, its id), the address is the paper's. The
+// page keeps its own: its path from the app's own segments (for a part of the frame, which sits
+// in the app's layout), and the query it had when the paper opened (for any part of the page).
 export const paperPath = /^\/app\/files\/[^/]+\/view$/;
 export function usePagePath() {
   return ["/app", ...useSelectedLayoutSegments().filter((segment) => !segment.startsWith("("))].join("/");
 }
+export const usePaperOpen = () => useShell()?.paper ?? "";
 export function usePageParams() {
   const params = useSearchParams();
   const path = usePathname();

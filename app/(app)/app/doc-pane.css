@@ -38,7 +38,7 @@
 .doc-body .viewer-pages img { box-shadow: 0 0 0 1px var(--line), var(--shadow-2); }
 
 /* The row on the page whose paper is open beside it. */
-.stage :is(tr, li):has(> a[data-open], > * > a[data-open]) { background: var(--accent-soft); }
+.ui .stage :is(tr:has([data-open]), li:has(> a[data-open])) { background: var(--accent-soft); }
 
 /* Its left edge: drag it, or use the arrow keys on it, to give the paper more or less room. */
 .doc-edge { position: absolute; inset: 0 auto 0 0; z-index: 2; width: 6px; cursor: col-resize; touch-action: none; }
@@ -47,22 +47,25 @@
 .ui .doc-edge:focus-visible { box-shadow: none; }
 
 /* Beside a paper the page has about half the room, so it lays out as on a smaller screen: its
-   header's actions go under the title, Today's cards stack, and the busiest pages leave out
-   what the paper shows. The Inbox keeps the open email (the list is back when the paper
-   closes); Documents keeps the papers by name and the chosen one's facts, without the kinds
-   of work, the folder tree or a first page. */
+   header's actions go under the title and Today's cards stack. Where papers are picked, what
+   helps pick the next one stays, slimmer, and the pane takes the place of the page's own
+   preview: Documents keeps the kinds of work and the papers by name, Folders the folder tree
+   and the files by name and type, a client's Documents tab the papers and their status. The
+   Inbox keeps the open email; its list is back when the paper closes. */
 @media (min-width: 1001px) {
   .ui:has(.doc-pane) .stage-body { padding-inline: var(--s5); }
   .ui:has(.doc-pane) .stage .topbar { flex-wrap: wrap; }
   .ui:has(.doc-pane) .stage .page-actions { order: 3; justify-content: flex-start; width: 100%; }
   .ui:has(.doc-pane) .stage .page-actions + .head-tools { margin-left: 0; padding-left: 0; border-left: 0; }
   .ui:has(.doc-pane) .ib .split:has(.ib-convo) .ib-list { display: none; }
-  .ui:has(.doc-pane) :is(.docs-folders, .docs-preview) { display: none; }
+  .ui:has(.doc-pane) :is(.docs-detail, .fb-detail) { display: none; }
+  .ui:has(.doc-pane) .docs-folders { flex-basis: 168px; }
   .ui:has(.doc-pane) .docs-table table { min-width: 0; }
   .ui:has(.doc-pane) .docs-table :is(th, td):nth-child(n+2 of :not(.docs-pick)) { display: none; }
-  .ui:has(.doc-pane) .fb-split { grid-template-columns: minmax(0, 1fr) 260px; }
-  .ui:has(.doc-pane) :is(.fb-tree, .fb-preview) { display: none; }
-  .ui:has(.doc-pane) .fb-table :is(th, td):nth-child(2) { display: none; }
+  .ui:has(.doc-pane) .docs-table tbody tr.on:not(:has([data-open])) { background: none; box-shadow: none; }
+  .ui:has(.doc-pane) .fb-split { grid-template-columns: 208px minmax(0, 1fr); }
+  .ui:has(.doc-pane) .fb-table :is(th, td):nth-child(n+2) { display: none; }
+  .ui:has(.doc-pane) .client-docs :is(th, td):is(:nth-child(2), :nth-child(3), :nth-child(4)) { display: none; }
   .ui:has(.doc-pane) .today-grid { grid-template-columns: minmax(0, 1fr); }
 }
 

@@ -33,7 +33,7 @@ export function DocPane({ name, full, chips, actions, children }: { name: React.
     if (active instanceof HTMLElement && active !== document.body && !active.closest(".doc-pane")) opener = active;
     pane.current?.focus({ preventScroll: true });
     // The page's own link to this paper stays marked while it is open (doc-pane.css).
-    const links = document.querySelectorAll<HTMLAnchorElement>(`.stage a[href="${location.pathname}"]`);
+    const links = document.querySelectorAll(`.stage a[href="${location.pathname}"], .stage [data-paper="${location.pathname.split("/")[3]}"]`);
     links.forEach((link) => link.setAttribute("data-open", ""));
     return () => {
       links.forEach((link) => link.removeAttribute("data-open"));
