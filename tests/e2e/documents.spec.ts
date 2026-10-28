@@ -72,6 +72,29 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     await expect.poll(views).toBe(1);
     await expect(detail.getByRole("link", { name: "Download" })).toHaveAttribute("href", `/app/files/${bills.id}`);
 
+    // View opens the paper beside the list, which stays; Close or Esc gives the list its room
+    // back. Reloaded, the paper's address is a page of its own, and Back returns to the list.
+    const beside = page.getByRole("complementary", { name: `Patel Textiles ${tag} - Purchase bills.pdf` });
+    await detail.getByRole("link", { name: "View" }).click();
+    await expect(beside.getByRole("img", { name: "Page 1" })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/app/files/${bills.id}/view$`));
+    await expect(papers.getByRole("link", { name: /Purchase bills/ })).toBeVisible();
+    await beside.getByRole("button", { name: "Close" }).click();
+    await expect(beside).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`file=${bills.id}`));
+    await detail.getByRole("link", { name: "View" }).click();
+    await expect(beside.getByRole("img", { name: "Page 1" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(beside).toHaveCount(0);
+    await expect(papers.getByRole("link", { name: /Purchase bills/ })).toBeVisible();
+    await detail.getByRole("link", { name: "View" }).click();
+    await expect(beside).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: `Patel Textiles ${tag} - Purchase bills.pdf`, level: 1 })).toBeVisible();
+    await expect(beside).toHaveCount(0);
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(page).toHaveURL(new RegExp(`file=${bills.id}`));
+
     // Upload papers finds the client and opens their upload form, here beside the list.
     await page.getByRole("link", { name: "Upload papers" }).click();
     const sheet = page.getByRole("dialog", { name: "Upload papers" });

@@ -9,6 +9,7 @@ import { canManageClients } from "@/src/lib/clients";
 import { pagesFor, personName, roleLabel } from "@/src/lib/roles";
 import { awake } from "@/src/lib/triage";
 import "./app.css";
+import "./doc-pane.css";
 import { ClosingWatch } from "./closing-watch";
 import { Command } from "./command";
 import { IdleWatch } from "./idle-watch";
@@ -29,9 +30,10 @@ const fortnightAgo = () => new Date(Date.now() - 14 * 86_400_000).toISOString();
 
 // The app's frame: the sidebar (the firm, New, search, the places this person's role uses, then
 // use, help and who is signed in), and the stage beside it, where each page draws its own
-// header and the status line sits at the foot. Only the sign in check waits; the counts, the
-// owner's use and the status line arrive as they are ready.
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
+// header and the status line sits at the foot; a paper opened from a page shows beside it
+// (doc, from @doc). Only the sign in check waits; the counts, the owner's use and the status
+// line arrive as they are ready.
+export default async function AppLayout({ children, doc }: { children: React.ReactNode; doc: React.ReactNode }) {
   const { supabase, membership, pcKey } = await currentMember();
   const jar = await cookies();
   // Light unless the person chose Dark or System in their account menu (user, 26 Oct 2026).
@@ -125,6 +127,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </Suspense>
         )}
       </main>
+      {doc}
       {!!membership?.idleMinutes && <IdleWatch minutes={membership.idleMinutes} />}
     </ShellFrame>
   );

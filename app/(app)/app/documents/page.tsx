@@ -269,7 +269,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                           <span className="docs-paper">
                             <FileTile name={row.name} />
                             <span className="grow">
-                              <Link className="docs-name" href={link({ page: state.page, file: row.id })} scroll={false} title={row.name} aria-current={row.id === paper?.id ? "true" : undefined}>
+                              <Link className="docs-name" href={link({ page: state.page, file: row.id })} scroll={false} title={row.name} aria-current={row.id === paper?.id ? "true" : undefined} data-paper={row.id}>
                                 {/* The Client column already names the client, so its name is not repeated here. */}
                                 {row.clients?.name && row.name.startsWith(`${row.clients.name} - `) ? row.name.slice(row.clients.name.length + 3) : row.name}
                               </Link>
