@@ -31,7 +31,9 @@ export type SubPlan = FirmPlan & { version: number; maxPaise: number; next?: Fir
 // `base`: the team the plan took when one more person was bought (its own people, or the more
 // the plan includes). `basis`: what a plan change was priced on (basisOf); for a renewal, the move
 // down waiting when it was raised (waitingOf). `priced`: a renewal's plan when it was raised (basisOf).
-export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number; basis?: string; priced?: string };
+// `unsure`: a debit or refund whose answer was lost, asked again with the same id (raise, sendRefund).
+// `stale`: a plan change paid after what it was priced on changed, given back in full (settle).
+export type Details = { lines: { text: string; paise: number }[]; via: "auth" | "charge" | "order"; mandate?: string; period?: [string, string]; plan?: FirmPlan; add?: number; base?: number; setupPaise?: number; basis?: string; priced?: string; unsure?: true; stale?: true };
 export type Alert = { kind: string; ref?: string; at: string };
 
 const json = (value: unknown) => value as NonNullable<Json>;
@@ -151,6 +153,30 @@ export const movingUp = async (admin: Admin, firmId: string) =>
   (await admin.from("payments").select("kind, amount_paise, due_at").eq("firm_id", firmId).in("kind", ["upgrade", "yearly"]).eq("status", "created").eq("details->>via", "charge").limit(1).maybeSingle()).data;
 
 const withPeriod = (lines: Details["lines"], period: [string, string]) => lines.map((line, at) => (at ? line : { ...line, text: `${line.text}, ${span(period)}` }));
+
+// What the payer's bank shows for a debit, the same on every try of it.
+const remarks = (payment: Payment) =>
+  payment.kind === "renewal" ? `InboxCA plan, ${span(detailsOf(payment).period!)}` : payment.kind === "plan" ? "InboxCA plan" : payment.kind === "topup" ? "InboxCA AI top-up" : detailsOf(payment).lines[0].text;
+
+// A debit on the mandate, raised with the payment's own id, which the provider takes as its
+// idempotency key. One the provider turned down is cancelled, as nothing was taken. Any other
+// failure (a timeout, a lost answer) may have been carried out: the payment stays created and
+// marked unsure, so its webhook still lands, the admins are told, and the daily run raises it
+// again with the same id and date (raiseAgain), which the provider answers as the first time.
+async function raise(admin: Admin, provider: PaymentProvider, mandate: string, payment: Payment) {
+  const details = detailsOf(payment);
+  try {
+    await provider.charge({ mandate, id: payment.id, paise: payment.amount_paise, at: new Date(payment.due_at!), note: remarks(payment) });
+  } catch (problem) {
+    if ((problem as { refused?: boolean }).refused) await admin.from("payments").update({ status: "cancelled" }).eq("id", payment.id).eq("status", "created");
+    else {
+      await admin.from("payments").update({ details: json({ ...details, unsure: true }) }).eq("id", payment.id);
+      await alertAdmins(admin, "charge_unsure", payment.id);
+    }
+    throw problem;
+  }
+  if (details.unsure) await admin.from("payments").update({ details: json({ ...details, unsure: undefined }) }).eq("id", payment.id);
+}
 
 // The owner's AutoPay: at sign up with the plan chosen, or again after it was cancelled. What
 // is due is taken at authorisation (UPI AutoPay, card) or debited once the bank confirms the
@@ -283,14 +309,9 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
   const amount = withGst(lines.reduce((sum, line) => sum + line.paise, 0), tax, firm.stateCode, today);
   if (what.kind === "yearly" && sub.status === "active" && sub.mandate && amount.total <= plan.maxPaise) {
     const at = new Date(Date.now() + NOTICE_MS);
-    const { data: debit, error } = await admin.from("payments").insert({ firm_id: firmId, kind: "yearly", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ ...details, lines, via: "charge" } satisfies Details) }).select("id").single();
+    const { data: debit, error } = await admin.from("payments").insert({ firm_id: firmId, kind: "yearly", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ ...details, lines, via: "charge" } satisfies Details) }).select("*").single();
     if (error) throw new Error(`Saving the debit failed: ${error.code}`);
-    try {
-      await provider.charge({ mandate: sub.mandate, id: debit.id, paise: amount.total, at, note: lines[0].text });
-    } catch (problem) {
-      await admin.from("payments").update({ status: "cancelled" }).eq("id", debit.id);
-      throw problem;
-    }
+    await raise(admin, provider, sub.mandate, debit);
     await note(admin, firmId, actor, "billing.order_started", { payment: debit.id, kind: what.kind });
     // Orelu's own notice, as for a renewal (RBI E-mandate Framework 2026, para 6).
     await mail(email, `InboxCA: ${rupees(amount.total)} will be taken on ${long(indiaDay(at))}`, [
@@ -330,9 +351,10 @@ export async function autoTopUp(firmId: string) {
   const amount = withGst(lines[0].paise, tax, firm.stateCode, today);
   if (amount.total > plan.maxPaise) return false;
   const at = new Date(Date.now() + NOTICE_MS);
-  const { data: row } = await admin.from("payments").insert({ firm_id: firmId, kind: "topup", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge", add: 1 } satisfies Details) }).select("id").single();
+  const { data: row } = await admin.from("payments").insert({ firm_id: firmId, kind: "topup", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge", add: 1 } satisfies Details) }).select("*").single();
   if (!row) return false;
-  await provider.charge({ mandate: sub.mandate, id: row.id, paise: amount.total, at, note: "InboxCA AI top-up" });
+  // Not raised again here when it fails: an unsure one is the daily run's (raiseAgain).
+  if (!(await raise(admin, provider, sub.mandate, row).then(() => true, () => false))) return false;
   await note(admin, firmId, null, "billing.auto_topup", { payment: row.id, blocks: 1 });
   await mail(await ownerOf(admin, firmId), "InboxCA: an AI top-up is on its way", [`Your firm used 90% of its AI credits, so InboxCA will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })} for ${formula.aiBlock.credits.toLocaleString("en-IN")} more credits, good for 12 months.`, `Turn auto top-up off in Settings, Billing: ${link(BILLING)}`]);
   return true;
@@ -437,59 +459,87 @@ export async function applyEvent(event: BillingEvent) {
   for (const payment of first ?? []) {
     if (detailsOf(payment).via === "auth") await paid(admin, payment.id, event.ref);
     else {
-      // eNACH takes nothing at authorisation: its first debit is raised now, after the notice.
+      // eNACH takes nothing at authorisation: its first debit is raised now, after the notice. If
+      // that fails the admins are told, and the daily run raises it again (raiseAgain).
       const at = new Date(Date.now() + NOTICE_MS);
       await admin.from("payments").update({ due_at: at.toISOString() }).eq("id", payment.id);
-      await billingProvider()?.charge({ mandate: event.mandate, id: payment.id, paise: payment.amount_paise, at, note: "InboxCA plan" });
+      try {
+        await raise(admin, billingProvider()!, event.mandate, { ...payment, due_at: at.toISOString() });
+      } catch {
+        await alertAdmins(admin, "first_debit_failed", sub.firm_id);
+        continue;
+      }
       await mail(await ownerOf(admin, sub.firm_id), "InboxCA: your bank confirmed AutoPay", [`Your bank mandate is confirmed. InboxCA will take ${rupees(payment.amount_paise)} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, and your firm starts as soon as it is paid.`]);
     }
   }
 }
 
-// A payment captured: what it buys is added now, and not before (5.14.1).
+// A payment captured: what it buys is added now, and not before (5.14.1). The payment's change to
+// done and what it buys are one transaction (public.pay), so a failure part way changes nothing
+// and the provider's retry of the webhook applies it all; a retry after that finishes what
+// follows (settle).
+type Grants = { details?: Details; subscription?: { from?: string; paid_until?: string; plan?: SubPlan; cycle?: Cycle }; activate?: string[] };
 async function paid(admin: Admin, id: string, ref?: string) {
-  const { data: payment } = await admin.from("payments").update({ status: "done", provider_ref: ref ?? null }).eq("id", id).neq("kind", "refund").in("status", ["created", "failed"]).select("*").maybeSingle();
-  if (!payment) return landedAfterMoneyBack(admin, id, ref);
+  const { data: payment } = await admin.from("payments").select("*").eq("id", id).neq("kind", "refund").maybeSingle();
+  if (!payment || payment.status === "cancelled") return landedAfterMoneyBack(admin, id, ref);
+  if (payment.status === "done") return settle(admin, payment);
   const firmId = payment.firm_id;
   const details = detailsOf(payment);
   const { data: sub } = await admin.from("subscriptions").select("*").eq("firm_id", firmId).maybeSingle();
   const today = indiaDay(new Date());
   const email = await ownerOf(admin, firmId);
   const stale = !!sub && !!details.basis && payment.kind !== "renewal" && details.basis !== basisOf(sub);
+  // A plan change priced on what has changed since is not applied: it goes back in full (settle).
+  let grants: Grants = stale ? { details: { ...details, stale: true } } : {};
+  let grown = false;
   if (sub) {
     const plan = planOf(sub);
     if (payment.kind === "plan") {
       const period: [string, string] = [today, periodEnd(today, sub.cycle as Cycle)];
-      await admin.from("payments").update({ details: json({ ...details, period, lines: withPeriod(details.lines, period) }) }).eq("id", id);
-      await admin.from("subscriptions").update({ paid_until: period[1] }).eq("firm_id", firmId);
-      const { data: started } = await admin.from("firms").update({ status: "active" }).eq("id", firmId).eq("status", "pending").select("name").maybeSingle();
-      if (started) await mail(email, `InboxCA is ready for ${started.name}`, [`Your first payment is in and ${started.name} is ready on InboxCA.`, `Sign in to start: ${link("/sign-in")}`, `Changed your mind? Cancel by ${long(moneyBackLastDay(today))} in Settings, Billing and get this payment back in full.`]);
+      grants = { details: { ...details, period, lines: withPeriod(details.lines, period) }, subscription: { paid_until: period[1] }, activate: ["pending"] };
     }
     if (payment.kind === "renewal" && details.period) {
       // The plan it was priced on. A move down set after it was raised waits for the next renewal; a
       // plan grown since (a move up, a person or an AI block paid in between) stays, never shrunk.
-      const grown = !!details.priced && details.priced !== basisOf(sub);
+      grown = !!details.priced && details.priced !== basisOf(sub);
       const rest = { ...plan, next: grown || (details.basis !== undefined && details.basis !== waitingOf(plan)) ? plan.next : undefined };
-      const { data: moved } = await admin.from("subscriptions").update({ paid_until: details.period[1], plan: json(details.plan && !grown ? { ...rest, ...details.plan } : rest) }).eq("firm_id", firmId).eq("paid_until", details.period[0]).select("mandate").maybeSingle();
-      if (!moved) await alertAdmins(admin, "paid_twice", id);
-      else {
-        await admin.from("firms").update({ status: "active" }).eq("id", firmId).in("status", ["grace", "read_only"]);
-        // Any other debit raised for the same period is called off.
-        const { data: others } = await admin.from("payments").update({ status: "cancelled" }).eq("firm_id", firmId).eq("kind", "renewal").eq("status", "created").eq("details->period->>0", details.period[0]).select("id, details");
-        for (const other of others ?? []) if (moved.mandate && detailsOf(other as Payment).via === "charge") await billingProvider()?.cancelCharge({ mandate: moved.mandate, id: other.id }).catch(() => log.warn("billing.charge_cancel_failed"));
-        if (grown && details.plan) await addedSince(admin, { ...sub, paid_until: details.period[1] }, details.plan);
-      }
+      grants = { subscription: { from: details.period[0], paid_until: details.period[1], plan: details.plan && !grown ? { ...rest, ...details.plan } : rest }, activate: ["grace", "read_only"] };
     }
-    // A plan change priced on what has changed since is not applied: it goes back in full below.
-    if (!stale && payment.kind === "upgrade" && details.plan) await admin.from("subscriptions").update({ plan: json({ ...plan, ...details.plan }) }).eq("firm_id", firmId);
-    if (!stale && payment.kind === "yearly" && details.period) await admin.from("subscriptions").update({ cycle: "yearly", paid_until: details.period[1] }).eq("firm_id", firmId);
-    if (!stale && payment.kind === "extra_user") await admin.from("subscriptions").update({ plan: json({ ...plan, people: Math.max(plan.people, details.base ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
-    if (!stale && payment.kind === "ai_block") await admin.from("subscriptions").update({ plan: json({ ...plan, aiBlocks: (plan.aiBlocks ?? 0) + (details.add ?? 1) }) }).eq("firm_id", firmId);
+    if (!stale && payment.kind === "upgrade" && details.plan) grants = { subscription: { plan: { ...plan, ...details.plan } } };
+    if (!stale && payment.kind === "yearly" && details.period) grants = { subscription: { cycle: "yearly", paid_until: details.period[1] } };
+    if (!stale && payment.kind === "extra_user") grants = { subscription: { plan: { ...plan, people: Math.max(plan.people, details.base ?? 0) + (details.add ?? 1) } } };
+    if (!stale && payment.kind === "ai_block") grants = { subscription: { plan: { ...plan, aiBlocks: (plan.aiBlocks ?? 0) + (details.add ?? 1) } } };
+  }
+  const { data, error } = await admin.rpc("pay", { payment_id: id, grants: json(grants), ...(ref && { ref }) });
+  if (error) throw new Error(`Recording a payment failed: ${error.code}`);
+  // Null: another delivery of the same webhook recorded it first.
+  const done = data as { moved: boolean; started: string | null } | null;
+  if (!done) return;
+  if (done.started) await mail(email, `InboxCA is ready for ${done.started}`, [`Your first payment is in and ${done.started} is ready on InboxCA.`, `Sign in to start: ${link("/sign-in")}`, `Changed your mind? Cancel by ${long(moneyBackLastDay(today))} in Settings, Billing and get this payment back in full.`]);
+  if (sub && payment.kind === "renewal" && details.period) {
+    if (!done.moved) await alertAdmins(admin, "paid_twice", id);
+    else {
+      // Any other debit raised for the same period is called off.
+      const { data: others } = await admin.from("payments").update({ status: "cancelled" }).eq("firm_id", firmId).eq("kind", "renewal").eq("status", "created").eq("details->period->>0", details.period[0]).select("id, details");
+      for (const other of others ?? []) if (sub.mandate && detailsOf(other as Payment).via === "charge") await billingProvider()?.cancelCharge({ mandate: sub.mandate, id: other.id }).catch(() => log.warn("billing.charge_cancel_failed"));
+      // What was added after it was raised; the admins collect it when it cannot be saved.
+      if (grown && details.plan) await addedSince(admin, { ...sub, paid_until: details.period[1] }, details.plan).catch(() => alertAdmins(admin, "added_above_limit", firmId));
+    }
   }
   await note(admin, firmId, null, "billing.paid", { payment: id, kind: payment.kind });
-  await issue(admin, id);
+  await settle(admin, { ...payment, status: "done", provider_ref: ref ?? null, details: json(grants.details ?? details) });
+}
+
+// What follows a payment, on every delivery of its webhook until it is all done: its receipt or
+// invoice, and the full refund of a plan change priced on a plan that changed since.
+async function settle(admin: Admin, payment: Payment) {
+  await issue(admin, payment.id);
   const provider = billingProvider();
-  if (stale && provider) await note(admin, firmId, null, "billing.refund_asked", { payment: (await refund(admin, provider, payment, payment.amount_paise, "priced_on_old_plan", sub)) ?? undefined, reason: "priced_on_old_plan" });
+  if (!detailsOf(payment).stale || !provider) return;
+  const { count } = await admin.from("payments").select("id", { count: "exact", head: true }).eq("refund_of", payment.id);
+  if (count) return;
+  const { data: sub } = await admin.from("subscriptions").select("mandate, method").eq("firm_id", payment.firm_id).maybeSingle();
+  await note(admin, payment.firm_id, null, "billing.refund_asked", { payment: (await refund(admin, provider, payment, payment.amount_paise, "priced_on_old_plan", sub)) ?? undefined, reason: "priced_on_old_plan" });
 }
 
 // A debit or order the money back called off that is taken all the same (D33): it is recorded
@@ -629,14 +679,28 @@ export async function claimMoneyBack(firmId: string, actor: string) {
 async function refund(admin: Admin, provider: PaymentProvider, of: Payment, amount: number, reason: "money_back" | "duplicate" | "charge_error" | "priced_on_old_plan", sub?: { mandate: string | null; method: string | null } | null) {
   if (amount <= 0) return null;
   const gst = Math.round((of.gst_paise * amount) / of.amount_paise);
-  const { data: row, error } = await admin.from("payments").insert({ firm_id: of.firm_id, kind: "refund", refund_of: of.id, reason, amount_paise: amount, gst_paise: gst, details: json({ lines: [], via: detailsOf(of).via } satisfies Details) }).select("id").single();
+  const { data: row, error } = await admin.from("payments").insert({ firm_id: of.firm_id, kind: "refund", refund_of: of.id, reason, amount_paise: amount, gst_paise: gst, details: json({ lines: [], via: detailsOf(of).via } satisfies Details) }).select("*").single();
   if (error) throw new Error(`Saving the refund failed: ${error.code}`);
-  try {
-    await provider.refund({ id: row.id, of: { id: of.id, ref: of.provider_ref, kind: detailsOf(of).via, mandate: detailsOf(of).mandate ?? sub?.mandate ?? null, method: (sub?.method as Method | null) ?? null }, paise: amount, note: reason === "money_back" ? "InboxCA money back" : "InboxCA refund" });
-  } catch {
-    await refundFailed(admin, row.id);
-  }
+  if ((await sendRefund(admin, provider, row, of, sub)) === false)
+    await admin.from("jobs").insert({ firm_id: row.firm_id, kind: "billing_refund", entity_type: "payment", entity_id: row.id, run_at: new Date(Date.now() + 3_600_000).toISOString(), idempotency_key: `billing_refund:${row.id}:unsure` });
   return row.id;
+}
+
+// A refund asked of the provider with its own id as the idempotency key. One turned down has
+// failed (refundFailed tries again with a new id). One whose answer was lost stays created and
+// unsure, the admins are told, and it is asked again with the same id (retryRefund): false then.
+async function sendRefund(admin: Admin, provider: PaymentProvider, row: Payment, of: Payment, sub?: { mandate: string | null; method: string | null } | null) {
+  const details = detailsOf(row);
+  try {
+    await provider.refund({ id: row.id, of: { id: of.id, ref: of.provider_ref, kind: detailsOf(of).via, mandate: detailsOf(of).mandate ?? sub?.mandate ?? null, method: (sub?.method as Method | null) ?? null }, paise: row.amount_paise, note: row.reason === "money_back" ? "InboxCA money back" : "InboxCA refund" });
+  } catch (problem) {
+    if ((problem as { refused?: boolean }).refused) return void (await refundFailed(admin, row.id));
+    await admin.from("payments").update({ details: json({ ...details, unsure: true }) }).eq("id", row.id);
+    await alertAdmins(admin, "refund_unsure", row.id);
+    return false;
+  }
+  if (details.unsure) await admin.from("payments").update({ details: json({ ...details, unsure: undefined }) }).eq("id", row.id);
+  return true;
 }
 
 // An Orelu admin gives back a payment taken twice or in error, in full, from the console.
@@ -654,12 +718,17 @@ export async function adminRefund(paymentId: string, actor: string, reason: "dup
 }
 
 // A failed refund, tried again an hour later with a new refund id, at most three times; after
-// that only the admin alert stays.
+// that only the admin alert stays. An unsure one is asked again with its own id: false while it
+// stays unsure, for the job to try again.
 export async function retryRefund(id: string) {
   const admin = supabaseAdmin();
   const provider = billingProvider();
-  const { data: failedRow } = await admin.from("payments").select("*").eq("id", id).eq("kind", "refund").eq("status", "failed").maybeSingle();
+  const { data: failedRow } = await admin.from("payments").select("*").eq("id", id).eq("kind", "refund").in("status", ["created", "failed"]).maybeSingle();
   if (!failedRow || !provider) return;
+  if (failedRow.status === "created") {
+    const [{ data: of }, { data: sub }] = await Promise.all([admin.from("payments").select("*").eq("id", failedRow.refund_of!).single(), admin.from("subscriptions").select("mandate, method").eq("firm_id", failedRow.firm_id).maybeSingle()]);
+    return detailsOf(failedRow).unsure && of ? sendRefund(admin, provider, failedRow, of, sub) : undefined;
+  }
   const { data: tries } = await admin.from("payments").select("status").eq("refund_of", failedRow.refund_of!).eq("reason", failedRow.reason!);
   if ((tries ?? []).some((row) => row.status !== "failed") || (tries?.length ?? 0) >= 3) return;
   const [{ data: of }, { data: sub }] = await Promise.all([admin.from("payments").select("*").eq("id", failedRow.refund_of!).single(), admin.from("subscriptions").select("mandate, method").eq("firm_id", failedRow.firm_id).maybeSingle()]);
@@ -688,6 +757,7 @@ export async function dailyBilling(firmId: string, now = new Date()) {
     if (firm.status === "read_only" && refundedOn && daysBetween(indiaDay(new Date(refundedOn)), today) >= 30) await admin.rpc("close_unpaid", { target_firm: firmId, why: "money_back" });
     return;
   }
+  if (sub?.status === "active" && sub.mandate) await raiseAgain(admin, provider, firm, sub, now);
   if (!sub?.paid_until || firm.status === "pending") return;
   const due = sub.paid_until;
   const email = await ownerOf(admin, firmId);
@@ -706,14 +776,9 @@ export async function dailyBilling(firmId: string, now = new Date()) {
       await mail(email, "InboxCA: approve your new AutoPay limit", [`Your plan now costs ${rupees(priced.recurring.total)}, more than the ${rupees(plan.maxPaise)} your AutoPay allows. Approve the new limit once in Settings, Billing, or pay now: ${link(BILLING)}`]);
     } else {
       const at = new Date(Math.max(Date.parse(`${due}T10:00:00+05:30`), now.getTime() + NOTICE_MS));
-      const { data: row, error } = await admin.from("payments").insert({ firm_id: firmId, kind: "renewal", amount_paise: priced.recurring.total, gst_paise: priced.recurring.gst, due_at: at.toISOString(), details: json({ lines: withPeriod(priced.price.lines, period), via: "charge", period, plan: next, basis: waitingOf(plan), priced: basisOf(sub) } satisfies Details) }).select("id").single();
+      const { data: row, error } = await admin.from("payments").insert({ firm_id: firmId, kind: "renewal", amount_paise: priced.recurring.total, gst_paise: priced.recurring.gst, due_at: at.toISOString(), details: json({ lines: withPeriod(priced.price.lines, period), via: "charge", period, plan: next, basis: waitingOf(plan), priced: basisOf(sub) } satisfies Details) }).select("*").single();
       if (error) throw new Error(`Saving the renewal failed: ${error.code}`);
-      try {
-        await provider.charge({ mandate: sub.mandate, id: row.id, paise: priced.recurring.total, at, note: `InboxCA plan, ${span(period)}` });
-      } catch (problem) {
-        await admin.from("payments").update({ status: "cancelled" }).eq("id", row.id);
-        throw problem;
-      }
+      await raise(admin, provider, sub.mandate, row);
       await note(admin, firmId, null, "billing.renewal_raised", { payment: row.id });
       // Orelu's own notice (RBI E-mandate Framework 2026, para 6: merchant, amount, date and time,
       // mandate reference and reason, and how to opt out), besides the provider's.
@@ -738,6 +803,40 @@ export async function dailyBilling(firmId: string, now = new Date()) {
   await admin.from("firms").update({ status }).eq("id", firmId).eq("status", firm.status);
   await note(admin, firmId, null, "billing.state", { status });
   if (status === "read_only") await mail(email, "InboxCA: your firm can only view now", [`Your InboxCA plan has not been paid since ${long(due)}, so your team can view but not change anything, and InboxCA has paused its work. Client emails wait in your mailbox.`, `Pay now in Settings, Billing to start again: ${link(BILLING)}`, `If it is not paid by ${long(addDays(due, 30))}, your firm closes and its InboxCA data is deleted 30 days later.`]);
+}
+
+// The daily run's second try at debits that did not reach the provider. One whose answer was lost
+// is raised again with the same id and date (raise), so it is never taken twice. A pending firm's
+// first eNACH debit that was turned down is raised again as a new one after the notice, at most 3
+// times. Orelu's own notice goes once each is raised.
+async function raiseAgain(admin: Admin, provider: PaymentProvider, firm: Firm, sub: Subscription, now: Date) {
+  const { data: open } = await admin.from("payments").select("*").eq("firm_id", firm.id).eq("status", "created").eq("details->>via", "charge");
+  const again = (open ?? []).filter((row) => detailsOf(row).unsure);
+  if (firm.status === "pending" && !open?.some((row) => row.kind === "plan")) {
+    const { data: refused } = await admin.from("payments").select("*").eq("firm_id", firm.id).eq("kind", "plan").eq("status", "cancelled").eq("details->>mandate", sub.mandate!).order("created_at");
+    const first = refused?.at(-1);
+    if (first && refused!.length < 3) {
+      const { data: row, error } = await admin.from("payments").insert({ firm_id: firm.id, kind: "plan", amount_paise: first.amount_paise, gst_paise: first.gst_paise, due_at: new Date(now.getTime() + NOTICE_MS).toISOString(), details: json({ ...detailsOf(first), unsure: undefined }) }).select("*").single();
+      if (error) throw new Error(`Saving the first debit failed: ${error.code}`);
+      again.push(row);
+    }
+  }
+  const email = again.length ? await ownerOf(admin, firm.id) : null;
+  for (const row of again) {
+    try {
+      await raise(admin, provider, sub.mandate!, row);
+    } catch {
+      continue;
+    }
+    const at = new Date(row.due_at!);
+    await note(admin, firm.id, null, row.kind === "renewal" ? "billing.renewal_raised" : "billing.order_started", row.kind === "renewal" ? { payment: row.id } : { payment: row.id, kind: row.kind });
+    // Orelu's own notice, as for a renewal (RBI E-mandate Framework 2026, para 6).
+    await mail(email, `InboxCA: ${rupees(row.amount_paise)} will be taken on ${long(indiaDay(at))}`, [
+      `Orelu (InboxCA) will take ${rupees(row.amount_paise)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, for ${firm.name}: ${remarks(row)}.`,
+      `AutoPay reference: ${sub.mandate}.`,
+      `To stop it, turn AutoPay off in Settings, Billing before then: ${link(BILLING)}`,
+    ]);
+  }
 }
 
 // The plan fit, in the daily run (5.14, D38). The owner is told once a year for each measure that
@@ -788,14 +887,9 @@ async function fitDay(admin: Admin, provider: PaymentProvider, formula: PlanForm
     return;
   }
   const at = new Date(now.getTime() + 3 * 86_400_000);
-  const { data: row, error } = await admin.from("payments").insert({ firm_id: firm.id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge", plan: fit.next, basis: basisOf(sub) } satisfies Details) }).select("id").single();
+  const { data: row, error } = await admin.from("payments").insert({ firm_id: firm.id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge", plan: fit.next, basis: basisOf(sub) } satisfies Details) }).select("*").single();
   if (error) throw new Error(`Saving the move up failed: ${error.code}`);
-  try {
-    await provider.charge({ mandate: sub.mandate, id: row.id, paise: amount.total, at, note: lines[0].text });
-  } catch (problem) {
-    await admin.from("payments").update({ status: "cancelled" }).eq("id", row.id);
-    throw problem;
-  }
+  await raise(admin, provider, sub.mandate, row);
   await note(admin, firm.id, null, "billing.moved_up", { payment: row.id });
   // Orelu's own notice, as for a renewal (RBI E-mandate Framework 2026, para 6).
   await mail(email, `InboxCA: ${rupees(amount.total)} will be taken on ${long(indiaDay(at))}`, [
@@ -839,9 +933,15 @@ async function addedSince(admin: Admin, sub: Subscription, priced: FirmPlan) {
     return void (await mail(email, "InboxCA: approve your new AutoPay limit", [`${firm.name}'s plan grew after its renewal was raised. What was added costs ${rupees(amount.total)} for ${long(today)} to ${long(addDays(sub.paid_until, -1))}, more than your AutoPay allows. Approve the new limit once in Settings, Billing: ${link(BILLING)}`]));
   }
   const at = new Date(Date.now() + NOTICE_MS);
-  const { data: row, error } = await admin.from("payments").insert({ firm_id: sub.firm_id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge" } satisfies Details) }).select("id").single();
+  const { data: row, error } = await admin.from("payments").insert({ firm_id: sub.firm_id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge" } satisfies Details) }).select("*").single();
   if (error) throw new Error(`Saving what was added failed: ${error.code}`);
-  await provider.charge({ mandate: sub.mandate, id: row.id, paise: amount.total, at, note: lines[0].text });
+  try {
+    await raise(admin, provider, sub.mandate, row);
+  } catch (problem) {
+    // Turned down: the admins collect it. Unsure: the daily run raises it again (raiseAgain).
+    if ((problem as { refused?: boolean }).refused) await alertAdmins(admin, "added_above_limit", sub.firm_id);
+    return;
+  }
   await note(admin, sub.firm_id, null, "billing.moved_up", { payment: row.id });
   // Orelu's own notice, as for a renewal (RBI E-mandate Framework 2026, para 6).
   await mail(email, `InboxCA: ${rupees(amount.total)} will be taken on ${long(indiaDay(at))}`, [

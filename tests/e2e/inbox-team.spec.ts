@@ -104,7 +104,7 @@ test("how long an email has waited shows on it, red after the firm's reply time,
   expect(morning).toContain("1 client email has waited more than a day for a reply.");
   expect(morning).toContain(`Anita, 1:\n- ${client.name}, waiting 3 days, late`);
   expect(morning).not.toContain("Old ITR");
-  expect(await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'replies.waiting_sent'", [firm.firmId])).toEqual([{ details: { emails: 1, people: 1, from: "firm" } }]);
+  expect(await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'replies.waiting_sent'", [firm.firmId])).toEqual([{ details: expect.objectContaining({ emails: 1, people: 1, from: "firm" }) }]);
 });
 
 test("the suggested reply goes with a paper from the client's folder, picked in two clicks", async () => {

@@ -1,11 +1,12 @@
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
-const mock=vi.hoisted(()=>({rpc:vi.fn(),send:vi.fn(),status:"connected"}));
+const mock=vi.hoisted(()=>({rpc:vi.fn(),send:vi.fn(),status:"connected",settings:{} as Record<string,unknown>}));
 vi.mock("@/src/lib/crypto",()=>({serverCrypto:()=>({decrypt:async(_firm:string,place:string)=>place.endsWith("address") ? "office@invented.test" : JSON.stringify({password:"invented"})})}));
-vi.mock("@/src/lib/supabase",()=>({supabaseAdmin:()=>({rpc:mock.rpc,from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:"mailbox",status:mock.status,address_enc:"sealed",credentials_enc:"sealed credentials",settings:{imap:{},smtp:{}}}})})})}));
+vi.mock("@/src/lib/supabase",()=>({supabaseAdmin:()=>({rpc:mock.rpc,from:()=>({select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{id:"mailbox",status:mock.status,address_enc:"sealed",credentials_enc:"sealed credentials",settings:mock.settings}})})})}));
 vi.mock("@/src/lib/mailbox",()=>({foundInSent:vi.fn(),smtpTransport:()=>({sendMail:mock.send}),signInFailed:(error:{code?:string})=>error.code==="EAUTH"}));
 vi.mock("@/src/lib/logger",()=>({log:{warn:vi.fn()}}));
 import {firmMailer} from "@/src/lib/firm-mail";
-beforeEach(()=>{vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-20T06:00:00Z"));mock.rpc.mockReset();mock.send.mockReset();mock.status="connected";});
+import {foundInSent} from "@/src/lib/mailbox";
+beforeEach(()=>{vi.useFakeTimers();vi.setSystemTime(new Date("2026-10-20T06:00:00Z"));mock.rpc.mockReset();mock.send.mockReset();mock.status="connected";mock.settings={imap:{},smtp:{}};});
 afterEach(()=>vi.useRealTimers());
 it("reserves every send through one mailbox limit, and waits without attempting SMTP",async()=>{
   const at="2026-10-21T06:00:00Z";
@@ -31,4 +32,17 @@ it("spaces SMTP starts and records authentication failures without marking uncer
   await vi.advanceTimersByTimeAsync(1000);expect(await uncertain).toBe(false);
   expect(mailer.waitUntil).toBeNull();
   expect(mock.rpc.mock.calls.filter(([name])=>name==="mail_health")).toHaveLength(1);
+});
+it("never reports a send that went as failed, and knows later that it went without a copy in the Sent folder",async()=>{
+  mock.rpc.mockImplementation(async(name:string)=>name==="reserve_mail_send" ? {data:{ready:true,at:new Date().toISOString()},error:null} : {data:null,error:name==="mail_health" ? {code:"57014"} : null});
+  mock.send.mockResolvedValue({});
+  const mailer=(await firmMailer("firm","Invented Firm"))!;
+  const id="<reminder-invented@inboxca.test>";
+  const sending=mailer.send("client@invented.test","Test","Test",id);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(await sending).toBe(true);
+  expect(mock.rpc).toHaveBeenCalledWith("reserve_mail_send",{account_id:"mailbox",message_id:id});
+  mock.settings={imap:{},smtp:{},mail_ids:{[id]:new Date().toISOString()}};
+  expect(await mailer.sentAlready(id)).toBe(true);
+  expect(foundInSent).not.toHaveBeenCalled();
 });

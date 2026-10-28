@@ -1023,6 +1023,9 @@ isOneToOne: false
               "returns_so_far": number,"returns_this_year": number,"workspace_by_march": number,"workspace_bytes": number
             }[]
                            },
+"forget_mail_send":
+{ Args: { "account_id": string,"message_id": string }; Returns: undefined
+                           },
 "form_ready":
 { Args: { "target": string }; Returns: boolean
                            },
@@ -1120,6 +1123,9 @@ isOneToOne: false
               "client_id": string,"client_name": string,"details": Json,"id": string,"kind": string
             }[]
                            },
+"pay":
+{ Args: { "grants": Json,"payment_id": string,"ref"?: string }; Returns: Json
+                           },
 "queue_fills":
 { Args: { "batch": string,"target_firm": string,"with_itrs": boolean }; Returns: {
               "clients": number,"first_job": number,"itrs": number,"queued": number
@@ -1149,7 +1155,7 @@ isOneToOne: false
 { Args: { "choice"?: Json,"client": string,"extension": string,"firm": string,"form": string,"period": string,"person": string,"prefix": string,"registration": string,"sources": Json,"template": string }; Returns: Json
                            },
 "reserve_mail_send":
-{ Args: { "account_id": string }; Returns: Json
+{ Args: { "account_id": string,"message_id"?: string }; Returns: Json
                            },
 "restore_member":
 { Args: { "person": string,"target_firm": string }; Returns: boolean
@@ -1228,6 +1234,9 @@ isOneToOne: false
                            },
 "user_id_for_email":
 { Args: { "address": string }; Returns: string
+                           },
+"wait_job":
+{ Args: { "error_code": string,"job_id": number,"retry_at": string }; Returns: boolean
                            },
 "work_numbers":
 { Args: { "mine"?: boolean,"since": string,"target_firm": string,"until": string }; Returns: {

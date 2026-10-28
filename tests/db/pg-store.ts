@@ -19,11 +19,13 @@ export function pgJobStore(db: ClientBase): JobStore {
       return result.rows.map((row) => ({ ...row, id: Number(row.id) }));
     },
     async markSending(id) {
-      await write(() => db.query("select public.mark_job_sending($1)", [id]));
+      const result = await write(() => db.query<{ marked: boolean | null }>("select public.mark_job_sending($1) as marked", [id]));
+      return result.rows[0]?.marked === true;
     },
     async finish(id, outcome, errorCode, retryAt) {
-      const result = await write(() =>
-        db.query<{ finished: boolean }>("select public.finish_job($1, $2, $3, $4) as finished", [id, outcome, errorCode ?? null, retryAt ?? null]),
+      const result = await write(() => outcome === "wait"
+        ? db.query<{ finished: boolean | null }>("select public.wait_job($1, $2, $3) as finished", [id, errorCode ?? null, retryAt ?? null])
+        : db.query<{ finished: boolean }>("select public.finish_job($1, $2, $3, $4) as finished", [id, outcome, errorCode ?? null, retryAt ?? null]),
       );
       return result.rows[0]?.finished ?? false;
     },
