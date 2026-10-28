@@ -676,8 +676,9 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   const question = owner.locator("section[aria-labelledby=questions] li").filter({ hasText: `asks to work until ${laterBy(close, 120)} today` });
   await question.getByRole("link", { name: "Answer" }).click();
   await owner.getByRole("dialog").getByRole("button", { name: "Allow today" }).click();
-  await expect(owner.locator("section[aria-labelledby=questions]")).toHaveCount(0);
-  expect(await query(local.dbUrl, "select access -> 'extra_time' ->> 'until' as until from public.firm_members where user_id = $1", [personId])).toEqual([{ until: laterBy(close, 120) }]);
+  // The answer saves before the panel lets the question go.
+  await expect.poll(async () => await query(local.dbUrl, "select access -> 'extra_time' ->> 'until' as until from public.firm_members where user_id = $1", [personId]), { timeout: 15_000 }).toEqual([{ until: laterBy(close, 120) }]);
+  await expect(question).toHaveCount(0);
   await query(local.dbUrl, "update public.firms set settings = jsonb_set(settings, '{special_hours,0,close}', '\"23:59\"') where id = $1", [firm.firmId]);
   await query(local.dbUrl, "update public.firm_members set access = access - 'extra_time' where user_id = $1", [personId]);
 });
