@@ -25,9 +25,10 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const DAY = 86_400_000;
 
 // At most two lines above the list, most pressing first: the firm's email or drive not working,
-// setup still to do (the owner), then what is new from the government. The government update
-// that does not fit joins the list instead.
-export type Line = "mail" | "drive" | "setup" | "gov";
+// setup still to do (the owner), client reminders held because a due date it has is not yet
+// checked (the owner; src/lib/reminders.ts), then what is new from the government. The
+// government update that does not fit joins the list instead.
+export type Line = "mail" | "drive" | "setup" | "held" | "gov";
 export const attention = cache(async ({ supabase, membership }: Context) => {
   const owner = membership.role === "owner";
   const firm = membership.firmId;
@@ -41,6 +42,10 @@ export const attention = cache(async ({ supabase, membership }: Context) => {
           count(supabase.from("clients").select("id", { count: "exact", head: true }).eq("firm_id", firm).is("archived_at", null)),
           count(supabase.from("client_registrations").select("id", { count: "exact", head: true }).filter("services", "neq", "{}")),
           count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
+          // A return still to come from a rule InboxCA has not checked: no reminder goes for it.
+          Promise.resolve(supabase.from("compliance_types").select("code").eq("period_key", "").is("verified_on", null)).then(({ data }) => data?.length
+            ? Promise.resolve(supabase.from("tasks").select("id").eq("firm_id", firm).eq("kind", "compliance").neq("status", "filed").gte("due_on", todayInIndia()).in("code", data.map((rule) => rule.code)).limit(1)).then((tasks) => !!tasks.data?.length)
+            : false),
         ])
       : null,
   ]);
@@ -49,11 +54,11 @@ export const attention = cache(async ({ supabase, membership }: Context) => {
     { done: has("mail"), href: "/app/settings#mailbox", action: "Connect the firm's email" },
     { done: has("drive"), href: "/app/settings#drive", action: "Connect the firm's drive" },
     { done: !!counts[0], href: "/app/clients", action: "Add your clients" },
-    { done: !!counts[1], href: "/app/clients", action: "Tick the services for each client" },
+    { done: !!counts[1], href: "/app/clients", action: "Set your clients' services" },
     { done: counts[2] > 1, href: "/app/people", action: "Invite your team" },
   ];
   const steps = setup?.some((step) => !step.done) ? { done: setup.filter((step) => step.done).length, total: setup.length, next: setup.find((step) => !step.done)! } : null;
-  const wanted: [Line, boolean][] = [["mail", owner && accounts.find((account) => account.kind === "mail")?.status === "needs_reconnect"], ["drive", !!driveAway], ["setup", !!steps], ["gov", gov]];
+  const wanted: [Line, boolean][] = [["mail", owner && accounts.find((account) => account.kind === "mail")?.status === "needs_reconnect"], ["drive", !!driveAway], ["setup", !!steps], ["held", !!counts?.[3]], ["gov", gov]];
   return { lines: wanted.filter(([, on]) => on).map(([line]) => line).slice(0, 2), setup: steps, owner };
 });
 

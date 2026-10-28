@@ -6,17 +6,19 @@ import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lu
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { setServices } from "@/app/(app)/actions";
 import { canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { cleanNumber, isGstin, isPan } from "@/src/lib/identifiers";
+import { cleanNumber, isGstin, isPan, numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
+import { Pending } from "../pending";
 import { AddClientForm } from "./add-client-form";
 import { BulkSendBar } from "./bulk-send";
 import { ImportForm } from "./import-form";
 import { LinkTabs } from "../link-tabs";
 import { Item, List, Presence } from "../motion";
-import { Avatar, Badge, Card, Empty, PageHead } from "../ui";
+import { Avatar, Badge, Card, Empty, PageHead, SidePanel, Toast } from "../ui";
 import { RowKeys } from "../row-keys";
 import "./clients.css";
 
@@ -28,13 +30,14 @@ const columns = "id, name, client_registrations(kind, number_enc), client_assign
 const pillJoin: Record<Pill, string> = { all: "", late: "", missing: ", missing:requests!inner(id)", mine: ", mine:client_assignments!inner(role)" };
 type Lateness = "late" | "on" | null;
 const lookAfter = ["partner_in_charge", "manager", "staff"];
+const uuid = /^[0-9a-f-]{36}$/;
 
 // The client register. Search finds a name, or a whole email, PAN or GSTIN through its
 // blind index, so those are never searched in plain text. Each pill's count is a true count.
 export default async function Clients({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; panel?: string; bulk?: string; error?: string; page?: string; show?: string }>;
+  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; panel?: string; bulk?: string; error?: string; page?: string; show?: string; clients?: string; services?: string; of?: string }>;
 }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
@@ -104,7 +107,7 @@ export default async function Clients({
   // Late pill already has when All is shown, places the page.
   const lateFirst = show !== "late" && !archived;
   const counting = (Object.keys(pills) as Pill[]).map((pill) => Promise.resolve(clientsIn(pill, "id", true)));
-  const ruling = Promise.resolve(supabase.from("compliance_types").select("code, name, frequency").eq("period_key", ""));
+  const ruling = Promise.resolve(supabase.from("compliance_types").select("code, name, frequency, due_rule").eq("period_key", "").order("code"));
   const late = lateFirst ? ((show === "all" ? await counting[1] : await clientsIn(show, "id", true, "late")).count ?? 0) : 0;
   const last = from + pageSize - 1;
   const [lateClients, restClients, { data: rules }, counts] = await Promise.all([
@@ -133,6 +136,8 @@ export default async function Clients({
   const filtered = params.group || params.branch;
   const groupName = filtered ? nameOf.get(filtered) : null;
   const canSend = manage && !archived && !!clients?.some((client) => membership.may("send", client.id));
+  // Ticks choose clients for Set services, and for sending a paper when the person may send.
+  const canTick = manage && !archived && !membership.viewOnlyUntil;
   const rows = await Promise.all(
     (clients ?? []).map(async (client) => {
       const gstin = client.client_registrations[0];
@@ -166,6 +171,13 @@ export default async function Clients({
     : [{ data: [] }, { data: [] }];
   const clientNames = new Map(chosen?.map((client) => [client.id, client.name]));
   const sendState = new Map(sends?.map((share) => [share.id, share.status]));
+  // Set services, for the clients ticked on the list (?clients=, at most a page of them), with
+  // the services each kind of number takes, as on a client's page.
+  const ticked = panel === "services" ? (params.clients ?? "").split(",").filter((id) => uuid.test(id)).slice(0, 50) : [];
+  const { data: setFor } = ticked.length ? await supabase.from("clients").select("id, name").eq("firm_id", firm).in("id", ticked).is("archived_at", null).order("name") : { data: [] };
+  const offered = (Object.keys(numberKinds) as NumberKind[]).map((kind) => [kind, rules?.filter((rule) => (rule.due_rule as { for?: string }).for === kind) ?? []] as const).filter(([, list]) => list.length);
+  const setNames = setFor?.map((client) => client.name) ?? [];
+  const added = Number(params.services), addedOf = Number(params.of);
   const plural = (n: number) => `${n.toLocaleString("en-IN")} ${archived ? "archived " : ""}client${n === 1 ? "" : "s"}`;
   const shownFrom = total ? from + 1 : 0;
   const shownTo = Math.min(from + (clients?.length ?? 0), total ?? 0);
@@ -200,8 +212,40 @@ export default async function Clients({
       />
       <Presence>
         {panel === "add" && <AddClientForm key="add" />}
-        {panel === "import" && <ImportForm key="import" />}
+        {panel === "import" && <ImportForm key="import" names={Object.fromEntries(rules?.map((rule) => [rule.code, rule.name ?? rule.code]) ?? [])} />}
+        {panel === "services" && !!setNames.length && (
+          <SidePanel key="services" id="set-services" title="Set services" close={pageHref(page)}>
+            {params.error === "services" && <p className="alert" role="alert">Tick the services to add, at most one of each return (one GSTR-1, one GSTR-3B, one ITR), and not composition with regular GST returns.</p>}
+            <p className="hint">
+              For {setNames.length > 4 ? `${setNames.slice(0, 3).join(", ")} and ${setNames.length - 3} more` : setNames.join(", ").replace(/, ([^,]*)$/, " and $1")}. Each ticked service is added to the client&apos;s number it sits on, where it is for that client type. Services already chosen stay, and InboxCA makes the due dates for the next 12 months.
+            </p>
+            <form action={setServices}>
+              {setFor?.map((client) => <input key={client.id} type="hidden" name="client" value={client.id} />)}
+              <input type="hidden" name="back" value={pageHref(page)} />
+              <ul className="client-rows">
+                {offered.map(([kind, list]) => (
+                  <li key={kind}>
+                    <div className="grow service-form">
+                      <span className="name">{numberKinds[kind].name}</span>
+                      {list.map((rule) => (
+                        <label key={rule.code} className="check">
+                          <input type="checkbox" name="service" value={rule.code} /> {rule.name}
+                        </label>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <Pending className="b b-primary service-save">Add services to {plural(setNames.length)}</Pending>
+            </form>
+          </SidePanel>
+        )}
       </Presence>
+      {added >= 0 && addedOf > 0 && (
+        <Toast>
+          Services added for {added === addedOf ? "" : `${added} of `}{addedOf === 1 ? "1 client" : `${addedOf} clients`}.{added < addedOf && " The rest already had them, have no number for them, or have other services they cannot go with."}
+        </Toast>
+      )}
 
       <div className="clients-bar">
         <LinkTabs kind="pills" label="Show" items={(Object.keys(pills) as Pill[]).map((pill) => ({ href: href({ show: pill }), label: pills[pill], count: countOf[pill], current: show === pill }))} />
@@ -264,7 +308,7 @@ export default async function Clients({
           <table className="t">
             <thead>
               <tr>
-                {canSend && <th scope="col" className="shrink"><span className="sr-only">Choose</span></th>}
+                {canTick && <th scope="col" className="shrink"><span className="sr-only">Choose</span></th>}
                 <th scope="col">Client</th>
                 <th scope="col">GSTIN</th>
                 <th scope="col">Looked after by</th>
@@ -277,7 +321,7 @@ export default async function Clients({
                 const [next, when] = client.next ? returnLine(client.next) : [];
                 return (
                   <Item as="tr" key={client.id}>
-                    {canSend && <td className="shrink"><input type="checkbox" form="bulk-send" name="client" value={client.id} data-name={client.name} aria-label={`Choose ${client.name}`} /></td>}
+                    {canTick && <td className="shrink"><input type="checkbox" form="bulk-send" name="client" value={client.id} data-name={client.name} aria-label={`Choose ${client.name}`} /></td>}
                     <td>
                       <span className="who">
                         <Avatar name={client.name} />
@@ -352,8 +396,10 @@ export default async function Clients({
           )}
         </span>
       </nav>
-      {canSend && (
+      {canTick && (
         <BulkSendBar
+          send={canSend}
+          list={pageHref(page)}
           types={documentTypes}
           years={periodChoices(todayInIndia())
             .filter((key) => key.length === 4)

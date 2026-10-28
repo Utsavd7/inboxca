@@ -1,4 +1,4 @@
-import { CalendarDays, KeyRound, ListChecks, Rocket, TriangleAlert } from "lucide-react";
+import { BellOff, CalendarDays, KeyRound, ListChecks, Rocket, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -153,7 +153,7 @@ async function Things({ work }: { work: ReturnType<typeof workFor> }) {
 }
 
 // At most two lines above the list (work-data.ts attention): the firm's email or drive not
-// working, setup still to do, what is new from the government.
+// working, setup still to do, client reminders held, what is new from the government.
 async function Attention({ ctx }: { ctx: Context }) {
   const { lines, setup, owner } = await attention(ctx);
   return (
@@ -190,6 +190,14 @@ async function Attention({ ctx }: { ctx: Context }) {
           <Link className="b b-primary b-small" href={setup.next.href}>
             {setup.next.action}
           </Link>
+        </div>
+      )}
+      {lines.includes("held") && (
+        <div className="today-line" role="region" aria-label="Client reminders">
+          <BellOff size={16} aria-hidden />
+          <span className="grow">
+            <strong>Client reminders are paused</strong> until InboxCA has checked your due dates against the government notifications. Papers you ask for yourself, and their follow ups, still go.
+          </span>
         </div>
       )}
       {lines.includes("gov") && <GovLine />}

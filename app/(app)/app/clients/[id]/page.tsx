@@ -8,10 +8,10 @@ import Form from "next/form";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { Suspense, ViewTransition } from "react";
+import { Fragment, Suspense, ViewTransition } from "react";
 import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
 import { addDays, dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
-import { assignmentRoles, canManageClients, clientKinds, type ClientKind } from "@/src/lib/clients";
+import { assignmentRoles, canManageClients, clientKinds, usualServices, type ClientKind } from "@/src/lib/clients";
 import { checklists, kindChecklist, workOfService, type DocumentRequest } from "@/src/lib/checklists";
 import { skipReasons, type Skip } from "@/src/lib/reminders";
 import { activityNames } from "@/src/lib/activity";
@@ -289,6 +289,11 @@ export default async function Client({ params, searchParams }: { params: Promise
   // Only those for this kind of client, and any already chosen, are offered.
   const servicesFor = ({ kind, services }: { kind: string; services: string[] }) =>
     rules?.filter((r) => (r.due_rule as { for?: string }).for === kind && (!r.client_kinds || r.client_kinds.includes(client.kind) || services.includes(r.code))) ?? [];
+  // A client with no services yet: the usual ones for its kind on each number, by number,
+  // shown on the Services card and saved only with Use these.
+  const usualFor = new Map(numbers.some((registration) => registration.services.length) ? [] : numbers
+    .map((registration) => [registration.id, usualServices(client.kind, registration.kind).filter((code) => servicesFor(registration).some((service) => service.code === code))] as const)
+    .filter(([, codes]) => codes.length));
   const teams = groups?.filter((group) => group.kind === "team");
   const clientGroups = groups?.filter((group) => group.kind === "client_group") ?? [];
   const branches = groups?.filter((group) => group.kind === "branch") ?? [];
@@ -565,9 +570,22 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <Card id="services-card" title="Services" Icon={ListChecks} kind="week" end={manage && <Link className="b b-ghost" href={`${base}?tab=services`} scroll={false}>Change services</Link>}>
                   <ul className="app-rows">
                     {numbers.filter((registration) => servicesFor(registration).length).map((registration) => (
-                      <Row key={registration.id} title={numberKinds[registration.kind as NumberKind].name} meta={registration.services.map((code) => rule.get(code)?.name ?? code).join(", ") || "None chosen yet"} />
+                      <Row key={registration.id} title={numberKinds[registration.kind as NumberKind].name} meta={usualFor.has(registration.id) ? `Suggested: ${usualFor.get(registration.id)!.map((code) => rule.get(code)?.name ?? code).join(", ")}` : registration.services.map((code) => rule.get(code)?.name ?? code).join(", ") || "None chosen yet"} />
                     ))}
                   </ul>
+                  {manage && !!usualFor.size && (
+                    <form action={manageClient} className="app-card-foot services-usual">
+                      {hidden("overview")}
+                      {[...usualFor].map(([registration, codes]) => (
+                        <Fragment key={registration}>
+                          <input type="hidden" name="registration" value={registration} />
+                          {codes.map((code) => <input key={code} type="hidden" name={`service-${registration}`} value={code} />)}
+                        </Fragment>
+                      ))}
+                      <span className="hint">Usual for this client type. Nothing is saved until you choose Use these.</span>
+                      <Pending className="b b-secondary b-small" name="intent" value="services">Use these</Pending>
+                    </form>
+                  )}
                 </Card>
               )}
             </div>

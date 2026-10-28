@@ -13,7 +13,7 @@ import { emailTemplates } from "@/src/lib/email-templates";
 import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
-import { assignmentRoles, canManageClients, checkClient, exampleClient, readKind, type ClientInput } from "@/src/lib/clients";
+import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, type ClientInput } from "@/src/lib/clients";
 import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
 import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
@@ -421,13 +421,14 @@ export async function changeSpecialHours(form: FormData) {
 export type ClientState = { error?: string; values?: Record<string, string> };
 
 // A client ready for add_clients: a new id, and its numbers encrypted with the firm's key,
-// bound to that id, with blind indexes.
-async function sealClient(firm: string, client: ClientInput) {
+// bound to that id, with blind indexes and any services an import gave them.
+async function sealClient(firm: string, client: ClientInput & Pick<ImportRow, "tan" | "services">) {
   const id = randomUUID();
   const crypto = serverCrypto();
   const numbers = [
     ["pan", client.pan, null],
     ["gstin", client.gstin, client.gstin.slice(0, 2)],
+    ["tan", client.tan ?? "", null],
   ].filter(([, number]) => number) as [string, string, string | null][];
   const registrations = await Promise.all(
     numbers.map(async ([kind, number, state_code]) => ({
@@ -436,6 +437,7 @@ async function sealClient(firm: string, client: ClientInput) {
       number_bidx: await crypto.blindIndex(firm, kind, number),
       identity_hash: numberIdentity(kind, number),
       state_code,
+      services: client.services?.[kind as "pan"] ?? [],
     })),
   );
   const email = client.email
@@ -459,17 +461,19 @@ export async function addClient(_prev: ClientState, form: FormData): Promise<Cli
   redirect(`/app/clients/${sealed.id}`);
 }
 
-export type ImportRow = ClientInput & { line: number; error?: string };
+// said: what the row's Services columns say; services: what that gives each number, once checked.
+export type ImportRow = ClientInput & { line: number; tan?: string; said?: Record<string, string>; services?: Partial<Record<"pan" | "gstin" | "tan", string[]>>; error?: string };
 export type ImportState = { rows?: ImportRow[]; error?: string; done?: number };
 
 // Column headings people use, Tally's among them, as InboxCA reads them (any case, without
 // dots or colons: "PAN/IT No." is "pan/it no").
-const headings: Record<keyof ClientInput, string[]> = {
+const headings: Record<keyof ClientInput | "tan", string[]> = {
   name: ["name", "client name", "client", "party name", "ledger name", "name of party"],
   kind: ["kind", "type", "client type", "constitution", "constitution of business", "category"],
   pan: ["pan", "pan no", "pan number", "it pan", "pan/it no"],
   gstin: ["gstin", "gst", "gst no", "gst number", "gstin/uin", "gstin no", "gstin number"],
   email: ["email", "e-mail", "email id", "email address", "mail", "mail id", "e-mail id"],
+  tan: ["tan", "tan no", "tan number"],
 };
 const heading = (cell: string) => cell.toLowerCase().replace(/[.:]/g, "").replace(/\s+/g, " ").trim();
 
@@ -500,9 +504,10 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
     const [header = [], ...body] = table.slice(top);
     const at = Object.fromEntries(
       Object.entries(headings).map(([field, names]) => [field, header.findIndex((cell) => names.includes(heading(cell)))]),
-    ) as Record<keyof ClientInput, number>;
+    ) as Record<keyof typeof headings, number>;
     if (at.name < 0) return { error: "The first row must name the columns, with one called Name or Client name." };
-    const cell = (cells: string[], field: keyof ClientInput) => (at[field] < 0 ? "" : (cells[at[field]] ?? "").trim());
+    const cell = (cells: string[], field: keyof typeof headings) => (at[field] < 0 ? "" : (cells[at[field]] ?? "").trim());
+    const serviceAt = Object.keys(importServices).map((column) => [column, header.findIndex((text) => heading(text) === heading(column))] as const).filter(([, at]) => at >= 0);
     rows = body
       .map((cells, index) => ({
         line: top + index + 2,
@@ -511,35 +516,44 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
         pan: cell(cells, "pan"),
         gstin: cell(cells, "gstin"),
         email: cell(cells, "email"),
+        tan: cell(cells, "tan"),
+        said: Object.fromEntries(serviceAt.map(([column, at]) => [column, (cells[at] ?? "").trim()])),
       }))
       // An empty row, and the template's example row copied in, are left out.
-      .filter((row) => (row.name || row.kind || row.pan || row.gstin || row.email) && row.name !== exampleClient.name);
+      .filter((row) => (row.name || row.kind || row.pan || row.gstin || row.email || row.tan || Object.values(row.said).some(Boolean)) && row.name !== exampleClient.name);
     if (rows.length > 2000) return { error: "Import at most 2,000 clients at a time." };
   }
 
   // Each row on its own, then numbers repeated in the file, then numbers already in the firm.
+  // A service must be one of the calendar's, for the row's kind of client.
+  const { data: rules } = await supabase.from("compliance_types").select("code, client_kinds").eq("period_key", "");
+  const kindsOf = new Map(rules?.map((rule) => [rule.code, rule.client_kinds]));
   const seen = new Set<string>();
   const checked: ImportRow[] = rows.map((row) => {
     const kind = readKind(row.kind, !!cleanNumber(row.gstin));
     if (!kind) return { ...row, error: `"${row.kind}" is not a client type InboxCA knows. Use Individual, Business, Company, LLP or Trust.` };
     const result = checkClient({ ...row, kind });
     if ("error" in result) return { ...row, error: result.error };
-    const numbers = [result.client.pan, result.client.gstin].filter(Boolean);
-    if (numbers.some((number) => seen.has(number))) return { ...row, ...result.client, error: "The same PAN or GSTIN is on an earlier row." };
+    const tan = cleanNumber(row.tan ?? "");
+    if (tan && !numberKinds.tan.valid(tan)) return { ...row, error: "That TAN is not valid. A TAN is 4 letters, 5 digits and a letter." };
+    const read = readServices(row.said ?? {}, { pan: result.client.pan, gstin: result.client.gstin, tan }, kind, (code) => kindsOf.has(code) && (kindsOf.get(code)?.includes(kind) ?? true));
+    if ("error" in read) return { ...row, error: read.error };
+    const numbers = [result.client.pan, result.client.gstin, tan].filter(Boolean);
+    if (numbers.some((number) => seen.has(number))) return { ...row, ...result.client, error: "The same PAN, GSTIN or TAN is on an earlier row." };
     numbers.forEach((number) => seen.add(number));
-    return { line: row.line, ...result.client };
+    return { line: row.line, ...result.client, tan, said: row.said, services: read.services };
   });
   const crypto = serverCrypto();
   const lines = new Map<string, number>();
   for (const row of checked.filter((row) => !row.error))
-    for (const [kind, number] of [["pan", row.pan], ["gstin", row.gstin]])
+    for (const [kind, number] of [["pan", row.pan], ["gstin", row.gstin], ["tan", row.tan ?? ""]])
       if (number) lines.set(await crypto.blindIndex(firm, kind, number), row.line);
   const indexes = [...lines.keys()];
   for (let start = 0; start < indexes.length; start += 150) {
     const { data } = await supabase.from("client_registrations").select("number_bidx").in("number_bidx", indexes.slice(start, start + 150));
     for (const { number_bidx } of data ?? []) {
       const row = checked.find((candidate) => candidate.line === lines.get(number_bidx));
-      if (row) row.error = "A client with this PAN or GSTIN is already in your firm.";
+      if (row) row.error = "A client with this PAN, GSTIN or TAN is already in your firm.";
     }
   }
   if (!confirmed) return { rows: checked };
@@ -2306,6 +2320,46 @@ export async function sendClientPapers(form: FormData) {
   await supabaseAdmin().from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"bulk_send.asked",entity_type:"request",entity_id:id,details:{clients:ids.length,type,period}});
   runJobsSoon();
   redirect(`/app/clients?bulk=${id}`);
+}
+
+// Set services for the clients ticked on the Clients list: each chosen service is added to the
+// client's number it sits on, where it is for that kind of client. Services already chosen
+// stay, and a number whose services would then not go together is left as it was. Row level
+// security and the database's services check run as on a client's page.
+export async function setServices(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  const ids = [...new Set(form.getAll("client").map(String))].filter((id) => z.uuid().safeParse(id).success).slice(0, 50);
+  const chosen = [...new Set(form.getAll("service").map(String))];
+  const back = String(form.get("back") ?? "");
+  const list = /^\/app\/clients(\?|$)/.test(back) ? back : "/app/clients";
+  const to = (query: string) => `${list}${list.includes("?") ? "&" : "?"}${query}`;
+  if (!membership || !canManageClients(membership.role) || !ids.length) redirect(list);
+  const firm = membership.firmId;
+  const [{ data: rules }, { data: numbers }] = await Promise.all([
+    supabase.from("compliance_types").select("code, due_rule, client_kinds").eq("period_key", ""),
+    supabase.from("client_registrations").select("id, client_id, kind, services, clients!inner(kind)").eq("firm_id", firm).in("client_id", ids),
+  ]);
+  const rule = new Map(rules?.map((r) => [r.code, { ...(r.due_rule as { for?: string; one_of?: string; scheme?: string }), kinds: r.client_kinds }]));
+  // As the database checks it: one of each group (one GSTR-1, one ITR) and one GST scheme.
+  const clash = (codes: string[]) => {
+    const groups = codes.map((code) => rule.get(code)?.one_of).filter(Boolean);
+    return new Set(groups).size < groups.length || new Set(codes.map((code) => rule.get(code)?.scheme).filter(Boolean)).size > 1;
+  };
+  if (!chosen.length || chosen.some((code) => !rule.has(code)) || clash(chosen)) redirect(to(`panel=services&clients=${ids.join(",")}&error=services`));
+  // Numbers that end with the same services are saved together.
+  const saves = new Map<string, { services: string[]; ids: string[] }>();
+  for (const number of numbers ?? []) {
+    const add = chosen.filter((code) => rule.get(code)!.for === number.kind && (rule.get(code)!.kinds?.includes(number.clients.kind) ?? true) && !number.services.includes(code));
+    const services = [...number.services, ...add];
+    if (add.length && !clash(services)) saves.set(services.join(), { services, ids: [...(saves.get(services.join())?.ids ?? []), number.id] });
+  }
+  const changed = new Set<string>();
+  for (const { services, ids: group } of saves.values()) {
+    const { data } = await supabase.from("client_registrations").update({ services }).eq("firm_id", firm).in("id", group).select("client_id");
+    data?.forEach((row) => changed.add(row.client_id));
+  }
+  revalidatePath("/app/clients");
+  redirect(to(`services=${changed.size}&of=${ids.length}`));
 }
 
 export async function setPaperSharing(form:FormData) {

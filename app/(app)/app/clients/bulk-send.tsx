@@ -1,22 +1,28 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { sendClientPapers } from "@/app/(app)/actions";
 import { paperType } from "@/src/lib/paper-type";
 
-// The bar that rises when clients are ticked: choose a paper and a year, then a second step
-// lists who gets what before anything is sent.
-export function BulkSendBar({ types, years }: { types: string[]; years: [string, string][] }) {
+// The bar that rises when clients are ticked: Set services opens beside the list for them
+// (list: the list as shown, to go back to), and for someone who may send, choose a paper and a
+// year, then a second step lists who gets what before anything is sent. Without the right to
+// send, the bar is no sending form.
+export function BulkSendBar({ types, years, send, list }: { types: string[]; years: [string, string][]; send: boolean; list: string }) {
   const [type, setType] = useState("");
   const [period, setPeriod] = useState(years[0]?.[0] ?? "");
   const [names, setNames] = useState<string[]>([]);
+  const [ids, setIds] = useState<string[]>([]);
   const [confirming, setConfirming] = useState(false);
 
   // The ticks sit in the table, joined to this form by its id.
   useEffect(() => {
     const read = () => {
-      const ticked = [...document.querySelectorAll<HTMLInputElement>('input[form="bulk-send"][name="client"]:checked')].map((box) => box.dataset.name ?? "");
+      const boxes = [...document.querySelectorAll<HTMLInputElement>('input[form="bulk-send"][name="client"]:checked')];
+      const ticked = boxes.map((box) => box.dataset.name ?? "");
       setNames(ticked);
+      setIds(boxes.map((box) => box.value));
       if (!ticked.length) setConfirming(false);
     };
     read();
@@ -32,7 +38,7 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
   const year = years.find(([value]) => value === period)?.[1] ?? "";
 
   return (
-    <form id="bulk-send" action={sendClientPapers} className="clients-bulk" aria-label="Send papers to the chosen clients">
+    <form id={send ? "bulk-send" : undefined} action={send ? sendClientPapers : undefined} className="clients-bulk" aria-label={send ? "Send papers to the chosen clients" : "Chosen clients"}>
       {confirming ? (
         <>
           <input type="hidden" name="type" value={type} />
@@ -53,6 +59,10 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
           <button className="b b-ghost" type="button" onClick={clear}>
             Clear
           </button>
+          <Link className={send ? "b b-ghost" : "b b-primary"} href={`${list}${list.includes("?") ? "&" : "?"}panel=services&clients=${ids.join(",")}`} scroll={false}>
+            Set services
+          </Link>
+          {send && <>
           <span className="bulk-what">Send them a paper</span>
           <select id="bulk-paper" name="type" required aria-label="Paper" value={type} onChange={(event) => setType(event.target.value)}>
             <option value="">Choose a paper</option>
@@ -70,6 +80,7 @@ export function BulkSendBar({ types, years }: { types: string[]; years: [string,
           <button className="b b-primary" type="button" disabled={!type || !names.length} onClick={() => setConfirming(true)}>
             {type ? `Send ${paperType(type)} to ${clients}` : `Choose a paper for ${clients}`}
           </button>
+          </>}
         </>
       )}
     </form>

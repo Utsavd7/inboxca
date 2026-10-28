@@ -1,14 +1,16 @@
-import { clientKinds, exampleClient } from "@/src/lib/clients";
+import { clientKinds, exampleClient, importServices } from "@/src/lib/clients";
 import { zip } from "@/src/lib/firm-download";
 
 // The client list template linked from Clients > Import from Excel: the headings the import
-// reads, a list of the app's client types, and checks Excel makes as each number is typed
-// (the import checks every row again). Built once, when the app is built, so there is no
-// file to keep in step. Its example row is on How to fill only, never in the data.
+// reads, lists of the app's client types and services, and checks Excel makes as each number
+// is typed (the import checks every row again). Built once, when the app is built, so there is
+// no file to keep in step. Its example row is on How to fill only, never in the data.
 export const dynamic = "force-static";
 
-const columns = ["Name", "Client type", "PAN", "GSTIN", "Email"];
-const widths = [36, 24, 14, 20, 32, 44];
+const services = Object.keys(importServices);
+const choices = (column: string) => Object.keys(importServices[column].choices);
+const columns = ["Name", "Client type", "PAN", "GSTIN", "Email", "TAN", ...services];
+const widths = [36, 24, 14, 20, 32, 14, 20, 14, 26, 44];
 const xml = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const main = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
@@ -43,6 +45,9 @@ export function GET() {
       `15 characters in capitals, like ${exampleClient.gstin}. Characters 3 to 12 are the PAN.`, "That GSTIN is not valid. Check it for a typing mistake, and that characters 3 to 12 are the PAN."),
     check("Email", 'type="custom"', 'AND(FIND("@",E2)>1,ISNUMBER(FIND(".",E2,FIND("@",E2)+2)),RIGHT(E2)<>".",LEN(SUBSTITUTE(E2,"@",""))=LEN(E2)-1,ISERR(FIND(" ",E2)))',
       "The address InboxCA writes to for this client.", "That email address is not valid."),
+    check("TAN", 'type="custom"', `AND(LEN(F2)=10,TEXT(MID(F2,5,5)*1,"00000")=MID(F2,5,5),${["F2", "MID(F2,2,1)", "MID(F2,3,1)", "MID(F2,4,1)", "RIGHT(F2)"].map(capital).join(",")})`,
+      "10 characters in capitals: 4 letters, 5 digits and a letter. Needed for TDS returns.", "That TAN is not valid. A TAN is 4 letters, 5 digits and a letter, in capitals."),
+    ...services.map((column) => check(column, 'type="list"', `"${choices(column).join(",")}"`, "Choose from the list what your firm files for this client. Left empty, InboxCA adds none.", `Choose ${column} from the list.`)),
   ].join("");
   const help = [
     ["How to fill the client list"],
@@ -56,10 +61,15 @@ export function GET() {
     ["PAN", "10 characters in capitals: 5 letters, 4 digits and a letter. You can leave it empty when you give a GSTIN."],
     ["GSTIN", "15 characters in capitals. Characters 3 to 12 are the PAN."],
     ["Email", "The address InboxCA writes to for this client."],
+    ["TAN", "10 characters in capitals: 4 letters, 5 digits and a letter. Needed for TDS returns."],
+    ["GST returns", `Choose from the list: ${choices("GST returns").join(", ")}. Monthly is GSTR-1 and GSTR-3B each month; Quarterly (QRMP) is both each quarter, with the GST payment for its first two months; Composition is CMP-08 and GSTR-4. Needs the GSTIN.`],
+    ["TDS returns", "Yes adds the quarterly TDS returns and the monthly TDS payments. Needs the TAN."],
+    ["Income tax return", `Choose from the list: ${choices("Income tax return").join(", ")}. Each has its own due date. Needs the PAN.`],
+    ["", "The last three are the services your firm files for the client; InboxCA makes their due dates. Left empty, you can choose them later on the Clients list."],
     [],
     ["An example row. Do not copy it into the Clients sheet."],
     columns,
-    [exampleClient.name, exampleClient.kind, exampleClient.pan, exampleClient.gstin, exampleClient.email],
+    [exampleClient.name, exampleClient.kind, exampleClient.pan, exampleClient.gstin, exampleClient.email, "", "Monthly", "", "Business and no audit"],
   ];
   const files: Record<string, string> = {
     "[Content_Types].xml": `${head}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${type}.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="${type}.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="${type}.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="${type}.worksheet+xml"/></Types>`,
@@ -68,7 +78,7 @@ export function GET() {
     "xl/_rels/workbook.xml.rels": `${head}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${rel}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="${rel}/styles" Target="styles.xml"/></Relationships>`,
     "xl/styles.xml": `${head}<styleSheet ${main}><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><i/><sz val="11"/><color rgb="FF5B6474"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
     "xl/worksheets/sheet1.xml": sheet([[...columns, "Only Name is needed. See the How to fill sheet."]], (_, column) => (column < columns.length ? 1 : 2), checks),
-    "xl/worksheets/sheet2.xml": sheet(help, (row) => ([0, 5, 12, 13].includes(row) ? 1 : 0)),
+    "xl/worksheets/sheet2.xml": sheet(help, (row) => ([0, 5, help.length - 3, help.length - 2].includes(row) ? 1 : 0)),
   };
   return new Response(new Uint8Array(zip(Object.entries(files).map(([name, text]) => ({ name, text })))), {
     headers: {

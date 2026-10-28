@@ -32,6 +32,8 @@
 .clients-page .pager p:empty { display: none; }
 /* The next return over its date, wrapping rather than pushing the status out of view. */
 .clients-page .t td.clients-next { min-width: 200px; white-space: normal; line-height: 1.35; }
+/* An import's services per row wrap in the check, as the next return does. */
+.clients-page .t td.import-services { min-width: 220px; white-space: normal; line-height: 1.35; }
 /* Where a paper came from wraps too, so the status and Open stay on screen. */
 .clients-page .t td:has(> .came-from) { min-width: 240px; white-space: normal; }
 /* A client late and missing papers shows both pills, late first, one over the other. */
@@ -151,6 +153,8 @@
 .service-form { display: grid; gap: var(--s2); }
 .service-form .b { justify-self: start; }
 .service-save { margin-top: var(--s4); }
+/* The usual services for a client with none, under the Services card, with Use these. */
+.services-usual { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .contact-form { flex-wrap: wrap; margin-top: var(--s2); }
 @media (max-width: 720px) { .clients-find { width: 100%; flex-wrap: nowrap; } .clients-find .search { flex: 1; width: auto; } }
 /* The firm's usual list for a kind of client, one paper a line, in Ask for papers. */
