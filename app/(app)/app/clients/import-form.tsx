@@ -94,8 +94,8 @@ export function ImportForm() {
             Row 1 must hold the column names: Name, and if you have them, Client type, Email, PAN and GSTIN. InboxCA
             adds nothing until you have seen the check.
           </p>
-          <a className="hint" href="/clients-sample.csv" download>
-            Download a sample sheet
+          <a className="hint" href="/app/clients/template" download>
+            Download the client list template
           </a>
         </form>
       )}
