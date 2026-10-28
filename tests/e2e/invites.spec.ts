@@ -817,7 +817,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
     await expect(open.getByRole("button", { name: "Mark done" })).toHaveCount(0, { timeout: 15_000 });
   }
   // Each waiting email is given to someone; here the owner is the only person.
-  expect(reasons.sort()).toEqual(["Asks for a paper that is not in the drive. Given to you", "Asks something InboxCA could not answer. Given to you"]);
+  expect(reasons.sort()).toEqual(["Asks for a paper that is not in the drive. Given to you.", "Asks something InboxCA could not answer. Given to you."]);
   await owner.goto("/app/inbox?show=reply");
   await expect(owner.getByText("No email needs a reply")).toBeVisible();
   await owner.goto("/app/inbox?show=in");
