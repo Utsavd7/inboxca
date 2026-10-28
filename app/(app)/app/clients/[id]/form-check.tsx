@@ -110,7 +110,7 @@ export function FormCheck({layout,items,papers,active,client,draft,revision,canC
         </form>}
         {editing && <div className="fc-fix"><FigureEdit key={`${draft}-${item.id}-${revision}`} client={client} draft={draft} line={item.id} revision={revision} value={kept[item.id]?.value ?? item.value} reason={kept[item.id]?.reason} kind={item.kind} kept={!!kept[item.id]} extra={{view:"form",next:item.id}}/><button type="button" className="b b-ghost b-small" onClick={()=>{setEditing(false);box(selected)?.focus();}}>Cancel<kbd aria-hidden>Esc</kbd></button></div>}
       </div>}/>
-      {!!layout.empty?.length && <p className="hint fc-empty">Nothing in these figures for {layout.empty.join(", ")}.</p>}
+      {!!layout.empty?.length && <details className="hint fc-empty"><summary>Nothing in these figures for the other {layout.empty.length} tables</summary><p>{layout.empty.join(", ")}.</p></details>}
     </div>
     <SourcePane title={<p className="fig-pane-title"><strong>{paper?.name ?? (item?.entered ? "Typed by your team" : "Source unavailable")}</strong><span className="sr-only">. </span><span className="sub">{item?.where}</span>{paper?.about && <span className={`fc-about${paper.about.ok===undefined ? "" : paper.about.ok ? " is-ok" : " is-off"}`}>{paper.about.ok===true && <Check size={13} strokeWidth={2.6} aria-hidden/>}{paper.about.ok===false && <X size={13} strokeWidth={2.6} aria-hidden/>}{paper.about.text}{paper.about.ok===true && <span className="sr-only">. InboxCA matched this to the client when it read the file.</span>}</span>}</p>}>
       <ul className="fc-facts" aria-label="About this figure">{item?.chips.map((chip)=><li key={chip.text} className={`is-${chip.tone}`}>{chip.text}</li>)}</ul>

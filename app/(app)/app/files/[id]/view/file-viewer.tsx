@@ -19,17 +19,8 @@ const drop = (entry: Kept) => {
   entry.pages.forEach((page) => URL.revokeObjectURL(page.url));
   if (kept === entry) kept = null;
 };
-export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 1, thumb = false, marks: figures, mark, onPages }: { id: string; hideInactive?: boolean; page?: number; sheet?: number; thumb?: boolean; marks?: string; mark?: string; onPages?: (view: ViewerPages) => void }) {
-  const key = figures && !thumb ? `${id}|${sheet}|${figures}` : "";
-  const [reused] = useState(() => (key && kept?.key === key ? kept : null));
-  const [pages, setPages] = useState<{ url: string; width: number; height: number }[]>(reused?.pages ?? []);
-  const [spots, setSpots] = useState<ViewMark[]>(reused?.marks ?? []);
-  const scroller = useRef<HTMLDivElement>(null);
-  const [limited, setLimited] = useState(reused?.limited ?? false);
-  const [state, setState] = useState<"loading" | "shown" | "failed" | "nodrive" | "large" | "locked" | "wrong">(reused ? "shown" : "loading");
+export function useCaptureGuard(id: string, hideInactive: boolean) {
   const [blank, setBlank] = useState(false);
-  const [opening, setOpening] = useState(0);
-
   // Capture deterrents (5.17.2): a screenshot key blanks the pages for a few seconds, tries to
   // clear the clipboard and is logged; with the firm's setting, pages hide while InboxCA is
   // not the active window. None of this can stop a photo of the screen; the watermark traces it.
@@ -59,6 +50,19 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
       window.removeEventListener("focus", back);
     };
   }, [id, hideInactive]);
+  return blank;
+}
+export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 1, thumb = false, marks: figures, mark, onPages }: { id: string; hideInactive?: boolean; page?: number; sheet?: number; thumb?: boolean; marks?: string; mark?: string; onPages?: (view: ViewerPages) => void }) {
+  const key = figures && !thumb ? `${id}|${sheet}|${figures}` : "";
+  const [reused] = useState(() => (key && kept?.key === key ? kept : null));
+  const [pages, setPages] = useState<{ url: string; width: number; height: number }[]>(reused?.pages ?? []);
+  const [spots, setSpots] = useState<ViewMark[]>(reused?.marks ?? []);
+  const scroller = useRef<HTMLDivElement>(null);
+  const [limited, setLimited] = useState(reused?.limited ?? false);
+  const [state, setState] = useState<"loading" | "shown" | "failed" | "nodrive" | "large" | "locked" | "wrong">(reused ? "shown" : "loading");
+  const blank = useCaptureGuard(id, hideInactive);
+  const [opening, setOpening] = useState(0);
+
 
   useEffect(() => {
     const controller = new AbortController();
