@@ -1,0 +1,192 @@
+/* A client's Return files (prepared-forms.tsx): each return as a card with its four steps and
+   one next action, then the returns ready to prepare. And its Figures (dataset-review.tsx): the
+   figures to check as a table beside their paper, then the tools that read papers. */
+.rf { display: grid; gap: var(--s3); margin-top: var(--s5); }
+.rf-head h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.rf-head .hint { margin-top: 2px; }
+.rf-list { display: grid; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
+
+/* One return file. */
+.rf-card { position: relative; display: grid; gap: var(--s3); padding: var(--s4); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-1); animation: rise var(--slow) var(--out) both; }
+.rf-card:has(.rf-menu[open]) { z-index: 2; }
+.rf-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
+.rf-name { display: grid; flex: 1 1 260px; gap: 2px; min-width: 0; }
+.rf-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.rf-title h3 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.rf-name .sub { display: flex; flex-wrap: wrap; gap: 0 var(--s3); }
+.rf-name .sub a { color: var(--ink-2); text-decoration: none; overflow-wrap: anywhere; }
+.rf-name .sub a:hover { color: var(--accent); text-decoration: underline; text-decoration-color: var(--line-2); }
+.rf-acts { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s2); margin-left: auto; }
+.rf-acts > form { display: contents; }
+.rf-note { color: var(--ink-2); font-size: 13px; }
+.rf-note.is-busy { color: var(--accent); }
+.rf-notice { display: flex; align-items: flex-start; gap: var(--s2); padding: var(--s2) var(--s3); border-radius: var(--r2); background: var(--info-bg); color: var(--info-fg); font-size: 13px; }
+.rf-notice > svg { flex: none; margin-top: 2px; }
+.rf-spin { flex: none; animation: rf-spin 0.9s linear infinite; }
+
+/* The four steps: a dot each, joined by a line that fills as a step is done. */
+.rf-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 780px; margin: 0; padding: 0; list-style: none; }
+.rf-steps li { display: flex; align-items: center; gap: var(--s2); min-width: 0; color: var(--ink-3); font-size: 13px; white-space: nowrap; }
+.rf-steps li:not(:last-child)::after { content: ""; flex: 1; min-width: var(--s3); height: 2px; margin-right: var(--s2); border-radius: var(--round); background: linear-gradient(var(--accent), var(--accent)) left / 0% 100% no-repeat, var(--line); }
+.rf-steps li.is-done:not(:last-child)::after { background-size: 100% 100%; animation: rf-fill var(--slower) var(--out) both; }
+.rf-steps li:nth-child(2)::after { animation-delay: 90ms; }
+.rf-steps li:nth-child(3)::after { animation-delay: 180ms; }
+.rf-dot { display: grid; flex: none; place-items: center; width: 18px; height: 18px; border: 2px solid var(--line-2); border-radius: var(--round); background: var(--surface); color: var(--on-accent); }
+.rf-steps .is-done { color: var(--ink-2); }
+.rf-steps .is-done .rf-dot { border-color: var(--accent-solid); background: var(--accent-solid); }
+.rf-steps .is-done .rf-dot svg { animation: tick-in var(--base) var(--out); }
+.rf-steps .is-now { color: var(--ink); font-weight: 600; }
+.rf-steps .is-now .rf-dot { border-color: var(--accent); box-shadow: 0 0 0 4px var(--focus-glow); }
+.rf-steps .is-now .rf-dot::after { content: ""; width: 6px; height: 6px; border-radius: var(--round); background: var(--accent); }
+.rf-steps .is-busy .rf-dot::after { animation: rf-pulse 1.2s var(--out) infinite; }
+.rf-steps.is-filed .rf-dot { border-color: var(--done-dot); background: var(--done-dot); }
+.rf-steps.is-filed li::after { background: var(--done-dot); }
+
+/* What InboxCA filled in a GSTR-3B, and what is left for the portal. */
+.rf-tables { border-radius: var(--r2); background: var(--surface-2); }
+.rf-tables > summary { display: flex; align-items: center; gap: var(--s2); min-height: var(--control); padding: var(--s1) var(--s3); color: var(--ink-2); font-size: 13px; cursor: pointer; list-style: none; }
+.rf-tables > summary::-webkit-details-marker { display: none; }
+.rf-tables > summary > svg:first-child { flex: none; color: var(--done-fg); }
+.rf-tables > summary > svg:last-child { flex: none; margin-left: auto; color: var(--ink-3); transition: transform var(--base) var(--out); }
+.rf-tables[open] > summary > svg:last-child { transform: rotate(180deg); }
+.rf-tables-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--s4); padding: var(--s1) var(--s3) var(--s3); animation: rf-open var(--base) var(--out); }
+.rf-tables h4 { margin-bottom: 6px; color: var(--ink-2); font-size: 12px; font-weight: 600; }
+.rf-tables .hint { margin-top: var(--s2); }
+.rf-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.rf-chips li { display: inline-flex; align-items: center; height: 24px; padding: 0 var(--s2); border-radius: var(--r1); background: var(--done-bg); color: var(--done-fg); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.rf-chips.is-left li { border: 1px dashed var(--line-3); background: var(--surface); color: var(--ink-2); font-weight: 500; }
+
+/* More, and Mark filed: a small sheet under its button. */
+.rf-menu { position: relative; }
+.rf-menu > summary { gap: 6px; list-style: none; user-select: none; }
+.rf-menu > summary::-webkit-details-marker { display: none; }
+.rf-menu > summary > svg { color: var(--ink-3); transition: transform var(--base) var(--out); }
+.rf-menu[open] > summary { background: var(--press); }
+.rf-menu[open] > summary > .lucide-chevron-down { transform: rotate(180deg); }
+.rf-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; display: grid; gap: 2px; width: 340px; max-width: calc(100vw - 32px); padding: var(--s1); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-float); transform-origin: top left; animation: rf-pop var(--base) var(--out); }
+.rf-pop.is-end { right: 0; left: auto; transform-origin: top right; }
+.rf-pop-item { display: flex; align-items: center; min-height: var(--control); padding: var(--s1) var(--s2); border-radius: var(--r2); color: var(--ink); font-size: 14px; text-decoration: none; cursor: pointer; list-style: none; transition: background var(--fast) var(--out); }
+.rf-pop-item::-webkit-details-marker { display: none; }
+.rf-pop-item:hover { background: var(--hover); }
+.rf-sub[open] > .rf-pop-item { background: var(--press); font-weight: 600; }
+.rf-pop-form { display: grid; gap: var(--s3); padding: var(--s2); animation: rf-open var(--base) var(--out); }
+.rf-pop-form > div { display: grid; gap: var(--s1); }
+.rf-pop-form > .b { justify-self: start; }
+
+/* Earlier versions, under the newest. */
+.rf-older > summary { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 13px; cursor: pointer; list-style: none; }
+.rf-older > summary::-webkit-details-marker { display: none; }
+.rf-older > summary > svg { color: var(--ink-3); transition: transform var(--base) var(--out); }
+.rf-older[open] > summary > svg { transform: rotate(180deg); }
+.rf-older ul { display: grid; gap: 2px; margin: var(--s2) 0 0; padding: 0; list-style: none; animation: rf-open var(--base) var(--out); }
+.rf-older li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); min-height: 36px; padding: 2px var(--s2); border-radius: var(--r2); font-size: 13px; }
+.rf-older li:hover { background: var(--hover); }
+.rf-older li > a { color: var(--ink-2); }
+
+/* Returns ready to prepare: a row each, its sources to tick, and its Prepare button. */
+.rf-prepare { margin-top: var(--s2); }
+.rf-prepare > .app-card-head .hint { margin-left: var(--s1); }
+.rf-group { display: grid; gap: var(--s1); padding: var(--s3) var(--s4) var(--s4); border-top: 1px solid var(--line); }
+.rf-group > h3 { color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.rf-prep { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s2) var(--s4); margin-inline: calc(var(--s2) * -1); padding: var(--s2); border-radius: var(--r2); transition: background var(--fast) var(--out); }
+.rf-prep:hover { background: var(--hover); }
+.rf-prep > fieldset { grid-column: 1; min-width: 0; margin: 0; padding: 0; border: 0; }
+.rf-prep > fieldset > legend { float: left; width: 100%; margin-bottom: 6px; padding: 0; font-size: 14px; font-weight: 600; }
+.rf-prep > fieldset > legend + * { clear: both; }
+.rf-prep > button { grid-column: 2; grid-row: 1; }
+.rf-prep > :is(details, .rf-prep-notes) { grid-column: 1; }
+.rf-prep-notes { display: grid; gap: var(--s2); }
+.rf-prep-notes:empty { display: none; }
+.rf-srcs { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.rf-src { display: inline-flex; align-items: center; gap: var(--s2); min-height: 40px; padding: var(--s1) var(--s3) var(--s1) var(--s2); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); cursor: pointer; transition: border-color var(--fast) var(--out), background var(--fast) var(--out); }
+.rf-src:hover { border-color: var(--line-3); }
+.rf-src:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.rf-src.is-todo { border-style: dashed; background: var(--surface-2); cursor: default; }
+.rf-src > span { display: grid; line-height: 1.3; }
+.rf-src a { color: var(--ink); font-size: 13px; font-weight: 600; text-decoration: none; }
+.rf-src a:hover { text-decoration: underline; text-decoration-color: var(--line-3); }
+.rf-src small { color: var(--ink-3); font-size: 12px; }
+.rf-older-tool > summary { width: fit-content; color: var(--ink-3); font-size: 12px; cursor: pointer; list-style: none; text-decoration: underline; text-decoration-color: var(--line-2); }
+.rf-older-tool > summary::-webkit-details-marker { display: none; }
+.rf-fields { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s2); animation: rf-open var(--base) var(--out); }
+.rf-fields > div { display: grid; gap: var(--s1); min-width: 200px; }
+.rf-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin-inline: calc(var(--s2) * -1); padding: var(--s2); }
+.rf-row select { width: auto; min-width: 200px; }
+.rf-row > .grow { flex: 1; min-width: 0; }
+
+/* Figures: how many are checked, then the table beside the paper. */
+.fig { margin-top: var(--s5); }
+.fig > .empty { margin: 0 var(--s4) var(--s4); border-style: solid; border-color: var(--line); background: var(--surface-2); }
+.fig-progress { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: 0 var(--s4); }
+.fig-for { display: inline-flex; align-items: center; height: 24px; padding: 0 var(--s2); border-radius: var(--round); background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.fig-progress strong { font-size: 13px; font-weight: 600; }
+.fig-bar { flex: 1 1 160px; max-width: 360px; height: 6px; overflow: hidden; border-radius: var(--round); background: var(--line); }
+.fig-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transform-origin: left; transition: transform var(--slower) var(--out); }
+.fig-bar.is-done > i { background: var(--done-dot); }
+.fig-next { margin-left: auto; }
+.fig-hint { padding: var(--s2) var(--s4) 0; }
+.fig > .alert { margin: var(--s3) var(--s4) 0; }
+.fig-layout { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--s4); padding: var(--s3) var(--s4) var(--s4); }
+.fig-table { border: 1px solid var(--line); border-radius: var(--r2); }
+.fig .fig-table > .t { min-width: 520px; table-layout: fixed; }
+.fig-table th:nth-child(2) { width: 112px; }
+.fig-table th:nth-child(3) { width: 140px; }
+.fig-table th:nth-child(4) { width: 104px; }
+.fig .fig-table > .t td { height: 44px; font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
+.fig-table thead th { background: var(--surface-2); }
+.fig-table thead th:first-child { border-top-left-radius: var(--r2); }
+.fig-table thead th:last-child { border-top-right-radius: var(--r2); }
+.fig-table .is-num { text-align: right; }
+.fig-table td.is-num { font-size: 13px; white-space: nowrap; }
+.fig-table tbody tr:not(.fig-open) { position: relative; }
+.fig-table tbody tr.is-open, .fig-table tbody tr.is-open:hover { background: var(--accent-soft); }
+.fig-table tbody tr.is-open + .fig-open { background: var(--accent-soft); }
+.fig-name { color: var(--ink); font-size: 13px; font-weight: 500; text-decoration: none; }
+.fig-name::after { content: ""; position: absolute; inset: 0; }
+.fig-table tr.is-open .fig-name { font-weight: 600; }
+.fig-from { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 var(--s2); border: 1px solid var(--line); border-radius: var(--r1); background: var(--surface); color: var(--ink-2); font-size: 12px; text-decoration: none; white-space: nowrap; transition: border-color var(--fast) var(--out), color var(--fast) var(--out); }
+a.fig-from:hover { border-color: var(--accent); color: var(--accent); }
+.fig-from > svg { flex: none; color: var(--ink-3); }
+.fig-table .badge { animation: tick-in var(--base) var(--out); }
+.fig-open > td { height: auto !important; padding: 0 !important; }
+.fig-act { display: grid; gap: var(--s3); padding: var(--s1) var(--s4) var(--s4); animation: rf-open var(--base) var(--out); }
+.fig-decide { display: grid; gap: var(--s2); }
+.fig-decide .form-row { margin: 0; flex-wrap: nowrap; }
+.fig-act .fields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s2) var(--s3); margin: 0; }
+.fig-act .fields > .hint { grid-column: 1 / -1; }
+.fig-why { color: var(--ink-2); font-size: 13px; }
+.fig-pane { position: sticky; top: 72px; width: clamp(320px, 30vw, 520px); overflow: hidden; border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-2); animation: rf-pane var(--slow) var(--out); }
+.fig-pane-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--s2) var(--s2) var(--s3); border-bottom: 1px solid var(--line); }
+.fig-pane-title { display: grid; min-width: 0; padding-top: 3px; font-size: 13px; line-height: 1.4; }
+.fig-pane-title strong { font-weight: 600; overflow-wrap: anywhere; }
+.fig-pane > .viewer { margin: 0; }
+.fig-pane > :is(.viewer, p) > .hint, .fig-pane > p { padding: var(--s3); }
+.fig-pane .viewer-pages { display: block; max-height: calc(100vh - 240px); overflow: auto; padding: var(--s3); border-radius: 0; }
+.fig-pane .viewer-pages img { width: auto; max-width: none; }
+.fig-pane-show { position: sticky; top: 72px; gap: 6px; }
+.fig .pager { padding: 0 var(--s4) var(--s4); margin: 0; }
+@media (max-width: 1100px) { .fig-layout { grid-template-columns: 1fr; } .fig-pane { position: static; width: auto; } }
+@media (max-width: 720px) { .rf-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--s2); } .rf-acts { margin-left: 0; } }
+
+/* The tools that read papers into figures: a card each, one action. */
+.fig-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; gap: var(--s3); margin-top: var(--s4); }
+.tool.is-wide { grid-column: 1 / -1; }
+.tool > .app-card-head { min-height: 48px; padding-bottom: var(--s1); }
+.tool-hint { padding: 0 var(--s4); color: var(--ink-3); font-size: 13px; }
+.tool-body { display: grid; gap: var(--s3); padding: var(--s3) var(--s4) var(--s4); }
+.tool-body > :is(.form-row, .fields, .alert, .ok) { margin: 0; }
+.tool .app-rows { margin: var(--s3) 0 0; }
+.tool .app-row { min-height: 48px; }
+.tool .app-row.is-on { background: var(--accent-soft); }
+.tool .app-rows + .tool-body { border-top: 1px solid var(--line); }
+
+@keyframes rf-pop { from { opacity: 0; transform: translateY(-4px) scale(0.97); } }
+@keyframes rf-open { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes rf-pane { from { opacity: 0; transform: translateX(12px); } }
+@keyframes rf-fill { from { background-size: 0% 100%; } }
+@keyframes rf-pulse { 50% { opacity: 0.4; transform: scale(0.6); } }
+@keyframes rf-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .rf-spin, .rf-steps .is-busy .rf-dot::after { animation: none !important; }
+  .fig-bar > i { transition: none; }
+}

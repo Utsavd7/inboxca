@@ -863,7 +863,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                           {canPrepare && fills(task.code) && fillable(stages.get(task.id)) && <Fill task={task.id} label={title} />}
                           {stages.get(task.id)?.stage === "filled" && <Link className="b b-secondary" href={`/app/files/${stages.get(task.id)!.form}/view`} aria-label={`Check figures of ${title}`}>Check figures</Link>}
                           {canFile && task.status !== "filed" ? (
-                            task.due_on <= addDays(today, 30) && <Link className="b b-secondary" href={`${returnsHref}&task=${task.id}`} scroll={false} aria-label={`Mark ${title} filed`}>Mark filed</Link>
+                            task.due_on <= addDays(today, 30) && <Link className={`b ${(canPrepare && fills(task.code) && fillable(stages.get(task.id))) || stages.get(task.id)?.stage === "filled" ? "b-ghost" : "b-secondary"}`} href={`${returnsHref}&task=${task.id}`} scroll={false} aria-label={`Mark ${title} filed`}>Mark filed</Link>
                           ) : (
                             canFile && (
                               <form action={manageTasks}>
@@ -887,8 +887,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns","returns")}
           </>
         )}
-        {sub === "extraction" && <>{pan && <Card id="itr-return" title="Income tax return" Icon={FileText} kind="docs" end={<Link className="b b-secondary b-small" href={`${base}/itr`}>Open the return</Link>}><p className="app-card-none">ITR-1 to ITR-4, filled with the client&apos;s PAN and the figures InboxCA already holds for the year. The rest is listed for you to fill.</p></Card>}<PortalInput clientId={id} message={portal}/><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/></>}
-        {sub === "extraction" && <PurchaseMatch clientId={id} searchParams={searchParams}/>}
+        {sub === "extraction" && <><DatasetReview clientId={id} draftId={draft} lineId={line} check={check}/><div className="fig-tools">{pan && <Card id="itr-return" className="tool" title="Income tax return" Icon={FileText} kind="docs" end={<Link className="b b-secondary" href={`${base}/itr`}>Open the return</Link>}><p className="app-card-none">ITR-1 to ITR-4, filled with the client&apos;s PAN and the figures InboxCA already holds for the year. The rest is listed for you to fill.</p></Card>}<PortalInput clientId={id} message={portal}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/><PurchaseMatch clientId={id} searchParams={searchParams}/></div></>}
         {sub === "outputs" && <PreparedForms client={id} message={formMessage}/>}
 
         {tab === "notices" && (

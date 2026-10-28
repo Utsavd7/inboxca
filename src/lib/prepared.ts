@@ -17,6 +17,8 @@ import {receive,unsafeText} from "./intake";
 import {itrChecks,type ItrWork} from "./itr-check";
 
 export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
+// Why a second Prepare of the same return waits; Return files shows it as the file being prepared.
+export const preparingNow="This return is already being prepared. Open the page again in a moment.";
 export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : "GSTR-3B";
 
 const formPeriod=(period:string)=>period.length===4 ? itrYear(period) : periodName(period);
@@ -58,7 +60,7 @@ export async function savePrepared(request:FormRequest,userId:string|null,permis
       if(done?.drive_file_id) return saved.id;
       await new Promise(resolve=>setTimeout(resolve,500));
     }
-    throw new Error(fill ? "This return is being filled now. Open it again in a moment." : "This return is already being prepared. Open the page again in a moment.");
+    throw new Error(fill ? "This return is being filled now. Open it again in a moment." : preparingNow);
   }
   try {
     const {data:finished,error}=await admin.rpc("finish_form",{target:saved.id,firm:request.firm,person:userId as string,file:file.id,checksum:createHash("sha256").update(bytes).digest("hex"),bytes:bytes.length,...(permission && {permission})});

@@ -58,7 +58,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await page.goto(`/app/clients/${client}?tab=returns`);await page.getByRole("link",{name:"Figures",exact:true}).click();
     await expect(page.getByRole("heading",{name:"Income tax return"})).toBeVisible();
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${paper}`);
-    await expect(page.getByRole("link",{name:"Income tax AY 2026-27"})).toHaveAttribute("aria-current","page");
+    await expect(page.getByText("Income tax AY 2026-27",{exact:true})).toBeVisible();
     for(let n=0;n<fromForm16.length;n++) {await expect(page.getByText("Invented Form 16.pdf. Page 1")).toBeVisible();await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${n+1} of ${fromForm16.length} checked`)).toBeVisible();}
     // The return: PAN and Form 16 are already filled; the rest is listed to fill.
     await page.goto(`/app/clients/${client}/itr`);
@@ -150,7 +150,7 @@ test("ITR-2, ITR-3 and ITR-4 are prepared from checked figures, and a return cor
       // The fallback: a return corrected in another tool is a new version whose figures wait for checks.
       output.ITR.ITR4.Verification.Declaration.FatherName="Invented Edited Father";
       await page.goto(`/app/clients/${client}?tab=outputs`);const row=page.locator("li").filter({has:page.getByRole("link",{name:saved.name,exact:true})});
-      await row.getByText("Upload a file you corrected outside InboxCA",{exact:true}).click();await row.getByLabel("Official return file",{exact:true}).setInputFiles({name:"invented-correction.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(output))});await row.getByRole("button",{name:"Add corrected version"}).click();await expect(page).toHaveURL(/tab=extraction&draft=/);
+      await row.locator("summary",{hasText:"More"}).click();await row.getByText("Upload a file you corrected outside InboxCA",{exact:true}).click();await row.getByLabel("Official return file",{exact:true}).setInputFiles({name:"invented-correction.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(output))});await row.getByRole("button",{name:"Add corrected version"}).click();await expect(page).toHaveURL(/tab=extraction&draft=/);
       const [external]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'='ITR4' and prepared->>'external'='true'",[firm.firmId]);
       expect(external.prepared.status).toBe("draft");expect(external.prepared.version).toBe(2);
       const [edited]=await query(local.dbUrl,"select data from public.datasets where id=$1",[external.prepared.sources[0].id]);
