@@ -119,3 +119,46 @@ export function formLayout(form:string,lines:Line[],{target,names={}}:{target?:s
   if(form==="ITR" && lines.some((line)=>line.field.startsWith("itr."))) return itr(lines,target);
   return {tables:other(lines),placed:0};
 }
+
+// A number with its digits grouped the Indian way (21,29,400.50), for reading only. One rule a
+// column: paise as two decimals when any of its amounts has paise, else none (decimals 0).
+export const grouped=(value:string,kind?:string,decimals=2)=>{
+  if(kind && kind!=="number") return value;
+  const [whole,fraction=""]=value.split(".");
+  return whole.replace(/^(-?)(\d+)/,(_,sign:string,digits:string)=>sign+digits.replace(/(\d)(?=(\d\d)*\d{3}$)/g,"$1,"))+(decimals===2 || /[1-9]/.test(fraction) ? `.${fraction.padEnd(2,"0")}` : "");
+};
+const amount=/^-?\d{1,13}(\.\d{1,2})?$/,hasPaise=(value:string)=>amount.test(value) && /\.\d*[1-9]/.test(value);
+
+// A layout's boxes as words, for a return shown read only: each figure's value, amounts grouped
+// with their column's decimals rule.
+export function textLayout(layout:FormLayout,values:Map<string,{value:string;kind?:string}>):FormLayout {
+  return {...layout,tables:layout.tables.map((table)=>{
+    const decimals=table.heads.map((_,index)=>table.rows.some((row)=>row.cells[index]?.ids?.some((id)=>hasPaise(values.get(id)?.value ?? ""))) ? 2 : 0);
+    return {...table,rows:table.rows.map((row)=>row.fill!=="figures" ? row : {...row,cells:row.cells.map((cell,index)=>cell?.ids ? {text:cell.ids.map((id)=>{const one=values.get(id)!;return grouped(one.value,one.kind,decimals[index]);}).join(", ")} : cell)})};
+  })};
+}
+
+// A prepared GSTR-3B upload file as its form: each row's values from where worker/gstr3b.ts
+// writes them (gstr3bTables json; an array of rows is found by its ty), the rows InboxCA leaves
+// for the portal marked so, and 3.2 a row for each place of supply.
+export function gstr3bFile(file:unknown):FormLayout {
+  const at=(path:string)=>path.split(".").reduce<unknown>((node,key)=>Array.isArray(node) ? node.find((item)=>(item as {ty?:string})?.ty===key) : (node as Record<string,unknown>|undefined)?.[key],file);
+  const words=(value:unknown)=>typeof value==="number" ? String(value) : typeof value==="string" ? value : "";
+  const tables=gstr3bTables.map((table)=>{
+    const heads=table.heads.map(([head])=>head),values=new Map<string,{value:string;kind?:string}>();
+    const cells=(key:string,entry:Record<string,unknown>,own?:string[]):FormCell[]=>heads.map((head)=>{
+      if(own && !own.includes(head) || entry[head]===undefined) return null;
+      values.set(`${key}.${head}`,{value:words(entry[head]),kind:head==="pos" ? "text" : "number"});
+      return {ids:[`${key}.${head}`]};
+    });
+    const rows=table.rows.flatMap((row):FormRow[]=>{
+      const base={key:row.key,number:row.number,name:row.name},value=row.json ? at(row.json) : undefined;
+      if(row.fill==="heading") return [{...base,fill:"heading",cells:[]}];
+      if(row.fill==="portal" || !value || typeof value!=="object") return [{...base,fill:"portal",cells:[{text:words3b.portal}]}];
+      if(Array.isArray(value)) return value.length ? value.map((entry,index)=>({...base,key:`${row.key}.${index}`,fill:"figures",cells:cells(`${row.key}.${index}`,entry as Record<string,unknown>)})) : [{...base,fill:"none",cells:[{text:"None this month"}]}];
+      return [{...base,fill:"figures",cells:cells(row.key,value as Record<string,unknown>,row.heads)}];
+    });
+    return textLayout({tables:[{key:table.key,number:table.number,name:table.name,heads:table.heads.map(([,label])=>label),rows}],placed:0},values).tables[0];
+  });
+  return {tables,placed:tables.length};
+}

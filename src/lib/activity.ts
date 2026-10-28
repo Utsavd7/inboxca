@@ -62,7 +62,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   // OneDrive's renewed refresh token saved (never the token itself).
   "drive.reconnected": ["provider"], "drive.back": ["jobs"], "drive.token_saved": ["provider"],
   "document.uploaded": ["from"], "document.filed": ["from"], "document.added": ["form", "kind"], "document.renamed": ["from", "to"], "document.removed": ["from"], "document.restored": ["from"],
-  "document.viewed": ["thumb"], "document.downloaded": ["stamped", "limit", "sheet", "permission", "zip"], "document.downloaded_by_client": [], "document.sharing": ["policy"],
+  "document.viewed": ["thumb", "form"], "document.downloaded": ["stamped", "limit", "sheet", "permission", "zip"], "document.downloaded_by_client": [], "document.sharing": ["policy"],
   "document.shared": ["share", "reply"], "document.missing": [], "document.safety_copy": [], "document.safety_restored": [],
   // The file worker (5.15): the scanner's name for what it found, or why a file was refused.
   "document.virus": ["found"], "document.refused": ["reason"], "document.password_saved": [], "document.changed_outside": ["renamed"], "document.purged": [],
