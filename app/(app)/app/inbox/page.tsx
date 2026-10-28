@@ -1,4 +1,4 @@
-import { AlarmClock, CheckCheck, ChevronDown, FolderInput, Inbox as InboxIcon, Mail, MailOpen, PenLine, Reply, Search, UserRound } from "lucide-react";
+import { AlarmClock, CheckCheck, ChevronDown, Clock, Ellipsis, ExternalLink, FileSearch, FolderInput, Inbox as InboxIcon, Info, KeyRound, Mail, MailOpen, PenLine, Reply, Search, Send, ShieldCheck, SlidersHorizontal, Tag as TagIcon, UserRound, X } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -26,10 +26,10 @@ import { suggestedReply, waitingWords } from "@/src/lib/team-replies";
 import { LinkTabs } from "../link-tabs";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
-import { Avatar, Badge, Empty, PageHead, Row as ListRow, SidePanel, Toast } from "../ui";
+import { Avatar, Badge, Empty, PageHead, Row as ListRow, SidePanel, Toast, storage } from "../ui";
 import { clientsOf, contactName, conversation } from "./conversation";
 import { manageAnswer } from "./actions";
-import { ComposeBox, InboxKeys, LinkBusy, Reading, ReplyBox } from "./inbox-client";
+import { ComposeBox, InboxKeys, LinkBusy, Reading, ReplyBox, ReplyButton } from "./inbox-client";
 import "./inbox.css";
 
 const PAGE = 30;
@@ -53,7 +53,8 @@ const outcomeTags: Record<string, Tag> = {
   none: { text: "Done", tone: "" },
 };
 const outcomeKeys = ["reply", "snoozed", "approval", "draft", "queued", "check", "answered", "replied", "notice", "filed", "none"];
-type Row = { key: string; href: string; dir: "in" | "out"; client: string; clientId: string | null; at: string; messageId: string; subject: string; snippet: string; tags: Tag[]; request?: string; assignee?: string };
+// A row carries one chip, the most pressing thing about the email; waits marks one that needs a reply.
+type Row = { key: string; href: string; dir: "in" | "out"; client: string; clientId: string | null; at: string; messageId: string; subject: string; snippet: string; tag: Tag; waits?: boolean; request?: string; assignee?: string };
 // What a Needs reply request keeps besides its status: snoozed until a day, and who answers
 // when a person chose (null for nobody).
 type Ask = { snooze?: string; assignee?: string | null };
@@ -70,7 +71,7 @@ const uuid = /^[0-9a-f-]{36}$/;
 const attachable = (papers: { id: string; name: string; prepared: unknown }[] | null) =>
   (papers ?? []).map(({ id, name, prepared }) => ({ id, name: prepared ? `${name} (Prepared by InboxCA, not the filed copy)` : name }));
 
-type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "compose" | "approved" | "error" | "replied" | "written" | "unsent" | "answer" | "decided" | "cleared" | "confirm" | "file" | "snoozed" | "assigned" | "filed" | "edit" | "went" | "stopped", string | undefined>;
+type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "compose" | "approved" | "error" | "replied" | "written" | "unsent" | "answer" | "decided" | "cleared" | "confirm" | "file" | "snoozed" | "assigned" | "filed" | "edit" | "went" | "stopped" | "panel", string | undefined>;
 
 // What a slow part gives, once it has it, so the page around it shows at once (Suspense).
 async function Later({ children }: { children: Promise<React.ReactNode> }) {
@@ -198,20 +199,20 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const whoWords = (user: string) => (user === userId ? "you" : nameOf(user));
   // Who a waiting email is for: the client's person unless someone chose; a snoozed one only by choice.
   const forWho = (eventId: string) => (replyOf.has(eventId) ? replyOf.get(eventId)!.assignee : askOf(eventId).assignee) ?? undefined;
-  // "Waiting 2 days", red once past the firm's reply time.
-  const waitTag = (eventId: string): Tag[] => {
-    const reply = replyOf.get(eventId);
-    return reply && reply.days > 0 ? [{ text: waitingWords(reply.days), tone: reply.late ? "late" : "" }] : [];
-  };
   // What InboxCA did with an email, as its badge: snoozed shows until when.
   const outcomeTag = (eventId: string, outcome = "none"): Tag =>
     outcome === "snoozed" ? { text: snoozedTill(eventId) ? `Snoozed until ${dayName(snoozedTill(eventId)!)}` : "Snoozed", tone: "blue" } : outcomeTags[outcome] ?? outcomeTags.none;
-  // An email's badges: what InboxCA did, then what it is when it waits or needed no reply
-  // (such as a notice that asks something), otherwise the next thing it did.
-  const tagsOf = (event: { id: string; label: string | null; outcomes: string[] | null }) => {
-    const [first = "none", next] = event.outcomes ?? [];
-    const second = ["reply", "snoozed", "unanswered", "none"].includes(first) ? (event.label && event.label !== "other" ? labelTag(event.label) : null) : next ? outcomeTag(event.id, next) : null;
-    return second ? [outcomeTag(event.id, first), second] : [outcomeTag(event.id, first)];
+  // An email's one chip, the most pressing first: what InboxCA did, and for one that needs a
+  // reply, red once past the firm's reply time, then an AI draft, then how long it waited.
+  // Its label shows on the open email. Filtered by what InboxCA did, each says that.
+  const chipOf = (event: { id: string; outcomes: string[] | null }): Tag => {
+    const first = status && event.outcomes?.includes(status) ? status : event.outcomes?.[0] ?? "none";
+    const reply = replyOf.get(event.id);
+    const waited = reply && reply.days > 0 ? waitingWords(reply.days) : "";
+    if (first !== "reply") return outcomeTag(event.id, first);
+    if (waited && reply?.late) return { text: waited, tone: "late" };
+    if (drafted?.some((ask) => ask.entity_id === event.id)) return { text: "AI draft ready", tone: "blue" };
+    return waited ? { text: waited, tone: "warn" } : outcomeTags.reply;
   };
   // The emails' rows from InboxCA's own records: who, when and what InboxCA did. The subject
   // and first line are filled in from the mailbox.
@@ -228,7 +229,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           messageId: event.provider_message_id,
           subject: "",
           snippet: "",
-          tags: [...tagsOf(event), ...(drafted?.some((ask) => ask.entity_id === event.id) ? [{ text: "AI draft ready", tone: "blue" as const }] : []), ...waitTag(event.id)],
+          tag: chipOf(event),
+          waits: event.outcomes?.[0] === "reply",
           request: pending.get(event.id)?.id,
           assignee: forWho(event.id),
         };
@@ -270,7 +272,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const sentClient = (item: MailItem) => visible?.find((row) => (!chosenClient || row.id === chosenClient.id) && item.to.some((address) => parties.get(address)?.includes(row.id)));
     const outRows: Row[] = sentItems.flatMap((item) => {
       const to = sentClient(item);
-      return to ? [{ key: item.messageId, href: href({ sent: item.messageId }), dir: "out" as const, client: to.name, clientId: to.id, at: item.date, messageId: item.messageId, subject: item.subject || "(no subject)", snippet: item.snippet, tags: [{ text: sentTags[sentKind(item.messageId)], tone: "" as const }] }] : [];
+      return to ? [{ key: item.messageId, href: href({ sent: item.messageId }), dir: "out" as const, client: to.name, clientId: to.id, at: item.date, messageId: item.messageId, subject: item.subject || "(no subject)", snippet: item.snippet, tag: { text: sentTags[sentKind(item.messageId)], tone: "" as const } }] : [];
     });
     const list = [...inRows, ...outRows].sort((a, b) => b.at.localeCompare(a.at)).slice(0, PAGE);
     const older = (events_.length >= PAGE || (!("error" in live) && (live.sent?.length ?? 0) >= PAGE)) && list.length ? href({ before: list.at(-1)!.at }) : null;
@@ -292,7 +294,25 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     started: "It had already gone, so it could not be stopped.",
   };
   const answers = await answerList;
-  const hasWait = !!toAnswer.length || !!papers?.length || !!answers.length || !!toCheck?.length || !!week?.length;
+  // What waits for the team besides email, as one line of counts under the title, each opening
+  // its list beside the page (?panel=), where Undo, Send and Approve are one click away.
+  const panelHref = (panel: string) => `${here}${here.includes("?") ? "&" : "?"}panel=${panel}`;
+  const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  const queued = answers.filter((row) => row.delivery.ack !== "held").length;
+  const waits = [
+    { panel: "asks", Icon: KeyRound, n: toAnswer.length, text: count(toAnswer.length, "permission request") },
+    { panel: "papers", Icon: ShieldCheck, n: papers?.length ?? 0, text: `${count(papers?.length ?? 0, "paper")} to approve` },
+    { panel: "replies", Icon: Send, n: answers.length, text: `${count(answers.length, "reply", "replies")} ${queued === answers.length ? "going out" : queued ? "by InboxCA" : "ready to send"}` },
+    { panel: "check", Icon: FileSearch, n: toCheck?.length ?? 0, text: `${count(toCheck?.length ?? 0, "paper")} to check` },
+  ].filter((wait) => wait.n);
+  // The filters beyond the three views, each in use as a chip that removes it.
+  const direction = show === "in" || show === "out" ? show : "";
+  const active = ([
+    [direction && shows[direction], href({ show: undefined })],
+    [chosenClient?.name, href({ client: undefined })],
+    [sp.status && sp.status in statuses && statuses[sp.status as keyof typeof statuses], href({ status: undefined })],
+    [when && whens[when as keyof typeof whens], href({ when: undefined })],
+  ] as const).filter((chip): chip is readonly [string, string] => !!chip[0]);
   const team = (people ?? []).filter((person) => person.status === "active").sort((a, b) => Number(b.user_id === userId) - Number(a.user_id === userId));
   // Mark all as done takes every email of the list that waits for a reply, after a preview
   // (not for a search, whose list is only what the mailbox found).
@@ -316,22 +336,25 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const { data: writePapers } = mayWriteAttach ? await supabase.from("documents").select("id, name, prepared").eq("client_id", writeTo.id).eq("status", "filed").order("received_at", { ascending: false }).limit(50) : { data: [] };
   // The paging client picker, for the filter, for writing and for filing: a search, eight
   // names a page.
+  const clientOptions = (keep: Partial<Search>, link: (id: string) => string, current?: string) => (
+    <>
+      <Form action="/app/inbox" scroll={false} role="search">
+        {Object.entries(keep).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
+        <input type="search" name="cq" defaultValue={cq} placeholder="Find a client" aria-label="Find a client" />
+      </Form>
+      {current && !keep.compose && <Link href={href({ client: undefined })}>All clients</Link>}
+      {pickList?.slice(0, 8).map((row) => (
+        <Link key={row.id} href={link(row.id)} aria-current={row.id === current ? "true" : undefined}><Avatar name={row.name} />{row.name}</Link>
+      ))}
+      {!pickList?.length && <span className="ib-note">No client by that name</span>}
+      {(pickList?.length ?? 0) > 8 && <Link href={href({ compose: keep.compose, mail: keep.mail, file: keep.file, cq: cq || undefined, cpage: String(cpage + 1) })}>More clients</Link>}
+    </>
+  );
   const clientPicker = (summary: string, keep: Partial<Search>, link: (id: string) => string, current?: string, open = !!cq || !!sp.cpage) => (
     // A pick closes the menu: it opens afresh once the choice changes.
     <details key={`${summary}${current}${sp.file}`} className="ib-menu" open={open}>
       <summary>{summary}<ChevronDown size={14} aria-hidden /></summary>
-      <div className="ib-pop">
-        <Form action="/app/inbox" scroll={false} role="search">
-          {Object.entries(keep).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
-          <input type="search" name="cq" defaultValue={cq} placeholder="Find a client" aria-label="Find a client" />
-        </Form>
-        {current && !keep.compose && <Link href={href({ client: undefined })}>All clients</Link>}
-        {pickList?.slice(0, 8).map((row) => (
-          <Link key={row.id} href={link(row.id)} aria-current={row.id === current ? "true" : undefined}><Avatar name={row.name} />{row.name}</Link>
-        ))}
-        {!pickList?.length && <span className="ib-note">No client by that name</span>}
-        {(pickList?.length ?? 0) > 8 && <Link href={href({ compose: keep.compose, mail: keep.mail, file: keep.file, cq: cq || undefined, cpage: String(cpage + 1) })}>More clients</Link>}
-      </div>
+      <div className="ib-pop">{clientOptions(keep, link, current)}</div>
     </details>
   );
 
@@ -340,24 +363,25 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const listView = (list: Row[], live: boolean, older?: string | null) => (
     <List label="Emails" rise={!live}>
       {list.map((row) => (
-        <Item key={row.key} className="ib-row" aria-current={row.key === openKey ? "true" : undefined} data-waits={row.tags[0]?.text === "Needs reply" || undefined}>
+        <Item key={row.key} className="ib-row" aria-current={row.key === openKey ? "true" : undefined} data-waits={row.waits || undefined}>
           <Link href={row.href} scroll={false}>
             <Avatar name={row.client} />
             <span className="ib-row-main">
               <span className="ib-row-top">
                 <strong>{row.dir === "out" && <span className="ib-sent-to">To </span>}{row.client}</strong>
-                {row.assignee && (
-                  <span className="ib-who-has">
-                    <Avatar name={nameOf(row.assignee)} />
-                    For {whoWords(row.assignee)}
-                  </span>
-                )}
                 <time dateTime={row.at}>{shortTime(row.at, today)}</time>
               </span>
               {live ? <span className="ib-subject">{row.subject}</span> : <span className="skel ib-skel-line" aria-hidden />}
               <span className="ib-row-foot">
                 {live ? <span className="ib-snippet">{row.snippet}</span> : <span className="skel ib-skel-line short" aria-hidden />}
-                {row.tags.map((tag) => <Badge key={tag.text} tone={tag.tone} plain={!tag.tone}>{tag.text}</Badge>)}
+                <Badge tone={row.tag.tone} plain={!row.tag.tone}>{row.tag.text}</Badge>
+                {row.waits && row.tag !== outcomeTags.reply && <span className="sr-only">Needs reply</span>}
+                {row.assignee && (
+                  <span className="ib-who-has" title={`For ${whoWords(row.assignee)}`}>
+                    <Avatar name={nameOf(row.assignee)} />
+                    <span className="sr-only">For {whoWords(row.assignee)}</span>
+                  </span>
+                )}
               </span>
             </span>
           </Link>
@@ -366,10 +390,10 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
               <form action={manageEmail}>
                 <input type="hidden" name="request" value={row.request} />
                 <input type="hidden" name="back" value={here} />
-                <Pending className="b b-secondary" name="intent" value="done" busy="Marking">Mark done</Pending>
+                <Pending className="b b-secondary b-icon" name="intent" value="done" aria-label="Mark done" title="Mark done"><CheckCheck size={16} aria-hidden /></Pending>
               </form>
             )}
-            {row.clientId && <Link className="b b-secondary" href={`/app/clients/${row.clientId}`}>Open client</Link>}
+            {row.clientId && <Link className="b b-secondary b-icon" href={`/app/clients/${row.clientId}`} aria-label="Open client" title={`Open ${row.client}`}><UserRound size={16} aria-hidden /></Link>}
           </span>
         </Item>
       ))}
@@ -434,13 +458,15 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const held = outcomes.includes("draft");
     const shared = sends?.find((share) => share.status === (outcome === "approval" ? "waiting" : "sent"));
     const eventOf = new Map(threadEvents?.map((row) => [row.provider_message_id, row.id]));
-    const { data: saved } = threadEvents?.length
-      ? await supabase.from("documents").select("id, name, email_event_id, work_type, period_key, status, received_at").in("email_event_id", threadEvents.map((row) => row.id))
+    // Every paper saved from the conversation, the open email's own too, so each shows as a file.
+    const savedFrom = [...new Set([...(threadEvents ?? []).map((row) => row.id), ...(event ? [event.id] : [])])];
+    const { data: saved } = savedFrom.length
+      ? await supabase.from("documents").select("id, name, email_event_id, work_type, period_key, status, received_at, size").in("email_event_id", savedFrom)
       : { data: [] };
     const order = ((drive?.settings ?? {}) as { folder_order?: FolderOrder }).folder_order ?? "year_client_work";
     const place = (doc: NonNullable<typeof saved>[number]) => folderFor(order, open.client?.name ?? "", { work: doc.work_type as never, period: doc.period_key, receivedAt: doc.received_at ?? "", toCheck: doc.status === "to_check" }).join(" / ");
     const kind = opened.box === "sent" ? sentKind(opened.messageId) : null;
-    const openTag: Tag | null = event ? outcomeTag(event.id, outcomes[0]) : kind ? { text: sentTags[kind], tone: "" } : null;
+    const openTag: Tag | null = event ? chipOf({ id: event.id, outcomes }) : kind ? { text: sentTags[kind], tone: "" } : null;
     const asked = askedPaper(opened.subject, opened.text);
     const suggested = clientPapers ? suggestPapers(`${opened.subject}\n${opened.text}`, clientPapers, asked, [...documentTypes, ...((membership.settings.document_types ?? []) as string[])]).map((doc) => doc.id) : [];
     // Snooze and who answers, for an email that needs a reply.
@@ -450,7 +476,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
     const paperLink: [string, string] | undefined = shared ? [`/app/files/${shared.document_id}/view`, "View the paper"] : undefined;
     const did = event && ({
       snoozed: { text: `Snoozed. It comes back to Needs reply on ${dayName(snoozedTill(event.id) ?? today)}.` },
-      reply: { text: `${replyReasons[request?.reason_code ?? ""] ?? "Waits for your team"}${openAsk.assignee ? `. Given to ${whoWords(openAsk.assignee)}` : ""}` },
+      reply: { text: `${replyReasons[request?.reason_code ?? ""] ?? "Waits for your team"}${openAsk.assignee ? `. Given to ${whoWords(openAsk.assignee)}` : ""}.` },
       approval: { text: `InboxCA found ${shared?.documents?.name ?? "the paper"}. It goes to the client once someone approves it.`, link: paperLink },
       check: { text: "InboxCA saved its papers under To check. Check their type and period.", link: event.client_id ? [`/app/clients/${event.client_id}?tab=files`, "Check them"] : undefined },
       unanswered: { text: "The client asked for a paper. InboxCA has not sent it yet." },
@@ -460,173 +486,195 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       filed: { text: `InboxCA saved ${filedHere === 1 ? "its paper" : `its ${filedHere} papers`} in ${open.client?.name ?? "the client"}'s folders.` },
       none: { text: "Done. Nothing waits for anyone." },
     } as Record<string, { text: string; link?: [string, string] }>)[outcome];
+    // The reply box, unless InboxCA's own reply waits in its place (and is not being edited).
+    const replying = !answerRow || (sp.edit === "answer" && held);
     return (
       <ViewTransition enter="ib-in" exit="ib-out" default="none">
         <div className="ib-convo">
+          {/* Who and what, then the actions as icons; the conversation scrolls under it and the
+              reply sits at the foot, so neither ever hides the other. */}
           <header className="ib-head">
-            <Avatar name={event ? sender : membership.firmName} />
-            <div className="grow">
-              <h2>{opened.subject || "(no subject)"}</h2>
-              <p className="ib-note">{event ? `From ${sender}${open.client && event.contact_id ? `, ${open.client.name}` : ""}` : `${kind === "team" ? "Sent by your team" : "Sent by InboxCA"} to ${open.client?.name}`}</p>
+            <div className="ib-head-top">
+              <Avatar name={open.client?.name ?? (event ? sender : membership.firmName)} />
+              <p className="ib-head-who">
+                {open.client ? <Link href={`/app/clients/${open.client.id}`} aria-label={`Open ${open.client.name}`}>{open.client.name}</Link> : <strong>{sender}</strong>}
+                <time dateTime={opened.date}>{longTime(opened.date)}</time>
+              </p>
+              <div className="ib-tools" role="toolbar" aria-label="Email actions">
+                {event?.client_id && connected && (replying ? <ReplyButton /> : held && <Link className="b b-ghost b-icon" href={`${href({ mail: event.id, edit: "answer" })}#reply-text`} scroll={false} aria-label="Reply" data-tip="Reply (r)"><Reply size={16} aria-hidden /></Link>)}
+                {request && (
+                  <form action={manageEmail}>
+                    <input type="hidden" name="request" value={request.id} />
+                    <input type="hidden" name="back" value={here} />
+                    <Pending className="b b-ghost b-icon" name="intent" value="done" data-key="e" aria-label="Mark done" data-tip="Mark done (e)"><CheckCheck size={16} aria-hidden /></Pending>
+                  </form>
+                )}
+                {request && event && (snoozedTill(event.id) ? (
+                  <form action={manageEmail}>
+                    <input type="hidden" name="request" value={request.id} />
+                    <input type="hidden" name="back" value={here} />
+                    <Pending className="b b-ghost b-icon" name="intent" value="wake" aria-label="Back to Needs reply now" data-tip="Back to Needs reply now"><AlarmClock size={16} aria-hidden /></Pending>
+                  </form>
+                ) : (
+                  <details key={`snooze${request.id}`} className="ib-menu">
+                    <summary className="b b-ghost b-icon" data-key="h" aria-label="Snooze" data-tip="Snooze (h)"><AlarmClock size={16} aria-hidden /></summary>
+                    <div className="ib-pop" role="group" aria-label="Snooze until">
+                      <form action={manageEmail} className="ib-pop-list">
+                        <input type="hidden" name="request" value={request.id} />
+                        <input type="hidden" name="back" value={here} />
+                        <input type="hidden" name="intent" value="snooze" />
+                        <Pending name="until" value={addDays(today, 1)}>Tomorrow<small>{dayName(addDays(today, 1))}</small></Pending>
+                        <Pending name="until" value={addDays(today, 7)}>Next week<small>{dayName(addDays(today, 7))}</small></Pending>
+                      </form>
+                      <form action={manageEmail} className="ib-day">
+                        <input type="hidden" name="request" value={request.id} />
+                        <input type="hidden" name="back" value={here} />
+                        <input type="hidden" name="intent" value="snooze" />
+                        <input type="date" name="until" min={addDays(today, 1)} max={addDays(today, 365)} required aria-label="Snooze until a date" />
+                        <Pending className="b b-secondary">Snooze</Pending>
+                      </form>
+                    </div>
+                  </details>
+                ))}
+                {request && (
+                  <details key={`assign${request.id}${openAsk.assignee}`} className="ib-menu">
+                    <summary className="b b-ghost b-icon" aria-label={openAsk.assignee ? `For ${whoWords(openAsk.assignee)}. Assign to someone else` : "Assign"} data-tip={openAsk.assignee ? `For ${whoWords(openAsk.assignee)}` : "Assign"}>
+                      {openAsk.assignee ? <Avatar name={nameOf(openAsk.assignee)} /> : <UserRound size={16} aria-hidden />}
+                    </summary>
+                    <form action={manageEmail} className="ib-pop" aria-label="Assign to">
+                      <input type="hidden" name="request" value={request.id} />
+                      <input type="hidden" name="back" value={here} />
+                      <input type="hidden" name="intent" value="assign" />
+                      {team.map((person) => (
+                        <Pending key={person.user_id} name="who" value={person.user_id} aria-current={person.user_id === openAsk.assignee ? "true" : undefined}>
+                          <Avatar name={personName(person.email)} />
+                          <span className="grow">{personName(person.email)}{person.user_id === userId && " (you)"}<small>{person.email}</small></span>
+                        </Pending>
+                      ))}
+                      {openAsk.assignee && <Pending name="who" value="">Nobody</Pending>}
+                    </form>
+                  </details>
+                )}
+                {event && (
+                  <details key={`${event.id}${event.label}`} className="ib-menu">
+                    <summary className="b b-ghost b-icon" aria-label="Change label" data-tip="Change label"><TagIcon size={16} aria-hidden /></summary>
+                    <form action={manageEmail} className="ib-pop" aria-label="What this email is">
+                      <input type="hidden" name="email" value={event.id} />
+                      <input type="hidden" name="intent" value="label" />
+                      {Object.entries(labels).map(([value, label]) => (
+                        <Pending key={value} name="label" value={value} aria-current={value === (event.label ?? "other") ? "true" : undefined}>{label}</Pending>
+                      ))}
+                    </form>
+                  </details>
+                )}
+                {event && gmail && <a className="b b-ghost b-icon" href={`/app/inbox/${event.id}/open`} target="_blank" rel="noreferrer" aria-label="Open in Gmail" data-tip="Open in Gmail"><ExternalLink size={16} aria-hidden /></a>}
+              </div>
             </div>
-            {openTag && <Badge tone={openTag.tone} plain={!openTag.tone}>{openTag.text}</Badge>}
-            {event && waitTag(event.id).map((tag) => <Badge key={tag.text} tone={tag.tone} plain={!tag.tone}>{tag.text}</Badge>)}
+            <h2>{opened.subject || "(no subject)"}</h2>
+            <p className="ib-head-meta">
+              {openTag && <Badge tone={openTag.tone} plain={!openTag.tone}>{openTag.text}</Badge>}
+              {event ? event.contact_id && <span>From {sender}</span> : <span>{kind === "team" ? "Sent by your team" : "Sent by InboxCA"} to {open.client?.name}</span>}
+              {event && <span className="ib-label" title="What InboxCA took this email to be. Change label picks another."><TagIcon size={13} aria-hidden />{labelTag(event.label).text}{event.decision_source === "staff" && <Badge plain>Corrected</Badge>}</span>}
+            </p>
           </header>
-          <div className="ib-actions">
-            {event?.client_id && connected && <a className="b b-secondary" href={answerRow && held && sp.edit !== "answer" ? `${href({ mail: event.id, edit: "answer" })}#reply-text` : "#reply-text"} title="Press r"><Reply size={16} aria-hidden />Reply<kbd className="kbd" aria-hidden>r</kbd></a>}
-            {request && (
-              <form action={manageEmail}>
-                <input type="hidden" name="request" value={request.id} />
-                <input type="hidden" name="back" value={here} />
-                <Pending className="b b-secondary" name="intent" value="done" busy="Marking" data-key="e" title="Takes it out of Needs reply. Press e"><CheckCheck size={16} aria-hidden />Mark done<kbd className="kbd" aria-hidden>e</kbd></Pending>
-              </form>
-            )}
-            {request && event && (snoozedTill(event.id) ? (
-              <form action={manageEmail}>
-                <input type="hidden" name="request" value={request.id} />
-                <input type="hidden" name="back" value={here} />
-                <Pending className="b b-secondary" name="intent" value="wake" busy="Bringing back"><AlarmClock size={16} aria-hidden />Back to Needs reply now</Pending>
-              </form>
-            ) : (
-              <details key={`snooze${request.id}`} className="ib-menu">
-                <summary data-key="h" title="Takes it out of Needs reply until the day you pick. Press h"><AlarmClock size={16} aria-hidden />Snooze<ChevronDown size={14} aria-hidden /></summary>
-                <div className="ib-pop" role="group" aria-label="Snooze until">
-                  <form action={manageEmail} className="ib-pop-list">
+          <div className="ib-scroll">
+            {event && !event.client_id && (
+              <div className="ib-confirm">
+                <FolderInput size={16} aria-hidden />
+                <span className="grow">InboxCA could not tell which client this email is for.</span>
+                {request?.reason_code === "client_unclear" && !!links?.length && (
+                  <form action={manageEmail} className="ib-inline">
                     <input type="hidden" name="request" value={request.id} />
-                    <input type="hidden" name="back" value={here} />
-                    <input type="hidden" name="intent" value="snooze" />
-                    <Pending name="until" value={addDays(today, 1)}>Tomorrow<small>{dayName(addDays(today, 1))}</small></Pending>
-                    <Pending name="until" value={addDays(today, 7)}>Next week<small>{dayName(addDays(today, 7))}</small></Pending>
-                  </form>
-                  <form action={manageEmail} className="ib-day">
-                    <input type="hidden" name="request" value={request.id} />
-                    <input type="hidden" name="back" value={here} />
-                    <input type="hidden" name="intent" value="snooze" />
-                    <input type="date" name="until" min={addDays(today, 1)} max={addDays(today, 365)} required aria-label="Snooze until a date" />
-                    <Pending className="b b-secondary">Snooze</Pending>
-                  </form>
-                </div>
-              </details>
-            ))}
-            {request && (
-              <details key={`assign${request.id}${openAsk.assignee}`} className="ib-menu">
-                <summary title="Who answers this email">
-                  {openAsk.assignee ? <><Avatar name={nameOf(openAsk.assignee)} />For {whoWords(openAsk.assignee)}</> : <><UserRound size={16} aria-hidden />Assign</>}
-                  <ChevronDown size={14} aria-hidden />
-                </summary>
-                <form action={manageEmail} className="ib-pop" aria-label="Assign to">
-                  <input type="hidden" name="request" value={request.id} />
-                  <input type="hidden" name="back" value={here} />
-                  <input type="hidden" name="intent" value="assign" />
-                  {team.map((person) => (
-                    <Pending key={person.user_id} name="who" value={person.user_id} aria-current={person.user_id === openAsk.assignee ? "true" : undefined}>
-                      <Avatar name={personName(person.email)} />
-                      <span className="grow">{personName(person.email)}{person.user_id === userId && " (you)"}<small>{person.email}</small></span>
-                    </Pending>
-                  ))}
-                  {openAsk.assignee && <Pending name="who" value="">Nobody</Pending>}
-                </form>
-              </details>
-            )}
-            {open.client && <Link className="b b-secondary" href={`/app/clients/${open.client.id}`}>Open {open.client.name}</Link>}
-            {request?.reason_code === "client_unclear" && event && !!links?.length && (
-              <form action={manageEmail} className="ib-inline">
-                <input type="hidden" name="request" value={request.id} />
-                <input type="hidden" name="email" value={event.id} />
-                <select name="client" aria-label={`Which client the email from ${sender} is for`}>
-                  {links.map((link) => <option key={link.client_id} value={link.client_id}>{link.clients?.name}</option>)}
-                </select>
-                <Pending className="b b-secondary" name="intent" value="client">It is for this client</Pending>
-              </form>
-            )}
-            {event && !event.client_id && clientPicker(links?.length ? "Save to another client" : "Save to a client", { ...filters, mail: event.id, file: "pick" }, (id) => href({ mail: event.id, file: id }), undefined, sp.file === "pick" && (!!cq || !!sp.cpage))}
-            {event && (
-              <span className="ib-inline ib-label">
-                <Badge plain>{labelTag(event.label).text}</Badge>
-                {event.decision_source === "staff" && <Badge plain>Corrected</Badge>}
-                <details key={`${event.id}${event.label}`} className="ib-menu">
-                  <summary title="Pick another label when InboxCA got it wrong">Change</summary>
-                  <form action={manageEmail} className="ib-pop" aria-label="What this email is">
                     <input type="hidden" name="email" value={event.id} />
-                    <input type="hidden" name="intent" value="label" />
-                    {Object.entries(labels).map(([value, label]) => (
-                      <Pending key={value} name="label" value={value} aria-current={value === (event.label ?? "other") ? "true" : undefined}>{label}</Pending>
-                    ))}
+                    <select name="client" aria-label={`Which client the email from ${sender} is for`}>
+                      {links.map((link) => <option key={link.client_id} value={link.client_id}>{link.clients?.name}</option>)}
+                    </select>
+                    <Pending className="b b-secondary" name="intent" value="client">It is for this client</Pending>
                   </form>
-                </details>
-              </span>
+                )}
+                {clientPicker(links?.length ? "Save to another client" : "Save to a client", { ...filters, mail: event.id, file: "pick" }, (id) => href({ mail: event.id, file: id }), undefined, sp.file === "pick" && (!!cq || !!sp.cpage))}
+              </div>
             )}
-            {event && gmail && <a className="b b-ghost" href={`/app/inbox/${event.id}/open`} target="_blank" rel="noreferrer">Open in Gmail</a>}
-          </div>
-          {fileTo && event && (
-            <form action={manageEmail} className="ib-confirm" aria-label="Save to a client">
-              <input type="hidden" name="email" value={event.id} />
-              <input type="hidden" name="client" value={fileTo.id} />
-              <input type="hidden" name="back" value={here} />
-              <FolderInput size={16} aria-hidden />
-              <span className="grow">Save this email to <strong>{fileTo.name}</strong>? InboxCA saves any papers in it in the client&apos;s folder.</span>
-              <Link className="b b-ghost" href={here} scroll={false}>Cancel</Link>
-              <Pending className="b b-primary" name="intent" value="file" busy="Saving">Save to {fileTo.name}</Pending>
-            </form>
-          )}
-          {did && <p className="ib-note ib-did">{did.text}{did.link && <> <Link href={did.link[0]}>{did.link[1]}</Link></>}</p>}
-          <ol className="ib-thread" aria-label="Conversation">
-            {open.messages.map((message) => {
-              const files = saved?.filter((doc) => doc.email_event_id === eventOf.get(message.messageId)) ?? [];
-              const who = (message.box === "sent" ? (sentKind(message.messageId) === "team" ? "Your team" : "InboxCA") : message.messageId === opened.messageId ? sender || open.client?.name : open.client?.name) ?? "";
-              return (
-                <li key={message.messageId} className={message.messageId === opened.messageId ? "on" : undefined}>
-                  <p className="ib-who">
-                    <Avatar name={message.box === "sent" ? membership.firmName : who} />
-                    <strong>{who}</strong>
-                    <time dateTime={message.date}>{longTime(message.date)}</time>
-                  </p>
-                  <div className="ib-body">{paragraphs(message.text).map((part, index) => <p key={index}>{part}</p>)}</div>
-                  {(files.length > 0 || message.attachments.length > 0) && (
-                    <ul className="ib-files" aria-label="Attachments">
-                      {files.map((doc) => (
-                        <li key={doc.id}>
-                          <span className="ib-ext" aria-hidden>{(doc.name.split(".").pop() ?? "").slice(0, 4).toUpperCase()}</span>
-                          <span className="grow"><strong>{doc.name}</strong><span className="ib-path">Saved to {place(doc)}</span></span>
-                          <Link className="b b-secondary" href={`/app/files/${doc.id}/view`}>View</Link>
-                        </li>
-                      ))}
-                      {!files.length && message.attachments.map((name, index) => (
-                        <li key={`${name}${index}`}>
-                          <span className="ib-ext" aria-hidden>{(name.split(".").pop() ?? "").slice(0, 4).toUpperCase()}</span>
-                          <span className="grow"><strong>{name}</strong><span className="ib-note">{message.box === "sent" ? "Sent with this email" : "Not saved in the drive"}</span></span>
-                        </li>
-                      ))}
-                      {!!files.length && message.attachments.length > files.length && <li className="ib-note">{message.attachments.length - files.length} more not saved in the drive</li>}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-          {answerRow && (sp.edit !== "answer" || !held) ? (
-            <section className="ib-drafted" aria-label="InboxCA's reply">
-              <p className="ib-note">{held ? "InboxCA wrote this reply from your records. Check it, then send it or change it." : `InboxCA sends this reply at ${india((answerRow.delivery as Delivery).at ?? new Date().toISOString(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}. Undo stops it.`}</p>
-              {drafted && ("text" in drafted ? <pre className="ib-draft-text">{drafted.text}</pre> : "team" in drafted && <p>{replyReasons[drafted.team]}. It goes to Needs reply instead.</p>)}
-              <form action={manageAnswer} className="ib-reply-foot">
-                <input type="hidden" name="email" value={answerRow.id} />
+            {fileTo && event && (
+              <form action={manageEmail} className="ib-confirm" aria-label="Save to a client">
+                <input type="hidden" name="email" value={event.id} />
+                <input type="hidden" name="client" value={fileTo.id} />
                 <input type="hidden" name="back" value={here} />
-                {held ? (
-                  <>
-                    <Pending className="b b-ghost" name="intent" value="stop" busy="Stopping">Don&apos;t send</Pending>
-                    {drafted && "text" in drafted && <Link className="b b-secondary" href={`${href({ mail: answerRow.id, edit: "answer" })}#reply-text`} scroll={false}>Edit</Link>}
-                    <Pending className="b b-primary" name="intent" value="send" busy="Sending">Send</Pending>
-                  </>
-                ) : <Pending className="b b-secondary" name="intent" value="stop" busy="Stopping">Undo</Pending>}
+                <FolderInput size={16} aria-hidden />
+                <span className="grow">Save this email to <strong>{fileTo.name}</strong>? InboxCA saves any papers in it in the client&apos;s folder.</span>
+                <Link className="b b-ghost" href={here} scroll={false}>Cancel</Link>
+                <Pending className="b b-primary" name="intent" value="file" busy="Saving">Save to {fileTo.name}</Pending>
               </form>
+            )}
+            {did && <p className="ib-did"><Info size={14} aria-hidden /><span>{did.text}{did.link && <> <Link href={did.link[0]}>{did.link[1]}</Link></>}</span></p>}
+            <ol className="ib-thread" aria-label="Conversation">
+              {open.messages.map((message) => {
+                // A paper saved from the conversation whose email is not found in it shows on the open one.
+                const files = saved?.filter((doc) => doc.email_event_id === eventOf.get(message.messageId) || (message.messageId === opened.messageId && !open.messages.some((other) => eventOf.get(other.messageId) === doc.email_event_id))) ?? [];
+                const who = (message.box === "sent" ? (sentKind(message.messageId) === "team" ? "Your team" : "InboxCA") : message.messageId === opened.messageId ? sender || open.client?.name : open.client?.name) ?? "";
+                return (
+                  <li key={message.messageId} className={message.messageId === opened.messageId ? "on" : undefined}>
+                    <p className="ib-who">
+                      <Avatar name={message.box === "sent" ? membership.firmName : who} />
+                      <strong>{who}</strong>
+                      <time dateTime={message.date}>{longTime(message.date)}</time>
+                    </p>
+                    {(files.length > 0 || message.attachments.length > 0) && (
+                      <ul className="ib-files" aria-label="Attachments">
+                        {files.map((doc) => (
+                          <li key={doc.id}>
+                            <Link href={`/app/files/${doc.id}/view`} title={`View ${doc.name}`}>
+                              <span className="ib-ext" aria-hidden>{(doc.name.split(".").pop() ?? "").slice(0, 4).toUpperCase()}</span>
+                              <span className="grow">
+                                <strong>{doc.name}</strong>
+                                <span className="ib-path">{doc.size ? `${storage(doc.size)}, ` : ""}Saved to {place(doc)}</span>
+                              </span>
+                              <span className="ib-view">View</span>
+                            </Link>
+                          </li>
+                        ))}
+                        {!files.length && message.attachments.map((name, index) => (
+                          <li key={`${name}${index}`}>
+                            <span className="ib-file-card">
+                              <span className="ib-ext" aria-hidden>{(name.split(".").pop() ?? "").slice(0, 4).toUpperCase()}</span>
+                              <span className="grow"><strong>{name}</strong><span className="ib-path">{message.box === "sent" ? "Sent with this email" : "Not saved in the drive"}</span></span>
+                            </span>
+                          </li>
+                        ))}
+                        {!!files.length && message.attachments.length > files.length && <li className="ib-note">{message.attachments.length - files.length} more not saved in the drive</li>}
+                      </ul>
+                    )}
+                    <div className="ib-body">{paragraphs(message.text).map((part, index) => <p key={index}>{part}</p>)}</div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+          {!replying && answerRow ? (
+            <section className="ib-drafted" aria-label="InboxCA's reply">
+              <div className="ib-card">
+                <p className="ib-card-head">{held ? <Reply size={14} aria-hidden /> : <Clock size={14} aria-hidden />}<strong>{held ? "Reply ready" : "Sending soon"}</strong><span>{held ? "InboxCA wrote this reply from your records. Check it, then send it or change it." : `InboxCA sends this reply at ${india((answerRow.delivery as Delivery).at ?? new Date().toISOString(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}. Undo stops it.`}</span></p>
+                {drafted && ("text" in drafted ? <pre className="ib-draft-text">{drafted.text}</pre> : "team" in drafted && <p>{replyReasons[drafted.team]}. It goes to Needs reply instead.</p>)}
+                <form action={manageAnswer} className="ib-reply-foot">
+                  <input type="hidden" name="email" value={answerRow.id} />
+                  <input type="hidden" name="back" value={here} />
+                  {held ? (
+                    <>
+                      <Pending className="b b-ghost" name="intent" value="stop" busy="Stopping">Don&apos;t send</Pending>
+                      {drafted && "text" in drafted && <Link className="b b-secondary" href={`${href({ mail: answerRow.id, edit: "answer" })}#reply-text`} scroll={false}>Edit</Link>}
+                      <Pending className="b b-primary" name="intent" value="send" busy="Sending"><Send size={14} aria-hidden />Send</Pending>
+                    </>
+                  ) : <Pending className="b b-secondary" name="intent" value="stop" busy="Stopping">Undo</Pending>}
+                </form>
+              </div>
             </section>
           ) : event?.client_id && connected && (
             // An email waiting for a person gets a reply suggested by why it waits; a paper not in the drive, the client's Ask for papers too.
-            // Once it no longer waits, the box starts empty again.
-            <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}:${aiWork && "text" in aiWork ? "ai" : ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : aiWork && "text" in aiWork ? aiWork.text : undefined} mail={event.id} papers={attachable(clientPapers)} suggested={aiWork && "papers" in aiWork ? [...suggested, ...aiWork.papers] : suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
+            // Once it no longer waits, the box starts empty again. AI's draft shows as a card to send or edit.
+            <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}:${aiWork && "text" in aiWork ? "ai" : ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : aiWork && "text" in aiWork ? aiWork.text : undefined} aiDraft={sp.edit !== "answer" && !!aiWork && "text" in aiWork} mail={event.id} papers={attachable(clientPapers)} suggested={aiWork && "papers" in aiWork ? [...suggested, ...aiWork.papers] : suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
               suggestion={request ? suggestedReply(request.reason_code, { name: sender || open.client?.name || "", client: open.client?.name ?? "", firm: membership.firmName, paper: asked }) : undefined}
               askPapers={request?.reason_code === "record_not_found" && !membership.viewOnlyUntil ? `/app/clients/${event.client_id}?tab=documents&ask=1` : undefined}
-              note={aiWork && "text" in aiWork ? "AI wrote this from your records. Check it, then send it. Nothing goes until you do." : aiWork ? `No AI draft. ${aiWork.reason}` : undefined} />
+              note={aiWork && "text" in aiWork ? "AI wrote this from your records. Check it, then send it." : aiWork ? `No AI draft. ${aiWork.reason}` : undefined} />
           )}
           {sp.filed && open.client && <Toast>Saved to {open.client.name}. InboxCA is now saving any papers in it to the client&apos;s folder.</Toast>}
         </div>
@@ -639,163 +687,96 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       <InboxKeys />
       <PageHead
         title="Inbox"
-        sub="Every email to and from your clients. InboxCA reads them from the firm email each time and keeps no copy."
+        sub={waits.length ? (
+          <nav className="ib-waits" aria-label="Waiting for you">
+            <span>Waiting for you</span>
+            {waits.map(({ panel, Icon, text }) => (
+              <Link key={panel} href={panelHref(panel)} scroll={false} aria-current={sp.panel === panel ? "true" : undefined}><Icon size={14} aria-hidden />{text}</Link>
+            ))}
+          </nav>
+        ) : "Every email with your clients, read live from the firm email."}
         actions={connected && <Link className="b b-primary" href={href({ compose: "1" })} scroll={false}><PenLine size={16} aria-hidden />Write to a client</Link>}
       />
       {sp.approved && <p className="notice" role="status">Sent. The client got a secure link to the paper, in reply to their email.</p>}
       {sp.error && errors[sp.error] && !composing && <p className="alert" role="alert">{sp.error === "mailbox" && !sp.mail ? "The paper could not be sent. Check that the client has an email address. If it fails again, the owner needs to check the firm email in Settings." : errors[sp.error]}</p>}
 
-      {hasWait && (
-        <div className="ib-wait">
-          {!!toAnswer.length && (
-            <section aria-labelledby="questions">
-              <h2 id="questions">Permission requests for you</h2>
-              <ul>
-                {toAnswer.map((ask) => {
-                  const { name, what } = asking(ask);
-                  return (
-                    <li key={ask.id}>
-                      <Avatar name={name} />
-                      <span className="grow">
-                        <strong>{name} asks to {what}</strong>
-                        <span className="ib-note">{[ask.clients?.name, (ask.details as { document_name?: string }).document_name].filter(Boolean).join(", ")}</span>
-                      </span>
-                      <Link className="b b-secondary" href={href({ ...(sp.mail && { mail: sp.mail }), answer: ask.id })} scroll={false} aria-label={`Answer ${name}`}>Answer</Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
-          {!!papers?.length && (
-            <section aria-labelledby="papers">
-              <h2 id="papers">Papers waiting for approval</h2>
-              <ul>
-                {papers.map((share) => (
-                  <li key={share.id} title="A client asked for a private paper. It goes as a secure link only once someone approves it.">
-                    <Avatar name={share.documents?.clients?.name ?? ""} />
-                    <span className="grow">
-                      <strong>{share.documents?.name}</strong>
-                      <span className="ib-note">Asked for by {share.contact_id ? "a contact of " : ""}{share.documents?.clients?.name}</span>
-                    </span>
-                    {approver && (
-                      <form action={decideShare}>
-                        <input type="hidden" name="share" value={share.id} />
-                        <Pending className="b b-ghost" name="intent" value="refuse">Don&apos;t send</Pending>
-                        <Pending className="b b-secondary" name="intent" value="approve">Approve and send</Pending>
-                      </form>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {!!answers.length && (
-            <section aria-labelledby="answers">
-              <h2 id="answers">Replies by InboxCA</h2>
-              <ul>
-                {answers.map((row) => {
-                  const kind = answerOf(row.label);
-                  const name = row.clients?.name ?? "";
-                  const ready = row.delivery.ack === "held";
-                  return (
-                    <li key={row.id}>
-                      <Avatar name={name} />
-                      <span className="grow">
-                        <strong>{name}</strong>
-                        <span className="ib-note">{kind && answerWords[kind][0]}{!ready && `. Goes at ${india(row.delivery.at ?? new Date().toISOString(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}`}</span>
-                      </span>
-                      <form action={manageAnswer}>
-                        <input type="hidden" name="email" value={row.id} />
-                        <input type="hidden" name="back" value={here} />
-                        {ready ? (
-                          <>
-                            <Link className="b b-ghost" href={`${href({ mail: row.id, edit: "answer" })}#reply-text`} scroll={false} aria-label={`Edit the reply to ${name}`}>Edit</Link>
-                            <Pending className="b b-secondary" name="intent" value="send" busy="Sending" aria-label={`Send the reply to ${name}`}>Send</Pending>
-                          </>
-                        ) : <Pending className="b b-secondary" name="intent" value="stop" busy="Stopping" aria-label={`Undo the reply to ${name}`}>Undo</Pending>}
-                      </form>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
-          {!!toCheck?.length && (
-            <section aria-labelledby="to-check">
-              <h2 id="to-check">Papers to check</h2>
-              <ul>
-                {toCheck.map((file) => (
-                  <li key={file.id} title="Saved in the client's To check folder. Check their type and period, or correct them.">
-                    <Avatar name={file.clients?.name ?? ""} />
-                    <span className="grow">
-                      <strong>{file.name}</strong>
-                      <span className="ib-note">{file.clients?.name}</span>
-                    </span>
-                    <Link className="b b-secondary" href={`/app/clients/${file.client_id}?tab=files`}>Check</Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {!!week?.length && (
-            <details id="approved" aria-labelledby="approved-title">
-              <summary id="approved-title">Approved in the last 7 days ({week.length})</summary>
-              <ul>
-                {week.map((entry) => (
-                  <li key={`${entry.at}${entry.action}`}>
-                    <span className="grow">{personName(emailOf.get(entry.actor_id ?? ""))} {approvalWords(entry.action, (entry.details ?? {}) as { right?: string; for?: string; kind?: string })}</span>
-                    <span className="ib-note">{longTime(entry.at)}</span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-        </div>
-      )}
-
       <div className="ib-bar">
         <LinkTabs
           kind="pills"
           label="Show"
-          items={Object.entries(shows).map(([key, name]) => ({
-            href: href({ show: key || undefined, status: undefined }),
+          items={Object.entries(shows).filter(([key]) => key !== "in" && key !== "out").map(([key, name]) => ({
+            href: href({ show: key || (direction || undefined), status: undefined }),
             label: name,
-            count: key === "reply" ? (needs ?? 0) : key === "mine" ? (mine ?? 0) : key === "in" ? (fromClients ?? 0) : undefined,
-            current: show === key,
+            count: key === "reply" ? (needs ?? 0) : key === "mine" ? (mine ?? 0) : undefined,
+            current: key ? show === key : !show || !!direction,
           }))}
         />
-        {clientPicker(chosenClient?.name ?? "Client", { ...filters, client: undefined }, (id) => href({ client: id }), chosenClient?.id, !composing && !sp.file && (!!cq || !!sp.cpage))}
-        <details className="ib-menu">
-          <summary>{status && sp.status ? statuses[status] : "Status"}<ChevronDown size={14} aria-hidden /></summary>
-          <div className="ib-pop is-tall">
-            <Link href={href({ status: undefined })}>Any status</Link>
-            {Object.entries(statuses).map(([key, name]) => (
-              <Link key={key} href={href({ status: key, show: undefined })} aria-current={sp.status === key ? "true" : undefined}>{name}</Link>
-            ))}
-          </div>
-        </details>
-        <details className="ib-menu">
-          <summary>{when ? whens[when as keyof typeof whens] : "When"}<ChevronDown size={14} aria-hidden /></summary>
+        {/* A pick closes the menu: it opens afresh with the new list. */}
+        <details key={href()} className="ib-menu ib-filters" open={!composing && !sp.file && (!!cq || !!sp.cpage)}>
+          <summary><SlidersHorizontal size={15} aria-hidden />Filters{!!active.length && <span className="ib-count">{active.length}</span>}</summary>
           <div className="ib-pop">
-            <Link href={href({ when: undefined })}>Any time</Link>
-            {Object.entries(whens).map(([key, name]) => (
-              <Link key={key} href={href({ when: key })} aria-current={when === key ? "true" : undefined}>{name}</Link>
-            ))}
+            <div className="ib-filter-group" role="group" aria-label="Client">
+              <span className="ib-filter-name">Client</span>
+              {clientOptions({ ...filters, client: undefined }, (id) => href({ client: id }), chosenClient?.id)}
+            </div>
+            <div className="ib-filter-side">
+              <div className="ib-filter-group" role="group" aria-label="Email">
+                <span className="ib-filter-name">Email</span>
+                <div className="ib-opts">
+                  <Link href={href({ show: direction ? undefined : show || undefined })} aria-current={!direction ? "true" : undefined}>Both ways</Link>
+                  <Link href={href({ show: "in", status: undefined })} aria-current={direction === "in" ? "true" : undefined}>{shows.in}<small>{fromClients ?? 0}</small></Link>
+                  <Link href={href({ show: "out", status: undefined })} aria-current={direction === "out" ? "true" : undefined}>{shows.out}</Link>
+                </div>
+              </div>
+              <div className="ib-filter-group" role="group" aria-label="Status">
+                <span className="ib-filter-name">Status</span>
+                <div className="ib-opts">
+                  <Link href={href({ status: undefined })} aria-current={!sp.status ? "true" : undefined}>Any status</Link>
+                  {Object.entries(statuses).map(([key, name]) => (
+                    <Link key={key} href={href({ status: key, show: undefined })} aria-current={sp.status === key ? "true" : undefined}>{name}</Link>
+                  ))}
+                </div>
+              </div>
+              <div className="ib-filter-group" role="group" aria-label="When">
+                <span className="ib-filter-name">When</span>
+                <div className="ib-opts">
+                  <Link href={href({ when: undefined })} aria-current={!when ? "true" : undefined}>Any time</Link>
+                  {Object.entries(whens).map(([key, name]) => (
+                    <Link key={key} href={href({ when: key })} aria-current={when === key ? "true" : undefined}>{name}</Link>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </details>
-        {!!clearable.length && (
-          <Link className="b b-ghost" href={`${here}${here.includes("?") ? "&" : "?"}confirm=done`} scroll={false} title="Takes every email of this list out of Needs reply, after a check">
-            <CheckCheck size={16} aria-hidden />
-            Mark all done
-            <LinkBusy />
-          </Link>
+        {!!active.length && (
+          <ul className="ib-active" aria-label="Filters in use">
+            {active.map(([label, remove]) => (
+              <li key={label}><Link href={remove} scroll={false} aria-label={`Remove filter: ${label}`} title="Remove this filter">{label}<X size={13} aria-hidden /></Link></li>
+            ))}
+            {active.length > 1 && <li><Link className="ib-clear" href={href({ show: direction ? undefined : show || undefined, client: undefined, status: undefined, when: undefined })} scroll={false}>Clear all</Link></li>}
+          </ul>
         )}
         <Form className="ib-search" action="/app/inbox" role="search">
           {Object.entries({ ...filters, q: undefined }).map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
           <Search size={14} aria-hidden />
           <input id="mail-search" type="search" name="q" defaultValue={q} placeholder="Search email" aria-label="Search email" title="Press / to search" />
         </Form>
+        {(!!clearable.length || !!week?.length) && (
+          <details className="ib-menu ib-overflow">
+            <summary className="b b-ghost b-icon" aria-label="More actions" data-tip="More"><Ellipsis size={16} aria-hidden /></summary>
+            <div className="ib-pop">
+              {!!clearable.length && (
+                <Link href={`${here}${here.includes("?") ? "&" : "?"}confirm=done`} scroll={false} title="Takes every email of this list out of Needs reply, after a check">
+                  <CheckCheck size={16} aria-hidden />
+                  Mark all done
+                  <LinkBusy />
+                </Link>
+              )}
+              {!!week?.length && <Link href={panelHref("approved")} scroll={false}><ShieldCheck size={16} aria-hidden /><span className="grow">Approved in the last 7 days</span><small>{week.length}</small></Link>}
+            </div>
+          </details>
+        )}
       </div>
 
       <Reading>
@@ -855,6 +836,97 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
         </SidePanel>
       )}
       </Presence>
+      {/* The lists that Waiting for you counts, each beside the page; an action here comes back to it. */}
+      <Presence>
+      {sp.panel === "asks" && !!toAnswer.length && !answering && (
+        <SidePanel key="asks" id="questions" title="Permission requests for you" close={here}>
+          <p className="hint">Someone on the team asks to do something that needs your yes.</p>
+          <section aria-labelledby="questions">
+            <ul className="app-rows ib-preview">
+              {toAnswer.map((ask) => {
+                const { name, what } = asking(ask);
+                return (
+                  <ListRow key={ask.id} lead={<Avatar name={name} />} title={`${name} asks to ${what}`} meta={[ask.clients?.name, (ask.details as { document_name?: string }).document_name].filter(Boolean).join(", ")}
+                    action={<Link className="b b-secondary" href={href({ ...(sp.mail && { mail: sp.mail }), answer: ask.id })} scroll={false} aria-label={`Answer ${name}`}>Answer</Link>} />
+                );
+              })}
+            </ul>
+          </section>
+        </SidePanel>
+      )}
+      {sp.panel === "papers" && !!papers?.length && (
+        <SidePanel key="papers" id="papers" title="Papers waiting for approval" close={here}>
+          <p className="hint">A client asked for a private paper. It goes as a secure link only once someone approves it.</p>
+          <section aria-labelledby="papers">
+            <ul className="app-rows ib-preview">
+              {papers.map((share) => (
+                <ListRow key={share.id} lead={<Avatar name={share.documents?.clients?.name ?? ""} />} title={share.documents?.name} meta={`Asked for by ${share.contact_id ? "a contact of " : ""}${share.documents?.clients?.name}`}
+                  action={approver && (
+                    <form action={decideShare} className="ib-inline">
+                      <input type="hidden" name="share" value={share.id} />
+                      <Pending className="b b-ghost" name="intent" value="refuse">Don&apos;t send</Pending>
+                      <Pending className="b b-primary" name="intent" value="approve">Approve and send</Pending>
+                    </form>
+                  )} />
+              ))}
+            </ul>
+          </section>
+        </SidePanel>
+      )}
+      {sp.panel === "replies" && !!answers.length && (
+        <SidePanel key="replies" id="answers" title="Replies by InboxCA" close={here}>
+          <p className="hint">{queued ? "Replies set to Auto go by themselves at the time shown. Undo stops one." : "InboxCA wrote these from your records. Check each, then send it."}</p>
+          <section aria-labelledby="answers">
+            <ul className="app-rows ib-preview">
+              {answers.map((row) => {
+                const kind = answerOf(row.label);
+                const name = row.clients?.name ?? "";
+                const ready = row.delivery.ack === "held";
+                return (
+                  <ListRow key={row.id} lead={<Avatar name={name} />} title={<Link href={href({ mail: row.id })} scroll={false}>{name}</Link>}
+                    meta={<>{kind && answerWords[kind][0]}{!ready && `. Goes at ${india(row.delivery.at ?? new Date().toISOString(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}`}</>}
+                    action={
+                      <form action={manageAnswer} className="ib-inline">
+                        <input type="hidden" name="email" value={row.id} />
+                        <input type="hidden" name="back" value={panelHref("replies")} />
+                        {ready ? (
+                          <>
+                            <Link className="b b-ghost" href={`${href({ mail: row.id, edit: "answer" })}#reply-text`} scroll={false} aria-label={`Edit the reply to ${name}`}>Edit</Link>
+                            <Pending className="b b-primary" name="intent" value="send" busy="Sending" aria-label={`Send the reply to ${name}`}>Send</Pending>
+                          </>
+                        ) : <Pending className="b b-secondary" name="intent" value="stop" busy="Stopping" aria-label={`Undo the reply to ${name}`}>Undo</Pending>}
+                      </form>
+                    } />
+                );
+              })}
+            </ul>
+          </section>
+        </SidePanel>
+      )}
+      {sp.panel === "check" && !!toCheck?.length && (
+        <SidePanel key="check" id="to-check" title="Papers to check" close={here}>
+          <p className="hint">Saved in the client&apos;s To check folder. Check their type and period, or correct them.</p>
+          <section aria-labelledby="to-check">
+            <ul className="app-rows ib-preview">
+              {toCheck.map((file) => (
+                <ListRow key={file.id} lead={<Avatar name={file.clients?.name ?? ""} />} title={file.name} meta={file.clients?.name}
+                  action={<Link className="b b-secondary" href={`/app/clients/${file.client_id}?tab=files`}>Check</Link>} />
+              ))}
+            </ul>
+          </section>
+        </SidePanel>
+      )}
+      {sp.panel === "approved" && !!week?.length && (
+        <SidePanel key="approved" id="approved-title" title="Approved in the last 7 days" close={here}>
+          <ul className="app-rows ib-preview">
+            {week.map((entry) => (
+              <ListRow key={`${entry.at}${entry.action}`} lead={<Avatar name={personName(emailOf.get(entry.actor_id ?? ""))} />}
+                title={`${personName(emailOf.get(entry.actor_id ?? ""))} ${approvalWords(entry.action, (entry.details ?? {}) as { right?: string; for?: string; kind?: string })}`} meta={longTime(entry.at)} />
+            ))}
+          </ul>
+        </SidePanel>
+      )}
+      </Presence>
       <Presence>
       {answering && (() => {
         const { name, what } = asking(answering);
@@ -898,10 +970,10 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           <p className="hint">They move out of Needs reply. No one gets an email. You can undo this.</p>
           <ul className="app-rows ib-preview">
             {/* Each email by its client and status at once, its subject once the mailbox answers. */}
-            <Suspense fallback={clearable.map((row) => <ListRow key={row.key} lead={<Avatar name={row.client} />} title={row.client} meta={`Emailed ${shortTime(row.at, today)}`} status={<Badge tone={row.tags[0]?.tone} plain={!row.tags[0]?.tone}>{row.tags[0]?.text}</Badge>} />)}>
+            <Suspense fallback={clearable.map((row) => <ListRow key={row.key} lead={<Avatar name={row.client} />} title={row.client} meta={`Emailed ${shortTime(row.at, today)}`} status={<Badge tone={row.tag.tone} plain={!row.tag.tone}>{row.tag.text}</Badge>} />)}>
               <Later>
                 {listed.then(({ list }) => list.filter((row) => row.request).map((row) => (
-                  <ListRow key={row.key} lead={<Avatar name={row.client} />} title={row.client} meta={row.subject} status={<Badge tone={row.tags[0]?.tone} plain={!row.tags[0]?.tone}>{row.tags[0]?.text}</Badge>} />
+                  <ListRow key={row.key} lead={<Avatar name={row.client} />} title={row.client} meta={row.subject} status={<Badge tone={row.tag.tone} plain={!row.tag.tone}>{row.tag.text}</Badge>} />
                 )))}
               </Later>
             </Suspense>

@@ -88,6 +88,13 @@ test("client mail and the firm's sent mail show live, filtered by URL, and nothi
   await expect(owner).toHaveURL(new RegExp(`mail=${mail}`));
   await owner.goto(`/app/inbox?client=${clientId}&show=out`);
   await expect(list().getByRole("listitem")).toHaveCount(1);
+  // The same from the Filters menu; a filter in use is a chip that takes itself away.
+  await owner.goto("/app/inbox");
+  await owner.locator("summary", { hasText: "Filters" }).click();
+  await owner.getByRole("group", { name: "Email" }).getByRole("link", { name: "Sent to clients" }).click();
+  await expect(list().getByRole("listitem")).toHaveCount(1);
+  await owner.getByRole("link", { name: "Remove filter: Sent to clients" }).click();
+  await expect(list().getByRole("listitem").filter({ hasText: `Meeting ${tag}` })).toBeVisible();
   await owner.goto("/app/inbox?q=audit");
   await expect(list().getByRole("listitem")).toHaveCount(1);
   await owner.goto("/app/inbox?q=nothing-like-this");
@@ -166,7 +173,7 @@ test("an attachment shows where it was saved in the drive, and opens in the view
   await expect(file).toContainText(`Saved to FY 2026-27 / ${clientName} / GST`);
   const [{ id }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1", [firm.firmId]);
   await expect(file.getByRole("link", { name: "View" })).toHaveAttribute("href", `/app/files/${id}/view`);
-  await expect(list().getByRole("listitem").filter({ hasText: "September purchase bills" })).toContainText("Papers saved");
+  await expect(pane()).toContainText(`InboxCA saved its paper in ${clientName}'s folders.`);
 });
 
 test("the team writes a new email to a client, only to the client's known addresses, with a paper and a file", async () => {
@@ -219,9 +226,9 @@ test("a notice that asks something waits for a reply; Mark done clears it, with 
   await owner.goto("/app/inbox?show=reply");
   const row = list().getByRole("listitem").filter({ hasText: `GST notice ${tag}` });
   await expect(row).toContainText("Needs reply");
-  await expect(row).toContainText("Notice received");
   await row.getByText(`GST notice ${tag}`).click();
   await expect(pane().getByRole("heading", { name: `GST notice ${tag}` })).toBeVisible();
+  await expect(pane()).toContainText("Notice received");
   await expect(pane()).toContainText("Sent a notice and asks what to do");
   const [{ id: request }] = await query(local.dbUrl, "select r.id from public.requests r join public.email_events e on e.id = r.entity_id where r.firm_id = $1 and r.kind = 'team_reply' and e.label = 'notice_received'", [firm.firmId]);
   const status = async () => (await query(local.dbUrl, "select status from public.requests where id = $1", [request]))[0].status;
@@ -247,7 +254,7 @@ test("a notice that asks something waits for a reply; Mark done clears it, with 
   // The label is a tag with a small menu to change it.
   await owner.goto("/app/inbox?show=in");
   await list().getByText(`GST notice ${tag}`).click();
-  await pane().getByText("Change", { exact: true }).click();
+  await pane().getByLabel("Change label").click();
   await pane().getByRole("form", { name: "What this email is" }).getByRole("button", { name: "GST data" }).click();
   await expect(pane().getByText("Corrected")).toBeVisible();
   expect(await query(local.dbUrl, "select label, decision_source from public.email_events e join public.requests r on r.entity_id = e.id where r.id = $1", [request])).toEqual([{ label: "data_gst", decision_source: "staff" }]);
@@ -275,12 +282,12 @@ test("an email that needs a reply is given to a teammate, snoozed to a day, mark
   // Mine. Assign changes it: to nobody, then to a teammate.
   await expect(list().getByRole("listitem").filter({ hasText: `Question A ${tag}` })).toContainText("For you");
   await expect(owner.getByRole("link", { name: /^Mine/ })).toContainText("2");
-  await pane().locator("summary", { hasText: "For you" }).click();
+  await pane().getByLabel(/^For you/).click();
   await pane().getByRole("form", { name: "Assign to" }).getByRole("button", { name: "Nobody" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Nobody is assigned now." })).toBeVisible();
   expect(await details(a)).toEqual({ assignee: null });
   await expect(owner.getByRole("link", { name: /^Mine/ })).toContainText("1");
-  await pane().getByText("Assign", { exact: true }).click();
+  await pane().getByLabel("Assign", { exact: true }).click();
   await pane().getByRole("form", { name: "Assign to" }).getByRole("button", { name: /\(you\)/ }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Assigned to you." })).toBeVisible();
   expect(await details(a)).toEqual({ assignee: firm.ownerId });
@@ -304,7 +311,7 @@ test("an email that needs a reply is given to a teammate, snoozed to a day, mark
   await snoozed.getByRole("button", { name: "Undo" }).click();
   await expect(snoozed).toHaveCount(0);
   expect(await details(a)).toEqual({ assignee: firm.ownerId });
-  await pane().locator("summary", { hasText: "Snooze" }).click();
+  await pane().getByLabel("Snooze", { exact: true }).click();
   await pane().getByLabel("Snooze until a date").fill(tomorrow);
   await pane().getByRole("group", { name: "Snooze until" }).getByRole("button", { name: "Snooze", exact: true }).click();
   await expect(snoozed).toBeVisible();
@@ -318,7 +325,8 @@ test("an email that needs a reply is given to a teammate, snoozed to a day, mark
   await owner.goto("/app/inbox?show=reply");
   await expect(list().getByRole("listitem").filter({ hasText: `Question A ${tag}` })).toContainText("Needs reply");
 
-  // Mark all as done: a preview of the list, one button, then Undo brings them all back.
+  // Mark all as done, under More: a preview of the list, one button, then Undo brings them all back.
+  await owner.getByLabel("More actions").click();
   await owner.getByRole("link", { name: "Mark all done" }).click();
   const panel = owner.getByRole("dialog", { name: "Mark 2 emails done?" });
   await expect(panel.getByRole("listitem")).toHaveCount(2);

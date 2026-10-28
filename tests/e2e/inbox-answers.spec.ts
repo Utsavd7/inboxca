@@ -25,6 +25,7 @@ let firm: Awaited<ReturnType<typeof seedFirm>>;
 let owner: Page;
 const list = () => owner.getByRole("list", { name: "Emails" });
 const pane = () => owner.getByRole("article", { name: "Open email" });
+// InboxCA's replies wait in their own list beside the Inbox, opened from Waiting for you.
 const replies = () => owner.locator("section[aria-labelledby=answers]");
 const toast = (text: string) => owner.getByRole("status").filter({ hasText: text });
 const open = async (subject: string) => {
@@ -78,6 +79,7 @@ test("Ask me first: each answer waits in the Inbox, built from the records, for 
   await pollFirmMail(owner.request, firm.firmId);
   await runJobs(owner.request, firm.firmId);
   await owner.goto("/app/inbox");
+  await owner.getByRole("navigation", { name: "Waiting for you" }).getByRole("link", { name: /replies/ }).click();
   const row = (words: string) => replies().getByRole("listitem").filter({ hasText: words });
   await expect(replies().getByRole("listitem")).toHaveCount(5);
   for (const words of ["Says which returns are filed", "Lists the papers still needed", "Lists what is due", "Says which papers arrived", "Says the notice arrived"]) await expect(row(words)).toContainText(client.name);
@@ -98,7 +100,7 @@ test("Ask me first: each answer waits in the Inbox, built from the records, for 
   await expect.poll(async () => (await mailTexts(client.email)).join("\n---\n")).toContain("- GSTR-1 (monthly) for Sep 2026: filed on ");
 
   // Edit puts it in the reply box, to change and send as the team's own reply.
-  await owner.goto("/app/inbox");
+  await owner.goto("/app/inbox?panel=replies");
   await row("Lists the papers still needed").getByRole("link", { name: "Edit" }).click();
   const box = pane().getByLabel("Your reply");
   await expect(box).toHaveValue(new RegExp(`We still need these papers for Oct 2026:\\n- Purchase bills\\n- Sales bills\\nUpload them here, no sign in needed: http\\S+/u/${token}`));
@@ -107,7 +109,7 @@ test("Ask me first: each answer waits in the Inbox, built from the records, for 
   await expect(toast("Reply sent")).toBeVisible();
 
   // One click Send from the list, and Don't send for the notice's receipt.
-  await owner.goto("/app/inbox");
+  await owner.goto("/app/inbox?panel=replies");
   await row("Lists what is due").getByRole("button", { name: /^Send/ }).click();
   await expect(toast("Sending the reply now.")).toBeVisible();
   await row("Says which papers arrived").getByRole("button", { name: /^Send/ }).click();
@@ -154,7 +156,7 @@ test("Auto: each answer goes after its 5 minutes, and Undo stops it", async () =
   await write(`two ${tag}`, "sales_bills_sep_2026.pdf");
   await pollFirmMail(owner.request, firm.firmId);
   await runJobs(owner.request, firm.firmId);
-  await owner.goto("/app/inbox");
+  await owner.goto("/app/inbox?panel=replies");
   const row = (words: string) => replies().getByRole("listitem").filter({ hasText: words });
   await expect(replies().getByRole("listitem")).toHaveCount(5);
   await expect(row("Says which returns are filed")).toContainText("Goes at");
