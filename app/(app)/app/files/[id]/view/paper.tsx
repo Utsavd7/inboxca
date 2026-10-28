@@ -64,7 +64,7 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
         <PreparedForm file={file} meta={meta} template={templateSchema.parse(template)} from={from}/>
         {decides && <div className="pf-foot">
           <form action={decideForm} id={`approve-${file.id}`}><input type="hidden" name="document" value={file.id}/><Pending className="b b-primary" name="decision" value="approved">Give second approval</Pending></form>
-          <details className="rf-menu"><summary className="b b-secondary">Reject this version</summary><div className="rf-pop is-end"><form action={decideForm} className="rf-pop-form">
+          <details className="rf-menu"><summary className="b b-secondary">Reject this version</summary><div className="rf-pop"><form action={decideForm} className="rf-pop-form">
             <input type="hidden" name="document" value={file.id}/>
             <div><label htmlFor={`reason-${file.id}`}>Reason</label><select id={`reason-${file.id}`} name="reason"><option value="figures">Figures need checking</option><option value="source">Source needs checking</option><option value="other">Other reason</option></select></div>
             <div><label htmlFor={`why-${file.id}`}>What needs to change</label><input id={`why-${file.id}`} name="explanation" minLength={3} maxLength={300} required/></div>
