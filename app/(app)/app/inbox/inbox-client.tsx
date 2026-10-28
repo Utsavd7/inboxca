@@ -1,9 +1,10 @@
 "use client";
 import Link, { useLinkStatus } from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { going } from "../nav-progress";
+import { usePageParams } from "../shell";
 import { draftEmail, draftReply, sendEmail, sendReply, type Draft } from "./actions";
 
 type Paper = { id: string; name: string };
@@ -60,7 +61,7 @@ const pick = (row?: Element | null) => document.querySelectorAll(".ib-row").forE
 // clicked row takes the selected tint at once, the pane shows its outline (inbox.css) and the
 // list stays as it is.
 export function Reading({ children }: { children: React.ReactNode }) {
-  const now = useSearchParams().toString();
+  const now = usePageParams().toString();
   const [from, setFrom] = useState<string | null>(null);
   const [seen, setSeen] = useState(now);
   if (seen !== now) {

@@ -85,6 +85,8 @@ export function Command({ pages, manage = false, write = false }: { pages: Page[
     setOpen(false);
     setAsking(false);
     setText("");
+    // The paper already open beside the page stays as it is (following it again empties the page).
+    if (hit.href === location.pathname && document.querySelector(".doc-pane")) return;
     going(hit.href);
     router.push(hit.href);
   };

@@ -1,12 +1,13 @@
 "use client";
 import { ChevronRight, Download, ExternalLink, Eye, File as FileIcon, FileImage, FileJson, FileSpreadsheet, FileText, Folder, FolderOpen, LayoutGrid, List, Search, Send, Upload, UserRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { findClients } from "@/app/(app)/actions";
 import { FileViewer } from "../../files/[id]/view/file-viewer";
 import { Badge, Empty, type Tone } from "../../ui";
 import { CopyButton } from "../../ui-client";
+import { usePageParams, usePaperOpen } from "../../shell";
 import { fileDrivePaper, uploadToFolder } from "./actions";
 import type { Origin } from "@/src/lib/paper-origin";
 import { CameFrom } from "../came-from";
@@ -187,7 +188,7 @@ type Props = { initial: Record<string, Listing>; home: string[]; asked: string; 
 // The address holds the open folder and file, so links and Back work; each folder is read
 // once and kept, read again after 15 seconds, and read ahead when pointed at.
 export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hideInactive }: Props) {
-  const params = useSearchParams();
+  const params = usePageParams();
   const homeKey = home.join("/");
   // A folder the server could not open shows the nearest one above it.
   const raw = params.get("path") ?? "";
@@ -241,6 +242,12 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
   useEffect(() => load(key), [key, load]);
 
   const go = useCallback((parts: string[], name?: string, replace = false) => window.history[replace ? "replaceState" : "pushState"](null, "", href(parts, name)), []);
+  // Beside an open paper the list chooses the paper shown there instead: a file InboxCA can
+  // show opens in its place (data-paper, shell.tsx); any other closes it and shows here.
+  const beside = usePaperOpen();
+  const router = useRouter();
+  const choose = (entry: Entry) => () => (beside ? router.push(href(path, entry.name), { scroll: false }) : go(path, entry.name, true));
+  const shown = (entry: Entry) => entry.kind !== "folder" && (beside ? entry.paper?.id === beside : entry.name === picked);
   const opener = (parts: string[]) => (event: React.MouseEvent) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
     event.preventDefault();
@@ -381,14 +388,14 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
               <ul className="fb-grid" aria-label="Files and folders">
                 {entries.map((entry) => {
                   const child = [...path, entry.name];
-                  const on = entry.kind !== "folder" && entry.name === picked;
+                  const on = shown(entry);
                   return (
                     <li key={entry.name} className={`fb-card${on ? " on" : ""}${dropKey === child.join("/") ? " is-drop" : ""}`} {...(entry.kind === "folder" && { onDragOver: over(child), onDrop: dropped(child), onPointerEnter: () => load(child.join("/")) })}>
                       <span className="fb-thumb">{entry.paper?.view && viewer ? <Thumb id={entry.paper.id} hideInactive={hideInactive} /> : <KindIcon kind={entry.kind} size={28} />}</span>
                       {entry.kind === "folder" ? (
                         <a className="fb-card-name" href={href(child)} onClick={opener(child)} title={entry.name}>{entry.name}</a>
                       ) : (
-                        <button type="button" className="fb-card-name" aria-pressed={on} onClick={() => go(path, entry.name, true)} title={entry.name}>{entry.name}</button>
+                        <button type="button" className="fb-card-name" aria-pressed={on} onClick={choose(entry)} title={entry.name} data-paper={entry.paper?.view ? entry.paper.id : undefined}>{entry.name}</button>
                       )}
                       {entry.kind !== "folder" && <Meta entry={entry} />}
                     </li>
@@ -407,7 +414,7 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
                 <tbody>
                   {entries.map((entry) => {
                     const child = [...path, entry.name];
-                    const on = entry.kind !== "folder" && entry.name === picked;
+                    const on = shown(entry);
                     return entry.kind === "folder" ? (
                       <tr key={entry.name} className={dropKey === child.join("/") ? "is-drop" : undefined} onDragOver={over(child)} onDrop={dropped(child)} onPointerEnter={() => load(child.join("/"))}>
                         <td>
@@ -422,7 +429,7 @@ export function FolderBrowser({ initial, home, asked, drive, choices, viewer, hi
                     ) : (
                       <tr key={entry.name} className={on ? "on" : undefined}>
                         <td>
-                          <button type="button" className="fb-name" aria-pressed={on} onClick={() => go(path, entry.name, true)} title={entry.name}>
+                          <button type="button" className="fb-name" aria-pressed={on} onClick={choose(entry)} title={entry.name} data-paper={entry.paper?.view ? entry.paper.id : undefined}>
                             <KindIcon kind={entry.kind} />
                             <span className="fb-text">
                               <span className="fb-title">{entry.name}</span>

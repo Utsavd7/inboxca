@@ -138,7 +138,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .ui {
   --side-w: 240px;
   display: grid;
-  grid-template-columns: var(--side-w) minmax(0, 1fr);
+  grid-template-columns: var(--side-w) minmax(0, 1fr) var(--doc-col, 0px);
   height: 100dvh;
   overflow: hidden;
   background: var(--canvas);
