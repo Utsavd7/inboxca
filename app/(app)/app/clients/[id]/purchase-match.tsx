@@ -11,7 +11,9 @@ import {agrees,changeGap,changeOf,changeState,changeTotal,MatchProblem,matchLine
 import {sameHeadings} from "@/src/lib/sales-register";
 import {supabaseAdmin} from "@/src/lib/supabase";
 import {workerSheet} from "@/src/lib/worker-read";
+import {GitCompare} from "lucide-react";
 import {Pending} from "../../pending";
+import {IconTile} from "../../ui";
 
 const problems:Record<string,string>={
   permission:"Ask your firm's owner to let you check figures for this client.",
@@ -99,8 +101,9 @@ export async function PurchaseMatch({clientId,searchParams}:{clientId:string;sea
   const choices=(gstins?.length ?? 0)>1 ? await Promise.all(gstins!.map(async (reg)=>({id:reg.id,number:await serverCrypto().decrypt(membership.firmId,`clients/${clientId}/gstin`,reg.number_enc)}))) : [];
   const lists:[string,string,Entry[]][]=result ? [["missing","Not in GSTR-2B: ask the supplier",result.missing],["differ","Amounts that differ",result.differ],["extra","In GSTR-2B but not in the books",result.extra],["matched","Matched",result.matched]] : [];
   const here=`?tab=extraction&purchases=${register.id}`,note=problem(message),changes=result ? changeTotal(result.changed) : zero,unknown=result?.changed.filter((entry)=>!changeOf(entry)).length ?? 0,gap=result && changeGap(result);
-  return <section className="section" id="gst-match" aria-labelledby="gst-match-title"><h2 id="gst-match-title">GSTR-2B and the purchase register</h2>
-    <p className="hint">InboxCA matches each bill in the client&apos;s purchase register with the month&apos;s GSTR-2B, by the supplier&apos;s GSTIN and the invoice number, and lists every amount that differs by more than ₹1. Bills and notes the supplier corrected are listed with the change they make this month. You decide what to claim. No GSTR-3B figure is changed.</p>
+  return <section className="app-card tool is-wide" id="gst-match" aria-labelledby="gst-match-title"><header className="app-card-head"><IconTile Icon={GitCompare} kind="docs"/><h2 id="gst-match-title">GSTR-2B and the purchase register</h2></header>
+    <p className="tool-hint">Each bill is matched with the month&apos;s GSTR-2B by the supplier&apos;s GSTIN and invoice number, and every amount that differs by more than ₹1 is listed. You decide what to claim. No GSTR-3B figure is changed.</p>
+    <div className="tool-body">
     {registers.length>1 && <nav className="pills" aria-label="Purchase registers">{registers.map((file)=><Link href={`?tab=extraction&purchases=${file.id}#gst-match`} key={file.id} aria-current={register.id===file.id ? "page" : undefined}>{file.name}</Link>)}</nav>}
     {(issue || note) && <p className="alert" role="alert">{issue || note}</p>}
     {message==="matched" && current && <p className="ok" role="status">Matched with the GSTR-2B for {month}.</p>}
@@ -135,5 +138,5 @@ export async function PurchaseMatch({clientId,searchParams}:{clientId:string;sea
         {purchaseFields.map((name,at)=><label key={name}>{name}<select name={`column${at}`} defaultValue={columns[at] ?? -1}><option value={-1}>Not in this file</option>{headings.map((value,n)=><option key={n} value={n}>{String.fromCharCode(65+n)}: {value.slice(0,200)}</option>)}</select></label>)}
         <Pending className="b b-primary">Confirm columns and match</Pending></form>
     </>}
-  </section>;
+    </div></section>;
 }

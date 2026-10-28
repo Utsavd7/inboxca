@@ -121,7 +121,7 @@ test("a Form 26AS text file and a Form 16 added on Documents are filed under the
   expect(drafts.map((draft) => [draft.id, draft.form_code, draft.period_key]).sort()).toEqual(papers.map((paper) => [paper.id, "ITR", "2026"]).sort());
   expect(drafts.every((draft) => draft.data.lines.every((line: { state: string }) => line.state === "pending"))).toBe(true);
   await owner.goto(`/app/clients/${client}?tab=extraction&draft=${papers[1].id}`);
-  await expect(owner.getByRole("link", { name: `${tan}: total tax deducted: 64480.00` })).toBeVisible();
+  await expect(owner.getByRole("row").filter({ has: owner.getByRole("link", { name: `${tan}: total tax deducted`, exact: true }) })).toContainText(/64,?480/);
   await owner.goto(`/app/clients/${client}/itr?form=ITR1&year=2026`);
   // The return holds both papers; the 26AS rows are there to check it against, not to fill it.
   const held = owner.getByRole("region", { name: "Already filled" });

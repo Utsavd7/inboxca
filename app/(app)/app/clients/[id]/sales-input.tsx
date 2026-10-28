@@ -11,7 +11,10 @@ import {salesSections,type SalesSection} from "@/src/lib/gstr1-fields";
 import {askPermission} from "@/app/(app)/actions";
 import {serverCrypto} from "@/src/lib/crypto";
 import {supabaseAdmin} from "@/src/lib/supabase";
+import {FileSpreadsheet} from "lucide-react";
+import {periodName} from "@/src/lib/documents";
 import {Pending} from "../../pending";
+import {IconTile} from "../../ui";
 import {keepReason,keptReason} from "@/src/lib/reason";
 
 async function readRegister(form:FormData) {
@@ -59,13 +62,14 @@ export async function SalesInput({clientId,source,section:asked,header:askedHead
   const canEdit=!membership.viewOnlyUntil && (membership.may("edit_figures", clientId) || !!await grantFor(membership.firmId,userId,"edit_figures",clientId));
   const {data:registrations}=await supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("kind","gstin");
   const gstins=(registrations?.length ?? 0)>1 ? await Promise.all(registrations!.map(async (reg)=>({id:reg.id,number:await serverCrypto().decrypt(membership.firmId,`clients/${clientId}/gstin`,reg.number_enc)}))) : [];
-  return <section className="section"><h2>Read a sales register</h2><p className="hint">Choose one GSTR-1 section for each file, then match its columns. InboxCA remembers your choices for this client&apos;s next register, from Tally or any other software. No figure goes into a return until it is checked.</p>
-    <nav className="pills" aria-label="Sales registers">{registers.map((file)=><Link href={`?tab=extraction&source=${file.id}`} key={file.id} aria-current={selected?.id===file.id ? "page" : undefined}>{file.name}</Link>)}</nav>
-    {(issue || read) && <p className="alert" role="alert">{issue || (read==="permission" ? "You need permission to read these figures. Choose Ask to edit figures." : reason ?? "InboxCA could not read the figures. Check the columns you chose, the dates and amounts, and the paper's month. If the file was changed, upload it again.")}</p>}
+  return <section className={`app-card tool${selected ? " is-wide" : ""}`} aria-labelledby="read-sales"><header className="app-card-head"><IconTile Icon={FileSpreadsheet} kind="docs"/><h2 id="read-sales">Read a sales register</h2></header>
+    <p className="tool-hint">Choose a register, its GSTR-1 section and its columns. InboxCA remembers them for this client&apos;s next register, from Tally or any other software.</p>
+    <ul className="app-rows" aria-label="Sales registers">{registers.map((file)=><li className={`app-row${selected?.id===file.id ? " is-on" : ""}`} key={file.id}><span className="grow"><strong>{file.name}</strong>{file.period_key && <span className="sub">{periodName(file.period_key)}</span>}</span><Link className="b b-secondary" href={`?tab=extraction&source=${file.id}`} aria-current={selected?.id===file.id ? "page" : undefined} aria-label={`Choose the columns of ${file.name}`}>Choose columns</Link></li>)}</ul>
+    {(issue || read || selected) && <div className="tool-body">{(issue || read) && <p className="alert" role="alert">{issue || (read==="permission" ? "You need permission to read these figures. Choose Ask to edit figures." : reason ?? "InboxCA could not read the figures. Check the columns you chose, the dates and amounts, and the paper's month. If the file was changed, upload it again.")}</p>}
     {selected && rows.length>0 && <><Form action={`/app/clients/${clientId}`} className="form-row"><input type="hidden" name="tab" value="extraction"/><input type="hidden" name="source" value={selected.id}/><label>GSTR-1 section<select name="section" defaultValue={section}>{Object.entries(salesSections).map(([key,value])=><option value={key} key={key}>{value.name}</option>)}</select></label><label>Column names are on row<input type="number" name="header" min={1} max={40} defaultValue={header}/></label><button className="b b-secondary">Show columns</button></Form>
     {canEdit ? <form action={readRegister} className="fields"><input type="hidden" name="client" value={clientId}/><input type="hidden" name="source" value={selected.id}/><input type="hidden" name="section" value={section}/><input type="hidden" name="header" value={header}/>{!!gstins.length && <label>GSTIN this register is for<select name="registration" required defaultValue={selected.registration_id ?? ""}><option value="" disabled>Choose</option>{gstins.map((reg)=><option key={reg.id} value={reg.id}>{reg.number}</option>)}</select></label>}{salesSections[section].headings.map((name,index)=>{
       const column=suggestion?.section===section && suggestion.header===header-1 ? suggestion.columns[index] : headings.findIndex((heading)=>heading.trim().toLowerCase()===name.toLowerCase());
       return <label key={name}>{name}<select name={`column${index}`} defaultValue={column}><option value={-1}>Not in this file</option>{headings.map((heading,n)=><option key={n} value={n}>{String.fromCharCode(65+n)}: {heading.slice(0,200)}</option>)}</select></label>;
     })}<Pending className="b b-primary">Confirm columns and read figures</Pending></form> : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-secondary">Ask to edit figures</Pending></form>}</>}
-  </section>;
+    </div>}</section>;
 }
