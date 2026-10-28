@@ -1,5 +1,4 @@
 import { CalendarDays, KeyRound, ListChecks, Rocket, TriangleAlert } from "lucide-react";
-import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
