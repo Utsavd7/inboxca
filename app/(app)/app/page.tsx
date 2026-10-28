@@ -51,7 +51,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
   // answers chosen on the site's price list until the owner asks for another plan.
   if (membership.billing === "start") return (
     <div className="today">
-      <PageHead title={`Welcome to InboxCA, ${personName(membership.email)}`} sub={membership.role === "owner" ? "One last step: choose your plan and set up AutoPay. Your firm starts as soon as the first payment is in." : "Your firm starts once its owner chooses a plan."} />
+      <PageHead title={`Welcome to InboxCA, ${membership.name}`} sub={membership.role === "owner" ? "One last step: choose your plan and set up AutoPay. Your firm starts as soon as the first payment is in." : "Your firm starts once its owner chooses a plan."} />
       {membership.role === "owner" && <StartPlan supabase={supabase} firmId={membership.firmId} ask={plan.clients ? plan : Object.fromEntries(new URLSearchParams((await cookies()).get("plan_ask")?.value))} />}
     </div>
   );
@@ -69,7 +69,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         sub={
           <p className="greet">
             <strong>
-              {greeting}, {personName(membership.email)}.
+              {greeting}, {membership.name}.
             </strong>{" "}
             {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" })}.{" "}
             <Suspense fallback={<span className="greet-wait">Looking at what needs you</span>}>

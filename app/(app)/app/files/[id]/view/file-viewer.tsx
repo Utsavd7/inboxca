@@ -84,9 +84,15 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
   return (
     <div className="viewer">
       {state === "loading" && <p className="hint">Opening the file from your firm&apos;s drive.</p>}
+      {/* Try again reads it afresh; while it fails, the paper's Download is hidden (app.css). */}
       {state === "failed" && (
-        <p className="alert" role="alert">
-          The file could not be opened. It may have been moved or removed in the drive.
+        <p className="alert viewer-failed" role="alert">
+          <span>The file could not be opened. It may have been moved or removed in the drive.</span>
+          {!thumb && (
+            <button type="button" className="b b-secondary b-small" onClick={() => { setPages([]); setState("loading"); setOpening((n) => n + 1); }}>
+              Try again
+            </button>
+          )}
         </p>
       )}
       {state === "nodrive" && <p className="hint">The firm&apos;s drive is not connected yet, so papers cannot be shown. The owner can connect it in Settings, under Email and drive.</p>}

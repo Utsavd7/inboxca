@@ -24,8 +24,10 @@ export const pagesFor = (role: string) => [
   ...(role === "owner" ? [{ href: "/app/settings", name: "Settings", place: "workspace" }] : []),
 ];
 
-// "Ravi" for ravi.shah@firm.in: how messages name a person.
-export const personName = (email?: string) => {
+// "Ravi" for ravi.shah@firm.in: how messages name a person. The full name Google or Microsoft
+// gave at sign in (the signed in person's user metadata) comes first when there is one.
+export const personName = (email?: string, full?: unknown) => {
+  if (typeof full === "string" && full.trim()) return full.trim().slice(0, 80);
   const name = email?.split("@")[0].split(/[._-]/)[0] || "Someone";
   return name[0].toUpperCase() + name.slice(1);
 };

@@ -937,7 +937,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.goto(docsTab);
   // A file opens in the viewer. Only the owner can get the original, sandboxed.
   await rows.getByRole("link", { name: `${mailClient} - Purchase bills - Sep 2026.pdf`, exact: true }).click();
-  await expect(owner.getByText("View only. Your email and the time are shown across every page.")).toBeVisible();
+  await expect(owner.getByText("View only, with your email on every page.")).toBeVisible();
   // A screenshot key blanks the pages for a moment, and each try is logged.
   await owner.keyboard.press("PrintScreen");
   await expect(owner.getByText("The pages are hidden. They show again in a few seconds, or when you come back to this window.")).toBeVisible();

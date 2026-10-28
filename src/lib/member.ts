@@ -7,6 +7,7 @@ import { may, mayDecide, type Permissions, type Right, type Standing } from "./r
 import { accessSetting, SEEN_COOKIE, seenAt } from "./session";
 import { chosenFirm, memberHours, officeDeviceAccess, officeProof } from "./office";
 import { newComputer } from "./owner-device";
+import { personName } from "./roles";
 import { supabaseAdmin, supabaseServer } from "./supabase";
 
 // The signed in person and their firm, for every product page and action; cached for the
@@ -81,8 +82,11 @@ export const currentMember = cache(async () => {
   const status = data.firms?.status;
   const billing = status === "pending" && billingReady() ? "start" : status === "grace" || status === "read_only" ? status : null;
   const viewOnlyUntil = office.remoteUntil ?? (billing === "start" || billing === "read_only" ? "billing" : undefined);
+  const email = String(claims.claims.email ?? "");
   const membership = {
-    firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, access, idleMinutes, closing, email: String(claims.claims.email ?? ""),
+    firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, access, idleMinutes, closing, email,
+    // How the app names this person: the name from Google or Microsoft, else from the email.
+    name: personName(email, claims.claims.user_metadata?.full_name ?? claims.claims.user_metadata?.name),
     // Every firm the person may open now, for the sidebar's switcher.
     firms: rows!.map((row) => ({ id: row.firm_id, name: row.firms?.name ?? "" })),
     // On a personal device allowed away from the office the person only views, until its end date.

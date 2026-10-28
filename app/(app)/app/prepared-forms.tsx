@@ -186,7 +186,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
 
   return <section className="rf" aria-labelledby="prepared-title">
     <MenuClose/>
-    <header className="rf-head"><h2 id="prepared-title">Return files</h2><p className="hint">Check every figure first. After approval, download the file and file it on the portal with your own code or signature.</p></header>
+    <header className="rf-head"><h2 id="prepared-title">Return files</h2></header>
     {toast ? <Toast>{toast}</Toast> : message && <p className="alert" role="status">{reason ?? (message==="edited" ? "InboxCA could not use this file. Choose the official workbook or return file you filled, with its headings unchanged. You also need permission to edit figures." : message==="ack" ? "The return was not marked filed. Choose or upload the acknowledgement, or type its number, then try again." : message==="approval" ? "The approval was not saved. Someone other than the person who checked the figures must approve. To reject, choose a reason and say what must change." : message==="differences" ? "This return differs from Form 26AS or Form 16. Look at the differences and tick the box, then approve again." : "InboxCA could not prepare this return. Check that every figure is checked and that your firm's drive is connected, then try again.")}</p>}
     {!!versions.size && <ul className="rf-list">{[...versions.values()].map(([file,...older])=>card(file,older))}</ul>}
     {[...versions.values()].some(([file])=>["preparing","making"].includes(stageOf(file).stage)) && <Refresh/>}

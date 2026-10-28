@@ -151,7 +151,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
     <div className="fill docs has-bulk">
       <PageHead
         title="Documents"
-        sub="Every client paper, kept in your firm's own drive, in folders by year, client and type of work."
+        sub="Kept in your firm's own drive."
         actions={
           <>
             {portal && (

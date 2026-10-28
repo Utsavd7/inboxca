@@ -338,6 +338,8 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .b-ghost:hover:not(:disabled) { background: var(--press); color: var(--ink); }
 .b-danger { border-color: var(--red-fg); background: var(--red-fg); color: var(--white); }
 .b-danger:hover:not(:disabled) { background: var(--red-fg); opacity: 0.9; }
+/* Back with nowhere to go (Today, opened afresh): dimmed, and still in its place. */
+.topbar .head-back[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
 @media (hover: hover) and (pointer: fine) {
   /* The lifted card still covers the spot it left, so a pointer on its edge does not flicker. */
   a.app-card::after { content: ""; position: absolute; inset: 0 0 -2px; }
@@ -469,6 +471,9 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .viewer-none { margin-top: var(--s5); }
 .viewer-pages.is-blank img { visibility: hidden; }
 .viewer-blank { margin-top: var(--s3); }
+/* A paper that could not be opened: its words, then Try again; a Download would fail too. */
+.viewer-failed > span { flex: 1; }
+:is(.doc-card, .page-in):has(.viewer-failed) .doc-get { display: none; }
 /* Printing is off: a printed viewer page comes out blank. */
 @media print {
   .viewer-pages, .viewer-pages img { display: none !important; }

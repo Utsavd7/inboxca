@@ -41,9 +41,9 @@ export async function Paper({ id, asked, pane = false }: { id: string; asked?: s
   const hints = (
     <>
       {meta && <span className="hint">Made on the official {formName(meta.form)} form, version {meta.template}.</span>}
-      <span className="hint">View only. Your email and the time are shown across every page.</span>
+      <span className="hint">View only, with your email on every page.</span>
       {/* A file InboxCA made itself needs no virus check; any other says when it had none. */}
-      {!file.scanned_at && !meta && file.document_type !== "Filing record" && <span className="hint">Not checked for viruses yet.</span>}
+      {!file.scanned_at && !meta && file.document_type !== "Filing record" && <span className="hint">Not virus checked by InboxCA.</span>}
     </>
   );
   const body = (
@@ -72,7 +72,7 @@ export async function Paper({ id, asked, pane = false }: { id: string; asked?: s
           {kind && <span className="badge">{kind}</span>}
           {file.status === "to_check" && <Badge tone="warn">To check</Badge>}
         </>}
-        actions={drive ? <a className="b b-secondary b-small" href={`/app/files/${id}`}>Download</a> : copies ? canCopy ? <form method="post" action={stream}><button className="b b-secondary b-small" title="A PDF with your email and the time on each page, up to 30 pages">Download</button></form> : <form action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><Pending className="b b-ghost b-small">Ask to download</Pending></form> : null}
+        actions={drive ? <a className="b b-secondary b-small doc-get" href={`/app/files/${id}`}>Download</a> : copies ? canCopy ? <form className="doc-get" method="post" action={stream}><button className="b b-secondary b-small" title="A PDF with your email and the time on each page, up to 30 pages">Download</button></form> : <form className="doc-get" action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><Pending className="b b-ghost b-small">Ask to download</Pending></form> : null}
       >
         <p className="head-meta">{hints}</p>
         {body}
@@ -98,7 +98,7 @@ export async function Paper({ id, asked, pane = false }: { id: string; asked?: s
         }
 
       />
-      {copies && <div className="form-row">{canCopy ? <form method="post" action={stream}><button className="b b-secondary b-small">Download these pages</button><p className="hint">You get a PDF with your email and the time on each page. It has up to 30 pages; for a spreadsheet, only this sheet.</p></form> : <form action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><Pending className="b b-ghost b-small">Ask to download</Pending></form>}</div>}
+      {copies && <div className="form-row doc-get">{canCopy ? <form method="post" action={stream}><button className="b b-secondary b-small">Download these pages</button><p className="hint">You get a PDF with your email and the time on each page. It has up to 30 pages; for a spreadsheet, only this sheet.</p></form> : <form action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><Pending className="b b-ghost b-small">Ask to download</Pending></form>}</div>}
       {body}
     </>
   );

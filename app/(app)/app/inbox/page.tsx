@@ -639,7 +639,6 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       <InboxKeys />
       <PageHead
         title="Inbox"
-        sub="Every email to and from your clients. InboxCA reads them from the firm email each time and keeps no copy."
         actions={connected && <Link className="b b-primary" href={href({ compose: "1" })} scroll={false}><PenLine size={16} aria-hidden />Write to a client</Link>}
       />
       {sp.approved && <p className="notice" role="status">Sent. The client got a secure link to the paper, in reply to their email.</p>}
