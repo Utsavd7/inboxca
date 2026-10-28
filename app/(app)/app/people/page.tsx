@@ -52,7 +52,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
     <div className="people-page">
       <PageHead
         title="People"
-        sub={`${count} ${count === 1 ? "person" : "people"} in ${membership.firmName}, with their role, team and branch.`}
+        sub={`${count} ${count === 1 ? "person" : "people"} in ${membership.firmName}.`}
         actions={
           <>
             {(isOwner || !!groups?.length) && (

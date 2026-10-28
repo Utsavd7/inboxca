@@ -16,7 +16,7 @@ export default async function Government() {
   const { items, unread } = await governmentUpdates(supabase, membership.firmId);
   return (
     <>
-      <PageHead title="From the government" sub="New forms, tools and news from government sites, for the services you do for your clients. InboxCA checks these sites every morning at 08:30." />
+      <PageHead title="From the government" sub="Checked every morning at 08:30." />
       <Card id="gov-new" title="Last 14 days" Icon={Landmark} kind="docs" count={items.length} className="gov-list">
         {items.length ? (
           <List name="gov" className="app-rows">
