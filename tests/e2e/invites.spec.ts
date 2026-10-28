@@ -1193,7 +1193,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   expect((await (await request.get(`${routineLink}/file`)).body()).toString()).toContain("invented ITR-V");
   await ask("Financial statements", "Can you share the financial statements for FY 2025-26?");
   await owner.goto("/app/inbox?panel=papers");
-  const papers = owner.locator("section[aria-labelledby=papers]");
+  const papers = owner.locator("section[aria-labelledby=papers]:not([role=dialog])");
   await expect(papers).toContainText(`${mailClient} - Balance sheet - FY 2025-26.pdf`);
   await papers.getByRole("button", { name: "Approve and send" }).click();
   await expect(owner.getByRole("status")).toContainText("Sent");
@@ -1412,7 +1412,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await send("Balance sheet","2026");
   await expect(progress).toContainText("Waiting for approval in the Inbox");
   await owner.goto("/app/inbox?panel=papers");
-  await owner.locator("section[aria-labelledby=papers]").getByRole("button",{name:"Approve and send"}).click();
+  await owner.locator("section[aria-labelledby=papers]:not([role=dialog])").getByRole("button",{name:"Approve and send"}).click();
   await expect(owner.getByRole("status")).toContainText("Sent");
   const [{id:client}] = await query(local.dbUrl,"select id from public.clients where firm_id=$1 and name=$2",[firm.firmId,mailClient]);
   const [{id:doc,name}] = await query(local.dbUrl,"select id,name from public.documents where client_id=$1 and document_type='ITR-V' and status='filed'",[client]);

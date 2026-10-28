@@ -161,7 +161,7 @@ test("a private paper waiting in the Inbox is not sent when someone chooses Don'
   const before = await mailCount(secret.email);
   const approve = await actionFields(owner, "/app/inbox?panel=papers", { share });
   await owner.goto("/app/inbox?panel=papers");
-  const waiting = owner.locator("section[aria-labelledby=papers]");
+  const waiting = owner.locator("section[aria-labelledby=papers]:not([role=dialog])");
   await expect(waiting.getByRole("listitem").filter({ hasText: balance.name })).toContainText(`Asked for by ${secret.name}`);
   await waiting.getByRole("button", { name: "Don't send" }).click();
   await expect(waiting).toHaveCount(0);
