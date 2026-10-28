@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Sign up | InboxCA" };
 
 // After Google or Microsoft, a person in no firm yet is signed in already: only the firm's
 // details are asked for. A plan chosen on the site's price list shows in one line, priced
-// again here from plan_formula, and waits for Today's plan choice.
+// again here from plan_formula, and waits for the plan and payment step (/start).
 export default async function SignUp({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [account, query] = await Promise.all([firmlessAccount(), searchParams]);
   const formula = typeof query.plan === "string" ? (await billingSettings()).formula : null;

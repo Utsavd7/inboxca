@@ -1,4 +1,4 @@
-import { CreditCard, Gauge } from "lucide-react";
+import { Gauge } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { billingSettings, fitOf, methodWords, moneyBack, moveDownFit, movingUp, quote, type SubPlan } from "@/src/lib/billing/billing";
@@ -10,12 +10,13 @@ import type { currentMember } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { Item, List } from "../motion";
 import { Pending } from "../pending";
-import { Badge, IconTile } from "../ui";
+import { Badge } from "../ui";
 import { approveCheckout, buyCheckout, moneyBackAction, moveDown, saveAutoTopUp, startCheckout, turnOffAutoPay } from "./billing-actions";
 import { Checkout, MoneyBackForm } from "./checkout";
+import { Methods } from "./methods";
 import "./settings.css";
 
-// Settings, Billing and sign up's last step (PLAN.md 5.14.1): the plan and its price, AutoPay,
+// Settings, Billing (PLAN.md 5.14.1; sign up's last step is app/(auth)/start): the plan and its price, AutoPay,
 // add-ons paid before they apply, receipts, and the money back within 14 days. Every amount is
 // the server's, from plan_formula and Orelu's tax settings.
 type Supabase = Awaited<ReturnType<typeof currentMember>>["supabase"];
@@ -43,51 +44,6 @@ function PlanQuestions({ ask, practices, action, hidden, button }: { ask: PlanAs
       </div>
       <div className="set-foot"><button className="b b-secondary" type="submit">{button}</button></div>
     </Form>
-  );
-}
-
-function Methods({ choices, name = "method" }: { choices: { method: Method; approveEach: boolean }[]; name?: string }) {
-  return (
-    <fieldset className="set-choices">
-      <legend className="sr-only">How to pay</legend>
-      {choices.map(({ method, approveEach }, at) => (
-        <label key={method}>
-          <input type="radio" name={name} value={method} required defaultChecked={!at} />
-          <span><strong>{methodWords[method][0].toUpperCase() + methodWords[method].slice(1)}</strong> <span className="hint">{approveEach ? "You approve each payment in your bank or UPI app." : method === "enach" ? "Your bank confirms it within 1 or 2 days. Nothing to approve after that." : "Approve once. Nothing to approve after that."}</span></span>
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
-// Sign up's last step on Today, once payments are set up: the plan, then AutoPay.
-export async function StartPlan({ supabase, firmId, ask }: { supabase: Supabase; firmId: string; ask: PlanAsk }) {
-  const [{ formula, tax }, { data: firm }] = await Promise.all([billingSettings(), supabase.from("firms").select("gstin, state_code, settings").eq("id", firmId).single()]);
-  if (!formula) return <p className="notice">Prices are not set up yet. Try again later.</p>;
-  const plan = ask.clients ? askedPlan(ask) : null;
-  const cycle: Cycle = ask.cycle === "yearly" ? "yearly" : "monthly";
-  const priced = plan?.success ? quote(formula, tax, firm?.gstin?.slice(0, 2) ?? firm?.state_code ?? "", plan.data, cycle, indiaDay(new Date()), true) : null;
-  return (
-    <div className="set-page"><div className="set-body set-start">
-    <section className="panel set-card" aria-labelledby="start-title">
-      <header className="set-head"><IconTile Icon={CreditCard} kind="approve" /><span className="grow"><h2 id="start-title">Choose your plan to start</h2><p className="hint">Tell us about your firm and InboxCA names the plan that fits. Clients are unlimited on every plan.</p></span></header>
-      <PlanQuestions ask={ask} practices={formula.practices} action="/app" button="See my plan" />
-      {priced && plan?.success && (
-        <Checkout action={startCheckout} label="Set up AutoPay" busy="Opening the payment page">
-          {Object.entries({ clients: String(plan.data.clients), practice: plan.data.practice, people: String(plan.data.people), cycle }).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
-          <p><strong>{priced.price.name} plan</strong>: {rupees(priced.recurring.total)} {cycle === "monthly" ? "a month" : "a year"}{priced.recurring.gst ? " with GST" : ""}, for a team of up to {Math.max(priced.price.people, plan.data.people)} and {priced.price.aiCredits.toLocaleString("en-IN")} AI credits a month.</p>
-          {priced.setupPaise > 0 && <p className="hint">The first payment, {rupees(priced.first.total)}, includes the one time setup.</p>}
-          <Methods choices={priced.methods} />
-          <div className="set-fields">
-            <div><label htmlFor="start-phone">Mobile number for AutoPay messages</label><input id="start-phone" name="phone" inputMode="tel" autoComplete="tel" required maxLength={14} /></div>
-            <div><label htmlFor="start-gstin">Firm GSTIN, if it has one</label><input id="start-gstin" name="gstin" maxLength={15} defaultValue={firm?.gstin ?? ""} /></div>
-            <div><label htmlFor="start-address">Firm address, for receipts</label><input id="start-address" name="address" required maxLength={300} defaultValue={String((firm?.settings as Record<string, unknown> | undefined)?.billing_address ?? "")} /></div>
-          </div>
-          <p className="hint">Orelu will never take more than {rupees(mandateMax(priced.price.paise, priced.methods[0].method))} at a time without asking you. Cancel within 14 days of your first payment and get it back in full.</p>
-        </Checkout>
-      )}
-    </section>
-    </div></div>
   );
 }
 

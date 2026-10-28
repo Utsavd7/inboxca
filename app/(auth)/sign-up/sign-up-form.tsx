@@ -11,8 +11,8 @@ import { states } from "./states";
 // firm yet) only the firm's details are asked for.
 export function SignUpForm({ account, providers, plan }: { account?: string; providers: ProviderChoice[]; plan?: string }) {
   const [state, send, sending] = useActionState(account ? setUpFirm : signUp, {} as SignUpState);
-  // The plan chosen on the site waits for Today's plan choice through the email code, Google or
-  // Microsoft and the 2 step setup (whose redirect renders Today): plan answers only, for a day.
+  // The plan chosen on the site waits for the plan and payment step (/start) through the email
+  // code, Google or Microsoft and the 2 step setup: plan answers only, for a day.
   useEffect(() => {
     if (plan) document.cookie = `plan_ask=${plan}; path=/; max-age=86400; samesite=lax${location.protocol === "https:" ? "; secure" : ""}`;
   }, [plan]);
@@ -34,26 +34,32 @@ export function SignUpForm({ account, providers, plan }: { account?: string; pro
           "Set up InboxCA for your firm. We will email you a code to sign in."
         )}
       </p>
-      <label htmlFor="firm">Firm name</label>
-      <input id="firm" name="firm" autoComplete="organization" maxLength={200} defaultValue={state.fields?.firm} required />
+      <div className="auth-row">
+        <div>
+          <label htmlFor="firm">Firm name</label>
+          <input id="firm" name="firm" autoComplete="organization" maxLength={200} defaultValue={state.fields?.firm} required />
+        </div>
+        <div>
+          <label htmlFor="state">State</label>
+          {/* The key brings back the chosen state: React's form reset does not for a select. */}
+          <select key={state.fields?.state} id="state" name="state" required defaultValue={state.fields?.state ?? ""}>
+            <option value="" disabled>
+              Choose a state
+            </option>
+            {states.map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       {!account && (
         <>
           <label htmlFor="email">Your work email</label>
           <input id="email" name="email" type="email" autoComplete="email" defaultValue={state.fields?.email} required />
         </>
       )}
-      <label htmlFor="state">State</label>
-      {/* The key brings back the chosen state: React's form reset does not for a select. */}
-      <select key={state.fields?.state} id="state" name="state" required defaultValue={state.fields?.state ?? ""}>
-        <option value="" disabled>
-          Choose your firm&apos;s state
-        </option>
-        {states.map(([code, name]) => (
-          <option key={code} value={code}>
-            {name}
-          </option>
-        ))}
-      </select>
       <label className="auth-check">
         <input type="checkbox" name="accept" required />
         <span>
