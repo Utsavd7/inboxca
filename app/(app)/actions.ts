@@ -2303,6 +2303,14 @@ export async function logCapture(documentId: string) {
   await tellOwnerOnRepeat(membership.firmId, userId, membership.email, "capture_attempt", "captures");
 }
 
+// A prepared return shown as its form is logged as a view, as its stamped pages are.
+export async function logFormView(documentId: string) {
+  const { supabase, userId, membership } = await currentMember();
+  const { data: document } = await supabase.from("documents").select("id").eq("id", documentId).not("prepared", "is", null).maybeSingle();
+  if (!membership || !document) return;
+  await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.viewed", entity_type: "document", entity_id: document.id, details: { form: true } });
+}
+
 // Clients: one page of chosen clients, with progress kept on a background request.
 export async function sendClientPapers(form: FormData) {
   const {supabase,userId,membership}=await currentWriter();
