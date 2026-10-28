@@ -6,6 +6,8 @@ import { createHash, createHmac, createPublicKey, randomBytes, timingSafeEqual, 
 // authenticator may copy to other devices (a synced passkey) is refused: such a PC works as a
 // laptop.
 export const CHALLENGE_COOKIE = "inboxca_pc_challenge";
+// The office PC strip, hidden by its person until the browser closes (a session cookie).
+export const PC_LATER_COOKIE = "inboxca_pc_later";
 const SYNCED = 0x08;
 const VERIFIED = 0x04;
 type Response = { clientDataJSON: string; authenticatorData: string };

@@ -51,6 +51,8 @@ a.week-label:hover { color: var(--ink); }
 .today-line .form-row { align-items: center; gap: var(--s2); margin: 0; }
 .today-line .grow { flex: 1 1 auto; }
 .today-line strong { color: var(--ink); }
+/* The office PC still to set up: its words wrap before its button does. */
+.today-pc .grow { flex: 1 1 0; min-width: 240px; }
 .today-setup-bar { width: 96px; height: 4px; overflow: hidden; border-radius: var(--round); background: var(--press); }
 .today-setup-bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transform-origin: left; animation: bar-grow 600ms var(--out) 120ms both; }
 .side-panel .drop { margin-top: 0; }

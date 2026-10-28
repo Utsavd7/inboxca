@@ -137,7 +137,9 @@ export async function officeDeviceAccess(userId: string, observe = true) {
       if (error) throw new Error(`PC check failed: ${error.code}`);
       pc = data;
     }
-    if (!observe) return { approved: false, deviceStatus: null, connectionWaiting: !office.anywhere && pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting", remoteUntil: null, pcKey: null, anywhere: !!office.anywhere };
+    // Without observing (the 2 step page), approved says only that this approved PC is on the
+    // office connection now, so the email code is enough here: the next request still checks.
+    if (!observe) return { approved: !office.anywhere && pc?.status === "approved" && pc.kind !== "personal" && !!line && connectionRule(line, office, "laptop") === "known", deviceStatus: null, connectionWaiting: !office.anywhere && pc?.status === "approved" && !!line && connectionRule(line, office, "laptop") === "waiting", remoteUntil: null, pcKey: null, anywhere: !!office.anywhere };
     if (pc?.status === "approved" && pc.kind === "office" && !office.anywhere) pcKey = pc.key_id ? "ready" : "needed";
     // A personal device works anywhere for its one person until its end date, view only;
     // anyone else on it, after that day, or once the firm stops working away, is refused.

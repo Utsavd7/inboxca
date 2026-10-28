@@ -15,9 +15,12 @@
 
 /* Tables in a white card that scrolls on its own, the head kept in view on a light blur. */
 .clients-table { overflow: auto; border: 1px solid var(--edge); border-radius: var(--r3); }
-.clients-page .t { min-width: 760px; }
+/* Only the Clients list keeps its columns on one line and scrolls sideways when narrow; a
+   client's own tables (documents, the 2B match) wrap to the page. */
+.clients-page:not(.client-record) .t { min-width: 760px; }
+.clients-page:not(.client-record) .t td { white-space: nowrap; }
 .clients-page .t th { position: sticky; top: 0; z-index: 2; height: var(--row); padding: 0 var(--s3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 82%, transparent); color: var(--ink-3); font-size: 12px; font-weight: 600; backdrop-filter: blur(8px); }
-.clients-page .t td { height: 56px; padding: var(--s2) var(--s3); font-size: 14px; white-space: nowrap; }
+.clients-page .t td { height: 56px; padding: var(--s2) var(--s3); font-size: 14px; }
 .clients-page .t th:first-child, .clients-page .t td:first-child { padding-left: var(--s4); }
 .clients-page .t tbody tr { position: relative; transition: background var(--fast) var(--out); }
 .clients-page .t tbody tr:hover { background: var(--hover); }
