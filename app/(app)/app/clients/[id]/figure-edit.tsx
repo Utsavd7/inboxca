@@ -4,7 +4,8 @@ import {reviewFigure,saveFigureEdit} from "./dataset-actions";
 import {Pending} from "../../pending";
 
 // Kept drafts are separate from checked figures and never change a prepared form.
-export function FigureEdit({client,draft,line,revision,value,reason="",kind,kept=false}:{client:string;draft:string;line:string;revision:number;value:string;reason?:string;kind?:string;kept?:boolean}) {
+// extra: more fields for the page InboxCA comes back to (Check on the form keeps its figure chosen).
+export function FigureEdit({client,draft,line,revision,value,reason="",kind,kept=false,extra={}}:{client:string;draft:string;line:string;revision:number;value:string;reason?:string;kind?:string;kept?:boolean;extra?:Record<string,string>}) {
   const [fields,setFields]=useState({value,reason}),[message,setMessage]=useState(kept ? "Your draft is kept. Save the correction when it is ready." : "");
   const latest=useRef({value,reason}),dirty=useRef(false),submitted=useRef(false),timer=useRef<number|undefined>(undefined),sequence=useRef(0),queue=useRef(Promise.resolve());
   const flush=useCallback(()=>{
@@ -27,9 +28,15 @@ export function FigureEdit({client,draft,line,revision,value,reason="",kind,kept
     setMessage("Keeping your draft...");window.clearTimeout(timer.current);timer.current=window.setTimeout(flush,300);
   };
   return <form action={reviewFigure} className="fields" onSubmit={()=>{submitted.current=true;window.clearTimeout(timer.current);}}>
-    {Object.entries({client,draft,line,revision:String(revision),intent:"edit"}).map(([name,value])=><input key={name} type="hidden" name={name} value={value}/>)}
+    {Object.entries({...extra,client,draft,line,revision:String(revision),intent:"edit"}).map(([name,value])=><input key={name} type="hidden" name={name} value={value}/>)}
     <div><label htmlFor="figure-value">Correct figure</label><input id="figure-value" name="value" type={kind==="date" ? "date" : "text"} inputMode={!kind || kind==="number" ? "decimal" : "text"} value={fields.value} maxLength={2000} onChange={event=>change("value",event.target.value)} onBlur={flush}/></div>
     <div><label htmlFor="figure-reason">Why it changed</label><input id="figure-reason" name="reason" maxLength={300} value={fields.reason} onChange={event=>change("reason",event.target.value)} onBlur={flush}/></div>
     <p className="hint" aria-live="polite">{message}</p><Pending className="b b-secondary">Save correction</Pending>
   </form>;
+}
+
+// For a person who may correct figures, No opens the correction: open already while a draft of it is kept.
+export function FigureNo({open:kept=false,children}:{open?:boolean;children:React.ReactNode}) {
+  const [open,setOpen]=useState(kept);
+  return open ? children : <button type="button" className="b b-secondary" onClick={()=>{setOpen(true);requestAnimationFrame(()=>document.getElementById("figure-value")?.focus());}}>No, this is wrong</button>;
 }
