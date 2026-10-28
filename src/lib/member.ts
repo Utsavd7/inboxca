@@ -107,6 +107,9 @@ export const myQuestions = cache(async () => {
   return (asks ?? []).filter((request) => me && (!["manager", "partner"].includes(me.role) || deputy || membership.may("approve_requests", request.client_id ?? undefined)) && mayDecide({ id: userId, role: me.role, team_id: me.team_id, deputy }, request.details as { by: string; route: "owner" | "manager"; team_id: string | null }));
 });
 
+// Why a button is off for someone who may only view, in one line beside it.
+export const viewOnlyWords = (until?: string) => (until ? (until === "billing" ? "Your firm can only view for now." : "This laptop can only view while it is away from the office.") : "");
+
 // For actions that change anything: a view only device gets no further.
 export async function currentWriter() {
   const member = await currentMember();
