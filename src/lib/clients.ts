@@ -12,6 +12,10 @@ export const clientKinds = {
 
 export type ClientKind = keyof typeof clientKinds;
 
+// The example row on the client list template's How to fill sheet. An import leaves it out
+// when someone copies it into their list.
+export const exampleClient = { name: "Sharma Traders (example)", kind: clientKinds.business, pan: "ABCDE1234F", gstin: "27ABCDE1234F1Z0", email: "accounts@example.com" };
+
 // What each person assigned to a client does for it.
 export const assignmentRoles = { partner_in_charge: "Partner in charge", manager: "Manager", staff: "Staff" } as const;
 
@@ -45,7 +49,7 @@ export function readKind(text: string, hasGstin: boolean): ClientKind | null {
   if (named) return named[0] as ClientKind;
   const guesses: [RegExp, ClientKind][] = [
     [/audit/, "tax_audit"],
-    [/llp/, "llp"],
+    [/llp|limited liability/, "llp"],
     [/compan|pvt|private limited|ltd|limited/, "company"],
     [/trust|society/, "trust"],
     [/individual|salaried|person/, "individual"],

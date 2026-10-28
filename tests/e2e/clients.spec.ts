@@ -1,6 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
 import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
+import { exampleClient } from "@/src/lib/clients";
+import { xlsxEntries } from "@/src/lib/sheet";
+import { craft } from "../fixtures/zip";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
 
 // Adding and finding clients, with numbers encrypted by the firm's key. Skipped when local
@@ -292,14 +296,35 @@ test("importing 500 clients with emails adds them all and reports every bad row"
   await expect(owner.getByRole("link", { name: "Client 42", exact: true })).toBeVisible();
 });
 
-test("the sample sheet has the headings the import reads", async () => {
+test("the client list template, filled in, and a Tally export both import", async () => {
+  const tag = randomUUID().slice(0, 6), panel = owner.locator("section[aria-labelledby=import]");
   await owner.goto("/app/clients?panel=import");
-  const href = await owner.getByRole("link", { name: "Download a sample sheet" }).getAttribute("href");
-  const sample = await owner.request.get(href ?? "");
-  await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "sample.csv", mimeType: "text/csv", buffer: await sample.body() });
+  const download = owner.waitForEvent("download");
+  await owner.getByRole("link", { name: "Download the client list template" }).click();
+  const template = xlsxEntries(await readFile((await (await download).path())!));
+  // Two clients typed under the template's headings, then an empty row and the example row
+  // copied from How to fill, which are left out.
+  const typed = [[`Template Mehta ${tag}`, "Company", "TMPLA1234B"], [`Template Joshi ${tag}`, "", "", "", `joshi-${tag}@example.test`], [], Object.values(exampleClient)];
+  const rows = typed.map((cells, at) => `<row r="${at + 2}">${cells.map((text, column) => text && `<c r="${"ABCDE"[column]}${at + 2}" t="inlineStr"><is><t>${text}</t></is></c>`).join("")}</row>`).join("");
+  const filled = craft([...template].map(([name, read]) => ({ name, bytes: name === "xl/worksheets/sheet1.xml" ? Buffer.from(read().toString().replace("</sheetData>", `${rows}</sheetData>`)) : read() })));
+  await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "clients.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: filled });
+  await owner.getByRole("button", { name: "Check the file" }).click();
+  await expect(owner.getByText("2 ready to import.")).toBeVisible();
+  await expect(panel.getByRole("table")).toContainText(`Template Mehta ${tag}Company`);
+  await owner.getByRole("button", { name: "Import 2 clients" }).click();
+  await expect(owner.getByText("Imported 2 clients.")).toBeVisible();
+
+  // Tally's column names, below the title rows its export puts on top.
+  const tally = ["Sharma & Co", "List of Ledgers", "", "Name of Party,GSTIN/UIN,PAN/IT No.,E-mail,Constitution", `Tally Kapoor ${tag},,TLYAB1234C,kapoor-${tag}@example.test,Limited Liability Partnership`];
+  await owner.goto("/app/clients?panel=import");
+  await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "tally.csv", mimeType: "text/csv", buffer: Buffer.from(tally.join("\n")) });
   await owner.getByRole("button", { name: "Check the file" }).click();
   await expect(owner.getByText("1 ready to import.")).toBeVisible();
-  await expect(owner.locator("section[aria-labelledby=import] table")).toContainText("Example Client (delete this row)Businessaccounts@example.com");
+  await expect(panel.getByRole("table")).toContainText(`Tally Kapoor ${tag}LLPkapoor-${tag}@example.testTLYAB1234C`);
+  await owner.getByRole("button", { name: "Import 1 client" }).click();
+  await expect(owner.getByText("Imported 1 client.")).toBeVisible();
+  await owner.goto(`/app/clients?q=${tag}`);
+  for (const name of [`Template Mehta ${tag}`, `Template Joshi ${tag}`, `Tally Kapoor ${tag}`]) await expect(owner.getByRole("link", { name, exact: true })).toBeVisible();
 });
 
 test("the client list shows its true count and a second page", async () => {
