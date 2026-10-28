@@ -47,7 +47,7 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const today = todayInIndia();
   // Office decisions of the last 90 days, the most fixedSuggestion counts over (admin_set_office),
   // and when each PC was first seen, so the read stays small as the log grows.
-  const [{ data: pcs }, { data: activity }, { data: seen }, { data: people }, { data: requests }, { data: branches }, fixedRule] = await Promise.all([
+  const [{ data: pcs }, { data: activity }, { data: firstSeen }, { data: people }, { data: requests }, { data: branches }, fixedRule] = await Promise.all([
     admin.from("devices").select("id, name, status, kind, person_id, ends_on, key_id, branch_id").eq("firm_id", membership.firmId),
     admin.from("activity_log").select("entity_id, actor_id, action, at, details").eq("firm_id", membership.firmId).in("action", ["office.refused", "office.here", "office.confirm", "office.today"]).gte("at", new Date(`${addDays(today, -90)}T00:00:00+05:30`).toISOString()),
     admin.from("activity_log").select("entity_id, actor_id, at, details").eq("firm_id", membership.firmId).eq("action", "device.first_seen"),
@@ -68,7 +68,7 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const ownOffice = picked && (picked.settings as { office?: Office }).office ? picked.id : null;
   const officePcs = (pcs ?? []).filter((pc) => compact || (pc.branch_id ?? null) === ownOffice);
   const emails = new Map(people?.map((person) => [person.user_id, person.email]));
-  const first = new Map(seen?.map((entry) => [entry.entity_id, entry]));
+  const first = new Map(firstSeen?.map((entry) => [entry.entity_id, entry]));
   const waiting = officePcs.filter((pc) => pc.status === "waiting");
   const approved = officePcs.filter((pc) => pc.status === "approved" && (pc.kind !== "personal" || (pc.ends_on ?? "") >= today));
   const seen = compact ? Date.parse((await cookies()).get(REFUSALS_SEEN)?.value ?? "") || 0 : 0;
