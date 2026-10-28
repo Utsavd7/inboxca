@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 import { latestEmail, localSupabase, query, totp } from "./local-supabase";
 
 // Public sign up through the real pages: a plan chosen on the site, firm details and acceptance,
-// the email code, the 2 step setup, then the app, where the plan choice waits with that plan.
+// the email code, the 2 step setup, then the plan and payment step with that plan.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 test.describe.configure({ timeout: 90_000 });
@@ -45,12 +45,12 @@ test("a new firm chooses Growth yearly on the site, signs up, signs in with the 
   const secret = (await page.locator(".secret").textContent())!.trim();
   await page.getByLabel("6 digit code from the app").fill(totp(secret));
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page).toHaveURL(/\/app$/);
-  await expect(page.locator(".rail-firm")).toContainText(firmName);
-  // The site's answers and payment period are already in Today's plan choice, priced by the server.
-  await expect(page.getByLabel("Clients", { exact: true })).toHaveValue("120");
-  await expect(page.getByLabel("Pay", { exact: true })).toHaveValue("yearly");
-  await expect(page.getByText("Growth plan", { exact: true })).toBeVisible();
+  // Payments are on in tests, so the plan and payment step comes first, with the site's plan and
+  // payment period already chosen.
+  await expect(page).toHaveURL(/\/start$/);
+  await expect(page.getByText(`${firmName} opens on InboxCA`)).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Plans" }).getByRole("link", { name: "Growth" })).toHaveAttribute("aria-current", "true");
+  await expect(page.getByRole("navigation", { name: "How often to pay" }).getByRole("link", { name: /Yearly/ })).toHaveAttribute("aria-current", "true");
 
   const [firm] = await query(
     local.dbUrl,

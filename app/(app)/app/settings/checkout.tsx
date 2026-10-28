@@ -1,5 +1,5 @@
 "use client";
-import { useActionState, useEffect, type ReactNode } from "react";
+import { startTransition, useActionState, useEffect, type ReactNode } from "react";
 import type { CheckoutState } from "./billing-actions";
 
 type CashfreeCheckout = {
@@ -12,8 +12,10 @@ declare global {
 
 // A form whose server action prepares a payment, then opens the provider's hosted checkout in
 // this tab (Cashfree's checkout script: card, UPI and bank details never reach InboxCA). The
-// owner comes back to Billing, which shows the payment once its webhook is in.
-export function Checkout({ action, label, busy, className = "set-stack", children }: { action: (prev: CheckoutState, form: FormData) => Promise<CheckoutState>; label: string; busy: string; className?: string; children?: ReactNode }) {
+// owner comes back to Billing, which shows the payment once its webhook is in. Sent by hand, not
+// as the form's action, as React empties a form after its action: what was typed stays on
+// screen, the button busy, until the checkout opens or an error shows.
+export function Checkout({ action, label, busy, className = "set-stack", button = "b b-primary", children }: { action: (prev: CheckoutState, form: FormData) => Promise<CheckoutState>; label: string; busy: string; className?: string; button?: string; children?: ReactNode }) {
   const [state, send, sending] = useActionState(action, {});
   const opening = !!state.session;
   useEffect(() => {
@@ -32,11 +34,11 @@ export function Checkout({ action, label, busy, className = "set-stack", childre
     document.head.append(script);
   }, [state]);
   return (
-    <form action={send} className={className}>
+    <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); startTransition(() => send(form)); }} className={className}>
       {children}
       {state.error && <p className="field-error" role="alert">{state.error}</p>}
       <div className="set-foot">
-        <button className="b b-primary" type="submit" disabled={sending || opening} aria-busy={sending || opening || undefined}>
+        <button className={button} type="submit" disabled={sending || opening} aria-busy={sending || opening || undefined}>
           {sending || opening ? busy : label}
         </button>
       </div>

@@ -207,8 +207,9 @@ test("a new owner signs up with Google, and the email code later opens the same 
     const first = totp(secret);
     await page.getByLabel("6 digit code from the app").fill(first);
     await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page).toHaveURL(/\/app$/);
-    await expect(page.locator(".rail-firm")).toContainText(firmName);
+    // Payments are on in tests: the new firm opens with its plan and payment step.
+    await expect(page).toHaveURL(/\/start$/);
+    await expect(page.getByText(`${firmName} opens on InboxCA`)).toBeVisible();
     const rows = await query(local.dbUrl, "select f.status, f.state_code, m.role from public.firms f join public.firm_members m on m.firm_id = f.id where f.name = $1", [firmName]);
     expect(rows).toEqual([{ status: "pending", state_code: "24", role: "owner" }]);
 
@@ -219,7 +220,7 @@ test("a new owner signs up with Google, and the email code later opens the same 
     await expect(page.getByRole("heading", { name: "Enter your 2 step code" })).toBeVisible();
     await page.getByLabel("6 digit code from the app").fill(await freshTotp(secret, first));
     await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page.locator(".rail-firm")).toContainText(firmName);
+    await expect(page.getByText(`${firmName} opens on InboxCA`)).toBeVisible();
     expect(await query(local.dbUrl, "select id from auth.users where email = $1", [email])).toEqual([{ id: userId }]);
   } finally {
     await removeFirm(firmName);

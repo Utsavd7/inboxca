@@ -531,45 +531,57 @@ li { text-wrap: pretty; }
 .policy-section li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
 .policy-section:target h2 { color: var(--blue-deep); }
 
-/* Sign in */
-.auth-page { display: grid; place-items: center; min-height: 100dvh; padding: 24px; background: var(--grey); }
-.auth-card { width: min(440px, 100%); padding: 36px 32px; border: 1px solid var(--line); border-radius: 24px; background: var(--white); box-shadow: var(--shadow-soft); }
-.auth-card h1 { margin-top: 28px; font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; }
-.auth-form { display: grid; gap: 12px; margin-top: 14px; }
-.auth-form label { margin-top: 8px; font-size: 15px; font-weight: 700; }
+/* Sign in: every step fits one laptop screen (1280 by 720 and up) with the app's 14 px text and
+   34 px controls. */
+.auth-page { display: grid; place-items: center; min-height: 100dvh; padding: 16px; background: var(--grey); }
+.auth-card { position: relative; width: min(420px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 20px; background: var(--white); box-shadow: var(--shadow-soft); font-size: 14px; line-height: 1.5; }
+.auth-card h1 { margin-top: 20px; font-size: 22px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.25; }
+.auth-form { display: grid; gap: 8px; margin-top: 12px; }
+.auth-form label { margin-top: 4px; font-size: 13px; font-weight: 700; }
 /* The sign in form's fields. The signed in app has its own (app/(app)/app/app.css). */
 .auth-form input,
-.auth-form select { height: 48px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--white); color: var(--navy); font-size: 16px; transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }
+.auth-form select { height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--white); color: var(--navy); font-size: 14px; transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }
 .auth-form input,
 .auth-form select { width: 100%; }
 .auth-form select { font-family: inherit; }
-.auth-form .auth-check { display: flex; gap: 10px; align-items: flex-start; font-weight: 500; }
-.auth-form .auth-check input { width: 18px; height: 18px; margin-top: 3px; flex: none; }
+.auth-form label + :is(input, select) { margin-top: -4px; }
+/* Two fields side by side: the firm's name and its state. */
+.auth-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px; }
+.auth-row > div { display: grid; gap: 4px; }
+.auth-row label + :is(input, select) { margin-top: 0; }
+.auth-card details { margin-top: 8px; }
+.auth-form .auth-check { display: flex; gap: 8px; align-items: flex-start; font-weight: 500; }
+.auth-form .auth-check input { width: 16px; height: 16px; margin-top: 2px; flex: none; }
 .auth-check a, .auth-small a { color: var(--blue-deep); text-decoration: underline; text-underline-offset: 3px; }
 .auth-form input:focus,
 .auth-form select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
 .auth-form input[aria-invalid="true"] { border-color: var(--error); }
-.auth-form .btn { margin-top: 8px; }
-.auth-form .text-button { justify-self: start; font-size: 15px; font-weight: 700; color: var(--blue-deep); text-decoration: underline; text-underline-offset: 4px; }
+.auth-form .btn { margin-top: 4px; }
+.auth-card .btn { height: 34px; padding: 0 16px; border-radius: 8px; font-size: 14px; }
+.auth-card .text-button { justify-self: start; font-size: 13px; font-weight: 700; color: var(--blue-deep); text-decoration: underline; text-underline-offset: 4px; }
 .auth-lead { color: var(--slate); }
-.auth-note { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: var(--wash); color: var(--navy); font-size: 15px; }
+.auth-note { margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: var(--wash); color: var(--navy); font-size: 13px; }
 .auth-note a { color: var(--blue-deep); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
-.auth-small { font-size: 14px; color: var(--slate); overflow-wrap: anywhere; }
-.code-input { font-size: 24px !important; letter-spacing: 0.3em; text-align: center; }
-.qr { justify-self: center; border: 1px solid var(--line); border-radius: 16px; padding: 8px; background: var(--white); }
+.auth-small { font-size: 13px; color: var(--slate); overflow-wrap: anywhere; }
+.code-input { font-size: 18px !important; letter-spacing: 0.3em; text-align: center; }
+.qr { justify-self: center; border: 1px solid var(--line); border-radius: 12px; padding: 6px; background: var(--white); }
 .secret { color: var(--navy); }
+/* The first 2 step setup: the QR code beside the code field. */
+.auth-setup { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; }
+.auth-setup .qr { width: 152px; height: 152px; }
+.auth-setup .auth-form { margin-top: 0; }
 /* Continue with Google or Microsoft: a plain button with the provider's own mark, as both
    brands ask, then a line to the email code. */
-.auth-providers { display: grid; gap: 10px; margin-top: 18px; }
-.auth-card h1 + .auth-lead { margin-top: 8px; }
+.auth-providers { display: grid; gap: 8px; margin-top: 12px; }
+.auth-card h1 + .auth-lead { margin-top: 4px; }
 .btn-provider {
-  display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; height: 48px; padding: 0 16px;
-  border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface, var(--white)); color: var(--navy); font-size: 16px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 34px; padding: 0 16px;
+  border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface, var(--white)); color: var(--navy); font-size: 14px; font-weight: 700;
   transition: background 0.3s var(--ease), border-color 0.3s var(--ease), transform 0.25s var(--ease);
 }
 .btn-provider:hover { background: var(--grey); border-color: var(--slate); }
 .btn-provider:disabled { opacity: 0.7; cursor: default; }
-.auth-or { display: flex; align-items: center; gap: 12px; margin-top: 18px; font-size: 14px; color: var(--slate); }
+.auth-or { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: var(--slate); }
 .auth-or::before,
 .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 @media (prefers-reduced-motion: no-preference) {

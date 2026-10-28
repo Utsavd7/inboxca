@@ -1,12 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { test, expect, type Browser } from "@playwright/test";
+import { test, expect, type Browser, type Page } from "@playwright/test";
+import { chosenPlan, formulaSchema, indiaDay, rupees, taxSchema, withGst, type Cycle } from "@/src/lib/billing/money";
 import { CASHFREE_KEYS, CASHFREE_TEST_URL } from "../../playwright.config";
 import { fakeCashfree } from "../fake-cashfree";
-import { appKey, emailStep, latestEmail, localSupabase, query, seedFirm, systemMail, totp } from "./local-supabase";
+import { addPerson, appKey, emailStep, latestEmail, localSupabase, query, seedFirm, systemMail, totp } from "./local-supabase";
 
 // Orelu's billing through the real pages, with payments on and Cashfree a fake on this machine
-// (PLAN.md 5.14.1, D33): a new firm signs up, chooses its plan and sets up AutoPay in the fake's
-// checkout, and the signed webhook makes it active; Settings, Billing lists its receipt and turns
+// (PLAN.md 5.14.1, D33): a new firm signs up and is held at the plan and payment step, owner and
+// staff alike, until the owner chooses a plan, sees the billing code's price and GST, and sets up
+// AutoPay in the fake's checkout; the signed webhook makes it active and opens the app. Each sign
+// in step fits a laptop screen. Settings, Billing lists its receipt and turns
 // AutoPay off; past its monthly share of returns with its year still within the plan, Today offers
 // yearly payment and one payment switches it; once the year passes the plan, Today offers the plan
 // that fits and one payment moves it up; the money comes back within 14 days with the 2 step code;
@@ -20,6 +23,7 @@ test.use({ storageState: { cookies: [{ name: "inboxca_device", value: randomByte
 
 const tag = randomUUID().slice(0, 8);
 const email = `billing-${tag}@example.test`;
+const staff = `billing-staff-${tag}@example.test`;
 const firmName = `Billing Firm ${tag}`;
 let origin = "";
 const fake = fakeCashfree(CASHFREE_KEYS, (raw, headers) => fetch(`${origin}/api/webhooks/cashfree`, { method: "POST", body: raw, headers }));
@@ -48,11 +52,21 @@ test.afterAll(async () => {
   else await query(local.dbUrl, "delete from public.platform_settings where key = 'tax'");
   await query(local.dbUrl, "delete from public.payments where firm_id in (select id from public.firms where name = $1)", [firmName]);
   await query(local.dbUrl, "with gone as (select set_config('app.log_purge', 'on', true)) delete from public.firms where name = $1 and exists (select 1 from gone)", [firmName]);
-  await query(local.dbUrl, "delete from auth.users where email = $1", [email]);
+  await query(local.dbUrl, "delete from auth.users where email = any($1)", [[email, staff]]);
 });
 
-test("a new firm signs up, sets up AutoPay in checkout, and the webhook activates it", async ({ page }) => {
+// Each sign in step and the plan and payment step fit a 1280 by 720 laptop screen: nothing scrolls.
+const fits = async (page: Page) => expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= innerHeight)).toBe(true);
+// What the plan and payment step must show for a plan on the site's price list: worked out by
+// the billing code from the server's formula, for a firm in Maharashtra.
+async function priceOf(plan: string, cycle: Cycle, taxNow: unknown) {
+  const formula = formulaSchema.parse((await query(local.dbUrl, "select value from public.platform_settings where key = 'plan_formula'"))[0].value);
+  return withGst(chosenPlan(formula, { plan, cycle })!.price.paise, taxSchema.parse(taxNow), "27", indiaDay(new Date()));
+}
+
+test("a new firm signs up, pays before anything opens, and the webhook opens the app", async ({ page, browser }) => {
   await page.goto("/sign-up");
+  await fits(page);
   await page.getByLabel("Firm name").fill(firmName);
   await page.getByLabel("Your work email").fill(email);
   await page.getByLabel("State").selectOption({ label: "Maharashtra" });
@@ -61,29 +75,70 @@ test("a new firm signs up, sets up AutoPay in checkout, and the webhook activate
   await page.getByRole("button", { name: "Sign up" }).click();
   const { code: emailed } = await latestEmail(local.mailUrl, email, sent);
   await page.getByLabel("Code from the email").fill(emailed);
+  await fits(page);
   await page.getByRole("button", { name: "Continue" }).click();
   secret = (await page.locator(".secret").textContent())!.trim();
+  await fits(page);
   await page.getByLabel("6 digit code from the app").fill(await code());
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // Nothing works before the first payment: Today asks for the plan.
-  await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole("heading", { name: "Choose your plan to start" })).toBeVisible();
-  await page.getByLabel("Clients").fill("60");
-  await page.getByLabel("Kind of practice").selectOption("mixed");
-  await page.getByLabel("Your team, you included").fill("1");
-  await page.getByRole("button", { name: "See my plan" }).click();
-  await expect(page.getByText("Solo plan")).toBeVisible();
-  await expect(page.getByText("₹1,499 a month")).toBeVisible();
+  // Nothing opens before the first payment: every page of the app sends to plan and payment.
+  await expect(page).toHaveURL(/\/start$/);
+  await page.goto("/app/clients");
+  await expect(page).toHaveURL(/\/start$/);
+  await expect(page.getByText(`${firmName} opens on InboxCA`)).toBeVisible();
+  await fits(page);
+  // Someone else in the firm waits for the owner.
+  const staffKey = appKey();
+  await addPerson((await firm()).id, staff, "staff", staffKey);
+  const other = await browser.newContext();
+  try {
+    const them = await other.newPage();
+    await emailStep(them, staff);
+    await them.getByLabel("6 digit code from the app").fill(totp(staffKey));
+    await them.getByRole("button", { name: "Continue" }).click();
+    await expect(them.getByRole("heading", { name: "Your firm starts once its owner chooses a plan" })).toBeVisible();
+    await them.goto("/app/clients");
+    await expect(them).toHaveURL(/\/start$/);
+    await expect(them.getByRole("button", { name: "Pay and start" })).toHaveCount(0);
+    await fits(them);
+  } finally {
+    await other.close();
+  }
+
+  // The price, GST and total are the billing code's for the plan and payment period chosen.
+  const withTax = { ...tax, gstin: "27AAAFI1234B1Z5", stateCode: "27", sac: "9983", rate: 18, gstFrom: indiaDay(new Date()) };
+  await query(local.dbUrl, "update public.platform_settings set value = $1 where key = 'tax'", [withTax]);
+  const choose = async (nav: string, name: string | RegExp) => {
+    const link = page.getByRole("navigation", { name: nav }).getByRole("link", { name });
+    await link.click();
+    await expect(link).toHaveAttribute("aria-current", "true");
+  };
+  await choose("Plans", "Growth");
+  await choose("How often to pay", /Yearly/);
+  const growth = await priceOf("growth", "yearly", withTax);
+  const price = page.locator(".start-price");
+  await expect(price.locator(".start-total dd")).toHaveText(rupees(growth.total));
+  await expect(price).toContainText(rupees(growth.taxable));
+  await expect(price).toContainText(rupees(growth.gst));
+  await fits(page);
+  await query(local.dbUrl, "update public.platform_settings set value = $1 where key = 'tax'", [tax]);
+  await choose("Plans", "Solo");
+  await choose("How often to pay", "Monthly");
+  const solo = await priceOf("solo", "monthly", tax);
+  await expect(price.locator(".start-total dd")).toHaveText(rupees(solo.total));
+  expect(solo.gst).toBe(0);
   await expect(page.getByRole("radio", { name: /UPI AutoPay/ })).toBeChecked();
   await expect(page.getByText("Orelu will never take more than ₹2,998 at a time without asking you.")).toBeVisible();
   await page.getByLabel("Mobile number for AutoPay messages").fill("9876543210");
   await page.getByLabel("Firm address, for receipts").fill("2 Invented Lane, Pune");
   expect((await firm()).status).toBe("pending");
-  await page.getByRole("button", { name: "Set up AutoPay" }).click();
+  await page.getByRole("button", { name: "Pay and start" }).click();
 
-  // The fake's checkout authorises at once, sends the signed webhook and comes back to Billing.
-  await expect(page).toHaveURL(/\/app\/settings\?group=billing&saved=checkout/);
+  // The fake's checkout authorises at once and sends the signed webhook; back from it, the firm
+  // is open and Today shows its setup.
+  await expect(page).toHaveURL(/\/app$/);
+  await page.goto("/app/settings?group=billing");
   await expect(page.getByText(/Paid until/)).toBeVisible();
   await expect(page.getByText(/AutoPay is on with your UPI AutoPay/)).toBeVisible();
   expect(await firm()).toMatchObject({ status: "active", autopay: "active" });
@@ -92,7 +147,11 @@ test("a new firm signs up, sets up AutoPay in checkout, and the webhook activate
 });
 
 test("Settings, Billing lists the receipt and turns AutoPay off", async ({ page }) => {
+  await page.goto("/sign-in");
+  await fits(page);
   await emailStep(page, email);
+  await expect(page.getByLabel("6 digit code from the app")).toBeVisible();
+  await fits(page);
   await page.getByLabel("6 digit code from the app").fill(await code());
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/app$/);

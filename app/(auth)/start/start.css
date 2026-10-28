@@ -1,0 +1,76 @@
+/* Sign up's plan and payment step, in the sign in card: the steps beside the logo, then the plan
+   on the left and AutoPay on the right, all on one laptop screen. */
+.auth-card:has(.start-wide) { width: min(1040px, 100%); padding: 24px 28px; }
+.start-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 16px; color: var(--slate); font-size: 13px; font-weight: 600; }
+.auth-card:has(.start-wide) .start-progress { position: absolute; top: 30px; right: 28px; margin: 0; }
+.start-progress li { display: inline-flex; align-items: center; gap: 6px; }
+.start-progress li + li::before { content: ""; width: 6px; height: 6px; margin-right: 4px; border-top: 1.5px solid var(--line-strong); border-right: 1.5px solid var(--line-strong); transform: rotate(45deg); order: -2; }
+.start-progress .done { color: var(--green-deep); }
+.start-progress [aria-current="step"] { color: var(--navy); }
+.start-progress [aria-current="step"]::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--wash); order: -1; }
+.start h1 { margin-top: 16px; }
+.start .auth-lead { margin-top: 4px; }
+.start > form:last-child { margin-top: 12px; }
+.start > .btn { margin-top: 16px; }
+.start > .auth-small { margin-top: 12px; }
+.start-wait { display: flex; align-items: center; gap: 10px; }
+.start-wait::before { content: ""; flex: none; width: 16px; height: 16px; border: 2px solid var(--tint); border-top-color: var(--blue); border-radius: 50%; animation: start-spin 0.8s linear infinite; }
+@keyframes start-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .start-wait::before { animation-duration: 2.4s; } }
+
+.start-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.start-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.start-pay { padding-left: 28px; border-left: 1px solid var(--line); }
+.start h2 { margin-bottom: 10px; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
+.start label { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 700; }
+.start input:not([type="radio"]),
+.start select { width: 100%; height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--white); color: var(--navy); font: inherit; font-size: 14px; transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease); }
+.start input:not([type="radio"]):focus,
+.start select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
+
+/* The plan: a segmented choice of plans, then of how often to pay. */
+.start-tabs { display: flex; padding: 3px; border-radius: 10px; background: var(--grey); }
+.start-tabs a { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 8px; border-radius: 7px; color: var(--slate); font-size: 13px; font-weight: 700; white-space: nowrap; transition: background 0.2s var(--ease), color 0.2s var(--ease), box-shadow 0.2s var(--ease); }
+.start-tabs a:hover { color: var(--navy); }
+.start-tabs a[aria-current="true"] { background: var(--white); color: var(--navy); box-shadow: 0 1px 2px rgba(11, 31, 58, 0.12), 0 0 0 1px var(--line); }
+.start-cycle { margin-top: 8px; }
+.start-free { padding: 1px 7px; border-radius: 999px; background: var(--wash); color: var(--blue-deep); font-size: 12px; }
+.start-includes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.start-includes li { padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--navy); font-size: 13px; }
+.start-team { display: flex; align-items: flex-end; gap: 8px; margin-top: 12px; }
+.start-team > div { flex: 1; min-width: 0; }
+.start-team .btn { flex: none; }
+.start-price { display: grid; margin-top: 12px; padding: 8px 14px; border-radius: 12px; background: var(--grey); }
+.start-price div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 2px 0; }
+.start-price dt { color: var(--slate); }
+.start-price dd { color: var(--navy); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.start-price .start-total { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line-strong); }
+.start-price .start-total dt { color: var(--navy); font-weight: 800; }
+.start-price .start-total dd { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.start-plan > .auth-small { margin-top: 8px; }
+.start-empty { display: grid; place-items: center; min-height: 220px; padding: 24px; border: 1px dashed var(--line-strong); border-radius: 12px; color: var(--slate); text-align: center; }
+
+/* AutoPay: the way to pay, the details receipts need, then the one button. */
+.start-form { display: grid; gap: 10px; }
+.start .set-choices { display: grid; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; }
+.start .set-choices label { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 8px 12px; border-top: 1px solid var(--line); font-weight: 500; cursor: pointer; transition: background 0.2s var(--ease); }
+.start .set-choices label:first-of-type { border-top: 0; }
+.start .set-choices label:hover { background: var(--grey); }
+.start .set-choices label:has(:checked) { background: var(--wash); }
+.start .set-choices input { margin-top: 3px; accent-color: var(--blue); }
+.start .set-choices strong { font-weight: 700; }
+.start .hint { color: var(--slate); font-size: 13px; }
+.start-fields { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 10px 12px; }
+.start-wide-field { grid-column: 1 / -1; }
+.start-back { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: var(--wash); color: var(--navy); font-size: 13px; }
+.start-back svg { color: var(--blue); }
+.start-form .btn { width: 100%; }
+.start-form .field-error { margin: 0; }
+
+@media (max-width: 760px) {
+  .auth-card:has(.start-wide) .start-progress { position: static; margin-top: 16px; }
+  .start-head { flex-wrap: wrap; }
+  .start-grid { grid-template-columns: minmax(0, 1fr); }
+  .start-pay { padding-left: 0; border-left: 0; }
+  .start-tabs { flex-wrap: wrap; }
+}
