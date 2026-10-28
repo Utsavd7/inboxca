@@ -19,7 +19,10 @@ async function approvers(firmId: string, route: "owner" | "manager", teamId: str
     .map((person) => person.user_id);
 }
 
-const nameOf = async (userId?: string) => personName((await supabaseAdmin().auth.admin.getUserById(userId ?? "")).data.user?.email);
+const nameOf = async (userId?: string) => {
+  const user = (await supabaseAdmin().auth.admin.getUserById(userId ?? "")).data.user;
+  return personName(user?.email, user?.user_metadata?.full_name ?? user?.user_metadata?.name);
+};
 
 export const notifyRequest: Handler = async (job) => {
   const { data: request } = await supabaseAdmin().from("requests").select("firm_id, kind, entity_type, reason_code, status, details").eq("id", job.entity_id!).maybeSingle();

@@ -60,7 +60,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         sub={
           <p className="greet">
             <strong>
-              {greeting}, {personName(membership.email)}.
+              {greeting}, {membership.name}.
             </strong>{" "}
             {new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" })}.{" "}
             <Suspense fallback={<span className="greet-wait">Looking at what needs you</span>}>

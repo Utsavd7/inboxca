@@ -121,7 +121,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
     <div className="fill notices">
       <PageHead
         title="Notices"
-        sub="Notices your clients received, the nearest date first. A date InboxCA found is only a suggestion until someone checks it."
+        sub="Nearest date first."
         actions={
           !viewOnly && (
             <Link className="b b-primary" href={href({ add: true })} scroll={false}>

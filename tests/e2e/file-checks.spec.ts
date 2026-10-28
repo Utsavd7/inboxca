@@ -89,7 +89,7 @@ test("a PDF with a password opens once a person types it, and the team need not 
   await expect(owner.getByRole("status")).toContainText("Saved as");
   const [document] = await query(local.dbUrl, "select id from public.documents where client_id = $1 and name like '%.pdf' and name not like '%Purchase bills%'", [clientId]);
   await owner.goto(`/app/files/${document.id}/view`);
-  await expect(owner.getByText("Not checked for viruses yet.")).toHaveCount(0);
+  await expect(owner.getByText("Not virus checked by InboxCA.")).toHaveCount(0);
   await owner.getByLabel("This PDF has a password. Type it to open the file.").fill("wrong-pass");
   await owner.getByRole("button", { name: "Open", exact: true }).click();
   await owner.getByLabel("That password did not open it. Type it again.").fill("invented-pass");
@@ -103,7 +103,7 @@ test("a PDF with a password opens once a person types it, and the team need not 
   await query(local.dbUrl, "update public.documents set scanned_at = null where id = $1", [document.id]);
   await owner.reload();
   await expect(owner.getByRole("img", { name: "Page 1", exact: true })).toBeVisible();
-  await expect(owner.getByText("Not checked for viruses yet.")).toBeVisible();
+  await expect(owner.getByText("Not virus checked by InboxCA.")).toBeVisible();
 });
 
 test("a Word letter is shown as its words, view only", async () => {
