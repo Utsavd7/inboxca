@@ -114,7 +114,7 @@ export function Row({ lead, title, meta, status, more, action }: { lead?: React.
   );
 }
 
-export type Tone ="blue" | "done" | "late" | "warn" | "purple" | "";
+export type Tone ="blue" | "done" | "late" | "warn" | "strong" | "";
 export function Badge({ tone = "", plain = false, children }: { tone?: Tone; plain?: boolean; children: React.ReactNode }) {
   return <span className={`badge ${tone}${plain ? " plain" : ""}`}>{children}</span>;
 }

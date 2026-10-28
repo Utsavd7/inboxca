@@ -50,7 +50,7 @@ function Meta({ entry }: { entry: Entry }) {
   const status = paper && statuses[paper.status];
   return (
     <span className="fb-sub">
-      {paper ? <span>{[paperType(paper.type), paper.work, paper.period].filter(Boolean).join(", ")}</span> : <Badge tone="purple">Not in InboxCA yet</Badge>}
+      {paper ? <span>{[paperType(paper.type), paper.work, paper.period].filter(Boolean).join(", ")}</span> : <Badge tone="strong">Not in InboxCA yet</Badge>}
       {status && <Badge tone={status[1]}>{status[0]}</Badge>}
     </span>
   );

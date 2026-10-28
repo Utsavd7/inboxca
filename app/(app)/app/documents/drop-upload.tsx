@@ -88,7 +88,7 @@ export function HeldFiles() {
   const count = useSyncExternalStore(nothing, () => held.length, () => 0);
   if (!count) return null;
   return (
-    <p className="notice docs-held">
+    <p className="note docs-held">
       <FileUp size={16} aria-hidden />
       {count} {count === 1 ? "file is" : "files are"} ready. Choose the client {count === 1 ? "it is" : "they are"} for.
     </p>

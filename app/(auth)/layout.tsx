@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Logo } from "@/components/site/logo";
+import { AuthFrame } from "@/components/site/auth-frame";
 
 export const metadata: Metadata = {
   title: "Sign in | InboxCA",
@@ -7,12 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="auth-page">
-      <div className="auth-card">
-        <Logo />
-        {children}
-      </div>
-    </main>
-  );
+  return <AuthFrame>{children}</AuthFrame>;
 }

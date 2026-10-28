@@ -15,7 +15,7 @@ const statusNames: Record<string, string> = { active: "Active", invited: "Invite
 // Active is the usual state, so it stays quiet; green means done only.
 const statusTones: Record<string, Tone> = { invited: "warn" };
 // Each role keeps one colour on its pill; the colour names the role, the word says it.
-const roleTones: Record<string, Tone> = { owner: "purple", partner: "blue", manager: "blue" };
+const roleTones: Record<string, Tone> = { owner: "strong", partner: "blue", manager: "blue" };
 // What a change on a person says once it is saved (?saved=).
 const savedNames: Record<string, string> = { role: "Changes saved.", remove: "Done. They can no longer sign in.", restore: "Restored. They can sign in again." };
 // A person is in at most one team and works at most at one branch.

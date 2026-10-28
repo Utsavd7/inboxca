@@ -15,7 +15,7 @@
 .docs-wait { display: inline-block; width: 18px; height: 10px; border-radius: var(--round); background: var(--sheen) 100% 0 / 300% 100%; vertical-align: middle; animation: shimmer 1.4s linear infinite; }
 
 /* A paper's kind (file-tile.tsx): PDF, sheet, image, JSON; anything else stays grey. */
-.icon-tile.f-pdf { background: var(--pink-bg); color: var(--pink-fg); }
+.icon-tile.f-pdf { background: var(--k-notice-bg); color: var(--k-notice); }
 .icon-tile.f-sheet { background: var(--k-week-bg); color: var(--k-week); }
 .icon-tile.f-image { background: var(--k-papers-bg); color: var(--k-papers); }
 .icon-tile.f-json { background: var(--k-reply-bg); color: var(--k-reply); }
@@ -81,7 +81,7 @@
 .side-panel .docs-find svg { left: var(--s3); }
 .docs-clients { margin: 0 calc(var(--s4) * -1); }
 .docs-other { margin-top: var(--s3); }
-.docs-held { margin: 0 0 var(--s3); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.docs-held { margin: 0 0 var(--s3); font-weight: 600; }
 .docs-send { margin: var(--s3) calc(var(--s4) * -1) 0; }
 .docs-send-foot { position: sticky; bottom: calc(var(--s4) * -1); display: flex; gap: var(--s2); margin: 0 calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
 

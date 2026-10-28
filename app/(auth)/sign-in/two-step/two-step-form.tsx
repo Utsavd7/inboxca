@@ -63,7 +63,8 @@ export function TwoStepForm({ factorId, codes = false }: { factorId?: string; co
             <div className="auth-form">{fields}</div>
           </div>
           <p className="auth-small">
-            Cannot scan? Type this key into the app: <span className="num secret">{setup.secret}</span>
+            {/* In groups of four to read, copied as one. */}
+            Cannot scan? Type this key into the app: <span className="num secret">{setup.secret.match(/.{1,4}/g)?.map((part, at) => <span key={at}>{part}</span>)}</span>
           </p>
         </>
       ) : (
@@ -81,7 +82,7 @@ export function TwoStepForm({ factorId, codes = false }: { factorId?: string; co
           <label htmlFor="recovery">Recovery code</label>
           <input id="recovery" name="recovery" autoComplete="off" className="num" required aria-invalid={!!lost.error} aria-describedby={lost.error ? "recovery-error" : undefined} />
           {lost.error && <p className="field-error" id="recovery-error" role="alert">{lost.error}</p>}
-          <button className="btn" type="submit" disabled={recovering}>{recovering ? "Checking" : "Use recovery code"}</button>
+          <button className="btn btn-quiet" type="submit" disabled={recovering}>{recovering ? "Checking" : "Use recovery code"}</button>
         </form>
       </details>
     )}

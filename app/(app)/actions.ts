@@ -1975,6 +1975,8 @@ export async function setOfficeOnly(form: FormData) {
   // is not an active partner) comes back as a note on the panel, not a broken page.
   const refused = error && (Object.entries(officeRefusals).find(([text]) => error.message.includes(text))?.[1] ?? "office");
   if (!refused) revalidatePath("/app", "layout");
+  // A yes from Today's list stays on Today; a refusal opens the panel that says why.
+  if (!refused && form.get("back") === "today") redirect("/app");
   redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}${refused ? `&error=${refused}` : decision === "deputies" ? "&saved=deputies" : ""}#office`);
 }
 

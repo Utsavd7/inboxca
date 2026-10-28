@@ -536,6 +536,20 @@ li { text-wrap: pretty; }
 .auth-page { display: grid; place-items: center; min-height: 100dvh; padding: 16px; background: var(--grey); }
 .auth-card { position: relative; width: min(420px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 20px; background: var(--white); box-shadow: var(--shadow-soft); font-size: 14px; line-height: 1.5; }
 .auth-card h1 { margin-top: 20px; font-size: 22px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.25; }
+/* A wide screen gives the left of the page to InboxCA's navy band, the card on the right (not
+   for the plan step's wide card). */
+.auth-band { display: none; }
+@media (min-width: 1100px) {
+  .auth-page:not(:has(.start-wide)) { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); padding: 0; }
+  .auth-page:not(:has(.start-wide)) .auth-band { display: flex; flex-direction: column; justify-content: space-between; align-self: stretch; justify-self: stretch; padding: 40px 48px 56px; background: radial-gradient(120% 90% at 0% 0%, var(--blue-deep) 0%, var(--navy) 60%); color: var(--white); }
+  .auth-band p { max-width: 14ch; font-size: 40px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.1; text-wrap: balance; }
+  .auth-page:not(:has(.start-wide)) .auth-card { margin: 16px; }
+  .auth-page:not(:has(.start-wide)) .auth-card > .logo { display: none; }
+  .auth-page:not(:has(.start-wide)) .auth-card > .logo + * { margin-top: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .auth-card { animation: settle 0.5s var(--ease) both; }
+}
 .auth-form { display: grid; gap: 8px; margin-top: 12px; }
 .auth-form label { margin-top: 4px; font-size: 13px; font-weight: 700; }
 /* The sign in form's fields. The signed in app has its own (app/(app)/app/app.css). */
@@ -547,15 +561,19 @@ li { text-wrap: pretty; }
 .auth-form label + :is(input, select) { margin-top: -4px; }
 /* Two fields side by side: the firm's name and its state. */
 .auth-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px; }
-.auth-row > div { display: grid; gap: 4px; }
+.auth-row > div { display: grid; align-content: start; gap: 4px; }
 .auth-row label + :is(input, select) { margin-top: 0; }
 .auth-card details { margin-top: 8px; }
+.auth-card summary { width: fit-content; color: var(--blue-deep); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; list-style: none; }
+.auth-card summary::-webkit-details-marker { display: none; }
 .auth-form .auth-check { display: flex; gap: 8px; align-items: flex-start; font-weight: 500; }
 .auth-form .auth-check input { width: 16px; height: 16px; margin-top: 2px; flex: none; }
 .auth-check a, .auth-small a { color: var(--blue-deep); text-decoration: underline; text-underline-offset: 3px; }
 .auth-form input:focus,
 .auth-form select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(26, 75, 176, 0.16); }
-.auth-form input[aria-invalid="true"] { border-color: var(--error); }
+.auth-form :is(input, select)[aria-invalid="true"] { border-color: var(--error); }
+/* A field's error sits right under it. */
+.auth-form .field-error { margin-top: -2px; color: var(--error); font-size: 13px; }
 .auth-form .btn { margin-top: 4px; }
 .auth-card .btn { height: 34px; padding: 0 16px; border-radius: 8px; font-size: 14px; }
 .auth-card .text-button { justify-self: start; font-size: 13px; font-weight: 700; color: var(--blue-deep); text-decoration: underline; text-underline-offset: 4px; }
@@ -566,6 +584,7 @@ li { text-wrap: pretty; }
 .code-input { font-size: 18px !important; letter-spacing: 0.3em; text-align: center; }
 .qr { justify-self: center; border: 1px solid var(--line); border-radius: 12px; padding: 6px; background: var(--white); }
 .secret { color: var(--navy); }
+.secret > span + span { margin-left: 0.5ch; }
 /* The first 2 step setup: the QR code beside the code field. */
 .auth-setup { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; }
 .auth-setup .qr { width: 152px; height: 152px; }

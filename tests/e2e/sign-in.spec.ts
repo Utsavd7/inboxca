@@ -80,8 +80,9 @@ test("a new computer waits, reaching nothing of the firm, until a computer alrea
   await expect(waits).toBeVisible();
 
   await first.goto("/app");
-  await first.getByRole("region", { name: "New computer" }).getByRole("button", { name: "Approve" }).click();
-  await expect(first.getByRole("region", { name: "New computer" })).toHaveCount(0);
+  const ask = first.locator("section[aria-labelledby=t-list] li").filter({ hasText: "A new computer wants to use your login" });
+  await ask.getByRole("button", { name: /^Approve/ }).click();
+  await expect(ask).toHaveCount(0);
   await page.getByRole("link", { name: "I approved it" }).click();
   await expect(page.locator(".rail-me")).toContainText("Owner");
   await page.goto("/app/clients");

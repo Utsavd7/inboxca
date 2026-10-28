@@ -133,7 +133,9 @@ test("OneDrive connects on Microsoft's own page, saves a paper in the client's f
   await owner.getByRole("link", { name: "Upload papers" }).click();
   await owner.getByRole("dialog").getByLabel("Files", { exact: true }).setInputFiles([{ name: "sales_bills_sep_2026.pdf", mimeType: "application/pdf", buffer: bills }]);
   await owner.getByRole("dialog").getByRole("button", { name: "Upload", exact: true }).click();
-  await expect(owner.locator("section[aria-labelledby=files] tbody tr").filter({ hasText: "Sales bills - Sep 2026.pdf" })).toContainText("Saved");
+  const row = owner.locator("section[aria-labelledby=files] tbody tr").filter({ hasText: "Sales bills - Sep 2026.pdf" });
+  await expect(row).toBeVisible();
+  await expect(row).not.toContainText("To check");
   const [paper] = await query(local.dbUrl, "select name, drive_file_id from public.documents where firm_id = $1", [firm.firmId]);
   expect(paper.name).toBe(`${client} - Sales bills - Sep 2026.pdf`);
   const saved = onedrive.file(`/InboxCA/FY 2026-27/${client}/GST/${paper.name}`);

@@ -17,6 +17,16 @@ export function SignUpForm({ account, providers, plan }: { account?: string; pro
     if (plan) document.cookie = `plan_ask=${plan}; path=/; max-age=86400; samesite=lax${location.protocol === "https:" ? "; secure" : ""}`;
   }, [plan]);
   if (state.email) return <SignInForm email={state.email} />;
+  // A refusal shows under the input it is about, named for screen readers too; one about the
+  // whole form shows above the button.
+  const invalid = (field: string) => (state.field === field ? { "aria-invalid": true, "aria-describedby": `${field}-error` } : {});
+  const error = (field?: string) =>
+    state.error &&
+    state.field === field && (
+      <p className="field-error" id={field && `${field}-error`} role="alert">
+        {state.error}
+      </p>
+    );
 
   return (
     <>
@@ -37,12 +47,13 @@ export function SignUpForm({ account, providers, plan }: { account?: string; pro
       <div className="auth-row">
         <div>
           <label htmlFor="firm">Firm name</label>
-          <input id="firm" name="firm" autoComplete="organization" maxLength={200} defaultValue={state.fields?.firm} required />
+          <input id="firm" name="firm" autoComplete="organization" maxLength={200} defaultValue={state.fields?.firm} required {...invalid("firm")} />
+          {error("firm")}
         </div>
         <div>
           <label htmlFor="state">State</label>
           {/* The key brings back the chosen state: React's form reset does not for a select. */}
-          <select key={state.fields?.state} id="state" name="state" required defaultValue={state.fields?.state ?? ""}>
+          <select key={state.fields?.state} id="state" name="state" required defaultValue={state.fields?.state ?? ""} {...invalid("state")}>
             <option value="" disabled>
               Choose a state
             </option>
@@ -52,26 +63,25 @@ export function SignUpForm({ account, providers, plan }: { account?: string; pro
               </option>
             ))}
           </select>
+          {error("state")}
         </div>
       </div>
       {!account && (
         <>
           <label htmlFor="email">Your work email</label>
-          <input id="email" name="email" type="email" autoComplete="email" defaultValue={state.fields?.email} required />
+          <input id="email" name="email" type="email" autoComplete="email" defaultValue={state.fields?.email} required {...invalid("email")} />
+          {error("email")}
         </>
       )}
       <label className="auth-check">
-        <input type="checkbox" name="accept" required />
+        <input key={state.fields?.accept} type="checkbox" name="accept" required defaultChecked={state.fields?.accept === "on"} {...invalid("accept")} />
         <span>
           I accept the <Link href="/terms">terms</Link>, the <Link href="/privacy">privacy notice</Link> and
           the <Link href="/dpa">data processing agreement</Link>.
         </span>
       </label>
-      {state.error && (
-        <p className="field-error" role="alert">
-          {state.error}
-        </p>
-      )}
+      {error("accept")}
+      {error()}
       <button className="btn" type="submit" disabled={sending}>
         {sending ? "Setting up" : "Sign up"}
       </button>

@@ -11,21 +11,22 @@ import { states } from "./states";
 
 // Public sign up (PLAN.md D5): the firm starts pending, as the plan has it for a firm
 // that has not paid. Billing is left out for now, so the owner goes straight in.
-export type SignUpState = { email?: string; error?: string; fields?: Record<string, string> };
+// field: the input a refusal is about, so its words show under it.
+export type SignUpState = { email?: string; error?: string; field?: string; fields?: Record<string, string> };
 
 export async function signUp(_prev: SignUpState, form: FormData): Promise<SignUpState> {
   const name = String(form.get("firm") ?? "").trim();
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const state = String(form.get("state") ?? "");
-  // A refused form shows again with what was typed.
-  const fail = (error: string) => ({ error, fields: { firm: name, email, state } });
-  if (!name || name.length > 200) return fail("Enter your firm's name.");
-  if (!z.email().safeParse(email).success) return fail("Enter a valid email address.");
+  // A refused form shows again with what was typed, the box still ticked.
+  const fail = (error: string, field?: string) => ({ error, field, fields: { firm: name, email, state, accept: String(form.get("accept") ?? "") } });
+  if (!name || name.length > 200) return fail("Enter your firm's name.", "firm");
+  if (!z.email().safeParse(email).success) return fail("Enter a valid email address.", "email");
   const wrong = detailsProblem(state, form);
-  if (wrong) return fail(wrong);
+  if (wrong) return fail(...wrong);
 
   // The code this sends counts towards the address's sign in codes, whether it has an account or not.
-  if (!(await withinLimit("code", email))) return fail("Too many codes asked for this address. Try again in an hour.");
+  if (!(await withinLimit("code", email))) return fail("Too many codes asked for this address. Try again in an hour.", "email");
   const admin = supabaseAdmin();
   if (await busy()) return fail("Sign up is busy right now. Try again in an hour.");
   const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true });
@@ -55,10 +56,10 @@ export async function setUpFirm(_prev: SignUpState, form: FormData): Promise<Sig
   if (!account) redirect("/sign-in");
   const name = String(form.get("firm") ?? "").trim();
   const state = String(form.get("state") ?? "");
-  const fail = (error: string) => ({ error, fields: { firm: name, state } });
-  if (!name || name.length > 200) return fail("Enter your firm's name.");
+  const fail = (error: string, field?: string) => ({ error, field, fields: { firm: name, state, accept: String(form.get("accept") ?? "") } });
+  if (!name || name.length > 200) return fail("Enter your firm's name.", "firm");
   const wrong = detailsProblem(state, form);
-  if (wrong) return fail(wrong);
+  if (wrong) return fail(...wrong);
   if (await busy()) return fail("Sign up is busy right now. Try again in an hour.");
   const { error } = await supabaseAdmin().rpc("sign_up_firm", {
     firm_name: name,
@@ -73,9 +74,9 @@ export async function setUpFirm(_prev: SignUpState, form: FormData): Promise<Sig
   redirect("/sign-in/two-step");
 }
 
-function detailsProblem(state: string, form: FormData) {
-  if (!states.some(([code]) => code === state)) return "Choose your firm's state.";
-  if (form.get("accept") !== "on") return "Tick the box to accept the terms, privacy notice and DPA.";
+function detailsProblem(state: string, form: FormData): [string, string] | undefined {
+  if (!states.some(([code]) => code === state)) return ["Choose your firm's state.", "state"];
+  if (form.get("accept") !== "on") return ["Tick the box to accept the terms, privacy notice and DPA.", "accept"];
 }
 
 // A public form that makes firms and sends email: at most 30 new firms an hour in all.

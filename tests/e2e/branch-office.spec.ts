@@ -70,10 +70,10 @@ test("the owner turns Office only on for one branch, and its staff are checked a
 
   // Away from the branch's office the branch's staff are kept out; there, their PC waits for the owner.
   await signIn(staff, staffEmail, staffKey);
-  await expect(staff.getByRole("heading", { name: "Use InboxCA from your office." })).toBeVisible();
+  await expect(staff.getByRole("heading", { name: "Use InboxCA from the office" })).toBeVisible();
   await staff.setExtraHTTPHeaders({ "x-test-ip": BRANCH_IP });
   await staff.goto("/app/clients");
-  await expect(staff.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  await expect(staff.getByRole("heading", { name: "This PC is waiting for approval" })).toBeVisible();
   // The PC is the branch's: it waits under Pune, not under the main office.
   await owner.goto(`/app/settings?group=access&branch=${branchId}`);
   await expect(owner.getByRole("heading", { name: "PCs waiting for approval" })).toBeVisible();
@@ -86,9 +86,9 @@ test("the owner turns Office only on for one branch, and its staff are checked a
   // On a new connection the PC waits, and the owner's first choice allows it for today only (#51).
   await staff.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.98" });
   await staff.goto("/app/clients");
-  await expect(staff.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
+  await expect(staff.getByRole("heading", { name: "Waiting for the office connection" })).toBeVisible();
   await owner.goto(`/app/settings?group=access&branch=${branchId}#office`);
-  const asked = owner.locator(".notice").filter({ hasText: "is on a new internet connection" });
+  const asked = owner.locator(".note").filter({ hasText: "is on a new internet connection" });
   await expect(asked.locator(".b-primary")).toHaveText("Allow this connection today");
   await expect(asked.getByRole("button").first()).toHaveText("Allow this connection today");
 
@@ -127,7 +127,7 @@ test("a branch keeps its own office hours until it goes back to the main office'
   expect((await settingsOf("firms", firm.firmId)).hours).toEqual(allWeek);
 
   await staff.goto("/app/clients");
-  await expect(staff.getByRole("heading", { name: /is closed now\.$/ })).toBeVisible();
+  await expect(staff.getByRole("heading", { name: /is closed now$/ })).toBeVisible();
   await owner.getByRole("button", { name: "Use the main office's hours" }).click();
   await expect(owner.getByText("Pune uses the main office's hours, holidays and special hours")).toBeVisible();
   expect((await settingsOf("groups", branchId)).hours).toBeUndefined();
@@ -165,7 +165,7 @@ test("Remote friendly lets staff in only on approved devices, with the 2 step co
   // A new laptop at home waits for the owner, who allows it in one press.
   const laptop = await (await browser.newContext({ extraHTTPHeaders: { "x-test-ip": "192.0.2.44", "x-test-country": "IN" } })).newPage();
   await signIn(laptop, staffEmail, staffKey);
-  await expect(laptop.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  await expect(laptop.getByRole("heading", { name: "This PC is waiting for approval" })).toBeVisible();
   await owner.goto("/app/settings?group=access#office");
   await expect(owner.locator("#office").getByText("Approved computers only is on")).toBeAttached();
   await expect(owner.getByRole("button", { name: "Approve as office PC" })).toHaveCount(0);

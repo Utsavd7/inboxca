@@ -205,10 +205,10 @@ test("under Office only, staff need the office connection and an approved PC", a
 
   await person.setExtraHTTPHeaders({ "x-test-ip": "198.51.100.7" });
   await person.goto("/app");
-  await expect(person.getByRole("heading", { name: "Use InboxCA from your office." })).toBeVisible();
+  await expect(person.getByRole("heading", { name: "Use InboxCA from the office" })).toBeVisible();
   await person.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.10" });
   await person.goto("/app/clients");
-  await expect(person.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  await expect(person.getByRole("heading", { name: "This PC is waiting for approval" })).toBeVisible();
 
   await owner.goto("/app");
   await expect(owner.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Approve 1 PC" })).toContainText("Signed in from your office today");
@@ -227,7 +227,7 @@ test("under Office only, staff need the office connection and an approved PC", a
   await emailStep(second, newEmail);
   await second.getByLabel("6 digit code from the app").fill(totp(personKey));
   await second.getByRole("button", { name: "Continue" }).click();
-  await expect(second.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  await expect(second.getByRole("heading", { name: "This PC is waiting for approval" })).toBeVisible();
   expect((await secondContext.cookies()).some((cookie) => cookie.name === "inboxca_device")).toBe(true);
   expect(await query(local.dbUrl, "select status from public.devices where firm_id = $1 order by status", [firm.firmId])).toEqual([{ status: "approved" }, { status: "waiting" }]);
   await owner.reload();
@@ -340,7 +340,7 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await emailStep(laptop, laptopEmail);
   await laptop.getByLabel("6 digit code from the app").fill(totp(deputyKey));
   await laptop.getByRole("button", { name: "Continue" }).click();
-  await expect(laptop.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  await expect(laptop.getByRole("heading", { name: "This PC is waiting for approval" })).toBeVisible();
   const { deviceHash } = await import("../../src/lib/device");
   const laptopCookie = (await laptop.context().cookies()).find((cookie) => cookie.name === "inboxca_device")!;
   await query(local.dbUrl, "update public.devices set name = 'Travel laptop' where firm_id = $1 and token_hash = $2", [firm.firmId, await deviceHash(laptopCookie.value)]);
@@ -357,17 +357,17 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   // Without its own key a PC that stays in the office waits on a new connection like a laptop.
   await person.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.20" });
   await person.goto("/app/clients");
-  await expect(person.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
+  await expect(person.getByRole("heading", { name: "Waiting for the office connection" })).toBeVisible();
 
   await laptop.setExtraHTTPHeaders({ "x-test-ip": "203.0.113.30" });
   await laptop.goto("/app/clients");
-  await expect(laptop.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
+  await expect(laptop.getByRole("heading", { name: "Waiting for the office connection" })).toBeVisible();
   await deputy.goto("/app");
-  const request = deputy.locator(".notice").filter({ hasText: "Travel laptop is on a new internet connection" });
+  const request = deputy.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Travel laptop is on a new internet connection" });
   await expect(request).toBeVisible();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   await query(local.dbUrl, "update public.firms set settings = settings || $2 where id = $1", [firm.firmId, { special_hours: [{ from: today, to: today, open: "00:00", close: "23:59" }] }]);
-  await request.getByRole("button", { name: "Allow this connection today" }).click();
+  await request.getByRole("button", { name: /^Allow today/ }).click();
   await expect(request).toHaveCount(0);
   await laptop.goto("/app/clients");
   await expect(laptop.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
@@ -376,7 +376,7 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
 
   await deputy.goto("/app/settings#office");
   await deputy.reload();
-  await deputy.locator(".notice").filter({ hasText: "Reception PC is on a new internet connection" }).getByRole("button", { name: "This is my office", exact: true }).click();
+  await deputy.locator(".note").filter({ hasText: "Reception PC is on a new internet connection" }).getByRole("button", { name: "This is my office", exact: true }).click();
   await expect(deputy.getByText("Reception PC is on a new internet connection", { exact: false })).toHaveCount(0);
   await person.goto("/app/clients");
   await expect(person.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
@@ -409,7 +409,7 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await emailStep(reception, laptopEmail);
   await reception.getByLabel("6 digit code from the app").fill(totp(deputyKey));
   await reception.getByRole("button", { name: "Continue" }).click();
-  await expect(reception.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  await expect(reception.getByRole("heading", { name: "This PC is waiting for approval" })).toBeVisible();
   // Signing in again while it waits, the 2 step code is asked.
   await reception.goto("/auth/sign-out");
   await emailStep(reception, laptopEmail);
@@ -442,14 +442,14 @@ test("a PC that stays in the office sets up its own key, then confirms a new off
   await reception.goto("/app/clients");
   await expect(reception.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
   await owner.goto("/app");
-  const changed = owner.locator(".notice").filter({ hasText: "Your office internet connection changed today" });
+  const changed = owner.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Your office internet connection changed today" });
   await expect(changed).toBeVisible();
 
   // Withdrawn by the owner, the connection goes and the PC waits again.
   await changed.getByRole("button", { name: "Not my office" }).click();
   await expect(changed).toHaveCount(0);
   await reception.goto("/app/clients");
-  await expect(reception.getByRole("heading", { name: "Waiting for your firm to confirm the office internet connection" })).toBeVisible();
+  await expect(reception.getByRole("heading", { name: "Waiting for the office connection" })).toBeVisible();
   await owner.goto("/app/settings#office");
   await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn off", exact: true }).click();
@@ -610,9 +610,9 @@ test("away from the office, the owner allows a staff member's own device to view
   await emailStep(home, laptopEmail);
   await home.getByLabel("6 digit code from the app").fill(totp(deputyKey));
   await home.getByRole("button", { name: "Continue" }).click();
-  await expect(home.getByRole("heading", { name: "Use InboxCA from your office." })).toBeVisible();
+  await expect(home.getByRole("heading", { name: "Use InboxCA from the office" })).toBeVisible();
   await home.getByRole("button", { name: "Ask to use this device away from the office" }).click();
-  await expect(home.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+  await expect(home.getByRole("heading", { name: "This PC is waiting for approval" })).toBeVisible();
 
   await owner.reload();
   const asked = owner.getByRole("listitem").filter({ hasText: "asks to use it away from the office" });
@@ -631,7 +631,7 @@ test("away from the office, the owner allows a staff member's own device to view
   await personal.getByRole("button", { name: "Withdraw" }).click();
   await expect(personal).toHaveCount(0);
   await home.goto("/app");
-  await expect(home.getByRole("heading", { name: "Your firm refused this PC." })).toBeVisible();
+  await expect(home.getByRole("heading", { name: "This PC was refused" })).toBeVisible();
   await officeSwitch(owner);
   await owner.getByRole("button", { name: "Turn off", exact: true }).click();
   await expect(owner.getByText("are you in the office now?")).toBeAttached();
@@ -654,7 +654,7 @@ test("the owner keeps people to office hours, and the person sees the firm is cl
   await expect(owner.getByText("Friday, 25 December 2026")).toBeVisible();
 
   await person.goto("/app");
-  await expect(person.locator(".page-head")).toContainText("Invite Test Firm is closed now.");
+  await expect(person.getByRole("heading", { name: "Invite Test Firm is closed now" })).toBeVisible();
   await owner.goto("/app");
   await expect(owner.locator(".rail-firm")).toContainText("Invite Test Firm");
 
@@ -1074,7 +1074,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(visitor.getByRole("region", { name: "Progress" })).toContainText("1 of 2 papers received");
   await owner.reload();
   await expect(owner.getByRole("list", { name: "Papers asked for" })).toContainText("1 of 2 received");
-  await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Saved");
+  await expect(rows.filter({ hasText: "Loan statement" })).not.toContainText("To check");
   await expect(rows.filter({ hasText: "Loan statement" })).toContainText("Sent by the client through their upload link, ");
   // The team checks what arrived. Ask again clears an item, so the client's link asks for it once more.
   // Several files chosen together all arrive before the request closes.
@@ -1512,7 +1512,7 @@ test("five office PCs need one batch approval, and managers cannot forge office 
       await pc.getByRole("button", { name: "Continue", exact: true }).click();
       await pc.getByLabel("6 digit code from the app").fill(totp(deputyKey));
       await pc.getByRole("button", { name: "Continue", exact: true }).click();
-      await expect(pc.getByRole("heading", { name: "This PC is waiting for your firm's approval." })).toBeVisible();
+      await expect(pc.getByRole("heading", { name: "This PC is waiting for approval" })).toBeVisible();
       if (n === 0) expect((await admin.auth.verifyOtp({ email: address, token: code, type: "email" })).error).not.toBeNull();
     }
     await boss.goto("/app");
