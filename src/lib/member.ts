@@ -18,7 +18,7 @@ import { supabaseAdmin, supabaseServer } from "./supabase";
 // sidebar (FIRM_COOKIE), else the first, and every query after this names it
 // (x-inboxca-firm), so the database shows that firm alone.
 export { FIRM_COOKIE } from "./office";
-export const currentMember = cache(async () => {
+export const signedInMember = cache(async () => {
   const signedIn = await supabaseServer();
   const { data: claims } = await signedIn.auth.getClaims();
   if (!claims) redirect("/sign-in");
@@ -95,6 +95,14 @@ export const currentMember = cache(async () => {
     may: (right: Right, client?: string) => !viewOnlyUntil && may(data.role, right, settings.permissions as Permissions, (access.always ?? []) as Standing[], client),
   };
   return { supabase, userId, membership, deviceStatus: office.deviceStatus, connectionWaiting: office.connectionWaiting, pcKey: office.pcKey };
+});
+// Sign up's plan and payment come first (5.14.1): until the first payment is in, every page,
+// action and route of the app opens /start instead. /start and the owner's billing actions read
+// signedInMember itself, so the plan can be paid and nothing loops.
+export const currentMember = cache(async () => {
+  const member = await signedInMember();
+  if (member.membership?.billing === "start") redirect("/start");
+  return member;
 });
 
 // The permission questions this person may answer now (5.17.2): never their own; a manager or

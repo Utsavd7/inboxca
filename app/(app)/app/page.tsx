@@ -1,5 +1,4 @@
 import { CalendarDays, ListChecks, Rocket, TriangleAlert } from "lucide-react";
-import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -20,7 +19,7 @@ import { Pending } from "./pending";
 import { attention, weekFor, workFor } from "./work-data";
 import { WorkRows } from "./work-rows";
 import { Card, PageHead, SidePanel, Toast } from "./ui";
-import { PlanFit, StartPlan, type PlanAsk } from "./settings/billing";
+import { PlanFit } from "./settings/billing";
 import { WarmLink } from "./ui-client";
 import "./today.css";
 
@@ -28,7 +27,7 @@ import "./today.css";
 const SHOWN = 7;
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-IN")} ${n === 1 ? one : many}`;
 
-type Params = { dropped?: string; error?: string; asked?: string; panel?: string } & PlanAsk;
+type Params = { dropped?: string; error?: string; asked?: string; panel?: string };
 type Context = Parameters<typeof workFor>[0];
 
 // Today, one screen for each person whatever the firm's size (PLAN.md "Today by role"): a
@@ -38,7 +37,7 @@ type Context = Parameters<typeof workFor>[0];
 // manager their team and what waits for their approval, staff and front desk their own
 // clients. Every query starts at once and each part shows as soon as its data is in.
 export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
-  const { dropped, error, asked, panel, ...plan } = await searchParams;
+  const { dropped, error, asked, panel } = await searchParams;
   const { supabase, userId, membership, deviceStatus, connectionWaiting, pcKey, ownerDevice } = await currentMember();
   if (ownerDevice) return <ComputerWaits state={ownerDevice} codes={!!((await supabase.auth.getClaims()).data?.claims.app_metadata as { recovery?: string[] } | undefined)?.recovery?.length} error={error} />;
   if (!membership) {
@@ -47,14 +46,6 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     if (closed?.reason === "session") redirect("/auth/sign-out?reason=session");
     return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} connectionWaiting={connectionWaiting} pcKey={pcKey} />;
   }
-  // Signed up, payments set up, nothing paid yet: the plan and AutoPay come first (5.14.1), with the
-  // answers chosen on the site's price list until the owner asks for another plan.
-  if (membership.billing === "start") return (
-    <div className="today">
-      <PageHead title={`Welcome to InboxCA, ${membership.name}`} sub={membership.role === "owner" ? "One last step: choose your plan and set up AutoPay. Your firm starts as soon as the first payment is in." : "Your firm starts once its owner chooses a plan."} />
-      {membership.role === "owner" && <StartPlan supabase={supabase} firmId={membership.firmId} ask={plan.clients ? plan : Object.fromEntries(new URLSearchParams((await cookies()).get("plan_ask")?.value))} />}
-    </div>
-  );
   const ctx = { supabase, membership, userId };
   const work = workFor(ctx, SHOWN);
   const week = weekFor(ctx, work);

@@ -1,27 +1,21 @@
-/* The Inbox: filters on one line, the list on the left and the open conversation on the
-   right, each scrolling on its own (.fill, .split and .pane come from app.css). Quick like a
-   mail program: the picked row tints at once, the open email crossfades in by its id. */
+/* The Inbox: what waits as one line of counts, the views and filters on one line, then the list
+   on the left and the open conversation on the right, each scrolling on its own (.fill, .split
+   and .pane come from app.css). Quick like a mail program: the picked row tints at once, the
+   open email crossfades in by its id. */
 .ib { gap: var(--s4); }
 .ib :is(.notice, .alert) { margin: 0; }
 .ib .split .empty { border: 0; background: none; padding: var(--s7) var(--s4); }
 .ib-note { color: var(--ink-3); font-size: 13px; font-weight: 500; }
 
-/* What waits for the team besides email: short, scrolls on its own. */
-.ib-wait { display: grid; gap: var(--s2); max-height: 184px; overflow: auto; padding: var(--s2) var(--s4); border: 1px solid var(--edge); border-radius: var(--r3); box-shadow: var(--shadow-1); }
-.ib-wait :is(h2, summary) { color: var(--ink-3); font-size: 12px; font-weight: 600; line-height: 1.3; }
-.ib-wait summary { cursor: pointer; }
-.ib-wait li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); min-height: var(--row); }
-.ib-wait .grow { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); flex: 1; min-width: 0; }
-.ib-wait strong { font-weight: 600; overflow-wrap: anywhere; }
-/* A question is one line and its Answer button; on a phone the words shorten, never wrap. */
-.ib-wait section[aria-labelledby=questions] li { flex-wrap: nowrap; }
-.ib-wait section[aria-labelledby=questions] .grow { flex-wrap: nowrap; overflow: hidden; }
-.ib-wait section[aria-labelledby=questions] :is(strong, .ib-note) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ib-wait section[aria-labelledby=questions] .ib-note { min-width: 0; }
-.ib-wait section[aria-labelledby=questions] .b { flex: none; }
-.ib-wait form { display: flex; flex-wrap: wrap; gap: var(--s2); }
+/* Waiting for you: a count each, opening its list beside the page. */
+.ib-waits { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.ib-waits > span { margin-right: var(--s1); color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.ib-waits a { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 var(--s3) 0 10px; border: 1px solid transparent; border-radius: var(--round); background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: none; transition: background var(--fast) var(--out), border-color var(--fast) var(--out), transform var(--fast) var(--out); }
+.ib-waits a:hover { border-color: var(--select); }
+.ib-waits a:active { transform: scale(0.97); }
+.ib-waits a[aria-current] { border-color: var(--accent-hi); }
 
-/* Filters: the views as a segmented control, then menus that look like buttons. */
+/* The views as a segmented control, then Filters, the filters in use, search and More. */
 .ib-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .ib-menu { position: relative; }
 .ib-menu summary { display: inline-flex; align-items: center; gap: var(--s2); height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow-button); color: var(--ink); font-size: 13px; font-weight: 600; list-style: none; white-space: nowrap; cursor: pointer; user-select: none; transition: background var(--fast) var(--out), border-color var(--fast) var(--out), transform var(--fast) var(--out); }
@@ -29,11 +23,10 @@
 .ib-menu summary:hover { border-color: var(--line-3); background: var(--hover); }
 .ib-menu summary:active { transform: scale(0.97); }
 .ib-menu[open] > summary { border-color: var(--line-3); background: var(--press); }
-.ib-menu summary > svg:last-child { margin-right: calc(var(--s1) * -1); color: var(--ink-3); transition: transform var(--base) var(--out); }
-.ib-menu[open] > summary > svg:last-child { transform: rotate(180deg); }
-.ib-menu summary .avatar { width: 20px; height: 20px; margin-left: calc(var(--s1) * -1); font-size: 10px; }
+.ib-menu summary > svg:last-child:not(:first-child) { margin-right: calc(var(--s1) * -1); color: var(--ink-3); transition: transform var(--base) var(--out); }
+.ib-menu[open] > summary > svg:last-child:not(:first-child) { transform: rotate(180deg); }
+.ib-menu summary .avatar { width: 20px; height: 20px; font-size: 10px; }
 .ib-pop { position: absolute; z-index: 20; top: calc(100% + var(--s1)); left: 0; display: grid; gap: 2px; width: 280px; max-height: 360px; overflow: auto; padding: var(--s1); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-float); transform-origin: top left; animation: ib-drop var(--base) var(--out); }
-.ib-pop.is-tall { max-height: 480px; }
 .ib-pop :is(a, button):not(.b) { display: flex; align-items: center; gap: var(--s2); min-height: var(--control); padding: var(--s1) var(--s2); border: 0; border-radius: var(--r2); background: transparent; color: inherit; font: inherit; font-size: 14px; text-align: left; text-decoration: none; overflow-wrap: anywhere; cursor: pointer; }
 .ib-pop :is(a, button):not(.b):hover { background: var(--hover); }
 .ib-pop :is(a, button):not(.b):active { background: var(--press); }
@@ -49,76 +42,112 @@
 .ib-pop-list button:not(.b) { justify-content: space-between; }
 .ib-day { display: flex; gap: var(--s2); margin-top: var(--s1); padding: var(--s2) var(--s1) var(--s1); border-top: 1px solid var(--line); }
 .ib .ib-day input { flex: 1; min-width: 0; }
+
+/* Filters: the client on the left, which way, status and when as choices on the right. */
+.ib-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-right: calc(var(--s1) * -1); padding: 0 5px; border-radius: var(--round); background: var(--accent-solid); color: var(--on-accent); font-size: 11px; font-weight: 700; }
+.ib-filters > .ib-pop { grid-template-columns: 240px minmax(0, 1fr); gap: var(--s3); width: min(600px, calc(100vw - var(--side-w) - var(--s7))); max-height: min(520px, 72vh); padding: var(--s3); }
+.ib-filter-group { display: grid; align-content: start; gap: 2px; min-width: 0; }
+.ib-filter-group form[role=search] { padding: 0 0 var(--s1); }
+.ib-filter-side { display: grid; align-content: start; gap: var(--s4); padding-left: var(--s3); border-left: 1px solid var(--line); }
+.ib-filter-name { padding: 0 var(--s2) var(--s1); color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.ib-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ib-filters .ib-opts > a { gap: 6px; min-height: 28px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--round); background: var(--surface); color: var(--ink-2); font-size: 13px; font-weight: 500; white-space: nowrap; transition: background var(--fast) var(--out), border-color var(--fast) var(--out), color var(--fast) var(--out); }
+.ib-filters .ib-opts > a:hover { border-color: var(--line-3); background: var(--hover); color: var(--ink); }
+.ib-filters .ib-opts > a[aria-current] { border-color: transparent; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+/* The filters in use, each a chip that takes itself away. */
+.ib-active { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ib-active a { display: inline-flex; align-items: center; gap: var(--s1); height: 28px; padding: 0 var(--s2) 0 10px; border-radius: var(--round); background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: none; animation: ib-pop-in var(--base) var(--out); transition: background var(--fast) var(--out); }
+.ib-active a:hover { background: var(--select); }
+.ib-active a svg { opacity: 0.75; }
+.ib-active a.ib-clear { padding: 0 var(--s2); background: none; color: var(--ink-3); font-weight: 500; animation: none; }
+.ib-active a.ib-clear:hover { color: var(--ink); background: var(--press); }
 .ib-search { display: flex; align-items: center; gap: var(--s2); flex: 1 1 160px; max-width: 288px; min-width: 0; height: var(--control); margin-left: auto; padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow-button); color: var(--ink-3); transition: border-color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
 .ib-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-glow); }
 .ib .ib-search input { width: 100%; height: 30px; padding: 0; border: 0; background: transparent; box-shadow: none; font-size: 14px; }
+.ib-overflow > .ib-pop { right: 0; left: auto; width: 260px; transform-origin: top right; }
 
-/* The list: an avatar a row, the client over the subject and the first line. An email that
-   waits for a reply has a dot and a darker subject; the open one is tinted. */
-.ib-list { flex: 0 1 420px; min-width: 280px; border-right: 1px solid var(--line); }
+/* Icon buttons (the open email's actions, More) name themselves in a small tip on hover or focus. */
+.ib-menu > summary.b-icon { justify-content: center; width: var(--control); padding: 0; border-color: transparent; background: none; box-shadow: none; color: var(--ink-2); }
+.ib-menu > summary.b-icon:hover, .ib-menu[open] > summary.b-icon { border-color: transparent; background: var(--press); color: var(--ink); }
+.ib [data-tip] { position: relative; }
+.ib [data-tip]::after { content: attr(data-tip); position: absolute; z-index: 25; top: calc(100% + 6px); right: 0; padding: 4px var(--s2); border-radius: var(--r1); background: var(--navy); color: var(--on-navy); font-size: 12px; font-weight: 600; line-height: 1.3; white-space: nowrap; box-shadow: var(--shadow-float); opacity: 0; pointer-events: none; transform: translateY(-3px); transition: opacity var(--fast) var(--out), transform var(--fast) var(--out); }
+.ib [data-tip]:is(:hover, :focus-visible)::after { opacity: 1; transform: none; transition-delay: 350ms; }
+.ib details[open] > [data-tip]::after, .ib [data-tip][aria-busy="true"]::after { display: none; }
+
+/* The list: an avatar a row, the client and when over the subject and the first line, with one
+   chip. An email that waits for a reply has a dot and darker words; the open one is tinted. */
+.ib-list { flex: 0 1 400px; min-width: 300px; border-right: 1px solid var(--line); }
 .ib-list > ul { margin: 0; padding: 0; list-style: none; }
 .ib-list .alert { margin: var(--s3) var(--s4); }
 .ib-row { position: relative; border-bottom: 1px solid var(--line); }
-.ib-row > a { position: relative; display: flex; align-items: flex-start; gap: var(--s3); padding: var(--s3) var(--s4) var(--s3) var(--s5); text-decoration: none; transition: background var(--base) var(--out); }
+.ib-row > a { position: relative; display: flex; align-items: flex-start; gap: var(--s3); padding: 14px var(--s4) 14px var(--s5); text-decoration: none; transition: background var(--base) var(--out); }
 .ib-row > a:hover { background: var(--hover); }
 .ib-row > a:active { background: var(--press); }
 .ib-row > a:focus-visible { border-radius: 0; box-shadow: inset 0 0 0 2px var(--accent-hi); }
 /* The picked row (set by the page's script from the address) wins over the server's mark,
    which the list may still carry from the last email while it refreshes. */
 .ib-row[data-picked] > a, .ib-list:not(:has([data-picked])) .ib-row[aria-current] > a { background: var(--accent-soft); }
-.ib-row > a > .avatar { margin-top: 2px; transition: box-shadow var(--base) var(--out); }
+.ib-row > a > .avatar { width: 32px; height: 32px; margin-top: 1px; transition: box-shadow var(--base) var(--out); }
 .ib-row[data-picked] > a > .avatar, .ib-list:not(:has([data-picked])) .ib-row[aria-current] > a > .avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent-hi); }
 /* Until the mailbox answers, a row's subject and first line are an outline. */
 .ib-row .ib-skel-line { width: 72%; height: 10px; margin: 5px 0; border-radius: var(--round); }
 .ib-row .ib-skel-line.short { flex: 1; width: auto; max-width: 56%; }
 .ib-list-wait { display: grid; gap: var(--s2); padding: var(--s3) var(--s4); }
 .ib-list-wait .skel { height: 64px; }
-.ib-row[data-waits] > a::before { content: ""; position: absolute; top: 24px; left: 9px; width: 7px; height: 7px; border-radius: var(--round); background: var(--wait-dot); }
-.ib-row-main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.ib-row[data-waits] > a::before { content: ""; position: absolute; top: 26px; left: 9px; width: 7px; height: 7px; border-radius: var(--round); background: var(--wait-dot); }
+.ib-row-main { display: grid; gap: 3px; flex: 1; min-width: 0; }
 .ib-row-top, .ib-row-foot { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
-.ib-row-top strong { flex: 1; min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ib-row-top strong { flex: 1; min-width: 0; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.ib-row[data-waits] .ib-row-top strong { font-weight: 650; }
+.ib-row-foot { margin-top: 1px; }
 .ib-sent-to { color: var(--ink-3); font-weight: 500; }
-.ib-who-has { display: inline-flex; flex: none; align-items: center; gap: var(--s1); color: var(--ink-3); font-size: 12px; font-weight: 500; white-space: nowrap; }
-.ib-who-has .avatar { width: 20px; height: 20px; font-size: 10px; }
+.ib-who-has { display: inline-flex; flex: none; }
+.ib-who-has .avatar { width: 20px; height: 20px; font-size: 9px; box-shadow: 0 0 0 2px var(--surface); }
 .ib-row time, .ib-who time { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
 .ib-subject { overflow: hidden; color: var(--ink-2); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .ib-row[data-waits] .ib-subject { color: var(--ink); font-weight: 600; }
 .ib-snippet { flex: 1; min-width: 0; overflow: hidden; color: var(--ink-3); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .ib-tag { display: inline-flex; align-items: center; height: 22px; padding: 0 var(--s2); border-radius: var(--round); background: var(--none-bg); color: var(--none-fg); font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
-/* A row's own actions fade in when it is pointed at or reached by keyboard. */
-.ib-acts { position: absolute; top: var(--s2); right: var(--s3); display: flex; gap: var(--s2); padding-left: var(--s5); background: linear-gradient(to right, transparent, var(--hover) var(--s5)); opacity: 0; pointer-events: none; transition: opacity var(--fast) var(--out); }
+/* A row's own actions fade in over its time when it is pointed at or reached by keyboard. */
+.ib-acts { position: absolute; top: var(--s2); right: var(--s3); display: flex; gap: var(--s1); padding-left: var(--s5); background: linear-gradient(to right, transparent, var(--hover) var(--s5)); opacity: 0; pointer-events: none; transform: translateX(4px); transition: opacity var(--fast) var(--out), transform var(--fast) var(--out); }
 .ib-row[data-picked] .ib-acts, .ib-list:not(:has([data-picked])) .ib-row[aria-current] .ib-acts { background: linear-gradient(to right, transparent, var(--accent-soft) var(--s5)); }
-.ib-row:is(:hover, :focus-within) .ib-acts { opacity: 1; pointer-events: auto; }
+.ib-row:is(:hover, :focus-within) .ib-acts { opacity: 1; pointer-events: auto; transform: none; }
 .ib-acts form { display: contents; }
 .ib-more { list-style: none; }
 .ib-more a { display: flex; align-items: center; justify-content: center; height: var(--row); color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: none; }
 
-/* The open email */
-.ib-open { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+/* The open email: its head stays, the conversation scrolls under it, the reply sits at the foot. */
+.ib-open { display: flex; flex: 1; flex-direction: column; min-width: 0; overflow: hidden; }
 .ib-pick { margin: auto; padding: var(--s7) var(--s5); color: var(--ink-3); text-align: center; }
 .ib-keys { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s2) var(--s4); max-width: 360px; margin-top: var(--s2); font-size: 12px; }
 .ib-keys > span { display: inline-flex; align-items: center; gap: var(--s1); }
-.ib-convo { display: flex; flex-direction: column; gap: var(--s4); flex: 1; padding: var(--s5) var(--s5) 0; }
-.ib-head { display: flex; align-items: flex-start; gap: var(--s3); }
-.ib-head > .avatar { width: 40px; height: 40px; font-size: 14px; }
-.ib-head .grow { flex: 1; min-width: 0; }
+.ib-convo { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.ib-head { display: grid; flex: none; gap: 6px; padding: var(--s3) var(--s4) var(--s3) var(--s5); border-bottom: 1px solid var(--line); }
+.ib-head-top { display: flex; align-items: center; gap: var(--s3); min-height: var(--control); }
+.ib-head-top > .avatar { width: 32px; height: 32px; }
+.ib-head-who { display: flex; align-items: baseline; gap: var(--s2); flex: 1; min-width: 0; }
+.ib-head-who :is(a, strong) { min-width: 0; overflow: hidden; color: var(--ink); font-weight: 600; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.ib-head-who a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.ib-head-who time { flex: none; color: var(--ink-3); font-size: 12px; }
+.ib-tools { display: flex; flex: none; align-items: center; gap: 2px; }
+.ib-tools > form { display: flex; }
+.ib-tools .ib-pop { right: 0; left: auto; transform-origin: top right; }
 .ib-head h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; overflow-wrap: anywhere; }
-.ib-head .ib-note { margin-top: 2px; }
+.ib-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); min-height: 22px; color: var(--ink-3); font-size: 13px; }
+.ib-label { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); }
+.ib-label .badge { margin-left: var(--s1); }
+.ib-scroll { display: flex; flex: 1; flex-direction: column; gap: var(--s4); min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--s4) var(--s4) var(--s5) var(--s5); }
 /* What InboxCA did with the open email, with a link to what was sent or recorded. */
+.ib-did { display: flex; align-items: flex-start; gap: var(--s2); padding: var(--s2) var(--s3); border-radius: var(--r2); background: var(--surface-2); color: var(--ink-2); font-size: 13px; }
+.ib-did > svg { flex: none; margin-top: 2px; color: var(--accent); }
 .ib-did a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .ib-did a:hover { text-decoration: underline; }
-.ib-actions, .ib-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
-.ib-actions > form { display: flex; }
-.ib-actions .b .kbd { height: 18px; margin-right: calc(var(--s1) * -1); padding: 0 5px; border-color: var(--line); font-size: 11px; }
+.ib-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .ib .ib-inline select { width: auto; max-width: 240px; height: var(--control); font-size: 13px; }
-/* The email's label as a tag, with a small menu to change it. */
-.ib-label { gap: var(--s1); }
-.ib-label .ib-menu summary { height: 24px; padding: 0 var(--s2); border-color: transparent; background: none; box-shadow: none; color: var(--accent); }
-.ib-label .ib-pop { right: 0; left: auto; transform-origin: top right; }
-/* Filing an email InboxCA could not match: the client picked, then one button. */
+/* Mail InboxCA could not match, and filing it: the client picked, then one button. */
 .ib-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--s3) var(--s4); border-radius: var(--r2); background: var(--accent-soft); color: var(--ink); animation: rise var(--slow) var(--out); }
 .ib-confirm > svg { color: var(--accent); }
-.ib-confirm .grow { flex: 1 1 240px; }
+.ib-confirm .grow { flex: 1 1 200px; }
 .ib-confirm strong { font-weight: 600; }
 
 /* While an email opens, its pane shows the outline of one at once (the first one on the
@@ -137,33 +166,53 @@
 /* The conversation: each message under its sender's avatar. */
 .ib-answer { display: grid; gap: var(--s4); }
 .ib-answer strong { font-weight: 600; overflow-wrap: anywhere; }
-.ib-thread { display: grid; gap: var(--s4); margin: 0; padding: 0; list-style: none; }
-.ib-thread > li { display: grid; gap: var(--s2); padding-top: var(--s4); border-top: 1px solid var(--line); }
+.ib-thread { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); margin: 0; padding: 0; list-style: none; }
+.ib-thread > li { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s2); }
+.ib-thread > li + li { padding-top: var(--s4); border-top: 1px solid var(--line); }
 .ib-thread > li > :not(.ib-who) { margin-left: 40px; }
 .ib-who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); font-size: 13px; }
 .ib-who strong { font-weight: 600; }
-.ib-body { display: grid; gap: var(--s2); max-width: 68ch; font-weight: 400; overflow-wrap: anywhere; white-space: pre-line; }
-.ib-files { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
-.ib-files > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--s2) var(--s3); border: 1px solid var(--edge); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow-button); }
-.ib-files > li.ib-note { padding: 0; border: 0; background: none; box-shadow: none; }
+.ib-body { display: grid; gap: var(--s2); max-width: 68ch; font-weight: 400; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-line; }
+/* Attachments as file chips: a saved paper opens in the viewer; one not saved says so. */
+.ib-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.ib-files > li { display: grid; min-width: 0; }
+.ib-files > li.ib-note { grid-column: 1 / -1; align-self: center; }
+.ib-files :is(a, .ib-file-card) { display: flex; align-items: center; gap: var(--s3); min-width: 0; padding: var(--s2) var(--s3) var(--s2) var(--s2); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); color: inherit; text-decoration: none; }
+.ib-files a { box-shadow: var(--shadow-button); transition: border-color var(--fast) var(--out), background var(--fast) var(--out), transform var(--fast) var(--out); }
+.ib-files a:hover { border-color: var(--line-3); background: var(--hover); }
+.ib-files a:active { transform: scale(0.99); }
+.ib-file-card { border-style: dashed; }
+/* The paper open beside the Inbox (doc-pane.css): its own chip shows it, not the row around it. */
+.ui .stage .ib-files > li:has(> a[data-open]) { background: none; }
+.ib-files a[data-open] { border-color: var(--accent-hi); background: var(--accent-soft); }
 .ib-files .grow { display: grid; flex: 1; min-width: 0; }
-.ib-files strong { font-weight: 600; overflow-wrap: anywhere; }
-.ib-ext { display: flex; flex: none; align-items: center; justify-content: center; width: var(--control); height: var(--control); border-radius: var(--r1); background: var(--k-docs-bg); color: var(--k-docs); font-size: 11px; font-weight: 700; }
-.ib-path { color: var(--ink-3); font-family: var(--font-plex), ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.ib-files strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ib-view { flex: none; color: var(--accent); font-size: 13px; font-weight: 600; }
+.ib-ext { display: flex; flex: none; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: var(--r1); background: var(--k-docs-bg); color: var(--k-docs); font-size: 11px; font-weight: 700; }
+.ib-path { overflow: hidden; color: var(--ink-3); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The reply stays at the foot of the conversation, quick replies above the text. */
-.ib-reply { position: sticky; bottom: 0; display: grid; gap: var(--s2); margin-top: auto; padding: var(--s3) 0 var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
-/* InboxCA's own reply from the firm's records, in the reply's place until a person sends,
-   changes or stops it, or while its Undo minutes run. */
-.ib-drafted { position: sticky; bottom: 0; display: grid; gap: var(--s2); margin-top: auto; padding: var(--s3) 0 var(--s4); border-top: 1px solid var(--line); background: var(--surface); animation: rise var(--slow) var(--out); }
-.ib-draft-text { max-height: 40vh; margin: 0; overflow: auto; padding: var(--s3); border-radius: var(--r2); background: var(--accent-soft); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The reply at the foot: one bar until opened, never over the conversation. */
+:is(.ib-reply, .ib-drafted) { flex: none; max-height: 62%; overflow-y: auto; padding: var(--s3) var(--s4) var(--s3) var(--s5); border-top: 1px solid var(--line); background: var(--surface); }
+.ib-reply-bar { display: flex; align-items: center; gap: var(--s2); width: 100%; height: 40px; padding: 0 var(--s2) 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow-button); color: var(--ink-3); font: inherit; font-size: 14px; text-align: left; cursor: text; transition: border-color var(--fast) var(--out), color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
+.ib-reply-bar:hover { border-color: var(--line-3); color: var(--ink-2); }
+.ib-reply-bar .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ib-reply-bar .ib-note { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 12px; font-weight: 600; }
+.ib-reply-bar .ib-note::before { content: ""; width: 6px; height: 6px; border-radius: var(--round); background: var(--wait-dot); }
+.ib-write-reply { display: grid; gap: var(--s2); animation: ib-open var(--base) var(--out); }
+.ib-write-reply[hidden] { display: none; }
+/* An AI draft, or InboxCA's own reply from the firm's records, as a card to send or edit. */
+.ib-card { display: grid; gap: var(--s2); padding: var(--s3); border: 1px solid var(--select); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-1); animation: rise var(--slow) var(--out); }
+.ib-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); color: var(--ink-3); font-size: 13px; }
+.ib-card-head > svg { color: var(--accent); }
+.ib-card-head strong { color: var(--accent); font-weight: 600; }
+.ib-draft-text { max-height: min(24vh, 8em); margin: 0; overflow: auto; padding: var(--s3); border-radius: var(--r2); background: var(--accent-soft); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ib :is(.ib-reply, .ib-compose) textarea { width: 100%; min-height: 96px; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.5; resize: vertical; transition: border-color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
 .ib :is(.ib-reply, .ib-compose) textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-glow); outline: none; }
 .ib-templates { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .ib-templates .ib-chip { height: 28px; border-radius: var(--round); }
 /* The line over a suggested reply, with Ask for papers when the paper is not in the drive. */
 .ib-suggest { display: flex; align-items: center; gap: var(--s2); }
-.ib-suggest .ib-chip { height: 28px; text-decoration: none; }
+.ib-suggest .ib-chip { flex: none; height: 28px; text-decoration: none; white-space: nowrap; }
 .ib-attach { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .ib-chip { display: inline-flex; align-items: center; gap: var(--s1); height: var(--control); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background var(--fast) var(--out), color var(--fast) var(--out), transform var(--fast) var(--out); }
 .ib-chip:hover { background: var(--hover); color: var(--ink); }
@@ -179,6 +228,7 @@
 .ib-attach .ib-tag span { overflow: hidden; text-overflow: ellipsis; }
 .ib-reply-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s2); }
 .ib-reply-foot .ib-note { margin-right: auto; }
+.ib-write-reply .ib-reply-foot > .ib-attach { flex: 1 1 240px; min-width: 0; }
 
 /* Writing to a client, in the side panel: the client, who gets it, then the email. */
 .ib-write, .ib-compose { display: grid; gap: var(--s4); }
@@ -190,8 +240,9 @@
 .ib-to .check { overflow-wrap: anywhere; }
 .ib-compose .ib-reply-foot { padding-top: var(--s3); border-top: 1px solid var(--line); }
 
-/* Mark all as done: the emails it takes, then the one button at the panel's foot. */
+/* Mark all as done and the Waiting for you lists: rows edge to edge in the side panel. */
 .ib-preview { margin: var(--s3) calc(var(--s4) * -1) 0; }
+.ib-preview .app-row .ib-inline { flex-wrap: nowrap; }
 .ib-send { position: sticky; bottom: calc(var(--s4) * -1); display: flex; justify-content: flex-end; margin: 0 calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
 
 /* The open email changes by crossfade: the old one fades out, the new one rises in. */
@@ -202,6 +253,13 @@
 .ib-busy { width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: var(--round); animation: spin 700ms linear infinite; }
 
 @keyframes ib-drop { from { opacity: 0; transform: translateY(calc(var(--s1) * -1)) scale(0.97); } }
+@keyframes ib-open { from { opacity: 0; transform: translateY(6px); } }
+@keyframes ib-pop-in { from { opacity: 0; transform: scale(0.92); } }
+/* Without motion, menus, chips and the reply only fade. */
+@media (prefers-reduced-motion: reduce) {
+  .ib-pop, .ib-write-reply, .ib-active a, .ib-card, .ib-confirm { animation-name: vt-fade; }
+  .ib-acts, .ib [data-tip]::after { transform: none; }
+}
 
 /* On a phone the page scrolls as one: the list, then the open email. */
 @media (max-width: 720px) {
@@ -209,10 +267,12 @@
   .stage-body:has(.ib), .stage-body:has(.ib) > .page-in { display: block; height: auto; }
   .ib-search { flex: 1 1 100%; max-width: none; margin-left: 0; }
   .ib .split { flex: none; flex-direction: column; }
-  .ib .pane { overflow: visible; }
-  :is(.ib-reply, .ib-drafted) { position: static; }
+  .ib .pane, .ib-open, .ib-scroll { overflow: visible; }
+  :is(.ib-reply, .ib-drafted) { max-height: none; }
   .ib-list { flex: none; min-width: 0; border-right: 0; border-bottom: 1px solid var(--line); }
-  .ib-convo { padding: var(--s4) var(--s4) 0; }
+  .ib-head, .ib-scroll, :is(.ib-reply, .ib-drafted) { padding-inline: var(--s4); }
   .ib-thread > li > :not(.ib-who) { margin-left: 0; }
   .ib-pop { width: min(280px, calc(100vw - 48px)); }
+  .ib-filters > .ib-pop { grid-template-columns: minmax(0, 1fr); width: calc(100vw - 48px); }
+  .ib-filter-side { padding-left: 0; border-left: 0; }
 }

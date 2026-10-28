@@ -83,6 +83,7 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   await owner.goto("/app/inbox");
   await row(owner, `Question ${tag}`).getByText(`Question ${tag}`).click();
   await expect(pane(owner).getByRole("heading", { name: `Question ${tag}` })).toBeVisible();
+  await pane(owner).getByRole("button", { name: /^Reply to/ }).click();
   await owner.getByLabel("Your reply").fill("Next Tuesday at 11.");
   await owner.getByRole("button", { name: "Send reply" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Reply sent" })).toBeVisible();
@@ -102,11 +103,10 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   ];
   await owner.goto("/app/inbox");
   await expect(list(owner).getByRole("listitem")).toHaveCount(8);
-  for (const [, words, subjects] of outcomes) for (const subject of subjects) await expect(row(owner, subject)).toContainText(words);
   await expect(list(owner)).not.toContainText(otherClient);
   for (const [status, words, subjects] of outcomes) {
     await owner.goto(`/app/inbox?status=${status}`);
-    await expect(owner.locator("summary", { hasText: words })).toBeVisible();
+    await expect(owner.getByRole("link", { name: `Remove filter: ${words}` })).toBeVisible();
     await expect(list(owner).getByRole("listitem")).toHaveCount(subjects.length);
     for (const subject of subjects) await expect(row(owner, subject)).toContainText(words);
     await expect(list(owner)).not.toContainText(otherClient);

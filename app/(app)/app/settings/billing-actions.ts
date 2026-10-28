@@ -6,20 +6,21 @@ import { z } from "zod";
 import { approveLimit, buy, claimMoneyBack, setAutoTopUp, setDowngrade, startAutoPay, stopAutoPay, type Buy } from "@/src/lib/billing/billing";
 import { planSchema, type Method } from "@/src/lib/billing/money";
 import { billingProvider } from "@/src/lib/billing/provider";
-import { currentMember } from "@/src/lib/member";
+import { signedInMember } from "@/src/lib/member";
 import { withinLimit } from "@/src/lib/rate-limit";
 import { supabaseServer } from "@/src/lib/supabase";
 
 // The owner's billing (PLAN.md 5.14.1). Each action is the owner's alone and works while the firm
-// is read only, so a plan can always be paid; amounts are worked out on the server only.
+// is read only or waits for its first payment (signedInMember, past the gate to /start), so a
+// plan can always be paid; amounts are worked out on the server only.
 export type CheckoutState = { error?: string; session?: string; kind?: "mandate" | "order"; script?: string; mode?: string };
 
 async function owner() {
-  const { userId, membership } = await currentMember();
+  const { userId, membership } = await signedInMember();
   if (membership?.role !== "owner") return null;
   return { userId, firmId: membership.firmId };
 }
-const returnUrl = async () => `${(await headers()).get("origin") ?? process.env.APP_BASE_URL ?? ""}/api/billing/return`;
+const returnUrl = async (to = "") => `${(await headers()).get("origin") ?? process.env.APP_BASE_URL ?? ""}/api/billing/return${to}`;
 const planIn = (form: FormData) => planSchema.safeParse({ clients: Number(form.get("clients")), practice: form.get("practice"), people: Number(form.get("people")), aiBlocks: 0 });
 const opened = (checkout: { session: string; kind: "mandate" | "order" } | { error: string }): CheckoutState => {
   if ("error" in checkout) return { error: checkout.error };
@@ -44,7 +45,7 @@ export async function startCheckout(_prev: CheckoutState, form: FormData): Promi
   if (gstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)) return { error: "Check the GSTIN: 15 letters and numbers, or leave it empty." };
   const cycle = form.get("cycle") === "yearly" ? "yearly" : "monthly";
   return opened(await startAutoPay(me.firmId, me.userId, {
-    method: method.data as Method, returnUrl: await returnUrl(),
+    method: method.data as Method, returnUrl: await returnUrl(again ? "" : "?to=start"),
     ...(!again && { plan: plan.data, cycle, address, phone, ...(gstin && { gstin }) }),
     ...(again && phone && { phone }),
   }));
