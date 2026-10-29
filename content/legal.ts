@@ -21,9 +21,11 @@ export const privacySections = [
     title: "What this website collects",
     points: [
       analyticsToken
-        ? "The website sets no cookies and shows no advertising. It counts visits without cookies and without knowing who you are."
-        : "Nothing by itself. The website sets no cookies and has no advertising, tracking or analytics.",
+        ? "The website's pages set no cookies and show no advertising. It counts visits without cookies and without knowing who you are."
+        : "Nothing by itself. The website's pages set no cookies and have no advertising, tracking or analytics.",
+      "Signing up or signing in sets only the cookies that keep you signed in, remember the plan you chose and remember how you set up the app's screens.",
       "If you sign up, you give us your firm's name, your work email and your firm's state.",
+      "Once your firm uses InboxCA, it also keeps your team's work emails and sign in records, the computers and office internet connections your firm approves, the record of who did what, and, for billing, the owner's mobile number and the firm's address and GSTIN.",
       "We use those details to run your firm's account and to email you sign in codes. We do not sell them or pass them on.",
       "Ask us at any time and we will delete them.",
     ],

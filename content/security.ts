@@ -108,8 +108,8 @@ export const securitySections = [
     points: [
       "* The screens on this website are illustrations, and the firms, names and figures in them are sample data.",
       analyticsToken
-        ? "This website sets no cookies. It counts visits without cookies and without knowing who you are."
-        : "This website sets no cookies and has no tracking or analytics.",
+        ? "This website's pages set no cookies. It counts visits without cookies and without knowing who you are. Signing up or signing in sets only the cookies that keep you signed in and remember your choices."
+        : "This website's pages set no cookies and have no tracking or analytics. Signing up or signing in sets only the cookies that keep you signed in and remember your choices.",
       "Other companies' names and logos belong to their owners. They are shown only to say what InboxCA is built to work with, and do not mean a partnership.",
     ],
   },
