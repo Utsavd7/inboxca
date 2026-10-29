@@ -67,12 +67,14 @@ it("filters the full list: mine, late, approvals and each area", () => {
   expect(keys("emails")).toEqual(["reply:mehta"]);
 });
 
-it("tells a manager the busiest people could not be read, rather than that none are busy", async () => {
-  const week = (teamLoad: { data: unknown; error: unknown }) => weekFor({
-    supabase: { rpc: async (name: string) => (name === "team_load" ? teamLoad : { data: [], error: null }) },
+it("tells a manager the busiest people or the week's numbers could not be read, rather than that none are busy or due", async () => {
+  const read = { data: [], error: null }, failed = { data: null, error: { code: "57014" } };
+  const week = (teamLoad: { data: unknown; error: unknown }, numbers = read) => weekFor({
+    supabase: { rpc: async (name: string) => (name === "team_load" ? teamLoad : name === "work_numbers" ? numbers : read) },
     membership: { role: "manager", firmId: "firm" },
     userId: "me",
-  } as unknown as Parameters<typeof weekFor>[0], Promise.resolve({ items: [], total: 0, late: 0 }));
-  expect((await week({ data: null, error: { code: "57014" } })).busiest).toBeNull();
-  expect((await week({ data: [], error: null })).busiest).toEqual([]);
+  } as unknown as Parameters<typeof weekFor>[0], Promise.resolve({ items: [], total: 0, late: 0, failed: false }));
+  expect((await week(failed)).busiest).toBeNull();
+  expect((await week(read)).busiest).toEqual([]);
+  expect((await week(read, failed as never)).range).toBeNull();
 });

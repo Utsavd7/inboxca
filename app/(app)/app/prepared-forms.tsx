@@ -4,7 +4,7 @@ import {Fragment} from "react";
 import {Check,ChevronDown,Ellipsis,FilePlus2,FileText,Info,LoaderCircle} from "lucide-react";
 import {serverCrypto} from "@/src/lib/crypto";
 import {currentMember,viewOnlyWords} from "@/src/lib/member";
-import {preparedSchema,formName,preparingNow} from "@/src/lib/prepared";
+import {preparedSchema,formName} from "@/src/lib/prepared";
 import {draftSchema} from "@/src/lib/datasets";
 import {periodName} from "@/src/lib/documents";
 import {itrReady,itrYear} from "@/src/lib/itr-fields";
@@ -23,7 +23,7 @@ import {addEditedForm,decideForm,markFormFiled,prepareForm,setDraftRegistration}
 const steps=["Figures checked","Prepared","Approved","Filed"];
 const stages:Record<string,{done:number;word:string;tone:Tone}>={
   preparing:{done:1,word:"Preparing",tone:"blue"},stalled:{done:1,word:"Not finished",tone:""},
-  check:{done:0,word:"Draft",tone:"warn"},making:{done:1,word:"Draft",tone:"warn"},waiting:{done:2,word:"Waiting for second approval",tone:"warn"},
+  check:{done:0,word:"Draft",tone:"warn"},making:{done:1,word:"Draft",tone:"warn"},outdated:{done:1,word:"Out of date",tone:""},waiting:{done:2,word:"Waiting for second approval",tone:"warn"},
   approved:{done:3,word:"Approved",tone:"blue"},filed:{done:4,word:"Filed",tone:"done"},rejected:{done:0,word:"Rejected",tone:""},
 };
 // The GSTR-3B parts InboxCA fills from checked GSTR-1 and GSTR-2B figures, and those left for
@@ -44,7 +44,7 @@ function Steps({done,busy}:{done:number;busy:boolean}) {
 export async function PreparedForms({client,message}:{client?:string;message?:string}) {
   const {supabase,membership,userId}=await currentMember();
   if(!membership) return null;
-  let query=supabase.from("documents").select("id,client_id,name,period_key,size,status,prepared,received_at,clients(name)").eq("firm_id",membership.firmId).not("prepared","is",null).order("received_at",{ascending:false}).limit(100);
+  let query=supabase.from("documents").select("id,client_id,name,period_key,size,status,prepared,received_at,clients(name)").eq("firm_id",membership.firmId).not("prepared","is",null).order("prepared->version",{ascending:false}).order("received_at",{ascending:false}).limit(100);
   if(client) query=query.eq("client_id",client);
   const {data:forms,error}=await query;
   if(error) throw new Error("The forms could not be read.");
@@ -58,12 +58,12 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     return review?.length ? <section className="panel"><h2>Forms to review</h2><ul className="rows">{review.map(file=><li key={file.id}><Link href={`/app/clients/${file.client_id}?tab=outputs`}>{file.clients?.name}: {file.name}</Link>{waiting?.some(item=>item.entity_id===file.id) && <span className="hint">An acknowledgement arrived. Mark it filed.</span>}</li>)}</ul></section> : null;
   }
   const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations},{data:pans},{data:itrRows}]=await Promise.all([
-    supabase.from("datasets").select("id,form_code,period_key,data").eq("firm_id",membership.firmId).eq("client_id",client).in("form_code",["GSTR1","GSTR3B"]).order("period_key",{ascending:false}).limit(100),
+    supabase.from("datasets").select("id,form_code,period_key,revision,data").eq("firm_id",membership.firmId).eq("client_id",client).in("form_code",["GSTR1","GSTR3B"]).order("period_key",{ascending:false}).limit(100),
     supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","gstin"),
     supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",client).in("document_type",["Acknowledgement","ITR-V"]).eq("status","filed").limit(100),
     supabase.from("requests").select("entity_id,details").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","form_confirmation").eq("status","pending"),
     supabase.from("client_registrations").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","pan"),
-    supabase.from("datasets").select("id,period_key,data").eq("firm_id",membership.firmId).eq("client_id",client).eq("form_code","ITR").order("period_key",{ascending:false}).limit(100),
+    supabase.from("datasets").select("id,period_key,revision,data").eq("firm_id",membership.firmId).eq("client_id",client).eq("form_code","ITR").order("period_key",{ascending:false}).limit(100),
   ]);
   // Income tax: one return per form and year that has figures entered for it, built with the
   // figures read from the client's papers for that year. Each lists what it still needs.
@@ -84,6 +84,10 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   const gstins=await Promise.all((registrations ?? []).map(async reg=>({id:reg.id,number:await serverCrypto().decrypt(membership.firmId,`clients/${client}/gstin`,reg.number_enc)})));
   const registrationOf=(row:{data:unknown})=>(row.data as {registration?:string}).registration ?? (gstins.length===1 ? gstins[0].id : undefined);
   const unassigned=(rows ?? []).filter(row=>row.form_code==="GSTR1" && !registrationOf(row));
+  // A draft made from figures that changed since (a correction): it can no longer be approved
+  // (private.form_current), even where the firm needs no second approval, and a newer version
+  // follows once every figure is checked.
+  const outdated=(meta:{sources:{id:string;revision:number}[]})=>meta.sources.some(source=>{const row=[...(rows ?? []),...itrDrafts].find(row=>row.id===source.id);return !!row && row.revision!==source.revision;});
   // A fill's figures still to check: approving and downloading wait for every one.
   const unchecked=(meta:{sources:{id:string}[]})=>meta.sources.reduce((sum,source)=>sum+((([...(rows ?? []),...itrDrafts].find(row=>row.id===source.id)?.data ?? {}) as {lines?:{state:string}[]}).lines ?? []).filter(line=>line.state!=="confirmed").length,0);
   const label=(row:{form_code:string;data:unknown})=>{const data=draftSchema.parse(row.data);return `${row.form_code==="GSTR3B" ? "GSTR-2B credit" : sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Source file"}, ${data.lines.length} figures${data.lines.every(line=>line.state==="confirmed") ? ", checked" : ", check these first"}`;};
@@ -105,16 +109,16 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
       <span><Link href={`?tab=extraction&draft=${row.id}`}>{name}</Link><small>{data.lines.length} figures, {ready ? "checked" : "check these first"}</small></span></label>;
   };
   const ask=<form action={askPermission} className="rf-row"><input type="hidden" name="client" value={client}/><input type="hidden" name="right" value="edit_figures"/><span className="grow hint">Preparing a return needs the right to edit figures.</span><Pending className="b b-secondary">Ask to prepare returns</Pending></form>;
-  const toast=message==="gstin" ? "GSTIN saved for this register." : reason===preparingNow ? "InboxCA is already preparing this return. It shows here when it is ready." : "";
+  const toast=message==="gstin" ? "GSTIN saved for this register." : "";
 
   // Where a version stands: being saved, its figures to check, waiting for approval, and so on.
   const stageOf=(file:NonNullable<typeof forms>[number])=>{
-    const meta=preparedSchema.parse(file.prepared),open=meta.filled && meta.status==="draft" ? unchecked(meta) : 0;
-    return {open,stage:!file.size ? (latest.has(file.id) && recent(file.received_at) ? "preparing" : "stalled") : meta.status!=="draft" ? meta.status : meta.filled ? (open ? "check" : "making") : "waiting"};
+    const meta=preparedSchema.parse(file.prepared),old=meta.status==="draft" && !meta.filled && outdated(meta),open=meta.status==="draft" && (meta.filled || old) ? unchecked(meta) : 0;
+    return {open,stage:!file.size ? (latest.has(file.id) && recent(file.received_at) ? "preparing" : "stalled") : meta.status!=="draft" ? meta.status : meta.filled ? (open ? "check" : "making") : old ? "outdated" : "waiting"};
   };
   const card=(file:NonNullable<typeof forms>[number],older:NonNullable<typeof forms>)=>{
     const meta=preparedSchema.parse(file.prepared),head=latest.has(file.id),active=head && !membership.viewOnlyUntil && file.size>0,{open,stage}=stageOf(file);
-    const {done,word,tone}=stages[stage],decides=head && file.size>0 && meta.status==="draft" && !meta.filled;
+    const {done,word,tone}=stages[stage],decides=head && stage==="waiting";
     const period=meta.form.startsWith("ITR") ? itrYear(file.period_key) : periodName(file.period_key),number=gstins.length>1 ? gstins.find(reg=>reg.id===meta.registration)?.number : undefined;
     const download=(primary:boolean)=><form action={`/app/files/${file.id}/filing`} method="post"><button className={`b ${primary ? "b-primary" : "b-secondary"}`} disabled={!active}>Download for filing</button></form>;
     const arrived=confirmations?.some(item=>item.entity_id===file.id);
@@ -123,6 +127,8 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     else if(stage==="stalled") note="This file was not finished. Prepare it again below.";
     else if(stage==="check") {primary=<Link className="b b-primary" href={`/app/files/${file.id}/view`}>Check figures</Link>;second=<button className="b b-secondary" disabled>Download for filing</button>;note=`${open} ${open===1 ? "figure" : "figures"} not checked yet. Approving and downloading wait until every figure is checked.`;}
     else if(stage==="making") {second=<button className="b b-secondary" disabled>Download for filing</button>;note=<span aria-live="polite">Every figure is checked. InboxCA is making the checked draft now.</span>;}
+    else if(stage==="outdated" && open) {primary=<Link className="b b-primary" href={`?tab=extraction&draft=${(meta.sources.find(source=>unchecked({sources:[source]})) ?? meta.sources[0]).id}`}>Check figures</Link>;note=`The figures changed after this file was made. Check ${open===1 ? "the figure" : `the ${open} figures`} not checked yet, and InboxCA makes a newer version.`;}
+    else if(stage==="outdated") note=<span aria-live="polite">Out of date. The figures changed after this file was made, and InboxCA is making a newer version.</span>;
     else if(stage==="waiting") {
       primary=active && approver ? <form action={decideForm} id={`approve-${file.id}`}><input type="hidden" name="document" value={file.id}/><Pending className="b b-primary" name="decision" value="approved">Give second approval</Pending></form> : <button className="b b-primary" disabled>Give second approval</button>;
       note=viewOnly || (!approver ? "Only the firm's owner, a partner or a manager can give the second approval." : "Check the file, then give the second approval.");
@@ -189,7 +195,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     <header className="rf-head"><h2 id="prepared-title">Return files</h2></header>
     {toast ? <Toast>{toast}</Toast> : message && <p className="alert" role="status">{reason ?? (message==="edited" ? "InboxCA could not use this file. Choose the official workbook or return file you filled, with its headings unchanged. You also need permission to edit figures." : message==="ack" ? "The return was not marked filed. Choose or upload the acknowledgement, or type its number, then try again." : message==="approval" ? "The approval was not saved. Someone other than the person who checked the figures must approve. To reject, choose a reason and say what must change." : message==="differences" ? "This return differs from Form 26AS or Form 16. Look at the differences and tick the box, then approve again." : "InboxCA could not prepare this return. Check that every figure is checked and that your firm's drive is connected, then try again.")}</p>}
     {!!versions.size && <ul className="rf-list">{[...versions.values()].map(([file,...older])=>card(file,older))}</ul>}
-    {[...versions.values()].some(([file])=>["preparing","making"].includes(stageOf(file).stage)) && <Refresh/>}
+    {[...versions.values()].some(([file])=>{const {stage,open}=stageOf(file);return stage==="preparing" || stage==="making" || stage==="outdated" && !open;}) && <Refresh/>}
     {(!!rows?.length || !!pans?.length) && <div className="app-card rf-prepare">
       <header className="app-card-head"><IconTile Icon={FilePlus2} kind="docs"/><h2>Prepare a return</h2><span className="hint">InboxCA fills the official file from checked figures only.</span></header>
       {!!rows?.length && (canPrepare ? <>

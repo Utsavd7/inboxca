@@ -81,4 +81,13 @@ it("ranks a manager's team by their open returns, and has none for someone with 
   const load = (person: string) => as(person, `select user_id, returns from public.team_load($1, ${day(6)})`, [firm]);
   expect(await load(people.manager)).toEqual([{ user_id: people.outside, returns: 3 }, { user_id: people.staff, returns: 2 }]);
   expect(await load(people.other)).toEqual([]);
+  // Read past the row rules, it still keeps them: nothing for someone outside the firm, and in a
+  // firm that shows each person only their clients, only the clients given to the manager's team.
+  expect(await load(people.stranger)).toEqual([]);
+  await asOwner(db);
+  await db.query(`update public.firms set settings = settings || '{"client_visibility": "restricted"}' where id = $1`, [firm]);
+  expect(await load(people.manager)).toEqual([]);
+  await asOwner(db);
+  await db.query("insert into public.client_assignments (firm_id, client_id, team_id, role) values ($1, $2, $3, 'staff')", [firm, client.team, team]);
+  expect(await load(people.manager)).toEqual([{ user_id: people.outside, returns: 3 }]);
 }));

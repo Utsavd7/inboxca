@@ -337,6 +337,7 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["end_other_sessions", "select public.end_other_sessions() r", [], false],
   ["firm_export", "select public.firm_export($1) r", ["firm"], true],
   ["firm_people", "select * from public.firm_people($1)", ["firm"], true],
+  ["team_load", "select * from public.team_load($1, current_date + 6)", ["firm"], true],
   ["firm_usage", "select * from public.firm_usage($1, current_date)", ["firm"], true],
   ["due_fills", "select * from public.due_fills($1)", ["firm"], true],
   ["queue_fills", "select * from public.queue_fills($1, gen_random_uuid(), true)", ["firm"], true],

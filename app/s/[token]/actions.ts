@@ -12,7 +12,7 @@ import { shareRecipient } from "./recipient";
 async function privateShare(token: string) {
   const { data: share } = await supabaseAdmin()
     .from("shares")
-    .select("id, firm_id, contact_id, needs_code, code_hash, code_expires_at, code_attempts, link_expires_at, downloads, documents(client_id, clients(name, email_enc)), firms(name)")
+    .select("id, firm_id, contact_id, needs_code, code_hash, link_expires_at, downloads, documents(client_id, clients(name, email_enc)), firms(name)")
     .eq("link_token_hash", createHash("sha256").update(token).digest("hex"))
     .maybeSingle();
   return share?.needs_code && Date.parse(share.link_expires_at ?? "") > Date.now() && share.downloads < 5 ? share : null;
@@ -48,12 +48,9 @@ export async function enterShareCode(form: FormData) {
   const share = await privateShare(token);
   if (!share?.code_hash) redirect(`/s/${token}`);
   const code = String(form.get("code") ?? "").replace(/\D/g, "");
-  const current = Date.parse(share.code_expires_at ?? "") > Date.now() && share.code_attempts < CODE_TRIES;
-  if (!current || codeHash(share.id, code) !== share.code_hash) {
-    await supabaseAdmin().from("shares").update({ code_attempts: Math.min(CODE_TRIES, share.code_attempts + 1) }).eq("id", share.id);
-    redirect(`/s/${token}?code=${current && share.code_attempts + 1 < CODE_TRIES ? "wrong" : "again"}`);
-  }
-  await supabaseAdmin().from("shares").update({ code_hash: null, code_expires_at: null }).eq("id", share.id);
+  // Counted and checked in one step (public.try_share_code), so guesses sent at once share the tries.
+  const { data: answer } = await supabaseAdmin().rpc("try_share_code", { share: share.id, hash: codeHash(share.id, code), tries: CODE_TRIES });
+  if (answer !== "right") redirect(`/s/${token}?code=${answer === "wrong" ? "wrong" : "again"}`);
   const { name, maxAge } = openCookie(share.id);
   (await cookies()).set(name, openValue(share.id), { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: `/s/${token}`, maxAge });
   redirect(`/s/${token}`);
