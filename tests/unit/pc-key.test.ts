@@ -1,6 +1,8 @@
-import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { createHash, generateKeyPairSync, randomBytes, sign, type KeyObject } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import { checkAdminKey, checkAdminKeyUse, checkKeyUse, checkNewKey, newChallenge, totp } from "@/src/lib/pc-key";
+
+vi.stubEnv("APP_HMAC_KEY", randomBytes(32).toString("base64url"));
 
 // An office PC's key answering InboxCA's question, as a browser would send it.
 const origin = "https://inboxca.example";

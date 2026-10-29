@@ -1224,6 +1224,9 @@ isOneToOne: false
               "assignee": string,"client_id": string,"client_name": string,"days": number,"email_id": string,"id": string,"late": boolean,"reason_code": string,"received_at": string
             }[]
                            },
+"try_share_code":
+{ Args: { "hash": string,"share": string,"tries": number }; Returns: string
+                           },
 "two_step_at":
 { Args: Record<PropertyKey, never>; Returns: string
                            },

@@ -45,9 +45,12 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const isAdmin = firmAdmin(membership.role, userId, membership.settings);
   const admin = supabaseAdmin();
   const today = todayInIndia();
-  const [{ data: pcs }, { data: activity }, { data: people }, { data: requests }, { data: branches }, fixedRule] = await Promise.all([
+  // Office decisions of the last 90 days, the most fixedSuggestion counts over (admin_set_office),
+  // and when each PC was first seen, so the read stays small as the log grows.
+  const [{ data: pcs }, { data: activity }, { data: firstSeen }, { data: people }, { data: requests }, { data: branches }, fixedRule] = await Promise.all([
     admin.from("devices").select("id, name, status, kind, person_id, ends_on, key_id, branch_id").eq("firm_id", membership.firmId),
-    admin.from("activity_log").select("entity_id, actor_id, action, at, details").eq("firm_id", membership.firmId).in("action", ["device.first_seen", "office.refused", "office.here", "office.confirm", "office.today"]),
+    admin.from("activity_log").select("entity_id, actor_id, action, at, details").eq("firm_id", membership.firmId).in("action", ["office.refused", "office.here", "office.confirm", "office.today"]).gte("at", new Date(`${addDays(today, -90)}T00:00:00+05:30`).toISOString()),
+    admin.from("activity_log").select("entity_id, actor_id, at, details").eq("firm_id", membership.firmId).eq("action", "device.first_seen"),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     admin.from("requests").select("id, entity_id, reason_code, details").eq("firm_id", membership.firmId).eq("entity_type", "office_connection").eq("status", "pending"),
     admin.from("groups").select("id, name, kind, settings").eq("firm_id", membership.firmId).eq("kind", "branch").order("name"),
@@ -65,7 +68,7 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const ownOffice = picked && (picked.settings as { office?: Office }).office ? picked.id : null;
   const officePcs = (pcs ?? []).filter((pc) => compact || (pc.branch_id ?? null) === ownOffice);
   const emails = new Map(people?.map((person) => [person.user_id, person.email]));
-  const first = new Map(activity?.filter((entry) => entry.action === "device.first_seen").map((entry) => [entry.entity_id, entry]));
+  const first = new Map(firstSeen?.map((entry) => [entry.entity_id, entry]));
   const waiting = officePcs.filter((pc) => pc.status === "waiting");
   const approved = officePcs.filter((pc) => pc.status === "approved" && (pc.kind !== "personal" || (pc.ends_on ?? "") >= today));
   const seen = compact ? Date.parse((await cookies()).get(REFUSALS_SEEN)?.value ?? "") || 0 : 0;
@@ -80,7 +83,7 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   // Self-adjusting (5.8): after 3 office confirmations in 14 days (the admin console's numbers),
   // or with no PC that stays in the office, the owner is told once how to get a fixed connection.
   const since = Date.parse(`${today}T00:00:00+05:30`) - fixedRule.days * 86_400_000;
-  const confirmations = (activity ?? []).filter((entry) => entry.action !== "device.first_seen" && entry.action !== "office.refused" && Date.parse(entry.at) >= since).length;
+  const confirmations = (activity ?? []).filter((entry) => entry.action !== "office.refused" && Date.parse(entry.at) >= since).length;
   const trustedPc = officePcs.some((pc) => pc.status === "approved" && pc.kind === "office" && pc.key_id);
   const suggestFixed =
     isAdmin && office.on && !anywhere && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= fixedRule.taps || !trustedPc);

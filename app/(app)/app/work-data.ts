@@ -3,6 +3,7 @@ import { aiCredits } from "@/src/lib/ai";
 import { addDays, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { periodName } from "@/src/lib/documents";
 import { downloadUse } from "@/src/lib/download-use";
+import { log } from "@/src/lib/logger";
 import { whenRange } from "@/src/lib/mail-view";
 import { currentMember, myQuestions } from "@/src/lib/member";
 import { formName, preparedSchema } from "@/src/lib/prepared";
@@ -23,6 +24,11 @@ type Signed = Awaited<ReturnType<typeof currentMember>>;
 type Context = { supabase: Signed["supabase"]; membership: NonNullable<Signed["membership"]>; userId: string };
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const DAY = 86_400_000;
+// A list Today could not read: logged, and its card says so instead of "nothing needs you".
+const notRead = (area: string, error: unknown) => {
+  log.error("today.not_read", { area, error });
+  return null;
+};
 
 // At most two lines above the list, most pressing first: the firm's email or drive not working,
 // setup still to do (the owner), then what is new from the government. The government update
@@ -88,12 +94,18 @@ export async function workFor(ctx: Context, late: number) {
   const lead = isLead(membership.role);
   const dayStart = new Date(`${today}T00:00:00+05:30`).toISOString();
   const tag = (area: Area) => (items: Omit<Listed, "area">[]) => items.map((item): Listed => ({ ...item, area }));
+  let failed = false;
+  const failing = (area: string) => (error: unknown) => {
+    failed = true;
+    notRead(area, error);
+    return [] as never[];
+  };
 
   // Prepared returns whose acknowledgement arrived, to mark filed; only the latest version of
   // each counts. Drafts to approve and files to file come with the returns (forms.ts).
   const confirmations = Promise.all([
-    Promise.resolve(supabase.from("documents").select("id, client_id, period_key, status, prepared, clients(name)").eq("firm_id", firm).not("prepared", "is", null).order("received_at", { ascending: false }).limit(100)),
-    Promise.resolve(supabase.from("requests").select("entity_id").eq("firm_id", firm).eq("kind", "form_confirmation").eq("status", "pending").limit(100)),
+    Promise.resolve(supabase.from("documents").select("id, client_id, period_key, status, prepared, clients(name)").eq("firm_id", firm).not("prepared", "is", null).order("prepared->version", { ascending: false }).order("received_at", { ascending: false }).limit(100).throwOnError()),
+    Promise.resolve(supabase.from("requests").select("entity_id").eq("firm_id", firm).eq("kind", "form_confirmation").eq("status", "pending").limit(100).throwOnError()),
   ]).then(([forms, confirming]) => {
     const seen = new Set<string>();
     const waiting = new Set(confirming.data?.map((item) => item.entity_id));
@@ -106,27 +118,27 @@ export async function workFor(ctx: Context, late: number) {
       const name = file.clients?.name ?? "";
       return [{ key: `confirm:${file.id}`, title: `${formName(meta.form)} for ${name}, ${periodName(file.period_key ?? "")}`, why: "The acknowledgement arrived. Check it and mark the return filed", client: { id: file.client_id, name }, action: { label: meta.status === "draft" ? "Review and approve" : "Mark filed", href: `/app/clients/${file.client_id}?tab=outputs` }, audience: "assigned", area: "returns" }];
     });
-  });
+  }, failing("confirmations"));
 
   // Late clients, one row each with the oldest late return: the person's own unless they lead.
   const rules = Promise.resolve(supabase.from("compliance_types").select("code, name, frequency").eq("period_key", "")).then(({ data }) => new Map(data?.map((rule) => [rule.code, rule])));
-  const lateRows = Promise.all([Promise.resolve(supabase.rpc("late_clients", { target_firm: firm, mine: !lead }, { count: "exact" }).limit(late)), rules]).then(([{ data, count }, rule]) => ({
+  const lateRows = Promise.all([Promise.resolve(supabase.rpc("late_clients", { target_firm: firm, mine: !lead }, { count: "exact" }).limit(late).throwOnError()), rules]).then(([{ data, count }, rule]) => ({
     count: count ?? data?.length ?? 0,
     items: (data ?? []).map((row): Listed => {
       const days = Math.round((Date.parse(today) - Date.parse(row.due_on)) / DAY);
       const name = `${rule.get(row.code)?.name ?? row.code ?? ""} for ${periodLabel(rule.get(row.code)?.frequency ?? null, row.period_key)}`;
       return { key: `late:${row.client_id}`, title: `File ${name}`, why: `${plural(days, "day", "days")} late${row.returns > 1 ? `, and ${plural(row.returns - 1, "more late return", "more late returns")}` : ""}`, client: { id: row.client_id, name: row.client_name }, due: row.due_on, urgent: true, action: { label: "See returns", href: `/app/clients/${row.client_id}?tab=due` }, audience: "assigned", area: "returns" };
     }),
-  }));
+  }), (error) => ({ count: 0, items: failing("late_clients")(error) }));
 
   // What only the owner or partners act on, and a notice's date close by. A client asked three
   // times shows once, as the call for whoever looks after it.
-  const papers = papersWorkItems(ctx);
+  const papers = papersWorkItems(ctx).catch(failing("papers"));
   const firmItems = Promise.all([
     myQuestions(),
-    owner ? Promise.resolve(supabase.from("devices").select("id").eq("firm_id", firm).eq("status", "waiting")) : null,
-    Promise.resolve(supabase.rpc("notice_alerts", { target_firm: firm }).limit(10)),
-    lead ? Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, details").eq("kind", "alert").neq("entity_type", "papers_in").neq("entity_type", "owner_device").neq("reason_code", "drive_away").eq("status", "pending").limit(20)) : null,
+    owner ? Promise.resolve(supabase.from("devices").select("id").eq("firm_id", firm).eq("status", "waiting").throwOnError()) : null,
+    Promise.resolve(supabase.rpc("notice_alerts", { target_firm: firm }).limit(10).throwOnError()),
+    lead ? Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, details").eq("kind", "alert").neq("entity_type", "papers_in").neq("entity_type", "owner_device").neq("reason_code", "drive_away").eq("status", "pending").limit(20).throwOnError()) : null,
     papers,
     owner ? downloadUse(firm).catch(() => null) : null,
     owner ? aiCredits(firm).catch(() => null) : null,
@@ -165,21 +177,21 @@ export async function workFor(ctx: Context, late: number) {
         .filter((alert) => alert.reason_code !== "request_stalled" || !calls.some((item) => item.key === `call:${alert.entity_id}`))
         .map((alert) => ({ ...alertItem(alert), key: `${alert.reason_code === "virus" ? "virus" : "alert"}:${alert.id}`, audience: "firm" as const })),
     ]);
-  });
+  }).catch(failing("firm"));
 
   const items = (
     await Promise.all([
       papers.then(tag("papers")),
-      formsWorkItems(ctx).then(tag("returns")),
-      itrCheckWorkItems(ctx).then(tag("returns"), () => []),
-      gstMatchWorkItems(ctx).then(tag("returns"), () => []),
+      formsWorkItems(ctx).then(tag("returns"), failing("returns")),
+      itrCheckWorkItems(ctx).then(tag("returns"), failing("itr_check")),
+      gstMatchWorkItems(ctx).then(tag("returns"), failing("gst_match")),
       // An email waiting for a person is on the Today of the person it is given to, and late ones
       // on the owner's and partners' (inbox-team.ts). Front desk also gets the emails that name no
       // client, as picking the client is theirs.
-      inboxWorkItems(ctx).then((list) => list.flatMap((item): Listed[] => (!item.key.startsWith("reply:") ? [{ ...item, area: "papers" }] : membership.role === "front_desk" && !item.client ? [{ ...item, area: "emails" }] : []))),
-      inboxTeamWorkItems(ctx).then(tag("emails")),
-      answersWorkItems(ctx).then(tag("emails"), () => []),
-      attention(ctx).then(({ lines }) => (lines.includes("gov") ? [] : governmentWorkItems(ctx).then(tag("gov"), () => []))),
+      inboxWorkItems(ctx).then((list) => list.flatMap((item): Listed[] => (!item.key.startsWith("reply:") ? [{ ...item, area: "papers" }] : membership.role === "front_desk" && !item.client ? [{ ...item, area: "emails" }] : [])), failing("inbox")),
+      inboxTeamWorkItems(ctx).then(tag("emails"), failing("team_replies")),
+      answersWorkItems(ctx).then(tag("emails"), failing("answers")),
+      attention(ctx).then(({ lines }) => (lines.includes("gov") ? [] : governmentWorkItems(ctx).then(tag("gov"), failing("gov")))),
       lateRows.then(({ items }) => items),
       confirmations,
       firmItems,
@@ -190,9 +202,9 @@ export async function workFor(ctx: Context, late: number) {
   const { count: lateCount, items: lateList } = await lateRows;
   // Someone who does not lead sees the clients they look after.
   const theirs = lead ? [] : [...new Set(unique.flatMap((item) => (item.audience === "assigned" && item.client ? [item.client.id] : [])))];
-  const looked = lead ? null : new Set(theirs.length ? ((await supabase.rpc("looked_after", { target_firm: firm, clients: theirs })).data ?? []) : []);
+  const looked = lead ? null : new Set(theirs.length ? await Promise.resolve(supabase.rpc("looked_after", { target_firm: firm, clients: theirs }).throwOnError()).then(({ data }) => data ?? [], failing("looked_after")) : []);
   const shown = rankWork(unique.filter((item) => visibleTo(item, { role: membership.role, looked })), today);
-  return { items: shown, total: shown.length + Math.max(0, lateCount - lateList.length), late: lateCount };
+  return { items: shown, total: shown.length + Math.max(0, lateCount - lateList.length), late: lateCount, failed };
 }
 
 // This week's numbers for the person's role, each opening its list.
@@ -203,10 +215,11 @@ export async function weekFor(ctx: Context, work: ReturnType<typeof workFor>) {
   const lead = isLead(membership.role);
   const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).toISOString().slice(0, 10);
   const [range, mail, load, people] = await Promise.all([
-    Promise.resolve(supabase.rpc("work_numbers", lead ? { target_firm: membership.firmId, since: `${today.slice(0, 8)}01`, until: monthEnd } : { target_firm: membership.firmId, since: monday, until: addDays(monday, 6), mine: true })).then(({ data }) => data?.[0] ?? { due: 0, filed: 0, waiting: 0 }),
+    // null when it could not be read, so Today says so rather than "none due".
+    Promise.resolve(supabase.rpc("work_numbers", lead ? { target_firm: membership.firmId, since: `${today.slice(0, 8)}01`, until: monthEnd } : { target_firm: membership.firmId, since: monday, until: addDays(monday, 6), mine: true })).then(({ data, error }) => (error ? notRead("work_numbers", error) : (data?.[0] ?? { due: 0, filed: 0, waiting: 0 }))),
     membership.role === "manager" ? null : inboxWeek(ctx),
     // null when it could not be read, so Today says so rather than "no returns".
-    membership.role === "manager" ? Promise.resolve(supabase.rpc("team_load", { target_firm: membership.firmId, until: addDays(monday, 6) })).then(({ data, error }) => (error ? null : (data ?? []))) : [],
+    membership.role === "manager" ? Promise.resolve(supabase.rpc("team_load", { target_firm: membership.firmId, until: addDays(monday, 6) })).then(({ data, error }) => (error ? notRead("team_load", error) : (data ?? []))) : [],
     membership.role === "manager" ? Promise.resolve(supabase.rpc("firm_people", { target_firm: membership.firmId })).then(({ data }) => new Map(data?.map((person) => [person.user_id, person.email]))) : new Map<string, string>(),
   ]);
   const { items, late } = await work;

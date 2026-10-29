@@ -14,6 +14,7 @@ export function localSupabase() {
   return {
     url: get("SUPABASE_URL"),
     secretKey: get("SUPABASE_SECRET_KEY"),
+    hmacKey: get("APP_HMAC_KEY"),
     dbUrl: get("TEST_DB_URL"),
     mailUrl: get("TEST_MAIL_URL"),
   };

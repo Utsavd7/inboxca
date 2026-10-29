@@ -3,6 +3,7 @@ import { z } from "zod";
 import { alertAdmins } from "./billing/billing";
 import { formulaSchema, planPrice, planSchema, type Cycle } from "./billing/money";
 import { todayInIndia } from "./calendar";
+import { hmacKey } from "./env";
 import { log } from "./logger";
 import { supabaseAdmin } from "./supabase";
 
@@ -60,7 +61,7 @@ export async function aiCredits(firmId: string) {
 const DAY = 86_400_000;
 const cache = new Map<string, { text: string; until: number }>();
 const hashOf = (firmId: string, reason: string, instructions: string, input: string) =>
-  createHmac("sha256", createHmac("sha256", process.env.SUPABASE_SECRET_KEY ?? "").update("ai cache").digest()).update([firmId, reason, instructions, input].join("\n")).digest("base64url").slice(0, 22);
+  createHmac("sha256", hmacKey("ai cache")).update([firmId, reason, instructions, input].join("\n")).digest("base64url").slice(0, 22);
 const base = () => (process.env.MAIL_ALLOW_LOCAL === "1" && process.env.OPENAI_TEST_URL ? process.env.OPENAI_TEST_URL : "https://api.openai.com");
 type Usage = { input_tokens: number; output_tokens: number };
 type Answer = { usage?: Usage; output?: { content?: { type: string; text?: string }[] }[] };
