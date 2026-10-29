@@ -1,4 +1,4 @@
-import {amends,exemptRows,numericHeadings,salesSections,type SalesSection} from "../src/lib/gstr1-fields.ts";
+import {amends,exemptRows,irnColumn,numericHeadings,salesSections,type SalesSection} from "../src/lib/gstr1-fields.ts";
 import {xlsxEntries} from "../src/lib/sheet.ts";
 import type {Figure} from "../src/lib/datasets.ts";
 import {chooseTemplate,type Template} from "../src/lib/templates.ts";
@@ -8,8 +8,9 @@ import {officialFile} from "./official.ts";
 import {isGstin} from "../src/lib/identifiers.ts";
 
 const unescape=(value:string)=>value.replaceAll("&amp;","&").replaceAll("&lt;","<").replaceAll("&gt;",">").replaceAll("&quot;",'"').replaceAll("&apos;","'");
+const money=(value:number)=>Math.round(value*100)/100;
 // Only named lists from the official file, never a hand-written rate or state list.
-export function gstr1Workbook(template:Template,period:string,gstin:string,drafts:Map<string,Figure>[]) {
+function gstr1(template:Template,period:string,gstin:string,drafts:Map<string,Figure>[]) {
   chooseTemplate([template],"GSTR1",period);
   if(!isGstin(gstin) || !template.mappings.validator) throw new Error("Check the client's GSTIN and the official form");
   if(!/^gstr1-v[\d.]+\/GSTR1_Excel_Workbook_Template_V[\d.]+\.xlsx$/.test(template.source.file)) throw new Error("Unknown official workbook");
@@ -28,7 +29,7 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
   // data validation names their master range (and v2.0 and v2.2 differ), so read it from there.
   const validated=new Map<string,Map<number,string[]>>(),sheetLists=/^(Financial Year|Nature of Supply|Document type)$/;
   const codes:Record<string,string>={"Original Place Of Supply":"POS","Original Month":"MONTH","Original Month/Quarter":"MONTH","Rate":"RATE","Place Of Supply":"POS","Reverse Charge":"RCHARGE","Invoice Type":"INVTYPE","Note Supply Type":"INVTYPE","Note Type":"CDRNOTE","Type":"TYPE","UQC":lists.has("NUQC") ? "NUQC" : "UQC","Applicable % of Tax Rate":"DIFF","Export Type":"EXP","UR Type":"URTYPE","Nature of Document":"DOCUMENT"};
-  const cells=new Map<string,Map<string,{value:string;number:boolean}>>(),next=new Map<string,number>(),invoices=new Map<string,string>(),lastInvoice=new Map<string,string>(),summaries=new Set<string>(),checkedSheets=new Set<string>();
+  const cells=new Map<string,Map<string,{value:string;number:boolean}>>(),next=new Map<string,number>(),invoices=new Map<string,string>(),lastInvoice=new Map<string,string>(),summaries=new Set<string>(),checkedSheets=new Set<string>(),portal:{data:Record<string,unknown>;key:string;irn:boolean}[]=[];
   const {schema,validate}=officialSchema(template.mappings.validator.file,template.mappings.validator.sha256);
   // GSTN schema v5.0 splits advances by recipient and names documents by text; v4.0 does not.
   const v5=Object.hasOwn((schema.properties as {at:{properties?:object}}).at.properties ?? {},"at_b2c");
@@ -60,6 +61,8 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
       if(at>1004) throw new Error("Use at most 1,000 rows per section");
       if(!cells.has(path)) cells.set(path,new Map());
       for(const [column,figure] of row) {
+        // An IRN has 64 letters and digits (GSTN's GSTR-2A schema).
+        if(column===irnColumn(section)) {if(!/^[a-zA-Z0-9]{64}$/.test(figure.value)) throw new Error("Check the IRN: it has 64 letters and digits");continue;}
         const heading=salesSections[section].headings[column];if(!heading) throw new Error("Unknown register column");
         if(/GSTIN|GSTIN\/UIN/.test(heading) && /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(figure.value) && !isGstin(figure.value)) throw new Error("Check the GSTIN's last character");
         const listed=codes[heading] || sheetLists.test(heading),list=codes[heading] ? lists.get(codes[heading]) : validated.get(section)!.get(column);
@@ -189,8 +192,68 @@ export function gstr1Workbook(template:Template,period:string,gstin:string,draft
         delete data[base];
       }
       if(!validate(data)) throw new Error("A register row does not pass the official form's checks");
+      // The portal JSON's tax, as the offline tool computes it from the rate and taxable value (its manual,
+      // FAQ 27): IGST across States and on large B2C sales, exports, SEZ and "intra-State supplies attracting
+      // IGST"; CGST and SGST halves within the State; none on supplies without payment of tax.
+      if(["b2b","cdnr","b2cl","cdnur","exp","b2cs","at","atadj"].includes(kind)) {
+        const of=(name:string)=>get((salesSections[kind].headings as readonly string[]).indexOf(name)),supply=of("Invoice Type") || of("Note Supply Type") || of("UR Type") || of("Export Type");
+        const igst=["b2cl","cdnur","exp"].includes(kind) || ["SEZ supplies with payment","Intra-State supplies attracting IGST"].includes(supply) || of("Place Of Supply").slice(0,2)!==gstin.slice(0,2);
+        const share=of("Applicable % of Tax Rate") ? Number(of("Applicable % of Tax Rate"))/100 : 1;
+        const taxLines=(value:unknown):Record<string,number>[]=>!value || typeof value!=="object" ? [] : "rt" in value ? [value as Record<string,number>] : Object.values(value).flatMap(taxLines);
+        if(!["SEZ supplies without payment","EXPWOP","WOPAY"].includes(supply)) for(const line of taxLines(data)) {const tax=(line.txval ?? line.ad_amt)*line.rt/100*share;Object.assign(line,igst ? {iamt:money(tax)} : {camt:money(tax/2),samt:money(tax/2)});}
+      }
+      portal.push({data,key:`${section}:${get(0)}:${get(kind==="b2b" || kind==="cdnr" ? 2 : 1)}`,irn:row.has(irnColumn(section))});
     }
   }
   if(!cells.size) throw new Error("There are no register rows to prepare");
-  return writeWorkbook(original,cells);
+  return {original,cells,validate,portal};
+}
+export const gstr1Workbook=(...args:Parameters<typeof gstr1>)=>{const {original,cells}=gstr1(...args);return writeWorkbook(original,cells);};
+
+// Rows of one recipient, invoice, note or table join as the schema nests them; a line, document
+// range or HSN row is numbered in its list.
+const scalars=(item:object)=>JSON.stringify(Object.entries(item).filter(([,value])=>typeof value!=="object"));
+const indexes=new WeakMap<object,Map<string,Record<string,unknown>>>();
+function merge(into:Record<string,unknown>,from:Record<string,unknown>) {
+  for(const [key,value] of Object.entries(from)) {
+    if(!value || typeof value!=="object") into[key]=value;
+    else if(!Array.isArray(value)) merge((into[key] ??= {}) as Record<string,unknown>,value as Record<string,unknown>);
+    else for(const item of value as Record<string,unknown>[]) {
+      const list=(into[key] ??= []) as Record<string,unknown>[],index=indexes.get(list) ?? new Map(),id=scalars(item);indexes.set(list,index);
+      const same=/^(itms|docs|hsn)/.test(key) ? undefined : index.get(id);
+      if(same) merge(same,item);
+      else {const added:Record<string,unknown>={};list.push(added);index.set(id,added);merge(added,item);if("num" in item) added.num=list.length;}
+    }
+  }
+}
+
+// The portal JSON, in GSTN's GSTR-1 save structure (the pinned request schema), for Prepare Offline:
+// one GSTIN a file, each file at most 5 MB, several files a month allowed (Returns Offline Tool
+// manual, FAQs 43 and 44). An invoice or note with an IRN is left out: the portal has it from the
+// e-invoice system already, and uploading it again wipes its IRN details. The tool's own "version"
+// and "hash" fields are not published, so they are left out.
+export function gstr1Json(...args:Parameters<typeof gstr1>) {
+  const [,period,gstin]=args,{validate,portal}=gstr1(...args),payload:Record<string,unknown>={gstin,fp:period.slice(5)+period.slice(0,4)};
+  // Table 15 needs a "tax payer action" flag the workbook has no column for (see above).
+  if(portal.some(({data})=>"ecom" in data || "ecoma" in data)) throw new Error("Supplies an e-commerce operator reports in table 15 are in this month. Make the JSON from the Excel with the offline tool");
+  const einvoiced=new Set(portal.filter((row)=>row.irn).map((row)=>row.key));
+  for(const {data,key} of portal) if(!einvoiced.has(key)) merge(payload,data);
+  if(Object.keys(payload).length<3) throw new Error("Every row came from e-invoices, so the portal has them already");
+  return portalFiles(payload).map((part)=>{if(!validate(part)) throw new Error("A register row does not pass the official form's checks");return Buffer.from(JSON.stringify(part));});
+}
+
+// Each file holds whole invoices and notes, and whole summary tables, under the GSTIN and month.
+export function portalFiles(payload:Record<string,unknown>,limit=5_000_000) {
+  const {gstin,fp,...tables}=payload,files:Record<string,unknown>[]=[];let size=0;
+  const units=Object.entries(tables).flatMap(([key,value])=>!Array.isArray(value) ? [{[key]:value}] : value.flatMap((entry:Record<string,unknown>)=>{
+    const child=["inv","nt"].find((name)=>Array.isArray(entry[name]));
+    return child ? (entry[child] as unknown[]).map((item)=>({[key]:[{...entry,[child]:[item]}]})) : [{[key]:[entry]}];
+  }));
+  for(const unit of units) {
+    const bytes=Buffer.byteLength(JSON.stringify(unit));
+    if(!files.length || size+bytes>limit) {files.push({gstin,fp});size=Buffer.byteLength(JSON.stringify({gstin,fp}));}
+    merge(files.at(-1)!,unit);size+=bytes;
+  }
+  if(files.some((file)=>Buffer.byteLength(JSON.stringify(file))>limit)) throw new Error("One invoice is too large for a portal file");
+  return files;
 }

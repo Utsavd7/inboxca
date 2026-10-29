@@ -73,14 +73,19 @@ test("prepared files keep versions and checked sources, then file with an acknow
     expect((await other.request.post(`/app/files/${external.id}/filing`,{headers:{Origin:"https://invented.invalid"}})).status()).toBe(403);
     await other.screenshot({path:test.info().outputPath("prepared.png"),fullPage:true});
     expect(await other.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+    // GSTR-1 downloads the portal JSON made from the corrected, checked figures; the workbook is the Excel for the offline tool.
     const download=other.waitForEvent("download",{timeout:20_000});await approved.getByRole("button",{name:"Download for filing"}).click();const downloaded=await download;
-    expect(createHash("sha256").update(await readFile((await downloaded.path())!)).digest("hex")).toBe(external.sha256);expect((await other.request.get(downloaded.url())).status()).toBe(410);
+    expect(downloaded.suggestedFilename()).toMatch(/\.json$/);
+    expect(JSON.parse(await readFile((await downloaded.path())!,"utf8"))).toMatchObject({gstin:inventedGstin(),fp:"092026",b2b:[{inv:[{inum:"INV/1",itms:[{itm_det:{rt:18,txval:102,camt:9.18,samt:9.18}}]}]}]});
+    expect((await other.request.get(downloaded.url())).status()).toBe(410);
+    const excel=other.waitForEvent("download",{timeout:20_000});await approved.locator("summary",{hasText:"More"}).click();await approved.getByRole("button",{name:"Excel for the offline tool"}).click();
+    expect(createHash("sha256").update(await readFile((await (await excel).path())!)).digest("hex")).toBe(external.sha256);
     await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,'GSTR1_M','2026-09','2026-10-11')",[firm.firmId,client,registration]);
     await approved.locator("summary",{hasText:"Mark filed"}).click();
     await approved.getByLabel("Or upload the portal acknowledgement").setInputFiles({name:"invented-ack.pdf",mimeType:"application/pdf",buffer:Buffer.from(pdf("Invented filing acknowledgement"))});await approved.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select prepared->>'status' status from public.documents where id=$1",[external.id]))[0].status).toBe("filed");
     expect((await query(local.dbUrl,"select status from public.tasks where firm_id=$1 and code='GSTR1_M'",[firm.firmId]))[0].status).toBe("filed");
-    expect((await query(local.dbUrl,"select count(*)::int n from public.activity_log where firm_id=$1 and action='form.downloaded'",[firm.firmId]))[0].n).toBe(1);
+    expect((await query(local.dbUrl,"select count(*)::int n from public.activity_log where firm_id=$1 and action='form.downloaded'",[firm.firmId]))[0].n).toBe(2);
     const [filed]=await query(local.dbUrl,"select prepared from public.documents where id=$1",[external.id]);expect(filed.prepared.status).toBe("filed");expect(filed.prepared.acknowledgement).toBeTruthy();
     // A second GST number: each register is given its number before its GSTR-1 is offered.
     const otherGstin=inventedGstin("ZZZPZ0003Z");

@@ -4,6 +4,7 @@ import {draftSchema,openFigures,verifySources,type Figure} from "./datasets";
 import {fillReasons,fills,notReady,returnPeriod} from "./return-work";
 import {itrReady} from "./itr-fields";
 import {formName} from "./prepared";
+import {gstPortalClosed,gstPortalTakes} from "./calendar";
 
 // Fill (PLAN.md 5.7.4 as the user changed it on 26 Oct 2026): a GSTR-1, GSTR-3B or ITR made from
 // every figure InboxCA has read for the return, checked or not. Read with the caller's own database
@@ -19,6 +20,7 @@ export async function fillWork(db:SupabaseClient<Database>,firm:string,task:stri
   ]);
   if(!row?.registration_id || !row.period_key || !row.code || !stages?.[0] || !fills(row.code)) return {refusal:"InboxCA cannot fill this return here."};
   const itr=row.code.startsWith("ITR_"),forms=[...new Set((drafts ?? []).flatMap(draft=>draft.target ? [draft.target] : []))];
+  if(!itr && !gstPortalTakes(row.period_key)) return {refusal:gstPortalClosed};
   const papers=(drafts ?? []).map(draft=>draft.document).filter((id):id is string=>!!id);
   const {data:names}=papers.length ? await db.from("documents").select("id,name").eq("firm_id",firm).in("id",papers) : {data:[]};
   // Only a file corrected outside InboxCA has to be checked first: an earlier fill whose figures

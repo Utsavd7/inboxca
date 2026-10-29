@@ -59,3 +59,18 @@ export function unpack(entry: ReturnType<typeof zipEntries>[number]) {
   if (/^(PK\x03\x04|Rar!|7z\xbc\xaf|\x1f\x8b|BZh|\xfd7zXZ)/.test(head) && !containers.test(entry.name)) throw new Refused("zip");
   return bytes;
 }
+
+// Files InboxCA made, stored as they are in one ZIP for a single download.
+export function zipFiles(files: [string, Buffer][]) {
+  const parts: Buffer[] = [], directory: Buffer[] = [];
+  let offset = 0;
+  for (const [name, bytes] of files) {
+    const path = Buffer.from(name), local = Buffer.alloc(30), central = Buffer.alloc(46);
+    local.writeUInt32LE(0x04034b50); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x800, 6); local.writeUInt16LE(33, 12); local.writeUInt32LE(crc32(bytes), 14); local.writeUInt32LE(bytes.length, 18); local.writeUInt32LE(bytes.length, 22); local.writeUInt16LE(path.length, 26);
+    central.writeUInt32LE(0x02014b50); central.writeUInt16LE(20, 4); local.copy(central, 6, 4, 30); central.writeUInt32LE(offset, 42);
+    parts.push(local, path, bytes); directory.push(central, path); offset += local.length + path.length + bytes.length;
+  }
+  const index = Buffer.concat(directory), end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(index.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, index, end]);
+}
