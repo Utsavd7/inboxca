@@ -13,7 +13,7 @@ export const legalNote =
 // The person who answers questions, rights requests and complaints, and how fast (DPDP Act
 // section 8(9), 8(10) and 13; the Rules allow up to 90 days; the E-Commerce Rules ask for an
 // acknowledgement within 48 hours and an answer within a month).
-export const grievanceContact = "Utsav Doshi";
+export const grievanceContact = "Utsav Doshi and Ria Chheda";
 export const grievanceAcknowledge = "48 hours";
 export const grievanceAnswer = "30 days";
 
@@ -102,7 +102,7 @@ export const privacySections = [
     points: [
       "You can ask to see a summary of the personal data we hold about you and how it is used, to correct or complete it, or to delete it. You can withdraw a consent you gave.",
       "You can name another person to exercise these rights for you if you die or cannot act.",
-      `Write to ${contactEmail} from the email address your account uses, so that we know it is you. We answer within ${grievanceAnswer}.`,
+      `Write to ${grievanceContact} at ${contactEmail} from the email address your account uses, so that we know it is you. We answer within ${grievanceAnswer}.`,
       "If you are a client of a CA firm, ask your firm first. It decides what happens to your data, and InboxCA helps it answer.",
     ],
   },
@@ -110,7 +110,7 @@ export const privacySections = [
     id: "grievance",
     title: "Complaints",
     points: [
-      `${grievanceContact} is the grievance contact for InboxCA. Write to ${contactEmail}.`,
+      `${grievanceContact} are the grievance contacts for InboxCA. Write to ${contactEmail}.`,
       `We acknowledge a complaint within ${grievanceAcknowledge} and answer it within ${grievanceAnswer}.`,
       "If we do not settle it, you can complain to the Data Protection Board of India.",
     ],
@@ -241,7 +241,7 @@ export const termsSections = [
     title: "Law and disputes",
     points: [
       "These terms follow the laws of India. Disputes go to the courts at Mumbai, after both sides have first tried to settle by writing to each other for 30 days.",
-      `Notices to Orelu go to ${contactEmail}. Notices to your firm go to the owner's email address.`,
+      `Notices to Orelu go to ${grievanceContact} at ${contactEmail}. Notices to your firm go to the owner's email address.`,
     ],
   },
 ] as const;
