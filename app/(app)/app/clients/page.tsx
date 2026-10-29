@@ -1,5 +1,6 @@
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
+import { itrYear } from "@/src/lib/itr-fields";
 import { paperType } from "@/src/lib/paper-type";
 import { sendSkip, type BulkSend } from "@/src/lib/records";
 import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lucide-react";
@@ -403,7 +404,7 @@ export default async function Clients({
           types={documentTypes}
           years={periodChoices(todayInIndia())
             .filter((key) => key.length === 4)
-            .map((key) => [key, `${periodName(key)} (AY ${key}-${String(Number(key) + 1).slice(2)})`])}
+            .map((key) => [key, key >= "2027" ? periodName(key) : `${periodName(key)} (${itrYear(key)})`])}
         />
       )}
     </div>

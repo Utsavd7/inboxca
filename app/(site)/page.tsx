@@ -239,7 +239,7 @@ export default function Home() {
               </p>
             </Reveal>
             <Reveal className="makers">
-              <p>InboxCA is built by Orelu.</p>
+              <p>InboxCA is a product of Orelu, a partnership firm.</p>
               <ul>
                 {makers.map(([name, role]) => (
                   <li key={name}>

@@ -16,7 +16,7 @@ export default function Page() {
       note={legalNote}
       sections={privacySections}
       contactTitle="Questions and complaints"
-      contactText="Utsav Doshi answers privacy questions and complaints."
+      contactText="Utsav Doshi answers privacy questions, rights requests and complaints: acknowledged within 48 hours, answered within 30 days."
     />
   );
 }

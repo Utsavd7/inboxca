@@ -62,7 +62,7 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
     <div className="pane client-pane">
     <Form action={`/app/clients/${id}/itr`} className="form-row">
       <div><label htmlFor="return">Return</label><select id="return" name="form" defaultValue={form}>{itrReturns.map(code=><option key={code} value={code}>{formName(code)}</option>)}</select></div>
-      <div><label htmlFor="year">Assessment year (type 2026 for AY 2026-27)</label><input id="year" name="year" defaultValue={period} inputMode="numeric" pattern="20[0-9]{2}" required/></div>
+      <div><label htmlFor="year">Year (type 2026 for AY 2026-27, 2027 for tax year 2026-27)</label><input id="year" name="year" defaultValue={period} inputMode="numeric" pattern="20[0-9]{2}" required/></div>
       <button className="b b-secondary">Open</button>
     </Form>
     {q.message && <p className="alert" role="status">{(await keptReason()) ?? "InboxCA could not save these entries. Amounts need digits only, and dates must be real days. To change a figure already saved, use Check the figures."}</p>}

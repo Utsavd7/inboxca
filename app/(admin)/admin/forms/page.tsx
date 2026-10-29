@@ -1,14 +1,15 @@
 import { Badge, PageHead } from "@/app/(app)/app/ui";
 import { addDays } from "@/src/lib/calendar";
+import { itrYear } from "@/src/lib/itr-fields";
 import { endTemplate } from "../actions";
 import { currentAdmin } from "../admin";
 import { Submit } from "../parts";
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-// A version's periods as people say them: months for GST forms, assessment years for ITR.
+// A version's periods as people say them: months for GST forms, the return's year (AY or tax year) for ITR.
 function periods(form: string, from: string, until: string | null) {
   const itr = /^ITR/.test(form);
-  const label = (day: string) => (itr ? `AY ${day.slice(0, 4)}-${String(Number(day.slice(0, 4)) + 1).slice(2)}` : `${months[Number(day.slice(5, 7)) - 1]} ${day.slice(0, 4)}`);
+  const label = (day: string) => (itr ? itrYear(day.slice(0, 4)) : `${months[Number(day.slice(5, 7)) - 1]} ${day.slice(0, 4)}`);
   const first = label(from), last = until && label(itr ? `${Number(until.slice(0, 4)) - 1}-04-01` : addDays(until, -1));
   return !last ? `${first} onwards` : first === last ? first : `${first} to ${last}`;
 }
@@ -42,7 +43,7 @@ export default async function AdminForms({ searchParams }: { searchParams: Promi
               </div>
               {template.status !== "draft" && template.valid_from && !template.valid_until && (
                 <>
-                  <label>Last period {/^ITR/.test(template.form_code) ? <input name="last" inputMode="numeric" pattern="20[0-9]{2}" placeholder="2026 for AY 2026-27" required /> : <input name="last" type="month" required />}</label>
+                  <label>Last period {/^ITR/.test(template.form_code) ? <input name="last" inputMode="numeric" pattern="20[0-9]{2}" placeholder="2026 for AY 2026-27, 2027 for tax year 2026-27" required /> : <input name="last" type="month" required />}</label>
                   <label>Official link that discontinues it <input name="link" type="url" pattern="https://.*" required /></label>
                   <Submit>Set last period</Submit>
                 </>
