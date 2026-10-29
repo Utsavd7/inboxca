@@ -822,7 +822,7 @@ export default async function Settings({
           <Card id="data" title="Your data" line="Your client list, returns and notices, the list of papers and the activity log, as spreadsheet files in one ZIP. The papers themselves are already in your firm's drive.">
             <div className="set-foot">{download}</div>
           </Card>
-          <Card id="support" title="Orelu support" line="Orelu is the company that makes InboxCA. Orelu cannot see your clients or papers. To fix a problem, Orelu support may ask here to see your people and client names for one hour.">
+          <Card id="support" title="Orelu support" line="InboxCA is a product of Orelu, a partnership firm. Orelu cannot see your clients or papers. To fix a problem, Orelu support may ask here to see your people and client names for one hour.">
             <Support supabase={supabase} firmId={membership.firmId} />
           </Card>
           <Card id="close" title="Close the firm" danger line="Everyone is signed out, your team can no longer sign in, and the firm email and drive are disconnected. For 30 days you can still sign in and download your data. Then InboxCA deletes your firm's data; the activity log is kept one more year, as Indian rules require. Papers in your drive are not touched.">

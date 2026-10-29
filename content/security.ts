@@ -1,9 +1,9 @@
 // Security policy copy. Every point follows PLAN.md section 8 and decisions D6, D13,
 // D18, D19 and D36. InboxCA is in development, so this describes how it is being
-// built. A lawyer reviews it with the terms and privacy notice before the pilot.
+// built. It is reviewed again with the terms and privacy notice before the pilot.
 import { analyticsToken } from "@/src/lib/site";
 
-export const securityUpdated = "27 Oct 2026";
+export const securityUpdated = "29 Oct 2026";
 
 export const securitySections = [
   {
@@ -13,8 +13,8 @@ export const securitySections = [
       "Your client files stay in your firm's own OneDrive or Dropbox. InboxCA does not keep them.",
       "InboxCA can read the drive you connect, and touches only the folders you choose and its own InboxCA folder. Connect a drive kept for your firm.",
       "A file passes through InboxCA only while it is checked and filed. That is at most 24 hours, or up to 7 days if your drive cannot be reached.",
-      "Your client list, your records and the figures read from files are kept in a database in Mumbai, India.",
-      "InboxCA's temporary files and safety copies are held outside India, and they are encrypted.",
+      "Your client list, your records and the figures read from files will be kept in a Supabase database. Its region is chosen at launch, and India is planned.",
+      "InboxCA's temporary files and safety copies are planned for Backblaze B2, which is outside India. They are encrypted.",
     ],
   },
   {
@@ -24,7 +24,7 @@ export const securitySections = [
       "Email subjects and email text. Your emails stay in your own mailbox.",
       "Portal passwords and OTPs. InboxCA never logs in to the GST or income tax portal.",
       "Card and bank details. Payments go through Cashfree's own checkout.",
-      "Full Aadhaar numbers. Only the last 4 digits are shown.",
+      "Aadhaar numbers. InboxCA does not ask for them, and a 12 digit number found in a paper is masked in InboxCA's logs.",
     ],
   },
   {
@@ -32,7 +32,7 @@ export const securitySections = [
     title: "Encryption",
     points: [
       "Everything that travels between you, InboxCA and its services is encrypted (TLS 1.2 or newer).",
-      "Each firm has its own encryption key. The master key sits in a key vault in Mumbai and never leaves it.",
+      "Each firm has its own encryption key. The master key sits in a key vault (AWS KMS, planned for the Mumbai region) and never leaves it.",
       "PAN, GSTIN, phone numbers, email addresses, bank details and the figures read from your files are encrypted with your firm's key (AES 256).",
       "Files in your drive are protected by your drive provider's own encryption and by your own account, so that you can always open them yourself.",
     ],
@@ -66,7 +66,7 @@ export const securitySections = [
     points: [
       "An outside security firm tests InboxCA for weaknesses, and again every year.",
       "Restoring from backup and changing the encryption keys are both rehearsed.",
-      "A lawyer reviews the terms, the privacy notice and the data processing agreement.",
+      "The terms, the privacy notice and the data processing agreement are reviewed again.",
       "Critical weaknesses are fixed within 7 days of being found, and serious ones within 30.",
     ],
   },
@@ -76,6 +76,7 @@ export const securitySections = [
     points: [
       "Your firm is told within 24 hours: what happened, which data, and what to do.",
       "Incidents that must be reported go to CERT-In within 6 hours.",
+      "Where Orelu is the data fiduciary, it reports to the Data Protection Board of India as section 8(6) of the DPDP Act and its Rules require; for your clients' data your firm reports, with what Orelu gives it.",
       "The database is backed up every 6 hours, so at most 6 hours of records could be lost. Your files are in your own drive and are backed up by your drive provider.",
     ],
   },
@@ -86,18 +87,19 @@ export const securitySections = [
       "The Digital Personal Data Protection Act 2023 and its Rules of 2025.",
       "The Information Technology Act 2000 and the CERT-In directions of April 2022.",
       "The Reserve Bank's rules for card and AutoPay payments, through Cashfree.",
-      "For your clients' data, your firm decides and InboxCA only follows your instructions, under a signed data processing agreement.",
+      "For your clients' data, your firm decides and InboxCA only follows your instructions, under the data processing agreement your firm accepts at sign up.",
     ],
   },
   {
     id: "services",
-    title: "Services InboxCA runs on",
+    title: "Services InboxCA will run on",
     points: [
-      "Supabase, in Mumbai: the database and sign in.",
-      "Cloudflare: the website and the app.",
-      "Amazon Web Services, in Mumbai: the key vault, file checks and system email.",
-      "Backblaze: InboxCA's encrypted temporary files, safety copies and backups.",
-      "OpenAI: AI, with nothing kept.",
+      "Decided on 29 Oct 2026 and planned for launch; this list is updated when each one is live.",
+      "Supabase: the database and sign in. Region chosen at launch, India planned.",
+      "DigitalOcean, in Bangalore: the server that runs the website and the app.",
+      "Amazon Web Services: the key vault (KMS, Mumbai region planned) and, later, system email (SES). Resend sends system email until then.",
+      "Backblaze B2: InboxCA's encrypted temporary files, safety copies and backups.",
+      "OpenAI: AI, which receives only the email or paper being worked on.",
       "Cashfree: plan payments. Sentry: error reports, with personal details removed.",
       "Your own mailbox (Google, Microsoft or Zoho) and your own drive (Microsoft or Dropbox).",
     ],
@@ -108,8 +110,8 @@ export const securitySections = [
     points: [
       "* The screens on this website are illustrations, and the firms, names and figures in them are sample data.",
       analyticsToken
-        ? "This website sets no cookies. It counts visits without cookies and without knowing who you are."
-        : "This website sets no cookies and has no tracking or analytics.",
+        ? "This website's pages set no cookies. It counts visits without cookies and without knowing who you are. Signing up or signing in sets only the cookies that keep you signed in and remember your choices."
+        : "This website's pages set no cookies and have no tracking or analytics. Signing up or signing in sets only the cookies that keep you signed in and remember your choices.",
       "Other companies' names and logos belong to their owners. They are shown only to say what InboxCA is built to work with, and do not mean a partnership.",
     ],
   },

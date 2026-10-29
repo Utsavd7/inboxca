@@ -27,12 +27,16 @@ export function Footer() {
             <Link href="/privacy">Privacy</Link>
             <Link href="/terms">Terms</Link>
             <Link href="/refunds">Refunds</Link>
+            <Link href="/dpa">Data processing</Link>
+            <Link href="/privacy#grievance">Complaints</Link>
             <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
           </nav>
         </div>
         <p className="footnote">
           * Screens show sample data.{" "}
-          <Link href="/security#website">About this website</Link>
+          <Link href="/security#website">About this website</Link>. InboxCA is a
+          product of Orelu, a partnership firm. Other names and logos belong to
+          their owners and imply no partnership.
         </p>
       </div>
     </footer>

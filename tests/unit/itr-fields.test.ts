@@ -31,6 +31,10 @@ it("does not label unrestricted gains as section 112A or give firms a salary sch
 });
 
 it("names a return's year as the law of that year does",()=>{
+  // Income up to 31 Mar 2026 is under the 1961 Act (assessment years); from 1 Apr 2026 the
+  // Income-tax Act 2025 names a tax year.
+  expect(itrYear("2025")).toBe("AY 2025-26");
   expect(itrYear("2026")).toBe("AY 2026-27");
   expect(itrYear("2027")).toBe("Tax year 2026-27");
+  expect(itrYear("2028")).toBe("Tax year 2027-28");
 });

@@ -232,7 +232,7 @@ for (const [path, title] of [
       "content",
       "noindex, nofollow",
     );
-    await expect(page.getByText("a lawyer will review it")).toBeVisible();
+    await expect(page.getByText("registration is in progress").first()).toBeVisible();
     expect(await axe(page)).toEqual([]);
   });
 
@@ -245,7 +245,7 @@ test("the data processing agreement is linked from sign up, private and accessib
   await expect(page).toHaveURL(/\/dpa$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Data processing agreement");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
-  await expect(page.getByText("a lawyer will review it")).toBeVisible();
+  await expect(page.getByText("registration is in progress").first()).toBeVisible();
   expect(await axe(page)).toEqual([]);
 });
 

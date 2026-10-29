@@ -29,7 +29,7 @@ function Comparison({ compared, change, used }: { compared: Compared; change: Ch
       <span className="sub">{compared.file}: same layout as {compared.with}. InboxCA has kept the file, so it can be used without an app update.</span>
       {compared.failed && <span className="sub">It did not go live by itself: a return InboxCA made with it failed a check. {compared.failed}</span>}
       {compared.renamed && <label><input type="checkbox" name="year" value="checked" required /> Its name is for another year than version {compared.with}. I have checked the year it is for</label>}
-      <label>Use this version from {/^ITR/.test(next.form_code) ? <input name="from" inputMode="numeric" pattern="20[0-9]{2}" placeholder="2026 for AY 2026-27" required /> : <input name="from" type="month" required />}</label>
+      <label>Use this version from {/^ITR/.test(next.form_code) ? <input name="from" inputMode="numeric" pattern="20[0-9]{2}" placeholder="2026 for AY 2026-27, 2027 for tax year 2026-27" required /> : <input name="from" type="month" required />}</label>
       <Submit>Use this version</Submit>
     </form>
   );
@@ -82,7 +82,7 @@ export default async function AdminToday({ searchParams }: { searchParams: Promi
     <>
       <PageHead title="Today's changes" sub={checked ? `The daily check of official forms. ${Object.keys(watch.sources ?? {}).length} sources, last checked ${when(checked)}.` : "The daily check of official forms has not run yet."} />
       {problem === "line" && <p className="alert" role="alert">Give either the date InboxCA uses it from or the periods it keeps the earlier version for (3 to 80 letters).</p>}
-      {problem === "use" && <p className="alert" role="alert">Give a month (an assessment year for ITR) within the periods of the version it matches. A version already in the list of forms is not added again.</p>}
+      {problem === "use" && <p className="alert" role="alert">Give a month (the return&apos;s year for ITR) within the periods of the version it matches. A version already in the list of forms is not added again.</p>}
       <section className="admin-card" aria-label="Changes to review">
         <h2>Changes to review</h2>
         {changes.length ? (
