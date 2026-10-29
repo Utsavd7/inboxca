@@ -5,13 +5,16 @@ import type { Handler } from "./runner";
 
 // The outage email (PLAN.md 5.17 #43): one firm's owners are told what is not working and
 // where to follow it. The words are the admin's public title, never a firm's or client's data.
+// Each owner's email is logged as it goes, so a try that stops part way never emails one twice.
 export const outageEmail: Handler = async (job, { markSending }) => {
   if (!systemMailReady()) return { fail: "system_mail_off" };
   const admin = supabaseAdmin();
-  const [{ data: incident }, { data: owners }] = await Promise.all([
+  const [{ data: incident }, { data: owners }, { data: told, error }] = await Promise.all([
     admin.from("incidents").select("title, parts, ended_at").eq("id", job.entity_id!).maybeSingle(),
     admin.from("firm_members").select("user_id").eq("firm_id", job.firm_id!).eq("role", "owner").eq("status", "active"),
+    admin.from("activity_log").select("person:details->>person").eq("entity_id", job.entity_id!).eq("firm_id", job.firm_id!).eq("action", "incident.emailed"),
   ]);
+  if (error) return { retry: "sent_not_read" };
   if (!incident || incident.ended_at) return { done: true };
   const parts = incident.parts.map((part) => statusParts[part as Part]).join(", ");
   const text = [
@@ -23,8 +26,10 @@ export const outageEmail: Handler = async (job, { markSending }) => {
   ].join("\n\n");
   await markSending();
   for (const owner of owners ?? []) {
+    if (told.some((row) => row.person === owner.user_id)) continue;
     const email = (await admin.auth.admin.getUserById(owner.user_id)).data.user?.email;
-    if (email) await sendSystemMail(email, `InboxCA: ${incident.title}`, text);
+    if (email && (await sendSystemMail(email, `InboxCA: ${incident.title}`, text)))
+      await admin.from("activity_log").insert({ firm_id: job.firm_id!, action: "incident.emailed", entity_type: "incident", entity_id: job.entity_id!, details: { person: owner.user_id } });
   }
   return { done: true };
 };

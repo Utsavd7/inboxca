@@ -90,8 +90,9 @@ export async function mailTokenForget(firm: string, actor: string) {
 
 // The firm's own mailbox, opened to send plain messages, or null when none is connected
 // (PLAN.md 5.2.1, 8.7). A message is written and sent in memory and never kept (D6). A
-// message sent with its own Message-ID can be looked for in the Sent folder later, so a
-// send that may or may not have happened is never repeated blindly.
+// message sent with its own Message-ID is recorded with its slot before SMTP, and let go
+// only when the send fails, so a send that may or may not have happened is never repeated
+// blindly, even where the provider keeps no copy in the Sent folder.
 export async function firmMailer(firmId: string, firmName: string) {
   const { data: mailbox } = await supabaseAdmin().from("connected_accounts").select("id, provider, address_enc, credentials_enc, settings, status").eq("firm_id", firmId).eq("kind", "mail").maybeSingle();
   if (mailbox?.status !== "connected") return null;
@@ -105,15 +106,18 @@ export async function firmMailer(firmId: string, firmName: string) {
     // a copy is put in the Sent folder when the provider does not keep one itself.
     async send(to: string, subject: string, text: string, messageId?: string, inReplyTo?: string, reply?: { references: string[]; attachments: { filename: string; content: Buffer }[] }) {
       waitUntil=null;
-      const {data,error}=await supabaseAdmin().rpc("reserve_mail_send",{account_id:mailbox.id});
+      const {data,error}=await supabaseAdmin().rpc("reserve_mail_send",{account_id:mailbox.id,...(messageId && {message_id:messageId})});
       if (error) throw new Error("mail_limit_not_read");
       const slot=data as {ready:boolean;at:string};
       if (!slot.ready) { waitUntil=new Date(slot.at); return false; }
       await new Promise((resolve)=>setTimeout(resolve,Math.max(0,Date.parse(slot.at)-Date.now())));
+      let box!: MailAccess;
+      let message!: Parameters<typeof api.sendMail>[1];
       try {
-        const box = await access();
-        if ("error" in box) throw Object.assign(new Error("mail_token"), { code: box.error === "sign_in" ? "EAUTH" : "ECONNECTION" });
-        const message = {
+        const opened = await access();
+        if ("error" in opened) throw Object.assign(new Error("mail_token"), { code: opened.error === "sign_in" ? "EAUTH" : "ECONNECTION" });
+        box = opened;
+        message = {
           from: `${firmName} <${box.address}>`,
           to,
           subject,
@@ -124,13 +128,8 @@ export async function firmMailer(firmId: string, firmName: string) {
         };
         if (box.provider === "imap") await smtpTransport(box.address, box.password, box.settings.smtp).sendMail(message);
         else await api.sendMail(box, message);
-        await mailHealth(mailbox.id,"send",false,mailbox.credentials_enc);
-        if (box.provider === "imap" && reply && messageId) {
-          const copy = await nodemailer.createTransport({ streamTransport: true, buffer: true }).sendMail(message);
-          await keepInSent(box.address, box.password, box.settings.imap, copy.message as Buffer, messageId);
-        }
-        return true;
       } catch (failure) {
+        if (messageId) await supabaseAdmin().rpc("forget_mail_send",{account_id:mailbox.id,message_id:messageId});
         if (signInFailed(failure)) {
           await mailHealth(mailbox.id,"send",true,mailbox.credentials_enc);
           waitUntil=new Date(Date.now()+60_000);
@@ -138,11 +137,24 @@ export async function firmMailer(firmId: string, firmName: string) {
         log.warn("firm_mail_failed", { code: (failure as { code?: string }).code ?? "send" });
         return false;
       }
+      // It went: what follows is kept on its own, so a hiccup here never reports it failed.
+      await mailHealth(mailbox.id,"send",false,mailbox.credentials_enc).catch(()=>log.warn("mail_health_not_saved"));
+      if (box.provider === "imap" && reply && messageId) {
+        const { address, password, settings } = box;
+        await nodemailer.createTransport({ streamTransport: true, buffer: true }).sendMail(message)
+          .then((copy) => keepInSent(address, password, settings.imap, copy.message as Buffer, messageId)).catch(() => log.warn("sent_copy_failed"));
+      }
+      return true;
     },
+    // Over IMAP the recorded id says a send was tried and not known to fail; the Sent folder is
+    // looked in only for one sent before ids were recorded, or more than 24 hours ago.
     async sentAlready(messageId: string) {
       const box = await access();
       if ("error" in box) throw new Error("sent_not_read");
-      return box.provider === "imap" ? foundInSent(box.address, box.password, box.settings.imap, messageId) : api.foundInSent(box, messageId);
+      if (box.provider !== "imap") return api.foundInSent(box, messageId);
+      const {data:account,error}=await supabaseAdmin().from("connected_accounts").select("settings").eq("id",mailbox.id).maybeSingle();
+      if (error) throw new Error("sent_not_read");
+      return !!(account?.settings as {mail_ids?:Record<string,string>}|undefined)?.mail_ids?.[messageId] || foundInSent(box.address, box.password, box.settings.imap, messageId);
     },
   };
 }

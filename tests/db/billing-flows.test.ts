@@ -194,6 +194,78 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     expect(await statusOf(firm.id)).toBe("read_only");
   });
 
+  it("asks again with the same id for a debit or refund whose answer was lost, so the money moves once and its webhook still lands", async () => {
+    const firm = await activeFirm("lost");
+    const due = money.addDays(today(), 2);
+    await db.query("update public.subscriptions set paid_until = $2 where firm_id = $1", [firm.id, due]);
+    fake.fail("/pg/subscriptions/pay", "lost");
+    await expect(billing.dailyBilling(firm.id)).rejects.toThrow();
+    const [renewal] = await paymentsOf(firm.id, "renewal");
+    expect(renewal).toMatchObject({ status: "created", details: { unsure: true } });
+    // The billing job's next try raises the same debit again, never a second one.
+    await billing.dailyBilling(firm.id);
+    const raised = fake.calls.filter((call) => call.path === "/pg/subscriptions/pay" && call.body.payment_id === renewal.id);
+    expect(raised).toHaveLength(2);
+    expect(raised[1].body).toEqual(raised[0].body);
+    expect(await paymentsOf(firm.id, "renewal")).toMatchObject([{ id: renewal.id, status: "created", details: { via: "charge" } }]);
+    expect((await paymentsOf(firm.id, "renewal"))[0].details.unsure).toBeUndefined();
+    await fake.charge(renewal.id, "SUCCESS");
+    await hook(last!.raw, last!.headers);
+    expect((await subOf(firm.id)).paid_until).toBe(money.addMonths(due, 1));
+    expect((await paymentsOf(firm.id, "renewal"))[0]).toMatchObject({ status: "done", doc: { kind: "receipt" } });
+
+    fake.settleRefunds(null);
+    fake.fail("/refunds", "lost");
+    expect(await billing.adminRefund(renewal.id, firm.owner, "duplicate")).toBe(true);
+    const [back] = await paymentsOf(firm.id, "refund");
+    expect(back).toMatchObject({ status: "created", details: { unsure: true } });
+    expect(await billing.adminRefund(renewal.id, firm.owner, "duplicate")).toBe(false);
+    expect(await billing.retryRefund(back.id)).toBe(true);
+    expect(fake.calls.filter((call) => call.path.endsWith("/refunds") && call.body.refund_id === back.id)).toHaveLength(2);
+    await fake.refund(back.id, "SUCCESS");
+    expect(await paymentsOf(firm.id, "refund")).toMatchObject([{ id: back.id, status: "done" }]);
+  });
+
+  it("records a payment and what it buys together, so a grant that fails leaves nothing done and the webhook's retry grants it all, once", async () => {
+    const firm = await activeFirm("grant");
+    await billing.buy(firm.id, firm.owner, { kind: "extra_user" }, returnUrl);
+    const [person] = await paymentsOf(firm.id, "extra_user");
+    // The subscription's write fails once for this firm alone, as a database error would.
+    const stop = `test_grant_stop_${run}`;
+    await db.query(`create function public.${stop}() returns trigger language plpgsql as $$ begin raise exception 'grant failed'; end $$`);
+    await db.query(`create trigger ${stop} before update on public.subscriptions for each row when (new.firm_id = '${firm.id}') execute function public.${stop}()`);
+    try {
+      await expect(fake.pay(person.id)).rejects.toThrow("webhook 500");
+    } finally {
+      await db.query(`drop trigger ${stop} on public.subscriptions`);
+      await db.query(`drop function public.${stop}()`);
+    }
+    expect((await paymentsOf(firm.id, "extra_user"))[0]).toMatchObject({ status: "created", doc: null });
+    expect((await subOf(firm.id)).plan.people).toBe(1);
+    await hook(last!.raw, last!.headers);
+    await hook(last!.raw, last!.headers);
+    expect((await paymentsOf(firm.id, "extra_user"))[0]).toMatchObject({ status: "done", doc: { kind: "receipt" } });
+    expect((await subOf(firm.id)).plan.people).toBe(2);
+  });
+
+  it("tells the admins when an eNACH first debit cannot be raised, and the daily run raises it again", async () => {
+    const firm = await newFirm("first");
+    await billing.startAutoPay(firm.id, firm.owner, { plan: solo, cycle: "monthly", method: "enach", phone: "9876543210", address: "2 Invented Lane, Pune", returnUrl });
+    const { mandate } = await subOf(firm.id);
+    fake.fail("/pg/subscriptions/pay", "refused");
+    await fake.authorise(mandate, "enach");
+    const [refused] = await paymentsOf(firm.id, "plan");
+    expect([refused.status, await statusOf(firm.id)]).toEqual(["cancelled", "pending"]);
+    const { value } = await one("select value from public.platform_settings where key = 'billing'");
+    expect(value.alerts).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "first_debit_failed", ref: firm.id })]));
+    await billing.dailyBilling(firm.id);
+    const plans = await paymentsOf(firm.id, "plan");
+    expect(plans.map((row) => [row.status, row.amount_paise])).toEqual([["cancelled", refused.amount_paise], ["created", refused.amount_paise]]);
+    expect(fake.charges.get(plans[1].id)).toMatchObject({ subscription_id: mandate });
+    await fake.charge(plans[1].id, "SUCCESS");
+    expect(await statusOf(firm.id)).toBe("active");
+  });
+
   it("stops AutoPay when the owner cancels in the UPI app, calling off the debit raised", async () => {
     const firm = await activeFirm("cancel");
     await db.query("update public.subscriptions set paid_until = $2 where firm_id = $1", [firm.id, money.addDays(today(), 1)]);
