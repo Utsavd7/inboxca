@@ -584,7 +584,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
      sides made the whole page wider than the screen. */
   .topbar { position: relative; flex-wrap: wrap; gap: var(--s2); }
   .topbar::before { inset: 0 calc(var(--s4) * -1); }
-  .crumbs h1 { font-size: 20px; }
+  .crumbs h1 { font-size: 20px; white-space: normal; overflow-wrap: anywhere; }
   .page-actions { order: 3; justify-content: flex-start; width: 100%; }
   .page-actions + .head-tools { margin: 0; padding: 0; border: 0; }
   .topbar .head-menu, .topbar .head-me { display: inline-flex; }

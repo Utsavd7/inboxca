@@ -9,8 +9,8 @@ type Member=Awaited<ReturnType<typeof currentMember>>;
 // 26AS or Form 16 (src/lib/itr-check.ts), for the client's assigned people, read as the signed in
 // person so row level security decides which clients count. At most 50 returns are checked.
 export async function itrCheckWorkItems({supabase,membership}:{supabase:Member["supabase"];membership:NonNullable<Member["membership"]>;userId?:string}):Promise<WorkItem[]> {
-  const {data:started,error}=await supabase.from("datasets").select("client_id,period_key,form:data->target->>form").eq("firm_id",membership.firmId).eq("form_code","ITR").not("data->target","is",null).not("data->lines->0->source->>entered_by","is",null).limit(200);
-  if(error || !started?.length) return [];
+  const {data:started}=await supabase.from("datasets").select("client_id,period_key,form:data->target->>form").eq("firm_id",membership.firmId).eq("form_code","ITR").not("data->target","is",null).not("data->lines->0->source->>entered_by","is",null).limit(200).throwOnError();
+  if(!started?.length) return [];
   const ids=[...new Set(started.map(row=>row.client_id))];
   const [{data:filed},{data:clients}]=await Promise.all([
     supabase.from("tasks").select("client_id,period_key").eq("firm_id",membership.firmId).like("code","ITR%").eq("status","filed").in("client_id",ids),

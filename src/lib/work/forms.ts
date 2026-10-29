@@ -29,8 +29,7 @@ function action(pin:Pin):[string,string] {
 // Settings says otherwise) a return still waiting for papers, a fill or checks, in red. A
 // "fill:" item's task id follows the colon, for a Fill button in its place.
 export async function formsWorkItems({supabase,membership}:{supabase:Member["supabase"];membership:NonNullable<Member["membership"]>;userId?:string}):Promise<WorkItem[]> {
-  const {data,error}=await supabase.rpc("return_pins",{target_firm:membership.firmId});
-  if(error) return [];
+  const {data}=await supabase.rpc("return_pins",{target_firm:membership.firmId}).throwOnError();
   const today=todayInIndia();
   return ((data ?? []) as Pin[]).map(pin=>{
     const {title,meta}=pinWords(pin,today),[href,label]=action(pin);

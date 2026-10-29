@@ -125,8 +125,8 @@ const todayErrors: Record<string, string> = {
 
 // The greeting's end: how many things need this person.
 async function Things({ work }: { work: ReturnType<typeof workFor> }) {
-  const { total } = await work;
-  return <span>{total ? `${plural(total, "thing needs", "things need")} you.` : "Nothing needs you today."}</span>;
+  const { total, failed } = await work;
+  return <span>{total ? `${plural(total, "thing needs", "things need")} you.` : failed ? "Some of your list could not load." : "Nothing needs you today."}</span>;
 }
 
 // At most two lines above the list (work-data.ts attention): the firm's email or drive not
@@ -194,16 +194,17 @@ async function Attention({ ctx }: { ctx: Context }) {
 
 // Your list: the first 7 of everything that needs this person, most urgent first.
 async function YourList({ work, ctx }: { work: ReturnType<typeof workFor>; ctx: Context }) {
-  const { items, total } = await work;
+  const { items, total, failed } = await work;
   const today = todayInIndia();
   const shown = items.slice(0, SHOWN);
   const red = shown.some((item) => item.urgent || (!!item.due && item.due < today));
   return (
     <Card id="t-list" title="Your list" Icon={ListChecks} kind="approve" count={total} countTone={red ? "late" : "blue"} className="today-list">
+      {failed && <NotLoaded />}
       {shown.length ? (
         <WorkRows name="today" items={shown} today={today} membership={ctx.membership} />
       ) : (
-        <Calm title="You are all caught up" line="Nothing waits for you. New work for your clients shows here first." />
+        !failed && <Calm title="You are all caught up" line="Nothing waits for you. New work for your clients shows here first." />
       )}
       {total > SHOWN && (
         <div className="app-card-foot">
@@ -219,6 +220,12 @@ async function YourList({ work, ctx }: { work: ReturnType<typeof workFor>; ctx: 
 // This week in three or four numbers for the person's role, each opening its list.
 async function ThisWeek({ week, role }: { week: ReturnType<typeof weekFor>; role: string }) {
   const { range, mail, late, approve, stuck, busiest } = await week;
+  if (!range)
+    return (
+      <Card id="t-week" title="This week" Icon={CalendarDays} kind="week" className="today-week">
+        <NotLoaded />
+      </Card>
+    );
   const tiles = isLead(role) ? (
     <>
       <Tile id="w-month" href="/app/calendar?view=month" label="Returns this month" value={range.filed} of={range.due} sub={range.due ? "filed" : "None due this month"} />
@@ -302,6 +309,15 @@ function Tile({ id, href, label, value, of, sub, red = false }: { id: string; hr
       )}{" "}
       <span className="week-sub">{sub}</span>
     </Press>
+  );
+}
+
+// A card whose list could not be read (work-data.ts logs why), never shown as nothing to do.
+function NotLoaded() {
+  return (
+    <p className="alert" role="alert">
+      Could not load this. <Link href="/app">Try again</Link>
+    </p>
   );
 }
 

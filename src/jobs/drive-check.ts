@@ -1,6 +1,7 @@
 import { settleVersions } from "@/src/lib/documents";
 import { openDrive, watchDrive } from "@/src/lib/drive-account";
 import { intakeLimits } from "@/src/lib/file-worker";
+import { pages } from "@/src/lib/paged";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { MAX_ATTEMPTS, type Handler } from "./runner";
 
@@ -36,9 +37,9 @@ export const driveCheck: Handler = async (job) => {
     return { retry: "drive_unreachable" };
   }
   const byId = new Map(seen.files.map((file) => [file.id, file.path]));
-  const { data: documents } = await admin.from("documents").select("id, name, status, drive_file_id, client_id, work_type, document_type, period_key, registration_id").eq("firm_id", firm).neq("status", "deleted");
+  const documents = await pages((from) => admin.from("documents").select("id, name, status, drive_file_id, client_id, work_type, document_type, period_key, registration_id").eq("firm_id", firm).neq("status", "deleted").order("id").range(from, from + 999));
   let missing = 0;
-  for (const document of documents ?? []) {
+  for (const document of documents) {
     const path = byId.get(document.drive_file_id);
     if (!path) {
       missing++;

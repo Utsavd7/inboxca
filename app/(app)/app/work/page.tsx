@@ -8,6 +8,7 @@ import type { DocumentRequest } from "@/src/lib/checklists";
 import { itrReady } from "@/src/lib/itr-fields";
 import { currentMember } from "@/src/lib/member";
 import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
+import { pages as everyPage } from "@/src/lib/paged";
 import { fillLine } from "@/src/lib/return-work";
 import { inFilter, isLead, workFilters, type Listed, type WorkFilter } from "@/src/lib/work/today";
 import { fillAll, stopFills } from "../form-actions";
@@ -48,11 +49,11 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
   const firm = membership.firmId;
   const sends = isLead(membership.role) && !membership.viewOnlyUntil;
   const { data: me } = await supabase.from("firm_members").select("team_id").eq("firm_id", firm).eq("user_id", userId).single();
-  const [{ items, total, late }, { data: assigned }] = await Promise.all([
+  const [{ items, total, late, failed }, assigned] = await Promise.all([
     workFor({ supabase, membership, userId }, LATE),
-    supabase.from("client_assignments").select("client_id").eq("firm_id", firm).or(`user_id.eq.${userId}${me?.team_id ? `,team_id.eq.${me.team_id}` : ""}`).limit(5000),
+    everyPage((from) => supabase.from("client_assignments").select("client_id").eq("firm_id", firm).or(`user_id.eq.${userId}${me?.team_id ? `,team_id.eq.${me.team_id}` : ""}`).order("client_id").order("user_id").order("team_id").range(from, from + 999)),
   ]);
-  const mine = new Set(assigned?.map((row) => row.client_id));
+  const mine = new Set(assigned.map((row) => row.client_id));
   // All, Late and Returns count every late client, as Today does, beyond the ones listed here.
   const unlisted = total - items.length;
   const counts = Object.fromEntries((Object.keys(workFilters) as WorkFilter[]).map((key) => [key, items.filter((item) => inFilter(item, key, today, mine)).length + (key === "all" || key === "late" || key === "returns" ? unlisted : 0)])) as Record<WorkFilter, number>;
@@ -191,9 +192,10 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
         <LinkTabs kind="pills" label="Show" items={(Object.keys(workFilters) as WorkFilter[]).map((key) => ({ href: href({ show: key }), label: workFilters[key], count: counts[key], current: show === key }))} />
       </div>
       <Card id="w-list" title={workFilters[show] === "All" ? "Everything" : workFilters[show]} Icon={ListChecks} kind="approve" count={counts[show]} countTone="blue">
+        {failed && <p className="alert" role="alert">Could not load all of this. <Link href={back}>Try again</Link></p>}
         {shown.length ? (
           <WorkRows name="work" items={shown} today={today} membership={membership} more={more} />
-        ) : (
+        ) : !failed && (
           <Empty Icon={ListChecks} kind="done" title={show === "all" ? "Nothing needs you" : "Nothing here"}>
             <span>{show === "all" ? "You are all caught up. New work for your clients shows here first." : "Nothing of this kind waits for you."}</span>
           </Empty>
@@ -333,8 +335,8 @@ async function sendPreview(supabase: Db, firm: string, what: "late" | "papers") 
 // days that this person may fill (public.due_fills), and why any is left out. The fill job decides
 // the same, and only it knows whether an ITR has every detail its official form needs.
 async function fillPreview(supabase: Db, firm: string, today: string) {
-  const { data } = await supabase.rpc("due_fills", { target_firm: firm });
-  const rows = (data ?? []).map((row) => ({ key: row.task, client: row.client, name: row.client_name, toCheck: row.open > 0, itr: row.code.startsWith("ITR_"), ...fillLine(row, today, itrReady()) }));
+  const data = await everyPage((from) => supabase.rpc("due_fills", { target_firm: firm }).order("task").range(from, from + 999));
+  const rows = data.map((row) => ({ key: row.task, client: row.client, name: row.client_name, toCheck: row.open > 0, itr: row.code.startsWith("ITR_"), ...fillLine(row, today, itrReady()) }));
   const ready = rows.filter((row) => row.go);
   return { rows, count: ready.length, clients: new Set(ready.map((row) => row.client)).size, toCheck: ready.filter((row) => row.toCheck).length, itrs: ready.filter((row) => row.itr).length };
 }

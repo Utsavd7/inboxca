@@ -9,7 +9,7 @@ type Signed = Awaited<ReturnType<typeof currentMember>>;
 type Context = { supabase: Signed["supabase"]; membership: NonNullable<Signed["membership"]>; userId: string };
 
 export async function answersWorkItems({ supabase, membership }: Context): Promise<WorkItem[]> {
-  const { data } = await supabase.from("email_events").select("id, client_id, label, clients(name)").eq("firm_id", membership.firmId).eq("delivery->>ack", "held").order("received_at").limit(50);
+  const { data } = await supabase.from("email_events").select("id, client_id, label, clients(name)").eq("firm_id", membership.firmId).eq("delivery->>ack", "held").order("received_at").limit(50).throwOnError();
   const { data: taken } = data?.length ? await supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("entity_type", "email").in("entity_id", data.map((row) => row.id)) : { data: [] };
   return (data ?? []).flatMap((row): WorkItem[] => {
     const kind = answerOf(row.label);

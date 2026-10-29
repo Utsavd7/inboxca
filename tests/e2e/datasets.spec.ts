@@ -138,6 +138,19 @@ test("a portal statement becomes encrypted pending figures beside its source, wi
     await expect(page.getByRole("link",{name:"Prepare the return"})).toHaveCount(0);
     for(let done=1;done<=16;done++) {const before=await chosen.getAttribute("aria-label");await page.keyboard.press("y");await expect.poll(confirmed).toBe(done);await expect(chosen).not.toHaveAttribute("aria-label",before!);}
     await expect(page.getByRole("link",{name:"Prepare the return"})).toBeVisible();
+    // The prepared GSTR-3B opens as its form, read only, with Table 4(A) holding the checked figures.
+    await query(local.dbUrl,"insert into public.requests(id,firm_id,client_id,kind,entity_type,entity_id,reason_code,status,expires_at,details) values ($4,$1,$2,'permission','permission',$4,'edit_figures','approved',now()+interval '1 hour',jsonb_build_object('by',$3::text))",[firm.firmId,client,firm.ownerId,randomUUID()]);
+    await page.getByRole("link",{name:"Prepare the return"}).click();await page.getByRole("button",{name:"Prepare GSTR-3B Sep 2026"}).first().click();
+    await expect(page).toHaveURL(/\/files\/.*\/view/);const [prepared]=await query(local.dbUrl,"select drive_file_id from public.documents where firm_id=$1 and prepared is not null",[firm.firmId]);artifacts.push(prepared.drive_file_id);
+    await expect(page.getByRole("link",{name:"Form view"})).toHaveAttribute("aria-current","page");
+    const credit=page.getByRole("region",{name:/Eligible ITC/}).getByRole("row",{name:/All other ITC/});
+    await expect(credit).toContainText("100");await expect(credit).toContainText("20");
+    // A draft waiting for the second approval: read only for staff, its approval at the foot for someone who may give it.
+    await query(local.dbUrl,"update public.documents set prepared=jsonb_set(prepared,'{status}','\"draft\"') where firm_id=$1 and prepared is not null",[firm.firmId]);
+    await page.reload();await expect(credit).toContainText("100");await expect(page.getByRole("button",{name:"Give second approval"})).toHaveCount(0);
+    await query(local.dbUrl,"update public.firm_members set role='owner' where firm_id=$1 and user_id=$2",[firm.firmId,firm.ownerId]);
+    await page.reload();await expect(page.getByRole("button",{name:"Give second approval"})).toBeVisible();await expect(page.getByText("Reject this version")).toBeVisible();
+    await expect.poll(async()=>(await query(local.dbUrl,"select count(*)::int n from public.activity_log where firm_id=$1 and action='document.viewed' and details->>'form'='true'",[firm.firmId]))[0].n).toBeGreaterThan(0);
   } finally {for(const id of artifacts) await drive.trash(id);await firm.remove();}
 });
 

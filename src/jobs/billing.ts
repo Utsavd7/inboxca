@@ -1,4 +1,5 @@
-import { dailyBilling, reconcile, retryRefund } from "@/src/lib/billing/billing";
+import { alertAdmins, dailyBilling, reconcile, retryRefund } from "@/src/lib/billing/billing";
+import { todayInIndia } from "@/src/lib/calendar";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Handler } from "./runner";
 
@@ -12,8 +13,11 @@ export const billingReconcile: Handler = async () => {
   await reconcile();
   return { done: true };
 };
-export const billingRefund: Handler = async (job) => {
-  await retryRefund(job.entity_id ?? "");
+export const billingRefund: Handler = async (job) => ((await retryRefund(job.entity_id ?? "")) === false ? { retry: "refund_unsure" } : { done: true });
+// Jobs the worker stopped part way (claim_jobs): one email a day tells Orelu's admins to look at
+// Admin, Failed jobs.
+export const jobsStopped: Handler = async () => {
+  await alertAdmins(supabaseAdmin(), "jobs_stopped", todayInIndia());
   return { done: true };
 };
 

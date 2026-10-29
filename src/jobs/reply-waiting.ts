@@ -10,7 +10,8 @@ const DAY = 86_400_000;
 // 09:00 India time (private.queue_reply_waiting): the owner's list of client emails that have
 // waited more than a day for a reply, by the person each is for, sent only when there are
 // any. From the firm's own mailbox it names the clients; without one it goes through Orelu's
-// system email, which names no client. Nothing of the emails themselves is read.
+// system email, which names no client. Nothing of the emails themselves is read. Each owner's
+// list is logged as it goes, so a try that stops part way never sends one twice.
 export const replyWaiting: Handler = async (job, { markSending }) => {
   const admin = supabaseAdmin();
   const [{ data: rows, error }, { data: firm }, { data: owners }] = await Promise.all([
@@ -37,12 +38,15 @@ export const replyWaiting: Handler = async (job, { markSending }) => {
   });
   const subject = `Replies waiting: ${emails}`;
   const text = ["Good morning,", `${emails} ${waiting.length === 1 ? "has" : "have"} waited more than a day for a reply.`, ...byPerson, `Open them in the Inbox: ${process.env.APP_BASE_URL ?? ""}/app/inbox?show=reply`, `InboxCA for ${firm.name}`].join("\n\n");
-  const to = (await Promise.all((owners ?? []).map((owner) => emailOf(owner.user_id)))).filter(Boolean);
+  const { data: told, error: toldError } = await admin.from("activity_log").select("person:details->>person").eq("firm_id", job.firm_id!).eq("action", "replies.waiting_sent")
+    .eq("details->>job", String(job.id)).gte("at", new Date(Date.now() - 7 * DAY).toISOString());
+  if (toldError) return { retry: "sent_not_read" };
+  const to = (await Promise.all((owners ?? []).map(async (owner) => ({ person: owner.user_id, address: await emailOf(owner.user_id) })))).filter(({ person, address }) => address && !told.some((row) => row.person === person));
   await markSending();
-  for (const address of to) {
+  for (const { person, address } of to) {
     if (!mailer) await sendSystemMail(address, `InboxCA: ${subject}`, text);
     else if (!(await mailer.send(address, subject, text))) return mailer.waitUntil ? { retry: "mail_wait", at: mailer.waitUntil } : { retry: "mail_not_sent" };
+    await admin.from("activity_log").insert({ firm_id: job.firm_id!, action: "replies.waiting_sent", entity_type: "firm", entity_id: job.firm_id!, details: { emails: waiting.length, people: people.size, from: mailer ? "firm" : "system", job: job.id, person } });
   }
-  await admin.from("activity_log").insert({ firm_id: job.firm_id!, action: "replies.waiting_sent", entity_type: "firm", entity_id: job.firm_id!, details: { emails: waiting.length, people: people.size, from: mailer ? "firm" : "system" } });
   return { done: true };
 };

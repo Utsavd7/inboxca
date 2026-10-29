@@ -1,7 +1,7 @@
 import {serverCrypto} from "@/src/lib/crypto";
 import {checkFigures,draftSchema,hundredths,openFigures,place as linePlace,type Draft,type Figure} from "@/src/lib/datasets";
 import {periodName} from "@/src/lib/documents";
-import {formLayout,type FormLayout} from "@/src/lib/form-layout";
+import {formLayout,grouped,type FormLayout} from "@/src/lib/form-layout";
 import {itrYear} from "@/src/lib/itr-fields";
 import {when} from "@/src/lib/paper-origin";
 import {matchPlace,matchSchema,totalOf} from "@/src/lib/purchase-register";
@@ -11,13 +11,6 @@ import type {CheckItem,CheckPaper} from "./form-check";
 
 // A change from the last checked period worth a second look: over 40% and over ₹10,000.
 const BIG_CHANGE={share:0.4,rupees:10_000};
-// A number with its digits grouped the Indian way (21,29,400.50), for reading only. One rule a
-// column: paise as two decimals when any of its amounts has paise, else none (decimals 0).
-export const grouped=(value:string,kind?:string,decimals=2)=>{
-  if(kind && kind!=="number") return value;
-  const [whole,fraction=""]=value.split(".");
-  return whole.replace(/^(-?)(\d+)/,(_,sign:string,digits:string)=>sign+digits.replace(/(\d)(?=(\d\d)*\d{3}$)/g,"$1,"))+(decimals===2 || /[1-9]/.test(fraction) ? `.${fraction.padEnd(2,"0")}` : "");
-};
 const paise=(figure:Figure)=>(!figure.kind || figure.kind==="number") && /\.\d*[1-9]/.test(figure.value);
 const rupees=(amount:bigint,decimals=2)=>grouped(`${amount<BigInt(0) ? "-" : ""}${(amount<BigInt(0) ? -amount : amount)/BigInt(100)}.${String((amount<BigInt(0) ? -amount : amount)%BigInt(100)).padStart(2,"0")}`,undefined,decimals);
 type Paper={id:string;name:string;document_type:string|null;period_key:string|null};
