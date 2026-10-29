@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { todayInIndia } from "@/src/lib/calendar";
 import { financialYear, folderPath } from "@/src/lib/drive";
 import { openDrive, watchDrive } from "@/src/lib/drive-account";
+import { pages } from "@/src/lib/paged";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { MAX_ATTEMPTS, type Handler } from "./runner";
 
@@ -24,9 +25,9 @@ export const driveSetup: Handler = async (job) => {
     // At Connect the folder order is always the first one: year, client, work.
     const year = financialYear(todayInIndia().slice(0, 7));
     // The test drive is shared by every firm on this computer, so it gets no client folders.
-    const { data: clients } = account.provider === "local" ? { data: [] } : await admin.from("clients").select("name").eq("firm_id", firm).is("archived_at", null);
+    const clients = account.provider === "local" ? [] : await pages((from) => admin.from("clients").select("name").eq("firm_id", firm).is("archived_at", null).order("id").range(from, from + 999));
     const made = new Set<string>();
-    if (clients?.length) {
+    if (clients.length) {
       let cursor: string | undefined;
       do {
         const page = await drive.list(year, cursor);
@@ -34,7 +35,7 @@ export const driveSetup: Handler = async (job) => {
         cursor = page.cursor ?? undefined;
       } while (cursor);
     }
-    for (const client of clients ?? []) {
+    for (const client of clients) {
       const [, name] = folderPath("year_client_work", year, client.name, "other");
       if (made.has(name)) continue;
       if (Date.now() - started > 60_000) return { retry: "drive_setup_more", at: new Date() };
@@ -47,7 +48,7 @@ export const driveSetup: Handler = async (job) => {
     if (saved !== "taken") await drive.trash(saved.id);
     const seen = await drive.check();
     const notices = (account.provider === "dropbox" && !!process.env.DROPBOX_APP_SECRET && !!(account.settings as { dropbox_account?: string }).dropbox_account) || (await watchDrive(firm, account));
-    await logged({ reached: true, clients: clients?.length ?? 0, test_file: readBack, shared: seen.shared, free_bytes: seen.freeBytes, notices });
+    await logged({ reached: true, clients: clients.length, test_file: readBack, shared: seen.shared, free_bytes: seen.freeBytes, notices });
     return { done: true };
   } catch {
     if (job.attempts < MAX_ATTEMPTS) return { retry: "drive_unreachable" };

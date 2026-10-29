@@ -8,6 +8,7 @@ import { firmMailer } from "@/src/lib/firm-mail";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { askDays, firstAsk, followUpDue, papersFor, periodsOf, planAsks, planReminders, reminderStages, checkedReminder, type FollowUp, type ReminderTask } from "@/src/lib/reminders";
 import { reminderOpening } from "@/src/lib/ai-reply";
+import { pages } from "@/src/lib/paged";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Handler } from "./runner";
 
@@ -53,25 +54,31 @@ export const sendReminders: Handler = async (job) => {
   if (!mailer) return {retry:"mail_not_connected",at:new Date(Date.now()+3600_000)};
 
   const today = todayInIndia();
-  const open = admin
-    .from("tasks")
-    .select("id, client_id, code, period_key, due_on, details, clients!inner(name, email_enc, reminders_paused, archived_at)")
-    .eq("firm_id", firm)
-    .eq("kind", "compliance")
-    .neq("status", "filed")
-    .is("clients.archived_at", null)
-    .gte("due_on", shift(today, now === "late" || now === "soon" ? -366 : -3))
-    .lte("due_on", shift(today, now === "late" ? -1 : 7));
-  const [{ data: rows }, { data: rules }, { data: handling }] = await Promise.all([
-    one ? open.eq("client_id", one) : open,
+  // Every open return in the window, a page at a time (a late run can reach thousands).
+  const open = (from: number) => {
+    const query = admin
+      .from("tasks")
+      .select("id, client_id, code, period_key, due_on, details, clients!inner(name, email_enc, reminders_paused, archived_at)")
+      .eq("firm_id", firm)
+      .eq("kind", "compliance")
+      .neq("status", "filed")
+      .is("clients.archived_at", null)
+      .gte("due_on", shift(today, now === "late" || now === "soon" ? -366 : -3))
+      .lte("due_on", shift(today, now === "late" ? -1 : 7));
+    return (one ? query.eq("client_id", one) : query).order("id").range(from, from + 999);
+  };
+  const [rows, { data: rules }, { data: handling }] = await Promise.all([
+    pages(open),
     admin.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", ""),
     admin.from("requests").select("client_id").eq("firm_id", firm).eq("kind", "team_reply").eq("status", "pending"),
   ]);
   const rule = new Map(rules?.map((r) => [r.code, r]));
-  const clientIds = [...new Set(rows?.map((row) => row.client_id))];
-  const { data: documents } = clientIds.length ? await admin.from("documents").select("client_id, work_type, period_key").in("client_id", clientIds).neq("status", "deleted") : { data: [] };
-  const filed = new Set(documents?.map((document) => `${document.client_id}:${document.work_type}:${document.period_key}`));
-  const tasks: (ReminderTask & { details: Details; name: string; email_enc: string | null })[] = (now === "papers" ? [] : rows ?? []).map((row) => ({
+  const clientIds = [...new Set(rows.map((row) => row.client_id))];
+  const filed = new Set<string>();
+  for (let at = 0; at < clientIds.length; at += 100)
+    for (const document of await pages((from) => admin.from("documents").select("id, client_id, work_type, period_key").in("client_id", clientIds.slice(at, at + 100)).neq("status", "deleted").order("id").range(from, from + 999)))
+      filed.add(`${document.client_id}:${document.work_type}:${document.period_key}`);
+  const tasks: (ReminderTask & { details: Details; name: string; email_enc: string | null })[] = (now === "papers" ? [] : rows).map((row) => ({
     id: row.id,
     client_id: row.client_id,
     code: row.code ?? "",
@@ -200,16 +207,6 @@ async function openAsks(firm: string, settings: Record<string, unknown>, today: 
   const days = askDays(settings);
   const codes = [...rule.values()].filter((r) => r.verified_on && workOfService(r.code)).map((r) => r.code);
   if (!codes.length || !Object.values(days).some(Boolean)) return;
-  // One read returns at most 1,000 rows, so each list is read a page at a time.
-  const pages = async <T,>(read: (from: number) => PromiseLike<{ data: T[] | null; error: unknown }>) => {
-    const rows: T[] = [];
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await read(from);
-      if (error) throw new Error("asks_not_read");
-      rows.push(...(data ?? []));
-      if ((data?.length ?? 0) < 1000) return rows;
-    }
-  };
   const coming = await pages((from) =>
     admin.from("tasks").select("id, client_id, code, period_key, due_on, clients!inner(kind, email_enc, reminders_paused, archived_at)").eq("firm_id", firm).eq("kind", "compliance").neq("status", "filed").in("code", codes)
       .is("clients.archived_at", null).gte("due_on", today).lte("due_on", shift(today, Math.max(31, ...Object.values(days)))).order("id").range(from, from + 999),

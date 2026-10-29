@@ -3,14 +3,20 @@ import { retryJob } from "../actions";
 import { currentAdmin, when } from "../admin";
 import { Submit } from "../parts";
 
-// Jobs that ran out of tries, newest first, each with one button to try again.
+// The two codes the worker gives a job it stopped part way (claim_jobs).
+const stopped: Record<string, string> = {
+  uncertain: "Stopped while sending. It may have gone: check before you try again.",
+  lease_expired: "The worker stopped while running it, again and again.",
+};
+
+// Jobs that ran out of tries or stopped part way, newest first, each with one button to try again.
 export default async function AdminJobs() {
   const { supabase } = await currentAdmin();
   const { data: jobs, error } = await supabase.rpc("admin_failed_jobs");
   if (error) throw new Error(`Admin jobs failed: ${error.code}`);
   return (
     <>
-      <PageHead title="Failed jobs" sub="Work that ran out of tries. Failed jobs are kept 30 days." />
+      <PageHead title="Failed jobs" sub="Work that ran out of tries or stopped part way. Failed jobs are kept 30 days." />
       <section className="admin-card" aria-label="Failed jobs">
         {jobs.length ? (
           <div className="table-wrap">
@@ -23,7 +29,7 @@ export default async function AdminJobs() {
                   <tr key={job.id}>
                     <td className="num">{job.kind}</td>
                     <td><strong>{job.firm ?? "Orelu"}</strong></td>
-                    <td className="num">{job.error ?? "None"}</td>
+                    <td><span className="num">{job.error ?? "None"}</span>{job.error && stopped[job.error] && <span className="sub">{stopped[job.error]}</span>}</td>
                     <td className="num">{job.attempts}</td>
                     <td className="num">{when(job.at)}</td>
                     <td className="shrink">

@@ -22,6 +22,8 @@ vi.mock("@/src/lib/supabase", () => ({
         eq: (key: string, value: string) => (filters.push(`${key}=${value}`), query),
         neq: () => query,
         is: () => query,
+        order: () => query,
+        range: () => query,
         maybeSingle: async () => ({ data: mock.rows[table] ?? null }),
         insert: async (value: unknown) => (mock.writes.push({ table, op: "insert", value, filters }), { error: null }),
         upsert: async (value: unknown) => (mock.writes.push({ table, op: "upsert", value, filters }), { error: null }),

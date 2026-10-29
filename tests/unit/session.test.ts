@@ -1,5 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { accessSetting, exceptionsOf, newRecoveryCodes, recoveryDigest, seenAt, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
+import { accessSetting, exceptionsOf, newRecoveryCodes, recoveryDigest, recoveryDigests, seenAt, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 
 const repeat = vi.hoisted(() => ({ count: 0, upsert: vi.fn() }));
 vi.mock("@/src/lib/supabase", () => ({
@@ -8,6 +9,7 @@ vi.mock("@/src/lib/supabase", () => ({
     gte: async () => ({ count: repeat.count }), upsert: repeat.upsert,
   }) }),
 }));
+vi.stubEnv("APP_HMAC_KEY", randomBytes(32).toString("base64url"));
 
 describe("signing in limits", () => {
   it("take the person's own setting, else the role's, else the firm's", () => {
@@ -66,4 +68,17 @@ it("makes ten recovery codes whose digests fit only their person", () => {
   expect(recoveryDigest("owner", ` ${codes[0].toLowerCase()} `)).toBe(recoveryDigest("owner", codes[0]));
   expect(recoveryDigest("other", codes[0])).not.toBe(recoveryDigest("owner", codes[0]));
   expect(recoveryDigest("owner", codes[1])).not.toBe(recoveryDigest("owner", codes[0]));
+});
+
+// src/lib/env.ts: a new APP_HMAC_KEY must not lock an owner out while the key before is kept.
+it("still takes a recovery code made with the key before, while APP_HMAC_OLD_KEY keeps it", () => {
+  const [code] = newRecoveryCodes(), before = randomBytes(32).toString("base64url");
+  vi.stubEnv("APP_HMAC_KEY", before);
+  const kept = recoveryDigest("owner", code);
+  vi.stubEnv("APP_HMAC_KEY", randomBytes(32).toString("base64url"));
+  expect(recoveryDigests("owner", code)).not.toContain(kept);
+  vi.stubEnv("APP_HMAC_OLD_KEY", before);
+  expect(recoveryDigests("owner", code)).toContain(kept);
+  expect(recoveryDigests("other", code)).not.toContain(kept);
+  vi.stubEnv("APP_HMAC_OLD_KEY", "");
 });

@@ -21,6 +21,9 @@ const values = {
   // The outer encryption key for development and tests only (production uses AWS KMS).
   // Kept once made: data encrypted with it can not be read with another.
   LOCAL_KEK: existing.match(/^LOCAL_KEK=(.+)$/m)?.[1] ?? randomBytes(32).toString("base64"),
+  // The server's own key for its digests and signed cookies (src/lib/env.ts). Kept once made too:
+  // recovery codes and approved owner computers are kept only as digests made with it.
+  APP_HMAC_KEY: existing.match(/^APP_HMAC_KEY=(.+)$/m)?.[1] ?? randomBytes(32).toString("base64"),
   // A test drive in a folder of this checkout (kept out of git), until a real one is linked.
   DRIVE_LOCAL_DIR: `${process.cwd()}/.test-drive`,
   // Orelu's workspace store (safety copies) in a folder of this checkout, until Backblaze B2 is set up.
@@ -28,6 +31,9 @@ const values = {
 };
 for (const [key, value] of Object.entries(values))
   if (!value) throw new Error(`supabase status did not report ${key}; is it running?`);
+// A checkout set up before APP_HMAC_KEY: what Supabase's secret signed until then stays accepted.
+const old = existing && !/^APP_HMAC_(OLD_)?KEY=/m.test(existing) ? existing.match(/^SUPABASE_SECRET_KEY=(.+)$/m)?.[1] : undefined;
+if (old) values.APP_HMAC_OLD_KEY = old;
 
 const kept = existing
   ? existing

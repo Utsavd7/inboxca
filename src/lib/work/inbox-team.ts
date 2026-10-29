@@ -13,7 +13,7 @@ type Context = Parameters<typeof inboxWorkItems>[0];
 export async function inboxTeamWorkItems({ supabase, membership, userId }: Context): Promise<WorkItem[]> {
   const firmWide = ["owner", "partner"].includes(membership.role);
   const [{ data: rows }, { data: people }] = await Promise.all([
-    supabase.rpc("team_replies", { target_firm: membership.firmId }),
+    supabase.rpc("team_replies", { target_firm: membership.firmId }).throwOnError(),
     firmWide ? supabase.rpc("firm_people", { target_firm: membership.firmId }) : Promise.resolve({ data: [] }),
   ]);
   const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
