@@ -306,7 +306,7 @@ test("the client list template, filled in with services, and a Tally export both
   // Two clients typed under the template's headings with their services, one with a service
   // the list does not offer, then an empty row and the example row copied from How to fill,
   // which are left out. Columns: Name, Client type, PAN, GSTIN, Email, TAN and the services.
-  const gstin = [..."0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"].map((check) => `27TMPJA1234K1Z${check}`).find(isGstin)!;
+  const gstin = Array.from({ length: 36 }, (_, at) => `27TMPJA1234K1Z${at.toString(36).toUpperCase()}`).find(isGstin)!;
   const typed = [
     [`Template Mehta ${tag}`, "Company", "TMPLA1234B", "", "", "TMPL12345C", "", "Yes", "Audit case"],
     [`Template Joshi ${tag}`, "", "", gstin, `joshi-${tag}@example.test`, "", "Quarterly (QRMP)", "", "Business and no audit"],
@@ -321,7 +321,7 @@ test("the client list template, filled in with services, and a Tally export both
   await expect(owner.getByText("2 ready to import, 1 with a problem and left out.")).toBeVisible();
   // The check shows each row's services before anything is added.
   const check = panel.getByRole("table").first();
-  await expect(check).toContainText(`Template Mehta ${tag}Company`);
+  await expect(check.getByRole("row").filter({ hasText: `Template Mehta ${tag}` })).toContainText("Company");
   await expect(check.getByRole("row").filter({ hasText: `Template Mehta ${tag}` })).toContainText("ITR (audit cases)");
   await expect(check.getByRole("row").filter({ hasText: `Template Joshi ${tag}` })).toContainText("GSTR-1 (QRMP)");
   await expect(panel.getByRole("table").last()).toContainText(`Template Rao ${tag}`);
@@ -331,7 +331,7 @@ test("the client list template, filled in with services, and a Tally export both
     .map((row) => `${row.name.split(" ")[1]} ${row.kind} ${[...row.services].sort().join(" ")}`.trim());
   expect(await services()).toEqual(["Joshi gstin GSTR1_Q GSTR3B_Q PMT06", "Joshi pan ITR_BIZ", "Mehta pan ITR_AUDIT", "Mehta tan TDS_PAY TDS_RET"]);
   // Their due dates are on the calendar at once.
-  const dueDay = async (code: string) => (await query(local.dbUrl, "select to_char(min(t.due_on), 'YYYY-MM-DD') day from public.tasks t join public.clients c on c.id = t.client_id where c.firm_id = $1 and c.name like $2 and t.code = $3", [firm.firmId, `Template % ${tag}`, code]))[0].day;
+  const dueDay = async (code: string) => (await query(local.dbUrl, "select to_char(min(t.due_on), 'YYYY-MM-DD') as first from public.tasks t join public.clients c on c.id = t.client_id where c.firm_id = $1 and c.name like $2 and t.code = $3", [firm.firmId, `Template % ${tag}`, code]))[0].first;
   await owner.goto(`/app/calendar?day=${await dueDay("GSTR1_Q")}&code=GSTR1_Q`);
   await expect(owner.getByRole("row").filter({ hasText: `Template Joshi ${tag}` })).toBeVisible();
 
@@ -345,7 +345,7 @@ test("the client list template, filled in with services, and a Tally export both
     await owner.getByRole("link", { name: "Set services" }).click();
     const set = owner.getByRole("dialog", { name: "Set services" });
     await set.getByLabel(`Services test return ${tag}`).check();
-    await set.getByLabel(/^Tax audit report/).check();
+    await set.getByRole("checkbox", { name: /^Tax audit report/ }).check();
     await set.getByRole("button", { name: "Add services to 2 clients" }).click();
     await expect(owner.getByText(/^Services added for 2 clients/)).toBeVisible();
     expect(await services()).toEqual(["Joshi gstin GSTR1_Q GSTR3B_Q PMT06", `Joshi pan ITR_BIZ ${code}`, `Mehta pan ITR_AUDIT ${code} TAX_AUDIT`, "Mehta tan TDS_PAY TDS_RET"]);

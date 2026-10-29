@@ -32,8 +32,10 @@
 .clients-page .pager p:empty { display: none; }
 /* The next return over its date, wrapping rather than pushing the status out of view. */
 .clients-page .t td.clients-next { min-width: 200px; white-space: normal; line-height: 1.35; }
-/* An import's services per row wrap in the check, as the next return does. */
-.clients-page .t td.import-services { min-width: 220px; white-space: normal; line-height: 1.35; }
+/* An import's check wraps a row's services under its name, and each problem, as the next
+   return does. */
+.clients-page .t td.import-wrap { min-width: 240px; white-space: normal; line-height: 1.35; }
+.clients-page .t td.import-wrap .sub { display: block; }
 /* Where a paper came from wraps too, so the status and Open stay on screen. */
 .clients-page .t td:has(> .came-from) { min-width: 240px; white-space: normal; }
 /* A client late and missing papers shows both pills, late first, one over the other. */
@@ -54,6 +56,9 @@
    to the foot of the screen. */
 .clients-bulk { position: absolute; bottom: var(--s3); left: 50%; z-index: var(--z-toast); display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); width: max-content; max-width: 100%; padding: var(--s2) var(--s2) var(--s2) var(--s4); border-radius: var(--r3); background: var(--navy); color: var(--white); font-size: 13px; box-shadow: var(--shadow-float); visibility: hidden; opacity: 0; transform: translate(-50%, 24px) scale(0.98); transition: opacity var(--base) var(--out), transform var(--spring-time) var(--spring), visibility var(--base); }
 .clients-page:has(input[name="client"]:checked) .clients-bulk { visibility: visible; opacity: 1; transform: translate(-50%, 0); }
+/* While a panel is open beside the list (Set services among them), the bar steps aside so it
+   never covers the panel. */
+.clients-page:has(input[name="client"]:checked):has(.side-panel) .clients-bulk { visibility: hidden; opacity: 0; transform: translate(-50%, 24px) scale(0.98); }
 @media (max-width: 720px) { .clients-bulk { position: fixed; bottom: var(--s4); max-width: calc(100vw - var(--s6)); } }
 .clients-page .clients-bulk select[name] { width: auto; max-width: 190px; }
 .clients-bulk .bulk-count { display: inline-flex; align-items: center; gap: var(--s2); font-weight: 600; }

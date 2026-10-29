@@ -196,7 +196,7 @@ async function Attention({ ctx }: { ctx: Context }) {
         <div className="today-line" role="region" aria-label="Client reminders">
           <BellOff size={16} aria-hidden />
           <span className="grow">
-            <strong>Client reminders are paused</strong> until InboxCA has checked your due dates against the government notifications. Papers you ask for yourself, and their follow ups, still go.
+            <strong>Client reminders are paused</strong> until InboxCA checks your due dates against the government notifications. You can still ask for papers yourself.
           </span>
         </div>
       )}

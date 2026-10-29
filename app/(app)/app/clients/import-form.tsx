@@ -36,19 +36,21 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
                       <th scope="col">PAN</th>
                       <th scope="col">GSTIN</th>
                       {more && <th scope="col">TAN</th>}
-                      {more && <th scope="col">Services</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {first.map((row) => (
                       <tr key={row.line}>
-                        <td>{row.name}</td>
+                        {/* Each row's services under its name, in view without scrolling sideways. */}
+                        <td className={more ? "import-wrap" : undefined}>
+                          {row.name}
+                          {more && <span className="sub">Services: {services(row) || "none"}</span>}
+                        </td>
                         <td>{clientKinds[row.kind as ClientKind]}</td>
                         <td>{row.email}</td>
                         <td className="num">{row.pan}</td>
                         <td className="num">{row.gstin}</td>
                         {more && <td className="num">{row.tan}</td>}
-                        {more && <td className="import-services">{services(row) || <span className="hint">None</span>}</td>}
                       </tr>
                     ))}
                   </tbody>
@@ -71,7 +73,7 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
                     <tr key={row.line}>
                       <td className="num">{row.line}</td>
                       <td>{row.name || "(no name)"}</td>
-                      <td>{row.error}</td>
+                      <td className="import-wrap">{row.error}</td>
                     </tr>
                   ))}
                 </tbody>
