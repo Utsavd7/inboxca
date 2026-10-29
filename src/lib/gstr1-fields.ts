@@ -33,6 +33,10 @@ export const salesSections = {
   ecoaurp2c: {name:"Amended section 9(5) supplies URP2C (15A)", headings:["Financial Year", "Original Month", "Place Of Supply", "Rate", "Taxable Value", "Cess Amount"]},
 } as const;
 export type SalesSection = keyof typeof salesSections;
+// A register may name each e-invoice's IRN in the tables the e-invoice system fills on the portal
+// (B2B, notes and exports). The workbook has no IRN column, so it comes after the official ones.
+export const irnColumn=(section:string)=>["b2b","cdnr","cdnur","exp"].includes(section) ? salesSections[section as SalesSection].headings.length : -1;
+export const registerColumns=(section:SalesSection):readonly string[]=>irnColumn(section)<0 ? salesSections[section].headings : [...salesSections[section].headings,"IRN"];
 // Each amendment sheet and the sheet it amends, by the workbook's sheet names.
 export const amends:Partial<Record<SalesSection,SalesSection>> = {b2ba:"b2b",b2cla:"b2cl",b2csa:"b2cs",cdnra:"cdnr",cdnura:"cdnur",expa:"exp",ata:"at",atadja:"atadj",ecoa:"eco",ecoab2b:"ecob2b",ecoab2c:"ecob2c",ecoaurp2b:"ecourp2b",ecoaurp2c:"ecourp2c"};
 

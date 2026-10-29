@@ -1,7 +1,7 @@
 import {createHash,randomUUID} from "node:crypto";
 import {z} from "zod";
 import type {FormRequest} from "./form-worker";
-import {checkedForm,workerForm} from "./prepare-form";
+import {checkedForm,formContext,requestFor,workerForm} from "./prepare-form";
 import {currentWriter} from "./member";
 import {supabaseAdmin} from "./supabase";
 import {openDrive} from "./drive-account";
@@ -9,7 +9,7 @@ import {financialYear,safeName} from "./drive";
 import {periodName} from "./documents";
 import {itrReturns,itrYear} from "./itr-fields";
 import {serverCrypto} from "./crypto";
-import {createDraft} from "./datasets";
+import {confirmedFigures,createDraft} from "./datasets";
 import {workerRead} from "./worker-read";
 import {grantFor} from "./permission-grants";
 import {chooseTemplate,templateSchema} from "./templates";
@@ -91,6 +91,18 @@ export async function visibleForm(id:string) {
   const {data}=await member.supabase.from("documents").select("id,firm_id,client_id,name,period_key,size,prepared").eq("firm_id",member.membership.firmId).eq("id",id).neq("status","deleted").maybeSingle();
   if(!data?.prepared) throw new Error("This return file is not available.");
   return {...member,membership:member.membership,document:{...data,prepared:preparedSchema.parse(data.prepared)}};
+}
+
+// GSTR-1's portal JSON is made when it is downloaded, from the version's own checked sources at
+// their saved revisions: the same figures as its workbook, and nothing derivable kept.
+export async function portalJson({document,membership}:Awaited<ReturnType<typeof visibleForm>>) {
+  const meta=document.prepared;
+  const context=await formContext({client:document.client_id,registration:meta.registration,form:meta.form,period:document.period_key,version:meta.template,reason:"download"},false);
+  const {data:rows}=await context.supabase.from("datasets").select("id,revision,data").eq("firm_id",membership.firmId).eq("client_id",document.client_id).in("id",meta.sources.map(source=>source.id));
+  if(rows?.length!==meta.sources.length || rows.some(row=>!meta.sources.some(source=>source.id===row.id && source.revision===row.revision))) throw new Error("These figures changed. Go back to the return and check them.");
+  const drafts=await Promise.all(rows.map(async row=>({id:row.id,revision:row.revision,figures:[...await confirmedFigures(membership.firmId,row.id,row.data)]})));
+  const response=await workerForm(requestFor({...context,template:{...context.template,mappings:{...context.template.mappings,format:"json"}}},drafts));
+  return {bytes:new Uint8Array(await response.arrayBuffer()),extension:response.headers.get("content-type")==="application/zip" ? "zip" : "json"};
 }
 
 export async function recordFormDecision(id:string,decision:"approved"|"rejected",code:string,text:string) {

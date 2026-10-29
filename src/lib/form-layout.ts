@@ -1,4 +1,4 @@
-import {salesSections,type SalesSection} from "./gstr1-fields";
+import {registerColumns,salesSections,type SalesSection} from "./gstr1-fields";
 import {itrFields,itrGroup,type ItrForm} from "./itr-fields";
 
 // A return laid out the way its official form is: tables of rows, each row's boxes holding the
@@ -84,13 +84,13 @@ function gstr3b(lines:Line[],names:Record<string,string>):FormLayout {
 // GSTR-1 by the sheets of the official workbook (gstr1-fields.ts), in its order: a register's
 // row and column (sales-register.ts, worker/edited-form.ts) are the sheet's row and heading.
 function gstr1(lines:Line[]):FormLayout {
-  const cell=/^([a-z0-9_]+)\.([rt])(\d+)\.c(\d+)$/,read=(line:Line)=>{const hit=cell.exec(line.field);return hit && Object.hasOwn(salesSections,hit[1]) && salesSections[hit[1] as SalesSection].headings[Number(hit[4])] ? {section:hit[1] as SalesSection,total:hit[2]==="t",row:Number(hit[3]),column:Number(hit[4])} : null;};
+  const cell=/^([a-z0-9_]+)\.([rt])(\d+)\.c(\d+)$/,read=(line:Line)=>{const hit=cell.exec(line.field);return hit && Object.hasOwn(salesSections,hit[1]) && registerColumns(hit[1] as SalesSection)[Number(hit[4])] ? {section:hit[1] as SalesSection,total:hit[2]==="t",row:Number(hit[3]),column:Number(hit[4])} : null;};
   const placed=lines.filter(read),tables:FormTable[]=[],empty:string[]=[];
-  for(const [section,{name,headings}] of Object.entries(salesSections) as [SalesSection,typeof salesSections[SalesSection]][]) {
+  for(const [section,{name}] of Object.entries(salesSections) as [SalesSection,typeof salesSections[SalesSection]][]) {
     const mine=placed.map((line)=>({line,at:read(line)!})).filter(({at})=>at.section===section);
     if(!mine.length) {empty.push(name);continue;}
     const columns=[...new Set(mine.map(({at})=>at.column))].sort((a,b)=>a-b),rows=[...new Set(mine.map(({at})=>`${at.total ? "t" : "r"}${at.row}`))].sort((a,b)=>Number(a.slice(1))-Number(b.slice(1)));
-    tables.push({key:section,name,heads:columns.map((column)=>headings[column]),rows:rows.map((row)=>({key:`${section}.${row}`,name:`${row.startsWith("t") ? "Total, row" : "Row"} ${row.slice(1)}`,fill:"figures",cells:columns.map((column)=>{const ids=mine.filter(({at})=>`${at.total ? "t" : "r"}${at.row}`===row && at.column===column).map(({line})=>line.id);return ids.length ? {ids} : null;})}))});
+    tables.push({key:section,name,heads:columns.map((column)=>registerColumns(section)[column]),rows:rows.map((row)=>({key:`${section}.${row}`,name:`${row.startsWith("t") ? "Total, row" : "Row"} ${row.slice(1)}`,fill:"figures",cells:columns.map((column)=>{const ids=mine.filter(({at})=>`${at.total ? "t" : "r"}${at.row}`===row && at.column===column).map(({line})=>line.id);return ids.length ? {ids} : null;})}))});
   }
   return {tables:[...tables,...other(lines.filter((line)=>!read(line)))],placed:placed.length,empty};
 }

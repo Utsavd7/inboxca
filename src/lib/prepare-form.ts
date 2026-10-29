@@ -7,6 +7,7 @@ import {chooseTemplate,templateSchema} from "./templates";
 import {formLimit,formRequest,type FormRequest} from "./form-worker";
 import {signView} from "./file-worker";
 import {officialLink} from "./official-files";
+import {gstPortalClosed,gstPortalTakes} from "./calendar";
 
 type Work={client:string;registration?:string;form:string;period:string;version?:string;reason?:string};
 export async function formContext(input:Work,edit=true) {
@@ -36,6 +37,7 @@ export function requestFor(context:Awaited<ReturnType<typeof formContext>>,draft
 export async function checkedForm(input:Work & {registration:string;drafts:string[]}) {
   z.array(z.uuid()).min(1).max(25).parse(input.drafts);
   if(new Set(input.drafts).size!==input.drafts.length) throw new Error("Choose each set of figures once.");
+  if(/^GSTR/.test(input.form) && !gstPortalTakes(input.period)) throw new Error(gstPortalClosed);
   const context=await formContext(input),{supabase,membership,userId,permission}=context;
   // GSTR-3B is built from the month's GSTR-1 figures and its GSTR-2B credit.
   const {data:rows}=await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",input.client).in("form_code",context.itr ? ["ITR"] : input.form==="GSTR3B" ? ["GSTR1","GSTR3B"] : [input.form]).eq("period_key",input.period).in("id",input.drafts);

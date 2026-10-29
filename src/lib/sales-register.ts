@@ -1,5 +1,5 @@
 import {z} from "zod";
-import {numericHeadings,salesSections,type SalesSection} from "./gstr1-fields.ts";
+import {numericHeadings,registerColumns,salesSections,type SalesSection} from "./gstr1-fields.ts";
 import type {Figure} from "./datasets";
 
 export const mappingSchema=z.object({section:z.enum(Object.keys(salesSections) as [SalesSection,...SalesSection[]]),header:z.number().int().min(0).max(39),headings:z.array(z.string().max(200)).min(1).max(26),columns:z.array(z.number().int().min(-1).max(25)).max(26)});
@@ -12,7 +12,7 @@ export function exactMapping(rows:string[][]):SalesMapping|undefined {
     const all=Object.entries(salesSections).filter(([,{headings}])=>headings.every((name)=>rows[header].filter((value)=>normal(value)===normal(name)).length===1));
     const most=Math.max(0,...all.map(([,{headings}])=>headings.length)),matches=all.filter(([,{headings}])=>headings.length===most);
     if(matches.length>1) return;
-    if(matches.length===1) {const [section,{headings}]=matches[0];return {section:section as SalesSection,header,headings:rows[header],columns:headings.map((name)=>rows[header].findIndex((value)=>normal(value)===normal(name)))};}
+    if(matches.length===1) {const [section]=matches[0];return {section:section as SalesSection,header,headings:rows[header],columns:registerColumns(section as SalesSection).map((name)=>rows[header].findIndex((value)=>normal(value)===normal(name)))};}
   }
 }
 export function date(value:string) {
@@ -27,15 +27,15 @@ export function date(value:string) {
 }
 // Section names and headings are official. These are internal draft keys, not portal JSON.
 export function extractSales(rows:string[][],asked:SalesMapping) {
-  const mapping=mappingSchema.parse(asked),headings=salesSections[mapping.section].headings;
-  if(!sameHeadings(rows[mapping.header] ?? [],mapping.headings) || mapping.columns.length!==headings.length) throw new Error("The columns changed. Check them again.");
+  const mapping=mappingSchema.parse(asked),headings=registerColumns(mapping.section);
+  if(!sameHeadings(rows[mapping.header] ?? [],mapping.headings) || ![salesSections[mapping.section].headings.length,headings.length].includes(mapping.columns.length)) throw new Error("The columns changed. Check them again.");
   const columns=mapping.columns.filter((column)=>column>=0);
   if(!columns.length || new Set(columns).size!==columns.length || columns.some((column)=>column>=mapping.headings.length)) throw new Error("Choose a different column for each field.");
   const lines:(Figure & {field:string;row:number;column:number;total:boolean})[]=[];
   for(let row=mapping.header+1;row<rows.length;row++) {
     if(!rows[row].some((cell)=>cell.trim())) continue;
     const total=rows[row].some((cell)=>/^(grand\s+)?total$/i.test(cell.trim()));
-    for(let index=0;index<headings.length;index++) {
+    for(let index=0;index<mapping.columns.length;index++) {
       const column=mapping.columns[index],raw=rows[row][column]?.trim();
       if(column<0 || !raw || total && /^(grand\s+)?total$/i.test(raw)) continue;
       const label=headings[index],numeric=numericHeadings.test(label);

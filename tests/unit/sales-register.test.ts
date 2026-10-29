@@ -1,4 +1,5 @@
 import {readFileSync} from "node:fs";
+import {randomBytes} from "node:crypto";
 import {expect,it} from "vitest";
 import {xlsxEntries,readSheet} from "@/src/lib/sheet";
 import {salesSections} from "@/src/lib/gstr1-fields";
@@ -34,4 +35,8 @@ it("reads Excel date cells and note dates deterministically",()=>{
   expect(extractSales(rows,{section:"cdnr",header:0,headings,columns}).find((line)=>line.kind==="date")?.value).toBe("2026-10-10");
   rows[1][3]="31-Feb-2026";
   expect(()=>extractSales(rows,{section:"cdnr",header:0,headings,columns})).toThrow();
+  // A register may name each e-invoice's IRN after the official columns; the portal JSON leaves those out.
+  rows[1][3]="10-Oct-2026";rows[0].push("IRN");rows[1].push(randomBytes(32).toString("hex"));
+  expect(extractSales(rows,{section:"cdnr",header:0,headings:rows[0],columns:[...columns,13]}).find((line)=>line.field==="cdnr.r2.c13")?.value).toBe(rows[1][13]);
+  expect(exactMapping(rows)?.columns.at(-1)).toBe(13);
 });
