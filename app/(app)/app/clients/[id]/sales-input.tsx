@@ -7,7 +7,7 @@ import {grantFor} from "@/src/lib/permission-grants";
 import {readSales,savedSalesMappings} from "@/src/lib/sales-draft";
 import {workerSheet} from "@/src/lib/worker-read";
 import {exactMapping,sameHeadings,mappingSchema} from "@/src/lib/sales-register";
-import {salesSections,type SalesSection} from "@/src/lib/gstr1-fields";
+import {registerColumns,salesSections,type SalesSection} from "@/src/lib/gstr1-fields";
 import {askPermission} from "@/app/(app)/actions";
 import {serverCrypto} from "@/src/lib/crypto";
 import {supabaseAdmin} from "@/src/lib/supabase";
@@ -32,7 +32,7 @@ async function readRegister(form:FormData) {
     const section=z.enum(Object.keys(salesSections) as [SalesSection,...SalesSection[]]).parse(form.get("section"));
     const header=z.coerce.number().int().min(1).max(40).parse(form.get("header"))-1;
     const rows=await workerSheet(membership.firmId,doc);
-    const mapping=mappingSchema.parse({section,header,headings:rows[header],columns:salesSections[section].headings.map((_,index)=>Number(form.get(`column${index}`) ?? -1))});
+    const mapping=mappingSchema.parse({section,header,headings:rows[header],columns:registerColumns(section).map((_,index)=>Number(form.get(`column${index}`) ?? -1))});
     // A client with several GST numbers names the register's one; with one, it is implied.
     const registration=form.get("registration") ? z.uuid().parse(form.get("registration")) : undefined;
     if(registration && !(await supabase.from("client_registrations").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",registration).eq("kind","gstin").maybeSingle()).data) throw new Error("Unknown GST number");
@@ -67,7 +67,7 @@ export async function SalesInput({clientId,source,section:asked,header:askedHead
     <ul className="app-rows" aria-label="Sales registers">{registers.map((file)=><li className={`app-row${selected?.id===file.id ? " is-on" : ""}`} key={file.id}><span className="grow"><strong>{file.name}</strong>{file.period_key && <span className="sub">{periodName(file.period_key)}</span>}</span><Link className="b b-secondary" href={`?tab=extraction&source=${file.id}`} aria-current={selected?.id===file.id ? "page" : undefined} aria-label={`Choose the columns of ${file.name}`}>Choose columns</Link></li>)}</ul>
     {(issue || read || selected) && <div className="tool-body">{(issue || read) && <p className="alert" role="alert">{issue || (read==="permission" ? "You need permission to read these figures. Choose Ask to edit figures." : reason ?? "InboxCA could not read the figures. Check the columns you chose, the dates and amounts, and the paper's month. If the file was changed, upload it again.")}</p>}
     {selected && rows.length>0 && <><Form action={`/app/clients/${clientId}`} className="form-row"><input type="hidden" name="tab" value="extraction"/><input type="hidden" name="source" value={selected.id}/><label>GSTR-1 section<select name="section" defaultValue={section}>{Object.entries(salesSections).map(([key,value])=><option value={key} key={key}>{value.name}</option>)}</select></label><label>Column names are on row<input type="number" name="header" min={1} max={40} defaultValue={header}/></label><button className="b b-secondary">Show columns</button></Form>
-    {canEdit ? <form action={readRegister} className="fields"><input type="hidden" name="client" value={clientId}/><input type="hidden" name="source" value={selected.id}/><input type="hidden" name="section" value={section}/><input type="hidden" name="header" value={header}/>{!!gstins.length && <label>GSTIN this register is for<select name="registration" required defaultValue={selected.registration_id ?? ""}><option value="" disabled>Choose</option>{gstins.map((reg)=><option key={reg.id} value={reg.id}>{reg.number}</option>)}</select></label>}{salesSections[section].headings.map((name,index)=>{
+    {canEdit ? <form action={readRegister} className="fields"><input type="hidden" name="client" value={clientId}/><input type="hidden" name="source" value={selected.id}/><input type="hidden" name="section" value={section}/><input type="hidden" name="header" value={header}/>{!!gstins.length && <label>GSTIN this register is for<select name="registration" required defaultValue={selected.registration_id ?? ""}><option value="" disabled>Choose</option>{gstins.map((reg)=><option key={reg.id} value={reg.id}>{reg.number}</option>)}</select></label>}{registerColumns(section).map((name,index)=>{
       const column=suggestion?.section===section && suggestion.header===header-1 ? suggestion.columns[index] : headings.findIndex((heading)=>heading.trim().toLowerCase()===name.toLowerCase());
       return <label key={name}>{name}<select name={`column${index}`} defaultValue={column}><option value={-1}>Not in this file</option>{headings.map((heading,n)=><option key={n} value={n}>{String.fromCharCode(65+n)}: {heading.slice(0,200)}</option>)}</select></label>;
     })}<Pending className="b b-primary">Confirm columns and read figures</Pending></form> : !membership.viewOnlyUntil && <form action={askPermission}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-secondary">Ask to edit figures</Pending></form>}</>}

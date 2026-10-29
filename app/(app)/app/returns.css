@@ -67,6 +67,7 @@
 .rf-pop.is-end { right: 0; left: auto; transform-origin: top right; }
 .rf-pop-item { display: flex; align-items: center; min-height: var(--control); padding: var(--s1) var(--s2); border-radius: var(--r2); color: var(--ink); font-size: 14px; text-decoration: none; cursor: pointer; list-style: none; transition: background var(--fast) var(--out); }
 .rf-pop-item::-webkit-details-marker { display: none; }
+button.rf-pop-item { width: 100%; text-align: left; }
 .rf-pop-item:hover { background: var(--hover); }
 .rf-sub[open] > .rf-pop-item { background: var(--press); font-weight: 600; }
 .rf-pop-form { display: grid; gap: var(--s3); padding: var(--s2); animation: rf-open var(--base) var(--out); }

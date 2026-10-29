@@ -1,9 +1,11 @@
 import {readFileSync} from "node:fs";
-import {createHash} from "node:crypto";
+import {createHash,randomBytes} from "node:crypto";
 import {expect,it,vi} from "vitest";
 import catalog from "../../reference/official/templates.json";
 import {templateSchema} from "@/src/lib/templates";
-import {gstr1Workbook} from "../../worker/gstr1";
+import {gstr1Json,gstr1Workbook,portalFiles} from "../../worker/gstr1";
+import {officialSchema} from "../../worker/schema";
+import {unpack,zipEntries,zipFiles} from "../../worker/zip";
 import {xlsxEntries} from "@/src/lib/sheet";
 import {b2bRow,hsnRow,inventedGstin,salesRow as rows} from "@/src/lib/form-samples";
 
@@ -97,6 +99,55 @@ it("fills large B2C sales, unregistered notes, exports, advances and documents i
     expect(files.get(`xl/worksheets/sheet${template.mappings.sheets!.at}.xml`)!().toString()).toContain("<v>50000</v>");
     expect(files.get(`xl/worksheets/sheet${template.mappings.sheets!.exemp}.xml`)!().toString()).toContain("<v>350.50</v>");
   }
+},slow);
+
+// The portal JSON for Prepare Offline, from the rows that fill the workbook, against each version's pinned GSTN schema.
+it("makes the portal JSON with tax, HSN and documents, leaving out invoices that came from e-invoices",()=>{
+  for(const template of templates) {
+    const v2=template.version==="2.0",period=v2 ? "2024-09" : "2026-09",day=`${period}-10`,gstin=inventedGstin(),buyer=inventedGstin("ZZZPZ0002Z");
+    const rate5=b2bRow(period);rate5.get("b2b.r2.c10")!.value="5";rate5.get("b2b.r2.c11")!.value="40";
+    const einvoice=rows("b2b",[buyer,"Invented Recipient","INV/2",day,"236","27-Maharashtra","N","","Regular B2B","","18","200","0",randomBytes(32).toString("hex")]);
+    const hsn=["1001","Invented goods","NOS-NUMBERS","1.25","118","18","100","0","9","9","0"];
+    const drafts=[b2bRow(period),rate5,einvoice,
+      rows("b2cl",["INV/7",day,"236000","27-Maharashtra","","18","200000","0",""]),
+      rows("b2cs",["OE","24-Gujarat",v2 ? "" : "65","18","100","0",""]),
+      rows("cdnr",[buyer,"Invented Recipient","CN/1",day,"C","24-Gujarat","N","Regular B2B","118","","18","100","0"]),
+      rows("exp",["WPAY","EXP/1",day,"118000","INNSA1","1234567",day,"18","100000","0"]),
+      rows("exp",["WOPAY","EXP/2",day,"100000","","","","0","100000",""]),
+      ...(v2 ? [rows("hsn",hsn)] : [rows("hsn_b2b",hsn),rows("hsn_b2c",hsn)]),
+      rows("docs",["Invoices for outward supply","INV/1","INV/250","250","3"])];
+    const [file,...more]=gstr1Json(template,period,gstin,drafts),json=JSON.parse(file.toString());
+    expect(more).toHaveLength(0);
+    expect(officialSchema(template.mappings.validator!.file,template.mappings.validator!.sha256).validate(json)).toBe(true);
+    expect(json).toMatchObject({gstin,fp:`09${period.slice(0,4)}`});
+    // One invoice with two rates; tax from rate and taxable value, CGST and SGST halves within the State, IGST across.
+    expect(json.b2b).toEqual([{ctin:buyer,inv:[expect.objectContaining({inum:"INV/1",itms:[{num:1,itm_det:{rt:18,txval:100,csamt:0,camt:9,samt:9}},{num:2,itm_det:{rt:5,txval:40,csamt:0,camt:1,samt:1}}]})]}]);
+    expect(json.b2cl[0].inv[0].itms[0].itm_det).toMatchObject({txval:200000,iamt:36000});
+    expect(json.b2cs[0]).toMatchObject(v2 ? {camt:9,samt:9} : {diff_percent:0.65,camt:5.85,samt:5.85});
+    expect(json.cdnr[0].nt[0].itms[0].itm_det).toMatchObject({camt:9,samt:9});
+    expect(json.exp.map((entry:{inv:{itms:unknown[]}[]})=>entry.inv[0].itms)).toEqual([[{rt:18,txval:100000,csamt:0,iamt:18000}],[{rt:0,txval:100000}]]);
+    expect(Object.keys(json.hsn)).toEqual(v2 ? ["data"] : ["hsn_b2b","hsn_b2c"]);
+    expect((v2 ? json.doc_issue.doc_det : json.doc_issue.doc_det_new)[0].docs).toEqual([{num:1,from:"INV/1",to:"INV/250",totnum:250,cancel:3,net_issue:247}]);
+    if(v2) continue;
+    // The e-invoice stays in the Excel; a value that is not an IRN is refused; table 15 has no published flag.
+    expect(xlsxEntries(gstr1Workbook(template,period,gstin,drafts)).get("xl/worksheets/sheet2.xml")!().toString()).toContain(">INV/2<");
+    einvoice.get("b2b.r2.c13")!.value="NA";
+    expect(()=>gstr1Json(template,period,gstin,drafts)).toThrow("IRN");
+    expect(()=>gstr1Json(template,period,gstin,[rows("ecob2b",[inventedGstin("ZZZPZ0004Z"),"Invented Supplier",buyer,"Invented Recipient","DOC/1",day,"118","24-Gujarat","Regular","18","100","0"])])).toThrow("table 15");
+  }
+},slow);
+
+it("splits a large month into portal files of at most 5 MB with whole invoices, each with the GSTIN and month",()=>{
+  const template=templates[1],{validate}=officialSchema(template.mappings.validator!.file,template.mappings.validator!.sha256),gstin=inventedGstin(),buyer=inventedGstin("ZZZPZ0002Z");
+  const inv=Array.from({length:40000},(_,n)=>({inum:`INV/${n+1}`,idt:"10-09-2026",val:118,pos:"24",rchrg:"N",inv_typ:"R",itms:[{num:1,itm_det:{rt:18,txval:100,camt:9,samt:9}}]}));
+  const files=portalFiles({gstin,fp:"092026",b2b:[{ctin:buyer,inv}],doc_issue:{doc_det_new:[{doc_num:"1",doc_typ:"Invoices for outward supply",docs:[{num:1,from:"INV/1",to:"INV/40000",totnum:40000,cancel:0,net_issue:40000}]}]}});
+  expect(files.length).toBeGreaterThan(1);
+  for(const file of files) {expect(Buffer.byteLength(JSON.stringify(file))).toBeLessThanOrEqual(5_000_000);expect(validate(file)).toBe(true);expect(file).toMatchObject({gstin,fp:"092026"});}
+  expect(files.flatMap((file)=>((file.b2b ?? []) as {inv:{inum:string}[]}[]).flatMap((entry)=>entry.inv.map((item)=>item.inum)))).toEqual(inv.map((item)=>item.inum));
+  expect(files.filter((file)=>file.doc_issue)).toHaveLength(1);
+  // Several files come as one ZIP that reads back unchanged.
+  const zip=zipFiles(files.map((file,n)=>[`${n+1}.json`,Buffer.from(JSON.stringify(file))]));
+  expect(zipEntries(zip).map((entry)=>JSON.parse(unpack(entry).toString()))).toEqual(files);
 },slow);
 
 it("refuses rows the official rules put elsewhere or leave out",()=>{

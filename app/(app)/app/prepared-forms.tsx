@@ -7,6 +7,8 @@ import {currentMember,viewOnlyWords} from "@/src/lib/member";
 import {preparedSchema,formName} from "@/src/lib/prepared";
 import {draftSchema} from "@/src/lib/datasets";
 import {periodName} from "@/src/lib/documents";
+import {gstPortalTakes} from "@/src/lib/calendar";
+import {irnColumn} from "@/src/lib/gstr1-fields";
 import {itrReady,itrYear} from "@/src/lib/itr-fields";
 import {itrWork} from "@/src/lib/itr";
 import {itrChecks} from "@/src/lib/itr-check";
@@ -90,6 +92,8 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   const outdated=(meta:{sources:{id:string;revision:number}[]})=>meta.sources.some(source=>{const row=[...(rows ?? []),...itrDrafts].find(row=>row.id===source.id);return !!row && row.revision!==source.revision;});
   // A fill's figures still to check: approving and downloading wait for every one.
   const unchecked=(meta:{sources:{id:string}[]})=>meta.sources.reduce((sum,source)=>sum+((([...(rows ?? []),...itrDrafts].find(row=>row.id===source.id)?.data ?? {}) as {lines?:{state:string}[]}).lines ?? []).filter(line=>line.state!=="confirmed").length,0);
+  // A GSTR-1 whose register names an IRN: its portal JSON leaves those invoices and notes out (worker/gstr1.ts).
+  const einvoiced=(meta:{sources:{id:string}[]})=>meta.sources.some(source=>(rows ?? []).some(row=>row.id===source.id && draftSchema.parse(row.data).lines.some(line=>{const hit=/^([a-z0-9]+)\.r\d+\.c(\d+)$/.exec(line.field);return !!hit && Number(hit[2])===irnColumn(hit[1]);})));
   const label=(row:{form_code:string;data:unknown})=>{const data=draftSchema.parse(row.data);return `${row.form_code==="GSTR3B" ? "GSTR-2B credit" : sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Source file"}, ${data.lines.length} figures${data.lines.every(line=>line.state==="confirmed") ? ", checked" : ", check these first"}`;};
   const reason=message ? await keptReason() : undefined;
   // Why this person cannot take a step, by the same rules the server keeps.
@@ -159,6 +163,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         <div className="rf-acts">
           {(meta.sources.length || reject || upload) && <details className="rf-menu"><summary className="b b-ghost" aria-label="More for this file">More<Ellipsis size={15} aria-hidden/></summary><div className="rf-pop is-end">
             {meta.sources.map((source,n)=><Link key={source.id} className="rf-pop-item" href={`?tab=extraction&draft=${source.id}`}>Check source figures{meta.sources.length>1 ? ` ${n+1}` : ""}</Link>)}
+            {meta.form==="GSTR1" && active && ["approved","filed"].includes(stage) && <form action={`/app/files/${file.id}/filing`} method="post"><input type="hidden" name="format" value="excel"/><button className="rf-pop-item">Excel for the offline tool</button></form>}
             {reject && <details className="rf-sub"><summary className="rf-pop-item">Reject this version</summary><form action={decideForm} className="rf-pop-form">
               <input type="hidden" name="document" value={file.id}/>
               <div><label htmlFor={`reason-${file.id}`}>Reason</label><select id={`reason-${file.id}`} name="reason"><option value="figures">Figures need checking</option><option value="source">Source needs checking</option><option value="other">Other reason</option></select></div>
@@ -175,6 +180,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
       </div>
       <Steps done={done} busy={stage==="preparing" || stage==="making"}/>
       {note && <p className={`rf-note${stage==="preparing" || stage==="making" ? " is-busy" : ""}`}>{note}</p>}
+      {meta.form==="GSTR1" && einvoiced(meta) && <p className="rf-notice"><Info size={15} aria-hidden/>Invoices and notes with an IRN are left out of the JSON, because the portal has them from e-invoices and uploading them again would wipe their IRN details.</p>}
       {meta.form==="GSTR1" && meta.template==="2.0" && <p className="rf-notice"><Info size={15} aria-hidden/>This older official workbook leaves out supplies through e-commerce operators (tables 14 and 15). Add them in the offline tool or on the portal before filing.</p>}
       {meta.form==="GSTR3B" && <details className="rf-tables"><summary><Check size={15} aria-hidden/>InboxCA filled {filled3b.length} parts from your checked GSTR-1 and GSTR-2B figures. Add {left3b.length} more on the portal before filing.<ChevronDown size={15} aria-hidden/></summary>
         <div className="rf-tables-body">
@@ -208,7 +214,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
           // A register named for this number, or any register when the client has only one;
           // GSTR-2B credit drafts hold every number's figures apart, so they serve each one.
           const own=(rows ?? []).filter(row=>row.form_code==="GSTR3B" || registrationOf(row)===reg.id),of=gstins.length>1 ? ` for ${reg.number}` : "";
-          const months1=[...new Set(own.filter(row=>row.form_code==="GSTR1").map(row=>row.period_key))],months3=[...new Set(own.filter(row=>row.period_key>="2025-04").map(row=>row.period_key))];
+          const months1=[...new Set(own.filter(row=>row.form_code==="GSTR1").map(row=>row.period_key))].filter(period=>gstPortalTakes(period)),months3=[...new Set(own.filter(row=>row.period_key>="2025-04").map(row=>row.period_key))].filter(period=>gstPortalTakes(period));
           return <Fragment key={reg.id}>
             {!!months1.length && <div className="rf-group"><h3>Prepare GSTR-1{of}</h3>{months1.map(period=>{
               const previous=forms?.find(file=>file.period_key===period && latest.has(file.id) && preparedSchema.parse(file.prepared).form==="GSTR1" && preparedSchema.parse(file.prepared).registration===reg.id),preferred=previous ? new Set(preparedSchema.parse(previous.prepared).sources.map(source=>source.id)) : null;

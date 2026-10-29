@@ -26,6 +26,12 @@ export const taskStatuses = { upcoming: "Upcoming", in_progress: "In progress", 
 // Today in India, as a date column holds it (YYYY-MM-DD).
 export const todayInIndia = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 export const addDays = (date: string, days: number) => new Date(Date.parse(date) + days * 86_400_000).toISOString().slice(0, 10);
+// The GST portal refuses a GSTR-1 or GSTR-3B three years after its due date (Finance Act 2023).
+// Their due dates fall in the month after the month or its quarter, so a month is offered until
+// three years after the end of the month after its quarter.
+export const gstPortalTakes = (period: string, today = todayInIndia()) =>
+  today <= new Date(Date.UTC(Number(period.slice(0, 4)) + 3, Math.ceil(Number(period.slice(5, 7)) / 3) * 3 + 1, 0)).toISOString().slice(0, 10);
+export const gstPortalClosed = "The GST portal no longer takes this return. It is more than three years past its due date.";
 
 // The calendar page's views: what is late, what is coming, what was filed.
 export const calendarViews = {
