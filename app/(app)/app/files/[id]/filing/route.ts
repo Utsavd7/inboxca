@@ -16,9 +16,11 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
   const {document,membership,userId}=form,admin=supabaseAdmin();
   const {data:ready,error}=await admin.rpc("form_ready",{target:id});
   if(error || !ready) return Response.redirect(new URL(`/app/clients/${document.client_id}?tab=outputs&form=check`,origin),303);
-  const token=randomBytes(32).toString("base64url"),ticket=randomUUID();
-  const {error:failed}=await admin.from("requests").insert({id:ticket,firm_id:membership.firmId,client_id:document.client_id,kind:"filing_download",entity_type:"document",entity_id:id,expires_at:new Date(Date.now()+60_000).toISOString(),details:{by:userId,token_hash:createHash("sha256").update(token).digest("hex")}});
-  if(failed) return refuse(503,"The return file could not be opened. Go back and try again.",document.client_id);
+  // One ticket row a return (requests are unique by kind and entity): a later download takes it over with a fresh key.
+  const token=randomBytes(32).toString("base64url");
+  const {data:made,error:failed}=await admin.from("requests").upsert({id:randomUUID(),firm_id:membership.firmId,client_id:document.client_id,kind:"filing_download",entity_type:"document",entity_id:id,status:"pending",expires_at:new Date(Date.now()+60_000).toISOString(),details:{by:userId,token_hash:createHash("sha256").update(token).digest("hex")}},{onConflict:"kind,entity_type,entity_id"}).select("id").single();
+  if(failed || !made) return refuse(503,"The return file could not be opened. Go back and try again.",document.client_id);
+  const ticket=made.id;
   const url=new URL(`/app/files/${id}/filing`,origin),excel=(await request.formData().catch(()=>null))?.get("format")==="excel";
   url.search=new URLSearchParams({ticket,key:token,...(excel && {format:"excel"})}).toString();
   return new Response(null,{status:303,headers:{Location:url.toString(),"Cache-Control":"private, no-store"}});
