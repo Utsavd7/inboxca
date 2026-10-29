@@ -87,6 +87,20 @@ describe("the compliance calendar", () => {
       expect((await due("PMT06")).map((task) => task.period_key)).not.toContain("2026-12");
     }));
 
+  it("adds an imported client with its services and their due dates, or nothing when they do not fit", () =>
+    rollback(db, async () => {
+      await seed();
+      const imported = (id: string, services: string[]) =>
+        JSON.stringify([{ id, name: "Imported Traders", kind: "business", registrations: [{ kind: "gstin", number_enc: "sealed", number_bidx: id, state_code: "24", services }] }]);
+      const [refused, added] = ["00000000-0000-4000-8000-0000000005c2", "00000000-0000-4000-8000-0000000005c3"];
+      expect((await attempt(db, "select public.add_clients($1, $2)", [FIRM, imported(refused, ["GSTR1_M", "GSTR1_Q"])])).ok).toBe(false);
+      expect((await attempt(db, "select public.add_clients($1, $2)", [FIRM, imported(added, ["GSTR1_Q", "GSTR3B_Q", "PMT06"])])).ok).toBe(true);
+      await asOwner(db);
+      expect((await db.query("select id from public.clients where id = any($1)", [[refused, added]])).rows).toEqual([{ id: added }]);
+      const planned = await db.query("select distinct code from public.tasks where client_id = $1 order by code", [added]);
+      expect(planned.rows.map((task) => task.code)).toEqual(["GSTR1_Q", "GSTR3B_Q", "PMT06"]);
+    }));
+
   it("lets staff mark a task filed but not move its date; removing a service keeps filed tasks", () =>
     rollback(db, async () => {
       await seed();

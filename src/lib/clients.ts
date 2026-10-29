@@ -1,4 +1,4 @@
-import { cleanNumber, isGstin, isPan, panOfGstin } from "./identifiers";
+import { cleanNumber, isGstin, isPan, numberKinds, panOfGstin } from "./identifiers";
 
 // Kinds of client (PLAN.md 6), for pages and the browser form.
 export const clientKinds = {
@@ -56,4 +56,46 @@ export function readKind(text: string, hasGstin: boolean): ClientKind | null {
     [/business|proprietor|partnership|firm|trader|shop/, "business"],
   ];
   return guesses.find(([pattern]) => pattern.test(kind))?.[1] ?? null;
+}
+
+// The client list's optional Services columns. Each choice is the calendar's own services
+// (compliance_types codes) on one of the client's numbers, as Change services on the client's
+// page ticks them: QRMP with its monthly payment, composition with its annual return, TDS
+// returns with the monthly TDS payments. Empty adds nothing; anything else is a row's problem.
+export const importServices: Record<string, { number: "pan" | "gstin" | "tan"; choices: Record<string, string[]> }> = {
+  "GST returns": { number: "gstin", choices: { Monthly: ["GSTR1_M", "GSTR3B_M"], "Quarterly (QRMP)": ["GSTR1_Q", "GSTR3B_Q", "PMT06"], Composition: ["CMP08", "GSTR4"], None: [] } },
+  "TDS returns": { number: "tan", choices: { Yes: ["TDS_PAY", "TDS_RET"], No: [] } },
+  "Income tax return": { number: "pan", choices: { "No business and no audit": ["ITR_NA"], "Business and no audit": ["ITR_BIZ"], "Audit case": ["ITR_AUDIT"], "Transfer pricing": ["ITR_TP"], None: [] } },
+};
+const or = (words: string[]) => words.join(", ").replace(/, ([^,]*)$/, " or $1");
+
+// A row's services by number from what its Services columns say (any case; "Quarterly" for
+// "Quarterly (QRMP)"), or why they cannot be added. fits says whether a service is for the
+// row's kind of client.
+export function readServices(said: Record<string, string>, numbers: Record<"pan" | "gstin" | "tan", string>, kind: ClientKind, fits: (code: string) => boolean) {
+  const services: Partial<Record<"pan" | "gstin" | "tan", string[]>> = {};
+  for (const [column, { number, choices }] of Object.entries(importServices)) {
+    const text = (said[column] ?? "").trim();
+    if (!text) continue;
+    const choice = Object.keys(choices).find((name) => [name, name.split(" (")[0]].some((form) => form.toLowerCase() === text.toLowerCase()));
+    if (!choice) return { error: `"${text}" is not a choice for ${column}. Use ${or(Object.keys(choices))}.` };
+    if (!choices[choice].length) continue;
+    if (!numbers[number]) return { error: `For ${column}, give the client's ${numberKinds[number].name}.` };
+    if (!choices[choice].every(fits)) return { error: `"${choice}" in ${column} is not for a ${clientKinds[kind]} client.` };
+    services[number] = choices[choice];
+  }
+  return { services };
+}
+
+// The services a kind of client files on a number by the calendar's own rules, suggested on a
+// client with none for a person to confirm (20261028300000 and 20261031000000): a plain
+// business or an LLP files the 31 August ITR, a company or a business with tax audit the audit
+// one (Income-tax Act s.139(1), Explanation 2), the latter with its tax audit report; every LLP
+// files Forms 8 and 11 (LLP Act s.34 and s.35); a TAN is for TDS. An individual's or a trust's
+// ITR and GST monthly or quarterly depend on the client, so nothing is suggested for them.
+export function usualServices(kind: string, number: string): string[] {
+  if (number === "tan") return ["TDS_PAY", "TDS_RET"];
+  if (number === "llpin") return ["LLP8", "LLP11"];
+  if (number !== "pan") return [];
+  return ({ business: ["ITR_BIZ"], llp: ["ITR_BIZ"], company: ["ITR_AUDIT"], tax_audit: ["TAX_AUDIT", "ITR_AUDIT"] } as Record<string, string[]>)[kind] ?? [];
 }

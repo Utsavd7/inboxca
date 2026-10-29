@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
 import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
 import { exampleClient } from "@/src/lib/clients";
+import { isGstin } from "@/src/lib/identifiers";
 import { xlsxEntries } from "@/src/lib/sheet";
 import { craft } from "../fixtures/zip";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
@@ -296,23 +297,64 @@ test("importing 500 clients with emails adds them all and reports every bad row"
   await expect(owner.getByRole("link", { name: "Client 42", exact: true })).toBeVisible();
 });
 
-test("the client list template, filled in, and a Tally export both import", async () => {
+test("the client list template, filled in with services, and a Tally export both import; Set services adds to many", async () => {
   const tag = randomUUID().slice(0, 6), panel = owner.locator("section[aria-labelledby=import]");
   await owner.goto("/app/clients?panel=import");
   const download = owner.waitForEvent("download");
   await owner.getByRole("link", { name: "Download the client list template" }).click();
   const template = xlsxEntries(await readFile((await (await download).path())!));
-  // Two clients typed under the template's headings, then an empty row and the example row
-  // copied from How to fill, which are left out.
-  const typed = [[`Template Mehta ${tag}`, "Company", "TMPLA1234B"], [`Template Joshi ${tag}`, "", "", "", `joshi-${tag}@example.test`], [], Object.values(exampleClient)];
-  const rows = typed.map((cells, at) => `<row r="${at + 2}">${cells.map((text, column) => text && `<c r="${"ABCDE"[column]}${at + 2}" t="inlineStr"><is><t>${text}</t></is></c>`).join("")}</row>`).join("");
+  // Two clients typed under the template's headings with their services, one with a service
+  // the list does not offer, then an empty row and the example row copied from How to fill,
+  // which are left out. Columns: Name, Client type, PAN, GSTIN, Email, TAN and the services.
+  const gstin = Array.from({ length: 36 }, (_, at) => `27TMPJA1234K1Z${at.toString(36).toUpperCase()}`).find(isGstin)!;
+  const typed = [
+    [`Template Mehta ${tag}`, "Company", "TMPLA1234B", "", "", "TMPL12345C", "", "Yes", "Audit case"],
+    [`Template Joshi ${tag}`, "", "", gstin, `joshi-${tag}@example.test`, "", "Quarterly (QRMP)", "", "Business and no audit"],
+    [`Template Rao ${tag}`, "", "", "", "", "", "Weekly"],
+    [],
+    Object.values(exampleClient),
+  ];
+  const rows = typed.map((cells, at) => `<row r="${at + 2}">${cells.map((text, column) => text && `<c r="${"ABCDEFGHI"[column]}${at + 2}" t="inlineStr"><is><t>${text}</t></is></c>`).join("")}</row>`).join("");
   const filled = craft([...template].map(([name, read]) => ({ name, bytes: name === "xl/worksheets/sheet1.xml" ? Buffer.from(read().toString().replace("</sheetData>", `${rows}</sheetData>`)) : read() })));
   await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "clients.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: filled });
   await owner.getByRole("button", { name: "Check the file" }).click();
-  await expect(owner.getByText("2 ready to import.")).toBeVisible();
-  await expect(panel.getByRole("table")).toContainText(`Template Mehta ${tag}Company`);
+  await expect(owner.getByText("2 ready to import, 1 with a problem and left out.")).toBeVisible();
+  // The check shows each row's services before anything is added.
+  const check = panel.getByRole("table").first();
+  await expect(check.getByRole("row").filter({ hasText: `Template Mehta ${tag}` })).toContainText("Company");
+  await expect(check.getByRole("row").filter({ hasText: `Template Mehta ${tag}` })).toContainText("ITR (audit cases)");
+  await expect(check.getByRole("row").filter({ hasText: `Template Joshi ${tag}` })).toContainText("GSTR-1 (QRMP)");
+  await expect(panel.getByRole("table").last()).toContainText(`Template Rao ${tag}`);
   await owner.getByRole("button", { name: "Import 2 clients" }).click();
   await expect(owner.getByText("Imported 2 clients.")).toBeVisible();
+  const services = async () => (await query(local.dbUrl, "select c.name, r.kind, r.services from public.client_registrations r join public.clients c on c.id = r.client_id where c.firm_id = $1 and c.name like $2 order by c.name, r.kind", [firm.firmId, `Template % ${tag}`]))
+    .map((row) => `${row.name.split(" ")[1]} ${row.kind} ${[...row.services].sort().join(" ")}`.trim());
+  expect(await services()).toEqual(["Joshi gstin GSTR1_Q GSTR3B_Q PMT06", "Joshi pan ITR_BIZ", "Mehta pan ITR_AUDIT", "Mehta tan TDS_PAY TDS_RET"]);
+  // Their due dates are on the calendar at once.
+  const dueDay = async (code: string) => (await query(local.dbUrl, "select to_char(min(t.due_on), 'YYYY-MM-DD') as first from public.tasks t join public.clients c on c.id = t.client_id where c.firm_id = $1 and c.name like $2 and t.code = $3", [firm.firmId, `Template % ${tag}`, code]))[0].first;
+  await owner.goto(`/app/calendar?day=${await dueDay("GSTR1_Q")}&code=GSTR1_Q`);
+  await expect(owner.getByRole("row").filter({ hasText: `Template Joshi ${tag}` })).toBeVisible();
+
+  // Set services for both at once adds a checked return and the tax audit where it fits (the
+  // company, not the business), and keeps what each had.
+  const code = `SV${tag.toUpperCase()}`;
+  await query(local.dbUrl, "insert into public.compliance_types (code, name, frequency, due_rule, source_url, verified_on, approved_by) values ($1, $2, 'monthly', '{\"for\": \"pan\", \"after\": 1, \"day\": 11}', 'https://example.test/notification', current_date, 'test')", [code, `Services test return ${tag}`]);
+  try {
+    await owner.goto(`/app/clients?q=${tag}`);
+    for (const name of [`Template Mehta ${tag}`, `Template Joshi ${tag}`]) await owner.getByLabel(`Choose ${name}`, { exact: true }).check();
+    await owner.getByRole("link", { name: "Set services" }).click();
+    const set = owner.getByRole("dialog", { name: "Set services" });
+    await set.getByLabel(`Services test return ${tag}`).check();
+    await set.getByRole("checkbox", { name: /^Tax audit report/ }).check();
+    await set.getByRole("button", { name: "Add services to 2 clients" }).click();
+    await expect(owner.getByText(/^Services added for 2 clients/)).toBeVisible();
+    expect(await services()).toEqual(["Joshi gstin GSTR1_Q GSTR3B_Q PMT06", `Joshi pan ITR_BIZ ${code}`, `Mehta pan ITR_AUDIT ${code} TAX_AUDIT`, "Mehta tan TDS_PAY TDS_RET"]);
+    // The checked return's dates show without the mark for a date not yet checked.
+    await owner.goto(`/app/calendar?day=${await dueDay(code)}&code=${code}`);
+    for (const name of [`Template Mehta ${tag}`, `Template Joshi ${tag}`]) await expect(owner.getByRole("row").filter({ hasText: name })).not.toContainText("*");
+  } finally {
+    await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
+  }
 
   // Tally's column names, below the title rows its export puts on top.
   const tally = ["Sharma & Co", "List of Ledgers", "", "Name of Party,GSTIN/UIN,PAN/IT No.,E-mail,Constitution", `Tally Kapoor ${tag},,TLYAB1234C,kapoor-${tag}@example.test,Limited Liability Partnership`];
