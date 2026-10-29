@@ -6,8 +6,9 @@ export const bytes = (text: string) => Uint8Array.from(atob(text.replace(/-/g, "
 export const text = (buffer: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 // An office PC's own key (PLAN.md 5.17.4 #32): set it up once, or use it to confirm a changed
-// office connection. The PC asks for its PIN or fingerprint; the key never leaves it.
-export function PcKey({ mode }: { mode: "setup" | "confirm" }) {
+// office connection. The PC asks for its PIN or fingerprint; the key never leaves it. button:
+// its class, the sign in card's own where the app's is not drawn.
+export function PcKey({ mode, button = "b b-primary b-small" }: { mode: "setup" | "confirm"; button?: string }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const run = async () => {
@@ -43,7 +44,7 @@ export function PcKey({ mode }: { mode: "setup" | "confirm" }) {
   };
   return (
     <span className="form-row">
-      <button className="b b-primary b-small" type="button" onClick={run} disabled={busy}>
+      <button className={button} type="button" onClick={run} disabled={busy}>
         {mode === "setup" ? "Set up this office PC" : "Confirm from this PC"}
       </button>
       {message && <span className="hint" role="status">{message}</span>}

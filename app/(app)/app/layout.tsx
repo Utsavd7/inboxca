@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { KeyRound, X } from "lucide-react";
 import { pcKeyLater } from "@/app/(app)/actions";
+import { AuthFrame } from "@/components/site/auth-frame";
 import { PC_LATER_COOKIE } from "@/src/lib/pc-key";
 import { todayInIndia } from "@/src/lib/calendar";
 import { longDate } from "@/src/lib/hours";
@@ -38,6 +39,9 @@ const fortnightAgo = () => new Date(Date.now() - 14 * 86_400_000).toISOString();
 // line arrive as they are ready.
 export default async function AppLayout({ children, doc }: { children: React.ReactNode; doc: React.ReactNode }) {
   const { supabase, membership, pcKey } = await currentMember();
+  // Someone not in a firm now (invited, kept out of the office, or a new computer waiting)
+  // sees Today's gate in the sign in card, not an empty app.
+  if (!membership) return <AuthFrame>{children}</AuthFrame>;
   const jar = await cookies();
   // Light unless the person chose Dark or System in their account menu (user, 26 Oct 2026).
   const theme = (["light", "dark", "system"].includes(jar.get("theme")?.value ?? "") ? jar.get("theme")!.value : "light") as Theme;
@@ -65,7 +69,7 @@ export default async function AppLayout({ children, doc }: { children: React.Rea
       <WorkspaceMenu />
       {membership && (
         <div className="side-tools">
-          <NewMenu manage={manage} write={write} />
+          <NewMenu manage={manage} write={write} portal={membership.may("portal_files")} />
           <Command pages={pagesFor(role)} manage={manage} write={write} />
         </div>
       )}
@@ -113,13 +117,14 @@ export default async function AppLayout({ children, doc }: { children: React.Rea
               </form>
             </div>
           )}
+          {/* The plan not paid is a failure, red; a laptop away from the office is news, blue. */}
           {membership?.billing && membership.billing !== "start" ? (
-            <div className="notice" role="status">
+            <div className="alert" role="status">
               <span className="grow">{membership.billing === "grace" ? "The last payment for InboxCA did not go through. Everything works for now." : "Your firm can only view for now: its InboxCA plan is not paid, or was cancelled."}{!owner && " The owner can pay in Settings, Billing."}</span>
               {owner && <Link className="b b-secondary" href="/app/settings?group=billing">Open Billing</Link>}
             </div>
           ) : membership?.viewOnlyUntil && membership.viewOnlyUntil !== "billing" && (
-            <p className="notice" role="status">
+            <p className="note" role="status">
               This laptop is away from the office, so it can only view papers until {longDate(membership.viewOnlyUntil)}.
             </p>
           )}

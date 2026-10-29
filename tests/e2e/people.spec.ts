@@ -49,7 +49,7 @@ test("an invite sent by mistake is withdrawn, and its email no longer joins the 
   const key = (await invited.locator(".secret").textContent())!.trim();
   await invited.getByLabel("6 digit code from the app").fill(totp(key));
   await invited.getByRole("button", { name: "Continue" }).click();
-  await expect(invited.locator(".page-head")).toContainText("You are not part of a firm yet.");
+  await expect(invited.getByRole("heading", { name: "No firm yet" })).toBeVisible();
   await expect(invited.getByRole("button", { name: /^Join/ })).toHaveCount(0);
   await invited.close();
 });

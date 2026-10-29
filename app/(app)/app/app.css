@@ -103,11 +103,9 @@ html:has(.ui) {
   --gray-bg: light-dark(#eef2f7, rgba(194, 211, 247, 0.08)); --gray-fg: light-dark(#51607a, #a9b8d0);
   --green-bg: light-dark(#e6f4ee, rgba(111, 220, 176, 0.12)); --green-fg: light-dark(#0b7a51, #6fdcb0);
   --red-bg: light-dark(#fdecea, rgba(245, 138, 128, 0.12)); --red-fg: light-dark(#b42318, #f58a80);
-  --amber-bg: light-dark(#e8eefb, rgba(125, 156, 240, 0.16)); --amber-fg: light-dark(#1a4bb0, #9bb4f5);
-  --purple-bg: light-dark(#dbe5f8, rgba(125, 156, 240, 0.24)); --purple-fg: light-dark(#153e94, #c2d3f7);
   --blue-bg: light-dark(#e8eefb, rgba(125, 156, 240, 0.16)); --blue-fg: light-dark(#1a4bb0, #9bb4f5);
-  --teal-bg: light-dark(#dbe5f8, rgba(125, 156, 240, 0.24)); --teal-fg: light-dark(#153e94, #c2d3f7);
-  --pink-bg: light-dark(#e3e8f0, rgba(194, 211, 247, 0.12)); --pink-fg: light-dark(#0b1f3a, #e8eefb);
+  /* Strong: the deeper blue on its stronger tint, for what stands apart (the owner, an image). */
+  --strong-bg: light-dark(#dbe5f8, rgba(125, 156, 240, 0.24)); --strong-fg: light-dark(#153e94, #c2d3f7);
   --red-bar: light-dark(#ef9a91, rgba(245, 138, 128, 0.45));
 
   /* Kinds: each Today card and empty state has a tile of its own, in the blue family; a
@@ -229,13 +227,13 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .stage-notes { display: grid; gap: var(--s2); padding: var(--s2) var(--s6) 0; }
 .stage-notes > * { margin: 0; }
 /* An office PC still to set up (layout.tsx): one slim line with its button and a close. Today
-   shows it as a card instead, so the strip steps aside there. */
+   shows it as one of its own lines when they have room, so the strip steps aside there. */
 .pc-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); min-height: 36px; padding: 2px 2px 2px var(--s3); border: 1px solid var(--edge); border-radius: var(--r2); background: var(--accent-soft); color: var(--ink-2); font-size: 13px; }
 .pc-strip > svg { flex: none; color: var(--accent); }
 .pc-strip .grow { flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-strip .form-row { flex-wrap: nowrap; align-items: center; gap: var(--s2); margin: 0; }
 .pc-strip form { display: flex; }
-.ui:has(.today-pc) .pc-strip { display: none; }
+.ui:has(.today) .pc-strip { display: none; }
 .stage-panel { flex: 1; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .stage-body { max-width: 1440px; margin-inline: auto; padding: 0 var(--s6) var(--s7); }
 /* The bar along the top of the stage while the next page loads (nav-progress.tsx): it creeps
@@ -440,7 +438,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 /* Status pills and avatars. A pill with a meaning has a dot and a word, never colour alone;
    a plain one (a count, a kind) has no dot. */
 .badge { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 22px; padding: 0 var(--s2); border-radius: var(--round); background: var(--none-bg); color: var(--none-fg); font-size: 12px; font-weight: 600; white-space: nowrap; }
-.badge:is(.blue, .done, .late, .warn, .purple):not(.plain)::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: var(--round); background: currentColor; }
+.badge:is(.blue, .done, .late, .warn, .strong):not(.plain)::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: var(--round); background: currentColor; }
 .badge.blue { background: var(--info-bg); color: var(--info-fg); }
 .badge.done { background: var(--done-bg); color: var(--done-fg); }
 .badge.done::before { background: var(--done-dot); }
@@ -448,7 +446,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .badge.late::before { background: var(--late-dot); }
 .badge.warn { background: var(--wait-bg); color: var(--wait-fg); }
 .badge.warn::before { background: var(--wait-dot); }
-.badge.purple { background: var(--purple-bg); color: var(--purple-fg); }
+.badge.strong { background: var(--strong-bg); color: var(--strong-fg); }
 /* Initials on one of eight hues picked by the name, so a person or client keeps a colour. */
 .avatar { display: inline-grid; flex: none; place-items: center; width: 28px; height: 28px; border-radius: var(--round); background: var(--a7-bg); color: var(--a7-fg); font-size: 12px; font-weight: 700; letter-spacing: 0.01em; }
 .avatar.square { border-radius: var(--r1); }
@@ -470,7 +468,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .drop p { display: grid; flex: 1 1 300px; }
 .drop-pick { display: flex; align-items: center; gap: var(--s2); }
 .drop input[type="file"] { width: auto; max-width: 260px; }
-.notice + .notice, .drop + .notice, .drop + .alert { margin-top: var(--s3); }
+.notice + .notice, .drop + :is(.notice, .note), .drop + .alert { margin-top: var(--s3); }
 /* The view-only file viewer: pages on a quiet ground, nothing to download. */
 .viewer { margin-top: var(--s5); }
 .viewer-pages { display: grid; justify-items: center; gap: var(--s4); padding: var(--s4); border-radius: var(--r3); background: var(--surface-2); user-select: none; }
@@ -490,7 +488,10 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .ui input[type="file"] { width: 100%; font-size: 13px; color: var(--ink-2); }
 .ui input[type="file"]::file-selector-button { height: var(--control); margin-right: var(--s3); padding: 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer; transition: background 120ms; }
 .ui input[type="file"]::file-selector-button:hover { background: var(--hover); }
-.notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s3); padding: var(--s2) var(--s3); border-radius: var(--r2); background: var(--green-bg); color: var(--green-fg); font-size: 13px; }
+/* A line in the page: .notice only for something done, .note (blue) for an ask or some news,
+   .alert (red) for a failure. */
+.notice, .note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s3); padding: var(--s2) var(--s3); border-radius: var(--r2); background: var(--green-bg); color: var(--green-fg); font-size: 13px; }
+.note { background: var(--info-bg); color: var(--info-fg); }
 
 /* Details as label and value pairs (a client's details, an open notice). */
 .props { display: grid; gap: var(--s1); }

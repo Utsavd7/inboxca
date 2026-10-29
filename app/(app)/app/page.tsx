@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { askAwayDevice, joinFirm } from "@/app/(app)/actions";
+import { signOut } from "@/app/(auth)/actions";
 import { PcKey } from "./pc-key";
 import { canManageClients } from "@/src/lib/clients";
 import { todayInIndia } from "@/src/lib/calendar";
@@ -11,7 +12,7 @@ import { currentMember } from "@/src/lib/member";
 import { personName, roleNames } from "@/src/lib/roles";
 import { isLead } from "@/src/lib/work/today";
 import { OfficePanel } from "./office-panel";
-import { ComputerWaits, NewComputers } from "./new-computers";
+import { ComputerWaits, problems } from "./new-computers";
 import { GovLine } from "./gov-line";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { Count, Presence, Press } from "./motion";
@@ -31,10 +32,10 @@ type Params = { dropped?: string; error?: string; asked?: string; panel?: string
 type Context = Parameters<typeof workFor>[0];
 
 // Today, one screen for each person whatever the firm's size (PLAN.md "Today by role"): a
-// greeting with how many things need them, at most two lines about the firm's email, drive,
-// setup or the government, their list (at most 7, most urgent first, See all for the rest) and
-// this week in a few numbers, each opening its list. The owner and partners see the firm, a
-// manager their team and what waits for their approval, staff and front desk their own
+// greeting with how many things need them, at most two lines about the firm (Attention), their
+// list (what waits for their yes first, at most 7 in all, most urgent first, See all for the
+// rest) and this week in a few numbers, each opening its list. The owner and partners see the
+// firm, a manager their team and what waits for their approval, staff and front desk their own
 // clients. Every query starts at once and each part shows as soon as its data is in.
 export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
   const { dropped, error, asked, panel } = await searchParams;
@@ -70,11 +71,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         }
         actions={
           <>
-            {portal && (
-              <Link className="b b-secondary" href="/app?panel=portal" scroll={false}>
-                Add portal files
-              </Link>
-            )}
+            {/* Add portal files is in the sidebar's New menu. */}
             {!membership.viewOnlyUntil && (
               <Link className="b b-secondary" href="/app/documents?upload=1">
                 Upload papers
@@ -91,34 +88,14 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
 
       {asked === "time" && <Toast>The owner is asked for more time today. You can keep working until closing.</Toast>}
       <DroppedNotice value={dropped} />
-      {error && todayErrors[error] && (
+      {error && (todayErrors[error] ?? problems[error]) && (
         <p className="alert" role="alert">
-          {todayErrors[error]}
+          {todayErrors[error] ?? problems[error]}
         </p>
-      )}
-      <Suspense fallback={null}>
-        <NewComputers error={error} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <OfficePanel compact />
-      </Suspense>
-      {pcKey === "needed" && (
-        <div className="today-line today-pc" role="region" aria-label="Set up this office PC">
-          <KeyRound size={16} aria-hidden />
-          <span className="grow">
-            <strong>Set up this office PC.</strong> One check with its PIN or fingerprint, then it confirms a new office internet connection by itself.
-          </span>
-          <PcKey mode="setup" />
-        </div>
       )}
       <Suspense fallback={null}>
         <Attention ctx={ctx} />
       </Suspense>
-      {membership.role === "owner" && (
-        <Suspense fallback={null}>
-          <PlanFit firmId={membership.firmId} />
-        </Suspense>
-      )}
 
       <div className="today-grid">
         <Suspense fallback={<CardSkeleton title="Your list" rows={5} />}>
@@ -153,13 +130,20 @@ async function Things({ work }: { work: ReturnType<typeof workFor> }) {
 }
 
 // At most two lines above the list (work-data.ts attention): the firm's email or drive not
-// working, setup still to do, what is new from the government.
+// working, this office PC to set up, setup still to do, what is new from the government; then,
+// while there is room, who was kept out of the office today and the plan's fit.
 async function Attention({ ctx }: { ctx: Context }) {
-  const { lines, setup, owner } = await attention(ctx);
+  const { membership } = ctx;
+  const [{ lines, setup, owner }, office, plan] = await Promise.all([
+    attention(ctx),
+    OfficePanel({ compact: true }),
+    membership.role === "owner" ? PlanFit({ firmId: membership.firmId }) : null,
+  ]);
+  const room = 2 - lines.length;
   return (
     <>
       {lines.includes("mail") && (
-        <div className="today-line" role="alert">
+        <div className="today-line is-bad" role="alert">
           <TriangleAlert size={16} aria-hidden />
           <span className="grow">Connect your firm&apos;s email again. Replies wait until it is connected.</span>
           <Link className="b b-secondary b-small" href="/app/settings#mailbox">
@@ -168,7 +152,7 @@ async function Attention({ ctx }: { ctx: Context }) {
         </div>
       )}
       {lines.includes("drive") && (
-        <div className="today-line" role="alert">
+        <div className="today-line is-bad" role="alert">
           <TriangleAlert size={16} aria-hidden />
           <span className="grow">InboxCA cannot reach your drive. New files wait up to 7 days.</span>
           {owner && (
@@ -176,6 +160,15 @@ async function Attention({ ctx }: { ctx: Context }) {
               Open drive settings
             </Link>
           )}
+        </div>
+      )}
+      {lines.includes("pc") && (
+        <div className="today-line today-pc" role="region" aria-label="Set up this office PC">
+          <KeyRound size={16} aria-hidden />
+          <span className="grow">
+            <strong>Set up this office PC.</strong> One check with its PIN or fingerprint, then it confirms a new office internet connection by itself.
+          </span>
+          <PcKey mode="setup" />
         </div>
       )}
       {lines.includes("setup") && setup && (
@@ -193,6 +186,8 @@ async function Attention({ ctx }: { ctx: Context }) {
         </div>
       )}
       {lines.includes("gov") && <GovLine />}
+      {room > 0 && (office ?? plan)}
+      {room > 1 && office && plan}
     </>
   );
 }
@@ -300,14 +295,18 @@ async function ThisWeek({ week, role }: { week: ReturnType<typeof weekFor>; role
   );
 }
 
+// With nothing due, its words alone say so, not a big 0 of 0.
 function Tile({ id, href, label, value, of, sub, red = false }: { id: string; href: string; label: string; value: number; of?: number; sub: string; red?: boolean }) {
+  const none = of === 0 && !value;
   return (
-    <Press href={href} className={`week-tile${red ? " is-red" : ""}`} lift>
+    <Press href={href} className={`week-tile${red ? " is-red" : ""}${none ? " is-none" : ""}`} lift>
       <span className="week-label">{label}</span>{" "}
-      <span className="week-big">
-        <Count id={id} value={value} />
-        {of !== undefined && <small> of {of.toLocaleString("en-IN")}</small>}
-      </span>{" "}
+      {!none && (
+        <span className="week-big">
+          <Count id={id} value={value} />
+          {of !== undefined && <small> of {of.toLocaleString("en-IN")}</small>}
+        </span>
+      )}{" "}
       <span className="week-sub">{sub}</span>
     </Press>
   );
@@ -356,71 +355,72 @@ function CardSkeleton({ title, rows }: { title: string; rows: number }) {
   );
 }
 
-// Someone signed in who is not in a firm yet: their invites, or the firm being closed.
+// Someone signed in who is not in a firm now, in the sign in card (layout.tsx): the office
+// connection or this PC waiting, the office or its hours keeping them out, their invites, or no
+// firm yet. A short title, one line, at most one action, and Sign out.
 function NoFirm({ closed, invites, deviceStatus, connectionWaiting, pcKey }: { closed: { firm_name: string; hours: unknown; reason: string; away: boolean } | null | undefined; invites: { firm_id: string; firm_name: string; role: string }[]; deviceStatus: "waiting" | "refused" | null; connectionWaiting: boolean; pcKey: "needed" | "ready" | null }) {
+  const gate = (title: string, line: React.ReactNode, action?: React.ReactNode) => (
+    <>
+      <h1>{title}</h1>
+      {line && <p className="auth-lead">{line}</p>}
+      {action}
+      <form action={signOut} className="auth-form">
+        <button className="text-button" type="submit">
+          Sign out
+        </button>
+      </form>
+    </>
+  );
   if (connectionWaiting)
-    return (
-      <>
-        <PageHead title="Waiting for your firm to confirm the office internet connection" sub={pcKey === "ready" ? "This PC stays in the office, so its key can confirm the new connection. The owner is told." : "Ask the owner or a deputy to confirm this connection."} />
-        {pcKey === "ready" && <PcKey mode="confirm" />}
-      </>
+    return gate(
+      "Waiting for the office connection",
+      pcKey === "ready" ? "This PC stays in the office, so its key can confirm the new connection. The owner is told." : "Ask the owner or a deputy to confirm this connection as your office.",
+      pcKey === "ready" && (
+        <div className="auth-form">
+          <PcKey mode="confirm" button="btn" />
+        </div>
+      ),
     );
   if (closed?.reason === "office" && deviceStatus)
-    return (
-      <PageHead
-        title={deviceStatus === "waiting" ? "This PC is waiting for your firm's approval." : "Your firm refused this PC."}
-        sub={deviceStatus === "waiting" ? "Ask the owner to approve it in Settings. You can try again after that." : "Ask the owner if this PC should be allowed."}
-      />
-    );
+    return deviceStatus === "waiting"
+      ? gate("This PC is waiting for approval", "Ask the owner to approve it in Settings, then try again.", (
+          <div className="auth-form">
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a fresh load, so once approved the app's own frame replaces this card */}
+            <a className="btn" href="/app">
+              Try again
+            </a>
+          </div>
+        ))
+      : gate("This PC was refused", "Ask the owner if this PC should be allowed.");
   if (closed?.reason === "office")
-    return (
-      <>
-        <PageHead
-          title="Use InboxCA from your office."
-          sub={`${closed.firm_name} lets staff use InboxCA only in the office, on the office internet connection. If you are in the office now, ask the owner to confirm this connection.`}
-        />
-        {closed.away && (
-          <form action={askAwayDevice} className="form-row">
-            <Pending className="b b-secondary">Ask to use this device away from the office</Pending>
-            <span className="hint">The owner may allow it for some days, to view only.</span>
-          </form>
-        )}
-      </>
+    return gate(
+      "Use InboxCA from the office",
+      `${closed.firm_name} lets staff use InboxCA only in the office, on the office internet connection. If you are in the office now, ask the owner to confirm this connection.`,
+      closed.away && (
+        <form action={askAwayDevice} className="auth-form">
+          <Pending className="btn">Ask to use this device away from the office</Pending>
+          <p className="auth-small">The owner may allow it for some days, to view only.</p>
+        </form>
+      ),
     );
-  return (
-    <>
-      <PageHead
-        title={closed ? `${closed.firm_name} is closed now.` : invites.length ? "Welcome to InboxCA." : "You are not part of a firm yet."}
-        sub={
-          closed
-            ? describeHours(closed.hours as Hours)
-              ? `Your firm uses InboxCA during office hours: ${describeHours(closed.hours as Hours)}, India time.`
-              : "Your firm has no office hours set. Ask the owner."
-            : invites.length
-              ? "Join your firm to start."
-              : <>Ask your firm&apos;s owner to invite you, or <Link href="/sign-up">set up your own firm</Link>.</>
-        }
-      />
-      {!!invites.length && (
-        <section className="panel" aria-labelledby="invites">
-          <h2 id="invites">Invites</h2>
-          <ul className="rows">
-            {invites.map((invite) => (
-              <li key={invite.firm_id}>
-                <span className="grow">
-                  <strong>{invite.firm_name}</strong> has invited you as {roleNames[invite.role]}.
-                </span>
-                <form action={joinFirm}>
-                  <input type="hidden" name="firm" value={invite.firm_id} />
-                  <Pending className="b b-primary" type="submit">
-                    Join {invite.firm_name}
-                  </Pending>
-                </form>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </>
+  const hours = closed && describeHours(closed.hours as Hours);
+  return gate(
+    closed ? `${closed.firm_name} is closed now` : invites.length ? "Join your firm" : "No firm yet",
+    closed ? (hours ? `Your firm uses InboxCA during office hours: ${hours}, India time.` : "Your firm has no office hours set. Ask the owner.") : !invites.length && "Ask your firm's owner to invite you.",
+    invites.length
+      ? invites.map((invite) => (
+          <form key={invite.firm_id} action={joinFirm} className="auth-form">
+            <input type="hidden" name="firm" value={invite.firm_id} />
+            <p className="auth-lead">
+              <strong>{invite.firm_name}</strong> has invited you as {roleNames[invite.role]}.
+            </p>
+            <Pending className="btn">Join {invite.firm_name}</Pending>
+          </form>
+        ))
+      : !closed && (
+          <p className="auth-small">
+            Setting up InboxCA for your own firm? <Link href="/sign-up">Set up your firm</Link>
+          </p>
+        ),
   );
 }

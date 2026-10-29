@@ -1,5 +1,4 @@
 import Form from "next/form";
-import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { reviewDevice, setOfficeOnly } from "@/app/(app)/actions";
@@ -64,9 +63,8 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   // Remote friendly: staff use the devices you approve from anywhere, so no connection is asked.
   const anywhere = !!office.anywhere;
   // Each office has its own PCs: a branch with its own office lists those first used there.
-  // Home's short view counts every office's.
   const ownOffice = picked && (picked.settings as { office?: Office }).office ? picked.id : null;
-  const officePcs = (pcs ?? []).filter((pc) => compact || (pc.branch_id ?? null) === ownOffice);
+  const officePcs = (pcs ?? []).filter((pc) => (pc.branch_id ?? null) === ownOffice);
   const emails = new Map(people?.map((person) => [person.user_id, person.email]));
   const first = new Map(firstSeen?.map((entry) => [entry.entity_id, entry]));
   const waiting = officePcs.filter((pc) => pc.status === "waiting");
@@ -79,6 +77,12 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
     const where = refusedWhere[(entry.details as { reason?: string } | null)?.reason ?? ""] ?? "from outside the office";
     refusedBy.set(where, (refusedBy.get(where) ?? new Set()).add(personName(emails.get(entry.actor_id ?? ""))));
   }
+  const kept = !!refusedBy.size && <div className="alert office-refused">
+    <span className="grow">{[...refusedBy].map(([where, names]) => `${new Intl.ListFormat("en-GB").format(names)} tried to use InboxCA ${where} today.`).join(" ")}</span>
+    {compact && <form action={dismissRefusals}><Pending className="b b-ghost b-small">Dismiss</Pending></form>}
+  </div>;
+  // Today's short view is that one line; what waits for a yes is on Today's list (work-data.ts).
+  if (compact) return kept || null;
   const here = onOfficeLine(requestAddress(await headers()), office);
   // Self-adjusting (5.8): after 3 office confirmations in 14 days (the admin console's numbers),
   // or with no PC that stays in the office, the owner is told once how to get a fixed connection.
@@ -87,7 +91,6 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const trustedPc = officePcs.some((pc) => pc.status === "approved" && pc.kind === "office" && pc.key_id);
   const suggestFixed =
     isAdmin && office.on && !anywhere && !(office.lines ?? []).some((line) => (line as { fixed?: boolean }).fixed) && !(office as { fixed_declined?: boolean }).fixed_declined && (confirmations >= fixedRule.taps || !trustedPc);
-  if (compact && !requests?.length && !refusals.length && (owner || !waiting.length)) return null;
   const line = <p className="hint">{anywhere ? "Staff, managers and front desk use only the PCs and laptops you approve, from anywhere." : "Staff, managers and front desk use approved PCs on your office internet connection."} You and partners can use InboxCA anywhere.</p>;
   const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">{where}
     {!anywhere && <Pending className="b b-ghost" name="intent" value="forget">Remove saved office connections</Pending>}<Pending className="b b-secondary" name="intent" value="off">Turn off</Pending>
@@ -100,8 +103,8 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   </form>;
   const Box = inPreset ? "div" : "section";
   return (
-    <Box className={inPreset ? "office-in-preset" : "panel"} aria-labelledby={inPreset ? undefined : compact ? "office-alerts" : "office-title"} id={compact ? undefined : "office"}>
-      {!inPreset && <h2 id={compact ? "office-alerts" : "office-title"}>{compact ? "Your office today" : anywhere ? "Staff use only the computers you approve" : "Staff can use InboxCA only in the office"}</h2>}
+    <Box className={inPreset ? "office-in-preset" : "panel"} aria-labelledby={inPreset ? undefined : "office-title"} id="office">
+      {!inPreset && <h2 id="office-title">{anywhere ? "Staff use only the computers you approve" : "Staff can use InboxCA only in the office"}</h2>}
       {refusedNotes[error] && <p className="alert" role="alert">{refusedNotes[error]}</p>}
       {!compact && !inPreset && line}
       {!compact && !!branches?.length && <Form action="/app/settings#office">
@@ -115,13 +118,13 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
         </div><button className="sr-only" value="branch">Show</button></div>
         {picked && !ownOffice && <p className="hint">{picked.name} follows the main office until you turn Office only on or off for it here.</p>}
       </Form>}
-      {office.on && !compact && !anywhere && <p className={here ? "notice" : "alert"} role="status">{here ? "On. You are on your office internet connection now." : "On. You are not on a saved office internet connection now. If you are in the office, choose This is my office."}</p>}
+      {office.on && !compact && !anywhere && <p className={here ? "note" : "alert"} role="status">{here ? "On. You are on your office internet connection now." : "On. You are not on a saved office internet connection now. If you are in the office, choose This is my office."}</p>}
       {anyOn && requests?.map((request) => {
         const details = request.details as { person?: string; day?: string };
         const pc = pcs?.find((pc) => pc.id === request.entity_id);
         if (!pc || pc.status !== "approved") return null;
         if (!owner && details.person === userId) return <p key={request.id}>This is your own connection. Ask the owner or the other deputy to approve it.</p>;
-        return <div className="notice" key={request.id}>
+        return <div className="note" key={request.id}>
           <p>{request.reason_code === "office_changed"
             ? `Your office internet connection changed ${details.day === today ? "today" : `on ${dueLabel(details.day ?? today)}`} (first seen on ${pc.name})`
             : `${personName(emails.get(details.person ?? ""))} on ${pc.name} is on a new internet connection:`}</p>
@@ -136,11 +139,7 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
           </form>
         </div>;
       })}
-      {!!refusedBy.size && <div className="alert office-refused">
-        <span className="grow">{[...refusedBy].map(([where, names]) => `${new Intl.ListFormat("en-GB").format(names)} tried to use InboxCA ${where} today.`).join(" ")}</span>
-        {compact && <form action={dismissRefusals}><Pending className="b b-ghost b-small">Dismiss</Pending></form>}
-      </div>}
-      {compact && !owner && !!waiting.length && <p>{waiting.length === 1 ? "1 PC is" : `${waiting.length} PCs are`} waiting for approval. <Link href="/app/settings#office">Approve PCs</Link></p>}
+      {kept}
       {!compact && <>
         {anyOn && !!waiting.length && <div className="device-list">
           <h3 className="sub-head">PCs waiting for approval</h3>

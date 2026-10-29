@@ -59,7 +59,7 @@ test("staff check figures beside the source; totals, edit rights and stale revie
     expect(JSON.parse(await crypto.decrypt(firm.firmId,`${place(id,lines[2])}/edit/${firm.ownerId}`,unfinished.data.edits[firm.ownerId][lines[2]].value_enc))).toEqual({value:"300.00",reason:"The source total was wrong"});
     const [{settings}]=await query(local.dbUrl,"select settings from public.firms where id=$1",[firm.firmId]);
     await query(local.dbUrl,"update public.firms set settings=settings||'{\"access\":{\"hours_only\":true},\"hours\":{}}' where id=$1",[firm.firmId]);
-    await page.reload();await expect(page.locator(".page-head")).toContainText("Figure Test Firm is closed now.");
+    await page.reload();await expect(page.getByRole("heading", { name: "Figure Test Firm is closed now" })).toBeVisible();
     await query(local.dbUrl,"update public.firms set settings=$2::jsonb where id=$1",[firm.firmId,JSON.stringify(settings)]);
     await page.goto(url);await expect(page.getByLabel("Correct figure")).toHaveValue("300.00");await expect(page.getByLabel("Why it changed")).toHaveValue("The source total was wrong");
     await page.getByRole("button",{name:"Save correction",exact:true}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");

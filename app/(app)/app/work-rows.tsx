@@ -1,5 +1,5 @@
-import { Bell, FileCheck2, FileText, Inbox, Landmark, Phone, TriangleAlert } from "lucide-react";
-import { seenAlert } from "@/app/(app)/actions";
+import { Bell, FileCheck2, FileText, Inbox, Landmark, Phone, ShieldCheck, TriangleAlert } from "lucide-react";
+import { reviewOwnerDevice, seenAlert, setOfficeOnly } from "@/app/(app)/actions";
 import type { currentMember } from "@/src/lib/member";
 import type { Listed } from "@/src/lib/work/today";
 import { Fill } from "./fill";
@@ -23,7 +23,7 @@ export function WorkRows({ items, today, membership, name, more }: { items: List
       <List name={name} className="app-rows work-rows">
         {items.map((item) => {
           const red = item.urgent || (!!item.due && item.due < today);
-          const [Icon, kind] = red ? [TriangleAlert, "late" as const] : item.key.startsWith("call:") ? [Phone, "notice" as const] : icons[item.area];
+          const [Icon, kind] = red ? [TriangleAlert, "late" as const] : item.key.startsWith("call:") ? [Phone, "notice" as const] : /^(computer|office):/.test(item.key) ? [ShieldCheck, "approve" as const] : icons[item.area];
           const client = item.client && !item.title.includes(item.client.name) ? item.client.name : null;
           return (
             <Row
@@ -47,7 +47,8 @@ export function WorkRows({ items, today, membership, name, more }: { items: List
 }
 
 // The row's one button: Fill for a return not filled yet, Got it for a file with a virus, the
-// official page in a new tab, or the page where it is done.
+// yes to a new computer or office connection, the official page in a new tab, or the page
+// where it is done.
 function Action({ item, membership }: { item: Listed; membership: Member }) {
   const { label, href } = item.action;
   const named = item.title.startsWith(label) ? item.title : `${label}: ${item.client?.name ?? item.title}`;
@@ -59,6 +60,27 @@ function Action({ item, membership }: { item: Listed; membership: Member }) {
         <Pending className="b b-secondary">{label}</Pending>
       </form>
     );
+  if (item.key.startsWith("computer:"))
+    return (
+      <form action={reviewOwnerDevice}>
+        <input type="hidden" name="request" value={item.key.slice(9)} />
+        <Pending className="b b-secondary" name="decision" value="approve" aria-label={named}>
+          {label}
+        </Pending>
+      </form>
+    );
+  if (item.key.startsWith("office:")) {
+    const [, intent, request] = item.key.split(":");
+    return (
+      <form action={setOfficeOnly}>
+        <input type="hidden" name="request" value={request} />
+        <input type="hidden" name="back" value="today" />
+        <Pending className="b b-secondary" name="intent" value={intent} aria-label={named}>
+          {label}
+        </Pending>
+      </form>
+    );
+  }
   if (/^https?:/.test(href))
     return (
       <a className="b b-secondary" href={href} target="_blank" rel="noopener noreferrer" aria-label={named}>

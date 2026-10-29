@@ -1,12 +1,15 @@
 import { cache } from "react";
 import { aiCredits } from "@/src/lib/ai";
-import { addDays, periodLabel, todayInIndia } from "@/src/lib/calendar";
+import { addDays, dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { periodName } from "@/src/lib/documents";
 import { downloadUse } from "@/src/lib/download-use";
 import { log } from "@/src/lib/logger";
 import { whenRange } from "@/src/lib/mail-view";
 import { currentMember, myQuestions } from "@/src/lib/member";
+import { memberOffice, officeApprover, type Office } from "@/src/lib/office";
 import { formName, preparedSchema } from "@/src/lib/prepared";
+import { personName } from "@/src/lib/roles";
+import { supabaseAdmin } from "@/src/lib/supabase";
 import { answersWorkItems } from "@/src/lib/work/answers";
 import { formsWorkItems } from "@/src/lib/work/forms";
 import { governmentUpdates, governmentWorkItems } from "@/src/lib/work/government";
@@ -31,9 +34,9 @@ const notRead = (area: string, error: unknown) => {
 };
 
 // At most two lines above the list, most pressing first: the firm's email or drive not working,
-// setup still to do (the owner), then what is new from the government. The government update
-// that does not fit joins the list instead.
-export type Line = "mail" | "drive" | "setup" | "gov";
+// this office PC to set up, setup still to do (the owner), then what is new from the
+// government. The government update that does not fit joins the list instead.
+export type Line = "mail" | "drive" | "pc" | "setup" | "gov";
 export const attention = cache(async ({ supabase, membership }: Context) => {
   const owner = membership.role === "owner";
   const firm = membership.firmId;
@@ -59,7 +62,8 @@ export const attention = cache(async ({ supabase, membership }: Context) => {
     { done: counts[2] > 1, href: "/app/people", action: "Invite your team" },
   ];
   const steps = setup?.some((step) => !step.done) ? { done: setup.filter((step) => step.done).length, total: setup.length, next: setup.find((step) => !step.done)! } : null;
-  const wanted: [Line, boolean][] = [["mail", owner && accounts.find((account) => account.kind === "mail")?.status === "needs_reconnect"], ["drive", !!driveAway], ["setup", !!steps], ["gov", gov]];
+  const pc = (await currentMember()).pcKey === "needed";
+  const wanted: [Line, boolean][] = [["mail", owner && accounts.find((account) => account.kind === "mail")?.status === "needs_reconnect"], ["drive", !!driveAway], ["pc", pc], ["setup", !!steps], ["gov", gov]];
   return { lines: wanted.filter(([, on]) => on).map(([line]) => line).slice(0, 2), setup: steps, owner };
 });
 
@@ -84,6 +88,42 @@ function alertItem(alert: { id: string; entity_id: string; client_id: string | n
   }
 }
 
+// What waits for this person's yes, at the top of their list with one button each: a new
+// computer on the owner's login (D38), then an office internet connection for an office
+// approver (5.17.4). Settings, Office and sign in keeps every other choice for them.
+const askedAt = (at?: string) => (at ? `, at ${new Date(at).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" })}` : "");
+async function computerAsks({ supabase }: Context): Promise<Listed[]> {
+  const { data } = await supabase.from("requests").select("id, details").eq("kind", "alert").eq("entity_type", "owner_device").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(5);
+  return (data ?? []).map((ask) => {
+    const { name, at } = ask.details as { name?: string; at?: string };
+    return { key: `computer:${ask.id}`, title: "A new computer wants to use your login", why: `${name}${askedAt(at)}. Approve it only if it is yours`, action: { label: "Approve", href: "/app/settings?group=access" }, audience: "firm", area: "firm" };
+  });
+}
+async function officeAsks({ supabase, membership, userId }: Context): Promise<Listed[]> {
+  const admin = supabaseAdmin();
+  const office = (membership.settings.office ?? {}) as Office;
+  const [{ data: asks }, { data: pcs }, { data: branches }, { data: people }] = await Promise.all([
+    admin.from("requests").select("id, entity_id, reason_code, details").eq("firm_id", membership.firmId).eq("entity_type", "office_connection").eq("status", "pending"),
+    admin.from("devices").select("id, name").eq("firm_id", membership.firmId).eq("status", "approved"),
+    admin.from("groups").select("kind, settings").eq("firm_id", membership.firmId).eq("kind", "branch"),
+    supabase.rpc("firm_people", { target_firm: membership.firmId }),
+  ]);
+  if (!asks?.length || (!office.on && !branches?.some((row) => memberOffice(office, row)?.on))) return [];
+  const today = todayInIndia();
+  const settings = { label: "", href: "/app/settings?group=access#office" };
+  return asks.flatMap((ask): Listed[] => {
+    const details = ask.details as { person?: string; day?: string };
+    const pc = pcs?.find((row) => row.id === ask.entity_id);
+    // An approver's own new connection is for the owner or the other deputy.
+    if (!pc || (membership.role !== "owner" && details.person === userId)) return [];
+    return [
+      ask.reason_code === "office_changed"
+        ? { key: `office:refuse:${ask.id}`, title: `Your office internet connection changed ${details.day && details.day !== today ? `on ${dueLabel(details.day)}` : "today"}`, why: `First seen on ${pc.name}. If this is not your office, say so`, action: { ...settings, label: "Not my office" }, audience: "firm", area: "firm" }
+        : { key: `office:today:${ask.id}`, title: `${personName(people?.find((person) => person.user_id === details.person)?.email)} on ${pc.name} is on a new internet connection`, why: "Allow it for today, or choose This is my office in Settings", action: { ...settings, label: "Allow today" }, audience: "firm", area: "firm" },
+    ];
+  });
+}
+
 // Every work item for this person, most urgent first. Late clients are read up to late at a
 // time (Today needs 7, the full list more); total counts them all.
 export async function workFor(ctx: Context, late: number) {
@@ -92,6 +132,8 @@ export async function workFor(ctx: Context, late: number) {
   const firm = membership.firmId;
   const owner = membership.role === "owner";
   const lead = isLead(membership.role);
+  const approver = officeApprover(membership.role, ctx.userId, membership.settings);
+  const asks = Promise.all([owner ? computerAsks(ctx) : [], approver ? officeAsks(ctx) : []]).then((lists) => lists.flat());
   const dayStart = new Date(`${today}T00:00:00+05:30`).toISOString();
   const tag = (area: Area) => (items: Omit<Listed, "area">[]) => items.map((item): Listed => ({ ...item, area }));
   let failed = false;
@@ -136,7 +178,7 @@ export async function workFor(ctx: Context, late: number) {
   const papers = papersWorkItems(ctx).catch(failing("papers"));
   const firmItems = Promise.all([
     myQuestions(),
-    owner ? Promise.resolve(supabase.from("devices").select("id").eq("firm_id", firm).eq("status", "waiting").throwOnError()) : null,
+    approver ? Promise.resolve(supabase.from("devices").select("id").eq("firm_id", firm).eq("status", "waiting").throwOnError()) : null,
     Promise.resolve(supabase.rpc("notice_alerts", { target_firm: firm }).limit(10).throwOnError()),
     lead ? Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, details").eq("kind", "alert").neq("entity_type", "papers_in").neq("entity_type", "owner_device").neq("reason_code", "drive_away").eq("status", "pending").limit(20).throwOnError()) : null,
     papers,
@@ -203,7 +245,7 @@ export async function workFor(ctx: Context, late: number) {
   // Someone who does not lead sees the clients they look after.
   const theirs = lead ? [] : [...new Set(unique.flatMap((item) => (item.audience === "assigned" && item.client ? [item.client.id] : [])))];
   const looked = lead ? null : new Set(theirs.length ? await Promise.resolve(supabase.rpc("looked_after", { target_firm: firm, clients: theirs }).throwOnError()).then(({ data }) => data ?? [], failing("looked_after")) : []);
-  const shown = rankWork(unique.filter((item) => visibleTo(item, { role: membership.role, looked })), today);
+  const shown = [...(await asks), ...rankWork(unique.filter((item) => visibleTo(item, { role: membership.role, looked })), today)];
   return { items: shown, total: shown.length + Math.max(0, lateCount - lateList.length), late: lateCount, failed };
 }
 

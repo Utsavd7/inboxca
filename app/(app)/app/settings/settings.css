@@ -21,8 +21,8 @@
 .set-page .check:has(> .toggle) { gap: var(--s3); }
 .set-page .panel > form, .set-page .panel > .connection, .set-page .panel > .reveal > form { margin-top: 16px; }
 .set-page .panel > .reveal > summary, .set-page .panel > .set-foot { margin-top: 16px; }
-.set-page .alert, .set-page .notice { margin: 0; }
-.set-page .set-body > .panel > .alert, .set-page .set-body > .panel > .notice { margin-top: 12px; }
+.set-page .alert, .set-page .notice, .set-page .note { margin: 0; }
+.set-page .set-body > .panel > :is(.alert, .notice, .note) { margin-top: 12px; }
 .set-page .connection { padding: 8px 8px 8px 16px; }
 .set-page textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--white); color: var(--ink); font: inherit; font-size: 14px; resize: vertical; }
 .set-page textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }

@@ -82,10 +82,10 @@ button.fb-chev:hover { background: var(--line); color: var(--ink); }
 /* Each kind of file has its own soft tile. */
 .fb-icon { display: inline-grid; flex: none; place-items: center; width: 28px; height: 28px; border-radius: var(--r1); background: var(--gray-bg); color: var(--gray-fg); }
 .fb-icon.k-folder { background: var(--blue-bg); color: var(--blue-fg); }
-.fb-icon.k-pdf { background: var(--pink-bg); color: var(--pink-fg); }
-.fb-icon.k-sheet { background: var(--teal-bg); color: var(--teal-fg); }
-.fb-icon.k-image { background: var(--purple-bg); color: var(--purple-fg); }
-.fb-icon.k-json { background: var(--amber-bg); color: var(--amber-fg); }
+.fb-icon.k-pdf { background: var(--k-notice-bg); color: var(--k-notice); }
+.fb-icon.k-sheet { background: var(--strong-bg); color: var(--strong-fg); }
+.fb-icon.k-image { background: var(--strong-bg); color: var(--strong-fg); }
+.fb-icon.k-json { background: var(--blue-bg); color: var(--blue-fg); }
 
 .fb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--s3); margin: 0; padding: var(--s4); list-style: none; }
 .fb-card { position: relative; display: grid; align-content: start; gap: var(--s1); padding: var(--s2); border: 1px solid var(--line); border-radius: var(--r3); background: var(--surface); transition: border-color var(--base) var(--out), box-shadow var(--base) var(--out), background-color var(--base) var(--out), transform var(--base) var(--out); }

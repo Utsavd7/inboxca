@@ -79,7 +79,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
         </p>
       )}
       {since && (
-        <p className="notice" role="status">
+        <p className="note" role="status">
           In your first 14 days, InboxCA adds only files from {periodName(since)} onwards. You can add older files from {receivedLabel(new Date(Date.parse(firm?.created_at ?? "") + 14 * 86_400_000).toISOString())}.
         </p>
       )}

@@ -463,9 +463,10 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
   const gstr2b = Buffer.from(JSON.stringify({ data: { gstin: "27AAPFU0939F1ZV", rtnprd: "092026", version: "1.0", docdata: { b2b: [] } } }));
   const other = Buffer.from(JSON.stringify({ gstin: "27AAPFU0939F1ZV", note: "not from the portal" }));
   await owner.goto("/app");
-  // Upload papers is the Documents page's; portal files have their own box on Today.
+  // Upload papers is the Documents page's; portal files open their own box on Today, from New.
   await expect(owner.getByRole("link", { name: "Upload papers" })).toHaveAttribute("href", "/app/documents?upload=1");
-  await owner.getByRole("link", { name: "Add portal files" }).click();
+  await owner.getByRole("button", { name: "New", exact: true }).click();
+  await owner.getByRole("menuitem", { name: "Add portal files" }).click();
   const drop = (files: { name: string; buffer: Buffer }[]) =>
     owner.getByLabel("Add portal files").setInputFiles(files.map((file) => ({ ...file, mimeType: "application/json" })));
   await drop([

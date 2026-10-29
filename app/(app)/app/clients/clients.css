@@ -1,7 +1,7 @@
 /* The Clients list and each client's page, on the app's tokens (app.css). */
 .clients-page.fill { position: relative; gap: var(--s4); }
 .clients-page .b-small { height: var(--control); padding: 0 var(--s3); }
-.clients-page .alert, .clients-page .notice { margin: var(--s4) 0 0; }
+.clients-page .alert, .clients-page .notice, .clients-page .note { margin: var(--s4) 0 0; }
 .clients-page .empty { padding: var(--s7) var(--s4); gap: var(--s2); }
 .clients-page .empty .b { margin-top: var(--s2); }
 

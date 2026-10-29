@@ -1,6 +1,6 @@
 "use client";
 import { Menu } from "@base-ui/react/menu";
-import { Check, ChevronDown, Copy, FilePlus2, FileUp, Mail, Plus, Scale, UserPlus, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Copy, FileInput, FilePlus2, FileUp, Mail, Plus, Scale, UserPlus, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -9,9 +9,11 @@ import { ToastMotion } from "./motion";
 // The quick things to start from anywhere: the New menu in the sidebar and the search palette
 // both list these (each only for those whose role does it).
 export type QuickAction = { key: string; label: string; href?: string; Icon: LucideIcon; kind: string };
-export const quickActions = ({ manage, write }: { manage: boolean; write: boolean }): QuickAction[] => [
+export const quickActions = ({ manage, write, portal = false }: { manage: boolean; write: boolean; portal?: boolean }): QuickAction[] => [
   ...(manage ? [{ key: "client", label: "New client", href: "/app/clients?panel=add", Icon: UserPlus, kind: "reply" }] : []),
   ...(write ? [{ key: "upload", label: "Upload papers", href: "/app/documents?upload=1", Icon: FileUp, kind: "docs" }] : []),
+  // Files from the GST or income tax portal open their box on Today.
+  ...(portal ? [{ key: "portal", label: "Add portal files", href: "/app?panel=portal", Icon: FileInput, kind: "docs" }] : []),
   ...(write ? [{ key: "write", label: "Write to a client", href: "/app/inbox?compose=1", Icon: Mail, kind: "approve" }] : []),
   ...(write ? [{ key: "ask", label: "Ask for papers", Icon: FilePlus2, kind: "papers" }] : []),
   ...(write ? [{ key: "notice", label: "Add a notice", href: "/app/notices?add=1", Icon: Scale, kind: "notice" }] : []),
@@ -22,8 +24,8 @@ export const ASK_EVENT = "inboxca:ask";
 export const NEW_EVENT = "inboxca:new";
 
 // The New button at the top of the sidebar.
-export function NewMenu({ manage, write }: { manage: boolean; write: boolean }) {
-  const actions = quickActions({ manage, write });
+export function NewMenu({ manage, write, portal }: { manage: boolean; write: boolean; portal: boolean }) {
+  const actions = quickActions({ manage, write, portal });
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const show = () => setOpen(true);

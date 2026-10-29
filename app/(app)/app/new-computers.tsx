@@ -1,15 +1,14 @@
-import Link from "next/link";
 import { recoverComputer, signOut } from "@/app/(auth)/actions";
 import { removeComputer, reviewOwnerDevice } from "@/app/(app)/actions";
 import { currentMember } from "@/src/lib/member";
 import { ASK_MINUTES, computersOf, thisComputer } from "@/src/lib/owner-device";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { Pending } from "./pending";
-import { PageHead } from "./ui";
 
 // New computers on the owner's login (PLAN.md D38), for the owner on a computer already signed
-// in: one card on Today and in Settings, Office and sign in, with Approve and Refuse.
-const problems: Record<string, string> = {
+// in: one card each in Settings, Office and sign in, with Approve and Refuse. Today lists each
+// as a row of its own, with Approve (work-data.ts).
+export const problems: Record<string, string> = {
   phone: "Approve new computers from a laptop or desktop, not a phone.",
   computer_ended: "That request has ended. The new computer can sign in again to ask again.",
 };
@@ -24,7 +23,7 @@ export async function NewComputers({ error = "", back = "" }: { error?: string; 
         const { name, at } = ask.details as { name?: string; at?: string };
         const time = at ? new Date(at).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" }) : "";
         return (
-          <div className="notice" role="region" aria-label="New computer" key={ask.id}>
+          <div className="note" role="region" aria-label="New computer" key={ask.id}>
             <span className="grow"><strong>A new computer wants to use your login:</strong> {name}{time && `, at ${time}`}. Approve it only if it is yours.</span>
             <form action={reviewOwnerDevice} className="form-row">
               <input type="hidden" name="request" value={ask.id} />
@@ -64,35 +63,41 @@ export async function YourComputers() {
   );
 }
 
-// What the new computer shows meanwhile: nothing of the firm. With no other computer, one of the
-// owner's recovery codes lets it in (5.17.4 #23), as for a lost phone.
+// What the new computer shows meanwhile, in the sign in card (layout.tsx): nothing of the firm.
+// With no other computer, one of the owner's recovery codes lets it in (5.17.4 #23), as for a
+// lost phone.
 const recoveryErrors: Record<string, string> = {
   recovery: "That recovery code did not work. Check it, or use another one.",
   recovery_limit: "Too many tries. Wait an hour, then try again.",
 };
 export function ComputerWaits({ state, codes, error = "" }: { state: "waiting" | "refused" | "ended"; codes: boolean; error?: string }) {
+  const wrong = recoveryErrors[error];
   return (
     <>
-      <PageHead
-        title={state === "waiting" ? "Approve this computer from a computer already signed in" : state === "refused" ? "This computer was refused" : "This request has ended"}
-        sub={state === "waiting"
+      <h1>{state === "waiting" ? "Approve this computer" : state === "refused" ? "This computer was refused" : "This request has ended"}</h1>
+      <p className="auth-lead">
+        {state === "waiting"
           ? `This computer is new for your login. On a computer where you already use InboxCA, choose Approve on Today. We emailed you too. The request ends in ${ASK_MINUTES} minutes.`
           : state === "refused" ? "Your other computer refused it. If that was a mistake, sign out, sign in again here and approve it." : `It was not approved in ${ASK_MINUTES} minutes. Sign out, then sign in again here to ask again.`}
-      />
-      {state === "waiting" ? <div className="form-row"><Link className="b b-primary" href="/app">I approved it</Link></div> : <form action={signOut} className="form-row"><Pending className="b b-secondary">Sign out</Pending></form>}
+      </p>
+      {state === "waiting" ? (
+        <div className="auth-form">
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a fresh load, so once approved the app's own frame replaces this card */}
+          <a className="btn" href="/app">I approved it</a>
+        </div>
+      ) : <form action={signOut} className="auth-form"><Pending className="btn">Sign out</Pending></form>}
       {codes && state !== "refused" && (
-        <details className="reveal" open={!!recoveryErrors[error]}>
+        <details className="auth-small" open={!!wrong}>
           <summary>No other computer? Use a recovery code</summary>
-          <form action={recoverComputer} className="form-row">
-            <div>
-              <label htmlFor="recovery">Recovery code</label>
-              <input id="recovery" name="recovery" autoComplete="off" required aria-invalid={!!recoveryErrors[error]} />
-            </div>
-            <Pending className="b b-secondary">Use recovery code</Pending>
+          <form action={recoverComputer} className="auth-form">
+            <label htmlFor="recovery">Recovery code</label>
+            <input id="recovery" name="recovery" autoComplete="off" className="num" required aria-invalid={!!wrong} aria-describedby={wrong ? "recovery-error" : undefined} />
+            {wrong && <p className="field-error" id="recovery-error" role="alert">{wrong}</p>}
+            <Pending className="btn btn-quiet">Use recovery code</Pending>
           </form>
-          {recoveryErrors[error] && <p className="alert" role="alert">{recoveryErrors[error]}</p>}
         </details>
       )}
+      {state === "waiting" && <form action={signOut} className="auth-form"><button className="text-button" type="submit">Sign out</button></form>}
     </>
   );
 }

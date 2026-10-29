@@ -578,7 +578,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                   <div><dt>Email</dt><dd>{email || <span className="hint">None yet</span>}</dd></div>
                   <div><dt>Group</dt><dd>{groupName ? <Link href={`/app/clients?group=${client.group_id}`}>{groupName}</Link> : <span className="hint">None</span>}</dd></div>
                   {!!branches.length && <div><dt>Branch</dt><dd>{branchName ? <Link href={`/app/clients?branch=${client.branch_id}`}>{branchName}</Link> : <span className="hint">None</span>}</dd></div>}
-                  <div><dt>Reminders</dt><dd>{client.reminders_paused ? <Badge tone="warn">Paused</Badge> : <Badge tone="done">On</Badge>}</dd></div>
+                  <div><dt>Reminders</dt><dd>{client.reminders_paused ? <Badge tone="warn">Paused</Badge> : <Badge>On</Badge>}</dd></div>
                   <div><dt>Changes</dt><dd><Link href={`${base}?tab=activity`} scroll={false}>Activity</Link></dd></div>
                 </dl>
               </Card>
@@ -650,7 +650,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             {sharedFile && <Toast>Sent {sharedFile.name}. The link works for 7 days and 5 downloads.</Toast>}
             {askedFor === "sent" && <Toast>The client was emailed a private upload link. What they upload is saved here.</Toast>}
             {askedFor && askedFor !== "sent" && (
-              <p className="notice" role="status">
+              <p className="note" role="status">
                 <span>
                   InboxCA could not email the client, so send this private upload link yourself. It works for 30 days: <span className="num link-once">{askedFor}</span>
                 </span>
@@ -757,9 +757,8 @@ export default async function Client({ params, searchParams }: { params: Promise
                               <CameFrom origin={origins.get(document.id)!} why={!twin} />
                             </td>
                             <td>
-                              <Badge tone={document.status === "to_check" ? "warn" : document.status === "missing" ? "late" : "done"}>
-                                {document.status === "to_check" ? "To check" : document.status === "missing" ? "Missing in the drive" : "Saved"}
-                              </Badge>
+                              {/* Only what needs someone: a saved paper says nothing. */}
+                              {document.status === "to_check" ? <Badge tone="warn">To check</Badge> : document.status === "missing" && <Badge tone="late">Missing in the drive</Badge>}
                             </td>
                             <td className="shrink">
                               {!viewOnly && (

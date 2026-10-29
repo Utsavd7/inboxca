@@ -37,6 +37,7 @@ a.week-label:hover { color: var(--ink); }
 .week-big small { color: var(--ink-3); font-size: 13px; font-weight: 600; letter-spacing: 0; }
 .week-tile.is-red .week-big { color: var(--late-fg); }
 .week-sub { color: var(--ink-3); font-size: 12px; line-height: 1.35; }
+.week-tile.is-none .week-sub { color: var(--ink-2); font-size: 13px; }
 .week-mail a { display: flex; align-items: baseline; gap: var(--s2); padding: 1px 0; color: var(--ink-2); font-size: 12px; text-decoration: none; }
 .week-mail a strong { min-width: 2.5ch; color: var(--ink); font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; transition: color var(--fast) var(--out); }
 .week-mail a:hover strong { color: var(--accent); }
@@ -44,13 +45,16 @@ a.week-label:hover { color: var(--ink); }
 .week-people li { display: flex; gap: var(--s2); color: var(--ink-2); }
 .week-people li > :last-child { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-/* A line above the list: the firm's email or drive, setup, the government. */
+/* A line above the list: the firm's email or drive (red, as Settings shows the same failure),
+   this office PC, setup, the government. */
 .today-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s2) var(--s2) var(--s4); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); color: var(--ink-2); font-size: 13px; }
 .today-line > svg { flex: none; color: var(--accent); }
 .today-line form { display: flex; }
 .today-line .form-row { align-items: center; gap: var(--s2); margin: 0; }
 .today-line .grow { flex: 1 1 auto; }
 .today-line strong { color: var(--ink); }
+.today-line.is-bad { border-color: transparent; background: var(--late-bg); color: var(--late-fg); }
+.today-line.is-bad > svg { color: var(--late-dot); }
 /* The office PC still to set up: its words wrap before its button does. */
 .today-pc .grow { flex: 1 1 0; min-width: 240px; }
 .today-setup-bar { width: 96px; height: 4px; overflow: hidden; border-radius: var(--round); background: var(--press); }
