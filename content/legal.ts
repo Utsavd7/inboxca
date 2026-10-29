@@ -12,9 +12,9 @@ export const legalNote =
 
 // The person who answers questions, rights requests and complaints, and how fast (DPDP Act
 // section 8(9), 8(10) and 13; the Rules allow up to 90 days; the E-Commerce Rules ask for an
-// acknowledgement within 48 hours and an answer within a month).
+// acknowledgement within 48 hours if they apply; Orelu sells to firms, not consumers, so 72).
 export const grievanceContact = "Utsav Doshi and Ria Chheda";
-export const grievanceAcknowledge = "48 hours";
+export const grievanceAcknowledge = "72 hours";
 export const grievanceAnswer = "30 days";
 
 export const privacySections = [
