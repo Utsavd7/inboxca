@@ -260,6 +260,25 @@ a.fig-from:hover { border-color: var(--accent); color: var(--accent); }
 .fc-crop { position: relative; overflow: hidden; border-radius: var(--r1); background: var(--paper); box-shadow: 0 0 0 1px var(--line); }
 .fc-crop img { position: absolute; top: 0; left: 0; max-width: none; }
 .fc-crop i { position: absolute; border: 2px solid var(--accent); border-radius: 3px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+/* A prepared return as its form (files/[id]/view): read only, stamped, the approval at its foot. */
+.pf { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); margin-top: var(--s4); user-select: none; }
+.pf-stamp { position: absolute; inset: 0; z-index: 2; pointer-events: none; background-repeat: repeat; }
+.pf.is-blank > :not(.pf-hidden) { visibility: hidden; }
+.pf-note { padding: var(--s2) var(--s3); border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface-2); color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.pf-secs { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s2); }
+.pf-empty > summary { cursor: pointer; }
+.pf-empty > p { margin-top: var(--s1); }
+.pf-sec { overflow: hidden; border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-1); }
+.pf-sec > summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); min-height: 44px; padding: 0 var(--s4); cursor: pointer; font-size: 13px; list-style: none; }
+.pf-sec > summary::-webkit-details-marker { display: none; }
+.pf-sec > summary:hover { background: var(--hover); }
+.pf-sec > summary span { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.pf-sec[open] > summary { border-bottom: 1px solid var(--line); }
+.pf-sec .table-wrap { border: 0; border-radius: 0; box-shadow: none; }
+.pf-sec .pager { padding: var(--s2) var(--s4) var(--s3); margin: 0; }
+.pf-foot { position: sticky; bottom: 0; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s3); padding: var(--s3) 0; border-top: 1px solid var(--line); background: var(--surface); }
+.pf-foot .rf-pop { top: auto; bottom: calc(100% + 6px); transform-origin: bottom left; }
+@media print { .pf { display: none !important; } }
 @keyframes fc-tick { 0% { transform: scale(0.4); } 60% { transform: scale(1.15); } }
 @keyframes fc-draw { from { opacity: 0; transform: scale(0.5) rotate(-20deg); } }
 @keyframes fc-mark { from { opacity: 0; box-shadow: 0 0 0 14px transparent; } }

@@ -18,7 +18,7 @@ export const activityNames: Record<string, string> = {
   "email.acknowledged": "Reply sent: papers received", "request.added": "Email or papers asked for added", "request.changed": "Email or papers asked for updated", "request.removed": "Email or papers asked for removed", "request.receipt_sent": "Receipt emailed for uploaded papers",
   "permission.asked": "Permission asked", "permission.allowed": "Permission given", "permission.refused": "Permission refused", "permission.always": "Permission given for always", "permission.undone": "Permission answer undone",
   "email.replied": "Reply sent", "email.written": "Email written to the client",
-  "email.assigned": "Email given to a person", "replies.waiting_sent": "Waiting replies emailed to the owner",
+  "email.assigned": "Email given to a person", "replies.waiting_sent": "Waiting replies emailed to the owner", "incident.emailed": "Owner told InboxCA is not working fully",
   "email.answered": "Reply sent by InboxCA", "email.answer_stopped": "Reply by InboxCA stopped",
   "email.ai_drafted": "Reply drafted by AI for a person to check", "email.ai_left": "Left for the team by AI",
   "document.added": "Acknowledgement saved", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked",
@@ -62,14 +62,14 @@ export const activityDetails: Record<string, readonly string[]> = {
   // OneDrive's renewed refresh token saved (never the token itself).
   "drive.reconnected": ["provider"], "drive.back": ["jobs"], "drive.token_saved": ["provider"],
   "document.uploaded": ["from"], "document.filed": ["from"], "document.added": ["form", "kind"], "document.renamed": ["from", "to"], "document.removed": ["from"], "document.restored": ["from"],
-  "document.viewed": ["thumb"], "document.downloaded": ["stamped", "limit", "sheet", "permission", "zip"], "document.downloaded_by_client": [], "document.sharing": ["policy"],
+  "document.viewed": ["thumb", "form"], "document.downloaded": ["stamped", "limit", "sheet", "permission", "zip"], "document.downloaded_by_client": [], "document.sharing": ["policy"],
   "document.shared": ["share", "reply"], "document.missing": [], "document.safety_copy": [], "document.safety_restored": [],
   // The file worker (5.15): the scanner's name for what it found, or why a file was refused.
   "document.virus": ["found"], "document.refused": ["reason"], "document.password_saved": [], "document.changed_outside": ["renamed"], "document.purged": [],
   "share.code_sent": [], "share.approved": [], "share.refused": [], "bulk_send.asked": ["clients", "type", "period"],
   "request.created": ["auto"], "request.phoned": [], "request.receipt_sent": [], "import.started": ["files", "scope"], "import.finished": ["files"], "import.undo_asked": [], "import.undone": [],
   "email.acknowledged": ["template"], "email.replied": ["files", "papers"], "email.written": ["to", "files", "papers"],
-  "email.assigned": ["person"], "replies.waiting_sent": ["emails", "people", "from"],
+  "email.assigned": ["person"], "replies.waiting_sent": ["emails", "people", "from", "job", "person"], "incident.emailed": ["person"],
   // InboxCA's answer by rules (Inbox, answered B and C): its template, or the kind a person stopped.
   "email.answered": ["template"], "email.answer_stopped": ["kind"],
   // AI's draft for an email waiting for a person (5.11): kept sealed on its request, or why AI left it.

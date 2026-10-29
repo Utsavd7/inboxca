@@ -19,9 +19,9 @@ import { reviewFigure } from "./dataset-actions";
 import {itrYear} from "@/src/lib/itr-fields";
 import {formName} from "@/src/lib/prepared";
 import {checkItr} from "@/src/lib/itr";
-import {formLayout} from "@/src/lib/form-layout";
+import {formLayout,grouped} from "@/src/lib/form-layout";
 import {FormCheck} from "./form-check";
-import {formCheckData,grouped} from "./form-check-data";
+import {formCheckData} from "./form-check-data";
 const messages:Record<string,string>={stale:"Someone changed these figures. Read the latest values and try again.",source:"The paper these figures came from is not available. Ask the owner to restore it.",permission:"Ask for permission before changing a figure.",value:"Check the value. Figures need no more than two decimal places; dates need a valid day.",reason:"Say why the figure needs to change.",totals:"The totals do not add up. Correct the figures before you mark any as right.",itr:"Fix the problems listed for this return before you mark a figure as right.",saved:"Your check was saved."};
 type Line=Draft["lines"][number];
 

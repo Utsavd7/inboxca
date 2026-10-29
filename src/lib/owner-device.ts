@@ -1,30 +1,31 @@
 import { createHmac } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { DEVICE_COOKIE, deviceName } from "./device";
+import { hmacKeys } from "./env";
 import { supabaseAdmin } from "./supabase";
 
 // The owner's login works only on computers the owner approved (PLAN.md D38): the first one by
 // itself, any other from a computer already signed in, or with a recovery code when every other
 // one is lost. Each is a short digest of the browser's random device cookie, keyed by the server's
-// secret and tied to the person, with when it was approved, in their app_metadata.devices; nothing
-// about the computer itself is kept. The database checks the same through the server's proof
+// own key (src/lib/env.ts) and tied to the person, with when it was approved, in their
+// app_metadata.devices; nothing about the computer itself is kept. The database checks the same through the server's proof
 // (private.device_allows), for a sign in session that still exists.
 export const ASK_MINUTES = 30;
 const KEPT = 20;
 export type Computer = { id: string; at: string };
 export const computersOf = (devices: unknown) => (devices ?? []) as Computer[];
 
-export async function thisComputer(userId: string) {
+// This computer's digest under each key in use, the one in use first.
+async function digestsOf(userId: string) {
   const token = (await cookies()).get(DEVICE_COOKIE)?.value;
-  return token
-    ? createHmac("sha256", createHmac("sha256", process.env.SUPABASE_SECRET_KEY ?? "").update("owner device").digest()).update(`${userId}:${token}`).digest("base64url").slice(0, 22)
-    : "";
+  return token ? hmacKeys("owner device").map((key) => createHmac("sha256", key).update(`${userId}:${token}`).digest("base64url").slice(0, 22)) : [];
 }
+export const thisComputer = async (userId: string) => (await digestsOf(userId))[0] ?? "";
 
 // The approved computers with this one added, the newest 20.
 export async function withThisComputer(userId: string, devices: unknown) {
-  const id = await thisComputer(userId);
-  const others = computersOf(devices).filter((computer) => computer.id !== id);
+  const ids = await digestsOf(userId), id = ids[0] ?? "";
+  const others = computersOf(devices).filter((computer) => !ids.includes(computer.id));
   return id ? [...others, { id, at: new Date().toISOString() }].slice(-KEPT) : others;
 }
 
@@ -43,6 +44,13 @@ export async function newComputer(userId: string, firmId: string, claims: { sess
   if (error) throw new Error(`Owner computers not read: ${error.code}`);
   const devices = computersOf(user.user?.app_metadata.devices);
   if (digest && devices.some((computer) => computer.id === digest)) return null;
+  // Approved under the key before (src/lib/env.ts hmacKeys): signed again with the key in use.
+  const older = (await digestsOf(userId)).slice(1).find((id) => devices.some((computer) => computer.id === id));
+  if (older) {
+    const { error: saved } = await admin.auth.admin.updateUserById(userId, { app_metadata: { devices: devices.map((computer) => (computer.id === older ? { ...computer, id: digest } : computer)) } });
+    if (saved) throw new Error(`Owner computer not saved: ${saved.code}`);
+    return null;
+  }
   // The first computer, or one the owner approved, from now on (the token says so at its next
   // refresh). An approval is used once, so a computer removed later cannot use it again.
   if (digest && (!devices.length || asked?.status === "approved")) {

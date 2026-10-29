@@ -25,8 +25,8 @@ const DAY = 86_400_000;
 export async function inboxWorkItems({ supabase, membership }: Context): Promise<WorkItem[]> {
   const today = todayInIndia();
   const [{ data: asks }, { data: papers }] = await Promise.all([
-    supabase.from("requests").select("entity_id, client_id, reason_code, clients(name)").eq("firm_id", membership.firmId).eq("kind", "team_reply").eq("status", "pending").or(awake(today)).limit(200),
-    supabase.from("shares").select("id, documents(name, client_id, clients(name))").eq("firm_id", membership.firmId).eq("status", "waiting").limit(50),
+    supabase.from("requests").select("entity_id, client_id, reason_code, clients(name)").eq("firm_id", membership.firmId).eq("kind", "team_reply").eq("status", "pending").or(awake(today)).limit(200).throwOnError(),
+    supabase.from("shares").select("id, documents(name, client_id, clients(name))").eq("firm_id", membership.firmId).eq("status", "waiting").limit(50).throwOnError(),
   ]);
   const { data: mails } = asks?.length ? await supabase.from("email_events").select("id, received_at").in("id", asks.map((ask) => ask.entity_id)) : { data: [] };
   const at = new Map(mails?.map((mail) => [mail.id, mail.received_at]));

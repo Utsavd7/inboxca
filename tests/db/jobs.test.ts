@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { Client } from "pg";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { localSupabase } from "../local-env";
 import { pgJobStore } from "./pg-store";
-import { runDueJobs } from "@/src/jobs/runner";
+import { MAX_ATTEMPTS, runDueJobs, type Job, type Outcome } from "@/src/jobs/runner";
 import { actAs, asOwner, attempt, connect, rollback } from "./db";
 
 // Most checks roll back. The two worker check commits, because two connections must see
@@ -82,14 +84,73 @@ describe("claiming jobs", () => {
 });
 
 describe("when a worker stops halfway", () => {
-  it("puts back a job that had not reached outside, and holds one that might have", () =>
+  it("puts back a job that had not reached outside, fails one that might have or keeps stopping the worker, and tells the admins", () =>
     rollback(db, async () => {
       const past = new Date(Date.now() - 1000).toISOString();
       await add("quiet", { state: "claimed", claimed_until: past });
       await add("sent", { state: "sending", claimed_until: past });
+      await add("again", { state: "claimed", claimed_until: past, attempts: 5, last_error_code: "lease_expired" });
       await pgJobStore(db).claim(0, 120);
-      expect(await states()).toEqual({ quiet: "pending", sent: "uncertain" });
+      expect(await states()).toEqual({ quiet: "pending", sent: "failed", again: "failed" });
+      const codes = await db.query("select idempotency_key as key, last_error_code as code from public.jobs where idempotency_key like $1 order by 1", [`${PREFIX}%`]);
+      expect(codes.rows.map((row) => row.code)).toEqual(["lease_expired", "lease_expired", "uncertain"]);
+      expect((await db.query("select state from public.jobs where idempotency_key = 'jobs_stopped:' || (now() at time zone 'Asia/Kolkata')::date")).rows).toHaveLength(1);
     }));
+});
+
+describe("waiting until a set time", () => {
+  it("uses no try, so a job that waited many times still has its tries for a failure", () =>
+    rollback(db, async () => {
+      await add("waits", { kind: "waits", run_at: "2000-01-01T00:00:00Z" });
+      let outcome: Outcome = { retry: "quiet_hours", at: new Date("2000-01-01T00:00:00Z") };
+      let tick = 0;
+      const sweep = () => runDueJobs(pgJobStore(db), { waits: async () => outcome }, { concurrency: 1, maxRunMs: 2, clock: () => tick++ });
+      for (let wait = 0; wait < MAX_ATTEMPTS + 2; wait++) await sweep();
+      outcome = { retry: "busy" };
+      await sweep();
+      expect((await db.query("select state, attempts from public.jobs where idempotency_key = $1", [`${PREFIX}waits`])).rows[0]).toEqual({ state: "pending", attempts: 1 });
+    }));
+});
+
+// The system mail is a fake that keeps who it emailed, and can stop the worker at a given email.
+const mailed = vi.hoisted(() => ({ to: [] as string[], stopAt: 0 }));
+vi.mock("@/src/lib/system-mail", () => ({
+  systemMailReady: () => true,
+  sendSystemMail: async (to: string) => {
+    if (mailed.to.length + 1 === mailed.stopAt) throw new Error("worker stopped");
+    mailed.to.push(to);
+    return true;
+  },
+}));
+
+describe("a send to several people that stops part way", () => {
+  it("emails, when it runs again, only those who did not get it", async () => {
+    const local = localSupabase();
+    vi.stubEnv("SUPABASE_URL", local.url);
+    vi.stubEnv("SUPABASE_SECRET_KEY", local.secretKey);
+    const { supabaseAdmin } = await import("@/src/lib/supabase");
+    const { outageEmail } = await import("@/src/jobs/outage-email");
+    const tag = randomUUID().slice(0, 8);
+    const owners = await Promise.all([1, 2, 3].map(async (n) => (await supabaseAdmin().auth.admin.createUser({ email: `outage-${n}-${tag}@example.test`, email_confirm: true })).data.user!.id));
+    const firm = (await db.query("insert into public.firms (name, state_code, status) values ($1, '27', 'active') returning id", [`Outage Test ${tag}`])).rows[0].id;
+    const incident = (await db.query("insert into public.incidents (title, parts, level) values ($1, '{mail}', 'slow') returning id", [`Invented outage ${tag}`])).rows[0].id;
+    try {
+      for (const owner of owners) await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'owner', 'active')", [firm, owner]);
+      const job = { id: 1, firm_id: firm, entity_type: "incident", entity_id: incident } as Job;
+      mailed.stopAt = 3;
+      await expect(outageEmail(job, { markSending: async () => {} })).rejects.toThrow("worker stopped");
+      expect(mailed.to).toHaveLength(2);
+      mailed.stopAt = 0;
+      expect(await outageEmail(job, { markSending: async () => {} })).toEqual({ done: true });
+      expect(mailed.to).toHaveLength(3);
+      expect(new Set(mailed.to)).toEqual(new Set([1, 2, 3].map((n) => `outage-${n}-${tag}@example.test`)));
+    } finally {
+      await db.query("delete from public.incidents where id = $1", [incident]);
+      await db.query("with gone as (select set_config('app.log_purge', 'on', true)) delete from public.firms where id = $1 and exists (select 1 from gone)", [firm]);
+      for (const owner of owners) await supabaseAdmin().auth.admin.deleteUser(owner);
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe("finishing jobs", () => {
@@ -102,7 +163,7 @@ describe("finishing jobs", () => {
         ok: async () => ({ done: true }),
         left: async () => ({ done: true, reason: "details" }),
         again: async () => ({ retry: "busy" }),
-      }, { batch: 4, maxRunMs: 2, clock: () => tick++ });
+      }, { concurrency: 4, maxRunMs: 2, clock: () => tick++ });
       expect(summary).toEqual({ claimed: 4, done: 2, retried: 1, failed: 1 });
       expect(await states()).toEqual({ ok: "done", left: "done", again: "pending", unknown: "failed" });
       // A job done with a reason (a return left for a person) keeps it; one done without keeps none.

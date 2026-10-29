@@ -21,6 +21,8 @@ export function fakeCashfree(keys: CashfreeKeys, deliver: Deliver) {
   let base = "";
   // A refund's webhook follows on its own, as Cashfree's would, unless a test settles it.
   let refundsSettle: "SUCCESS" | "FAILED" | null = null;
+  // The next call to a path ending so is turned down, or carried out with its answer lost.
+  const faults = new Map<string, "refused" | "lost">();
 
   const send = async (type: string, data: Body) => {
     const raw = JSON.stringify({ type, event_time: new Date().toISOString(), data });
@@ -32,6 +34,7 @@ export function fakeCashfree(keys: CashfreeKeys, deliver: Deliver) {
     subscriptions, charges, orders, refunds, calls, recon,
     get url() { return base; },
     settleRefunds(outcome: "SUCCESS" | "FAILED" | null) { refundsSettle = outcome; },
+    fail(ending: string, how: "refused" | "lost") { faults.set(ending, how); },
     authorise: (id: string, method = "upi") => {
       subscriptions.get(id)!.status = "ACTIVE";
       return send("SUBSCRIPTION_STATUS_CHANGED", {
@@ -57,7 +60,10 @@ export function fakeCashfree(keys: CashfreeKeys, deliver: Deliver) {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(chunk as Buffer);
     const body = chunks.length ? (JSON.parse(Buffer.concat(chunks).toString()) as Body) : {};
-    const answer = (status: number, json: Body | string, headers: Record<string, string> = { "Content-Type": "application/json" }) => void response.writeHead(status, headers).end(typeof json === "string" ? json : JSON.stringify(json));
+    const fault = [...faults.keys()].find((ending) => url.pathname.endsWith(ending));
+    const how = fault && request.headers["x-client-id"] ? faults.get(fault) : undefined;
+    if (how) faults.delete(fault!);
+    const answer = (status: number, json: Body | string, headers: Record<string, string> = { "Content-Type": "application/json" }) => void (how === "lost" ? response.destroy() : response.writeHead(status, headers).end(typeof json === "string" ? json : JSON.stringify(json)));
     if (request.method === "GET" && url.pathname === "/js/v3/cashfree.js")
       return answer(200, `window.Cashfree=function(){return{subscriptionsCheckout:function(o){location.href=${JSON.stringify(base)}+"/checkout/mandate/"+encodeURIComponent(o.subsSessionId);return Promise.resolve({})},checkout:function(o){location.href=${JSON.stringify(base)}+"/checkout/order/"+encodeURIComponent(o.paymentSessionId);return Promise.resolve({})}}}`, { "Content-Type": "text/javascript" });
     if (request.method === "GET" && url.pathname.startsWith("/checkout/")) {
@@ -70,6 +76,7 @@ export function fakeCashfree(keys: CashfreeKeys, deliver: Deliver) {
     }
     if (request.headers["x-client-id"] !== keys.CASHFREE_APP_ID || request.headers["x-client-secret"] !== keys.CASHFREE_SECRET_KEY || !request.headers["x-api-version"]) return answer(401, { code: "authentication_failed" });
     calls.push({ path: url.pathname, body });
+    if (how === "refused") return void response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ code: "request_failed" }));
     const parts = url.pathname.split("/").map(decodeURIComponent);
     if (url.pathname === "/pg/plans") return answer(200, { ...body, plan_status: "ACTIVE" });
     if (url.pathname === "/pg/subscriptions") {

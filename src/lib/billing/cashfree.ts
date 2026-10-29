@@ -44,9 +44,10 @@ async function call(path: string, body: unknown, idempotency?: string, method = 
     signal: AbortSignal.timeout(20_000),
   });
   const answer = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  // The code and status only: an answer may name the customer.
+  // The code and status only: an answer may name the customer. A request Cashfree turned down
+  // was not carried out; a timeout, a server error or a conflict may have been.
   const code = String(answer.code ?? "error").slice(0, 40);
-  if (!response.ok) throw new Error(`cashfree_${response.status}_${code}`);
+  if (!response.ok) throw Object.assign(new Error(`cashfree_${response.status}_${code}`), { refused: [400, 401, 403, 404, 422].includes(response.status) });
   return answer;
 }
 

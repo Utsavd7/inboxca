@@ -36,6 +36,7 @@ function memoryStore(jobs: Partial<Job>[]) {
     },
     async markSending(id) {
       sending.push(id);
+      return true;
     },
     async finish(id, outcome, code, at) {
       finished.push({ id, outcome, code, at });
@@ -114,6 +115,22 @@ describe("the job runner", () => {
       { now },
     );
     expect(sending).toEqual([1]);
+  });
+
+  it("stops a job whose lease ran out before it reaches outside, and leaves it to its new worker", async () => {
+    const { store, finished } = memoryStore([{ kind: "send" }]);
+    store.markSending = async () => false;
+    const sent: number[] = [];
+    const summary = await runDueJobs(store, {
+      send: async (job, { markSending }) => {
+        await markSending();
+        sent.push(job.id);
+        return { done: true };
+      },
+    }, { now });
+    expect(sent).toEqual([]);
+    expect(finished).toEqual([]);
+    expect(summary).toMatchObject({ claimed: 1, done: 0, retried: 0, failed: 0 });
   });
 
   it("stops claiming near the sweep time limit", async () => {

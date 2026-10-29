@@ -13,7 +13,7 @@ import { connect } from "./db";
 const env = Object.fromEntries((existsSync(".env.local") ? readFileSync(".env.local", "utf8") : "").split("\n").filter((line) => line.includes("=") && !line.startsWith("#")).map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
 const ready = !!env.SUPABASE_URL && !!env.SUPABASE_SECRET_KEY;
 const key = randomBytes(24).toString("base64url");
-Object.assign(process.env, { SUPABASE_URL: env.SUPABASE_URL, SUPABASE_SECRET_KEY: env.SUPABASE_SECRET_KEY, OPENAI_API_KEY: key });
+Object.assign(process.env, { SUPABASE_URL: env.SUPABASE_URL, SUPABASE_SECRET_KEY: env.SUPABASE_SECRET_KEY, APP_HMAC_KEY: randomBytes(32).toString("base64url"), OPENAI_API_KEY: key });
 delete process.env.AI_AGENT_MODEL;
 delete process.env.AI_GLOBAL_DAILY_CAP_USD;
 delete process.env.SYSTEM_MAIL_URL;

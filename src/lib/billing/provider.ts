@@ -25,7 +25,10 @@ export interface PaymentProvider {
   // A mandate with a maximum amount, authorised by the owner in checkout; firstPaise is taken
   // at authorisation where the method allows it (UPI AutoPay, card), else raised once active.
   mandate(input: { id: string; customer: Customer; maxPaise: number; firstPaise: number; method: Method; returnUrl: string }): Promise<Checkout>;
-  // A debit on an active mandate, due at `at`; the provider sends the pre-debit notice.
+  // A debit on an active mandate, due at `at`; the provider sends the pre-debit notice. Writes
+  // take Orelu's id as their idempotency key, so the same call again never moves money twice. A
+  // write the provider turned down throws an error with `refused: true`; any other throw (a
+  // timeout, a lost answer) may have been carried out, and is tried again with the same id.
   charge(input: { mandate: string; id: string; paise: number; at: Date; note: string }): Promise<void>;
   cancelCharge(input: { mandate: string; id: string }): Promise<void>;
   // A one time payment for exactly this amount.

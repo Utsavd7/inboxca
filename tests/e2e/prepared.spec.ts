@@ -46,7 +46,7 @@ test("prepared files keep versions and checked sources, then file with an acknow
     await emailStep(page,email);await page.getByLabel("6 digit code from the app").fill(totp(secret));await page.getByRole("button",{name:"Continue"}).click();await expect(page).toHaveURL(/\/app$/);
     const outputs=`/app/clients/${client}?tab=outputs`;
     await page.goto(outputs);await page.getByRole("button",{name:"Prepare Sep 2026",exact:true}).click();await expect(page).toHaveURL(/\/files\/.*\/view/);
-    await expect(page.getByRole("img",{name:"Page 1",exact:true})).toBeVisible();await expect(page.getByRole("navigation",{name:"Form sheets"}).getByRole("link",{name:"B2B",exact:true})).toHaveAttribute("aria-current","page");
+    await page.getByRole("link",{name:"File view"}).click();await expect(page.getByRole("img",{name:"Page 1",exact:true})).toBeVisible();await expect(page.getByRole("navigation",{name:"Form sheets"}).getByRole("link",{name:"B2B",exact:true})).toHaveAttribute("aria-current","page");
     const [first]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared is not null",[firm.firmId]);files.push(first.drive_file_id);
     expect(first.prepared.status).toBe("approved");expect(first.drive_file_id).toContain("/Prepared/");expect((await page.request.get(`/app/files/${first.id}`)).status()).toBe(404);
     // Changing a figure clears approval; the final check regenerates the next version.

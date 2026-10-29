@@ -8,8 +8,8 @@ import type {FormLayout,FormRow} from "@/src/lib/form-layout";
 export function FigureForm({layout,cell,open}:{layout:FormLayout;cell?:(id:string,many:boolean)=>ReactNode;open?:(row:FormRow)=>ReactNode}) {
   return <div className="fs">{layout.tables.map((table)=>{
     const span=Math.max(1,table.heads.length);
-    return <section key={table.key} className="fs-table" aria-labelledby={`fs-${table.key}`}>
-      <h3 id={`fs-${table.key}`}>{table.number && <span className="fs-num">{table.number}</span>}{table.name}</h3>
+    return <section key={table.key} className="fs-table" aria-labelledby={table.name ? `fs-${table.key}` : undefined}>
+      {table.name && <h3 id={`fs-${table.key}`}>{table.number && <span className="fs-num">{table.number}</span>}{table.name}</h3>}
       <div className="table-wrap"><table className="t fs-grid">
         <thead><tr><th scope="col">Details</th>{table.heads.length ? table.heads.map((head)=><th key={head} scope="col" className="is-num">{head}</th>) : <th scope="col"><span className="sr-only">Value</span></th>}</tr></thead>
         <tbody>{table.rows.map((row)=>{

@@ -17,8 +17,6 @@ import {receive,unsafeText} from "./intake";
 import {itrChecks,type ItrWork} from "./itr-check";
 
 export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
-// Why a second Prepare of the same return waits; Return files shows it as the file being prepared.
-export const preparingNow="This return is already being prepared. Open the page again in a moment.";
 export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : "GSTR-3B";
 
 const formPeriod=(period:string)=>period.length===4 ? itrYear(period) : periodName(period);
@@ -54,13 +52,15 @@ export async function savePrepared(request:FormRequest,userId:string|null,permis
   const folder=await drive.ensureFolder([workFolder(request.period),workYear(request.period),safeName(client.name),"Prepared"]);
   const file=await drive.save(folder,saved.name,bytes);
   if(file==="taken") {
-    // A second Fill of the same work while the first is saving opens the same draft once saved.
-    for(let wait=0;fill && wait<20;wait++) {
+    // A second Prepare or Fill of the same work while the first is saving opens the same file once saved.
+    for(let wait=0;wait<20;wait++) {
       const {data:done}=await admin.from("documents").select("drive_file_id").eq("firm_id",request.firm).eq("id",saved.id).single();
       if(done?.drive_file_id) return saved.id;
       await new Promise(resolve=>setTimeout(resolve,500));
     }
-    throw new Error(fill ? "This return is being filled now. Open it again in a moment." : preparingNow);
+    // Nothing finished it: a file of the same name was in the drive already, left from an earlier
+    // try or put there by someone.
+    throw new Error("A file with this return's name is already in the client's Prepared folder in your drive. Move or rename that file, then prepare the return again.");
   }
   try {
     const {data:finished,error}=await admin.rpc("finish_form",{target:saved.id,firm:request.firm,person:userId as string,file:file.id,checksum:createHash("sha256").update(bytes).digest("hex"),bytes:bytes.length,...(permission && {permission})});

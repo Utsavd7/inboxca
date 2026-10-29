@@ -39,3 +39,11 @@ it("shares one rolling 24 hour limit and spaces starts, without resetting it at 
   await db.query("update public.connected_accounts set settings=jsonb_build_object('mail_sends',jsonb_build_array(now()-interval '25 hours')) where id=$1",[id]);
   expect((await db.query("select public.reserve_mail_send($1) slot",[id])).rows[0].slot.ready).toBe(true);
 }));
+it("keeps a message's id from its slot until its send fails, never for a send that waits",()=>rollback(db,async()=>{
+  const id=await seed();
+  for (const message of ["<a@mail-health.test>","<b@mail-health.test>","<c@mail-health.test>"]) await db.query("select public.reserve_mail_send($1,$2)",[id,message]);
+  await db.query("select public.forget_mail_send($1,'<a@mail-health.test>')",[id]);
+  const {settings}=(await db.query("select settings from public.connected_accounts where id=$1",[id])).rows[0];
+  expect(Object.keys(settings.mail_ids)).toEqual(["<b@mail-health.test>"]);
+  expect(settings.mail_sends).toHaveLength(2);
+}));
