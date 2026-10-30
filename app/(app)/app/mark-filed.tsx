@@ -4,9 +4,11 @@ import { todayInIndia } from "@/src/lib/calendar";
 import { Pending } from "./pending";
 
 // Marking returns filed, from the Calendar or a client's Returns tab, in a side panel: the day
-// they were filed and each one's acknowledgement number (ARN), both kept with the return.
-export function MarkFiled({ rows, state }: { rows: { id: string; name: string; sub: string }[]; state: React.ReactNode }) {
+// they were filed and each one's acknowledgement number (ARN), both kept with the return. An
+// income tax return (itr) can also send the client one email to e-verify it in time.
+export function MarkFiled({ rows, state }: { rows: { id: string; name: string; sub: string; itr?: boolean }[]; state: React.ReactNode }) {
   const today = todayInIndia();
+  const itr = rows.some((row) => row.itr);
   return (
     <form action={manageTasks} className="mark-filed">
       {state}
@@ -30,6 +32,12 @@ export function MarkFiled({ rows, state }: { rows: { id: string; name: string; s
           </li>
         ))}
       </ul>
+      {itr && (
+        <label className="check check-row">
+          <input type="checkbox" name="remind_verify" />
+          Email the client to e-verify the return within 30 days
+        </label>
+      )}
       <div className="mark-filed-actions">
         <Pending className="b b-primary" name="intent" value="filed">
           Mark filed

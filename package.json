@@ -29,7 +29,6 @@
     "@supabase/supabase-js": "2.117.2",
     "@tesseract.js-data/eng": "1.0.0",
     "ajv": "6.15.0",
-    "clsx": "^2.1.1",
     "imapflow": "2.2.1",
     "lucide-react": "^1.55.0",
     "mailparser": "3.12.4",
@@ -39,7 +38,6 @@
     "pdfjs-dist": "6.3.289",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "tailwind-merge": "^3.7.0",
     "tesseract.js": "7.0.0",
     "zod": "^4.6.7"
   },

@@ -116,7 +116,7 @@ export async function checkMailbox(address: string, password: string, settings: 
   }
 }
 
-export type NewMail = { uid: number; messageId: string; threadId: string; from: string; receivedAt: string };
+export type NewMail = { uid: number; messageId: string; threadId: string; from: string; receivedAt: string; auth: string };
 export type MailContent = { subject: string; text: string; attachments: string[] };
 
 // The inbox's messages after the cursor, up to 200 a time, as envelopes. Only the ones
@@ -139,15 +139,21 @@ export async function readNewMail(
     const all: NewMail[] = [];
     if (box.uidNext > start) {
       const last = Math.min(box.uidNext - 1, start + 199);
-      for await (const message of imap.fetch(`${start}:${last}`, { uid: true, envelope: true, internalDate: true, headers: ["references"] }, { uid: true })) {
+      for await (const message of imap.fetch(`${start}:${last}`, { uid: true, envelope: true, internalDate: true, headers: ["references", "authentication-results"] }, { uid: true })) {
         const id = message.envelope?.messageId ?? `uid:${box.uidValidity}:${message.uid}`;
-        const root = message.headers?.toString().match(/<[^>]+>/)?.[0];
+        // Each header with its folded lines; the mailbox's own SPF and DKIM results are kept
+        // for the official sender check (src/lib/gov-mail.ts).
+        const headers = (message.headers?.toString() ?? "").split(/\r?\n(?!\s)/);
+        const root = headers.find((line) => /^references:/i.test(line))?.match(/<[^>]+>/)?.[0];
         all.push({
           uid: message.uid,
           messageId: id,
           threadId: root ?? message.envelope?.inReplyTo ?? id,
           from: message.envelope?.from?.[0]?.address?.toLowerCase() ?? "",
           receivedAt: new Date(message.internalDate ?? Date.now()).toISOString(),
+          // Only the topmost result counts: the receiving mailbox adds it last, above any copy a
+          // sender forged into the message.
+          auth: headers.find((line) => /^authentication-results:/i.test(line)) ?? "",
         });
       }
       start = last + 1;

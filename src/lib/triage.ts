@@ -19,6 +19,8 @@ export type Label = keyof typeof labels;
 export const statusLabels: Label[] = ["ask_filed", "ask_papers", "ask_due"];
 // Why an email waits for the team, in words for people.
 export const replyReasons: Record<string, string> = {
+  government_unmatched: "Mail from a tax portal that names no PAN or GSTIN of one client",
+  government_mail: "Mail from a tax portal that is not a notice or an acknowledgement",
   no_rule: "Asks something InboxCA could not answer",
   notice_question: "Sent a notice and asks what to do",
   record_internal: "Asks for a paper kept inside your firm",

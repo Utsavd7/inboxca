@@ -23,7 +23,7 @@ export const fileMail: Handler = async (job) => {
   const admin = supabaseAdmin();
   const { data: event } = await admin
     .from("email_events")
-    .select("id, firm_id, client_id, provider_message_id, received_at, label, clients(name), connected_accounts(id, provider, address_enc, credentials_enc, settings, status)")
+    .select("id, firm_id, client_id, provider_message_id, received_at, label, reason_code, clients(name), connected_accounts(id, provider, address_enc, credentials_enc, settings, status)")
     .eq("id", job.entity_id ?? "")
     .maybeSingle();
   const mailbox = event?.connected_accounts;
@@ -49,7 +49,8 @@ export const fileMail: Handler = async (job) => {
     return { retry: "drive_unreachable", patient: true };
   }
   // The receipt saying what arrived is a job of its own, by the firm's setting (Inbox, answered C).
-  if (filed.length) {
+  // A tax portal's mail gets none: the client did not send it.
+  if (filed.length && !event.reason_code?.startsWith("government_")) {
     const { error } = await admin.from("jobs").upsert({ firm_id: firm, kind: "answer_mail", entity_type: "email", entity_id: event.id, idempotency_key: `answer_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
     if (error) return { retry: "receipt_not_queued" };
   }

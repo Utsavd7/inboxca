@@ -35,6 +35,15 @@ export const emailTemplates={
     const got=items.filter((item)=>item.received.length).map((item)=>`- ${item.type}: ${item.received.length===1 ? "1 file" : `${item.received.length} files`}`);
     return {subject:`We have received your papers${when}`,text:[`Dear ${client},`,"",`Thank you. We have received these papers${when}:`,...got,"",...(missing.length ? ["Still needed:",...missing,"","Please add them with the upload link we sent you."] : ["That is everything we asked for."]),"",firm].join("\n")};
   },
+  // The text filled into a WhatsApp click to chat link for papers still missing; a person sends it.
+  whatsapp(client:string,firm:string,period:string,items:{type:string}[],link:string) {
+    const when=period ? ` for ${periodName(period)}` : "";
+    return [`Dear ${client},`,`${firm} still needs these papers${when}:`,...items.map((item)=>`- ${askName(item.type)}`),link ? `Please upload them here, no sign in needed: ${link}` : "",`Thank you.`].filter(Boolean).join("\n");
+  },
+  // After an income tax return is marked filed: one reminder to e-verify it, with the last day.
+  verify(client:string,firm:string,what:string,filedOn:string,by:string) {
+    return {subject:`Please e-verify your ${what}`,text:[`Dear ${client},`,"",`Your ${what} was filed on ${filedOn}. Please e-verify it on the income tax e-filing portal by ${by}, within 30 days of filing. The return is complete only once it is verified.`,"","You can e-verify with Aadhaar OTP, net banking or a bank account on the portal. If you have already verified it, please ignore this email.","",firm].join("\n")};
+  },
   code(code:string,firm:string) {
     return {subject:"Your code to open the document",text:[`Your code is ${code}.`,"",`It works for ${CODE_MINUTES} minutes. If you did not ask for it, you can ignore this email.`,"",firm].join("\n")};
   },

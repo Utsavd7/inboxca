@@ -14,7 +14,7 @@ export type ClientKind = keyof typeof clientKinds;
 
 // The example row on the client list template's How to fill sheet. An import leaves it out
 // when someone copies it into their list.
-export const exampleClient = { name: "Sharma Traders (example)", kind: clientKinds.business, pan: "ABCDE1234F", gstin: "27ABCDE1234F1Z0", email: "accounts@example.com" };
+export const exampleClient = { name: "Sharma Traders (example)", kind: clientKinds.business, pan: "ABCDE1234F", gstin: "27ABCDE1234F1Z0", email: "accounts@example.com", phone: "98765 43210" };
 
 // What each person assigned to a client does for it.
 export const assignmentRoles = { partner_in_charge: "Partner in charge", manager: "Manager", staff: "Staff" } as const;
@@ -22,7 +22,24 @@ export const assignmentRoles = { partner_in_charge: "Partner in charge", manager
 // Who may add and change clients; staff view only (PLAN.md 5.17.2).
 export const canManageClients = (role: string) => ["owner", "partner", "manager"].includes(role);
 
-export type ClientInput = { name: string; kind: string; pan: string; gstin: string; email: string };
+export type ClientInput = { name: string; kind: string; pan: string; gstin: string; email: string; phone?: string };
+
+// A phone number as typed or imported, kept as the country code and digits ("+919876543210")
+// so a WhatsApp link can use it: 10 digits are an Indian number, a leading 0 is dropped, and
+// "+" or "00" starts another country's code. Null when it is not a number.
+export function cleanPhone(value: string) {
+  const typed = value.replace(/[\s().-]/g, "");
+  if (!typed) return "";
+  const rest = typed.replace(/^(\+|00)/, "");
+  if (!/^\d+$/.test(rest)) return null;
+  if (rest.length !== typed.length) return rest.length >= 8 && rest.length <= 15 ? `+${rest}` : null;
+  const local = rest.replace(/^0/, "");
+  return /^\d{10}$/.test(local) ? `+91${local}` : null;
+}
+
+// WhatsApp's click to chat link (wa.me): opens the chat in the person's own WhatsApp with the
+// text filled in; they press send. No API, nothing sent by InboxCA.
+export const whatsappLink = (phone: string, text = "") => `https://wa.me/${phone.replace(/\D/g, "")}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 
 // Checks a client as typed or imported, and gives it back cleaned, or why it can't be added.
 // A GSTIN holds the PAN, so the PAN can be left empty when a GSTIN is given.
@@ -37,7 +54,9 @@ export function checkClient(input: ClientInput): { client: ClientInput } | { err
   if (pan && !isPan(pan)) return { error: "That PAN is not valid. A PAN is 5 letters, 4 digits and a letter." };
   if (gstin && panOfGstin(gstin) !== pan) return { error: "The PAN does not match the GSTIN. Characters 3 to 12 of a GSTIN are the PAN. Check both, or leave the PAN empty." };
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "That email address is not valid." };
-  return { client: { name, kind: input.kind, pan, gstin, email } };
+  const phone = cleanPhone(input.phone ?? "");
+  if (phone === null) return { error: "That phone number is not valid. Type the 10 digit number, or + and the country code for a number outside India." };
+  return { client: { name, kind: input.kind, pan, gstin, email, phone } };
 }
 
 // A kind as people write it in a spreadsheet ("Pvt Ltd", "Proprietor", "LLP"). Blank means

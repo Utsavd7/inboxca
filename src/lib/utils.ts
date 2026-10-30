@@ -1,9 +1,3 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-export function cn(...values: ClassValue[]) {
-  return twMerge(clsx(values));
-}
-
 // Two letters for a name or an address: "Patel Textiles" is PT, "ravi@x.in" is RA. Kept here,
 // not in the app's ui.tsx, so the not found page and client links do not load the app's menus.
 export const initials = (text: string) => {

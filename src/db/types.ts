@@ -114,13 +114,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"purchase_mapping_enc": string | null,"reminders_paused": boolean,"sales_mapping_enc": string | null
+                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"phone_enc": string | null,"purchase_mapping_enc": string | null,"reminders_paused": boolean,"sales_mapping_enc": string | null
                   }
                   Insert: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"phone_enc"?: string | null,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
                   }
                   Update: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"phone_enc"?: string | null,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null
                   }
                   Relationships: [
                     {

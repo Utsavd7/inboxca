@@ -12,8 +12,8 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
   const ready = (state.rows?.length ?? 0) - problems.length;
   const first = state.rows?.filter((row) => !row.error).slice(0, 5) ?? [];
   const services = (row: ImportRow) => Object.values(row.services ?? {}).flat().map((code) => names[code] ?? code).join(", ");
-  // A file without a TAN or services shows the columns it had.
-  const more = first.some((row) => row.tan || services(row));
+  // A file without a phone, TAN or services shows the columns it had.
+  const more = first.some((row) => row.tan || row.phone || services(row));
 
   return (
     <SidePanel id="import" title="Import from Excel or CSV" close="/app/clients">
@@ -35,6 +35,7 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
                       <th scope="col">Email</th>
                       <th scope="col">PAN</th>
                       <th scope="col">GSTIN</th>
+                      {more && <th scope="col">Phone</th>}
                       {more && <th scope="col">TAN</th>}
                     </tr>
                   </thead>
@@ -50,6 +51,7 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
                         <td>{row.email}</td>
                         <td className="num">{row.pan}</td>
                         <td className="num">{row.gstin}</td>
+                        {more && <td className="num">{row.phone}</td>}
                         {more && <td className="num">{row.tan}</td>}
                       </tr>
                     ))}
@@ -100,8 +102,8 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
             {running ? "Reading" : "Check the file"}
           </button>
           <p className="hint">
-            Row 1 must hold the column names: Name, and if you have them, Client type, Email, PAN, GSTIN, TAN and the
-            services, as in the template. InboxCA adds nothing until you have seen the check.
+            Row 1 must hold the column names: Name, and if you have them, Client type, Email, Phone, PAN, GSTIN, TAN and
+            the services, as in the template. InboxCA adds nothing until you have seen the check.
           </p>
           <a className="hint" href="/app/clients/template" download>
             Download the client list template

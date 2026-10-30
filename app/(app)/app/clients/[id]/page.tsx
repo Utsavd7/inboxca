@@ -10,8 +10,9 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { Fragment, Suspense, ViewTransition } from "react";
 import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
-import { addDays, dueLabel, periodLabel, taskStatuses, todayInIndia } from "@/src/lib/calendar";
-import { assignmentRoles, canManageClients, clientKinds, usualServices, type ClientKind } from "@/src/lib/clients";
+import { addDays, dueLabel, isItr, periodLabel, taskStatuses, todayInIndia, verifyBy } from "@/src/lib/calendar";
+import { assignmentRoles, canManageClients, clientKinds, usualServices, whatsappLink, type ClientKind } from "@/src/lib/clients";
+import { emailTemplates } from "@/src/lib/email-templates";
 import { checklists, kindChecklist, workOfService, type DocumentRequest } from "@/src/lib/checklists";
 import { skipReasons, type Skip } from "@/src/lib/reminders";
 import { activityNames } from "@/src/lib/activity";
@@ -50,7 +51,7 @@ import "../clients.css";
 import "../../today.css";
 
 const errors: Record<string, string> = {
-  details: "Enter a name, choose a client type, and check the email address.",
+  details: "Enter a name, choose a client type, and check the email address and phone number.",
   number: "That number does not fit the type you chose. Check the type, and check the number for a typing mistake.",
   "one-pan": "This client already has a PAN.",
   "gstin-pan": "That GSTIN holds a different PAN from this client's.",
@@ -104,7 +105,7 @@ const tabOf: Record<string, Main> = { files: "documents", due: "returns", extrac
 const panels = ["notice", "numbers", "services", "contacts", "team", "details", "activity"];
 const lookAfter = ["partner_in_charge", "manager", "staff"];
 const uuid = /^[0-9a-f-]{36}$/;
-const taskChanges: Record<string, string> = { filed: "marked filed", in_progress: "marked in progress", reopen: "marked not filed" };
+const taskChanges: Record<string, string> = { filed: "marked filed", in_progress: "marked in progress", reopen: "marked not filed", verified: "marked e-verified" };
 // What a save on this page says once it is done (?changed=).
 const changes: Record<string, string> = {
   details: "Details saved.", services: "Services saved.", "contact-rights": "Contact saved.", "add-contact": "Contact added.", "unlink-contact": "Contact removed.",
@@ -113,10 +114,10 @@ const changes: Record<string, string> = {
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; task?: string; marked?: string; t?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; request?: string; task?: string; marked?: string; t?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, request: askedRequest, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
   const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "overview";
   const sub = asked === "extraction" || asked === "outputs" ? asked : tab;
   const panel = panels.includes(asked ?? "") ? asked! : "";
@@ -147,7 +148,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase
       .from("clients")
       .select(
-        "id, name, kind, archived_at, email_enc, group_id, branch_id, reminders_paused, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_receive_documents, contacts(name_enc, email_enc))",
+        "id, name, kind, archived_at, email_enc, phone_enc, group_id, branch_id, reminders_paused, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_receive_documents, contacts(name_enc, email_enc))",
       )
       .eq("id", id)
       .eq("firm_id", firm)
@@ -180,6 +181,10 @@ export default async function Client({ params, searchParams }: { params: Promise
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
+  // The upload link InboxCA could not email, shown once from its stored copy, never in the address.
+  const { data: askedLink } = askedFor === "link" && uuid.test(askedRequest ?? "") ? await supabaseAdmin().from("requests").select("details").eq("firm_id", firm).eq("id", askedRequest!).eq("kind", "documents").maybeSingle() : { data: null };
+  const linkEnc = (askedLink?.details as { link_enc?: string } | null)?.link_enc;
+  const askedUploadLink = linkEnc ? `${process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? ""}/u/${await crypto.decrypt(firm, `requests/${askedRequest}/link`, linkEnc)}` : "";
   // Where each open return stands, and who may fill it by hand.
   const stages = await returnStages(supabase, firm, sub === "returns" ? (tasks ?? []).filter((task) => task.status !== "filed").map((task) => task.id) : []);
   const canPrepare = !viewOnly && membership.may("edit_figures", id);
@@ -194,7 +199,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const openAsk = viewOnly ? undefined : (asks ?? []).filter((request) => request.status === "pending" && (request.details as unknown as DocumentRequest).link_enc).sort((a, b) => (b.expires_at ?? "").localeCompare(a.expires_at ?? ""))[0];
   // The second and last round: the client's own numbers and contacts opened with the firm's key,
   // and what the shown lists need from them.
-  const [numbers, email, contacts, { data: confirms }, { data: statements }, uploadLink, { data: taxPapers }] = await Promise.all([
+  const [numbers, email, contacts, { data: confirms }, { data: statements }, uploadLink, { data: taxPapers }, phone] = await Promise.all([
     Promise.all(client.client_registrations.map(async (registration) => ({ ...registration, number: await crypto.decrypt(firm, `clients/${client.id}/${registration.kind}`, registration.number_enc) }))),
     client.email_enc ? crypto.decrypt(firm, `clients/${client.id}/email`, client.email_enc) : "",
     Promise.all(
@@ -208,7 +213,12 @@ export default async function Client({ params, searchParams }: { params: Promise
     months.length ? supabase.from("documents").select("period_key").eq("client_id", id).eq("document_type", "GSTR-2B").neq("status", "deleted").in("period_key", months) : Promise.resolve({ data: [] }),
     openAsk && (async () => `${process.env.APP_BASE_URL ?? `${(await headers()).get("x-forwarded-proto") ?? "http"}://${(await headers()).get("host")}`}/u/${await crypto.decrypt(firm, `requests/${openAsk.id}/link`, (openAsk.details as unknown as DocumentRequest).link_enc!)}`)(),
     itrYears.length ? supabase.from("documents").select("document_type, period_key").eq("client_id", id).in("document_type", ["Form 16", "Form 130", "Form 26AS", "Form 168", "AIS"]).neq("status", "deleted") : Promise.resolve({ data: [] }),
+    client.phone_enc ? crypto.decrypt(firm, `clients/${client.id}/phone`, client.phone_enc) : "",
   ]);
+  // WhatsApp click to chat from the person's own phone, with the papers still missing and the
+  // upload link filled in while papers are asked for (product gaps S6). InboxCA sends nothing.
+  const missingAsk = openAsk && (openAsk.details as unknown as DocumentRequest);
+  const whatsapp = phone && whatsappLink(phone, missingAsk && uploadLink ? emailTemplates.whatsapp(client.name, membership.firmName, missingAsk.period, missingAsk.items.filter((item) => !item.received.length), uploadLink) : "");
   const manage = canManageClients(membership.role);
   // Send reminder now on the Returns tab: those who manage clients and those who look after this one.
   const reminds = sub === "returns" && !viewOnly && !!client.email_enc && !client.reminders_paused && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
@@ -594,6 +604,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <dl className="props client-props">
                   <div><dt>Client type</dt><dd>{clientKinds[client.kind as ClientKind]}</dd></div>
                   <div><dt>Email</dt><dd>{email || <span className="hint">None yet</span>}</dd></div>
+                  <div><dt>Phone</dt><dd>{phone ? <>{phone}{whatsapp && !client.archived_at && <>{" "}<a href={whatsapp} target="_blank" rel="noreferrer">Message on WhatsApp</a></>}</> : <span className="hint">None yet</span>}</dd></div>
                   <div><dt>Group</dt><dd>{groupName ? <Link href={`/app/clients?group=${client.group_id}`}>{groupName}</Link> : <span className="hint">None</span>}</dd></div>
                   {!!branches.length && <div><dt>Branch</dt><dd>{branchName ? <Link href={`/app/clients?branch=${client.branch_id}`}>{branchName}</Link> : <span className="hint">None</span>}</dd></div>}
                   <div><dt>Reminders</dt><dd>{client.reminders_paused ? <Badge tone="warn">Paused</Badge> : <Badge>On</Badge>}</dd></div>
@@ -667,10 +678,10 @@ export default async function Client({ params, searchParams }: { params: Promise
             {askedRight && <Toast>Permission asked. Once allowed, it works here once, within an hour.</Toast>}
             {sharedFile && <Toast>Sent {sharedFile.name}. The link works for 7 days and 5 downloads.</Toast>}
             {askedFor === "sent" && <Toast>The client was emailed a private upload link. What they upload is saved here.</Toast>}
-            {askedFor && askedFor !== "sent" && (
+            {askedUploadLink && (
               <p className="note" role="status">
                 <span>
-                  InboxCA could not email the client, so send this private upload link yourself. It works for 30 days: <span className="num link-once">{askedFor}</span>
+                  InboxCA could not email the client, so send this private upload link yourself. It works for 30 days: <span className="num link-once">{askedUploadLink}</span>
                 </span>
               </p>
             )}
@@ -844,7 +855,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                     const r = rule.get(task.code ?? "");
                     const overdue = task.status !== "filed" && task.due_on < today;
                     const note = reminderNote(task.details as { reminded?: string[]; skipped?: { reason: string } });
-                    const filed = task.details as { filed_on?: string; by?: string; ack?: string };
+                    const filed = task.details as { filed_on?: string; by?: string; ack?: string; verified_on?: string };
+                    // A filed income tax return waits to be e-verified: by the portal's mail, or by a person.
+                    const verify = task.status === "filed" && isItr(task.code);
                     const title = `${r?.name} ${periodLabel(r?.frequency ?? null, task.period_key)}`;
                     const [day, month] = dueLabel(task.due_on).split(" ");
                     return (
@@ -859,7 +872,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                         title={title}
                         meta={
                           task.status === "filed"
-                            ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}</>
+                            ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}{verify && (filed.verified_on ? `. E-verified ${dueLabel(filed.verified_on)}` : `. Verify by ${dueLabel(verifyBy(filed.filed_on ?? task.due_on))}`)}</>
                             : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}{task.code?.startsWith("ITR") && itrNeeds.get(task.period_key?.slice(0, 4) ?? "")?.line}<StageLine code={task.code} work={stages.get(task.id)} /></>
                         }
                         status={
@@ -886,7 +899,8 @@ export default async function Client({ params, searchParams }: { params: Promise
                               <form action={manageTasks}>
                                 {returnsState}
                                 <input type="hidden" name="task" value={task.id} />
-                                <Pending className="b b-secondary" name="intent" value="reopen" aria-label={`${title} was not filed after all`}>Not filed after all</Pending>
+                                {verify && !filed.verified_on && <Pending className="b b-secondary" name="intent" value="verified" aria-label={`Mark ${title} e-verified`}>Mark verified</Pending>}
+                                <Pending className="b b-ghost" name="intent" value="reopen" aria-label={`${title} was not filed after all`}>Not filed after all</Pending>
                               </form>
                             )
                           )}
@@ -1115,6 +1129,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             {hidden("details")}
             <div><label htmlFor="client-name">Name</label><input id="client-name" name="name" required defaultValue={client.name} /></div>
             <div><label htmlFor="client-email">Email</label><input id="client-email" name="email" type="email" defaultValue={email} /></div>
+            <div><label htmlFor="client-phone">Phone</label><input id="client-phone" name="phone" type="tel" maxLength={20} className="num" defaultValue={phone} /></div>
             <div>
               <label htmlFor="client-kind">Client type</label>
               <select id="client-kind" name="kind" defaultValue={client.kind}>
@@ -1349,7 +1364,7 @@ export default async function Client({ params, searchParams }: { params: Promise
       )}
       {filing && (
         <SidePanel key="mark-filed" id="mark-filed" title="Mark filed" close={returnsHref}>
-          <MarkFiled state={returnsState} rows={[{ id: filing.id, name: `${rule.get(filing.code ?? "")?.name ?? filing.code} ${periodLabel(rule.get(filing.code ?? "")?.frequency ?? null, filing.period_key)}`, sub: `Due ${dueLabel(filing.due_on)}` }]} />
+          <MarkFiled state={returnsState} rows={[{ id: filing.id, name: `${rule.get(filing.code ?? "")?.name ?? filing.code} ${periodLabel(rule.get(filing.code ?? "")?.frequency ?? null, filing.period_key)}`, sub: `Due ${dueLabel(filing.due_on)}`, itr: isItr(filing.code) }]} />
         </SidePanel>
       )}
       </Presence>

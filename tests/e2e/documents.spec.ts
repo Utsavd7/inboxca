@@ -86,6 +86,7 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     await expect(beside.getByRole("img", { name: "Page 1" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(beside).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`file=${bills.id}`));
     await expect(papers.getByRole("link", { name: /Purchase bills/ })).toBeVisible();
     await detail.getByRole("link", { name: "View" }).click();
     await expect(beside).toBeVisible();

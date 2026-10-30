@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { addPerson, appKey, latestEmail, localSupabase, query, seedFirm, signIn, totp } from "./local-supabase";
+import { personName } from "@/src/lib/roles";
 
 // Taking back what the owner set up on People: an invite sent by mistake is withdrawn, so its
 // email no longer joins the firm, and a team is removed, which leaves its people without a
@@ -35,7 +36,7 @@ test("an invite sent by mistake is withdrawn, and its email no longer joins the 
   await expect(row).toContainText("Invited");
 
   await row.getByRole("link", { name: `Change ${invitedEmail}` }).click();
-  await owner.getByRole("dialog", { name: invitedEmail }).getByRole("button", { name: "Withdraw invite" }).click();
+  await owner.getByRole("dialog", { name: personName(invitedEmail) }).getByRole("button", { name: "Withdraw invite" }).click();
   await expect(row).toHaveCount(0);
   expect(await query(local.dbUrl, "select 1 from public.firm_members m join auth.users u on u.id = m.user_id where m.firm_id = $1 and u.email = $2", [firm.firmId, invitedEmail])).toEqual([]);
   expect(await logged("member.invite_withdrawn")).toEqual([firm.ownerId]);

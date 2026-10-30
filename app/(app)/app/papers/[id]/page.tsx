@@ -1,11 +1,14 @@
 import { FileCheck2, FileClock } from "lucide-react";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { askedByPhone, checkFigures, remindClient, stopSend } from "@/app/(app)/actions";
 import { dueLabel, todayInIndia } from "@/src/lib/calendar";
 import type { DocumentRequest } from "@/src/lib/checklists";
-import { canManageClients } from "@/src/lib/clients";
+import { canManageClients, whatsappLink } from "@/src/lib/clients";
+import { serverCrypto } from "@/src/lib/crypto";
 import { periodName } from "@/src/lib/documents";
+import { emailTemplates } from "@/src/lib/email-templates";
 import { currentMember } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { Pending } from "../../pending";
@@ -28,7 +31,7 @@ export default async function Papers({ params, searchParams }: { params: Promise
   if (!membership) redirect("/app");
   const [{ id }, query] = await Promise.all([params, searchParams]);
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
-  const { data: request } = await supabase.from("requests").select("id, client_id, status, expires_at, details, clients(name, email_enc, reminders_paused)").eq("firm_id", membership.firmId).eq("kind", "documents").eq("id", id).maybeSingle();
+  const { data: request } = await supabase.from("requests").select("id, client_id, status, expires_at, details, clients(name, email_enc, phone_enc, reminders_paused)").eq("firm_id", membership.firmId).eq("kind", "documents").eq("id", id).maybeSingle();
   if (!request?.client_id || !request.clients) notFound();
   const details = request.details as unknown as DocumentRequest;
   const client = request.clients;
@@ -45,6 +48,12 @@ export default async function Papers({ params, searchParams }: { params: Promise
   const asked = details.followups?.length ?? 0;
   const live = request.status === "pending" && Date.parse(request.expires_at ?? "") > new Date().getTime();
   const what = details.returns?.length ? details.returns.map((code) => rules?.find((rule) => rule.code === code)?.name ?? code).join(" and ") : "";
+  // Message on WhatsApp: the person's own WhatsApp opens with the missing papers and the upload
+  // link filled in, for a client with a phone number. They press send; InboxCA sends nothing.
+  const crypto = serverCrypto();
+  const whatsapp = acts && live && missing.length > 0 && client.phone_enc && details.link_enc
+    ? whatsappLink(await crypto.decrypt(membership.firmId, `clients/${request.client_id}/phone`, client.phone_enc), emailTemplates.whatsapp(client.name, membership.firmName, details.period, missing, `${process.env.APP_BASE_URL ?? `${(await headers()).get("x-forwarded-proto") ?? "http"}://${(await headers()).get("host")}`}/u/${await crypto.decrypt(membership.firmId, `requests/${request.id}/link`, details.link_enc)}`))
+    : "";
   // Anything that stops an email going now.
   const stop = mailbox?.status !== "connected" ? "Connect the firm email in Settings first. Reminders go from the firm email." : !client.email_enc ? "This client has no email address. Add one on the client's page." : client.reminders_paused ? "Reminders are paused for this client. Resume them on the client's page." : emailed ? "Already emailed today. The next reminder can go tomorrow." : "";
   const hidden = (
@@ -73,6 +82,7 @@ export default async function Papers({ params, searchParams }: { params: Promise
             <>
               {live && missing.length > 0 && (
                 <>
+                  {whatsapp && <a className="b b-secondary" href={whatsapp} target="_blank" rel="noreferrer">Message on WhatsApp</a>}
                   <form action={askedByPhone}>
                     {hidden}
                     <Pending className="b b-secondary" busy="Saving">Mark as asked by phone</Pending>
