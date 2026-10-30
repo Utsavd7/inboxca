@@ -44,7 +44,7 @@ export default async function SharedDocument({ params, searchParams }: { params:
       firm={share.firms.name}
       band={
         <>
-          <h1 className="public-doc">{share.documents.name}</h1>
+          <h1 className="public-doc">{locked ? "A private paper for you" : share.documents.name}</h1>
           <p className="public-for">Shared with you by {share.firms.name}</p>
         </>
       }

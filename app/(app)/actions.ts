@@ -49,6 +49,7 @@ import { currentMember, currentWriter, FIRM_COOKIE, myQuestions } from "@/src/li
 import { activityNames } from "@/src/lib/activity";
 import { invitableRoles, personName } from "@/src/lib/roles";
 import { EXCEPTION_RULES, IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
+import { withinLimit } from "@/src/lib/rate-limit";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 import { sendSystemMail, systemMailReady, systemMailUse } from "@/src/lib/system-mail";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
@@ -98,7 +99,7 @@ export async function inviteMember(_prev: InviteState, form: FormData): Promise<
   });
   if (!added) return { error: `${email} is already on your firm's list.`, values };
 
-  const origin = (await headers()).get("origin") ?? process.env.APP_BASE_URL ?? "";
+  const origin = process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? "";
   const { error } = await supabaseAnonymous().auth.signInWithOtp({
     email,
     options: { shouldCreateUser: false, emailRedirectTo: `${origin}/auth/confirm` },
@@ -125,7 +126,9 @@ export async function manageMember(form: FormData) {
   const role = invitable.safeParse(form.get("role"));
   if (intent === "remove") {
     const { data: removed } = await supabase.rpc("remove_member", args);
-    const { data: keys } = removed && form.get("passkeys") === "on" ? await supabaseAdmin().from("passkeys").delete().eq("user_id", args.person).select("id") : { data: null };
+    // Passkeys belong to the person, not the firm: kept while another firm still has them.
+    const { count: elsewhere } = removed && form.get("passkeys") === "on" ? await supabaseAdmin().from("firm_members").select("firm_id", { count: "exact", head: true }).eq("user_id", args.person).eq("status", "active").neq("firm_id", membership.firmId) : { count: 1 };
+    const { data: keys } = removed && form.get("passkeys") === "on" && !elsewhere ? await supabaseAdmin().from("passkeys").delete().eq("user_id", args.person).select("id") : { data: null };
     if (keys?.length) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "passkey.removed", entity_type: "user", entity_id: args.person, details: { removed: keys.length } });
   } else if (intent === "restore") await supabase.rpc("restore_member", args);
   else if (role.success) {
@@ -1577,8 +1580,8 @@ export async function askForDocuments(form: FormData) {
   const message=emailTemplates.request(client.name,membership.firmName,period,items,link);
   const sent=!!mailer && !!to && await mailer.send(to,message.subject,message.text);
   revalidatePath("/app", "layout");
-  // The link is shown once, in the address, only when it could not be emailed.
-  redirect(sent ? `${back}&asked=sent` : `${back}&asked=${encodeURIComponent(link)}`);
+  // The link is shown once, from its stored copy, only when it could not be emailed.
+  redirect(sent ? `${back}&asked=sent` : `${back}&asked=link&request=${id}`);
 }
 
 // The owner, a partner or a manager changes the firm's usual list for this kind of client,
@@ -1608,13 +1611,16 @@ export async function saveChecklist(form: FormData) {
 export async function uploadToRequest(form: FormData): Promise<"got" | "file" | "full" | "later" | "closed" | "unsafe"> {
   const token = String(form.get("token") ?? "");
   const admin = supabaseAdmin();
+  const linkHash = createHash("sha256").update(token).digest("hex");
   const { data: request } = await admin
     .from("requests")
     .select("id, firm_id, client_id, status, expires_at, details, clients(id, name), firms(name)")
     .eq("kind", "documents")
-    .eq("details->>link_hash", createHash("sha256").update(token).digest("hex"))
+    .eq("details->>link_hash", linkHash)
     .maybeSingle();
   if (!request?.clients || request.status !== "pending" || Date.parse(request.expires_at ?? "") < Date.now()) return "closed";
+  // Every file sent counts, saved or not, so one link cannot keep the file worker busy all day.
+  if (!(await withinLimit("upload", linkHash))) return "later";
   const details = request.details as unknown as DocumentRequest;
   const item = details.items[Number(form.get("item"))];
   const file = form.get("file");

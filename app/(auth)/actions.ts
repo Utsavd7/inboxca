@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { log } from "@/src/lib/logger";
 import { mailboxLogin } from "@/src/lib/mailbox-login";
-import { chosenFirm } from "@/src/lib/office";
+import { chosenFirm, requestAddress } from "@/src/lib/office";
 import { withThisComputer } from "@/src/lib/owner-device";
 import { CHALLENGE_COOKIE, checkAdminKeyUse, newChallenge } from "@/src/lib/pc-key";
 import { withinLimit } from "@/src/lib/rate-limit";
@@ -28,8 +28,12 @@ export async function requestCode(_prev: CodeState, form: FormData): Promise<Cod
   // Counted for every address alike, so the answer never tells whether it has an account.
   if (!(await withinLimit("code", email)))
     return { step: "email", email, error: "Too many codes asked for this address. Try again in an hour." };
+  // And for every address asked from one internet connection, when the host says which.
+  const from = requestAddress(await headers());
+  if (from && !(await withinLimit("signIn", from)))
+    return { step: "email", email, error: "Too many codes asked from this internet connection. Try again in an hour." };
   const supabase = await supabaseServer();
-  const origin = (await headers()).get("origin") ?? process.env.APP_BASE_URL ?? "";
+  const origin = process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? "";
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: { shouldCreateUser: false, emailRedirectTo: `${origin}/auth/confirm` },

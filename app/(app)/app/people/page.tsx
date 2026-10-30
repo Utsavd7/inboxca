@@ -145,7 +145,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
       {isOwner && panel === "invite" && <InviteForm key="invite" />}
 
       {person && (
-        <SidePanel key="person" id="person" title={person.email} close="/app/people">
+        <SidePanel key="person" id="person" title={personName(person.email)} close="/app/people">
           <div className="people-card">
             <Avatar name={person.email} big />
             <span className="grow">

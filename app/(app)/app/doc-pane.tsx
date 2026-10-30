@@ -23,6 +23,8 @@ export function DocPane({ name, full, chips, actions, children }: { name: React.
   const pane = useRef<HTMLElement>(null);
   const [leaving, setLeaving] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // Close's delayed step back, dropped if the page moves on before it runs.
+  const closing = useRef(0);
   const [share, setShare] = useState(() => (width ? Math.round((100 * width) / (innerWidth - 64)) : 52));
 
   useEffect(() => {
@@ -51,8 +53,9 @@ export function DocPane({ name, full, chips, actions, children }: { name: React.
     while (behind[steps - 1] && panes.has(behind[steps - 1].key)) steps++;
     // A folder chosen beside the paper moved the address on without it: stay there.
     const go = () => (!paperPath.test(location.pathname) ? router.push(location.pathname + location.search, { scroll: false }) : here ? history.go(-steps) : router.back());
-    setTimeout(go, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200);
+    closing.current = window.setTimeout(go, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200);
   };
+  useEffect(() => () => window.clearTimeout(closing.current), []);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !typing(event.target) && !document.querySelector("[role=dialog], [role=menu]")) close();
