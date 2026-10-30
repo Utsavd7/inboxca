@@ -151,7 +151,9 @@ export async function readNewMail(
           threadId: root ?? message.envelope?.inReplyTo ?? id,
           from: message.envelope?.from?.[0]?.address?.toLowerCase() ?? "",
           receivedAt: new Date(message.internalDate ?? Date.now()).toISOString(),
-          auth: headers.filter((line) => /^authentication-results:/i.test(line)).join("\n"),
+          // Only the topmost result counts: the receiving mailbox adds it last, above any copy a
+          // sender forged into the message.
+          auth: headers.find((line) => /^authentication-results:/i.test(line)) ?? "",
         });
       }
       start = last + 1;

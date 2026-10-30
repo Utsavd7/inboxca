@@ -21,7 +21,8 @@ const under = (domain: string, root: string) => domain === root || domain.endsWi
 
 // The work (income tax or GST) an official sender's mail belongs to, or null for anyone else
 // or for an official address that did not pass SPF or DKIM for its own domain. auth is the
-// message's Authentication-Results header(s), as the receiving mailbox wrote them.
+// message's topmost Authentication-Results header, the one the receiving mailbox wrote; lower
+// copies can be forged by the sender and are never passed in.
 export function officialSender(from: string, auth: string): OfficialWork | null {
   const domain = domainOf(from);
   const root = (Object.keys(officialDomains) as (keyof typeof officialDomains)[]).find((known) => under(domain, known));

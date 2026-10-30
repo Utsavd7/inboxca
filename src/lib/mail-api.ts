@@ -132,7 +132,7 @@ function gmail(mailbox: ApiMailbox): Driver {
         cursor: page.nextPageToken ? String(page.history?.at(-1)?.id ?? page.historyId) : String(page.historyId),
         mail: envelopes.flatMap((message) =>
           message
-            ? [{ uid: 0, ref: message.id, messageId: nameOf("gmail", message.id, "inbox", header(message.payload?.headers, "Message-ID")), threadId: message.threadId, from: emails(header(message.payload?.headers, "From"))[0] ?? "", receivedAt: new Date(Number(message.internalDate) || Date.now()).toISOString(), auth: (message.payload?.headers ?? []).filter((entry) => entry.name.toLowerCase() === "authentication-results").map((entry) => entry.value).join("\n") }]
+            ? [{ uid: 0, ref: message.id, messageId: nameOf("gmail", message.id, "inbox", header(message.payload?.headers, "Message-ID")), threadId: message.threadId, from: emails(header(message.payload?.headers, "From"))[0] ?? "", receivedAt: new Date(Number(message.internalDate) || Date.now()).toISOString(), auth: (message.payload?.headers ?? []).find((entry) => entry.name.toLowerCase() === "authentication-results")?.value ?? "" }]
             : [],
         ),
       };
