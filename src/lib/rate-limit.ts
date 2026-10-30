@@ -9,6 +9,8 @@ import { supabaseAdmin } from "./supabase";
 export const LIMITS = {
   code: { most: 10, seconds: 3600 }, // sign in codes emailed to one address
   signUp: { most: 10, seconds: 3600 }, // public sign ups from one internet address
+  signIn: { most: 30, seconds: 3600 }, // sign in codes asked from one internet address
+  upload: { most: 200, seconds: 3600 }, // files sent to one upload link
   check: { most: 10, seconds: 3600 }, // email codes tried for one address
   twoStep: { most: 10, seconds: 3600 }, // authenticator app codes tried by one person
   recovery: { most: 5, seconds: 3600 }, // recovery codes tried by one person

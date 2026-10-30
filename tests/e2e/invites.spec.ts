@@ -12,6 +12,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { TEST_DRIVE, TEST_WORKER_SECRET, TEST_WORKSPACE } from "../../playwright.config";
 import { financialYear } from "@/src/lib/drive";
 import { laterBy } from "@/src/lib/hours";
+import { personName } from "@/src/lib/roles";
 import { pdf } from "@/tests/fixtures/pdf";
 import { actionFields, askForCode, emailStep, latestEmail, localSupabase, pollFirmMail, query, runJobs, seedFirm, totp } from "./local-supabase";
 
@@ -168,7 +169,7 @@ test("the owner changes the role, removes the person and brings them back", asyn
   const row = owner.getByRole("row").filter({ hasText: newEmail });
   // Changes open in a panel beside the list.
   await row.getByRole("link", { name: `Change ${newEmail}` }).click();
-  const panel = owner.getByRole("dialog", { name: newEmail });
+  const panel = owner.getByRole("dialog", { name: personName(newEmail) });
   await panel.getByLabel("Role").selectOption("staff");
   await panel.getByRole("button", { name: "Save changes" }).click();
   await expect(row).toContainText("Staff");
@@ -724,7 +725,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.getByRole("link", { name: "Close" }).click();
   const row = owner.getByRole("row").filter({ hasText: newEmail });
   await row.getByRole("link", { name: `Change ${newEmail}` }).click();
-  await owner.getByRole("dialog", { name: newEmail }).getByLabel("Team").selectOption({ label: "GST team" });
+  await owner.getByRole("dialog", { name: personName(newEmail) }).getByLabel("Team").selectOption({ label: "GST team" });
   await owner.getByRole("button", { name: "Save changes" }).click();
   await expect(row).toContainText("GST team");
   await owner.goto("/app/people?panel=groups");

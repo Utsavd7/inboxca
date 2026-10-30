@@ -113,10 +113,10 @@ const changes: Record<string, string> = {
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; task?: string; marked?: string; t?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; request?: string; task?: string; marked?: string; t?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, request: askedRequest, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
   const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "overview";
   const sub = asked === "extraction" || asked === "outputs" ? asked : tab;
   const panel = panels.includes(asked ?? "") ? asked! : "";
@@ -180,6 +180,10 @@ export default async function Client({ params, searchParams }: { params: Promise
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
+  // The upload link InboxCA could not email, shown once from its stored copy, never in the address.
+  const { data: askedLink } = askedFor === "link" && uuid.test(askedRequest ?? "") ? await supabaseAdmin().from("requests").select("details").eq("firm_id", firm).eq("id", askedRequest!).eq("kind", "documents").maybeSingle() : { data: null };
+  const linkEnc = (askedLink?.details as { link_enc?: string } | null)?.link_enc;
+  const askedUploadLink = linkEnc ? `${process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? ""}/u/${await crypto.decrypt(firm, `requests/${askedRequest}/link`, linkEnc)}` : "";
   // Where each open return stands, and who may fill it by hand.
   const stages = await returnStages(supabase, firm, sub === "returns" ? (tasks ?? []).filter((task) => task.status !== "filed").map((task) => task.id) : []);
   const canPrepare = !viewOnly && membership.may("edit_figures", id);
@@ -667,10 +671,10 @@ export default async function Client({ params, searchParams }: { params: Promise
             {askedRight && <Toast>Permission asked. Once allowed, it works here once, within an hour.</Toast>}
             {sharedFile && <Toast>Sent {sharedFile.name}. The link works for 7 days and 5 downloads.</Toast>}
             {askedFor === "sent" && <Toast>The client was emailed a private upload link. What they upload is saved here.</Toast>}
-            {askedFor && askedFor !== "sent" && (
+            {askedUploadLink && (
               <p className="note" role="status">
                 <span>
-                  InboxCA could not email the client, so send this private upload link yourself. It works for 30 days: <span className="num link-once">{askedFor}</span>
+                  InboxCA could not email the client, so send this private upload link yourself. It works for 30 days: <span className="num link-once">{askedUploadLink}</span>
                 </span>
               </p>
             )}
