@@ -1068,7 +1068,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   // One button an item: choosing files sends them at once, with no second step.
   const loan = visitor.getByRole("listitem").filter({ hasText: "Loan statement" });
   const loanPdf = Buffer.from(pdf("Invented loan account 99231"));
-  await expect(loan.getByLabel("Add Loan statement from camera or files")).toHaveAttribute("accept", "image/*,application/pdf");
+  await expect(loan.getByLabel("Add Loan statement from camera or files")).toHaveAttribute("accept", "image/*,application/pdf,.xlsx,.xls,.csv,.xml,.json,.zip");
   await loan.getByLabel("Add Loan statement from camera or files").setInputFiles({ name: "IMG_77.pdf", mimeType: "application/pdf", buffer: loanPdf });
   await expect(loan.getByRole("status")).toHaveText("Received: 1 file");
   await expect(loan.getByRole("img", { name: "Received" })).toBeVisible();
