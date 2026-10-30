@@ -22,6 +22,11 @@ export function periodLabel(frequency: string | null, key: string | null) {
 export const dueLabel = (date: string) => `${Number(date.slice(8, 10))} ${months[Number(date.slice(5, 7)) - 1]} ${date.slice(0, 4)}`;
 
 export const taskStatuses = { upcoming: "Upcoming", in_progress: "In progress", filed: "Filed" } as const;
+// An income tax return is e-verified within 30 days of filing (incometax.gov.in, ITR-V FAQs,
+// citing Notification No. 2/2024 of 31 March 2024). Counted from the day it was filed, never stored.
+export const EVERIFY_DAYS = 30;
+export const verifyBy = (filedOn: string) => addDays(filedOn, EVERIFY_DAYS);
+export const isItr = (code: string | null | undefined) => !!code?.startsWith("ITR");
 
 // Today in India, as a date column holds it (YYYY-MM-DD).
 export const todayInIndia = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });

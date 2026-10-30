@@ -43,6 +43,11 @@ export function AddClientForm() {
           {error("email")}
         </div>
         <div>
+          <label htmlFor="client-phone">Phone</label>
+          <input id="client-phone" name="phone" type="tel" autoComplete="off" maxLength={20} className="num" defaultValue={state.values?.phone} {...mark("phone")} />
+          {error("phone")}
+        </div>
+        <div>
           <label htmlFor="client-pan">PAN</label>
           <input id="client-pan" name="pan" autoComplete="off" maxLength={10} className="num" defaultValue={state.values?.pan} {...mark("pan")} />
           {error("pan")}

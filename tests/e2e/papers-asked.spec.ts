@@ -143,9 +143,11 @@ test("once the client uploads every paper, the person is told to check the figur
   const link = (await mailTexts(client.email))[0].match(/http\S+\/u\/[\w-]+/)![0];
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(link);
+  // Registers come as spreadsheets, so the link takes those too (product gaps S5).
   for (const paper of ["Sales bills", "Purchase bills", "Bank statement"]) {
     const item = visitor.getByRole("listitem").filter({ hasText: paper });
-    await item.getByLabel(`Add ${paper} from camera or files`).setInputFiles({ name: `${paper}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf(`Invented ${paper}`)) });
+    const file = paper === "Bank statement" ? { name: "statement.csv", mimeType: "text/csv", buffer: Buffer.from("Date,Narration,Amount\n01-10-2026,Invented entry,100\n") } : { name: `${paper}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf(`Invented ${paper}`)) };
+    await item.getByLabel(`Add ${paper} from camera or files`).setInputFiles(file);
     await expect(item.getByRole("status")).toHaveText("Received: 1 file");
   }
   await expect(visitor.getByRole("heading", { name: "All 3 papers received" })).toBeVisible();

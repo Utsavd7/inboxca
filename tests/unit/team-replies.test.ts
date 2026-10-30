@@ -5,7 +5,8 @@ import { replyReasons } from "@/src/lib/triage";
 const names = { name: "Meera Shah", client: "Invented Traders", firm: "Test Firm" };
 
 it("suggests a short reply for every reason an email waits, with the names filled in and nothing invented", () => {
-  const replies = Object.keys(replyReasons).filter((reason) => reason !== "client_unclear").map((reason) => suggestedReply(reason, names));
+  // No reply is suggested for a tax portal's mail: its address takes none.
+  const replies = Object.keys(replyReasons).filter((reason) => reason !== "client_unclear" && !reason.startsWith("government_")).map((reason) => suggestedReply(reason, names));
   // Each reason has its own words.
   expect(new Set(replies).size).toBe(replies.length);
   for (const reply of replies) {

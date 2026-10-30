@@ -44,6 +44,20 @@ test("a number added by mistake is removed from the client", async () => {
   expect(await logged("registration.removed")).toEqual([clients["Mehta Traders"]]);
 });
 
+test("a phone number saved on the client is kept encrypted and opens a WhatsApp chat", async () => {
+  const id = clients["Mehta Exports"];
+  await owner.goto(`/app/clients/${id}?tab=details`);
+  const panel = owner.getByRole("dialog", { name: "Details" });
+  await panel.getByLabel("Phone").fill("98765 43210");
+  await panel.getByRole("button", { name: "Save details" }).click();
+  const details = owner.locator("section").filter({ has: owner.locator("h2#details-card") });
+  await expect(details).toContainText("+919876543210");
+  await expect(details.getByRole("link", { name: "Message on WhatsApp" })).toHaveAttribute("href", "https://wa.me/919876543210");
+  const [{ phone_enc }] = await query(local.dbUrl, "select phone_enc from public.clients where id = $1", [id]);
+  expect(phone_enc).toBeTruthy();
+  expect(phone_enc).not.toContain("9876543210");
+});
+
 test("a contact is taken off one client and still acts for the other", async () => {
   for (const name of ["Mehta Traders", "Mehta Exports"]) {
     await owner.goto(`/app/clients/${clients[name]}`);

@@ -10,7 +10,7 @@ import { z } from "zod";
 import { ASK_DAYS, askChoices, STAGES } from "@/src/lib/reminders";
 import { answerKinds, answerModes } from "@/src/lib/answers";
 import { emailTemplates } from "@/src/lib/email-templates";
-import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
+import { addDays, dueLabel, isItr, periodLabel, todayInIndia, verifyBy } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, type ClientInput } from "@/src/lib/clients";
@@ -443,13 +443,14 @@ async function sealClient(firm: string, client: ClientInput & Pick<ImportRow, "t
   const email = client.email
     ? { email_enc: await crypto.encrypt(firm, `clients/${id}/email`, client.email), email_bidx: await crypto.blindIndex(firm, "email", client.email) }
     : {};
-  return { id, name: client.name, kind: client.kind, ...email, registrations };
+  const phone = client.phone ? { phone_enc: await crypto.encrypt(firm, `clients/${id}/phone`, client.phone) } : {};
+  return { id, name: client.name, kind: client.kind, ...email, ...phone, registrations };
 }
 
 // Adds one client from the form.
 export async function addClient(_prev: ClientState, form: FormData): Promise<ClientState> {
   const { supabase, membership } = await currentWriter();
-  const values = Object.fromEntries(["name", "kind", "pan", "gstin", "email"].map((field) => [field, String(form.get(field) ?? "")]));
+  const values = Object.fromEntries(["name", "kind", "pan", "gstin", "email", "phone"].map((field) => [field, String(form.get(field) ?? "")]));
   if (!membership || !canManageClients(membership.role))
     return { error: "Only the owner, a partner or a manager can add clients.", values };
   const checked = checkClient(values as ClientInput);
@@ -473,6 +474,7 @@ const headings: Record<keyof ClientInput | "tan", string[]> = {
   pan: ["pan", "pan no", "pan number", "it pan", "pan/it no"],
   gstin: ["gstin", "gst", "gst no", "gst number", "gstin/uin", "gstin no", "gstin number"],
   email: ["email", "e-mail", "email id", "email address", "mail", "mail id", "e-mail id"],
+  phone: ["phone", "phone no", "phone number", "mobile", "mobile no", "mobile number", "contact no", "contact number", "whatsapp", "whatsapp no", "whatsapp number"],
   tan: ["tan", "tan no", "tan number"],
 };
 const heading = (cell: string) => cell.toLowerCase().replace(/[.:]/g, "").replace(/\s+/g, " ").trim();
@@ -516,11 +518,12 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
         pan: cell(cells, "pan"),
         gstin: cell(cells, "gstin"),
         email: cell(cells, "email"),
+        phone: cell(cells, "phone"),
         tan: cell(cells, "tan"),
         said: Object.fromEntries(serviceAt.map(([column, at]) => [column, (cells[at] ?? "").trim()])),
       }))
       // An empty row, and the template's example row copied in, are left out.
-      .filter((row) => (row.name || row.kind || row.pan || row.gstin || row.email || row.tan || Object.values(row.said).some(Boolean)) && row.name !== exampleClient.name);
+      .filter((row) => (row.name || row.kind || row.pan || row.gstin || row.email || row.phone || row.tan || Object.values(row.said).some(Boolean)) && row.name !== exampleClient.name);
     if (rows.length > 2000) return { error: "Import at most 2,000 clients at a time." };
   }
 
@@ -585,9 +588,9 @@ export async function manageClient(form: FormData) {
   const intent = form.get("intent");
 
   if (intent === "details") {
-    const checked = checkClient({ name: String(form.get("name") ?? ""), kind: String(form.get("kind") ?? ""), pan: "", gstin: "", email: String(form.get("email") ?? "") });
+    const checked = checkClient({ name: String(form.get("name") ?? ""), kind: String(form.get("kind") ?? ""), pan: "", gstin: "", email: String(form.get("email") ?? ""), phone: String(form.get("phone") ?? "") });
     if ("error" in checked) back("details");
-    const { name, kind, email } = (checked as { client: ClientInput }).client;
+    const { name, kind, email, phone } = (checked as { client: ClientInput }).client;
     // A group chosen from the list, or a new one named here.
     let group = String(form.get("group") ?? "") || null;
     const newGroup = String(form.get("new_group") ?? "").trim();
@@ -609,6 +612,7 @@ export async function manageClient(form: FormData) {
         branch_id: String(form.get("branch") ?? "") || null,
         email_enc: email ? await crypto.encrypt(firm, `clients/${id}/email`, email) : null,
         email_bidx: email ? await crypto.blindIndex(firm, "email", email) : null,
+        phone_enc: phone ? await crypto.encrypt(firm, `clients/${id}/phone`, phone) : null,
       })
       .eq("id", id);
   } else if (intent === "archive" || intent === "restore") {
@@ -762,22 +766,34 @@ export async function manageTasks(form: FormData) {
   const typed = String(form.get("filed_on") ?? "");
   const filedOn = /^\d{4}-\d{2}-\d{2}$/.test(typed) && !Number.isNaN(Date.parse(typed)) && typed <= todayInIndia() ? typed : todayInIndia();
   if(!ids.length || ids.length>100 || ids.some(id=>!z.uuid().safeParse(id).success)) redirect("/app/calendar");
-  if(intent==="filed") {
-    const {data:tasks}=await supabase.from("tasks").select("id,client_id").eq("firm_id",membership.firmId).in("id",ids);
-    if(tasks?.length!==ids.length || tasks.some(task=>!membership.may("mark_filed",task.client_id))) redirect("/app/calendar?error=filing");
-  }
+  const {data:tasks}=intent==="filed" || intent==="verified" ? await supabase.from("tasks").select("id,client_id,code,period_key,details,clients(name,email_enc)").eq("firm_id",membership.firmId).in("id",ids) : {data:null};
+  if(tasks && (tasks.length!==ids.length || tasks.some(task=>!membership.may("mark_filed",task.client_id)))) redirect("/app/calendar?error=filing");
   await Promise.all(
     ids.map((id) => {
       const ack = String(form.get(`ack-${id}`) ?? "").trim().slice(0, 40);
       const change =
         intent === "filed"
           ? { status: "filed", details: { filed_on: filedOn, by: userId, ...(ack && { ack }) } }
-          : intent === "in_progress"
-            ? { status: "in_progress" }
-            : { status: "upcoming", details: {} };
+          : intent === "verified"
+            // A filed income tax return e-verified by hand (the portal's confirmation mail does this itself).
+            ? { details: { ...(tasks?.find((task) => task.id === id)?.details as Record<string, unknown>), verified_on: todayInIndia(), verified_by: userId } }
+            : intent === "in_progress"
+              ? { status: "in_progress" }
+              : { status: "upcoming", details: {} };
       return supabase.from("tasks").update(change).eq("id", id);
     }),
   );
+  // If asked, each client whose income tax return was just filed gets one email to e-verify it
+  // by its last day, from the firm's mailbox. A client with no email is skipped.
+  if (intent === "filed" && form.get("remind_verify")) {
+    const mailer = await firmMailer(membership.firmId, membership.firmName);
+    const crypto = serverCrypto();
+    for (const task of (tasks ?? []).filter((task) => isItr(task.code) && task.clients?.email_enc)) {
+      const to = await crypto.decrypt(membership.firmId, `clients/${task.client_id}/email`, task.clients!.email_enc!);
+      const message = emailTemplates.verify(task.clients!.name, membership.firmName, `income tax return ${periodLabel("yearly", task.period_key)}`, dueLabel(filedOn), dueLabel(verifyBy(filedOn)));
+      if (mailer && await mailer.send(to, message.subject, message.text)) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "reminder.sent", entity_type: "client", entity_id: task.client_id, details: { template: "verify", tasks: [task.id] } });
+    }
+  }
   revalidatePath("/app", "layout");
   // From the Calendar: back to the same view, with a note of what changed and an Undo.
   if (form.has("view")) redirect(calendarBack(form, ["saved", String(intent)], ["t", ids.join(".")]));

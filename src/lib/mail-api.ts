@@ -127,12 +127,12 @@ function gmail(mailbox: ApiMailbox): Driver {
       );
       if (!page) return null;
       const added = [...new Map((page.history ?? []).flatMap((entry) => entry.messagesAdded ?? []).map(({ message }) => [message.id, message])).values()].filter((message) => message.labelIds?.includes("INBOX"));
-      const envelopes = await Promise.all(added.slice(0, 200).map((message) => get<GmailMessage>(`messages/${message.id}?${metadata(["From", "Message-ID"])}`)));
+      const envelopes = await Promise.all(added.slice(0, 200).map((message) => get<GmailMessage>(`messages/${message.id}?${metadata(["From", "Message-ID", "Authentication-Results"])}`)));
       return {
         cursor: page.nextPageToken ? String(page.history?.at(-1)?.id ?? page.historyId) : String(page.historyId),
         mail: envelopes.flatMap((message) =>
           message
-            ? [{ uid: 0, ref: message.id, messageId: nameOf("gmail", message.id, "inbox", header(message.payload?.headers, "Message-ID")), threadId: message.threadId, from: emails(header(message.payload?.headers, "From"))[0] ?? "", receivedAt: new Date(Number(message.internalDate) || Date.now()).toISOString() }]
+            ? [{ uid: 0, ref: message.id, messageId: nameOf("gmail", message.id, "inbox", header(message.payload?.headers, "Message-ID")), threadId: message.threadId, from: emails(header(message.payload?.headers, "From"))[0] ?? "", receivedAt: new Date(Number(message.internalDate) || Date.now()).toISOString(), auth: (message.payload?.headers ?? []).filter((entry) => entry.name.toLowerCase() === "authentication-results").map((entry) => entry.value).join("\n") }]
             : [],
         ),
       };
@@ -198,7 +198,7 @@ function outlook(mailbox: ApiMailbox): Driver {
       const read = byTime(cursor, (page?.value ?? []).map((message) => ({ message, id: short(message.id), at: message.receivedDateTime ?? "" })));
       return {
         cursor: read.cursor,
-        mail: read.fresh.map(({ message }) => ({ uid: 0, ref: message.id, messageId: nameOf("outlook", message.id, "inbox", message.internetMessageId), threadId: message.conversationId ?? "", from: message.from?.emailAddress?.address?.toLowerCase() ?? "", receivedAt: message.receivedDateTime ?? new Date().toISOString() })),
+        mail: read.fresh.map(({ message }) => ({ uid: 0, ref: message.id, messageId: nameOf("outlook", message.id, "inbox", message.internetMessageId), threadId: message.conversationId ?? "", from: message.from?.emailAddress?.address?.toLowerCase() ?? "", receivedAt: message.receivedDateTime ?? new Date().toISOString(), auth: "" })),
       };
     },
     raw: async (ref, cap) => {
@@ -276,7 +276,7 @@ function zoho(mailbox: ApiMailbox): Driver {
         cursor: read.cursor,
         mail: read.fresh.map(({ row }) => {
           const { ref, messageId, from } = item(row);
-          return { uid: 0, ref, messageId, threadId: row.threadId ?? "", from, receivedAt: new Date(Number(row.receivedTime)).toISOString() };
+          return { uid: 0, ref, messageId, threadId: row.threadId ?? "", from, receivedAt: new Date(Number(row.receivedTime)).toISOString(), auth: "" };
         }),
       };
     },

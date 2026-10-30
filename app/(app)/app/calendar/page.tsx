@@ -4,7 +4,7 @@ import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageTasks, markTasksInProgress, remindClient, reopenTasks, stopSend } from "@/app/(app)/actions";
-import { addDays, calendarViews, dueLabel, periodLabel, todayInIndia, type CalendarView } from "@/src/lib/calendar";
+import { addDays, calendarViews, dueLabel, isItr, periodLabel, todayInIndia, verifyBy, type CalendarView } from "@/src/lib/calendar";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { canManageClients } from "@/src/lib/clients";
 import { periodName } from "@/src/lib/documents";
@@ -202,7 +202,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
             <List as="tbody">
               {tasks.map((task) => {
                 const [form, of] = name(task);
-                const ack = (task.details as { ack?: string }).ack;
+                const { ack, filed_on, verified_on } = task.details as { ack?: string; filed_on?: string; verified_on?: string };
                 const [tone, word] = status(task);
                 return (
                   <Item as="tr" key={task.id}>
@@ -234,6 +234,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                       <span className="cal-status">
                         <Badge tone={tone}>{word}</Badge>
                         {ack && <span className="num">{ack}</span>}
+                        {task.status === "filed" && isItr(task.code) && <span className="sub">{verified_on ? `Verified ${dueLabel(verified_on)}` : `Verify by ${dueLabel(verifyBy(filed_on ?? task.due_on))}`}</span>}
                       </span>
                     </td>
                     <td className="cal-act">
@@ -452,7 +453,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
       {marking && !viewOnly && (
         <SidePanel key="filed" id="mark-filed" title={marking.length > 1 ? `Mark ${marking.length} returns filed` : "Mark filed"} close={close}>
           {marking.length ? (
-            <MarkFiled state={state} rows={marking.map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${name(task).join(" ")}, due ${dueLabel(task.due_on)}` }))} />
+            <MarkFiled state={state} rows={marking.map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${name(task).join(" ")}, due ${dueLabel(task.due_on)}`, itr: isItr(task.code) }))} />
           ) : (
             <p className="hint">These returns are already filed.</p>
           )}
