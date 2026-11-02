@@ -20,7 +20,7 @@ begin
       execute format(
         'create table private.%I partition of public.activity_log for values from (%L) to (%L)',
         part, starts, starts + interval '1 month');
-      insert into public.activity_log select * from pg_temp.stranded;
+      execute format('insert into private.%I select * from pg_temp.stranded', part);
       drop table pg_temp.stranded;
     end if;
   end loop;
