@@ -1113,8 +1113,9 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(owner.getByRole("status")).toContainText("works for 7 days and 5 downloads");
   const shared = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/s\/[\w-]+/)![0];
   await visitor.goto(shared);
-  await expect(visitor.getByRole("heading", { name: /Loan statement/ })).toBeVisible();
-  // A loan statement is a private paper: it opens only with the code emailed to the same address.
+  // A loan statement is a private paper: its name stays hidden and it opens only with the code
+  // emailed to the same address.
+  await expect(visitor.getByRole("heading", { name: "A private paper for you" })).toBeVisible();
   expect((await visitor.request.get(`${shared}/file`)).status()).toBe(403);
   await visitor.getByRole("button", { name: "Email me a code" }).click();
   await expect(visitor.getByRole("status")).toHaveText("We sent a code to c•••@patel.test. It works for 10 minutes.");
