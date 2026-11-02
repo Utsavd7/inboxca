@@ -85,6 +85,16 @@ describe("the activity log keeps each firm's chosen months", () => {
       expect((await attempt(db, "delete from public.activity_log")).ok).toBe(false);
     }));
 
+  it("moves a month's rows out of the default partition when the job has missed that month", () =>
+    rollback(db, async () => {
+      await seed();
+      await log(LONG, "2031-03-02");
+      await maintain("2031-03-15T12:00:00Z");
+      expect(await months(LONG)).toEqual(["2031-03"]);
+      expect(await exists("private.activity_log_y2031m03")).toBe(true);
+      expect((await db.query("select count(*)::int as rows from private.activity_log_default where firm_id = $1", [LONG])).rows[0].rows).toBe(0);
+    }));
+
   it("keeps the partitions and the purge out of reach of everyone else", () =>
     rollback(db, async () => {
       await actAs(db, PERSON);
