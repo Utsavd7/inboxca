@@ -4,7 +4,8 @@ export const activityNames: Record<string, string> = {
   "dataset.edit_saved":"Correction saved as a draft", "form.started":"Return preparation started", "form.prepared":"Return prepared", "form.edited_outside":"Corrected return added", "form.downloaded":"Return downloaded for filing", "form.filed":"Return marked filed", "form.approved":"Return approved", "form.rejected":"Return needs a correction", "form.differences_seen":"Differences with Form 26AS looked at",
   "dataset.created": "Figures ready to check", "dataset.checked": "Figure checked", "dataset.changed": "Figure corrected",
   "gst_match.made": "Purchase register matched with GSTR-2B", "gst_match.downloaded": "GSTR-2B differences downloaded",
-  "client.added": "Client added", "client.changed": "Client details changed",
+  "client.added": "Client added", "client.changed": "Client details changed", "clients.exported": "Client list exported to Excel",
+  "licence.added": "Licence or registration date added", "licence.removed": "Licence or registration date removed",
   "registration.added": "Tax number added", "registration.changed": "Services changed", "registration.removed": "Tax number removed",
   "assignment.added": "Person or team assigned", "assignment.removed": "Assignment removed",
   "contact_link.added": "Contact added", "contact_link.changed": "Contact permissions changed", "contact_link.removed": "Contact removed",
@@ -34,6 +35,8 @@ export const activityDetails: Record<string, readonly string[]> = {
   // Written by the database as rows change (log_change): what changed, or the new row's kind.
   ...Object.fromEntries(["group", "member", "client", "registration", "assignment", "contact", "contact_link", "task", "account", "email", "request"]
     .flatMap((thing) => [[`${thing}.added`, ["kind"]], [`${thing}.removed`, ["kind"]], [`${thing}.changed`, ["changed"]]])),
+  // The client list as Excel: how many clients it held, never their numbers or emails.
+  "clients.exported": ["clients"], "licence.added": [], "licence.removed": [],
   "firm.signed_up": ["accepted"], "firm.changed": ["name", "settings"], "firm.downloaded": [], "firm.closed": ["reason"], "firm.data_deleted": [],
   "member.invited": ["role"], "member.joined": [], "member.role_changed": ["role"], "member.removed": [], "member.invite_withdrawn": [], "member.restored": [],
   "session.ended_other": ["ended"], "recovery.codes_made": [], "recovery.used": ["left", "passkeys"], "hours.extended": ["until"],

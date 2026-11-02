@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import type { Metadata } from "next";
 import { FirmFoot, LinkEnded, PublicPage } from "@/app/public-link";
-import { dueLabel } from "@/src/lib/calendar";
+import { dueLabel, todayInIndia } from "@/src/lib/calendar";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { periodName } from "@/src/lib/documents";
+import { askName } from "@/src/lib/paper-type";
+import { nextFollowUp } from "@/src/lib/reminders";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { AddFiles } from "./add-files";
 
@@ -12,6 +14,7 @@ export const metadata: Metadata = { title: "Upload documents", robots: { index: 
 // Whether a link's end time is still ahead.
 const current = (expiresAt: string | null) => Date.parse(expiresAt ?? "") > Date.now();
 const papers = (count: number) => (count === 1 ? "1 paper" : `${count} papers`);
+const list = (items: { type: string }[]) => items.map((item) => askName(item.type)).join(", ");
 
 // The page a client reaches from a firm's request (PLAN.md 5.3.1, 8.6): no sign in, only the
 // private link. It shows what the firm asked for, how much has arrived, and takes files for
@@ -21,7 +24,7 @@ export default async function RequestUpload({ params }: { params: Promise<{ toke
   const { token } = await params;
   const { data: request } = await supabaseAdmin()
     .from("requests")
-    .select("firm_id, status, expires_at, details, clients(name, email_enc), firms(name)")
+    .select("firm_id, status, expires_at, details, clients(name, email_enc, reminders_paused), firms(name, settings)")
     .eq("kind", "documents")
     .eq("details->>link_hash", createHash("sha256").update(token).digest("hex"))
     .maybeSingle();
@@ -31,9 +34,15 @@ export default async function RequestUpload({ params }: { params: Promise<{ toke
   const done = request.status === "done";
   const firm = request.firms.name;
   const total = details.items.length;
-  const got = details.items.filter((item) => item.received.length).length;
+  const arrived = details.items.filter((item) => item.received.length);
+  const needed = details.items.filter((item) => !item.received.length);
+  const got = arrived.length;
   // A receipt follows by email when the firm's mailbox can send one to the client.
   const { data: mailbox } = done && request.clients?.email_enc ? await supabaseAdmin().from("connected_accounts").select("status").eq("firm_id", request.firm_id).eq("kind", "mail").maybeSingle() : { data: null };
+  // The next reminder email for this request, when the firm has them on for this client
+  // (src/jobs/reminders.ts sends it); nothing when none is planned.
+  const reminders = (request.firms.settings as { reminders?: boolean }).reminders === true && !!request.clients?.email_enc && !request.clients.reminders_paused;
+  const next = open && reminders ? nextFollowUp({ expires_at: request.expires_at!, details }, todayInIndia()) : null;
 
   return (
     <PublicPage
@@ -68,6 +77,13 @@ export default async function RequestUpload({ params }: { params: Promise<{ toke
             <span style={{ "--got": got / total } as React.CSSProperties} />
           </span>
           <p className="hint">{open ? `Add each paper below. It goes straight to ${firm}.` : `Ask ${firm} to send a new one.`}</p>
+          {open && (
+            <p className="hint">
+              Still needed: {list(needed)}.{!!got && ` Arrived: ${list(arrived)}.`}
+              {next && ` Next reminder from ${firm}: ${next === todayInIndia() ? "today" : dueLabel(next)}.`}
+            </p>
+          )}
+          {open && <p className="hint">If a file has a password, you will be asked for it once.</p>}
         </section>
       )}
       <ul className="public-items" aria-label={done ? "What you sent" : "Papers asked for"}>

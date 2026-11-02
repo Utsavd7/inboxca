@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
+import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
+import { readSheet } from "@/src/lib/sheet";
 import { addPerson, appKey, localSupabase, query, seedFirm, signIn } from "./local-supabase";
 
 // Undoing a client's details from its page: a number added by mistake is removed, a contact
@@ -93,4 +96,73 @@ test("a person assigned to a client is unassigned again", async () => {
   await expect(panel.getByText("Nobody is assigned yet.")).toBeVisible();
   expect(await query(local.dbUrl, "select 1 from public.client_assignments where client_id = $1", [clients["Mehta Traders"]])).toEqual([]);
   expect(await logged("assignment.removed")).toEqual([clients["Mehta Traders"]]);
+});
+
+test("tags, a note and a licence date on the client; the list filters by tag; the export imports back with formulas disarmed", async () => {
+  const id = clients["Mehta Traders"];
+  const until = addDays(todayInIndia(), 10);
+  // A client whose name a spreadsheet would run as a formula.
+  const [{ id: formula }] = await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, $2, 'individual') returning id", [firm.firmId, `=HYPERLINK("https://x.test") ${tag}`]);
+  await owner.goto(`/app/clients/${id}?tab=details`);
+  const panel = owner.getByRole("dialog", { name: "Details" });
+  await panel.getByLabel("Tags, separated by commas").fill("Priority, Audit 2027");
+  await panel.getByLabel("What we do for them, and since when").fill("GST returns and ITR since 2019");
+  await panel.getByRole("button", { name: "Save details" }).click();
+  const details = owner.locator("section").filter({ has: owner.locator("h2#details-card") });
+  await expect(details).toContainText("GST returns and ITR since 2019");
+  await expect(details).toContainText("Priority");
+  const [{ engagement_enc }] = await query(local.dbUrl, "select engagement_enc from public.clients where id = $1", [id]);
+  expect(engagement_enc).not.toContain("since 2019");
+  await owner.goto(`/app/clients/${id}?tab=details`);
+  await panel.getByLabel("Licence or registration").fill("FSSAI licence");
+  await panel.getByLabel("Valid until").fill(until);
+  await panel.getByRole("button", { name: "Add expiry date" }).click();
+  await expect(details).toContainText(`FSSAI licence: until ${dueLabel(until)}`);
+  expect(await logged("licence.added")).toHaveLength(1);
+  // On the Calendar and Today before the date, renewed in one press.
+  await owner.goto(`/app/calendar?day=${until}`);
+  const row = owner.getByRole("row").filter({ hasText: `Mehta Traders ${tag}` });
+  await expect(row).toContainText("FSSAI licence");
+  await expect(row).toContainText("Expires");
+  await owner.goto("/app");
+  await expect(owner.getByRole("listitem").filter({ hasText: `FSSAI licence for Mehta Traders ${tag} expires` })).toBeVisible();
+  await owner.goto(`/app/calendar?day=${until}`);
+  await row.getByRole("button", { name: /Mark .* renewed/ }).click();
+  await expect(owner.getByRole("row").filter({ hasText: `Mehta Traders ${tag}` })).toContainText("Renewed");
+
+  // The list filters by a tag; Add tags from the ticked bar keeps what each client had.
+  await owner.goto(`/app/clients?q=${tag}&tag=Priority`);
+  await expect(owner.getByRole("link", { name: `Mehta Traders ${tag}`, exact: true })).toBeVisible();
+  await expect(owner.getByRole("link", { name: `Mehta Exports ${tag}`, exact: true })).toHaveCount(0);
+  await owner.goto(`/app/clients?q=${tag}`);
+  for (const name of [`Mehta Traders ${tag}`, `Mehta Exports ${tag}`]) await owner.getByLabel(`Choose ${name}`, { exact: true }).check();
+  await owner.getByRole("link", { name: "Add tags" }).click();
+  const tagging = owner.getByRole("dialog", { name: "Add tags" });
+  await tagging.getByLabel("Tags, separated by commas").fill("Audit 2027, Mumbai");
+  await tagging.getByRole("button", { name: "Add tags to 2 clients" }).click();
+  await expect(owner.getByText(/^Tags added to 2 clients\./)).toBeVisible();
+  expect((await query(local.dbUrl, "select name, tags from public.clients where id = any($1) order by name", [[id, clients["Mehta Exports"]]])).map((client) => client.tags)).toEqual([["Audit 2027", "Mumbai"], ["Priority", "Audit 2027", "Mumbai"]]);
+
+  // The export holds every client under the template's headings, the formula name and the phone
+  // behind an apostrophe; the import reads it back as data, and the export is logged.
+  const download = owner.waitForEvent("download");
+  await owner.getByRole("link", { name: "Export to Excel" }).click();
+  const file = await readFile((await (await download).path())!);
+  const sheet = readSheet(file, "clients.xlsx", { rows: 100, columns: 20 });
+  expect(sheet[0]).toEqual(["Name", "Client type", "PAN", "GSTIN", "Email", "TAN", "GST returns", "TDS returns", "Income tax return", "Phone", "Looked after by", "Tags"]);
+  const by = (name: string) => sheet.find((cells) => cells[0].includes(name))!;
+  expect(by(`Mehta Traders ${tag}`)).toEqual([`Mehta Traders ${tag}`, "Business", "", "", "", "", "", "", "", "", "", "Priority, Audit 2027, Mumbai"]);
+  expect(by(`Mehta Exports ${tag}`)[9]).toBe("'+919876543210");
+  expect(by("HYPERLINK")[0]).toBe(`'=HYPERLINK("https://x.test") ${tag}`);
+  expect(sheet.flat().some((cell) => /^[=+\-@]/.test(cell))).toBe(false);
+  expect(await logged("clients.exported")).toEqual([firm.firmId]);
+  await owner.goto("/app/clients?panel=import");
+  await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "export.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: file });
+  await owner.getByRole("button", { name: "Check the file" }).click();
+  await expect(owner.getByText("3 ready to import.")).toBeVisible();
+  const check = owner.locator("section[aria-labelledby=import]").getByRole("table").first();
+  await expect(check).toContainText(`=HYPERLINK("https://x.test") ${tag}`);
+  await expect(check).not.toContainText("'=HYPERLINK");
+  await expect(check).toContainText("+919876543210");
+  await query(local.dbUrl, "delete from public.clients where id = $1", [formula]);
 });

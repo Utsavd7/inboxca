@@ -106,6 +106,22 @@ export function readServices(said: Record<string, string>, numbers: Record<"pan"
   return { services };
 }
 
+// The Services column a number's services answer to on the export ("Monthly" when a GSTIN
+// has GSTR1_M and GSTR3B_M), so an export imports back with the same services; empty when
+// the services are not one of the column's choices.
+export function serviceChoice(column: string, services: string[]) {
+  return Object.entries(importServices[column].choices).find(([, codes]) => codes.length && codes.every((code) => services.includes(code)))?.[0] ?? "";
+}
+
+// A client's tags as typed or imported ("Priority, Audit 2027"): split on commas or
+// semicolons, trimmed, each at most 40 characters, no repeats (any case), at most 10.
+export function readTags(text: string) {
+  const tags: string[] = [];
+  for (const word of text.split(/[,;]/).map((tag) => tag.replace(/\s+/g, " ").trim().slice(0, 40)))
+    if (word && !tags.some((tag) => tag.toLowerCase() === word.toLowerCase())) tags.push(word);
+  return tags.slice(0, 10);
+}
+
 // The services a kind of client files on a number by the calendar's own rules, suggested on a
 // client with none for a person to confirm (20261028300000 and 20261031000000): a plain
 // business or an LLP files the 31 August ITR, a company or a business with tax audit the audit

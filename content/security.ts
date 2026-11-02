@@ -43,10 +43,12 @@ export const securitySections = [
     points: [
       "Every sign in needs two proofs. Staff at an approved office PC use the code sent to their own email; you, your deputies and anyone outside the office also use a code from a phone app. One login is for one person.",
       "The owner's login works only on computers the owner approved. A new computer waits for the owner's OK, and a lost one can be removed, which signs it out.",
+      "An approved computer is known by a random cookie in its browser, digested with Orelu's own key and tied to the person. Nothing about the computer itself is kept.",
       "Staff can view files but cannot change, share or delete the originals. The owner decides what each role may do.",
       "With the office only switch, staff can sign in only on PCs you approved, on your office internet, in your office hours.",
       "Every view, download, share and delete request is recorded. The record is kept for 12 to 36 months and nobody can edit it or delete it early, the owner included.",
       "A deleted file waits 30 days before it is gone, and InboxCA keeps its own locked copy for those 30 days.",
+      "InboxCA checks its folder in your drive once a day. If the folder is shared or has a link, if files are missing or moved, or if the drive is nearly full, the owner is told.",
       "Orelu's own team cannot open your data. Support needs a session that you approve, that ends by itself and that is recorded.",
     ],
   },

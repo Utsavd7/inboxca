@@ -766,7 +766,7 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
 });
 
 // #26, #55, #56: the shared mailbox cannot sign in; automation runs separately.
-test("the owner connects the firm's mailbox; client mail is sorted, unclear mail waits for the team, a stranger's is skipped", async ({ request, browser }) => {
+test("the owner connects the firm's mailbox; client mail is sorted, unclear mail waits for the team, a stranger's is listed unread", async ({ request, browser }) => {
   // An address already on the team is refused as soon as it becomes the firm's mailbox.
   await owner.goto("/app/people?panel=invite");
   await owner.getByLabel("Their work email").fill(mailboxEmail);
@@ -812,8 +812,9 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   for (const from of [`Client-${tag}@Patel.test`, `stranger-${tag}@else.test`])
     await smtp.sendMail({ from, to: mailboxEmail, subject: "Please send last year's ITR", text: "Thanks" });
   await pollFirmMail(request, firm.firmId);
-  const events = await query(local.dbUrl, "select (client_id is not null) as matched, label from public.email_events where firm_id = $1", [firm.firmId]);
+  const events = await query(local.dbUrl, "select (client_id is not null) as matched, label from public.email_events where firm_id = $1 and reason_code is distinct from 'not_a_client'", [firm.firmId]);
   expect(events).toEqual([{ matched: true, label: "records_past" }]);
+  expect(await query(local.dbUrl, "select (client_id is not null) as matched, label from public.email_events where firm_id = $1 and reason_code = 'not_a_client'", [firm.firmId])).toEqual([{ matched: false, label: "other" }]);
   expect(await mailCount(`stranger-${tag}@else.test`)).toBe(1);
 
   // A second email the rules cannot place waits for the team, and a person corrects a label.
@@ -839,7 +840,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await owner.goto("/app/inbox?show=reply");
   await expect(owner.getByText("No email needs a reply")).toBeVisible();
   await owner.goto("/app/inbox?show=in");
-  await expect(waiting).toHaveCount(2);
+  await expect(waiting).toHaveCount(3); // With the stranger's mail, listed unread and last.
   await waiting.first().locator(".ib-subject").click();
   await open.getByLabel("Change label").click();
   await open.getByRole("form", { name: "What this email is" }).getByRole("button", { name: "Asks for this year's papers" }).click();
@@ -1112,8 +1113,9 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(owner.getByRole("status")).toContainText("works for 7 days and 5 downloads");
   const shared = (await lastMail(`client-${tag}@patel.test`)).match(/http\S+\/s\/[\w-]+/)![0];
   await visitor.goto(shared);
-  await expect(visitor.getByRole("heading", { name: /Loan statement/ })).toBeVisible();
-  // A loan statement is a private paper: it opens only with the code emailed to the same address.
+  // A loan statement is a private paper: its name stays hidden and it opens only with the code
+  // emailed to the same address.
+  await expect(visitor.getByRole("heading", { name: "A private paper for you" })).toBeVisible();
   expect((await visitor.request.get(`${shared}/file`)).status()).toBe(403);
   await visitor.getByRole("button", { name: "Email me a code" }).click();
   await expect(visitor.getByRole("status")).toHaveText("We sent a code to c•••@patel.test. It works for 10 minutes.");

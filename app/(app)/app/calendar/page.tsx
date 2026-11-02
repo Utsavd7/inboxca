@@ -22,7 +22,7 @@ import { Pending } from "../pending";
 import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Tone } from "../ui";
 import { RowKeys } from "../row-keys";
 
-const columns = "id, client_id, code, period_key, due_on, status, details, clients!inner(name, archived_at)";
+const columns = "id, client_id, kind, code, period_key, due_on, status, details, clients!inner(name, archived_at)";
 const uuid = /^[0-9a-f-]{36}$/;
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const saved: Record<string, string> = { filed: "marked filed", in_progress: "marked in progress", reopen: "marked not filed" };
@@ -55,7 +55,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
 
   // The returns a view shows, for the list and for each pill's true count.
   const returns = (shown: CalendarView | null, select: typeof columns, head = false) => {
-    let query = supabase.from("tasks").select(select, { count: "exact", head }).eq("firm_id", membership.firmId).eq("kind", "compliance").is("clients.archived_at", null);
+    // Returns, and the licence expiry dates a firm entered on its clients (kind licence).
+    let query = supabase.from("tasks").select(select, { count: "exact", head }).eq("firm_id", membership.firmId).in("kind", ["compliance", "licence"]).is("clients.archived_at", null);
     const window: { from?: string; to?: string; filedSince?: string } = shown ? calendarViews[shown].window(today) : {};
     if (!shown) query = query.eq("due_on", day!);
     else if (window.filedSince) query = query.eq("status", "filed").gte("details->>filed_on", window.filedSince);
@@ -112,7 +113,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   // GST returns and ITRs with figures in but not filled yet, for Fill.
   const stages = await returnStages(supabase, membership.firmId, viewOnly ? [] : (tasks ?? []).filter((task) => task.status !== "filed" && fills(task.code)).map((task) => task.id));
   const rule = new Map(rules?.map((r) => [r.code, r]));
-  const name = (task: { code: string | null; period_key: string | null }) => [rule.get(task.code ?? "")?.name ?? task.code, periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)] as const;
+  const licence = (task: { kind?: string }) => task.kind === "licence";
+  const name = (task: { kind?: string; code: string | null; period_key: string | null; details?: unknown }) =>
+    licence(task) ? ([(task.details as { label?: string }).label ?? "Licence", "Licence or registration"] as const) : ([rule.get(task.code ?? "")?.name ?? task.code, periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)] as const);
   const onDay = new Map(perDay?.map((row) => [row.due_on, row]));
   const most = Math.max(1, ...[...onDay.values()].map((row) => row.returns));
 
@@ -133,8 +136,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     !!remindedToday && "This client was already reminded today. Each client gets at most one reminder a day.",
   ].filter((stop): stop is string => !!stop);
 
-  const status = (task: { status: string; due_on: string }): [Tone, string] =>
-    task.status === "filed" ? ["done", "Filed"] : task.due_on < today ? ["late", "Late"] : task.status === "in_progress" ? ["blue", "In progress"] : ["warn", "Upcoming"];
+  const status = (task: { kind: string; status: string; due_on: string }): [Tone, string] =>
+    task.status === "filed" ? ["done", licence(task) ? "Renewed" : "Filed"] : task.due_on < today ? ["late", licence(task) ? "Expired" : "Late"] : task.status === "in_progress" ? ["blue", "In progress"] : ["warn", licence(task) ? "Expires" : "Upcoming"];
   const filedView = !day && view === "filed";
   const period = day ? `Due on ${dueLabel(day)}` : view === "overdue" ? "Due before today" : filedView ? `Filed since ${dueLabel(addDays(today, -30))}` : `${dueLabel(today)} to ${dueLabel(addDays(today, view === "week" ? 7 : 30))}`;
   const shownFrom = total ? from + 1 : 0;
@@ -246,11 +249,20 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                       )}
                       {!viewOnly && membership.may("edit_figures", task.client_id) && fillable(stages.get(task.id)) && <Fill task={task.id} label={`${task.clients.name} ${form}`} />}
                       {viewOnly ? null : task.status !== "filed" ? (
-                        membership.may("mark_filed", task.client_id) && (
+                        membership.may("mark_filed", task.client_id) && (licence(task) ? (
+                          // A licence has no acknowledgement to type: renewed in one press.
+                          <form action={manageTasks}>
+                            {state}
+                            <input type="hidden" name="task" value={task.id} />
+                            <Pending className="b b-secondary" name="intent" value="filed" aria-label={`Mark ${task.clients.name} ${form} renewed`}>
+                              Mark renewed
+                            </Pending>
+                          </form>
+                        ) : (
                           <Link className="b b-secondary" href={href({ page, task: task.id })} scroll={false} aria-label={`Mark ${task.clients.name} ${form} filed`}>
                             Mark filed
                           </Link>
-                        )
+                        ))
                       ) : (
                         <form action={manageTasks}>
                           {state}
