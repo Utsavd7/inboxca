@@ -211,7 +211,7 @@ export default async function Clients({
         actions={
           manage && (
             <>
-              {!!countOf.all && (
+              {!!countOf.all && membership.role === "owner" && (
                 <a className="b b-secondary" href="/app/clients/export" download>
                   Export to Excel
                 </a>

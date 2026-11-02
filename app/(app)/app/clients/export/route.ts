@@ -1,19 +1,19 @@
 import { columns, safeCell, sheet, sheetType, workbook } from "@/src/lib/client-sheet";
-import { canManageClients, clientKinds, serviceChoice, type ClientKind } from "@/src/lib/clients";
+import { clientKinds, serviceChoice, type ClientKind } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { currentMember } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
 
 // Clients > Export to Excel: the firm's current clients under the template's own headings, so
-// the file imports back as it is. For the owner, partners and managers, who see every client;
-// each number, email and phone is opened here on the server with the firm's key, and the
-// export is logged. A cell a spreadsheet could run as a formula is written as text (safeCell).
+// the file imports back as it is. For the owner only, like the papers ZIP: it is every client at
+// once, so a download switch or a view only laptop must not be a way around. Each number, email
+// and phone is opened here on the server with the firm's key, and the export is logged. A cell a spreadsheet could run as a formula is written as text (safeCell).
 export const dynamic = "force-dynamic";
 const lookAfter = ["partner_in_charge", "manager", "staff"];
 
 export async function GET() {
   const { supabase, userId, membership } = await currentMember();
-  if (!membership || !canManageClients(membership.role)) return new Response("Not allowed", { status: 403 });
+  if (!membership || membership.role !== "owner") return new Response("Not allowed", { status: 403 });
   const firm = membership.firmId;
   const crypto = serverCrypto();
   const { data: people } = await supabase.rpc("firm_people", { target_firm: firm });
