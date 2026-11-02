@@ -189,8 +189,9 @@ async function Attention({ ctx }: { ctx: Context }) {
         <div className="today-line" role="region" aria-label="Client reminders">
           <BellOff size={16} aria-hidden />
           <span className="grow">
-            <strong>Client reminders are paused</strong> until InboxCA checks your due dates against the government notifications. You can still ask for papers yourself.
+            <strong>Client reminders are paused</strong> for due dates nobody has checked against the government notification yet. You can confirm them yourself, or wait for InboxCA. You can still ask for papers yourself.
           </span>
+          <Link className="b b-secondary b-small" href="/app/settings?group=reminders#due-dates">Confirm due dates</Link>
         </div>
       )}
       {lines.includes("gov") && <GovLine />}

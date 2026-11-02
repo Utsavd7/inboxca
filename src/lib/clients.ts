@@ -131,6 +131,9 @@ export function readTags(text: string) {
 export function usualServices(kind: string, number: string): string[] {
   if (number === "tan") return ["TDS_PAY", "TDS_RET"];
   if (number === "llpin") return ["LLP8", "LLP11"];
+  // Every company files its financial statements and annual return after the AGM
+  // (Companies Act 2013 s.137 and s.92); ADT-1, DPT-3 and MSME-1 depend on the company.
+  if (number === "cin") return ["AOC4", "MGT7"];
   if (number !== "pan") return [];
   return ({ business: ["ITR_BIZ"], llp: ["ITR_BIZ"], company: ["ITR_AUDIT"], tax_audit: ["TAX_AUDIT", "ITR_AUDIT"] } as Record<string, string[]>)[kind] ?? [];
 }

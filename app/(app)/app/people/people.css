@@ -40,3 +40,4 @@
 .people-groups li:first-child { border-top: 0; }
 .people-groups .grow { flex: 1; min-width: 0; font-weight: 600; }
 .side-panel section .form-row { margin-top: var(--s3); }
+.people-load { display: grid; min-width: 0; line-height: 1.35; }

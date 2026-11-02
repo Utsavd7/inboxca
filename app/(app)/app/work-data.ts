@@ -3,6 +3,7 @@ import { aiCredits } from "@/src/lib/ai";
 import { addDays, dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { periodName } from "@/src/lib/documents";
 import { downloadUse } from "@/src/lib/download-use";
+import { firmChecked } from "@/src/lib/due-dates";
 import { log } from "@/src/lib/logger";
 import { whenRange } from "@/src/lib/mail-view";
 import { currentMember, myQuestions } from "@/src/lib/member";
@@ -51,9 +52,10 @@ export const attention = cache(async ({ supabase, membership }: Context) => {
           count(supabase.from("clients").select("id", { count: "exact", head: true }).eq("firm_id", firm).is("archived_at", null)),
           count(supabase.from("client_registrations").select("id", { count: "exact", head: true }).filter("services", "neq", "{}")),
           count(supabase.from("firm_members").select("user_id", { count: "exact", head: true })),
-          // A return still to come from a rule InboxCA has not checked: no reminder goes for it.
-          Promise.resolve(supabase.from("compliance_types").select("code").eq("period_key", "").is("verified_on", null)).then(({ data }) => data?.length
-            ? Promise.resolve(supabase.from("tasks").select("id").eq("firm_id", firm).eq("kind", "compliance").neq("status", "filed").gte("due_on", todayInIndia()).in("code", data.map((rule) => rule.code)).limit(1)).then((tasks) => !!tasks.data?.length)
+          // A return still to come from a rule nobody has checked (neither InboxCA nor the
+          // owner, src/lib/due-dates.ts): no reminder goes for it.
+          Promise.resolve(supabase.from("compliance_types").select("code, verified_on").eq("period_key", "").is("verified_on", null)).then(({ data }) => firmChecked(supabase, firm, data)).then((rules) => rules.filter((rule) => !rule.verified_on)).then((rules) => rules.length
+            ? Promise.resolve(supabase.from("tasks").select("id").eq("firm_id", firm).eq("kind", "compliance").neq("status", "filed").gte("due_on", todayInIndia()).in("code", rules.map((rule) => rule.code)).limit(1)).then((tasks) => !!tasks.data?.length)
             : false),
         ])
       : null,

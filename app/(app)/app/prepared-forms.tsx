@@ -17,6 +17,7 @@ import {askPermission} from "@/app/(app)/actions";
 import {Pending} from "./pending";
 import {ItrDifferences} from "./itr-check";
 import {keptReason} from "@/src/lib/reason";
+import {signoffLines} from "@/src/lib/signoffs";
 import {Badge,IconTile,Toast,type Tone} from "./ui";
 import {MenuClose,Refresh} from "./returns-client";
 import {addEditedForm,decideForm,markFormFiled,prepareForm,setDraftRegistration} from "./form-actions";
@@ -59,14 +60,18 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     const review=forms?.filter(file=>latest.has(file.id) && file.status!=="deleted" && (preparedSchema.parse(file.prepared).status==="draft" || waiting?.some(item=>item.entity_id===file.id)));
     return review?.length ? <section className="panel"><h2>Forms to review</h2><ul className="rows">{review.map(file=><li key={file.id}><Link href={`/app/clients/${file.client_id}?tab=outputs`}>{file.clients?.name}: {file.name}</Link>{waiting?.some(item=>item.entity_id===file.id) && <span className="hint">An acknowledgement arrived. Mark it filed.</span>}</li>)}</ul></section> : null;
   }
-  const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations},{data:pans},{data:itrRows}]=await Promise.all([
+  const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations},{data:pans},{data:itrRows},{data:signoffs},{data:people}]=await Promise.all([
     supabase.from("datasets").select("id,form_code,period_key,revision,data").eq("firm_id",membership.firmId).eq("client_id",client).in("form_code",["GSTR1","GSTR3B"]).order("period_key",{ascending:false}).limit(100),
     supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","gstin"),
     supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",client).in("document_type",["Acknowledgement","ITR-V"]).eq("status","filed").limit(100),
     supabase.from("requests").select("entity_id,details").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","form_confirmation").eq("status","pending"),
     supabase.from("client_registrations").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","pan"),
     supabase.from("datasets").select("id,period_key,revision,data").eq("firm_id",membership.firmId).eq("client_id",client).eq("form_code","ITR").order("period_key",{ascending:false}).limit(100),
+    // Who prepared, approved and filed each version (src/lib/signoffs.ts).
+    supabase.rpc("form_signoffs",{target_firm:membership.firmId,docs:(forms ?? []).map(file=>file.id)}),
+    supabase.rpc("firm_people",{target_firm:membership.firmId}),
   ]);
+  const emailOf=(person:string|null)=>people?.find(one=>one.user_id===person)?.email;
   // Income tax: one return per form and year that has figures entered for it, built with the
   // figures read from the client's papers for that year. Each lists what it still needs.
   const itrDrafts=(itrRows ?? []).map(row=>({...row,data:draftSchema.parse(row.data)}));
@@ -159,10 +164,12 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         <div className="rf-name">
           <div className="rf-title"><h3>{formName(meta.form)} {period}{number && <span className="sub-inline">{number}</span>}</h3><Badge tone={tone}>{stage==="preparing" && <LoaderCircle className="rf-spin" size={12} aria-hidden/>}{word}</Badge></div>
           <p className="sub"><Link href={`/app/files/${file.id}/view`}>{file.name}</Link><span>Official version {meta.template}.{meta.external && " Corrected outside InboxCA."}</span></p>
+          {!!signoffLines(signoffs,file.id,emailOf).length && <p className="sub">{signoffLines(signoffs,file.id,emailOf).map(step=>step.line).join(". ")}.</p>}
         </div>
         <div className="rf-acts">
           {(meta.sources.length || reject || upload) && <details className="rf-menu"><summary className="b b-ghost" aria-label="More for this file">More<Ellipsis size={15} aria-hidden/></summary><div className="rf-pop is-end">
             {meta.sources.map((source,n)=><Link key={source.id} className="rf-pop-item" href={`?tab=extraction&draft=${source.id}`}>Check source figures{meta.sources.length>1 ? ` ${n+1}` : ""}</Link>)}
+            <Link className="rf-pop-item" href={`/app/files/${file.id}/paper`}>Working paper</Link>
             {meta.form==="GSTR1" && active && ["approved","filed"].includes(stage) && <form action={`/app/files/${file.id}/filing`} method="post"><input type="hidden" name="format" value="excel"/><button className="rf-pop-item">Excel for the offline tool</button></form>}
             {reject && <details className="rf-sub"><summary className="rf-pop-item">Reject this version</summary><form action={decideForm} className="rf-pop-form">
               <input type="hidden" name="document" value={file.id}/>

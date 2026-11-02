@@ -808,6 +808,29 @@ export async function saveReminders(form: FormData) {
   redirect("/app/settings?group=reminders&saved=reminders#reminders");
 }
 
+// Settings → Reminders → Due dates: the owner confirms a rule's date against its official
+// link, for this firm only (public.confirm_due_date, src/lib/due-dates.ts). Logged there.
+export async function confirmDueDate(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  if (membership?.role !== "owner") redirect("/app");
+  const code = z.string().regex(/^[A-Z0-9_]{2,20}$/).safeParse(form.get("code"));
+  const { data } = code.success ? await supabase.rpc("confirm_due_date", { target_firm: membership.firmId, rule_code: code.data }) : { data: false };
+  redirect(`/app/settings?group=reminders&${data ? "saved=due_date" : "error=due_date"}#due-dates`);
+}
+
+// A company's AGM date for a financial year (public.record_agm): its AOC-4, MGT-7 and ADT-1
+// get their dates from it. Never guessed.
+export async function recordAgm(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const asked = z.object({ client: z.uuid(), registration: z.uuid(), year_end: z.string().regex(/^[0-9]{4}-03$/), agm: z.iso.date() })
+    .safeParse({ client: form.get("client"), registration: form.get("registration"), year_end: form.get("year_end"), agm: form.get("agm") });
+  if (!asked.success) redirect("/app/clients");
+  const { data } = await supabase.rpc("record_agm", { target_firm: membership.firmId, registration: asked.data.registration, year_end: asked.data.year_end, agm: asked.data.agm });
+  revalidatePath("/app", "layout");
+  redirect(`/app/clients/${asked.data.client}?tab=returns&${data ? "changed=agm" : "error=agm"}`);
+}
+
 // Settings → Replies by InboxCA: Auto, Ask me first or Off for each kind of answer.
 export async function saveAnswers(form: FormData) {
   const { supabase, membership } = await currentWriter();
@@ -863,10 +886,12 @@ export async function manageTasks(form: FormData) {
     ids.map((id) => {
       const ack = String(form.get(`ack-${id}`) ?? "").trim().slice(0, 40);
       const task = tasks?.find((task) => task.id === id);
+      // The UDIN of a tax audit report, as the firm typed it (mark-filed.tsx).
+      const udin = task?.code === "TAX_AUDIT" ? String(form.get(`udin-${id}`) ?? "").trim().replace(/[^A-Za-z0-9]/g, "").slice(0, 30) : "";
       const change =
         intent === "filed"
           // A licence marked renewed keeps its label.
-          ? { status: "filed", details: { ...(task?.kind === "licence" ? (task.details as Record<string, unknown>) : {}), filed_on: filedOn, by: userId, ...(ack && { ack }) } }
+          ? { status: "filed", details: { ...(task?.kind === "licence" ? (task.details as Record<string, unknown>) : {}), filed_on: filedOn, by: userId, ...(ack && { ack }), ...(udin && { udin }) } }
           : intent === "verified"
             // A filed income tax return e-verified by hand (the portal's confirmation mail does this itself).
             ? { details: { ...(tasks?.find((task) => task.id === id)?.details as Record<string, unknown>), verified_on: todayInIndia(), verified_by: userId } }

@@ -40,9 +40,9 @@ export const skipReasons: Record<Skip, string> = {
 // three months of a quarter, or the financial year.
 export function periodsOf(frequency: string | null, key: string) {
   if (frequency === "yearly") return [key.slice(0, 4)];
-  if (frequency === "quarterly") {
+  if (frequency === "quarterly" || frequency === "half_yearly") {
     const end = new Date(`${key}-01T00:00:00Z`);
-    return [0, 1, 2].map((back) => new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - back, 1)).toISOString().slice(0, 7));
+    return Array.from({ length: frequency === "quarterly" ? 3 : 6 }, (_, back) => new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - back, 1)).toISOString().slice(0, 7));
   }
   return [key];
 }

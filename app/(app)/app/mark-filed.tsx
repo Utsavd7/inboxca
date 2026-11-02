@@ -5,8 +5,10 @@ import { Pending } from "./pending";
 
 // Marking returns filed, from the Calendar or a client's Returns tab, in a side panel: the day
 // they were filed and each one's acknowledgement number (ARN), both kept with the return. An
-// income tax return (itr) can also send the client one email to e-verify it in time.
-export function MarkFiled({ rows, state }: { rows: { id: string; name: string; sub: string; itr?: boolean }[]; state: React.ReactNode }) {
+// income tax return (itr) can also send the client one email to e-verify it in time. A tax
+// audit report (udin) takes the UDIN the firm generated for it, as typed, with no format check:
+// InboxCA could not read ICAI's official text on the format.
+export function MarkFiled({ rows, state }: { rows: { id: string; name: string; sub: string; itr?: boolean; udin?: boolean }[]; state: React.ReactNode }) {
   const today = todayInIndia();
   const itr = rows.some((row) => row.itr);
   return (
@@ -29,6 +31,14 @@ export function MarkFiled({ rows, state }: { rows: { id: string; name: string; s
               ARN <span className="sr-only">for {row.name} </span>(optional)
             </label>
             <input id={`ack-${row.id}`} name={`ack-${row.id}`} maxLength={40} autoComplete="off" className="num" />
+            {row.udin && (
+              <>
+                <label htmlFor={`udin-${row.id}`}>
+                  UDIN <span className="sr-only">for {row.name} </span>(optional)
+                </label>
+                <input id={`udin-${row.id}`} name={`udin-${row.id}`} maxLength={30} autoComplete="off" className="num" />
+              </>
+            )}
           </li>
         ))}
       </ul>

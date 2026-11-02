@@ -5,6 +5,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageTasks, markTasksInProgress, remindClient, reopenTasks, stopSend } from "@/app/(app)/actions";
 import { addDays, calendarViews, dueLabel, isItr, periodLabel, todayInIndia, verifyBy, type CalendarView } from "@/src/lib/calendar";
+import { firmChecked } from "@/src/lib/due-dates";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { canManageClients } from "@/src/lib/clients";
 import { periodName } from "@/src/lib/documents";
@@ -71,7 +72,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const views = Object.keys(calendarViews) as CalendarView[];
   // Everything that does not hang on the view starts at once: the rules, the panels, the counts.
   const rest = Promise.all([
-    supabase.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", "").order("name"),
+    Promise.resolve(supabase.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", "").order("name")).then(async ({ data }) => ({ data: await firmChecked(supabase, membership.firmId, data) })),
     picked.length ? supabase.from("tasks").select("id, code, period_key, due_on, clients(name)").eq("firm_id", membership.firmId).eq("kind", "compliance").neq("status", "filed").in("id", picked).order("due_on") : Promise.resolve({ data: null }),
     // Remind client: the client, its returns due within 7 days, and whether the email can go.
     remindId ? supabase.from("clients").select("id, name, email_enc, reminders_paused").eq("firm_id", membership.firmId).eq("id", remindId).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
@@ -465,7 +466,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
       {marking && !viewOnly && (
         <SidePanel key="filed" id="mark-filed" title={marking.length > 1 ? `Mark ${marking.length} returns filed` : "Mark filed"} close={close}>
           {marking.length ? (
-            <MarkFiled state={state} rows={marking.map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${name(task).join(" ")}, due ${dueLabel(task.due_on)}`, itr: isItr(task.code) }))} />
+            <MarkFiled state={state} rows={marking.map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${name(task).join(" ")}, due ${dueLabel(task.due_on)}`, itr: isItr(task.code), udin: task.code === "TAX_AUDIT" }))} />
           ) : (
             <p className="hint">These returns are already filed.</p>
           )}

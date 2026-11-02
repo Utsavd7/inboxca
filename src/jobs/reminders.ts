@@ -4,6 +4,7 @@ import type { Json } from "@/src/db/types";
 import { todayInIndia } from "@/src/lib/calendar";
 import { kindChecklist, workOfService } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
+import { firmChecked } from "@/src/lib/due-dates";
 import { firmMailer } from "@/src/lib/firm-mail";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { askDays, firstAsk, followUpDue, papersFor, periodsOf, planAsks, planReminders, reminderStages, checkedReminder, type FollowUp, type ReminderTask } from "@/src/lib/reminders";
@@ -67,9 +68,9 @@ export const sendReminders: Handler = async (job) => {
       .lte("due_on", shift(today, now === "late" ? -1 : 7));
     return (one ? query.eq("client_id", one) : query).order("id").range(from, from + 999);
   };
-  const [rows, { data: rules }, { data: handling }] = await Promise.all([
+  const [rows, rules, { data: handling }] = await Promise.all([
     pages(open),
-    admin.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", ""),
+    Promise.resolve(admin.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", "")).then(({ data }) => firmChecked(admin, firm, data)),
     admin.from("requests").select("client_id").eq("firm_id", firm).eq("kind", "team_reply").eq("status", "pending"),
   ]);
   const rule = new Map(rules?.map((r) => [r.code, r]));
