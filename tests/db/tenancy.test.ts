@@ -264,6 +264,7 @@ async function seedEvery(tag: string) {
   await run("insert into public.ai_ledger (firm_id, reason, credits, hash) values ($1, 'reply_draft', 1, 'hash')", []);
   await run("insert into public.subscriptions (firm_id, cycle, plan) values ($1, 'monthly', '{}')", []);
   await run("insert into public.payments (firm_id, kind, amount_paise) values ($1, 'plan', 100)", []);
+  await run("insert into public.firm_due_dates (firm_id, code, confirmed_by, source_url) values ($1, 'ADV_TAX', $2, 'https://www.incometax.gov.in/')", [people.owner]);
   return { ...ids, name, people };
 }
 
@@ -338,6 +339,10 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["firm_export", "select public.firm_export($1) r", ["firm"], true],
   ["firm_people", "select * from public.firm_people($1)", ["firm"], true],
   ["team_load", "select * from public.team_load($1, current_date + 6)", ["firm"], true],
+  ["people_load", "select * from public.people_load($1)", ["firm"], true],
+  ["confirm_due_date", "select public.confirm_due_date($1, 'ADV_TAX_P') r", ["firm"], true],
+  ["form_signoffs", "select * from public.form_signoffs($1, array[$2::uuid])", ["firm", "document"], true],
+  ["record_agm", "select public.record_agm($1, $2, '2026-03', '2026-09-30') r", ["firm", "registration"], true],
   ["firm_usage", "select * from public.firm_usage($1, current_date)", ["firm"], true],
   ["due_fills", "select * from public.due_fills($1)", ["firm"], true],
   ["queue_fills", "select * from public.queue_fills($1, gen_random_uuid(), true)", ["firm"], true],
@@ -435,7 +440,7 @@ describe("every table and function, from the catalog", () => {
         from pg_constraint c join pg_class t on t.oid = c.conrelid join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
         where c.contype in ('p', 'u') and c.connamespace = 'public'::regnamespace and a.attname <> 'firm_id'`);
       const { rows: [{ id: job }] } = await db.query("select id::text from public.jobs where firm_id = $1 limit 1", [b.firm]);
-      const values: Record<string, string> = { firm: b.firm, client: b.client, name: b.name, owner: b.people.owner, staff: b.people.staff, job, request: b.request, outsider: randomUUID() };
+      const values: Record<string, string> = { firm: b.firm, client: b.client, name: b.name, owner: b.people.owner, staff: b.people.staff, job, request: b.request, document: b.document, registration: b.registration, outsider: randomUUID() };
       const secretsOf = (firm: typeof b) => [firm.firm, firm.name, ...Object.values(firm.people), ...ROWS.map((key) => firm[key])];
       const secrets = secretsOf(b);
       const fingerprint = async () => {
