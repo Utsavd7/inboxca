@@ -82,6 +82,9 @@ test("every plan price ends in 499 and the estimate follows the answers", async 
   const quote = plans.locator(".quote");
   const clients = plans.getByLabel("How many clients?");
   await expect(prices).toHaveText(["₹1,499", "₹3,499", "₹7,499", "₹15,499"]);
+  // The yearly total sits beside each monthly figure, and every card has the same tick list.
+  await expect(plans.locator(".plan-grid .plan-other .num")).toHaveText(["₹16,499", "₹38,499", "₹82,499", "₹1,70,499"]);
+  await expect(plans.locator(".plan-grid .plan-ticks")).toHaveCount(4);
   await expect(plans.locator(".plan.is-fit h3")).toHaveText("Growth");
   await expect(quote).toContainText("Growth");
   await expect(quote).toContainText("₹3,499");

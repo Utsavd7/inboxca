@@ -67,6 +67,20 @@ export const practices = [
 // One more person on a fixed plan, a month.
 export const extraPerson = 399;
 
+// One more block of AI credits a month, as plan_formula.aiBlock in the billing migration.
+export const aiBlock = { credits: 4000, price: 399 } as const;
+
+// What every plan has. Only the figures above differ between plans.
+export const planIncludes = [
+  "Emails read, sorted and filed",
+  "Replies and reminders from your address",
+  "GSTR-1 and GSTR-3B prepared",
+  "ITR-1 to ITR-4 prepared",
+  "Notice tracker",
+  "Office only lock and view only staff",
+  "Activity record nobody can edit",
+] as const;
+
 // The Custom plan, for firms above Enterprise on work or people. One size step is
 // 200 returns a year. Slabs work like income tax slabs: [up to, rate a month].
 export const custom = {
@@ -91,11 +105,12 @@ export const custom = {
   yearlyAdd: 10,
 } as const;
 
+// The two metered rows first, then the team; clients are unlimited, so they are not a row.
 export const planRows = [
   ["Returns a year", "returns"],
-  ["Storage a year", "storage"],
-  ["AI credits a month", "ai"],
+  ["InboxCA storage a year", "storage"],
   ["Team, you included", "team"],
+  ["AI credits a month", "ai"],
 ] as const;
 
 export const rupees = (value: number) => `₹${value.toLocaleString("en-IN")}`;

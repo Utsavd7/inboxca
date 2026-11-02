@@ -2,8 +2,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { ArrowRight, Minus, Plus } from "lucide-react";
-import { custom, planRows, plans, practices, rupees } from "@/content/plans";
+import { ArrowRight, Check, Minus, Plus } from "lucide-react";
+import { aiBlock, custom, extraPerson, planIncludes, planRows, plans, practices, rupees } from "@/content/plans";
 import { estimate, type Practice } from "@/src/lib/estimate";
 import { Rolling } from "./rolling";
 
@@ -219,11 +219,15 @@ export function Plans() {
                 )}
                 <span>
                   {label}
-                  {value && <em className="free">1 month free</em>}
+                  {value && <em className="free">11 months for 12</em>}
                 </span>
               </button>
             ))}
           </div>
+          {/* PLAN.md D32: prices before GST; the tax setting turns GST and tax invoices on. */}
+          <p className="quote-gst">
+            Prices before GST. Once Orelu is GST registered, GST is added and every payment gets a tax invoice.
+          </p>
           {/* The saving is the real difference: twelve monthly payments against one yearly one. */}
           <p className="quote-save">
             {yearly ? (
@@ -252,12 +256,21 @@ export function Plans() {
           <li key={plan.name} className={`plan ${fit === index ? "is-fit" : ""}`}>
             {fit === index && <FitTag />}
             <h3>{plan.name}</h3>
-            <p className="plan-suits">
-              Suits about <span className="num">{plan.clients}</span> clients
-            </p>
             <p className="plan-price">
               <Price value={yearly ? plan.yearly : plan.monthly} />
               <small>{per}</small>
+            </p>
+            {/* The other way to pay, so the yearly total always sits beside the monthly figure. */}
+            <p className="plan-other">
+              {yearly ? (
+                <>
+                  or <span className="num">{rupees(plan.monthly)}</span> a month
+                </>
+              ) : (
+                <>
+                  <span className="num">{rupees(plan.yearly)}</span> a year, 11 months for 12
+                </>
+              )}
             </p>
             <dl>
               {planRows.map(([label, key]) => (
@@ -268,7 +281,21 @@ export function Plans() {
                   </dd>
                 </div>
               ))}
+              <div>
+                <dt>Clients</dt>
+                <dd className="plan-suits">
+                  Unlimited, suits about <span className="num">{plan.clients}</span>
+                </dd>
+              </div>
             </dl>
+            <ul className="plan-ticks" aria-label="In every plan">
+              {planIncludes.map((line) => (
+                <li key={line}>
+                  <Check size={14} strokeWidth={3} aria-hidden />
+                  {line}
+                </li>
+              ))}
+            </ul>
             <Link className={`btn plan-start ${fit === index ? "" : "btn-quiet"}`} href={start(plan.name)}>
               Start with {plan.name}
             </Link>
@@ -327,9 +354,24 @@ export function Plans() {
           </p>
         )}
       </div>
+      {/* Add ons at the prices in content/plans.ts; the Custom plan is worked out above. */}
+      <ul className="add-ons" aria-label="Add ons">
+        <li>
+          <span>One more person in your team</span>
+          <span className="num">{rupees(extraPerson)} a month</span>
+        </li>
+        <li>
+          <span>One more block of <span className="num">{number(aiBlock.credits)}</span> AI credits a month</span>
+          <span className="num">{rupees(aiBlock.price)} a month</span>
+        </li>
+        <li>
+          <span>Bigger than Enterprise</span>
+          <span>Custom, worked out from your answers above</span>
+        </li>
+      </ul>
       <p className="plan-guide">
-        An estimate from your answers. You see the exact price, with GST,
-        before you pay.
+        An estimate from your answers. You see the exact price, with GST where
+        it applies, before you pay, and every payment gets a numbered receipt.
       </p>
     </div>
   );

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { contactEmail, oreluUrl } from "@/src/lib/site";
+import { analyticsToken, contactEmail, oreluUrl } from "@/src/lib/site";
 import { Logo } from "./logo";
 
 export function Footer() {
@@ -33,6 +33,8 @@ export function Footer() {
           </nav>
         </div>
         <p className="footnote">
+          {/* True of the site's pages: the home test checks no cookie is set (security.ts, website). */}
+          {analyticsToken ? "No cookies on this site. Visits are counted without knowing who you are. " : "No cookies, no tracking on this site. "}
           * Screens show sample data.{" "}
           <Link href="/security#website">About this website</Link>. InboxCA is a
           product of Orelu, a partnership firm. Other names and logos belong to
