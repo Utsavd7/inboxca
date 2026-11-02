@@ -47,7 +47,7 @@ async function gstClient(name:string,n:number,tags:string[],withRegister:boolean
   return client;
 }
 
-test("GST month end: every client's month in one list, by tag, with GSTR-1 by rate; staff see their own clients only",async({browser})=>{
+test("GST month end: every client's month in one list, by tag, with GSTR-1 by rate; staff in a restricted firm see their own clients only",async({browser})=>{
   clients.mehta=await gstClient(names.mehta,2,["priority"],true);
   clients.shah=await gstClient(names.shah,3,[],false);
   const staff=await addPerson(firm.firmId,staffEmail,"staff",staffKey);
@@ -74,7 +74,8 @@ test("GST month end: every client's month in one list, by tag, with GSTR-1 by ra
   await expect(row(names.mehta)).toBeVisible();
   await expect(row(names.shah)).toHaveCount(0);
   await expect(owner.getByText("Showing 1 to 1 of 1 clients")).toBeVisible();
-  // A staff member sees the client they look after, and no other.
+  // In a firm that limits clients, a staff member sees the client they look after, and no other.
+  await query(local.dbUrl,"update public.firms set settings=settings||'{\"client_visibility\":\"restricted\"}' where id=$1",[firm.firmId]);
   const page=await (await browser.newContext()).newPage();
   await signIn(page,staffEmail,staffKey);
   await page.goto("/app/work/gst?period=2026-09");
