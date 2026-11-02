@@ -49,6 +49,15 @@ it("one Yes covers the rows that add up to the register's total, never a row wit
   expect(before.join("")).toContain('"txval":100');expect(before.join("")).toContain('"txval":200');
 });
 
+it("a row with no rate or no taxable value cannot pass through a section Yes",()=>{
+  const noRate=invoice(inventedGstin("ZZZPZ0004Z"),"INV/3","59","50"),noTaxable=invoice(inventedGstin("ZZZPZ0005Z"),"INV/4","59","");
+  noRate[10]="";
+  const {draft,figures}=register([...good,noRate,noTaxable],{4:"472",11:"350",12:"0"});
+  const [section]=sectionSummary(draft,figures);
+  expect(section.flagged.map((one)=>[one.row,one.why])).toEqual([["r4","The rate is missing"],["r5","The taxable value is missing"]]);
+  expect(section.lines).not.toContain(draft.lines.find((line)=>line.field==="b2b.r4.c0")!.id);
+});
+
 it("a section whose rows do not add up to its total, or has no total row, cannot be said yes to at once",()=>{
   const off=register(good,{4:"354",11:"301",12:"0"});
   expect(sectionSummary(off.draft,off.figures)[0]).toMatchObject({agree:false});

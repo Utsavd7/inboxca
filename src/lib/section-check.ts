@@ -35,6 +35,8 @@ export function sectionSummary(draft:Draft,figures:Map<string,Figure>):Section[]
     for(const [key,row] of data) {
       const why:string[]=[];
       const first=[...row.values()][0].id;
+      if(rate>=0 && !value(row,rate)) why.push("The rate is missing");
+      if(taxable>=0 && !value(row,taxable)) why.push("The taxable value is missing");
       if(Object.hasOwn(amends,section)) why.push("An amendment: check it against the original");
       headings.forEach((heading,column)=>{
         if(!/GSTIN/.test(heading)) return;

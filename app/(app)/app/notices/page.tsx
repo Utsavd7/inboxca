@@ -307,7 +307,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
           </dl>
           {params.error === "reply" && (
             <p className="alert" role="alert">
-              Give the date the reply was sent and what was sent. A notice closes only with its reply recorded.
+              Give the date the reply was sent and what was sent. If no reply is needed, say so here. A notice closes only with this recorded.
             </p>
           )}
           {decides && !openDetails.reply && (
