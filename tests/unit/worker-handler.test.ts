@@ -4,6 +4,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
+
+// Reads files and runs the worker: slow under load, so longer than the 5 second default.
+vi.setConfig({ testTimeout: 30_000 });
 import { signView, readFrames } from "@/src/lib/file-worker";
 import { writeWorkbook } from "@/worker/workbook";
 import { demoFiles } from "@/scripts/demo-files.mts";

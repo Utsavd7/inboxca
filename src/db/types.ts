@@ -728,7 +728,7 @@ isOneToOne: false
           Views: {
             "email_outcomes": {
                   Row: {
-                    "client_id": string | null,"contact_id": string | null,"decision_source": string | null,"firm_id": string | null,"id": string | null,"label": string | null,"outcomes": (string)[] | null,"provider_message_id": string | null,"received_at": string | null
+                    "client_id": string | null,"contact_id": string | null,"decision_source": string | null,"firm_id": string | null,"id": string | null,"label": string | null,"outcomes": (string)[] | null,"provider_message_id": string | null,"reason_code": string | null,"received_at": string | null
                   }
                   Relationships: [
                     {

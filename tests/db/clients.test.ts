@@ -70,6 +70,20 @@ describe("the client register", () => {
       expect((await db.query("select 1 from public.client_registrations")).rowCount).toBe(0);
     }));
 
+  it("assigns an imported client to the person named as looking after it, by their firm role, and to nobody outside the firm", () =>
+    rollback(db, async () => {
+      await seed();
+      await actAs(db, OWNER);
+      const imported = (id: string, who: string) => JSON.stringify([{ id, name: "Looked After", kind: "individual", registrations: pan(id), looked_after: who }]);
+      const [mine, theirs, nobody] = [randomUUID(), randomUUID(), randomUUID()];
+      await db.query("select public.add_clients($1, $2)", [FIRM, imported(mine, OWNER)]);
+      await db.query("select public.add_clients($1, $2)", [FIRM, imported(theirs, STAFF)]);
+      await db.query("select public.add_clients($1, $2)", [FIRM, imported(nobody, OUTSIDER)]);
+      await asOwner(db);
+      const rows = (await db.query("select client_id, user_id, role from public.client_assignments where firm_id = $1 order by role", [FIRM])).rows;
+      expect(rows).toEqual([{ client_id: mine, user_id: OWNER, role: "partner_in_charge" }, { client_id: theirs, user_id: STAFF, role: "staff" }]);
+    }));
+
   it("refuses the same number twice in one firm", () =>
     rollback(db, async () => {
       await seed();
