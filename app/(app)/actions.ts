@@ -13,7 +13,8 @@ import { emailTemplates } from "@/src/lib/email-templates";
 import { addDays, dueLabel, isItr, periodLabel, todayInIndia, verifyBy } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
-import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, type ClientInput } from "@/src/lib/clients";
+import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, readTags, type ClientInput } from "@/src/lib/clients";
+import { unsafeCell } from "@/src/lib/client-sheet";
 import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
 import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
@@ -426,7 +427,7 @@ export type ClientState = { error?: string; values?: Record<string, string> };
 // A client ready for add_clients: a new id, and its numbers encrypted with the firm's key,
 // bound to that id, with blind indexes and any services an import gave them, and the person
 // who looks after it.
-async function sealClient(firm: string, client: ClientInput & Pick<ImportRow, "tan" | "services" | "looked_after">) {
+async function sealClient(firm: string, client: ClientInput & Pick<ImportRow, "tan" | "services" | "looked_after" | "tags">) {
   const id = randomUUID();
   const crypto = serverCrypto();
   const numbers = [
@@ -448,7 +449,7 @@ async function sealClient(firm: string, client: ClientInput & Pick<ImportRow, "t
     ? { email_enc: await crypto.encrypt(firm, `clients/${id}/email`, client.email), email_bidx: await crypto.blindIndex(firm, "email", client.email) }
     : {};
   const phone = client.phone ? { phone_enc: await crypto.encrypt(firm, `clients/${id}/phone`, client.phone) } : {};
-  return { id, name: client.name, kind: client.kind, ...email, ...phone, registrations, ...(client.looked_after && { looked_after: client.looked_after }) };
+  return { id, name: client.name, kind: client.kind, ...email, ...phone, registrations, ...(client.looked_after && { looked_after: client.looked_after }), ...(client.tags?.length && { tags: client.tags }) };
 }
 
 // Adds one client from the form.
@@ -468,12 +469,12 @@ export async function addClient(_prev: ClientState, form: FormData): Promise<Cli
 
 // said: what the row's Services columns say; services: what that gives each number, once checked.
 // after: what Looked after by says; looked_after: that person's user id, once matched.
-export type ImportRow = ClientInput & { line: number; tan?: string; said?: Record<string, string>; services?: Partial<Record<"pan" | "gstin" | "tan", string[]>>; after?: string; looked_after?: string; error?: string };
+export type ImportRow = ClientInput & { line: number; tan?: string; said?: Record<string, string>; services?: Partial<Record<"pan" | "gstin" | "tan", string[]>>; after?: string; looked_after?: string; tags?: string[]; error?: string };
 export type ImportState = { rows?: ImportRow[]; error?: string; done?: number; late?: boolean };
 
 // Column headings people use, Tally's among them, as InboxCA reads them (any case, without
 // dots or colons: "PAN/IT No." is "pan/it no").
-const headings: Record<keyof ClientInput | "tan" | "after", string[]> = {
+const headings: Record<keyof ClientInput | "tan" | "after" | "tags", string[]> = {
   name: ["name", "client name", "client", "party name", "ledger name", "name of party"],
   kind: ["kind", "type", "client type", "constitution", "constitution of business", "category"],
   pan: ["pan", "pan no", "pan number", "it pan", "pan/it no"],
@@ -482,6 +483,7 @@ const headings: Record<keyof ClientInput | "tan" | "after", string[]> = {
   phone: ["phone", "phone no", "phone number", "mobile", "mobile no", "mobile number", "contact no", "contact number", "whatsapp", "whatsapp no", "whatsapp number"],
   tan: ["tan", "tan no", "tan number"],
   after: ["looked after by", "assigned to", "assigned", "handled by", "in charge", "staff", "team member"],
+  tags: ["tags", "tag", "labels", "label"],
 };
 const heading = (cell: string) => cell.toLowerCase().replace(/[.:]/g, "").replace(/\s+/g, " ").trim();
 
@@ -514,7 +516,8 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
       Object.entries(headings).map(([field, names]) => [field, header.findIndex((cell) => names.includes(heading(cell)))]),
     ) as Record<keyof typeof headings, number>;
     if (at.name < 0) return { error: "The first row must name the columns, with one called Name or Client name." };
-    const cell = (cells: string[], field: keyof typeof headings) => (at[field] < 0 ? "" : (cells[at[field]] ?? "").trim());
+    // An export's apostrophe before a cell that could run as a formula comes off (client-sheet.ts).
+    const cell = (cells: string[], field: keyof typeof headings) => (at[field] < 0 ? "" : unsafeCell((cells[at[field]] ?? "").trim()));
     const serviceAt = Object.keys(importServices).map((column) => [column, header.findIndex((text) => heading(text) === heading(column))] as const).filter(([, at]) => at >= 0);
     rows = body
       .map((cells, index) => ({
@@ -527,10 +530,11 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
         phone: cell(cells, "phone"),
         tan: cell(cells, "tan"),
         after: cell(cells, "after"),
+        tags: readTags(cell(cells, "tags")),
         said: Object.fromEntries(serviceAt.map(([column, at]) => [column, (cells[at] ?? "").trim()])),
       }))
       // An empty row, and the template's example row copied in, are left out.
-      .filter((row) => (row.name || row.kind || row.pan || row.gstin || row.email || row.phone || row.tan || row.after || Object.values(row.said).some(Boolean)) && row.name !== exampleClient.name);
+      .filter((row) => (row.name || row.kind || row.pan || row.gstin || row.email || row.phone || row.tan || row.after || row.tags.length || Object.values(row.said).some(Boolean)) && row.name !== exampleClient.name);
     if (rows.length > 2000) return { error: "Import at most 2,000 clients at a time." };
   }
 
@@ -556,7 +560,7 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
     const numbers = [result.client.pan, result.client.gstin, tan].filter(Boolean);
     if (numbers.some((number) => seen.has(number))) return { ...row, ...result.client, error: "The same PAN, GSTIN or TAN is on an earlier row." };
     numbers.forEach((number) => seen.add(number));
-    return { line: row.line, ...result.client, tan, said: row.said, services: read.services, after, looked_after };
+    return { line: row.line, ...result.client, tan, said: row.said, services: read.services, after, looked_after, tags: row.tags };
   });
   const crypto = serverCrypto();
   const lines = new Map<string, number>();
@@ -610,11 +614,34 @@ export async function assignClients(form: FormData) {
   redirect(to(`assigned=${made?.length ?? 0}&of=${ids.length}`));
 }
 
+// Add tags to the clients ticked on the list (?clients=, at most a page of them): each keeps
+// the tags it has. Row level security allows only the owner, a partner or a manager.
+export async function tagClients(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  const ids = [...new Set(form.getAll("client").map(String))].filter((id) => z.uuid().safeParse(id).success).slice(0, 50);
+  const back = String(form.get("back") ?? "");
+  const list = /^\/app\/clients(\?|$)/.test(back) ? back : "/app/clients";
+  const to = (query: string) => `${list}${list.includes("?") ? "&" : "?"}${query}`;
+  if (!membership || !canManageClients(membership.role) || !ids.length) redirect(list);
+  const added = readTags(String(form.get("tags") ?? ""));
+  if (!added.length) redirect(to(`panel=tags&clients=${ids.join(",")}&error=tags`));
+  const { data: clients } = await supabase.from("clients").select("id, tags").eq("firm_id", membership.firmId).in("id", ids);
+  let changed = 0;
+  for (const client of clients ?? []) {
+    const tags = readTags([...client.tags, ...added].join(","));
+    if (tags.length === client.tags.length) continue;
+    const { error } = await supabase.from("clients").update({ tags }).eq("id", client.id).eq("firm_id", membership.firmId);
+    if (!error) changed++;
+  }
+  revalidatePath("/app/clients");
+  redirect(to(`tagged=${changed}&of=${ids.length}`));
+}
+
 // Every change on a client's page: its name and kind, a number added or removed, archived
 // or restored. Row level security allows only the owner, a partner or a manager, and a
 // trigger logs each change.
 export async function manageClient(form: FormData) {
-  const { supabase, membership } = await currentWriter();
+  const { supabase, membership, userId } = await currentWriter();
   const id = String(form.get("client") ?? "");
   const tab = String(form.get("tab") ?? "").replace(/[^a-z]/g, "");
   const back = (error?: string) => {
@@ -644,6 +671,8 @@ export async function manageClient(form: FormData) {
       group = data?.id ?? group;
     }
     const crypto = serverCrypto();
+    // The engagement note, what the firm does for the client and since when, is sealed like the email.
+    const engagement = String(form.get("engagement") ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
     await supabase
       .from("clients")
       .update({
@@ -654,8 +683,29 @@ export async function manageClient(form: FormData) {
         email_enc: email ? await crypto.encrypt(firm, `clients/${id}/email`, email) : null,
         email_bidx: email ? await crypto.blindIndex(firm, "email", email) : null,
         phone_enc: phone ? await crypto.encrypt(firm, `clients/${id}/phone`, phone) : null,
+        tags: readTags(String(form.get("tags") ?? "")),
+        engagement_enc: engagement ? await crypto.encrypt(firm, `clients/${id}/engagement`, engagement) : null,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("firm_id", firm);
+  } else if (intent === "add-licence" || intent === "remove-licence") {
+    // A licence or registration's expiry (FSSAI, Shop Act, IEC, MSME and the like) as the firm
+    // enters it: a task of its own kind with the firm's label, on the Calendar and Today before
+    // the date. The client's own date, so no rule is checked and no reminder goes to the client.
+    const { data: own } = await supabase.from("clients").select("id").eq("id", id).eq("firm_id", firm).maybeSingle();
+    if (!own) back("role");
+    const admin = supabaseAdmin();
+    if (intent === "add-licence") {
+      const label = String(form.get("label") ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+      const on = String(form.get("on") ?? "");
+      if (!label || !/^\d{4}-\d{2}-\d{2}$/.test(on) || Number.isNaN(Date.parse(on))) back("licence");
+      const { data: made } = await admin.from("tasks").insert({ firm_id: firm, client_id: id, kind: "licence", due_on: on, details: { label } }).select("id").single();
+      if (made) await admin.from("activity_log").insert({ firm_id: firm, actor_id: userId, action: "licence.added", entity_type: "task", entity_id: made.id });
+    } else {
+      const licence = String(form.get("licence") ?? "");
+      const { data: gone } = z.uuid().safeParse(licence).success ? await admin.from("tasks").delete().eq("id", licence).eq("firm_id", firm).eq("client_id", id).eq("kind", "licence").select("id") : { data: null };
+      if (gone?.length) await admin.from("activity_log").insert({ firm_id: firm, actor_id: userId, action: "licence.removed", entity_type: "task", entity_id: licence });
+    }
   } else if (intent === "archive" || intent === "restore") {
     await supabase.from("clients").update({ archived_at: intent === "archive" ? new Date().toISOString() : null }).eq("id", id);
   } else if (intent === "assign") {
@@ -807,14 +857,16 @@ export async function manageTasks(form: FormData) {
   const typed = String(form.get("filed_on") ?? "");
   const filedOn = /^\d{4}-\d{2}-\d{2}$/.test(typed) && !Number.isNaN(Date.parse(typed)) && typed <= todayInIndia() ? typed : todayInIndia();
   if(!ids.length || ids.length>100 || ids.some(id=>!z.uuid().safeParse(id).success)) redirect("/app/calendar");
-  const {data:tasks}=intent==="filed" || intent==="verified" ? await supabase.from("tasks").select("id,client_id,code,period_key,details,clients(name,email_enc)").eq("firm_id",membership.firmId).in("id",ids) : {data:null};
+  const {data:tasks}=intent==="filed" || intent==="verified" ? await supabase.from("tasks").select("id,client_id,kind,code,period_key,details,clients(name,email_enc)").eq("firm_id",membership.firmId).in("id",ids) : {data:null};
   if(tasks && (tasks.length!==ids.length || tasks.some(task=>!membership.may("mark_filed",task.client_id)))) redirect("/app/calendar?error=filing");
   await Promise.all(
     ids.map((id) => {
       const ack = String(form.get(`ack-${id}`) ?? "").trim().slice(0, 40);
+      const task = tasks?.find((task) => task.id === id);
       const change =
         intent === "filed"
-          ? { status: "filed", details: { filed_on: filedOn, by: userId, ...(ack && { ack }) } }
+          // A licence marked renewed keeps its label.
+          ? { status: "filed", details: { ...(task?.kind === "licence" ? (task.details as Record<string, unknown>) : {}), filed_on: filedOn, by: userId, ...(ack && { ack }) } }
           : intent === "verified"
             // A filed income tax return e-verified by hand (the portal's confirmation mail does this itself).
             ? { details: { ...(tasks?.find((task) => task.id === id)?.details as Record<string, unknown>), verified_on: todayInIndia(), verified_by: userId } }

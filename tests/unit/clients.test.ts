@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { checkClient, cleanPhone, readKind, whatsappLink } from "@/src/lib/clients";
+import { safeCell, unsafeCell } from "@/src/lib/client-sheet";
+import { checkClient, cleanPhone, readKind, readTags, serviceChoice, whatsappLink } from "@/src/lib/clients";
 
 it("reads kinds the way people write them, and guesses blanks from the GSTIN", () => {
   expect(readKind("Pvt Ltd", false)).toBe("company");
@@ -31,4 +32,19 @@ it("keeps a phone number as its country code and digits, for the WhatsApp link",
   for (const bad of ["12345", "98765 4321O", "+1"]) expect(cleanPhone(bad), bad).toBeNull();
   expect(checkClient({ name: "Shah", kind: "business", pan: "", gstin: "", email: "", phone: "12345" })).toHaveProperty("error");
   expect(whatsappLink("+919876543210", "Dear Shah,\nPlease upload: https://x.test/u/abc")).toBe("https://wa.me/919876543210?text=Dear%20Shah%2C%0APlease%20upload%3A%20https%3A%2F%2Fx.test%2Fu%2Fabc");
+});
+
+// An export cell a spreadsheet could run (=, +, -, @) is written as text and read back as data,
+// so a phone with its + and a name typed as a formula both import again unchanged.
+it("neutralises formula cells on export and takes the mark off on import", () => {
+  for (const text of ["=HYPERLINK(\"https://x.test\")", "+919876543210", "-1", "@cmd", "\tx"]) {
+    expect(safeCell(text)).toBe(`'${text}`);
+    expect(unsafeCell(safeCell(text))).toBe(text);
+  }
+  expect(safeCell("Shah")).toBe("Shah");
+  expect(unsafeCell("'quoted name")).toBe("'quoted name");
+  expect(readTags(" Priority, audit 2027 ;priority,, ")).toEqual(["Priority", "audit 2027"]);
+  expect(readTags(Array.from({ length: 12 }, (_, at) => `t${at}`).join(","))).toHaveLength(10);
+  expect(serviceChoice("GST returns", ["GSTR1_Q", "GSTR3B_Q", "PMT06"])).toBe("Quarterly (QRMP)");
+  expect(serviceChoice("GST returns", ["GSTR1_M"])).toBe("");
 });

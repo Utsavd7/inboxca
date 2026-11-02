@@ -58,6 +58,7 @@ const errors: Record<string, string> = {
   taken: "Another client in your firm already has that number.",
   "filed-number": "That number has filed returns, so it stays. To stop its new returns, untick its services and choose Save services.",
   assign: "Choose a person and what they do for this client.",
+  licence: "Name the licence or registration and give the date it is valid until.",
   assigned: "That person is already assigned to this client.",
   contact: "Enter the contact's name and a valid email address.",
   linked: "That contact is already added to this client.",
@@ -110,7 +111,7 @@ const taskChanges: Record<string, string> = { filed: "marked filed", in_progress
 const changes: Record<string, string> = {
   details: "Details saved.", services: "Services saved.", "contact-rights": "Contact saved.", "add-contact": "Contact added.", "unlink-contact": "Contact removed.",
   "add-number": "Tax number added.", "remove-number": "Tax number removed.", assign: "Assigned.", unassign: "Unassigned.", archive: "Client archived.", restore: "Client restored.",
-  reminders: "Reminders saved.", list: "List saved.", sharing: "Sending choice saved.",
+  reminders: "Reminders saved.", list: "List saved.", sharing: "Sending choice saved.", "add-licence": "Expiry date added. It is on the Calendar.", "remove-licence": "Expiry date removed.",
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
@@ -144,11 +145,11 @@ export default async function Client({ params, searchParams }: { params: Promise
   const tokens = typed.length ? await searchTokens(firm, typed) : null;
   const owner = membership.role === "owner";
   const namedIds = [edit ?? send, shared, renamed ?? saved ?? removed ?? restored].filter((file): file is string => uuid.test(file ?? ""));
-  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: sheets }] = await Promise.all([
+  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: sheets }, { data: licences }] = await Promise.all([
     supabase
       .from("clients")
       .select(
-        "id, name, kind, archived_at, email_enc, phone_enc, group_id, branch_id, reminders_paused, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_receive_documents, contacts(name_enc, email_enc))",
+        "id, name, kind, archived_at, email_enc, phone_enc, group_id, branch_id, reminders_paused, tags, engagement_enc, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_receive_documents, contacts(name_enc, email_enc))",
       )
       .eq("id", id)
       .eq("firm_id", firm)
@@ -179,6 +180,8 @@ export default async function Client({ params, searchParams }: { params: Promise
     files && (namedIds.length || owner) ? supabase.from("documents").select(fileColumns).eq("firm_id", firm).eq("client_id", id).or([...(namedIds.length ? [`id.in.(${namedIds})`] : []), ...(owner ? ["status.eq.deleted"] : [])].join(",")).order("received_at", { ascending: false }) : Promise.resolve({ data: [] }),
     // Whether Returns offers Figures: a GST spreadsheet or JSON file filed for this client.
     tab === "returns" ? supabase.from("documents").select("id").eq("firm_id", firm).eq("client_id", id).eq("work_type", "gst").eq("status", "filed").filter("name", "imatch", "\\.(xlsx?|ods|csv|json)$").limit(1) : Promise.resolve({ data: [] }),
+    // The client's licence and registration expiry dates, as the firm entered them (Details).
+    supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "licence").order("due_on").limit(20),
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
@@ -200,7 +203,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const openAsk = viewOnly ? undefined : (asks ?? []).filter((request) => request.status === "pending" && (request.details as unknown as DocumentRequest).link_enc).sort((a, b) => (b.expires_at ?? "").localeCompare(a.expires_at ?? ""))[0];
   // The second and last round: the client's own numbers and contacts opened with the firm's key,
   // and what the shown lists need from them.
-  const [numbers, email, contacts, { data: confirms }, { data: statements }, uploadLink, { data: taxPapers }, phone] = await Promise.all([
+  const [numbers, email, contacts, { data: confirms }, { data: statements }, uploadLink, { data: taxPapers }, phone, engagement] = await Promise.all([
     Promise.all(client.client_registrations.map(async (registration) => ({ ...registration, number: await crypto.decrypt(firm, `clients/${client.id}/${registration.kind}`, registration.number_enc) }))),
     client.email_enc ? crypto.decrypt(firm, `clients/${client.id}/email`, client.email_enc) : "",
     Promise.all(
@@ -215,7 +218,9 @@ export default async function Client({ params, searchParams }: { params: Promise
     openAsk && (async () => `${process.env.APP_BASE_URL ?? `${(await headers()).get("x-forwarded-proto") ?? "http"}://${(await headers()).get("host")}`}/u/${await crypto.decrypt(firm, `requests/${openAsk.id}/link`, (openAsk.details as unknown as DocumentRequest).link_enc!)}`)(),
     itrYears.length ? supabase.from("documents").select("document_type, period_key").eq("client_id", id).in("document_type", ["Form 16", "Form 130", "Form 26AS", "Form 168", "AIS"]).neq("status", "deleted") : Promise.resolve({ data: [] }),
     client.phone_enc ? crypto.decrypt(firm, `clients/${client.id}/phone`, client.phone_enc) : "",
+    client.engagement_enc ? crypto.decrypt(firm, `clients/${client.id}/engagement`, client.engagement_enc) : "",
   ]);
+  const licenceLabel = (licence: { details: unknown }) => (licence.details as { label?: string }).label ?? "Licence";
   // WhatsApp click to chat from the person's own phone, with the papers still missing and the
   // upload link filled in while papers are asked for (product gaps S6). InboxCA sends nothing.
   const missingAsk = openAsk && (openAsk.details as unknown as DocumentRequest);
@@ -613,6 +618,10 @@ export default async function Client({ params, searchParams }: { params: Promise
                   <div><dt>Group</dt><dd>{groupName ? <Link href={`/app/clients?group=${client.group_id}`}>{groupName}</Link> : <span className="hint">None</span>}</dd></div>
                   {!!branches.length && <div><dt>Branch</dt><dd>{branchName ? <Link href={`/app/clients?branch=${client.branch_id}`}>{branchName}</Link> : <span className="hint">None</span>}</dd></div>}
                   <div><dt>Reminders</dt><dd>{client.reminders_paused ? <Badge tone="warn">Paused</Badge> : <Badge>On</Badge>}</dd></div>
+                  <div><dt>Tags</dt><dd>{client.tags.length ? client.tags.map((word) => <Badge key={word}>{word}</Badge>) : <span className="hint">None</span>}</dd></div>
+                  <div><dt>What we do</dt><dd>{engagement || <span className="hint">Not written yet</span>}</dd></div>
+                  {/* Expiry dates the firm entered: red once past, green once marked renewed on the Calendar. */}
+                  <div><dt>Licences</dt><dd>{licences?.length ? licences.map((licence) => <span key={licence.id} className="sub">{licenceLabel(licence)}: {licence.status === "filed" ? <Badge tone="done">Renewed</Badge> : <>{licence.due_on < today ? "expired" : "until"} {dueLabel(licence.due_on)}</>}</span>) : <span className="hint">None</span>}</dd></div>
                   <div><dt>Changes</dt><dd><Link href={`${base}?tab=activity`} scroll={false}>Activity</Link></dd></div>
                 </dl>
               </Card>
@@ -1149,6 +1158,8 @@ export default async function Client({ params, searchParams }: { params: Promise
               </select>
             </div>
             <div><label htmlFor="client-new-group">Or a new group</label><input id="client-new-group" name="new_group" maxLength={120} /></div>
+            <div><label htmlFor="client-tags">Tags, separated by commas</label><input id="client-tags" name="tags" maxLength={200} defaultValue={client.tags.join(", ")} placeholder="Priority, Audit 2027" /></div>
+            <div><label htmlFor="client-engagement">What we do for them, and since when</label><textarea id="client-engagement" name="engagement" maxLength={300} rows={2} defaultValue={engagement} placeholder="GST returns and ITR since 2019" /></div>
             {!!branches.length && (
               <div>
                 <label htmlFor="client-branch">Branch</label>
@@ -1159,6 +1170,28 @@ export default async function Client({ params, searchParams }: { params: Promise
               </div>
             )}
             <Pending className="b b-primary" name="intent" value="details">Save details</Pending>
+          </form>
+          <h3>Licences and registrations</h3>
+          <p className="hint">Expiry dates you enter here, like FSSAI, Shop Act, IEC or MSME, show on the Calendar and Today before the date. InboxCA does not remind the client of them.</p>
+          {!!licences?.length && (
+            <ul className="app-rows">
+              {licences.map((licence) => (
+                <li key={licence.id} className="app-row">
+                  <span className="grow">{licenceLabel(licence)}: {licence.status === "filed" ? "renewed" : licence.due_on < today ? "expired" : "until"} {dueLabel(licence.due_on)}</span>
+                  <form action={manageClient}>
+                    {hidden("details")}
+                    <input type="hidden" name="licence" value={licence.id} />
+                    <Pending className="b b-ghost b-small" name="intent" value="remove-licence" aria-label={`Remove ${licenceLabel(licence)}`}>Remove</Pending>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form action={manageClient} className="fields">
+            {hidden("details")}
+            <div><label htmlFor="licence-label">Licence or registration</label><input id="licence-label" name="label" required maxLength={60} placeholder="FSSAI licence" /></div>
+            <div><label htmlFor="licence-on">Valid until</label><input id="licence-on" name="on" type="date" required /></div>
+            <Pending className="b b-secondary" name="intent" value="add-licence">Add expiry date</Pending>
           </form>
           <h3>Reminders</h3>
           <form action={pauseReminders} className="form-row">

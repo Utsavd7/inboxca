@@ -7,7 +7,7 @@ import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lu
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { assignClients, setServices } from "@/app/(app)/actions";
+import { assignClients, setServices, tagClients } from "@/app/(app)/actions";
 import { assignmentRoles, canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { cleanNumber, isGstin, isPan, numberKinds, type NumberKind } from "@/src/lib/identifiers";
@@ -25,7 +25,7 @@ import "./clients.css";
 
 const pills = { all: "All", late: "Late", missing: "Missing papers", mine: "Assigned to me" } as const;
 type Pill = keyof typeof pills;
-const columns = "id, name, client_registrations(kind, number_enc), client_assignments(user_id, team_id, role), next:tasks(code, period_key, due_on), asks:requests(id), late:tasks(id)";
+const columns = "id, name, tags, client_registrations(kind, number_enc), client_assignments(user_id, team_id, role), next:tasks(code, period_key, due_on), asks:requests(id), late:tasks(id)";
 // What each pill adds: a client counts when it has at least one such row (late returns are
 // joined by every list, to count them, and by a count that asks for them).
 const pillJoin: Record<Pill, string> = { all: "", late: "", missing: ", missing:requests!inner(id)", mine: ", mine:client_assignments!inner(role)" };
@@ -38,12 +38,13 @@ const uuid = /^[0-9a-f-]{36}$/;
 export default async function Clients({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; panel?: string; bulk?: string; error?: string; page?: string; show?: string; clients?: string; services?: string; assigned?: string; of?: string; email?: string }>;
+  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; tag?: string; panel?: string; bulk?: string; error?: string; page?: string; show?: string; clients?: string; services?: string; assigned?: string; tagged?: string; of?: string; email?: string }>;
 }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
   const q = params.q?.trim() ?? "";
+  const tag = params.tag?.trim().slice(0, 40) ?? "";
   const archived = params.archived === "1";
   const show: Pill = params.show && params.show in pills ? (params.show as Pill) : "all";
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
@@ -59,6 +60,7 @@ export default async function Clients({
     if (q) search.set("q", q);
     if (params.branch) search.set("branch", params.branch);
     if (params.group) search.set("group", params.group);
+    if (tag) search.set("tag", tag);
     if (archived) search.set("archived", "1");
     if (params.bulk) search.set("bulk", params.bulk);
     const pill = next.show ?? show;
@@ -73,11 +75,12 @@ export default async function Clients({
   // A whole email, PAN or GSTIN is found by its blind index; the rest of the page's first
   // reads go together.
   const [emailIndex, numberIndex] = await Promise.all([q.includes("@") ? crypto.blindIndex(firm, "email", q) : null, kind ? crypto.blindIndex(firm, kind, number) : null]);
-  const [{ data: byNumber }, { data: people }, { data: groups }, { data: batch }] = await Promise.all([
+  const [{ data: byNumber }, { data: people }, { data: groups }, { data: batch }, { data: firmTags }] = await Promise.all([
     kind && numberIndex ? supabase.from("client_registrations").select("client_id").eq("firm_id", firm).eq("kind", kind).eq("number_bidx", numberIndex) : Promise.resolve({ data: null }),
     supabase.rpc("firm_people", { target_firm: firm }),
     supabase.from("groups").select("id, kind, name").eq("firm_id", firm).in("kind", ["client_group", "branch", "team"]).order("name"),
     manage && params.bulk ? supabase.from("requests").select("id,status,details").eq("firm_id", firm).eq("id", params.bulk).eq("kind", "bulk_send").maybeSingle() : Promise.resolve({ data: null }),
+    supabase.rpc("firm_tags", { target_firm: firm }),
   ]);
   const myTeam = people?.find((person) => person.user_id === userId)?.team_id;
   // The same search, group, branch and archive choice for the list and every pill's count.
@@ -86,6 +89,7 @@ export default async function Clients({
     let query = supabase.from("clients").select(`${select}${pillJoin[pill]}${head && lateness ? ", late:tasks(id)" : ""}` as typeof columns, { count: "exact", head }).eq("firm_id", firm);
     if (params.group) query = query.eq("group_id", params.group);
     if (params.branch) query = query.eq("branch_id", params.branch);
+    if (tag) query = query.contains("tags", [tag]);
     query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
     if (emailIndex) query = query.eq("email_bidx", emailIndex);
     else if (byNumber) query = query.in("id", byNumber.map((row) => row.client_id));
@@ -134,8 +138,8 @@ export default async function Clients({
     return [`${name} ${periodLabel(rule?.frequency ?? null, task.period_key)}`.trim(), `Late since ${since}`];
   };
   const branches = groups?.filter((group) => group.kind === "branch") ?? [];
-  const filtered = params.group || params.branch;
-  const groupName = filtered ? nameOf.get(filtered) : null;
+  const filtered = params.group || params.branch || tag;
+  const groupName = filtered ? (nameOf.get(filtered) ?? (tag ? `Tagged ${tag}` : null)) : null;
   const canSend = manage && !archived && !!clients?.some((client) => membership.may("send", client.id));
   // Ticks choose clients for Set services, and for sending a paper when the person may send.
   const canTick = manage && !archived && !membership.viewOnlyUntil;
@@ -150,6 +154,8 @@ export default async function Clients({
         lead: lead ? (lead.team_id ? nameOf.get(lead.team_id) : personName(emailOf.get(lead.user_id ?? ""))) : "",
         team: !!lead?.team_id,
         next,
+        // The firm's own tags, under the status.
+        labels: client.tags,
         // Late first, then missing papers; one quiet tag when neither (green means done only).
         tags: archived
           ? [["Archived", ""] as const]
@@ -175,11 +181,11 @@ export default async function Clients({
   // Set services and Assign, for the clients ticked on the list (?clients=, at most a page of
   // them), with the services each kind of number takes, or the people and teams, as on a
   // client's page.
-  const ticked = panel === "services" || panel === "assign" ? (params.clients ?? "").split(",").filter((id) => uuid.test(id)).slice(0, 50) : [];
+  const ticked = panel === "services" || panel === "assign" || panel === "tags" ? (params.clients ?? "").split(",").filter((id) => uuid.test(id)).slice(0, 50) : [];
   const { data: setFor } = ticked.length ? await supabase.from("clients").select("id, name").eq("firm_id", firm).in("id", ticked).is("archived_at", null).order("name") : { data: [] };
   const offered = (Object.keys(numberKinds) as NumberKind[]).map((kind) => [kind, rules?.filter((rule) => (rule.due_rule as { for?: string }).for === kind) ?? []] as const).filter(([, list]) => list.length);
   const setNames = setFor?.map((client) => client.name) ?? [];
-  const added = Number(params.services), assigned = Number(params.assigned), addedOf = Number(params.of);
+  const added = Number(params.services), assigned = Number(params.assigned), tagged = Number(params.tagged), addedOf = Number(params.of);
   const teams = groups?.filter((group) => group.kind === "team") ?? [];
   const activePeople = people?.filter((person) => person.status === "active") ?? [];
   const chosenNames = setNames.length > 4 ? `${setNames.slice(0, 3).join(", ")} and ${setNames.length - 3} more` : setNames.join(", ").replace(/, ([^,]*)$/, " and $1");
@@ -205,6 +211,11 @@ export default async function Clients({
         actions={
           manage && (
             <>
+              {!!countOf.all && (
+                <a className="b b-secondary" href="/app/clients/export" download>
+                  Export to Excel
+                </a>
+              )}
               <Link className="b b-secondary" href="/app/clients?panel=import" scroll={false}>
                 Import from Excel
               </Link>
@@ -270,7 +281,28 @@ export default async function Clients({
             </form>
           </SidePanel>
         )}
+        {panel === "tags" && !!setNames.length && (
+          <SidePanel key="tags" id="tag-clients" title="Add tags" close={pageHref(page)}>
+            {params.error === "tags" && <p className="alert" role="alert">Type at least one tag.</p>}
+            <p className="hint">For {chosenNames}. Tags are your firm&apos;s own words for a client, like Priority or Audit 2027. Each client keeps the tags it has.</p>
+            <form action={tagClients} className="fields">
+              {setFor?.map((client) => <input key={client.id} type="hidden" name="client" value={client.id} />)}
+              <input type="hidden" name="back" value={pageHref(page)} />
+              <div>
+                <label htmlFor="tag-words">Tags, separated by commas</label>
+                <input id="tag-words" name="tags" required maxLength={200} list="firm-tags" autoComplete="off" />
+                <datalist id="firm-tags">{firmTags?.map((word) => <option key={word} value={word} />)}</datalist>
+              </div>
+              <Pending className="b b-primary">Add tags to {plural(setNames.length)}</Pending>
+            </form>
+          </SidePanel>
+        )}
       </Presence>
+      {tagged >= 0 && addedOf > 0 && (
+        <Toast>
+          Tags added to {tagged === addedOf ? "" : `${tagged} of `}{addedOf === 1 ? "1 client" : `${addedOf} clients`}.{tagged < addedOf && " The rest already had them."}
+        </Toast>
+      )}
       {assigned >= 0 && addedOf > 0 && !params.services && (
         <Toast>
           Assigned {assigned === addedOf ? "" : `${assigned} of `}{addedOf === 1 ? "1 client" : `${addedOf} clients`}.{assigned < addedOf && " The rest were already assigned to them."}
@@ -295,6 +327,16 @@ export default async function Clients({
               {branches.map((branch) => (
                 <option key={branch.id} value={branch.id}>
                   {branch.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {!!firmTags?.length && (
+            <select id="tag" name="tag" defaultValue={tag} aria-label="Tag">
+              <option value="">Any tag</option>
+              {firmTags.map((word) => (
+                <option key={word} value={word}>
+                  {word}
                 </option>
               ))}
             </select>
@@ -383,6 +425,7 @@ export default async function Clients({
                           {client.tags.map(([word, tone]) => (
                             <Badge key={word} tone={tone}>{word}</Badge>
                           ))}
+                          {client.labels.length > 0 && <span className="sub">{client.labels.join(", ")}</span>}
                         </span>
                         {/* The quick things to do for a client, shown while its row is pointed at.
                             Words only: an icon on every row would double the page's size. */}

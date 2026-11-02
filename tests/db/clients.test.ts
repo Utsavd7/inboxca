@@ -284,3 +284,26 @@ it("shows only a visible client's recent activity, without private log details",
   await actAs(db,OUTSIDER);expect((await db.query("select * from public.client_activity($1)",[CLIENT])).rows).toEqual([]);
   await actAs(db,null);expect((await attempt(db,"select * from public.client_activity($1)",[CLIENT])).ok).toBe(false);
 }));
+
+// Tags are the firm's words on a client: imported with it, changed by those who manage clients,
+// listed only to the firm's own people. A licence date is a task of its own kind.
+it("keeps tags and licence dates inside the firm, and lets only managers change them", () =>
+  rollback(db, async () => {
+    await seed();
+    await actAs(db, OWNER);
+    expect((await db.query("select public.add_clients($1, $2) as added", [FIRM, JSON.stringify([{ id: CLIENT, name: "Patel Textiles", kind: "business", registrations: [], tags: ["Priority", "Audit 2027"] }])])).rows[0].added).toBe(1);
+    expect((await db.query("select public.firm_tags($1) as tag", [FIRM])).rows.map((row) => row.tag)).toEqual(["Audit 2027", "Priority"]);
+    // Row level security lets staff and outsiders change no row (no error, nothing touched).
+    const tried = async (sql: string) => { const result = await attempt(db, sql, [CLIENT]); return result.ok ? result.count : 0; };
+    await actAs(db, STAFF);
+    expect(await tried("update public.clients set tags = '{Mine}' where id = $1")).toBe(0);
+    await actAs(db, OUTSIDER);
+    expect((await db.query("select public.firm_tags($1) as tag", [FIRM])).rows).toEqual([]);
+    expect(await tried("update public.clients set tags = '{Theirs}' where id = $1")).toBe(0);
+    await asOwner(db);
+    expect((await db.query("select tags from public.clients where id = $1", [CLIENT])).rows[0].tags).toEqual(["Priority", "Audit 2027"]);
+    expect((await attempt(db, "update public.clients set tags = array(select 't' || n from generate_series(1, 11) n) where id = $1", [CLIENT])).ok).toBe(false);
+    expect((await attempt(db, "insert into public.tasks (firm_id, client_id, kind, due_on, details) values ($1, $2, 'licence', current_date + 10, '{\"label\": \"FSSAI licence\"}')", [FIRM, CLIENT])).ok).toBe(true);
+    expect((await attempt(db, "insert into public.tasks (firm_id, client_id, kind, due_on) values ($1, $2, 'permit', current_date)", [FIRM, CLIENT])).ok).toBe(false);
+    expect((await db.query("select returns from public.calendar_days($1, current_date, current_date + 30)", [FIRM])).rows).toEqual([{ returns: 1 }]);
+  }));

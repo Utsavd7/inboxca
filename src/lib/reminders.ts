@@ -89,6 +89,18 @@ export function followUpDue(request: { expires_at: string; details: Asking }, to
   return missing.length && count < MAX_FOLLOW_UPS && (now || firstAsk(request.details) || -daysUntil(last, today) >= FOLLOW_UP_DAYS) ? missing : null;
 }
 
+// The day the next follow up for a request may go, for the client's upload page: today when the
+// first email is still to go or the wait is over, else FOLLOW_UP_DAYS after the latest ask;
+// null once every paper is in or the follow ups are used up.
+export function nextFollowUp(request: { expires_at: string; details: Asking }, today: string) {
+  if (!followUpDue(request, today, true)) return null;
+  if (firstAsk(request.details)) return today;
+  const asked = new Date(Date.parse(request.expires_at) - 30 * DAY).toISOString().slice(0, 10);
+  const last = [request.details.followups?.at(-1), request.details.since, request.details.chased].filter((day): day is string => !!day).sort().at(-1) ?? asked;
+  const next = new Date(Date.parse(last) + FOLLOW_UP_DAYS * DAY).toISOString().slice(0, 10);
+  return next < today ? today : next;
+}
+
 // Ask early (user, 26 Oct 2026): InboxCA itself asks a client for a return's papers this many
 // days before the return is due, by how often it comes; 0 is Off. A firm sets its own in
 // Settings (firms.settings.ask_days).
