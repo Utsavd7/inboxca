@@ -353,3 +353,20 @@ test("an email that needs a reply is given to a teammate, snoozed to a day, mark
   expect(await query(local.dbUrl, "select client_id from public.email_events where id = $1", [mail])).toEqual([{ client_id: clientId }]);
   expect((await query(local.dbUrl, "select status from public.requests where id = $1", [b]))[0].status).toBe("done");
 });
+
+test("an email from someone who is not a client yet is listed read only, nothing answered, with Add as a client", async () => {
+  const stranger = `inbox-prospect-${tag}@newco.test`;
+  await smtp.sendMail({ from: stranger, to: office, subject: `Need a CA ${tag}`, text: "Hello, I want to register a new company. Can you help?" });
+  await readMail();
+  const [{ id: mail }] = await query(local.dbUrl, "select id from public.email_events where firm_id = $1 and reason_code = 'not_a_client'", [firm.firmId]);
+  // Kept as a row only: no client, no request for the team, no job to answer or file it.
+  expect((await query(local.dbUrl, "select count(*)::int as n from public.requests where entity_id = $1", [mail]))[0].n).toBe(0);
+  expect((await query(local.dbUrl, "select count(*)::int as n from public.jobs where entity_id = $1", [mail]))[0].n).toBe(0);
+  await owner.goto("/app/inbox");
+  await expect(list().getByRole("listitem").filter({ hasText: `Need a CA ${tag}` })).toContainText("Not a client yet");
+  await list().getByText(`Need a CA ${tag}`).click();
+  await expect(pane().getByText(`${stranger} is not a client yet`)).toBeVisible();
+  await expect(pane().getByRole("link", { name: "Reply" })).toHaveCount(0);
+  await pane().getByRole("link", { name: "Add as a client" }).click();
+  await expect(owner.locator("#client-email")).toHaveValue(stranger);
+});

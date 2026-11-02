@@ -424,8 +424,9 @@ export async function changeSpecialHours(form: FormData) {
 export type ClientState = { error?: string; values?: Record<string, string> };
 
 // A client ready for add_clients: a new id, and its numbers encrypted with the firm's key,
-// bound to that id, with blind indexes and any services an import gave them.
-async function sealClient(firm: string, client: ClientInput & Pick<ImportRow, "tan" | "services">) {
+// bound to that id, with blind indexes and any services an import gave them, and the person
+// who looks after it.
+async function sealClient(firm: string, client: ClientInput & Pick<ImportRow, "tan" | "services" | "looked_after">) {
   const id = randomUUID();
   const crypto = serverCrypto();
   const numbers = [
@@ -447,7 +448,7 @@ async function sealClient(firm: string, client: ClientInput & Pick<ImportRow, "t
     ? { email_enc: await crypto.encrypt(firm, `clients/${id}/email`, client.email), email_bidx: await crypto.blindIndex(firm, "email", client.email) }
     : {};
   const phone = client.phone ? { phone_enc: await crypto.encrypt(firm, `clients/${id}/phone`, client.phone) } : {};
-  return { id, name: client.name, kind: client.kind, ...email, ...phone, registrations };
+  return { id, name: client.name, kind: client.kind, ...email, ...phone, registrations, ...(client.looked_after && { looked_after: client.looked_after }) };
 }
 
 // Adds one client from the form.
@@ -466,12 +467,13 @@ export async function addClient(_prev: ClientState, form: FormData): Promise<Cli
 }
 
 // said: what the row's Services columns say; services: what that gives each number, once checked.
-export type ImportRow = ClientInput & { line: number; tan?: string; said?: Record<string, string>; services?: Partial<Record<"pan" | "gstin" | "tan", string[]>>; error?: string };
-export type ImportState = { rows?: ImportRow[]; error?: string; done?: number };
+// after: what Looked after by says; looked_after: that person's user id, once matched.
+export type ImportRow = ClientInput & { line: number; tan?: string; said?: Record<string, string>; services?: Partial<Record<"pan" | "gstin" | "tan", string[]>>; after?: string; looked_after?: string; error?: string };
+export type ImportState = { rows?: ImportRow[]; error?: string; done?: number; late?: boolean };
 
 // Column headings people use, Tally's among them, as InboxCA reads them (any case, without
 // dots or colons: "PAN/IT No." is "pan/it no").
-const headings: Record<keyof ClientInput | "tan", string[]> = {
+const headings: Record<keyof ClientInput | "tan" | "after", string[]> = {
   name: ["name", "client name", "client", "party name", "ledger name", "name of party"],
   kind: ["kind", "type", "client type", "constitution", "constitution of business", "category"],
   pan: ["pan", "pan no", "pan number", "it pan", "pan/it no"],
@@ -479,6 +481,7 @@ const headings: Record<keyof ClientInput | "tan", string[]> = {
   email: ["email", "e-mail", "email id", "email address", "mail", "mail id", "e-mail id"],
   phone: ["phone", "phone no", "phone number", "mobile", "mobile no", "mobile number", "contact no", "contact number", "whatsapp", "whatsapp no", "whatsapp number"],
   tan: ["tan", "tan no", "tan number"],
+  after: ["looked after by", "assigned to", "assigned", "handled by", "in charge", "staff", "team member"],
 };
 const heading = (cell: string) => cell.toLowerCase().replace(/[.:]/g, "").replace(/\s+/g, " ").trim();
 
@@ -523,17 +526,20 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
         email: cell(cells, "email"),
         phone: cell(cells, "phone"),
         tan: cell(cells, "tan"),
+        after: cell(cells, "after"),
         said: Object.fromEntries(serviceAt.map(([column, at]) => [column, (cells[at] ?? "").trim()])),
       }))
       // An empty row, and the template's example row copied in, are left out.
-      .filter((row) => (row.name || row.kind || row.pan || row.gstin || row.email || row.phone || row.tan || Object.values(row.said).some(Boolean)) && row.name !== exampleClient.name);
+      .filter((row) => (row.name || row.kind || row.pan || row.gstin || row.email || row.phone || row.tan || row.after || Object.values(row.said).some(Boolean)) && row.name !== exampleClient.name);
     if (rows.length > 2000) return { error: "Import at most 2,000 clients at a time." };
   }
 
   // Each row on its own, then numbers repeated in the file, then numbers already in the firm.
   // A service must be one of the calendar's, for the row's kind of client.
-  const { data: rules } = await supabase.from("compliance_types").select("code, client_kinds").eq("period_key", "");
+  const [{ data: rules }, { data: people }] = await Promise.all([supabase.from("compliance_types").select("code, client_kinds").eq("period_key", ""), supabase.rpc("firm_people", { target_firm: firm })]);
   const kindsOf = new Map(rules?.map((rule) => [rule.code, rule.client_kinds]));
+  // Looked after by names a person in the firm by their name or email, any case.
+  const personBy = (text: string) => people?.find((person) => person.status === "active" && [person.email, personName(person.email)].some((way) => way.toLowerCase() === text.toLowerCase()))?.user_id;
   const seen = new Set<string>();
   const checked: ImportRow[] = rows.map((row) => {
     const kind = readKind(row.kind, !!cleanNumber(row.gstin));
@@ -544,10 +550,13 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
     if (tan && !numberKinds.tan.valid(tan)) return { ...row, error: "That TAN is not valid. A TAN is 4 letters, 5 digits and a letter." };
     const read = readServices(row.said ?? {}, { pan: result.client.pan, gstin: result.client.gstin, tan }, kind, (code) => kindsOf.has(code) && (kindsOf.get(code)?.includes(kind) ?? true));
     if ("error" in read) return { ...row, error: read.error };
+    const after = (row.after ?? "").trim();
+    const looked_after = after ? personBy(after) : undefined;
+    if (after && !looked_after) return { ...row, error: `"${after}" in Looked after by is not someone in your firm. Use their name or email as on People, or leave it empty.` };
     const numbers = [result.client.pan, result.client.gstin, tan].filter(Boolean);
     if (numbers.some((number) => seen.has(number))) return { ...row, ...result.client, error: "The same PAN, GSTIN or TAN is on an earlier row." };
     numbers.forEach((number) => seen.add(number));
-    return { line: row.line, ...result.client, tan, said: row.said, services: read.services };
+    return { line: row.line, ...result.client, tan, said: row.said, services: read.services, after, looked_after };
   });
   const crypto = serverCrypto();
   const lines = new Map<string, number>();
@@ -567,9 +576,38 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
   const ready = checked.filter((row) => !row.error);
   const clients = await Promise.all(ready.map((row) => sealClient(firm, row)));
   const { data, error } = await supabase.rpc("add_clients", { target_firm: firm, clients });
-  if (error || !data) return { rows: checked, error: "The import did not go through, and nothing was added. Try again." };
+  // Nothing is added when it fails, and the reason is said: the database's own words when they
+  // are not one InboxCA knows.
+  if (error || !data) {
+    const reasons: Record<string, string> = { "23505": "a PAN, GSTIN or TAN in the file was added to your firm meanwhile", "23514": "some services do not fit their number", "57014": "it took too long. Split the file in two and import each half" };
+    return { rows: checked, error: `The import did not go through, and nothing was added: ${reasons[error?.code ?? ""] ?? error?.message ?? "your firm was not found"}.` };
+  }
   revalidatePath("/app/clients");
-  return { done: data };
+  // Returns whose due date has passed were made for the services given (20261107100000).
+  return { done: data, late: ready.some((row) => Object.values(row.services ?? {}).some((list) => list.length)) };
+}
+
+// Assign to the clients ticked on the list (?clients=, at most a page of them): one person or
+// team in one role for each, as on a client's page. Row level security allows only the owner,
+// a partner or a manager; a client already assigned to them keeps that.
+export async function assignClients(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  const ids = [...new Set(form.getAll("client").map(String))].filter((id) => z.uuid().safeParse(id).success).slice(0, 50);
+  const back = String(form.get("back") ?? "");
+  const list = /^\/app\/clients(\?|$)/.test(back) ? back : "/app/clients";
+  const to = (query: string) => `${list}${list.includes("?") ? "&" : "?"}${query}`;
+  if (!membership || !canManageClients(membership.role) || !ids.length) redirect(list);
+  const role = String(form.get("role") ?? "");
+  const [kind, who] = String(form.get("who") ?? "").split(":");
+  if (!(role in assignmentRoles) || !z.uuid().safeParse(who).success || (kind !== "team" && kind !== "person")) redirect(to(`panel=assign&clients=${ids.join(",")}&error=assign`));
+  const { data: already } = await supabase.from("client_assignments").select("client_id").eq("firm_id", membership.firmId).in("client_id", ids).eq(kind === "team" ? "team_id" : "user_id", who);
+  const fresh = ids.filter((id) => !already?.some((row) => row.client_id === id));
+  const { data: made, error } = fresh.length
+    ? await supabase.from("client_assignments").insert(fresh.map((client_id) => ({ firm_id: membership.firmId, client_id, role, ...(kind === "team" ? { team_id: who } : { user_id: who }) }))).select("client_id")
+    : { data: [], error: null };
+  if (error) redirect(to(`panel=assign&clients=${ids.join(",")}&error=assign`));
+  revalidatePath("/app/clients");
+  redirect(to(`assigned=${made?.length ?? 0}&of=${ids.length}`));
 }
 
 // Every change on a client's page: its name and kind, a number added or removed, archived
@@ -1952,6 +1990,36 @@ export async function manageNotice(form: FormData) {
     if (intent === "confirm") {
       await supabaseAdmin().from("tasks").update({ due_on: date, details: { ...details, action_date: date } as unknown as NonNullable<Json> }).eq("id", notice.id);
       await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.date_confirmed", entity_type: "task", entity_id: notice.id, details: { date } });
+    }
+    // The notice's owner: one of the firm's active people, or nobody.
+    else if (intent === "assign") {
+      const person = String(form.get("person") ?? "");
+      const { data: people } = person ? await supabase.rpc("firm_people", { target_firm: membership.firmId }) : { data: [] };
+      if (person && !people?.some((one) => one.user_id === person && one.status === "active")) redirect(back);
+      const { assigned_to: was, ...rest } = details;
+      await supabaseAdmin().from("tasks").update({ details: { ...rest, ...(person && { assigned_to: person }) } as unknown as NonNullable<Json> }).eq("id", notice.id);
+      if (person !== (was ?? "")) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.assigned", entity_type: "task", entity_id: notice.id, details: { person } });
+    }
+    // The reply a person sent (never AI): its date, what was sent, the acknowledgement and a paper of
+    // this client's. Recording it marks the notice replied, or closes it; closing needs it recorded.
+    else if (intent === "reply" || intent === "reply_close" || intent === "closed") {
+      const again = back === "/app/notices" ? `/app/notices?notice=${notice.id}&error=reply` : back;
+      let reply = details.reply;
+      if (intent !== "closed") {
+        const on = String(form.get("on") ?? ""), sent = String(form.get("sent") ?? "").trim().slice(0, 300), reference = String(form.get("ack") ?? "").trim().slice(0, 80), paper = String(form.get("paper") ?? "");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(on) || Number.isNaN(Date.parse(on)) || !sent) redirect(again);
+        if (paper) {
+          const { data: document } = await supabase.from("documents").select("id").eq("firm_id", membership.firmId).eq("client_id", notice.client_id).eq("id", paper).neq("status", "deleted").maybeSingle();
+          if (!document) redirect(again);
+        }
+        reply = { on, sent, ...(reference && { reference }), ...(paper && { document: paper }) };
+      }
+      if (!reply) redirect(again);
+      const status = intent === "reply" ? "replied" : "closed";
+      const { error } = await supabaseAdmin().from("tasks").update({ status, details: { ...details, reply } as unknown as NonNullable<Json> }).eq("id", notice.id);
+      if (error) redirect(again);
+      if (intent !== "closed") await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.replied", entity_type: "task", entity_id: notice.id, details: { on: reply.on, document: reply.document ?? null } });
+      if (status === "closed") await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.closed", entity_type: "task", entity_id: notice.id });
     }
     else if (intent in noticeStatuses) await supabase.from("tasks").update({ status: intent }).eq("id", notice.id);
   }

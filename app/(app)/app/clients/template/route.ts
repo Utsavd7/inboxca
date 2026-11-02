@@ -9,8 +9,8 @@ export const dynamic = "force-static";
 
 const services = Object.keys(importServices);
 const choices = (column: string) => Object.keys(importServices[column].choices);
-const columns = ["Name", "Client type", "PAN", "GSTIN", "Email", "TAN", ...services, "Phone"];
-const widths = [36, 24, 14, 20, 32, 14, 20, 14, 26, 18, 44];
+const columns = ["Name", "Client type", "PAN", "GSTIN", "Email", "TAN", ...services, "Phone", "Looked after by"];
+const widths = [36, 24, 14, 20, 32, 14, 20, 14, 26, 18, 24, 44];
 const xml = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const main = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
@@ -49,6 +49,7 @@ export function GET() {
       "10 characters in capitals: 4 letters, 5 digits and a letter. Needed for TDS returns.", "That TAN is not valid. A TAN is 4 letters, 5 digits and a letter, in capitals."),
     ...services.map((column) => check(column, 'type="list"', `"${choices(column).join(",")}"`, "Choose from the list what your firm files for this client. Left empty, InboxCA adds none.", `Choose ${column} from the list.`)),
     check("Phone", 'type="textLength" operator="lessThanOrEqual"', "20", "The client's mobile number, for calls and WhatsApp from your team's phones.", "A phone number can have at most 20 characters."),
+    check("Looked after by", 'type="textLength" operator="lessThanOrEqual"', "120", "The name or email of the person in your firm who looks after this client, as on People.", "A name can have at most 120 characters."),
   ].join("");
   const help = [
     ["How to fill the client list"],
@@ -68,6 +69,7 @@ export function GET() {
     ["Income tax return", `Choose from the list: ${choices("Income tax return").join(", ")}. Each has its own due date. Needs the PAN.`],
     ["", "Those three are the services your firm files for the client; InboxCA makes their due dates. Left empty, you can choose them later on the Clients list."],
     ["Phone", "The client's mobile number: 10 digits, or + and the country code for a number outside India. For calls and WhatsApp from your team's phones."],
+    ["Looked after by", "The name or email of the person in your firm who looks after this client, as on People. They are assigned to the client."],
     [],
     ["An example row. Do not copy it into the Clients sheet."],
     columns,

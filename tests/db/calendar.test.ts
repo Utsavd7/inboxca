@@ -97,7 +97,13 @@ describe("the compliance calendar", () => {
       expect((await attempt(db, "select public.add_clients($1, $2)", [FIRM, imported(added, ["GSTR1_Q", "GSTR3B_Q", "PMT06"])])).ok).toBe(true);
       await asOwner(db);
       expect((await db.query("select id from public.clients where id = any($1)", [[refused, added]])).rows).toEqual([{ id: added }]);
-      const planned = await db.query("select distinct code from public.tasks where client_id = $1 order by code", [added]);
+      // The period just gone is made at once, for the firm to mark filed or to file; the dates
+      // ahead come from the firm's calendar job, queued by the import.
+      const gone = await db.query("select distinct code from public.tasks where client_id = $1 and due_on < (now() at time zone 'Asia/Kolkata')::date order by code", [added]);
+      expect(gone.rows.map((task) => task.code)).toEqual(["GSTR1_Q", "GSTR3B_Q", "PMT06"]);
+      expect((await db.query("select count(*)::int as n from public.jobs where firm_id = $1 and kind = 'calendar_top_up' and state = 'pending'", [FIRM])).rows[0].n).toBeGreaterThanOrEqual(1);
+      await db.query("select public.calendar_top_up($1)", [FIRM]);
+      const planned = await db.query("select distinct code from public.tasks where client_id = $1 and due_on >= (now() at time zone 'Asia/Kolkata')::date order by code", [added]);
       expect(planned.rows.map((task) => task.code)).toEqual(["GSTR1_Q", "GSTR3B_Q", "PMT06"]);
     }));
 

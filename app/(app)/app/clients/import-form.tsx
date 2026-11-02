@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useActionState } from "react";
 import { importClients, type ImportRow, type ImportState } from "@/app/(app)/actions";
 import { clientKinds, type ClientKind } from "@/src/lib/clients";
@@ -12,12 +13,17 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
   const ready = (state.rows?.length ?? 0) - problems.length;
   const first = state.rows?.filter((row) => !row.error).slice(0, 5) ?? [];
   const services = (row: ImportRow) => Object.values(row.services ?? {}).flat().map((code) => names[code] ?? code).join(", ");
-  // A file without a phone, TAN or services shows the columns it had.
-  const more = first.some((row) => row.tan || row.phone || services(row));
+  // A file without a phone, TAN, services or Looked after by shows the columns it had.
+  const more = first.some((row) => row.tan || row.phone || services(row) || row.after);
 
   return (
     <SidePanel id="import" title="Import from Excel or CSV" close="/app/clients">
-      {state.done ? <Toast>Imported {state.done} {state.done === 1 ? "client" : "clients"}.</Toast> : null}
+      {state.done ? (
+        <Toast>
+          Imported {state.done} {state.done === 1 ? "client" : "clients"}. Their due dates reach the Calendar within a few minutes.
+          {state.late && <> Returns due before today are on it as late until you mark them filed: <Link href="/app/calendar?view=overdue">tick the ones already filed</Link>.</>}
+        </Toast>
+      ) : null}
       {state.rows ? (
         <>
           <p className="hint" role="status">
@@ -45,7 +51,7 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
                         {/* Each row's services under its name, in view without scrolling sideways. */}
                         <td className={more ? "import-wrap" : undefined}>
                           {row.name}
-                          {more && <span className="sub">Services: {services(row) || "none"}</span>}
+                          {more && <span className="sub">Services: {services(row) || "none"}{row.after && `. Looked after by ${row.after}`}</span>}
                         </td>
                         <td>{clientKinds[row.kind as ClientKind]}</td>
                         <td>{row.email}</td>
@@ -102,8 +108,8 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
             {running ? "Reading" : "Check the file"}
           </button>
           <p className="hint">
-            Row 1 must hold the column names: Name, and if you have them, Client type, Email, Phone, PAN, GSTIN, TAN and
-            the services, as in the template. InboxCA adds nothing until you have seen the check.
+            Row 1 must hold the column names: Name, and if you have them, Client type, Email, Phone, PAN, GSTIN, TAN,
+            the services and Looked after by, as in the template. InboxCA adds nothing until you have seen the check.
           </p>
           <a className="hint" href="/app/clients/template" download>
             Download the client list template

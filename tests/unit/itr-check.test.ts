@@ -1,4 +1,7 @@
-import {expect,it} from "vitest";
+import {expect,it,vi} from "vitest";
+
+// Reads files and runs the worker: slow under load, so longer than the 5 second default.
+vi.setConfig({ testTimeout: 30_000 });
 import {checkTitle,itrDifferences,rupees} from "@/src/lib/itr-check";
 import {readTaxPdf,readTaxText} from "../../worker/portal";
 import {bankTan,form16,form26asText,tan} from "../fixtures/tax-papers";

@@ -173,8 +173,9 @@ export default async function Client({ params, searchParams }: { params: Promise
     // Returns tab: the return being marked filed in the side panel, and the ones just changed.
     tab === "returns" && canFile && uuid.test(marking ?? "") ? supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).eq("id", marking!).neq("status", "filed").maybeSingle() : Promise.resolve({ data: null }),
     tab === "returns" && taskChanges[marked ?? ""] && doneIds.length ? supabase.from("tasks").select("id, code, period_key").eq("firm_id", firm).eq("client_id", id).in("id", doneIds) : Promise.resolve({ data: null }),
-    // Asking is for the month of the next return due for this client, else last month.
-    ask ? supabase.from("tasks").select("period_key").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(12) : Promise.resolve({ data: [] }),
+    // Asking is for the return in hand: the client's oldest return not filed (a late one first),
+    // its period and its papers; else last month.
+    ask ? supabase.from("tasks").select("code, period_key").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").order("due_on").limit(12) : Promise.resolve({ data: [] }),
     files && (namedIds.length || owner) ? supabase.from("documents").select(fileColumns).eq("firm_id", firm).eq("client_id", id).or([...(namedIds.length ? [`id.in.(${namedIds})`] : []), ...(owner ? ["status.eq.deleted"] : [])].join(",")).order("received_at", { ascending: false }) : Promise.resolve({ data: [] }),
     // Whether Returns offers Figures: a GST spreadsheet or JSON file filed for this client.
     tab === "returns" ? supabase.from("documents").select("id").eq("firm_id", firm).eq("client_id", id).eq("work_type", "gst").eq("status", "filed").filter("name", "imatch", "\\.(xlsx?|ods|csv|json)$").limit(1) : Promise.resolve({ data: [] }),
@@ -340,15 +341,19 @@ export default async function Client({ params, searchParams }: { params: Promise
   const kindList = kindChecklist(membership.settings, client.kind);
   const askItems = new Map(kindList.map((type) => [type, `kind:${type}`]));
   for (const [work, list] of Object.entries(checklists)) for (const type of list) if (!askItems.has(type)) askItems.set(type, `${work}:${type}`);
-  // Papers for the work this client's services need start ticked; More papers opens when one of its own is.
-  const usual = ([type, value]: [string, string]) => usualWork.has(value.startsWith("kind:") ? workOfType(type) : (value.split(":")[0] as WorkType));
+  // Papers for the return in hand start ticked (an ITR client gets the ITR papers only), else
+  // for every work the client's services need; More papers opens when one of its own is.
+  const inHand = due?.[0]?.code ? workOfService(due[0].code) : null;
+  const askWork = inHand ? new Set([inHand]) : usualWork;
+  const usual = ([type, value]: [string, string]) => askWork.has(value.startsWith("kind:") ? workOfType(type) : (value.split(":")[0] as WorkType));
   const askBox = (item: [string, string]) => (
     <label key={item[0]} className="check">
       <input type="checkbox" name="item" value={item[1]} defaultChecked={usual(item)} />
       {item[0]}
     </label>
   );
-  const askPeriod = due?.map((task) => task.period_key).find((key) => periodChoices(today).includes(key ?? "")) ?? periodChoices(today)[1];
+  // A yearly return's period is its year ("2026-03" is the year ending March 2026, "2026").
+  const askPeriod = due?.map((task) => (isItr(task.code) || task.code === "TAX_AUDIT" ? task.period_key?.slice(0, 4) : task.period_key)).find((key) => periodChoices(today).includes(key ?? "")) ?? periodChoices(today)[1];
   const openNotices = (notices ?? []).filter((notice) => ["upcoming", "in_progress"].includes(notice.status));
   const showExtraction = !!drafts || !!pan || !!sheets?.length;
   const showOutputs = !!draftForms?.some(row=>["GSTR1","GSTR3B","ITR"].includes(row.form_code)) || !!outputs;
@@ -965,7 +970,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                                 <input type="hidden" name="notice" value={notice.id} />
                                 <input type="hidden" name="back" value="client" />
                                 <AutoSelect save="status" name="intent" defaultValue={notice.status} aria-label={`Status of ${details.notice_type}`}>
-                                  {Object.entries(noticeStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                  {Object.entries(noticeStatuses).filter(([value]) => value !== "closed" || details.reply).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                 </AutoSelect>
                                 <button hidden value="status" />
                               </form>

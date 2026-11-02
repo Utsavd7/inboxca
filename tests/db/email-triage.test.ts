@@ -63,7 +63,11 @@ it("triages 50 invented emails and keeps their subjects and bodies out of saved 
     const encrypted=vi.spyOn(crypto,"encrypt"),written=vi.spyOn(fs.promises,"writeFile"),synced=vi.spyOn(fs,"writeFileSync");
     const logs=[vi.spyOn(console,"log"),vi.spyOn(console,"warn"),vi.spyOn(console,"error"),vi.spyOn(process.stdout,"write")];
     expect(await mailPoll({entity_id:account} as Job,{markSending:async()=>{}})).toEqual({done:true});
-    const rows=(await db.query("select provider_message_id,label from public.email_events where firm_id=$1",[firm])).rows;
+    const all=(await db.query("select provider_message_id,label,reason_code,client_id from public.email_events where firm_id=$1",[firm])).rows;
+    // The unknown sender's email is kept as a row only (not a client yet): no client, no label
+    // read from it, and nothing asked of the team.
+    expect(all.find((row)=>row.provider_message_id.includes("-50@"))).toMatchObject({label:"other",reason_code:"not_a_client",client_id:null});
+    const rows=all.filter((row)=>!row.provider_message_id.includes("-50@"));
     expect(rows).toHaveLength(50);
     correct=rows.filter((row)=>row.label===pack[Number(row.provider_message_id.match(/-(\d+)@/)[1])].label).length;
     expect(correct/50).toBeGreaterThanOrEqual(0.9);

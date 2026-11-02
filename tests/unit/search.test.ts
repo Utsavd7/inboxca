@@ -1,5 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Reads files and runs the worker: slow under load, so longer than the 5 second default.
+vi.setConfig({ testTimeout: 30_000 });
 import { firmCrypto, localKek } from "@/src/lib/crypto";
 import { fingerprint, readText, words } from "@/src/lib/search";
 import { pdf } from "@/tests/fixtures/pdf";

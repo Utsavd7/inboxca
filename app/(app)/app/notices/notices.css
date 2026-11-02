@@ -27,3 +27,7 @@
 .notices .notices-find input[name="for"] { padding-left: var(--s6); }
 .notices-clients { margin: var(--s3) calc(var(--s4) * -1) 0; }
 .notices-pick-pages { padding: var(--s2) 0; border-top: 0; }
+
+/* The notice's owner, chosen in its row of facts. */
+.notices-owner { display: flex; align-items: center; gap: var(--s2); }
+.notices-owner select { min-width: 0; flex: 1; }

@@ -63,6 +63,9 @@ test.beforeAll(async ({ browser }) => {
   await query(local.dbUrl, "insert into public.connected_accounts (id, firm_id, kind, provider, address_enc, credentials_enc, status) values ($1, $2, 'mail', 'imap', $3, $4, 'needs_reconnect')", [account, firm.firmId, await crypto.encrypt(firm.firmId, `accounts/${account}/address`, "office@invented.test"), await crypto.encrypt(firm.firmId, `accounts/${account}/credentials`, "{}")]);
   const [{ id: mail }] = await query(local.dbUrl, "insert into public.email_events (firm_id, account_id, client_id, provider_message_id, sender_bidx, received_at) values ($1, $2, $3, $4, 'invented', now() - interval '5 days') returning id", [firm.firmId, account, mehtaId, `<today-${tag}@invented.test>`]);
   await query(local.dbUrl, "insert into public.requests (firm_id, client_id, kind, entity_type, entity_id, reason_code) values ($1, $2, 'team_reply', 'email', $3, 'no_rule')", [firm.firmId, mehtaId, mail]);
+  // Shah's income tax return was filed 25 days ago and is not e-verified: its last day is in 5
+  // days, so it is on the owner's list (and on the list of whoever looks after Shah).
+  await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on, status, details) values ($1, $2, 'compliance', 'ITR_BIZ', '2026-03', '2026-08-31', 'filed', jsonb_build_object('filed_on', ${day(-25)}))`, [firm.firmId, shahId]);
   // 1,200 more clients, each with a return 10 days late, that nobody in particular looks after.
   await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) select $1, 'Invented Bulk Client ' || n, 'individual' from generate_series(1, $2) n", [firm.firmId, BULK]);
   await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) select $1, id, 'compliance', 'GSTR1_M', '2026-08', ${day(-10)} from public.clients where firm_id = $1 and name like 'Invented Bulk Client %'`, [firm.firmId]);
@@ -93,8 +96,8 @@ test("the owner sees the whole firm: 7 rows, See all, and the firm's numbers, on
   await expect(rows.first()).toContainText(`Reply to ${mehta}`);
   await expect(rows.nth(1)).toContainText("File GSTR-1 (monthly) for Aug 2026");
   await expect(rows.nth(1)).toContainText("10 days late");
-  // Every late client, Mehta's return due today, the call and the reply.
-  const all = BULK + 5;
+  // Every late client, Mehta's return due today, the call, the reply and Shah's return to e-verify.
+  const all = BULK + 6;
   await expect(owner.locator(".page-head")).toContainText(`${all.toLocaleString("en-IN")} things need you.`);
   await expect(list(owner).getByRole("link", { name: `See all ${all.toLocaleString("en-IN")}` })).toHaveAttribute("href", "/app/work");
   await expect(week(owner).getByRole("link", { name: /^Returns this month/ })).toBeVisible();

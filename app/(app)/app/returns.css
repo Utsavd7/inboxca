@@ -126,6 +126,22 @@ button.rf-pop-item { width: 100%; text-align: left; }
 .fig-bar.is-done > i { background: var(--done-dot); }
 .fig-next { margin-left: auto; }
 .fig-hint { padding: var(--s2) var(--s4) 0; }
+/* A register's sections, one Yes each: its totals, the amounts by rate, and the rows left for a person. */
+.fig-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--s3); padding: var(--s3) var(--s4) 0; }
+.fig-section { display: grid; gap: var(--s2); padding: var(--s3); border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface-2); }
+.fig-section.is-done { border-color: var(--done-dot); }
+.fig-section > header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.fig-section > header strong { font-size: 13px; font-weight: 600; }
+.fig-section > header .sub { flex: 1; color: var(--ink-3); font-size: 12px; }
+.fig-section-totals { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--s1) var(--s3); margin: 0; }
+.fig-section-totals dt { color: var(--ink-3); font-size: 12px; }
+.fig-section-totals dd { display: flex; flex-wrap: wrap; gap: 0 var(--s2); margin: 0; font-size: 13px; font-weight: 600; }
+.fig-section-totals .sub, .fig-section-totals .is-ok, .fig-section-totals .is-off { font-size: 12px; font-weight: 500; }
+.fig-section-totals .is-ok { color: var(--done-fg); }
+.fig-section-totals .is-off { color: var(--late-fg); }
+.fig-section > form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
+.fig-section > form .hint { margin: 0; }
+.fig-section-flags { margin: 0; padding-left: var(--s4); color: var(--ink-2); font-size: 12px; }
 .fig > .alert { margin: var(--s3) var(--s4) 0; }
 .fig-layout { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--s4); padding: var(--s3) var(--s4) var(--s4); }
 .fig-table { border: 1px solid var(--line); border-radius: var(--r2); }

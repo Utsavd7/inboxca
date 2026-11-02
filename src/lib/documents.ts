@@ -84,6 +84,16 @@ export function describeFile(fileName: string, subject: string, label: string | 
   return { type: found?.[1] ?? "Document", work, period, year, sure: !!found && !!period };
 }
 
+// Tax papers whose printed layout InboxCA knows (src/lib/tax-papers.ts). A PDF typed as one of
+// them by a name or an email's words keeps that type only when its content has the layout:
+// a bank statement sent with a Form 16 is an Other paper under To check, and a Form No. 130
+// named as Form 16 is Form 130.
+export const layoutTyped = new Set(["Form 16", "Form 130", "Form 26AS", "Form 168", "AIS", "TIS"]);
+export function typeByContent<T extends { type: string; sure: boolean }>(about: T, found: { type: string } | null): T {
+  if (!layoutTyped.has(about.type)) return about;
+  return found ? { ...about, type: found.type } : { ...about, type: "Document", sure: false };
+}
+
 // The work a paper's type belongs to, by the same rules; "other" when none says.
 export const workOfType = (type: string): WorkType => types.find(([pattern]) => pattern.test(type.toLowerCase()))?.[2] ?? "other";
 

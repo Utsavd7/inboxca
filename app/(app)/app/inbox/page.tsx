@@ -1,4 +1,4 @@
-import { AlarmClock, CheckCheck, ChevronDown, Clock, Ellipsis, ExternalLink, FileSearch, FolderInput, Inbox as InboxIcon, Info, KeyRound, Mail, MailOpen, PenLine, Reply, Search, Send, ShieldCheck, SlidersHorizontal, Tag as TagIcon, UserRound, X } from "lucide-react";
+import { AlarmClock, CheckCheck, ChevronDown, Clock, Ellipsis, ExternalLink, FileSearch, FolderInput, Inbox as InboxIcon, Info, KeyRound, Mail, MailOpen, PenLine, Reply, Search, Send, ShieldCheck, SlidersHorizontal, Tag as TagIcon, UserPlus, UserRound, X } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -124,7 +124,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
   const wantOut = !["reply", "mine", "in"].includes(show) && !outcomeKeys.includes(status);
   const range = whenRange(when, today);
   const until = [range.until, before].filter(Boolean).sort()[0];
-  let events = supabase.from("email_outcomes").select("id, client_id, contact_id, received_at, label, decision_source, provider_message_id, outcomes, clients(name), contacts(name_enc)").eq("firm_id", firm);
+  let events = supabase.from("email_outcomes").select("id, client_id, contact_id, received_at, label, decision_source, provider_message_id, reason_code, outcomes, clients(name), contacts(name_enc)").eq("firm_id", firm);
   if (chosenClient) events = events.eq("client_id", chosenClient.id);
   if (status === "none") events = events.filter("outcomes", "eq", "{}");
   else if (outcomeKeys.includes(status)) events = events.contains("outcomes", [status]);
@@ -223,7 +223,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           key: event.id,
           href: href({ mail: event.id }),
           dir: "in" as const,
-          client: event.clients?.name ?? ((await contactName(firm, event)) || "A contact"),
+          client: event.clients?.name ?? (event.reason_code === "not_a_client" ? "Not a client yet" : (await contactName(firm, event)) || "A contact"),
           clientId: event.client_id,
           at: event.received_at,
           messageId: event.provider_message_id,
@@ -445,7 +445,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       event ? supabase.from("email_outcomes").select("outcomes").eq("id", event.id).maybeSingle() : Promise.resolve({ data: null }),
       event ? supabase.from("shares").select("document_id, status, documents(name)").eq("email_event_id", event.id).in("status", ["sent", "waiting"]).limit(10) : Promise.resolve({ data: [] as { document_id: string; status: string; documents: { name: string } | null }[] }),
       event ? supabase.from("tasks").select("id").eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1).maybeSingle() : Promise.resolve({ data: null }),
-      event ? event.clients?.name ?? contactName(firm, event).then((name) => name || "A contact") : "",
+      event ? event.clients?.name ?? (event.reason_code === "not_a_client" ? "Not a client yet" : contactName(firm, event).then((name) => name || "A contact")) : "",
       // AI's sealed draft for an email waiting for a person, or why AI left it to them; not for
       // someone who may only view, as it may carry the upload link.
       request && event && !membership.viewOnlyUntil ? aiDraftOf(firm, request.id, event.id).catch(() => null) : null,
@@ -578,7 +578,16 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
             </p>
           </header>
           <div className="ib-scroll">
-            {event && !event.client_id && (
+            {/* Someone who is not a client yet: nothing is answered or filed for them by itself;
+                a person adds them as a client, their address filled in, or saves the email to one. */}
+            {event && !event.client_id && event.reason_code === "not_a_client" && (
+              <div className="ib-confirm">
+                <UserPlus size={16} aria-hidden />
+                <span className="grow">{opened?.from ?? "This sender"} is not a client yet. InboxCA answers and files nothing for them until they are.</span>
+                {approver && !membership.viewOnlyUntil && opened?.from && <Link className="b b-secondary" href={`/app/clients?panel=add&email=${encodeURIComponent(opened.from)}`}>Add as a client</Link>}
+              </div>
+            )}
+            {event && !event.client_id && event.reason_code !== "not_a_client" && (
               <div className="ib-confirm">
                 <FolderInput size={16} aria-hidden />
                 <span className="grow">InboxCA could not tell which client this email is for.</span>

@@ -7,8 +7,8 @@ import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lu
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { setServices } from "@/app/(app)/actions";
-import { canManageClients } from "@/src/lib/clients";
+import { assignClients, setServices } from "@/app/(app)/actions";
+import { assignmentRoles, canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { cleanNumber, isGstin, isPan, numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { currentMember } from "@/src/lib/member";
@@ -38,7 +38,7 @@ const uuid = /^[0-9a-f-]{36}$/;
 export default async function Clients({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; panel?: string; bulk?: string; error?: string; page?: string; show?: string; clients?: string; services?: string; of?: string }>;
+  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; panel?: string; bulk?: string; error?: string; page?: string; show?: string; clients?: string; services?: string; assigned?: string; of?: string; email?: string }>;
 }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
@@ -172,13 +172,17 @@ export default async function Clients({
     : [{ data: [] }, { data: [] }];
   const clientNames = new Map(chosen?.map((client) => [client.id, client.name]));
   const sendState = new Map(sends?.map((share) => [share.id, share.status]));
-  // Set services, for the clients ticked on the list (?clients=, at most a page of them), with
-  // the services each kind of number takes, as on a client's page.
-  const ticked = panel === "services" ? (params.clients ?? "").split(",").filter((id) => uuid.test(id)).slice(0, 50) : [];
+  // Set services and Assign, for the clients ticked on the list (?clients=, at most a page of
+  // them), with the services each kind of number takes, or the people and teams, as on a
+  // client's page.
+  const ticked = panel === "services" || panel === "assign" ? (params.clients ?? "").split(",").filter((id) => uuid.test(id)).slice(0, 50) : [];
   const { data: setFor } = ticked.length ? await supabase.from("clients").select("id, name").eq("firm_id", firm).in("id", ticked).is("archived_at", null).order("name") : { data: [] };
   const offered = (Object.keys(numberKinds) as NumberKind[]).map((kind) => [kind, rules?.filter((rule) => (rule.due_rule as { for?: string }).for === kind) ?? []] as const).filter(([, list]) => list.length);
   const setNames = setFor?.map((client) => client.name) ?? [];
-  const added = Number(params.services), addedOf = Number(params.of);
+  const added = Number(params.services), assigned = Number(params.assigned), addedOf = Number(params.of);
+  const teams = groups?.filter((group) => group.kind === "team") ?? [];
+  const activePeople = people?.filter((person) => person.status === "active") ?? [];
+  const chosenNames = setNames.length > 4 ? `${setNames.slice(0, 3).join(", ")} and ${setNames.length - 3} more` : setNames.join(", ").replace(/, ([^,]*)$/, " and $1");
   const plural = (n: number) => `${n.toLocaleString("en-IN")} ${archived ? "archived " : ""}client${n === 1 ? "" : "s"}`;
   const shownFrom = total ? from + 1 : 0;
   const shownTo = Math.min(from + (clients?.length ?? 0), total ?? 0);
@@ -212,13 +216,13 @@ export default async function Clients({
         }
       />
       <Presence>
-        {panel === "add" && <AddClientForm key="add" />}
+        {panel === "add" && <AddClientForm key="add" email={params.email?.slice(0, 254)} />}
         {panel === "import" && <ImportForm key="import" names={Object.fromEntries(rules?.map((rule) => [rule.code, rule.name ?? rule.code]) ?? [])} />}
         {panel === "services" && !!setNames.length && (
           <SidePanel key="services" id="set-services" title="Set services" close={pageHref(page)}>
             {params.error === "services" && <p className="alert" role="alert">Tick the services to add, at most one of each return (one GSTR-1, one GSTR-3B, one ITR), and not composition with regular GST returns.</p>}
             <p className="hint">
-              For {setNames.length > 4 ? `${setNames.slice(0, 3).join(", ")} and ${setNames.length - 3} more` : setNames.join(", ").replace(/, ([^,]*)$/, " and $1")}. Each ticked service is added to the client&apos;s number it sits on, where it is for that client type. Services already chosen stay, and InboxCA makes the due dates for the next 12 months.
+              For {chosenNames}. Each ticked service is added to the client&apos;s number it sits on, where it is for that client type. Services already chosen stay, and InboxCA makes the due dates for the next 12 months.
             </p>
             <form action={setServices}>
               {setFor?.map((client) => <input key={client.id} type="hidden" name="client" value={client.id} />)}
@@ -241,7 +245,37 @@ export default async function Clients({
             </form>
           </SidePanel>
         )}
+        {panel === "assign" && !!setNames.length && (
+          <SidePanel key="assign" id="assign-clients" title="Assign" close={pageHref(page)}>
+            {params.error === "assign" && <p className="alert" role="alert">Choose a person or team and what they do for these clients.</p>}
+            <p className="hint">For {chosenNames}. Whoever these clients already have keeps looking after them.</p>
+            <form action={assignClients} className="fields">
+              {setFor?.map((client) => <input key={client.id} type="hidden" name="client" value={client.id} />)}
+              <input type="hidden" name="back" value={pageHref(page)} />
+              <div>
+                <label htmlFor="assign-who">Who</label>
+                <select id="assign-who" name="who" required defaultValue="">
+                  <option value="">Choose</option>
+                  {activePeople.map((person) => <option key={person.user_id} value={`person:${person.user_id}`}>{personName(person.email)}{person.user_id === userId && " (you)"}</option>)}
+                  {teams.map((team) => <option key={team.id} value={`team:${team.id}`}>{team.name} (team)</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="assign-role">As</label>
+                <select id="assign-role" name="role" defaultValue="staff">
+                  {Object.entries(assignmentRoles).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
+              <Pending className="b b-primary">Assign to {plural(setNames.length)}</Pending>
+            </form>
+          </SidePanel>
+        )}
       </Presence>
+      {assigned >= 0 && addedOf > 0 && !params.services && (
+        <Toast>
+          Assigned {assigned === addedOf ? "" : `${assigned} of `}{addedOf === 1 ? "1 client" : `${addedOf} clients`}.{assigned < addedOf && " The rest were already assigned to them."}
+        </Toast>
+      )}
       {added >= 0 && addedOf > 0 && (
         <Toast>
           Services added for {added === addedOf ? "" : `${added} of `}{addedOf === 1 ? "1 client" : `${addedOf} clients`}.{added < addedOf && " The rest already had them, have no number for them, or have other services they cannot go with."}

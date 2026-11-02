@@ -16,6 +16,7 @@ export const isLead = (role: string) => role === "owner" || role === "partner";
 // for everyone.
 export function visibleTo(item: Listed, { role, looked }: Viewer) {
   const lead = isLead(role);
+  if (item.mine) return true;
   if (role === "front_desk" && item.area !== "emails" && item.area !== "papers") return false;
   if (item.audience === "firm") return lead || item.area === "gov" || (role === "front_desk" && item.area === "emails");
   if (item.audience === "approver") return lead || role === "manager";

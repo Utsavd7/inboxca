@@ -6,6 +6,8 @@ export type Authority = keyof typeof authorities;
 export const noticeStatuses = { upcoming: "Open", in_progress: "In progress", replied: "Replied", closed: "Closed" } as const;
 
 const types: [RegExp, string, Authority][] = [
+  // 143(1)(a) proposes an adjustment and asks for a response; 143(1) is the processed return.
+  [/143\s?\(1\)\s?\(a\)/, "Intimation u/s 143(1)(a)", "income_tax"],
   [/143\s?\(1\)|intimation u\/s 143/, "Intimation u/s 143(1)", "income_tax"],
   [/143\s?\(2\)/, "Notice u/s 143(2)", "income_tax"],
   [/142\s?\(1\)/, "Notice u/s 142(1)", "income_tax"],
@@ -36,10 +38,14 @@ export function readNotice(text: string, receivedOn: string) {
   const words = text.toLowerCase();
   const found = types.find(([pattern]) => pattern.test(words));
   const authority: Authority = found && found[2] !== "other" ? found[2] : (authorityWords.find(([pattern]) => pattern.test(words))?.[1] ?? found?.[2] ?? "other");
-  const reference = text.match(/\bDIN[\s.:-]*([A-Z0-9/-]{10,40})/i)?.[1] ?? text.match(/\b(?:reference|ref\.?)\s*(?:no\.?|number)?[\s.:-]*([A-Z0-9/-]{6,40})/i)?.[1] ?? "";
-  const on = words.match(/(?:on or before|not later than|latest by|by)\s+(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+  // A DIN is kept whole, its trailing "(1)" included.
+  const reference = text.match(/\bDIN[\s.:-]*([A-Z0-9/()-]{10,40})/i)?.[1] ?? text.match(/\b(?:reference|ref\.?)\s*(?:no\.?|number)?[\s.:-]*([A-Z0-9/-]{6,40})/i)?.[1] ?? "";
+  // "on or before 28/11/2026", "by 28.11.2026", "before 28 November 2026", "last date 28-Nov-2026".
+  const on = words.match(/\b(?:on or before|not later than|latest by|before|till|until|up ?to|due date|last date|by)[a-z\s:,]{0,30}?\b(\d{1,2})(?:st|nd|rd|th)?[./\s-]+([a-z]{3,9}|\d{1,2})[./\s,-]+(\d{4}|\d{2})\b/);
+  const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const month = on ? (/^\d+$/.test(on[2]) ? Number(on[2]) : monthNames.indexOf(on[2].slice(0, 3)) + 1) : 0;
   const within = words.match(/within\s+(\d{1,3})\s+days/);
-  const suggested = on ? isoDate(Number(on[1]), Number(on[2]), Number(on[3])) : within ? new Date(Date.parse(receivedOn) + Number(within[1]) * DAY).toISOString().slice(0, 10) : "";
+  const suggested = (on && month ? isoDate(Number(on[1]), month, Number(on[3])) : "") || (within ? new Date(Date.parse(receivedOn) + Number(within[1]) * DAY).toISOString().slice(0, 10) : "");
   return { authority, type: found?.[1] ?? "Other", reference: reference.toUpperCase(), suggested };
 }
 
@@ -55,7 +61,11 @@ export function reviewBy(receivedOn: string, days = 1, holidays: string[] = []) 
   return new Date(at).toISOString().slice(0, 10);
 }
 
-export type NoticeDetails = { authority: Authority; notice_type: string; reference: string; received_on: string; action_date?: string; suggested_date?: string; email_event_id?: string };
+// assigned_to: the person who owns the reply. reply: what was sent, when, its acknowledgement or
+// reference and a paper from the client's folder; a notice closes only with it. People write replies,
+// never AI (AI never drafts or sends a notice reply).
+export type NoticeReply = { on: string; sent: string; reference?: string; document?: string };
+export type NoticeDetails = { authority: Authority; notice_type: string; reference: string; received_on: string; action_date?: string; suggested_date?: string; email_event_id?: string; assigned_to?: string; reply?: NoticeReply };
 
 // Who confirmed each notice's action date, from its activity lines: the confirmation, or else
 // the person who added the notice with its date.
