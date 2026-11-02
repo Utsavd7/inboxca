@@ -6,7 +6,7 @@ import { exampleClient } from "@/src/lib/clients";
 import { isGstin } from "@/src/lib/identifiers";
 import { xlsxEntries } from "@/src/lib/sheet";
 import { craft } from "../fixtures/zip";
-import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
+import { addPerson, appKey, emailStep, localSupabase, query, runJobs, seedFirm, totp } from "./local-supabase";
 
 // Adding and finding clients, with numbers encrypted by the firm's key. Skipped when local
 // Supabase is not running.
@@ -268,33 +268,46 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await expect(owner.locator(".page-head")).not.toContainText("Archived");
 });
 
-test("importing 500 clients with emails adds them all and reports every bad row", async () => {
-  test.setTimeout(120_000);
-  // 500 good rows with distinct, valid PANs, then five rows with a problem each.
+test("importing 500 clients with emails, services and who looks after them adds them all and reports every bad row", async () => {
+  test.setTimeout(150_000);
+  // 500 good rows with distinct, valid PANs (every second one a business with a GSTIN and
+  // monthly GST returns, the rest individuals with an ITR), looked after by the owner or a
+  // staff member, then rows with a problem each.
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const pan = (n: number) => `QRS${letters[Math.floor(n / 26) % 26]}${letters[n % 26]}${String(n).padStart(4, "0")}Z`;
-  const lines = ["Client name,Constitution,PAN,GST No,Email ID"];
-  for (let n = 0; n < 500; n++) lines.push(`Client ${n},${n % 2 ? "Proprietor" : "Individual"},${pan(n)},,client${n}@example.test`);
-  lines.push("Bad PAN,Individual,ABC123,,", "Odd kind,Martian,QRSZZ9998Z,,", `Repeat,Individual,${pan(7)},,`, ",Individual,QRSZZ9997Z,,", "Patel again,Business,,27AAPFU0939F1ZV,", "Bad email,Individual,QRSZZ9996Z,,nobody@");
+  const gstin = (n: number) => Array.from({ length: 36 }, (_, at) => `27${pan(n)}1Z${at.toString(36).toUpperCase()}`).find(isGstin)!;
+  const staffEmail = `clients-staff-${randomUUID().slice(0, 8)}@example.test`;
+  const staff = await addPerson(firm.firmId, staffEmail, "staff", appKey());
+  const lines = ["Client name,Constitution,PAN,GST No,Email ID,GST returns,Income tax return,Looked after by"];
+  for (let n = 0; n < 500; n++) lines.push(n % 2 ? `Client ${n},Proprietor,${pan(n)},${gstin(n)},client${n}@example.test,Monthly,Business and no audit,${staffEmail}` : `Client ${n},Individual,${pan(n)},,client${n}@example.test,,No business and no audit,${ownerEmail}`);
+  lines.push("Bad PAN,Individual,ABC123,,", "Odd kind,Martian,QRSZZ9998Z,,", `Repeat,Individual,${pan(7)},,`, ",Individual,QRSZZ9997Z,,", "Patel again,Business,,27AAPFU0939F1ZV,", "Bad email,Individual,QRSZZ9996Z,,nobody@", "Nobody,Individual,QRSZZ9995Z,,,,,Ramesh");
 
   await owner.goto("/app/clients?panel=import");
   await owner.getByLabel("CSV or Excel file").setInputFiles({ name: "clients.csv", mimeType: "text/csv", buffer: Buffer.from(lines.join("\n")) });
   await owner.getByRole("button", { name: "Check the file" }).click();
-  await expect(owner.getByText("500 ready to import, 6 with a problem and left out.")).toBeVisible({ timeout: 30_000 });
-  // The first rows show as they will be saved, the kind read from the sheet's own words.
+  await expect(owner.getByText("500 ready to import, 7 with a problem and left out.")).toBeVisible({ timeout: 30_000 });
+  // The first rows show as they will be saved, the kind read from the sheet's own words, with
+  // their services and who looks after them.
   const first = owner.locator("section[aria-labelledby=import]").getByRole("table").first();
   await expect(first.locator("tbody tr")).toHaveCount(5);
-  await expect(first.locator("tbody tr").nth(1)).toContainText("Client 1Business");
+  await expect(first.locator("tbody tr").nth(1)).toContainText(`${staffEmail}Business`);
+  await expect(first.locator("tbody tr").nth(1)).toContainText(`Looked after by ${staffEmail}`);
   const problems = owner.locator("section[aria-labelledby=import]").getByRole("table").last();
-  for (const text of ["PAN is not valid", "not a client type InboxCA knows", "on an earlier row", "Enter the client's name", "already in your firm", "email address is not valid"])
+  for (const text of ["PAN is not valid", "not a client type InboxCA knows", "on an earlier row", "Enter the client's name", "already in your firm", "email address is not valid", '"Ramesh" in Looked after by is not someone in your firm'])
     await expect(problems).toContainText(text);
 
   await owner.getByRole("button", { name: "Import 500 clients" }).click();
-  await expect(owner.getByText("Imported 500 clients.")).toBeVisible({ timeout: 30_000 });
+  await expect(owner.getByText(/^Imported 500 clients\./)).toBeVisible({ timeout: 60_000 });
   await owner.goto(`/app/clients?q=${pan(321).toLowerCase()}`);
   await expect(owner.getByRole("link", { name: "Client 321" })).toBeVisible();
   await owner.goto("/app/clients?q=client42@example.test");
   await expect(owner.getByRole("link", { name: "Client 42", exact: true })).toBeVisible();
+  // Each client is assigned to the person named; the period just gone is on the calendar at
+  // once, as late until marked filed, and the dates ahead follow from the import's job.
+  expect((await query(local.dbUrl, `select count(*)::int as n from public.client_assignments a join public.clients c on c.id = a.client_id and c.firm_id = a.firm_id where a.firm_id = $1 and c.name like 'Client %' and ((a.user_id = $2 and a.role = 'staff') or (a.user_id = $3 and a.role = 'partner_in_charge'))`, [firm.firmId, staff, firm.ownerId]))[0].n).toBe(500);
+  expect((await query(local.dbUrl, `select count(*)::int as n from public.tasks t join public.clients c on c.id = t.client_id where c.firm_id = $1 and c.name like 'Client %' and t.code = 'GSTR3B_M' and t.due_on < (now() at time zone 'Asia/Kolkata')::date`, [firm.firmId]))[0].n).toBe(250);
+  await runJobs(owner.request, firm.firmId);
+  expect((await query(local.dbUrl, `select count(distinct t.client_id)::int as n from public.tasks t join public.clients c on c.id = t.client_id where c.firm_id = $1 and c.name like 'Client %' and t.due_on >= (now() at time zone 'Asia/Kolkata')::date`, [firm.firmId]))[0].n).toBe(500);
 });
 
 test("the client list template, filled in with services, and a Tally export both import; Set services adds to many", async () => {
@@ -326,11 +339,12 @@ test("the client list template, filled in with services, and a Tally export both
   await expect(check.getByRole("row").filter({ hasText: `Template Joshi ${tag}` })).toContainText("GSTR-1 (QRMP)");
   await expect(panel.getByRole("table").last()).toContainText(`Template Rao ${tag}`);
   await owner.getByRole("button", { name: "Import 2 clients" }).click();
-  await expect(owner.getByText("Imported 2 clients.")).toBeVisible();
+  await expect(owner.getByText(/^Imported 2 clients\./)).toBeVisible();
   const services = async () => (await query(local.dbUrl, "select c.name, r.kind, r.services from public.client_registrations r join public.clients c on c.id = r.client_id where c.firm_id = $1 and c.name like $2 order by c.name, r.kind", [firm.firmId, `Template % ${tag}`]))
     .map((row) => `${row.name.split(" ")[1]} ${row.kind} ${[...row.services].sort().join(" ")}`.trim());
   expect(await services()).toEqual(["Joshi gstin GSTR1_Q GSTR3B_Q PMT06", "Joshi pan ITR_BIZ", "Mehta pan ITR_AUDIT", "Mehta tan TDS_PAY TDS_RET"]);
-  // Their due dates are on the calendar at once.
+  // Their due dates are on the calendar once the import's calendar job has run.
+  await runJobs(owner.request, firm.firmId);
   const dueDay = async (code: string) => (await query(local.dbUrl, "select to_char(min(t.due_on), 'YYYY-MM-DD') as first from public.tasks t join public.clients c on c.id = t.client_id where c.firm_id = $1 and c.name like $2 and t.code = $3", [firm.firmId, `Template % ${tag}`, code]))[0].first;
   await owner.goto(`/app/calendar?day=${await dueDay("GSTR1_Q")}&code=GSTR1_Q`);
   await expect(owner.getByRole("row").filter({ hasText: `Template Joshi ${tag}` })).toBeVisible();
@@ -349,6 +363,15 @@ test("the client list template, filled in with services, and a Tally export both
     await set.getByRole("button", { name: "Add services to 2 clients" }).click();
     await expect(owner.getByText(/^Services added for 2 clients/)).toBeVisible();
     expect(await services()).toEqual(["Joshi gstin GSTR1_Q GSTR3B_Q PMT06", `Joshi pan ITR_BIZ ${code}`, `Mehta pan ITR_AUDIT ${code} TAX_AUDIT`, "Mehta tan TDS_PAY TDS_RET"]);
+    // Assign for both at once: the owner as partner in charge, shown on the list.
+    for (const name of [`Template Mehta ${tag}`, `Template Joshi ${tag}`]) await owner.getByLabel(`Choose ${name}`, { exact: true }).check();
+    await owner.getByRole("link", { name: "Assign", exact: true }).click();
+    const assign = owner.getByRole("dialog", { name: "Assign" });
+    await assign.getByLabel("Who").selectOption({ label: "Clients (you)" });
+    await assign.getByLabel("As").selectOption("partner_in_charge");
+    await assign.getByRole("button", { name: "Assign to 2 clients" }).click();
+    await expect(owner.getByText(/^Assigned 2 clients\./)).toBeVisible();
+    expect((await query(local.dbUrl, "select count(*)::int as n from public.client_assignments a join public.clients c on c.id = a.client_id where c.firm_id = $1 and c.name like $2 and a.user_id = $3 and a.role = 'partner_in_charge'", [firm.firmId, `Template % ${tag}`, firm.ownerId]))[0].n).toBe(2);
     // The checked return's dates show without the mark for a date not yet checked.
     await owner.goto(`/app/calendar?day=${await dueDay(code)}&code=${code}`);
     for (const name of [`Template Mehta ${tag}`, `Template Joshi ${tag}`]) await expect(owner.getByRole("row").filter({ hasText: name })).not.toContainText("*");

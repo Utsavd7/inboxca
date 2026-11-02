@@ -2,7 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { clientReplied, receiveAsked } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
-import { describeFile, filePeriod, folderFor, gstinFor, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
+import { describeFile, filePeriod, folderFor, gstinFor, layoutTyped, placeUnderFreeName, receivedLabel, settleVersions, typeByContent } from "@/src/lib/documents";
+import { pdfLines, recogniseTaxPdf } from "@/src/lib/tax-papers";
 import type { FolderOrder, Naming } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { mailHealth, openMail } from "@/src/lib/firm-mail";
@@ -89,7 +90,9 @@ async function fileAttachments(
       const sha256 = createHash("sha256").update(file.bytes).digest("hex");
       const previous=known.find((document)=>document.email_event_id===event.id && document.sha256===sha256);
       if (previous) {if(previous.status==="filed" && /\.(xlsx?|ods|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,previous.id);if(error) throw new Error("sales_not_queued");}filed.push({type:previous.document_type,period:previous.period_key,toCheck:previous.status!=="filed"});continue;}
-      const described = describeFile(file.name, file === attachment ? read.subject : `${read.subject} ${attachment.name}`, event.label, event.received_at);
+      const named = describeFile(file.name, file === attachment ? read.subject : `${read.subject} ${attachment.name}`, event.label, event.received_at);
+      // A PDF named as a tax paper is typed by what is printed in it, never by the words alone.
+      const described = layoutTyped.has(named.type) && /\.pdf$/i.test(file.name) ? typeByContent(named, await pdfLines(file.bytes, 10).then(recogniseTaxPdf, () => null)) : named;
       const about = notice ? { ...described, work: notice.authority, type: described.type === "Document" && /\.pdf$/i.test(file.name) ? "Notice" : described.type } : described;
       const again = known.some((document) => document.sha256 === sha256);
       const registration = gstinFor(about.work, (gstins ?? []).map((row) => row.id));

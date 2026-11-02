@@ -16,7 +16,7 @@ import { governmentUpdates, governmentWorkItems } from "@/src/lib/work/governmen
 import { gstMatchWorkItems } from "@/src/lib/work/gst-match";
 import { inboxWeek, inboxWorkItems } from "@/src/lib/work/inbox";
 import { inboxTeamWorkItems } from "@/src/lib/work/inbox-team";
-import { itrCheckWorkItems } from "@/src/lib/work/itr-check";
+import { itrCheckWorkItems, itrVerifyWorkItems } from "@/src/lib/work/itr-check";
 import { papersWorkItems } from "@/src/lib/work/papers";
 import { isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
 import { firmAccounts } from "./shell-data";
@@ -231,6 +231,7 @@ export async function workFor(ctx: Context, late: number) {
       papers.then(tag("papers")),
       formsWorkItems(ctx).then(tag("returns"), failing("returns")),
       itrCheckWorkItems(ctx).then(tag("returns"), failing("itr_check")),
+      itrVerifyWorkItems(ctx).then(tag("returns"), failing("itr_verify")),
       gstMatchWorkItems(ctx).then(tag("returns"), failing("gst_match")),
       // An email waiting for a person is on the Today of the person it is given to, and late ones
       // on the owner's and partners' (inbox-team.ts). Front desk also gets the emails that name no

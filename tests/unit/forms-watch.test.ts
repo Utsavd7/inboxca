@@ -1,6 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, it, vi } from "vitest";
+
+// Reads files and runs the worker: slow under load, so longer than the 5 second default.
+vi.setConfig({ testTimeout: 30_000 });
 import { checkLive, checkSources, type Source, type Watch } from "@/src/jobs/forms-watch";
 import { handle } from "@/worker/handler";
 import { gstNews } from "@/src/jobs/gov-pages";

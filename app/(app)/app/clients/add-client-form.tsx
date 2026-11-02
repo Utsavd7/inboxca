@@ -8,7 +8,8 @@ import { SidePanel } from "../ui";
 const fieldOf = (error = "") =>
   error.includes("name") ? "name" : error.startsWith("That GSTIN") ? "gstin" : error.includes("PAN") ? "pan" : error.includes("email") ? "email" : "";
 
-export function AddClientForm() {
+// email: the address to start with, from an Inbox email by someone who is not a client yet.
+export function AddClientForm({ email }: { email?: string }) {
   const [state, add, adding] = useActionState(addClient, {} as ClientState);
   const field = fieldOf(state.error);
   const mark = (name: string) => (field === name ? { "aria-invalid": true, "aria-describedby": "add-client-error" } : {});
@@ -39,7 +40,7 @@ export function AddClientForm() {
         </div>
         <div>
           <label htmlFor="client-email">Email</label>
-          <input id="client-email" name="email" type="email" autoComplete="off" defaultValue={state.values?.email} {...mark("email")} />
+          <input id="client-email" name="email" type="email" autoComplete="off" defaultValue={state.values?.email ?? email} {...mark("email")} />
           {error("email")}
         </div>
         <div>

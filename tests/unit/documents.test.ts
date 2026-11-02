@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeFile, filePeriod, gstinFor, periodName } from "@/src/lib/documents";
+import { describeFile, filePeriod, gstinFor, periodName, typeByContent } from "@/src/lib/documents";
 
 // Attachment names as clients send them, and where InboxCA files each one.
 describe("what an attachment is", () => {
@@ -37,5 +37,16 @@ describe("the GSTIN a paper is for", () => {
     expect(gstinFor("gst", ["a", "b"], "elsewhere")).toBeNull();
     expect(gstinFor("income_tax", ["a"], "a")).toBeNull();
     expect(gstinFor("gst", [])).toBeNull();
+  });
+});
+
+// A PDF named as a tax paper by the email's words is typed by what is printed in it.
+describe("a tax paper's type from its content", () => {
+  const named = { type: "Form 16", sure: true };
+  it("keeps a Form 16 that reads as one, takes the printed type over the words, and sends anything else to To check", () => {
+    expect(typeByContent(named, { type: "Form 16" })).toEqual(named);
+    expect(typeByContent(named, { type: "Form 130" })).toEqual({ type: "Form 130", sure: true });
+    expect(typeByContent(named, null)).toEqual({ type: "Document", sure: false });
+    expect(typeByContent({ type: "Bank statement", sure: true }, null)).toEqual({ type: "Bank statement", sure: true });
   });
 });
