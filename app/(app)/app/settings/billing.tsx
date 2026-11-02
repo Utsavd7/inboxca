@@ -178,7 +178,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
           {autopay ? `AutoPay is on with your ${methodWords[sub.method as Method]}${sub.paid_until ? `. Next payment ${rupees(coming.recurring.total)} on ${longDate(sub.paid_until)}` : ""}.` : sub.status === "created" ? "AutoPay is waiting for your bank or payment page." : "AutoPay is off. Nothing more will be taken."}
         </p>
         {retry && <p className="alert" role="alert">A payment was for a plan that had changed, so it was returned. Please try again.</p>}
-        {autopay && <p className="hint">Orelu will never take more than {rupees(plan.maxPaise)} at a time without asking you. You get an email 3 days before each payment.</p>}
+        {autopay && <p className="hint">Orelu will never take more than {rupees(plan.maxPaise)} at a time without asking you. You get an email 3 days before each payment. If a payment fails, everything keeps working for 7 days, then your firm can only view until day 30, then it is paused with its records kept 30 more days.</p>}
         {plan.next && !later && <p className="hint">Moves to the {coming.price.name} plan, {rupees(coming.recurring.total)} {per}, at the renewal on {longDate(sub.paid_until!)}.</p>}
         {abovelimit ? (
           <Checkout action={approveCheckout} label="Approve the new AutoPay limit" busy="Opening the payment page">
@@ -192,7 +192,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
           <details className="reveal">
             <summary>Turn AutoPay off</summary>
             <form action={turnOffAutoPay} className="set-foot">
-              <p className="hint grow">Nothing more is taken. {sub.paid_until ? `Your plan works until ${last(sub.paid_until)}.` : ""}</p>
+              <p className="hint grow">Nothing more is taken. {sub.paid_until ? `Your plan works until ${last(sub.paid_until)}.` : ""} <Link href="/app/settings?group=data">Download your data</Link> first if you are leaving.</p>
               <Pending className="b b-danger" busy="Turning off">Turn AutoPay off</Pending>
             </form>
           </details>
@@ -279,7 +279,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
           {back.state === "open" && (
             <details className="reveal">
               <summary>Cancel and get my money back</summary>
-              <p className="hint">The one time setup is kept once the first import of your past papers has started. Enter the code from your authenticator app to confirm.</p>
+              <p className="hint">The one time setup is kept once the first import of your past papers has started. <Link href="/app/settings?group=data">Download your data</Link> first if you want it. Enter the code from your authenticator app to confirm.</p>
               <MoneyBackForm action={moneyBackAction} />
             </details>
           )}
