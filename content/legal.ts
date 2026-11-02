@@ -6,7 +6,7 @@
 // firms needs a new date.
 import { analyticsToken, contactEmail } from "@/src/lib/site";
 
-export const legalUpdated = "29 Oct 2026";
+export const legalUpdated = "2 Nov 2026";
 export const legalNote =
   "InboxCA is a product of Orelu, a partnership firm. Orelu's registration is in progress, and its registered name and address will be added here when it completes.";
 
@@ -48,6 +48,7 @@ export const privacySections = [
       "Client files stay in your firm's own OneDrive or Dropbox.",
       "InboxCA keeps your client list, your records and the figures read from files, so that it can do its work.",
       "InboxCA does not keep email subjects or email text, portal passwords, OTPs, card details or Aadhaar numbers.",
+      "When someone who is not yet a client writes to your firm, InboxCA does not open the email. It keeps only a record of who wrote and when, so that your firm can add them as a client.",
     ],
   },
   {
