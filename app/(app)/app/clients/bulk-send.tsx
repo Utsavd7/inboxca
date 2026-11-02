@@ -6,10 +6,11 @@ import { sendClientPapers } from "@/app/(app)/actions";
 import { paperType } from "@/src/lib/paper-type";
 
 // The bar that rises when clients are ticked: Set services opens beside the list for them
-// (list: the list as shown, to go back to), and for someone who may send, choose a paper and a
+// (list: the list as shown, to go back to), or for every client the list matches when it has
+// more than the ticked ones (total), and for someone who may send, choose a paper and a
 // year, then a second step lists who gets what before anything is sent. Without the right to
 // send, the bar is no sending form.
-export function BulkSendBar({ types, years, send, list }: { types: string[]; years: [string, string][]; send: boolean; list: string }) {
+export function BulkSendBar({ types, years, send, list, total }: { types: string[]; years: [string, string][]; send: boolean; list: string; total: number }) {
   const [type, setType] = useState("");
   const [period, setPeriod] = useState(years[0]?.[0] ?? "");
   const [names, setNames] = useState<string[]>([]);
@@ -68,6 +69,15 @@ export function BulkSendBar({ types, years, send, list }: { types: string[]; yea
           <Link className="b b-ghost" href={`${list}${list.includes("?") ? "&" : "?"}panel=tags&clients=${ids.join(",")}`} scroll={false}>
             Add tags
           </Link>
+          {total > names.length && <>
+            <span className="bulk-what">or for all {total.toLocaleString("en-IN")} on this list:</span>
+            <Link className="b b-ghost" href={`${list}${list.includes("?") ? "&" : "?"}panel=services&all=1`} scroll={false}>
+              Set services for all {total.toLocaleString("en-IN")}
+            </Link>
+            <Link className="b b-ghost" href={`${list}${list.includes("?") ? "&" : "?"}panel=assign&all=1`} scroll={false}>
+              Assign all {total.toLocaleString("en-IN")}
+            </Link>
+          </>}
           {send && <>
           <span className="bulk-what">Send them a paper</span>
           <select id="bulk-paper" name="type" required aria-label="Paper" value={type} onChange={(event) => setType(event.target.value)}>

@@ -1,5 +1,5 @@
 import {officialSchema} from "./schema.ts";
-import {itrFieldName,itrFields,itrGroup as group,itrGroups as groups,itrReady,itrSources,itrWords as words,type ItrForm} from "../src/lib/itr-fields.ts";
+import {itrFieldName,itrFields,itrGroup as group,itrGroups as groups,itrPlainNames as plain,itrReady,itrSources,itrWords as words,type ItrForm} from "../src/lib/itr-fields.ts";
 import type {Template} from "../src/lib/templates.ts";
 import type {FormRequest,ItrEntry,ItrReview} from "../src/lib/form-worker.ts";
 import {jsonSource} from "./json-source.ts";
@@ -56,7 +56,7 @@ export function itrEntries(template:Template) {
   const headings=new Map<string,Record<string,string>>(),heading=(key:string,child:string)=>{
     if(!headings.has(key)) {
       const texts=Object.entries(resolve(root.properties![key]).properties ?? {}).map(([name,node])=>[name,described(node.description ?? resolve(node).description)]);
-      headings.set(key,Object.fromEntries(texts.map(([name,text])=>[name,groups[name] ?? (text && !/[a-z][A-Z]/.test(text) && texts.filter(other=>other[1]===text).length===1 ? text : group(name))])));
+      headings.set(key,Object.fromEntries(texts.map(([name,text])=>[name,groups[name] ?? plain[name] ?? (text && !/[a-z][A-Z]/.test(text) && texts.filter(other=>other[1]===text).length===1 ? text : group(name))])));
     }
     return headings.get(key)![child] ?? group(child);
   };
@@ -67,10 +67,12 @@ export function itrEntries(template:Template) {
     if(!["string","integer","number","boolean"].includes(primitive)) throw new Error("Unknown official value type");
     // Numbers with a pattern (mobile numbers, PIN codes) are codes, not amounts.
     const kind=(primitive==="integer" || primitive==="number") && !node.pattern ? "number" : /YYYY-MM-DD/.test(node.description ?? "") || /^(DOB|DateDep|.*Date)$/.test(path.at(-1)!) && /\\d\{3\}/.test(node.pattern ?? "") ? "date" : "text";
-    // InboxCA's own label, else the schema's description, else the detail's own name from the
-    // schema ("Address, Road Or Street"), which CA staff recognise from the utility.
+    // InboxCA's own label, else plain words for the key (itrPlainNames), else the schema's
+    // description, else the detail's own name from the schema ("Address, Road Or Street"), which
+    // CA staff recognise from the utility.
     const part=split ? `${group(path[0])}: ${heading(path[0],path[1])}` : group(path[0]);
-    const label=named?.label ?? (described(node.description) || path.slice(split ? 2 : 1).filter(key=>key!=="*").map(words).join(", ").slice(0,120) || words(path.at(-1)!));
+    const leaf=path.at(-1)!,parent=path.filter(key=>key!=="*").at(-2);
+    const label=named?.label ?? plain[leaf] ?? (described(node.description) || path.slice(split ? 2 : 1).filter(key=>key!=="*").map(key=>plain[key] ?? words(key)).join(", ").slice(0,120) || (parent && plain[parent] ? `${plain[parent]}, ${words(leaf)}` : words(leaf)));
     // A value the schema fixes, such as the due date ITR-1 allows, is offered as its only choice.
     const choices=node.enum?.map(String) ?? (node.pattern && /^[A-Za-z0-9 .-]+$/.test(node.pattern) ? [node.pattern] : undefined);
     // Rules the schema states in words: the latest or earliest date it allows.

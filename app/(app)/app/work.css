@@ -16,3 +16,9 @@
 /* A preview row's line says why it is left out, so it wraps instead of being cut short. */
 .work-preview .sub { white-space: normal; }
 .work-send { position: sticky; bottom: calc(var(--s4) * -1); margin: 0 calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
+
+/* GST month end (work/gst): seven short columns, so a row stays one line on a laptop. */
+.gst-month td, .gst-month th { font-size: 13px; }
+.gst-month .sub { display: block; margin-top: 2px; }
+.gst-month .sub .b-ghost { height: auto; padding: 0; margin-left: var(--s2); font-size: 12px; }
+.gst-month .who { display: inline-flex; align-items: center; gap: var(--s2); }

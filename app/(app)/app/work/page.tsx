@@ -190,6 +190,7 @@ export default async function Work({ searchParams }: { searchParams: Promise<Par
 
       <div className="work-bar">
         <LinkTabs kind="pills" label="Show" items={(Object.keys(workFilters) as WorkFilter[]).map((key) => ({ href: href({ show: key }), label: workFilters[key], count: counts[key], current: show === key }))} />
+        <Link className="b b-secondary" href="/app/work/gst">GST month end</Link>
       </div>
       <Card id="w-list" title={workFilters[show] === "All" ? "Everything" : workFilters[show]} Icon={ListChecks} kind="approve" count={counts[show]} countTone="blue">
         {failed && <p className="alert" role="alert">Could not load all of this. <Link href={back}>Try again</Link></p>}
