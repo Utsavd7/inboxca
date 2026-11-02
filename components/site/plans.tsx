@@ -219,7 +219,7 @@ export function Plans() {
                 )}
                 <span>
                   {label}
-                  {value && <em className="free">11 months for 12</em>}
+                  {value && <em className="free">about 11 months for 12</em>}
                 </span>
               </button>
             ))}
@@ -268,7 +268,7 @@ export function Plans() {
                 </>
               ) : (
                 <>
-                  <span className="num">{rupees(plan.yearly)}</span> a year, 11 months for 12
+                  <span className="num">{rupees(plan.yearly)}</span> a year, about 11 months for 12
                 </>
               )}
             </p>
