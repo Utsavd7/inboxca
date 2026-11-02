@@ -11,6 +11,7 @@ import { assignClients, setServices, tagClients } from "@/app/(app)/actions";
 import { assignmentRoles, canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { cleanNumber, isGstin, isPan, numberKinds, type NumberKind } from "@/src/lib/identifiers";
+import { clientsIn as clientsMatching, filterKeys, matchingClients, MOST_MATCHING, pills, readFilter, type Lateness, type Pill, columns } from "./matching";
 import { currentMember } from "@/src/lib/member";
 import { personName } from "@/src/lib/roles";
 import { Pending } from "../pending";
@@ -23,13 +24,6 @@ import { Avatar, Badge, Card, Empty, PageHead, SidePanel, Toast } from "../ui";
 import { RowKeys } from "../row-keys";
 import "./clients.css";
 
-const pills = { all: "All", late: "Late", missing: "Missing papers", mine: "Assigned to me" } as const;
-type Pill = keyof typeof pills;
-const columns = "id, name, tags, client_registrations(kind, number_enc), client_assignments(user_id, team_id, role), next:tasks(code, period_key, due_on), asks:requests(id), late:tasks(id)";
-// What each pill adds: a client counts when it has at least one such row (late returns are
-// joined by every list, to count them, and by a count that asks for them).
-const pillJoin: Record<Pill, string> = { all: "", late: "", missing: ", missing:requests!inner(id)", mine: ", mine:client_assignments!inner(role)" };
-type Lateness = "late" | "on" | null;
 const lookAfter = ["partner_in_charge", "manager", "staff"];
 const uuid = /^[0-9a-f-]{36}$/;
 
@@ -38,15 +32,13 @@ const uuid = /^[0-9a-f-]{36}$/;
 export default async function Clients({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; tag?: string; panel?: string; bulk?: string; error?: string; page?: string; show?: string; clients?: string; services?: string; assigned?: string; tagged?: string; of?: string; email?: string }>;
+  searchParams: Promise<{ q?: string; archived?: string; group?: string; branch?: string; tag?: string; panel?: string; bulk?: string; error?: string; page?: string; show?: string; clients?: string; services?: string; assigned?: string; tagged?: string; of?: string; email?: string; all?: string }>;
 }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
-  const q = params.q?.trim() ?? "";
-  const tag = params.tag?.trim().slice(0, 40) ?? "";
-  const archived = params.archived === "1";
-  const show: Pill = params.show && params.show in pills ? (params.show as Pill) : "all";
+  const filter = readFilter(params);
+  const { q, tag, archived, show } = filter;
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const pageSize = 50;
   const from = (page - 1) * pageSize;
@@ -82,25 +74,9 @@ export default async function Clients({
     manage && params.bulk ? supabase.from("requests").select("id,status,details").eq("firm_id", firm).eq("id", params.bulk).eq("kind", "bulk_send").maybeSingle() : Promise.resolve({ data: null }),
     supabase.rpc("firm_tags", { target_firm: firm }),
   ]);
-  const myTeam = people?.find((person) => person.user_id === userId)?.team_id;
-  // The same search, group, branch and archive choice for the list and every pill's count.
-  const clientsIn = (pill: Pill, select: string, head = false, only: Lateness = null) => {
-    const lateness = only ?? (pill === "late" ? "late" : null);
-    let query = supabase.from("clients").select(`${select}${pillJoin[pill]}${head && lateness ? ", late:tasks(id)" : ""}` as typeof columns, { count: "exact", head }).eq("firm_id", firm);
-    if (params.group) query = query.eq("group_id", params.group);
-    if (params.branch) query = query.eq("branch_id", params.branch);
-    if (tag) query = query.contains("tags", [tag]);
-    query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
-    if (emailIndex) query = query.eq("email_bidx", emailIndex);
-    else if (byNumber) query = query.in("id", byNumber.map((row) => row.client_id));
-    else if (q) query = query.ilike("name", `%${q.replace(/[\\%_]/g, "\\$&")}%`);
-    if (!head || lateness) query = query.eq("late.kind", "compliance").neq("late.status", "filed").lt("late.due_on", today);
-    if (head && lateness) query = query.limit(1, { referencedTable: "late" });
-    if (lateness) query = lateness === "late" ? query.not("late", "is", null) : query.is("late", null);
-    if (pill === "missing") query = query.eq("missing.kind", "documents").eq("missing.status", "pending").gt("missing.expires_at", now).limit(1, { referencedTable: "missing" });
-    if (pill === "mine") query = query.or(`user_id.eq.${userId}${myTeam ? `,team_id.eq.${myTeam}` : ""}`, { referencedTable: "mine" });
-    return query;
-  };
+  const myTeam = people?.find((person) => person.user_id === userId)?.team_id ?? null;
+  // The same search, group, branch and archive choice for the list and every pill's count (matching.ts).
+  const clientsIn = (pill: Pill, select: string, head = false, only: Lateness = null) => clientsMatching(supabase, firm, filter, { emailIndex, byNumber, userId, myTeam }, pill, select, head, only);
   const list = (lateness: Lateness, at: number, to: number) =>
     clientsIn(show, columns, false, lateness)
       .eq("client_registrations.kind", "gstin")
@@ -179,16 +155,24 @@ export default async function Clients({
   const clientNames = new Map(chosen?.map((client) => [client.id, client.name]));
   const sendState = new Map(sends?.map((share) => [share.id, share.status]));
   // Set services and Assign, for the clients ticked on the list (?clients=, at most a page of
-  // them), with the services each kind of number takes, or the people and teams, as on a
-  // client's page.
-  const ticked = panel === "services" || panel === "assign" || panel === "tags" ? (params.clients ?? "").split(",").filter((id) => uuid.test(id)).slice(0, 50) : [];
-  const { data: setFor } = ticked.length ? await supabase.from("clients").select("id, name").eq("firm_id", firm).in("id", ticked).is("archived_at", null).order("name") : { data: [] };
+  // them) or for every client the list's filter matches (?all=1, the count shown first), with
+  // the services each kind of number takes, or the people and teams, as on a client's page.
+  const all = params.all === "1" && (panel === "services" || panel === "assign") && !archived;
+  const matching = all ? await matchingClients(supabase, firm, userId, filter) : [];
+  const tooMany = matching.length > MOST_MATCHING;
+  const ticked = all ? matching.slice(0, MOST_MATCHING) : panel === "services" || panel === "assign" || panel === "tags" ? (params.clients ?? "").split(",").filter((id) => uuid.test(id)).slice(0, 50) : [];
+  const { data: named } = ticked.length ? await supabase.from("clients").select("id, name").eq("firm_id", firm).in("id", ticked.slice(0, 50)).is("archived_at", null).order("name") : { data: [] };
+  const setFor = all ? ticked.map((id) => ({ id, name: named?.find((client) => client.id === id)?.name ?? "" })) : named;
+  // The action reads the same filter again, as this person, rather than a list of ids.
+  const chosenInputs = all
+    ? <>{<input type="hidden" name="all" value="1" />}{filterKeys.map((key) => params[key] && <input key={key} type="hidden" name={key} value={params[key]} />)}</>
+    : setFor?.map((client) => <input key={client.id} type="hidden" name="client" value={client.id} />);
   const offered = (Object.keys(numberKinds) as NumberKind[]).map((kind) => [kind, rules?.filter((rule) => (rule.due_rule as { for?: string }).for === kind) ?? []] as const).filter(([, list]) => list.length);
   const setNames = setFor?.map((client) => client.name) ?? [];
   const added = Number(params.services), assigned = Number(params.assigned), tagged = Number(params.tagged), addedOf = Number(params.of);
   const teams = groups?.filter((group) => group.kind === "team") ?? [];
   const activePeople = people?.filter((person) => person.status === "active") ?? [];
-  const chosenNames = setNames.length > 4 ? `${setNames.slice(0, 3).join(", ")} and ${setNames.length - 3} more` : setNames.join(", ").replace(/, ([^,]*)$/, " and $1");
+  const chosenNames = all ? `all ${setNames.length.toLocaleString("en-IN")} clients on this list${filtered || q || show !== "all" ? ` (${[q && `matching “${q}”`, groupName, show !== "all" && pills[show]].filter(Boolean).join(", ")})` : ""}` : setNames.length > 4 ? `${setNames.slice(0, 3).join(", ")} and ${setNames.length - 3} more` : setNames.join(", ").replace(/, ([^,]*)$/, " and $1");
   const plural = (n: number) => `${n.toLocaleString("en-IN")} ${archived ? "archived " : ""}client${n === 1 ? "" : "s"}`;
   const shownFrom = total ? from + 1 : 0;
   const shownTo = Math.min(from + (clients?.length ?? 0), total ?? 0);
@@ -235,8 +219,9 @@ export default async function Clients({
             <p className="hint">
               For {chosenNames}. Each ticked service is added to the client&apos;s number it sits on, where it is for that client type. Services already chosen stay, and InboxCA makes the due dates for the next 12 months.
             </p>
+            {tooMany && <p className="alert" role="alert">This list has more than {MOST_MATCHING.toLocaleString("en-IN")} clients. Narrow it by tag, branch or search first.</p>}
             <form action={setServices}>
-              {setFor?.map((client) => <input key={client.id} type="hidden" name="client" value={client.id} />)}
+              {chosenInputs}
               <input type="hidden" name="back" value={pageHref(page)} />
               <ul className="client-rows">
                 {offered.map(([kind, list]) => (
@@ -252,7 +237,7 @@ export default async function Clients({
                   </li>
                 ))}
               </ul>
-              <Pending className="b b-primary service-save">Add services to {plural(setNames.length)}</Pending>
+              <Pending className="b b-primary service-save" disabled={tooMany}>Add services to {plural(setNames.length)}</Pending>
             </form>
           </SidePanel>
         )}
@@ -260,8 +245,9 @@ export default async function Clients({
           <SidePanel key="assign" id="assign-clients" title="Assign" close={pageHref(page)}>
             {params.error === "assign" && <p className="alert" role="alert">Choose a person or team and what they do for these clients.</p>}
             <p className="hint">For {chosenNames}. Whoever these clients already have keeps looking after them.</p>
+            {tooMany && <p className="alert" role="alert">This list has more than {MOST_MATCHING.toLocaleString("en-IN")} clients. Narrow it by tag, branch or search first.</p>}
             <form action={assignClients} className="fields">
-              {setFor?.map((client) => <input key={client.id} type="hidden" name="client" value={client.id} />)}
+              {chosenInputs}
               <input type="hidden" name="back" value={pageHref(page)} />
               <div>
                 <label htmlFor="assign-who">Who</label>
@@ -277,7 +263,7 @@ export default async function Clients({
                   {Object.entries(assignmentRoles).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </div>
-              <Pending className="b b-primary">Assign to {plural(setNames.length)}</Pending>
+              <Pending className="b b-primary" disabled={tooMany}>Assign to {plural(setNames.length)}</Pending>
             </form>
           </SidePanel>
         )}
@@ -478,6 +464,7 @@ export default async function Clients({
         <BulkSendBar
           send={canSend}
           list={pageHref(page)}
+          total={countOf[show]}
           types={documentTypes}
           years={periodChoices(todayInIndia())
             .filter((key) => key.length === 4)

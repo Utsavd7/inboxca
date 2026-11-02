@@ -30,10 +30,19 @@ export default async function People({ searchParams }: { searchParams: Promise<{
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   if (!["owner", "partner", "manager"].includes(membership.role)) return <NotForYou title="People" who="the owner, partners and managers" />;
-  const [{ data: people }, { data: groups }] = await Promise.all([
+  // Who is behind (the owner's morning question): each person's open and late returns, clients
+  // asked for papers and replies waiting, on the clients they look after. The owner and partners
+  // see everyone, a manager their own team (public.people_load, public.team_replies).
+  const [{ data: people }, { data: groups }, { data: load }, { data: replies }] = await Promise.all([
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "branch"]).order("name"),
+    supabase.rpc("people_load", { target_firm: membership.firmId }),
+    supabase.rpc("team_replies", { target_firm: membership.firmId }),
   ]);
+  const loadOf = (person: string) => {
+    const row = load?.find((one) => one.user_id === person);
+    return row && { ...row, replies: replies?.filter((reply) => reply.assignee === person).length ?? 0 };
+  };
   const { panel, person: chosen, confirm, saved } = await searchParams;
   const groupName = new Map(groups?.map((group) => [group.id, group.name]));
   const groupsOf = (kind: string) => groups?.filter((group) => group.kind === kind) ?? [];
@@ -80,6 +89,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
                   {one}
                 </th>
               ))}
+              {!!load?.length && <th scope="col">Work waiting</th>}
               <th scope="col">Status</th>
               {isOwner && (
                 <th scope="col" className="shrink">
@@ -111,6 +121,20 @@ export default async function People({ searchParams }: { searchParams: Promise<{
                 {shownKinds.map(({ kind, column, one: label }) => (
                   <td key={kind}>{groupName.get(one[column] ?? "") ?? <span className="hint">No {label.toLowerCase()}</span>}</td>
                 ))}
+                {!!load?.length && (
+                  <td className="people-load">
+                    {(() => {
+                      const work = loadOf(one.user_id);
+                      if (!work) return <span className="hint">Not shown</span>;
+                      return (
+                        <>
+                          <span>{work.open} {work.open === 1 ? "return" : "returns"} open{!!work.late && <> <Badge tone="late">{work.late} late</Badge></>}</span>
+                          <span className="sub">{work.asks} {work.asks === 1 ? "client" : "clients"} asked for papers, {work.replies} {work.replies === 1 ? "reply" : "replies"} waiting</span>
+                        </>
+                      );
+                    })()}
+                  </td>
+                )}
                 <td>
                   <Badge tone={statusTones[one.status]}>{statusNames[one.status]}</Badge>
                 </td>

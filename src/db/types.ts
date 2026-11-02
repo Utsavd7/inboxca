@@ -343,6 +343,25 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"firm_due_dates": {
+                  Row: {
+                    "code": string,"confirmed_at": string,"confirmed_by": string,"firm_id": string,"source_url": string
+                  }
+                  Insert: {
+                    "code": string,"confirmed_at"?: string,"confirmed_by": string,"firm_id": string,"source_url": string
+                  }
+                  Update: {
+                    "code"?: string,"confirmed_at"?: string,"confirmed_by"?: string,"firm_id"?: string,"source_url"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "firm_due_dates_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"firm_keys": {
                   Row: {
                     "firm_id": string,"wrapped_key": string
@@ -966,6 +985,9 @@ isOneToOne: false
               "away": boolean,"firm_name": string,"hours": Json,"reason": string
             }[]
                            },
+"confirm_due_date":
+{ Args: { "rule_code": string,"target_firm": string }; Returns: boolean
+                           },
 "connect_drive":
 { Args: { "account": string,"address": string,"credentials": string,"drive_provider": string,"drive_settings": Json,"level": string,"target_firm": string,"terms_version": string }; Returns: boolean
                            },
@@ -1031,6 +1053,11 @@ isOneToOne: false
                            },
 "form_ready":
 { Args: { "target": string }; Returns: boolean
+                           },
+"form_signoffs":
+{ Args: { "docs": (string)[],"target_firm": string }; Returns: {
+              "action": string,"actor_id": string,"at": string,"document": string
+            }[]
                            },
 "forms_go_live":
 { Args: Record<PropertyKey, never>; Returns: number
@@ -1129,6 +1156,11 @@ isOneToOne: false
 "pay":
 { Args: { "grants": Json,"payment_id": string,"ref"?: string }; Returns: Json
                            },
+"people_load":
+{ Args: { "target_firm": string }; Returns: {
+              "asks": number,"late": number,"open": number,"user_id": string
+            }[]
+                           },
 "queue_fills":
 { Args: { "batch": string,"target_firm": string,"with_itrs": boolean }; Returns: {
               "clients": number,"first_job": number,"itrs": number,"queued": number
@@ -1136,6 +1168,9 @@ isOneToOne: false
                            },
 "rate_limit":
 { Args: { "bucket": string,"most": number,"seconds": number }; Returns: boolean
+                           },
+"record_agm":
+{ Args: { "agm": string,"registration": string,"target_firm": string,"year_end": string }; Returns: number
                            },
 "register_device":
 { Args: { "actor": string,"away"?: boolean,"label": string,"target_firm": string,"token_digest": string }; Returns: {

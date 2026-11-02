@@ -325,3 +325,11 @@ a.fig-from:hover { border-color: var(--accent); color: var(--accent); }
   .fig-bar > i { transition: none; }
   .fc-ring, .fc-ring svg, .viewer-mark, .fc-peek { animation: none !important; transition: none !important; }
 }
+
+/* The working paper of a return (files/[id]/paper): one printable page, the sidebar left out. */
+.wp { max-width: 760px; }
+.wp table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.wp th, .wp td { padding: var(--s2) var(--s2); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.wp th { color: var(--ink-2); font-weight: 500; white-space: nowrap; }
+.wp h2 { margin: var(--s4) 0 var(--s2); font-size: 15px; }
+@media print { .side, .wp-actions { display: none !important; } .stage { padding: 0; } .wp { max-width: none; } }

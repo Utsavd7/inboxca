@@ -34,11 +34,28 @@ export const itrReady=()=>/^SW\d{8}$/.test(process.env.ITR_SOFTWARE_ID ?? "") &&
 
 // The official schema's top level parts by the names CA staff know, shared by the worker's form
 // entries and the figures laid out as the return.
-export const itrWords=(value:string)=>value.replace(/([a-z])([A-Z])/g,"$1 $2").replace(/_/g," ");
+export const itrWords=(value:string)=>value.replace(/([a-z])([A-Z])/g,"$1 $2").replace(/([a-z])(\d)/g,"$1 $2").replace(/_/g," ");
 export const itrGroups:Record<string,string>={PersonalInfo:"Client details",FilingStatus:"Filing details",ITR1_IncomeDeductions:"Income and deductions",IncomeDeductions:"Income and deductions",ITR1_TaxComputation:"Tax amounts",TaxComputation:"Tax amounts",TaxPaid:"Taxes paid",Refund:"Refund and bank details",Verification:"Declaration",TDSonSalaries:"TDS on salary",TDSonOthThanSals:"Other TDS",ScheduleTCS:"TCS",TaxPayments:"Tax challans",ScheduleIT:"Tax challans",ScheduleBP:"Business details",
   PartA_GEN1:"Client and filing details",PartA_GEN2:"Business and audit details",PARTA_BS:"Balance sheet",ManufacturingAccount:"Manufacturing account",TradingAccount:"Trading account",PARTA_PL:"Profit and loss account",PARTA_OI:"Other information",PARTA_QD:"Quantity details","PartB-TI":"Total income",PartB_TTI:"Tax, taxes paid and refund",ScheduleTDS1:"TDS on salary",ScheduleTDS2:"Other TDS",ScheduleCGFor23:"Schedule CG",ScheduleTDS3Dtls:"Schedule TDS3",ScheduleTDS3:"Schedule TDS3",ScheduleEA10_13A:"House rent allowance"};
 // Schedules keep the official names CA staff know, such as Schedule HP or Schedule 80C.
 export const itrGroup=(key:string)=>itrGroups[key] ?? (/^(ITR\d)?Schedule/.test(key) ? `Schedule ${key.replace(/^(ITR\d)?Schedule_?/,"").replace(/_/g,"-")}` : itrWords(key));
+// Plain words for the AY 2026-27 schemas' own key names where they carry no description, or a
+// description two keys share ("Deductions from income"), so an article assistant reads
+// "Deductions under Chapter VI-A" and not "Usr Deduct Und Chap VIA". Chapter, section and
+// clause numbers are the ones written in the key itself, as the official utility shows them;
+// "Usr" is the amount claimed, the other the amount allowed (ITR-1's two deduction blocks).
+// From tax year 2026-27 Form No. 130 (Income-tax Rules, 2026, reference/official/income-tax)
+// names these Chapter VIII, section 11 and section 19, for the schemas of that year.
+export const itrPlainNames:Record<string,string>={
+  UsrDeductUndChapVIA:"Deductions under Chapter VI-A, as claimed",DeductUndChapVIA:"Deductions under Chapter VI-A, as allowed",TotalChapVIADeductions:"Total deductions under Chapter VI-A",
+  DeductionsUnderScheduleVIA:"Deductions under Chapter VI-A (Schedule VIA)",DeductionsUndSchVIADtl:"Deductions under Chapter VI-A (Schedule VIA)",TotDeductUndSchVIA:"Total deductions under Chapter VI-A",PartBchapterVIA:"Part B of Chapter VI-A",PartCchapterVIA:"Part C of Chapter VI-A",
+  AllwncExemptUs10:"Allowances exempt under section 10",AllwncExemptUs10Dtls:"Allowances exempt under section 10, each",TotalAllwncExemptUs10:"Total allowances exempt under section 10",ExemptIncAgriOthUs10:"Exempt income, agricultural and other under section 10",
+  GrossSalary:"Gross salary",Salary:"Salary",PerquisitesValue:"Value of perquisites",NetSalary:"Net salary",DeductionUs16:"Deductions under section 16",DeductionUs16ia:"Deduction under section 16(ia)",EntertainmentAlw16ii:"Entertainment allowance under section 16(ii)",EntertainmntalwncUs16ii:"Entertainment allowance under section 16(ii)",ProfessionalTaxUs16iii:"Professional tax under section 16(iii)",IncomeFromSal:"Income from salary",
+  IncomeOthSrc:"Income from other sources",DeductionUs57iia:"Deduction under section 57(iia)",TotIncFromOS:"Total income from other sources",IncomeFromBusinessProf:"Income from business or profession",TotProfBusGain:"Total profits and gains of business or profession",TotalCapGains:"Total capital gains",
+  GrossTotIncome:"Gross total income (without long term gains under section 112A)",GrossTotIncomeIncLTCG112A:"Gross total income (with long term gains under section 112A)",GrossTotalIncome:"Gross total income",TotalIncome:"Total income",AggregateIncome:"Aggregate income",
+  IncChargeTaxSplRate111A112:"Income taxed at special rates under sections 111A and 112",IncChargeableTaxSplRates:"Income taxed at special rates",NetAgricultureIncomeOrOtherIncomeForRate:"Net agricultural or other income counted for the rate",DeemedIncomeUs115JC:"Deemed income under section 115JC",DeductionsUnder10Aor10AA:"Deductions under section 10A or 10AA",
+  TotalTaxPayable:"Total tax payable",Rebate87A:"Rebate under section 87A",TaxPayableOnRebate:"Tax payable after rebate",EducationCess:"Education cess",HealthEduCess:"Health and education cess",Surcharge:"Surcharge",GrossTaxLiability:"Gross tax liability",Section89:"Relief under section 89",NetTaxLiability:"Net tax liability",IntrstPay:"Interest payable",TotalIntrstPay:"Total interest payable",TotTaxPlusIntrstPay:"Total tax and interest payable",
+};
 export const itrFields={
   // Client details InboxCA holds: the PAN registration and the client's email address.
   "itr.personal.pan":{label:"PAN",paths:{ITR1:"PersonalInfo.PAN",ITR4:"PersonalInfo.PAN",ITR2:"PartA_GEN1.PersonalInfo.PAN",ITR3:"PartA_GEN1.PersonalInfo.PAN"}},

@@ -197,3 +197,7 @@
 /* An income tax return's cards: their lists and forms sit inside the card's padding. */
 .itr-body { padding: 0 var(--s4) var(--s4); }
 .itr-body > .form-row:first-child { margin-top: 0; }
+
+/* A company's AGM date, asked under its returns so AOC-4, MGT-7 and ADT-1 get their dates. */
+.agm-form { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s2) var(--s3); }
+.agm-form label { display: grid; gap: 2px; font-size: 13px; color: var(--ink-2); }

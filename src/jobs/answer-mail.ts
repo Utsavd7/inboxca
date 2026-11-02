@@ -3,6 +3,7 @@ import { answerMode, answerOf, dueAnswer, filedAnswer, papersAnswer, receivedLin
 import { addDays, todayInIndia } from "@/src/lib/calendar";
 import type { DocumentRequest } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
+import { firmChecked } from "@/src/lib/due-dates";
 import { emailTemplates, TEMPLATE_VERSION } from "@/src/lib/email-templates";
 import { firmMailer } from "@/src/lib/firm-mail";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -42,11 +43,11 @@ export async function recordLines(db: Admin, firm: string, client: string, kind:
       link: link ? `${process.env.APP_BASE_URL ?? ""}/u/${await crypto.decrypt(firm, `requests/${id}/link`, details.link_enc!)}` : "(the upload link)",
     }))), asked);
   }
-  const [{ data: tasks, error }, { data: rules, error: rulesError }] = await Promise.all([
+  const [{ data: tasks, error }, rules] = await Promise.all([
     db.from("tasks").select("code, period_key, due_on, status, details").eq("firm_id", firm).eq("client_id", client).eq("kind", "compliance").gte("due_on", addDays(today, -400)).lte("due_on", addDays(today, 400)),
-    db.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", ""),
+    Promise.resolve(db.from("compliance_types").select("code, name, frequency, verified_on").eq("period_key", "")).then(({ data, error }) => (error ? null : firmChecked(db, firm, data))),
   ]);
-  if (error || rulesError) throw new Error("records_not_read");
+  if (error || !rules) throw new Error("records_not_read");
   const rule = new Map(rules.map((row) => [row.code, row]));
   const list: AnswerTask[] = tasks.map((task) => {
     const of = rule.get(task.code ?? "");

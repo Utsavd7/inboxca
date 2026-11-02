@@ -32,7 +32,10 @@ import { mailApis, type MailApi } from "@/src/lib/mail-view";
 import { onedriveReady } from "@/src/lib/onedrive";
 import { MailboxForm } from "./mailbox-form";
 import { GroupAnchor } from "./group-anchor";
-import { saveReplies } from "@/app/(app)/actions";
+import { confirmDueDate, saveReplies } from "@/app/(app)/actions";
+import { dueDatesForOwner } from "@/src/lib/due-dates";
+import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
+import { personName } from "@/src/lib/roles";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
 import { NewComputers, YourComputers } from "../new-computers";
 import { PushSwitch } from "../push-switch";
@@ -44,6 +47,7 @@ import "./settings.css";
 const driveNames: Record<string, string> = { onedrive: "OneDrive", dropbox: "Dropbox", local: "Test drive on this computer" };
 // Each problem a save can report, shown in the section it belongs to.
 const problems: Record<string, [string, string]> = {
+  due_date: ["due_dates", "That date could not be confirmed. It may be checked already, or it has no official link yet."],
   permission_scope: ["permissions", "Check the end date and client names. Use the full names shown in Clients, one per line, with no repeated names."],
   mail_limit: ["mailbox", "Choose a whole number from 1 to 2,000 for the email limit."],
   mail_denied: ["mailbox", "The sign in was not allowed, so nothing was connected."],
@@ -60,14 +64,14 @@ const problems: Record<string, [string, string]> = {
   special: ["special", "The To date must be the same as or after the From date, and Closes must be later than Opens."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { checkout: "Thank you. The payment shows here as soon as your bank confirms it.", autopay_off: "AutoPay is off. Nothing more will be taken.", down: "Your plan moves down at the next renewal.", down_undone: "Your plan stays as it is.", topup: "Auto top-up saved.", money_back: "Your plan is cancelled and your money is on its way back.",preset: "Saved. Your team now works this way.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Paper sending rules saved.", permissions: "Permissions saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", folders: "Folder order and file names saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", answers: "Replies saved.", replies: "Reply time saved.", exception: "Exception removed. The firm's rule applies again.", computer_removed: "Computer removed. Your other computers are signed out and can sign in again as usual." };
+const savedNames: Record<string, string> = { due_date: "Date confirmed. Client reminders now go for it.", checkout: "Thank you. The payment shows here as soon as your bank confirms it.", autopay_off: "AutoPay is off. Nothing more will be taken.", down: "Your plan moves down at the next renewal.", down_undone: "Your plan stays as it is.", topup: "Auto top-up saved.", money_back: "Your plan is cancelled and your money is on its way back.",preset: "Saved. Your team now works this way.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Paper sending rules saved.", permissions: "Permissions saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", folders: "Folder order and file names saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", answers: "Replies saved.", replies: "Reply time saved.", exception: "Exception removed. The firm's rule applies again.", computer_removed: "Computer removed. Your other computers are signed out and can sign in again as usual." };
 // The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "replies", "drive"]],
   ["access", "Office and sign in", ["preset", "office", "limits", "tester", "notices", "recovery", "computers"]],
   ["hours", "Hours and holidays", ["hours", "special", "holidays"]],
   ["people", "People's access", ["permissions", "always", "visibility"]],
-  ["reminders", "Reminders and papers", ["reminders", "answers", "records"]],
+  ["reminders", "Reminders and papers", ["reminders", "due_dates", "answers", "records"]],
   ["data", "Your data", ["use", "data", "support", "close"]],
   ["me", "Your sign in", ["passkeys"]],
   ["billing", "Billing", ["plan", "change", "addons", "receipts", "money_back"]],
@@ -78,12 +82,12 @@ const cardIcons: Record<string, [LucideIcon, Kind]> = {
   mailbox: [Mail, "approve"], drive: [HardDrive, "docs"], preset: [ShieldCheck, "approve"], limits: [LogIn, "approve"], tester: [UserCheck, "approve"], notices: [BellRing, "approve"], recovery: [LifeBuoy, "approve"], computers: [Laptop, "approve"],
   hours: [Clock, "week"], special: [CalendarClock, "week"], holidays: [CalendarOff, "week"],
   permissions: [KeyRound, "papers"], always: [UserCheck, "papers"], visibility: [Eye, "papers"], exceptions: [UserCog, "papers"], passkeys: [Fingerprint, "approve"],
-  reminders: [BellRing, "notice"], answers: [MailCheck, "notice"], records: [FileCheck2, "notice"],
+  reminders: [BellRing, "notice"], due_dates: [CalendarClock, "notice"], answers: [MailCheck, "notice"], records: [FileCheck2, "notice"],
   replies: [Clock, "reply"],
   use: [Gauge, "docs"], ai: [Gauge, "docs"], data: [Download, "docs"], support: [Headset, "approve"], close: [TriangleAlert, "late"],
   fit: [Gauge, "approve"], plan: [CreditCard, "approve"], change: [SlidersHorizontal, "approve"], addons: [UserPlus, "papers"], receipts: [Receipt, "docs"], money_back: [RotateCcw, "late"],
 };
-const ownerOnly = ["mailbox", "replies", "drive", "recovery", "computers", "visibility", "exceptions", "reminders", "answers", "records", "use", "data", "support", "close", "plan", "change", "addons", "receipts", "money_back"];
+const ownerOnly = ["mailbox", "replies", "drive", "recovery", "computers", "visibility", "exceptions", "reminders", "due_dates", "answers", "records", "use", "data", "support", "close", "plan", "change", "addons", "receipts", "money_back"];
 const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
 
 function Card({ id, title, line, danger, children }: { id: string; title: string; line?: React.ReactNode; danger?: boolean; children: React.ReactNode }) {
@@ -181,6 +185,7 @@ export default async function Settings({
   );
   const mailbox = accounts?.find((account) => account.kind === "mail");
   const drive = accounts?.find((account) => account.kind === "drive");
+  const dueDates = group === "reminders" && owner ? await dueDatesForOwner(supabase, membership.firmId, todayInIndia()) : null;
   const crypto = serverCrypto();
   const permissions = (membership.settings.permissions ?? {}) as Permissions;
   const always = (standing ?? []).flatMap((member) => {
@@ -761,6 +766,32 @@ export default async function Settings({
               <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save reminders</Pending></div>
             </form>
           </Card>
+
+          {/* The owner confirms a due date for their firm until InboxCA's own check comes (src/lib/due-dates.ts). */}
+          {dueDates && <Card id="due_dates" title="Due dates to confirm" line="InboxCA checks every due date against the government notification before it reminds clients. Until then you, as the firm's chartered accountant, can confirm a date yourself from the notification linked beside it. Client reminders then go for it. InboxCA's own check comes later and replaces yours.">
+            {dueDates.length ? (
+              <ul className="set-rows" id="due-dates">
+                {dueDates.map((rule) => (
+                  <li key={rule.code}>
+                    <span className="grow">
+                      <strong>{rule.name}</strong>
+                      <span className="sub">{rule.next ? `Next: ${periodLabel(rule.frequency, rule.next.period_key)}, due ${dueLabel(rule.next.due_on)}` : "No return due yet"}{rule.source_url ? <>. <a href={rule.source_url} target="_blank" rel="noreferrer">Open the notification</a></> : ". No official link yet, so InboxCA checks this one itself"}</span>
+                    </span>
+                    {rule.confirmed ? (
+                      <Badge tone="done">Confirmed by {personName(rule.confirmed.email)} on {dueLabel(rule.confirmed.confirmed_at.slice(0, 10))}</Badge>
+                    ) : rule.source_url ? (
+                      <form action={confirmDueDate}>
+                        <input type="hidden" name="code" value={rule.code} />
+                        <Pending className="b b-secondary b-small" busy="Confirming">I checked this date against the notification</Pending>
+                      </form>
+                    ) : (
+                      <Badge>Waiting for InboxCA</Badge>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="hint">Every due date your clients&apos; services use is checked.</p>}
+          </Card>}
 
           <Card id="answers" title="Replies by InboxCA" line="InboxCA answers these emails from your records only, in English, to the client's own address or a contact allowed to receive papers. Questions about advice, fees or what a notice means always wait for your team.">
             <form action={saveAnswers} className="set-stack">

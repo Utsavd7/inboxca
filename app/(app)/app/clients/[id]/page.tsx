@@ -11,6 +11,7 @@ import { notFound, redirect } from "next/navigation";
 import { Fragment, Suspense, ViewTransition } from "react";
 import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
 import { addDays, dueLabel, isItr, periodLabel, taskStatuses, todayInIndia, verifyBy } from "@/src/lib/calendar";
+import { firmChecked } from "@/src/lib/due-dates";
 import { assignmentRoles, canManageClients, clientKinds, usualServices, whatsappLink, type ClientKind } from "@/src/lib/clients";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { checklists, kindChecklist, workOfService, type DocumentRequest } from "@/src/lib/checklists";
@@ -44,7 +45,7 @@ import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, 
 import { CopyButton, MoreMenu } from "../../ui-client";
 import { CameFrom } from "../../documents/came-from";
 import { UploadForm } from "./upload-form";
-import { remindClient } from "@/app/(app)/actions";
+import { recordAgm, remindClient } from "@/app/(app)/actions";
 import { RemindToast } from "../../remind-toast";
 import { unsafeText } from "@/src/lib/intake";
 import "../clients.css";
@@ -59,6 +60,7 @@ const errors: Record<string, string> = {
   "filed-number": "That number has filed returns, so it stays. To stop its new returns, untick its services and choose Save services.",
   assign: "Choose a person and what they do for this client.",
   licence: "Name the licence or registration and give the date it is valid until.",
+  agm: "The AGM date was not saved. Choose the year and a date after it, for a company whose services follow the AGM.",
   assigned: "That person is already assigned to this client.",
   contact: "Enter the contact's name and a valid email address.",
   linked: "That contact is already added to this client.",
@@ -112,6 +114,7 @@ const changes: Record<string, string> = {
   details: "Details saved.", services: "Services saved.", "contact-rights": "Contact saved.", "add-contact": "Contact added.", "unlink-contact": "Contact removed.",
   "add-number": "Tax number added.", "remove-number": "Tax number removed.", assign: "Assigned.", unassign: "Unassigned.", archive: "Client archived.", restore: "Client restored.",
   reminders: "Reminders saved.", list: "List saved.", sharing: "Sending choice saved.", "add-licence": "Expiry date added. It is on the Calendar.", "remove-licence": "Expiry date removed.",
+  agm: "AGM date saved. The returns that follow it are on the Calendar.",
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
@@ -156,7 +159,7 @@ export default async function Client({ params, searchParams }: { params: Promise
       .maybeSingle(),
     supabase.rpc("firm_people", { target_firm: firm }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
-    supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on, client_kinds").eq("period_key", "").order("code"),
+    Promise.resolve(supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on, client_kinds").eq("period_key", "").order("code")).then(async ({ data }) => ({ data: await firmChecked(supabase, firm, data) })),
     supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact", head: sub !== "returns"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
     files ? (tokens ? fileQuery.contains("search_tokens", tokens) : fileQuery).order("received_at", { ascending: false }).order("id", { ascending: false }).range(start, start + 49) : fileQuery,
     supabase.from("requests").select("id, status, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
@@ -869,7 +872,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                     const r = rule.get(task.code ?? "");
                     const overdue = task.status !== "filed" && task.due_on < today;
                     const note = reminderNote(task.details as { reminded?: string[]; skipped?: { reason: string } });
-                    const filed = task.details as { filed_on?: string; by?: string; ack?: string; verified_on?: string };
+                    const filed = task.details as { filed_on?: string; by?: string; ack?: string; udin?: string; verified_on?: string };
                     // A filed income tax return waits to be e-verified: by the portal's mail, or by a person.
                     const verify = task.status === "filed" && isItr(task.code);
                     const title = `${r?.name} ${periodLabel(r?.frequency ?? null, task.period_key)}`;
@@ -886,7 +889,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                         title={title}
                         meta={
                           task.status === "filed"
-                            ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}{verify && (filed.verified_on ? `. E-verified ${dueLabel(filed.verified_on)}` : `. Verify by ${dueLabel(verifyBy(filed.filed_on ?? task.due_on))}`)}</>
+                            ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}{filed.udin && <>, UDIN <span className="num">{filed.udin}</span></>}{verify &&(filed.verified_on ? `. E-verified ${dueLabel(filed.verified_on)}` : `. Verify by ${dueLabel(verifyBy(filed.filed_on ?? task.due_on))}`)}</>
                             : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}{task.code?.startsWith("ITR") && itrNeeds.get(task.period_key?.slice(0, 4) ?? "")?.line}<StageLine code={task.code} work={stages.get(task.id)} /></>
                         }
                         status={
@@ -927,6 +930,20 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <p className="app-card-none">{show==="filed" ? "No filed returns on this page." : "No returns due. Add a number and choose its services on Overview."}</p>
               )}
               {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="app-card-foot hint">InboxCA has not yet checked dates marked * against the government notification.</p>}
+              {/* A company's AOC-4, MGT-7 and ADT-1 fall due after its AGM: the date is asked, never guessed (public.record_agm). */}
+              {manage && show !== "filed" && numbers.filter((registration) => registration.kind === "cin" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "agm")).map((registration) => {
+                const fyEnd = Number(today.slice(0, 4)) + (today.slice(5, 7) >= "04" ? 1 : 0);
+                return (
+                  <form key={registration.id} action={recordAgm} className="app-card-foot agm-form">
+                    <input type="hidden" name="client" value={client.id} />
+                    <input type="hidden" name="registration" value={registration.id} />
+                    <span className="hint grow">AOC-4, MGT-7 and ADT-1 fall due after the AGM. Give its date and InboxCA puts them on the Calendar.</span>
+                    <label>Financial year <select name="year_end" defaultValue={`${fyEnd}-03`}>{[fyEnd - 1, fyEnd].map((year) => <option key={year} value={`${year}-03`}>{periodLabel("yearly", `${year}-03`)}</option>)}</select></label>
+                    <label>AGM date <input type="date" name="agm" required /></label>
+                    <Pending className="b b-secondary b-small" busy="Saving">Save AGM date</Pending>
+                  </form>
+                );
+              })}
             </Card>
             {(!!needs2b.size || [...itrNeeds.values()].some((needs) => needs.missing)) && membership.may("portal_files", client.id) && <PortalDrop clientId={client.id} back="returns" />}
             {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns","returns")}
@@ -1402,7 +1419,7 @@ export default async function Client({ params, searchParams }: { params: Promise
       )}
       {filing && (
         <SidePanel key="mark-filed" id="mark-filed" title="Mark filed" close={returnsHref}>
-          <MarkFiled state={returnsState} rows={[{ id: filing.id, name: `${rule.get(filing.code ?? "")?.name ?? filing.code} ${periodLabel(rule.get(filing.code ?? "")?.frequency ?? null, filing.period_key)}`, sub: `Due ${dueLabel(filing.due_on)}`, itr: isItr(filing.code) }]} />
+          <MarkFiled state={returnsState} rows={[{ id: filing.id, name: `${rule.get(filing.code ?? "")?.name ?? filing.code} ${periodLabel(rule.get(filing.code ?? "")?.frequency ?? null, filing.period_key)}`, sub: `Due ${dueLabel(filing.due_on)}`, itr: isItr(filing.code), udin: filing.code === "TAX_AUDIT" }]} />
         </SidePanel>
       )}
       </Presence>

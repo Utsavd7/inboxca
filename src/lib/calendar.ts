@@ -15,6 +15,7 @@ export function periodLabel(frequency: string | null, key: string | null) {
     return `${end >= 2027 ? "Tax year" : "FY"} ${end - 1}-${String(end).slice(2)}`;
   }
   if (frequency === "quarterly") return `${monthOf(key, -2).split(" ")[0]} to ${monthOf(key)}`;
+  if (frequency === "half_yearly") return `${monthOf(key, -5).split(" ")[0]} to ${monthOf(key)}`;
   return monthOf(key);
 }
 
