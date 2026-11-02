@@ -840,7 +840,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await owner.goto("/app/inbox?show=reply");
   await expect(owner.getByText("No email needs a reply")).toBeVisible();
   await owner.goto("/app/inbox?show=in");
-  await expect(waiting).toHaveCount(2);
+  await expect(waiting).toHaveCount(3); // With the stranger's mail, listed unread and last.
   await waiting.first().locator(".ib-subject").click();
   await open.getByLabel("Change label").click();
   await open.getByRole("form", { name: "What this email is" }).getByRole("button", { name: "Asks for this year's papers" }).click();
