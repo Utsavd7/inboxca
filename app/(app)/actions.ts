@@ -14,6 +14,7 @@ import { addDays, dueLabel, isItr, periodLabel, todayInIndia, verifyBy } from "@
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, readTags, type ClientInput } from "@/src/lib/clients";
+import { chunks, filterKeys, matchingClients, MOST_MATCHING, readFilter } from "@/app/(app)/app/clients/matching";
 import { unsafeCell } from "@/src/lib/client-sheet";
 import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
 import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
@@ -591,27 +592,42 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
   return { done: data, late: ready.some((row) => Object.values(row.services ?? {}).some((list) => list.length)) };
 }
 
-// Assign to the clients ticked on the list (?clients=, at most a page of them): one person or
+// The clients a list action is for: the ticked ones (client=, at most a page), or every client
+// the list's filter matches (all=1 with the filter's own fields), read again as this person
+// through the list's own query (clients/matching.ts) and capped, never a list of ids from the
+// browser. 200 ids a read, as they travel in the request.
+async function listedClients(form: FormData, supabase: Awaited<ReturnType<typeof currentWriter>>["supabase"], firm: string, userId: string) {
+  if (form.get("all") === "1") return (await matchingClients(supabase, firm, userId, readFilter(Object.fromEntries(filterKeys.map((key) => [key, String(form.get(key) ?? "")]))))).slice(0, MOST_MATCHING);
+  return [...new Set(form.getAll("client").map(String))].filter((id) => z.uuid().safeParse(id).success).slice(0, 50);
+}
+const listQuery = (form: FormData, panel: string, ids: string[]) => form.get("all") === "1" ? `panel=${panel}&all=1` : `panel=${panel}&clients=${ids.join(",")}`;
+
+// Assign to the clients ticked on the list, or to every client it matches: one person or
 // team in one role for each, as on a client's page. Row level security allows only the owner,
 // a partner or a manager; a client already assigned to them keeps that.
 export async function assignClients(form: FormData) {
-  const { supabase, membership } = await currentWriter();
-  const ids = [...new Set(form.getAll("client").map(String))].filter((id) => z.uuid().safeParse(id).success).slice(0, 50);
+  const { supabase, membership, userId } = await currentWriter();
   const back = String(form.get("back") ?? "");
   const list = /^\/app\/clients(\?|$)/.test(back) ? back : "/app/clients";
   const to = (query: string) => `${list}${list.includes("?") ? "&" : "?"}${query}`;
-  if (!membership || !canManageClients(membership.role) || !ids.length) redirect(list);
+  if (!membership || !canManageClients(membership.role)) redirect(list);
+  const ids = await listedClients(form, supabase, membership.firmId, userId);
+  if (!ids.length) redirect(list);
   const role = String(form.get("role") ?? "");
   const [kind, who] = String(form.get("who") ?? "").split(":");
-  if (!(role in assignmentRoles) || !z.uuid().safeParse(who).success || (kind !== "team" && kind !== "person")) redirect(to(`panel=assign&clients=${ids.join(",")}&error=assign`));
-  const { data: already } = await supabase.from("client_assignments").select("client_id").eq("firm_id", membership.firmId).in("client_id", ids).eq(kind === "team" ? "team_id" : "user_id", who);
-  const fresh = ids.filter((id) => !already?.some((row) => row.client_id === id));
-  const { data: made, error } = fresh.length
-    ? await supabase.from("client_assignments").insert(fresh.map((client_id) => ({ firm_id: membership.firmId, client_id, role, ...(kind === "team" ? { team_id: who } : { user_id: who }) }))).select("client_id")
-    : { data: [], error: null };
-  if (error) redirect(to(`panel=assign&clients=${ids.join(",")}&error=assign`));
+  if (!(role in assignmentRoles) || !z.uuid().safeParse(who).success || (kind !== "team" && kind !== "person")) redirect(to(`${listQuery(form, "assign", ids)}&error=assign`));
+  let made = 0;
+  for (const batch of chunks(ids)) {
+    const { data: already } = await supabase.from("client_assignments").select("client_id").eq("firm_id", membership.firmId).in("client_id", batch).eq(kind === "team" ? "team_id" : "user_id", who);
+    const fresh = batch.filter((id) => !already?.some((row) => row.client_id === id));
+    const { data, error } = fresh.length
+      ? await supabase.from("client_assignments").insert(fresh.map((client_id) => ({ firm_id: membership.firmId, client_id, role, ...(kind === "team" ? { team_id: who } : { user_id: who }) }))).select("client_id")
+      : { data: [], error: null };
+    if (error) redirect(to(`${listQuery(form, "assign", ids)}&error=assign`));
+    made += data?.length ?? 0;
+  }
   revalidatePath("/app/clients");
-  redirect(to(`assigned=${made?.length ?? 0}&of=${ids.length}`));
+  redirect(to(`assigned=${made}&of=${ids.length}`));
 }
 
 // Add tags to the clients ticked on the list (?clients=, at most a page of them): each keeps
@@ -2504,17 +2520,18 @@ export async function sendClientPapers(form: FormData) {
 // stay, and a number whose services would then not go together is left as it was. Row level
 // security and the database's services check run as on a client's page.
 export async function setServices(form: FormData) {
-  const { supabase, membership } = await currentWriter();
-  const ids = [...new Set(form.getAll("client").map(String))].filter((id) => z.uuid().safeParse(id).success).slice(0, 50);
+  const { supabase, membership, userId } = await currentWriter();
   const chosen = [...new Set(form.getAll("service").map(String))];
   const back = String(form.get("back") ?? "");
   const list = /^\/app\/clients(\?|$)/.test(back) ? back : "/app/clients";
   const to = (query: string) => `${list}${list.includes("?") ? "&" : "?"}${query}`;
-  if (!membership || !canManageClients(membership.role) || !ids.length) redirect(list);
+  if (!membership || !canManageClients(membership.role)) redirect(list);
+  const ids = await listedClients(form, supabase, membership.firmId, userId);
+  if (!ids.length) redirect(list);
   const firm = membership.firmId;
-  const [{ data: rules }, { data: numbers }] = await Promise.all([
+  const [{ data: rules }, numbers] = await Promise.all([
     supabase.from("compliance_types").select("code, due_rule, client_kinds").eq("period_key", ""),
-    supabase.from("client_registrations").select("id, client_id, kind, services, clients!inner(kind)").eq("firm_id", firm).in("client_id", ids),
+    Promise.all(chunks(ids).map((batch) => supabase.from("client_registrations").select("id, client_id, kind, services, clients!inner(kind)").eq("firm_id", firm).in("client_id", batch))).then((reads) => reads.flatMap((read) => read.data ?? [])),
   ]);
   const rule = new Map(rules?.map((r) => [r.code, { ...(r.due_rule as { for?: string; one_of?: string; scheme?: string }), kinds: r.client_kinds }]));
   // As the database checks it: one of each group (one GSTR-1, one ITR) and one GST scheme.
@@ -2522,17 +2539,17 @@ export async function setServices(form: FormData) {
     const groups = codes.map((code) => rule.get(code)?.one_of).filter(Boolean);
     return new Set(groups).size < groups.length || new Set(codes.map((code) => rule.get(code)?.scheme).filter(Boolean)).size > 1;
   };
-  if (!chosen.length || chosen.some((code) => !rule.has(code)) || clash(chosen)) redirect(to(`panel=services&clients=${ids.join(",")}&error=services`));
+  if (!chosen.length || chosen.some((code) => !rule.has(code)) || clash(chosen)) redirect(to(`${listQuery(form, "services", ids)}&error=services`));
   // Numbers that end with the same services are saved together.
   const saves = new Map<string, { services: string[]; ids: string[] }>();
-  for (const number of numbers ?? []) {
+  for (const number of numbers) {
     const add = chosen.filter((code) => rule.get(code)!.for === number.kind && (rule.get(code)!.kinds?.includes(number.clients.kind) ?? true) && !number.services.includes(code));
     const services = [...number.services, ...add];
     if (add.length && !clash(services)) saves.set(services.join(), { services, ids: [...(saves.get(services.join())?.ids ?? []), number.id] });
   }
   const changed = new Set<string>();
-  for (const { services, ids: group } of saves.values()) {
-    const { data } = await supabase.from("client_registrations").update({ services }).eq("firm_id", firm).in("id", group).select("client_id");
+  for (const { services, ids: group } of saves.values()) for (const batch of chunks(group)) {
+    const { data } = await supabase.from("client_registrations").update({ services }).eq("firm_id", firm).in("id", batch).select("client_id");
     data?.forEach((row) => changed.add(row.client_id));
   }
   revalidatePath("/app/clients");

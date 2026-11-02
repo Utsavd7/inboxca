@@ -75,9 +75,12 @@ it("pins the field choices, resolves official repeating entries and keeps assess
   expect(new Set(three.map(entry=>entry.group)).size).toBeGreaterThan(40);
   expect(three.some(entry=>entry.group==="Schedule HP")).toBe(true);
   expect(three.filter(entry=>entry.group===three[0].group).length).toBeLessThan(400);
-  // That heading is InboxCA's name, else the schema's description, else the key's words; a description two headings share names neither.
+  // That heading is InboxCA's name, else plain words for the key (itrPlainNames), else the schema's description, else the key's words; a description two headings share names neither.
   const groups=new Set([...three,...itrEntries(itrRequest("ITR2").template),...entries].map(entry=>entry.group));
-  for(const name of ["Schedule CFL: Carry forward losses for AY2025-26","Client and filing details: Client details","Client and filing details: Filing details","Income and deductions: Usr Deduct Und Chap VIA","Income and deductions: Deduct Und Chap VIA"]) expect(groups).toContain(name);
+  for(const name of ["Schedule CFL: Carry forward losses for AY2025-26","Client and filing details: Client details","Client and filing details: Filing details","Income and deductions: Deductions under Chapter VI-A, as claimed","Income and deductions: Deductions under Chapter VI-A, as allowed"]) expect(groups).toContain(name);
+  // Plain labels change only what staff read: the field name, its official path and the output stay as they were.
+  const claimed=entries.find(entry=>entry.path==="ITR1_IncomeDeductions.UsrDeductUndChapVIA.Section80C");
+  expect(claimed?.group).toBe("Income and deductions: Deductions under Chapter VI-A, as claimed");expect(claimed?.label).toBe("Section 80C");expect(claimed?.field).toMatch(/^itr\.f\.[0-9a-f]{16}$/);
   // A detail InboxCA has no label for reads the schema's own description, else its own name
   // from the schema, as the utility shows it.
   expect(entries.find(entry=>entry.path==='PersonalInfo.DOB')?.label).toBe('Date of Birth of the Assessee');

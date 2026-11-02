@@ -58,7 +58,8 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
   const empty=shown.filter(entry=>entry.kind==="number" && !entry.choices && missing.has(itrField(entry,rows))).map(entry=>itrField(entry,rows));
   return <>
     <PageHead crumb={<Link className="crumb" href={`/app/clients/${id}?tab=extraction`}><ChevronLeft size={14} aria-hidden/>{client.name}</Link>} title={`${formName(form)} ${itrYear(period)}`}
-      sub={<span className="head-meta"><span>InboxCA fills what it already holds and lists the rest for you. Nothing is guessed.</span></span>}/>
+      sub={<span className="head-meta"><span>InboxCA fills what it already holds and lists the rest for you. Nothing is guessed.</span></span>}
+      actions={<Link className="b b-secondary" href={`/app/clients/${id}/itr/computation?form=${form}&year=${period}`}>Computation sheet</Link>}/>
     <div className="pane client-pane">
     <Form action={`/app/clients/${id}/itr`} className="form-row">
       <div><label htmlFor="return">Return</label><select id="return" name="form" defaultValue={form}>{itrReturns.map(code=><option key={code} value={code}>{formName(code)}</option>)}</select></div>
