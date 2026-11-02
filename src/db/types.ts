@@ -1088,7 +1088,7 @@ isOneToOne: false
                            },
 "notice_alerts":
 { Args: { "target_firm": string }; Returns: {
-              "action_date": string,"client_id": string,"client_name": string,"due_on": string,"id": string
+              "action_date": string,"assigned_to": string,"client_id": string,"client_name": string,"due_on": string,"id": string
             }[]
                            },
 "observe_office":

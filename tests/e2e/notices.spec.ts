@@ -81,12 +81,42 @@ test("the owner moves the notice on to in progress, replied and closed; a done n
   await expect(row).toHaveCount(0);
   expect((await notice()).status).toBe("replied");
 
+  // Closing needs the reply recorded: the date, what was sent, its acknowledgement and a paper of the client's.
   await owner.getByRole("link", { name: /^Replied or closed/ }).click();
   await expect(row).toBeVisible();
   await row.getByRole("link", { name: `Update the notice for ${clientName}` }).click();
-  await panel.getByRole("button", { name: "Close notice" }).click();
+  await expect(panel.getByRole("heading", { name: "Record the reply" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Close notice" })).toHaveCount(0);
+  const [{ id: paper }] = await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, name, size, sha256, drive_file_id) values ($1, $2, 'income_tax', 'Notice reply', 'invented-reply.pdf', 10, repeat('b', 64), 'invented-drive-file') returning id", [firm.firmId, clientId]);
+  await owner.goto(`/app/notices?show=done&notice=${id}`);
+  await panel.getByLabel("Reply sent on").fill("2026-12-20");
+  await panel.getByLabel("What was sent").fill("Response filed on the portal with the computation");
+  await panel.getByLabel("Acknowledgement or reference").fill(`ACK-${tag}`);
+  await panel.getByLabel("Paper from the client's folder").selectOption(paper);
+  await panel.getByRole("button", { name: "Save reply and close" }).click();
   await expect(owner).toHaveURL(/show=done/);
   await expect.poll(async () => (await notice()).status).toBe("closed");
+  expect((await notice()).details.reply).toEqual({ on: "2026-12-20", sent: "Response filed on the portal with the computation", reference: `ACK-${tag}`, document: paper });
+  expect(await logged("notice.closed")).toEqual([firm.ownerId]);
+  await owner.goto(`/app/notices?show=done&notice=${id}`);
+  await expect(panel).toContainText(`ACK-${tag}`);
+  await expect(panel.getByRole("link", { name: "invented-reply.pdf" })).toBeVisible();
+});
+
+test("a notice given to a person shows on their Today three days before its date, though the client is not theirs", async () => {
+  const [{ id }] = await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, due_on, details) values ($1, $2, 'notice', (now() at time zone 'Asia/Kolkata')::date + 2, '{"authority":"gst","notice_type":"Invented owned notice","reference":"","received_on":"2026-10-28","action_date":"2026-11-04"}') returning id`, [firm.firmId, clientId]);
+  await staff.goto("/app");
+  await expect(staff.getByText(`Review the notice for ${clientName}`)).toHaveCount(0);
+  await owner.goto(`/app/notices?notice=${id}`);
+  const panel = owner.getByRole("dialog", { name: "Invented owned notice" });
+  await panel.getByLabel("Owner of this notice").selectOption(staffId);
+  await panel.getByRole("button", { name: "Save owner" }).click();
+  await expect(owner.getByRole("status")).toContainText("Notice owner saved");
+  expect((await query(local.dbUrl, "select details->>'assigned_to' as owner from public.tasks where id = $1", [id]))[0].owner).toBe(staffId);
+  expect(await logged("notice.assigned")).toEqual([firm.ownerId]);
+  await staff.goto("/app");
+  await expect(staff.getByText(`Reply to the notice for ${clientName}`)).toBeVisible();
+  await query(local.dbUrl, "delete from public.tasks where id = $1", [id]);
 });
 
 test("staff see the closed notice but cannot move it on", async () => {

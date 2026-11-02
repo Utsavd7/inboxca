@@ -61,13 +61,21 @@ it("shows Home alerts only to the owner, partners and the assigned people or tea
   expect((await db.query("select id from public.notice_alerts($1)", [FIRM])).rows).toEqual([{ id }]);
   await asOwner(db);
   await db.query("delete from public.client_assignments where client_id=$1", [CLIENT]);
+  // The notice's own owner sees it too, with no claim on the client.
+  await db.query("update public.tasks set details=details || jsonb_build_object('assigned_to',$2::text) where id=$1", [id, STAFF]);
+  await actAs(db,STAFF);
+  expect((await db.query("select id, assigned_to from public.notice_alerts($1)", [FIRM])).rows).toEqual([{ id, assigned_to: STAFF }]);
+  await asOwner(db);
+  await db.query("update public.tasks set details=details - 'assigned_to' where id=$1", [id]);
   await db.query("update public.firm_members set role='partner' where firm_id=$1 and user_id=$2", [FIRM,STAFF]);
   await actAs(db,STAFF);
   expect((await db.query("select id from public.notice_alerts($1)", [FIRM])).rows).toEqual([{ id }]);
   await actAs(db,"00000000-0000-4000-8000-000000000cc9");
   expect((await db.query("select id from public.notice_alerts($1)", [FIRM])).rows).toEqual([]);
   await asOwner(db);
-  await db.query("update public.tasks set status='closed' where id=$1",[id]);
+  // A notice closes only with its reply recorded.
+  expect((await attempt(db,"update public.tasks set status='closed' where id=$1",[id])).ok).toBe(false);
+  await db.query(`update public.tasks set status='closed', details=details || '{"reply":{"on":"2026-10-20","sent":"Invented reply"}}' where id=$1`,[id]);
   await actAs(db,OWNER);
   expect((await db.query("select id from public.notice_alerts($1)", [FIRM])).rows).toEqual([]);
 }));

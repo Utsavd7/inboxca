@@ -21,7 +21,7 @@ export const activityNames: Record<string, string> = {
   "email.assigned": "Email given to a person", "replies.waiting_sent": "Waiting replies emailed to the owner", "incident.emailed": "Owner told InboxCA is not working fully",
   "email.answered": "Reply sent by InboxCA", "email.answer_stopped": "Reply by InboxCA stopped",
   "email.ai_drafted": "Reply drafted by AI for a person to check", "email.ai_left": "Left for the team by AI",
-  "document.added": "Acknowledgement saved", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked",
+  "document.added": "Acknowledgement saved", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked", "notice.assigned": "Notice given to a person", "notice.replied": "Notice reply recorded", "notice.closed": "Notice closed",
   "contact.added": "Contact added", "contact.changed": "Contact changed",
   "fills.asked": "Fill asked for returns late or due in the next 7 days", "fills.stopped": "Fill stopped before it started",
 };
@@ -75,8 +75,9 @@ export const activityDetails: Record<string, readonly string[]> = {
   // AI's draft for an email waiting for a person (5.11): kept sealed on its request, or why AI left it.
   "email.ai_drafted": [], "email.ai_left": ["reason"],
   "fills.asked": ["returns", "clients", "batch"], "fills.stopped": ["returns", "batch"],
-  "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"],
-  "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state"], "dataset.edit_saved": ["dataset", "line"],
+  "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"], "notice.assigned": ["person"], "notice.replied": ["on", "document"], "notice.closed": [],
+  // A register section said yes to at once: its name, row counts and the totals seen, encrypted.
+  "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state", "section", "rows", "flagged", "totals_enc"], "dataset.edit_saved": ["dataset", "line"],
   "dataset.changed": ["dataset", "revision", "line", "state", "before", "after", "reason_enc", "registration", "entered", "zeroed"], // before, after and reason encrypted
   "form.started": ["version", "template", "reason_code", "filled"], "form.prepared": [], "form.edited_outside": ["version", "template"], "form.approved": [],
   "form.rejected": ["code", "text_enc"], // the reason's code, and its words encrypted

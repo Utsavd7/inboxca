@@ -71,7 +71,7 @@ export const approvalSummary: Handler = async (job) => {
 export const noticeAlert: Handler = async (job) => {
   const admin = supabaseAdmin();
   const stage = job.idempotency_key.split(":").at(-1)!;
-  const { data: notice, error: missing } = await admin.from("tasks").select("firm_id,client_id").eq("id", job.entity_id!).maybeSingle();
+  const { data: notice, error: missing } = await admin.from("tasks").select("firm_id,client_id,details").eq("id", job.entity_id!).maybeSingle();
   if (missing) return { retry: "notice_not_read" };
   if (!notice) return { done: true };
   const [{ data: people, error: peopleError }, { data: assignments, error: assignmentsError }] = await Promise.all([
@@ -82,7 +82,9 @@ export const noticeAlert: Handler = async (job) => {
   const { data, error } = await admin.rpc("claim_notice_alert", { task_id: job.entity_id!, stage });
   if (error) return { retry: "notice_not_claimed" };
   if (!data) return { done: true };
-  const recipients = (people ?? []).filter((person) => ["owner","partner"].includes(person.role) || assignments?.some((a) => a.user_id === person.user_id || (a.team_id && a.team_id === person.team_id))).map((person) => person.user_id);
+  // The notice's own owner is told too, with the firm's owner, partners and the client's team.
+  const owner = (notice.details as { assigned_to?: string } | null)?.assigned_to;
+  const recipients = (people ?? []).filter((person) => ["owner","partner"].includes(person.role) || person.user_id === owner || assignments?.some((a) => a.user_id === person.user_id || (a.team_id && a.team_id === person.team_id))).map((person) => person.user_id);
   const when = stage.endsWith("late") ? "has passed" : stage.endsWith("due") ? "is today" : "is within 3 days";
   await notify(recipients, { title: "A notice needs attention", body: stage.startsWith("action_") ? `A notice's action date ${when}.` : `A notice still needs its action date checked. Your firm's deadline for this ${when}.`, url: "/app/notices" }, notice.firm_id);
   return { done: true };

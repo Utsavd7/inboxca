@@ -965,7 +965,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                                 <input type="hidden" name="notice" value={notice.id} />
                                 <input type="hidden" name="back" value="client" />
                                 <AutoSelect save="status" name="intent" defaultValue={notice.status} aria-label={`Status of ${details.notice_type}`}>
-                                  {Object.entries(noticeStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                  {Object.entries(noticeStatuses).filter(([value]) => value !== "closed" || details.reply).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                 </AutoSelect>
                                 <button hidden value="status" />
                               </form>

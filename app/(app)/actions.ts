@@ -1953,6 +1953,36 @@ export async function manageNotice(form: FormData) {
       await supabaseAdmin().from("tasks").update({ due_on: date, details: { ...details, action_date: date } as unknown as NonNullable<Json> }).eq("id", notice.id);
       await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.date_confirmed", entity_type: "task", entity_id: notice.id, details: { date } });
     }
+    // The notice's owner: one of the firm's active people, or nobody.
+    else if (intent === "assign") {
+      const person = String(form.get("person") ?? "");
+      const { data: people } = person ? await supabase.rpc("firm_people", { target_firm: membership.firmId }) : { data: [] };
+      if (person && !people?.some((one) => one.user_id === person && one.status === "active")) redirect(back);
+      const { assigned_to: was, ...rest } = details;
+      await supabaseAdmin().from("tasks").update({ details: { ...rest, ...(person && { assigned_to: person }) } as unknown as NonNullable<Json> }).eq("id", notice.id);
+      if (person !== (was ?? "")) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.assigned", entity_type: "task", entity_id: notice.id, details: { person } });
+    }
+    // The reply a person sent (never AI): its date, what was sent, the acknowledgement and a paper of
+    // this client's. Recording it marks the notice replied, or closes it; closing needs it recorded.
+    else if (intent === "reply" || intent === "reply_close" || intent === "closed") {
+      const again = back === "/app/notices" ? `/app/notices?notice=${notice.id}&error=reply` : back;
+      let reply = details.reply;
+      if (intent !== "closed") {
+        const on = String(form.get("on") ?? ""), sent = String(form.get("sent") ?? "").trim().slice(0, 300), reference = String(form.get("ack") ?? "").trim().slice(0, 80), paper = String(form.get("paper") ?? "");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(on) || Number.isNaN(Date.parse(on)) || !sent) redirect(again);
+        if (paper) {
+          const { data: document } = await supabase.from("documents").select("id").eq("firm_id", membership.firmId).eq("client_id", notice.client_id).eq("id", paper).neq("status", "deleted").maybeSingle();
+          if (!document) redirect(again);
+        }
+        reply = { on, sent, ...(reference && { reference }), ...(paper && { document: paper }) };
+      }
+      if (!reply) redirect(again);
+      const status = intent === "reply" ? "replied" : "closed";
+      const { error } = await supabaseAdmin().from("tasks").update({ status, details: { ...details, reply } as unknown as NonNullable<Json> }).eq("id", notice.id);
+      if (error) redirect(again);
+      if (intent !== "closed") await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.replied", entity_type: "task", entity_id: notice.id, details: { on: reply.on, document: reply.document ?? null } });
+      if (status === "closed") await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.closed", entity_type: "task", entity_id: notice.id });
+    }
     else if (intent in noticeStatuses) await supabase.from("tasks").update({ status: intent }).eq("id", notice.id);
   }
   revalidatePath("/app", "layout");

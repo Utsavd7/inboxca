@@ -15,7 +15,8 @@ import { FileViewer } from "../../files/[id]/view/file-viewer";
 import { Pending } from "../../pending";
 import { Badge, Empty, IconTile, Toast } from "../../ui";
 import { SourcePane } from "../../returns-client";
-import { reviewFigure } from "./dataset-actions";
+import { approveSection, reviewFigure } from "./dataset-actions";
+import { sectionSummary } from "@/src/lib/section-check";
 import {itrYear} from "@/src/lib/itr-fields";
 import {formName} from "@/src/lib/prepared";
 import {checkItr} from "@/src/lib/itr";
@@ -23,6 +24,7 @@ import {formLayout,grouped} from "@/src/lib/form-layout";
 import {FormCheck} from "./form-check";
 import {formCheckData} from "./form-check-data";
 const messages:Record<string,string>={stale:"Someone changed these figures. Read the latest values and try again.",source:"The paper these figures came from is not available. Ask the owner to restore it.",permission:"Ask for permission before changing a figure.",value:"Check the value. Figures need no more than two decimal places; dates need a valid day.",reason:"Say why the figure needs to change.",totals:"The totals do not add up. Correct the figures before you mark any as right.",itr:"Fix the problems listed for this return before you mark a figure as right.",saved:"Your check was saved."};
+const rupees=(paise:bigint)=>grouped(`${paise<BigInt(0) ? "-" : ""}${(paise<BigInt(0) ? -paise : paise)/BigInt(100)}.${String((paise<BigInt(0) ? -paise : paise)%BigInt(100)).padStart(2,"0")}`,"number",2);
 type Line=Draft["lines"][number];
 
 export async function DatasetReview({clientId,draftId,lineId,check,view}:{clientId:string;draftId?:string;lineId?:string;check?:string;view?:string}) {
@@ -65,6 +67,8 @@ export async function DatasetReview({clientId,draftId,lineId,check,view}:{client
   };
   const state=(line:Line)=>line.state==="confirmed" ? <span title={line.by ? `Checked by ${who(line.by)}, ${when(line.at!)}` : undefined}><Badge key="done" tone="done">Checked</Badge></span> : line.state==="rejected" ? <Badge key="wrong">Wrong</Badge> : <Badge key="open" tone="warn">To check</Badge>;
   const onPaper=onForm ? await formCheckData({supabase,firm:membership.firmId,userId,row,draft,figures,papers:papers ?? [],who,issues,sourceReady,lineId}) : null;
+  // A GST register is checked a section at a time: one Yes once its rows add up to its own totals.
+  const sections=draft.target ? [] : sectionSummary(draft,figures),canCheck=!viewOnly && membership.may("check_figures",clientId) && sourceReady;
   const switchTo=(to:"form"|"list")=>`?tab=extraction&draft=${row.id}&view=${to}${onPaper?.active ?? lineId ? `&line=${onPaper?.active ?? lineId}` : ""}`;
   return <section className="app-card fig" aria-labelledby="figures">
     <header className="app-card-head"><IconTile Icon={ListChecks} kind="docs"/><h2 id="figures">Check the figures</h2>
@@ -75,6 +79,21 @@ export async function DatasetReview({clientId,draftId,lineId,check,view}:{client
     {check==="saved" ? <Toast>{messages.saved}</Toast> : check && messages[check] && <p className="alert" role="status">{messages[check]}</p>}
     {!sourceReady && <p className="alert" role="alert">A paper these figures came from was changed or removed. Ask the owner to restore it, or read the paper again, before you check these figures.</p>}
     {!!issues.length && <p className="alert" role="alert">{issues.join(" ")} Correct the figures before you mark them as right.</p>}
+    {!!sections.length && <div className="fig-sections">
+      {sections.map((part)=><section key={part.section} className={`fig-section${part.checked ? " is-done" : ""}`} aria-label={`${part.name} section`}>
+        <header><strong>{part.name}</strong><span className="sub">{part.rows} rows{part.flagged.length ? `, ${part.flagged.length} to check one by one` : ""}</span>
+          {part.checked ? <Badge tone="done">Checked</Badge> : part.agree ? <Badge tone="warn">To check</Badge> : <Badge tone="late">{part.totals.length ? "Does not add up" : "No total row"}</Badge>}</header>
+        <dl className="fig-section-totals">
+          {part.totals.map((total)=><div key={total.label}><dt>{total.label}</dt><dd className="num">{grouped(total.value,"number",2)}<span className={total.ok ? "is-ok" : "is-off"}>{total.ok ? "adds up" : "does not add up"}</span></dd></div>)}
+          {part.byRate.map((entry)=><div key={entry.rate}><dt>At {entry.rate || "0"}%</dt><dd className="num">{rupees(entry.taxable)}{entry.tax!==undefined && <span className="sub">tax {rupees(entry.tax)}</span>}</dd></div>)}
+        </dl>
+        {part.checked ? <p className="fig-done"><Check size={15} strokeWidth={2.6} aria-hidden/>Checked by {who(part.by)}, {when(part.at!)}</p>
+          : <form action={approveSection}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="draft" value={row.id}/><input type="hidden" name="section" value={part.section}/><input type="hidden" name="revision" value={row.revision}/><input type="hidden" name="view" value={onForm ? "form" : "list"}/>
+            <Pending className="b b-primary" disabled={!canCheck || !part.agree || !part.lines.length}>Yes, these totals are right</Pending>
+            <span className="hint">{!part.agree ? part.totals.length ? "Correct the rows or the total first." : "Add a total row to the register, or check each row." : `Checks ${part.rows-part.flagged.length} rows and the totals at once.`}</span></form>}
+        {!!part.flagged.length && <ul className="fig-section-flags">{part.flagged.map((flag)=><li key={flag.row}><Link href={href(flag.line)} scroll={false}>Row {flag.row.slice(1)}</Link>: {flag.why}</li>)}</ul>}
+      </section>)}
+    </div>}
     {onPaper ? <>
       <FormCheck key={row.id} layout={onPaper.layout} items={onPaper.items} papers={onPaper.papers} active={onPaper.active} client={clientId} draft={row.id} revision={row.revision} kept={onPaper.kept} focus={check==="saved"}
         canCheck={!viewOnly && membership.may("check_figures",clientId)} canEdit={!viewOnly && sourceReady && canEdit} ask={!viewOnly && !canEdit} why={viewOnly ? viewOnlyWords(membership.viewOnlyUntil) : !membership.may("check_figures",clientId) ? "Ask your firm's owner to let you check figures for this client." : ""}

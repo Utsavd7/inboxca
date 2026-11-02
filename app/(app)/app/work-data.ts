@@ -132,7 +132,7 @@ async function officeAsks({ supabase, membership, userId }: Context): Promise<Li
 // Every work item for this person, most urgent first. Late clients are read up to late at a
 // time (Today needs 7, the full list more); total counts them all.
 export async function workFor(ctx: Context, late: number) {
-  const { supabase, membership } = ctx;
+  const { supabase, membership, userId } = ctx;
   const today = todayInIndia();
   const firm = membership.firmId;
   const owner = membership.role === "owner";
@@ -209,7 +209,8 @@ export async function workFor(ctx: Context, late: number) {
       ...(waitingIds.length ? [{ key: "pcs", title: `Approve ${plural(waitingIds.length, "PC", "PCs")}`, why: seenToday === waitingIds.length ? "Signed in from your office today" : "Waiting for your approval before staff can use them", action: { label: "Approve", href: "/app/settings#office" }, audience: "firm" as const }] : []),
       ...(notices.data ?? []).map((notice) => ({
         key: `notice:${notice.id}`,
-        title: `Review the notice for ${notice.client_name}`,
+        title: `${notice.assigned_to === userId ? "Reply to" : "Review"} the notice for ${notice.client_name}`,
+        mine: notice.assigned_to === userId,
         why: `Its ${notice.action_date ? "action date" : "review deadline"} ${notice.due_on < today ? "has passed" : notice.due_on === today ? "is today" : "is within 3 days"}`,
         client: { id: notice.client_id, name: notice.client_name },
         due: notice.due_on,

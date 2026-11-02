@@ -13,6 +13,8 @@ export type WorkItem = {
   urgent?: boolean;
   action: { label: string; href: string };
   audience: "assigned" | "approver" | "firm";
+  // Given to this person by name (a notice's owner): shown whoever looks after the client.
+  mine?: boolean;
 };
 
 const times = (count: number) => (count === 2 ? "twice" : `${count} times`);

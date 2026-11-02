@@ -22,7 +22,7 @@ const pills = { open: "Open", confirm: "Date to check", done: "Replied or closed
 type Pill = keyof typeof pills;
 const columns = "id, client_id, due_on, status, details, clients(name)";
 const moves: Record<string, string> = { upcoming: "Mark open", in_progress: "Mark in progress", replied: "Mark replied", closed: "Close notice" };
-const saved: Record<string, string> = { add: "Notice added.", confirm: "Action date checked.", upcoming: "Notice marked open.", in_progress: "Notice marked in progress.", replied: "Notice marked replied.", closed: "Notice closed." };
+const saved: Record<string, string> = { add: "Notice added.", confirm: "Action date checked.", upcoming: "Notice marked open.", in_progress: "Notice marked in progress.", replied: "Notice marked replied.", closed: "Notice closed.", assign: "Notice owner saved.", reply: "Reply recorded.", reply_close: "Reply recorded and notice closed." };
 const PAGE = 50;
 const PICK = 8;
 const uuid = /^[0-9a-f-]{36}$/;
@@ -115,7 +115,13 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
   }[show];
   const openDetails = opened?.details as NoticeDetails | undefined;
   const confirmer = openDetails?.action_date ? confirmers(confirms ?? []).get(opened?.id ?? "") : undefined;
-  const confirmedBy = confirmer && personName(people?.find((person) => person.user_id === confirmer)?.email);
+  const nameOf = (id?: string) => (id ? personName(people?.find((person) => person.user_id === id)?.email) : "");
+  const confirmedBy = confirmer && nameOf(confirmer);
+  // The client's papers, for the reply's evidence; and the paper a recorded reply names.
+  const [{ data: papers }, { data: replyPaper }] = await Promise.all([
+    opened && decides && !openDetails?.reply ? supabase.from("documents").select("id, name").eq("firm_id", firm).eq("client_id", opened.client_id).neq("status", "deleted").order("received_at", { ascending: false }).limit(50) : Promise.resolve({ data: null }),
+    openDetails?.reply?.document ? supabase.from("documents").select("id, name").eq("firm_id", firm).eq("id", openDetails.reply.document).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
 
   return (
     <div className="fill notices">
@@ -260,7 +266,89 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 <dd>{confirmedBy}</dd>
               </div>
             )}
+            <div>
+              <dt>Owner</dt>
+              <dd>
+                {decides && !done(opened.status) ? (
+                  <form action={manageNotice} className="notices-owner">
+                    {state}
+                    <input type="hidden" name="notice" value={opened.id} />
+                    <select name="person" defaultValue={openDetails.assigned_to ?? ""} aria-label="Owner of this notice">
+                      <option value="">Nobody yet</option>
+                      {people?.filter((person) => person.status === "active").map((person) => (
+                        <option key={person.user_id} value={person.user_id}>
+                          {personName(person.email)}
+                        </option>
+                      ))}
+                    </select>
+                    <Pending className="b b-secondary b-small" name="intent" value="assign">
+                      Save owner
+                    </Pending>
+                  </form>
+                ) : (
+                  nameOf(openDetails.assigned_to) || "Nobody yet"
+                )}
+              </dd>
+            </div>
+            {openDetails.reply && (
+              <div>
+                <dt>Reply sent</dt>
+                <dd>
+                  {dueLabel(openDetails.reply.on)}: {openDetails.reply.sent}
+                  {openDetails.reply.reference && <span className="sub num">Acknowledgement {openDetails.reply.reference}</span>}
+                  {replyPaper && (
+                    <Link className="sub" href={`/app/files/${replyPaper.id}/view`}>
+                      {replyPaper.name}
+                    </Link>
+                  )}
+                </dd>
+              </div>
+            )}
           </dl>
+          {params.error === "reply" && (
+            <p className="alert" role="alert">
+              Give the date the reply was sent and what was sent. A notice closes only with its reply recorded.
+            </p>
+          )}
+          {decides && !openDetails.reply && (
+            <form action={manageNotice} className="fields notices-confirm">
+              {state}
+              <input type="hidden" name="notice" value={opened.id} />
+              <h3>Record the reply</h3>
+              <p className="hint">What your firm sent in answer to this notice. InboxCA never writes or sends a notice reply.</p>
+              <div>
+                <label htmlFor="reply-on">Reply sent on</label>
+                <input id="reply-on" name="on" type="date" defaultValue={today} required />
+              </div>
+              <div>
+                <label htmlFor="reply-sent">What was sent</label>
+                <input id="reply-sent" name="sent" maxLength={300} placeholder="Response filed on the portal with the computation" required />
+              </div>
+              <div>
+                <label htmlFor="reply-ack">Acknowledgement or reference</label>
+                <input id="reply-ack" name="ack" maxLength={80} className="num" />
+              </div>
+              <div>
+                <label htmlFor="reply-paper">Paper from the client&apos;s folder</label>
+                <select id="reply-paper" name="paper" defaultValue="">
+                  <option value="">None</option>
+                  {papers?.map((paper) => (
+                    <option key={paper.id} value={paper.id}>
+                      {paper.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="notices-moves">
+                <Pending className="b b-primary" name="intent" value="reply_close">
+                  Save reply and close
+                </Pending>
+                <Pending className="b b-secondary" name="intent" value="reply">
+                  Save reply
+                </Pending>
+              </div>
+            </form>
+          )}
           {decides && !openDetails.action_date && (
             <form action={manageNotice} className="fields notices-confirm">
               {state}
@@ -285,7 +373,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 {state}
                 <input type="hidden" name="notice" value={opened.id} />
                 {Object.keys(noticeStatuses)
-                  .filter((status) => status !== opened.status)
+                  .filter((status) => status !== opened.status && (status !== "closed" || openDetails.reply))
                   .map((status) => (
                     <Pending key={status} className="b b-secondary" name="intent" value={status}>
                       {moves[status]}
