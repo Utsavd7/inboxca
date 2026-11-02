@@ -36,7 +36,7 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(() => firm.remove());
 
 test("Documents: tick papers to download one ZIP or preview sending them as links, and drop files to upload", async () => {
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const drive = owner.locator("section#drive");
   await drive.getByLabel("Test drive on this computer").check();
   await drive.getByLabel(/I have read this and I agree/).check();

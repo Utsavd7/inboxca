@@ -517,7 +517,7 @@ test("a contact person can act for several clients, with what they may receive",
 });
 
 test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside it", async () => {
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const drive = owner.locator("section#drive");
   await drive.getByLabel("Test drive on this computer").check();
   await drive.getByLabel(/I have read this and I agree/).check();

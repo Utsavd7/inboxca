@@ -12,6 +12,8 @@
 
 /* The full list: the filters, then the rows a page at a time. */
 .work-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-bottom: var(--s3); }
+/* GST month end: its month, person and tag choices side by side, not one a row. */
+.ui .work-bar > select { width: auto; flex: 0 1 220px; }
 .work-preview { margin: var(--s3) calc(var(--s4) * -1) 0; }
 /* A preview row's line says why it is left out, so it wraps instead of being cut short. */
 .work-preview .sub { white-space: normal; }

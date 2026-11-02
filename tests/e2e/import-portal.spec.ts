@@ -32,7 +32,7 @@ test.beforeAll(async ({ browser }) => {
   await owner.getByLabel("6 digit code from the app").fill(totp(key));
   await owner.getByRole("button", { name: "Continue" }).click();
   await expect(owner).toHaveURL(/\/app$/);
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const section = owner.locator("section#drive");
   await section.getByLabel("Test drive on this computer").check();
   await section.getByLabel(/I have read this and I agree/).check();

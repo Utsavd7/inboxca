@@ -69,7 +69,7 @@ test("the owner names a co-admin, who changes the access settings but not the ow
   expect((await settings()).office).toMatchObject({ deputies: [partnerId], co_admin: partnerId });
 
   await signIn(partner, partnerEmail, partnerKey);
-  await partner.goto("/app/settings");
+  await partner.goto("/app/settings?group=access");
   await expect(partner.getByRole("heading", { name: "How your team works" })).toBeVisible();
   for (const owners of ["Firm email", "Recovery codes", "Close the firm"]) await expect(partner.getByRole("heading", { name: owners })).toHaveCount(0);
   await expect(partner.getByLabel("Second admin")).toHaveCount(0);

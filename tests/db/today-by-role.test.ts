@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Client } from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { actAs, asOwner, connect, rollback } from "./db";
+import { actAs, asOwner, attempt, connect, rollback } from "./db";
 
 // Today by role (20261101100000_today_by_role.sql): a person's own late clients, which of a list
 // of clients they look after, this week's numbers and a manager's busiest people, each read as
@@ -90,4 +90,26 @@ it("ranks a manager's team by their open returns, and has none for someone with 
   await asOwner(db);
   await db.query("insert into public.client_assignments (firm_id, client_id, team_id, role) values ($1, $2, $3, 'staff')", [firm, client.team, team]);
   expect(await load(people.manager)).toEqual([{ user_id: people.outside, returns: 3 }]);
+}));
+
+it("shows a person assigned for one kind of work only that desk's returns", () => rollback(db, async () => {
+  await seed();
+  await asOwner(db);
+  // The other staff member also takes the staff member's client, for income tax only; the
+  // client has one ITR late as well as its GST return.
+  await db.query("insert into public.client_assignments (firm_id, client_id, user_id, role, work) values ($1, $2, $3, 'staff', 'income_tax')", [firm, client.mine, people.other]);
+  await db.query(`insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) values ($1, $2, 'compliance', 'ITR_NA', '2025', ${day(-2)})`, [firm, client.mine]);
+  const late = (person: string) => as(person, "select client_id, returns, code from public.late_clients($1, true) order by client_id", [firm]);
+  // The income tax person sees the client with its one late ITR; the GST person sees only the GST return.
+  expect(await late(people.other)).toEqual([{ client_id: client.mine, returns: 1, code: "ITR_NA" }, { client_id: client.other, returns: 1, code: "GSTR1_M" }].sort((a, b) => a.client_id.localeCompare(b.client_id)));
+  await asOwner(db);
+  await db.query("update public.client_assignments set work = 'gst' where client_id = $1 and user_id = $2", [client.mine, people.staff]);
+  expect(await late(people.staff)).toEqual([{ client_id: client.mine, returns: 1, code: "GSTR1_M" }]);
+  // Whoever has the client's whole work still sees both, and the client itself stays visible to each.
+  expect(await late(people.owner)).toHaveLength(3);
+  expect(await as(people.staff, "select id from public.looked_after($1, $2) id", [firm, [client.mine]])).toEqual([{ id: client.mine }]);
+  // The manager's team load counts each person's own kind.
+  expect(await as(people.manager, `select user_id, returns from public.team_load($1, ${day(6)}) order by user_id`, [firm])).toEqual([{ user_id: people.outside, returns: 2 }, { user_id: people.staff, returns: 2 }].sort((a, b) => a.user_id.localeCompare(b.user_id)));
+  // No third kind.
+  expect((await attempt(db, "insert into public.client_assignments (firm_id, client_id, user_id, role, work) values ($1, $2, $3, 'staff', 'audit')", [firm, client.team, people.other])).ok).toBe(false);
 }));

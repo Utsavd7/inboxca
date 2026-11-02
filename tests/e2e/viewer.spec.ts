@@ -18,7 +18,7 @@ test("PDFs, spreadsheets and photos arrive as personal page images, with no file
     await page.getByLabel("6 digit code from the app").fill(totp(key));
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(page).toHaveURL(/\/app$/);
-    await page.goto("/app/settings");
+    await page.goto("/app/settings?group=email");
     const drive = page.locator("section#drive");
     await drive.getByLabel("Test drive on this computer").check();
     await drive.getByLabel(/I have read this and I agree/).check();

@@ -18,6 +18,12 @@ export const exampleClient = { name: "Sharma Traders (example)", kind: clientKin
 
 // What each person assigned to a client does for it.
 export const assignmentRoles = { partner_in_charge: "Partner in charge", manager: "Manager", staff: "Staff" } as const;
+// Which of the client's work: everything (the default, stored as null), or one desk's returns
+// (client_assignments.work; public.work_of sorts return codes the same way).
+export const assignmentWork = { "": "Everything", gst: "GST only", income_tax: "Income tax only" } as const;
+export const readWork = (value: FormDataEntryValue | null) => (value === "gst" || value === "income_tax" ? value : null);
+// "Staff, GST only" for a row about who looks after a client.
+export const assignmentLabel = (a: { role: string; work?: string | null }) => `${assignmentRoles[a.role as keyof typeof assignmentRoles]}${a.work ? `, ${assignmentWork[a.work as keyof typeof assignmentWork]}` : ""}`;
 
 // Who may add and change clients; staff view only (PLAN.md 5.17.2).
 export const canManageClients = (role: string) => ["owner", "partner", "manager"].includes(role);

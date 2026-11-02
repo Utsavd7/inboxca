@@ -20,11 +20,11 @@ import { folderOrderNames, namings } from "@/src/lib/drive";
 import { lowSpace } from "@/src/jobs/drive-check";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { serverCrypto } from "@/src/lib/crypto";
-import { DAYS, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
+import { DAYS, describeHours, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
 import { exceptionsOf, IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
-import { Badge, IconTile, NotForYou, PageHead, storage, Toast, type Kind } from "../ui";
-import { Item, List } from "../motion";
+import { Badge, IconTile, NotForYou, PageHead, Row, SidePanel, storage, Toast, type Kind } from "../ui";
+import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { STAGES, askChoices, askDays, stageNames, reminderStages } from "@/src/lib/reminders";
 import { isMailApi, mailSignInReady, signInNames, signInNotReady } from "@/src/lib/mail-oauth";
@@ -65,7 +65,8 @@ const problems: Record<string, [string, string]> = {
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
 const savedNames: Record<string, string> = { due_date: "Date confirmed. Client reminders now go for it.", checkout: "Thank you. The payment shows here as soon as your bank confirms it.", autopay_off: "AutoPay is off. Nothing more will be taken.", down: "Your plan moves down at the next renewal.", down_undone: "Your plan stays as it is.", topup: "Auto top-up saved.", money_back: "Your plan is cancelled and your money is on its way back.",preset: "Saved. Your team now works this way.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Paper sending rules saved.", permissions: "Permissions saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", folders: "Folder order and file names saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", answers: "Replies saved.", replies: "Reply time saved.", exception: "Exception removed. The firm's rule applies again.", computer_removed: "Computer removed. Your other computers are signed out and can sign in again as usual." };
-// The page shows one group at a time, chosen by ?group=. Each section keeps its old anchor.
+// The page is one line per group, saying what is set now; ?group= opens that group's cards in
+// the side panel. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "replies", "drive"]],
   ["access", "Office and sign in", ["preset", "office", "limits", "tester", "notices", "recovery", "computers"]],
@@ -157,21 +158,23 @@ export default async function Settings({
   // The co-admin sees only the groups about keeping client data safe.
   const shown = groups.map(([id, name, sections]) => [id, name, sections.filter((section) => owner || !ownerOnly.includes(section))] as const).filter(([, , sections]) => sections.length);
   const groupOf = Object.fromEntries(shown.flatMap(([id, , sections]) => sections.map((section) => [section, id])));
-  const group = shown.find(([id]) => id === asked)?.[0] ?? groupOf[problems[error ?? ""]?.[0]] ?? shown[0][0];
-  // Only the open group's data is read, all at once. The usage meters (about 100 ms at 10,000
-  // clients) come in after the page, in their own card.
+  const group = shown.find(([id]) => id === asked)?.[0] ?? groupOf[problems[error ?? ""]?.[0]] ?? null;
+  // The summary's few facts and the open group's data are read all at once. The usage meters
+  // (about 100 ms at 10,000 clients) come in after the page, in their own card.
   const admin = supabaseAdmin();
   const usage = group === "data" ? Promise.resolve(supabase.rpc("firm_usage", { target_firm: membership.firmId })).then(({ data }) => data?.[0]) : null;
-  const [{ data: closed }, { data: accounts }, { data: people }, { data: standing }, { data: branches }] = await Promise.all([
+  const [{ data: closed }, { data: accounts }, { data: people }, { data: standing }, { data: branches }, { count: headcount }, { data: sub }] = await Promise.all([
     // A closed firm keeps only its download until InboxCA deletes it, 30 days on.
     supabase.from("activity_log").select("at").eq("entity_id", membership.firmId).eq("firm_id", membership.firmId).eq("action", "firm.closed").maybeSingle(),
-    group === "email" ? supabase.from("connected_accounts").select("id, kind, provider, address_enc, status") : Promise.resolve({ data: null }),
+    supabase.from("connected_accounts").select("id, kind, provider, address_enc, status"),
     group === "people" ? supabase.rpc("firm_people", { target_firm: membership.firmId }) : Promise.resolve({ data: null }),
     // People with their own access: what the owner or a deputy always allowed them, from a
     // question in the Inbox, and their exceptions to the firm's rules.
     group === "people" ? admin.from("firm_members").select("user_id, access").eq("firm_id", membership.firmId).not("access", "is", null) : Promise.resolve({ data: null }),
     // Each branch may keep its own hours (5.17.4 #13).
     group === "hours" ? supabase.from("groups").select("id, name, kind, settings").eq("firm_id", membership.firmId).eq("kind", "branch").order("name") : Promise.resolve({ data: null }),
+    admin.from("firm_members").select("user_id", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("status", "active"),
+    owner ? admin.from("subscriptions").select("status, paid_until").eq("firm_id", membership.firmId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   if (closed) return (
     <div className="set-page">
@@ -195,16 +198,16 @@ export default async function Settings({
   const scopeIds=group === "people" ? [...new Set([...Object.values(permissions).flatMap(column=>column?.scope?.clients ?? []),...always.flatMap(person=>person.rights.flatMap(grant=>"clients" in grant ? grant.clients ?? [] : []))])] : [];
   // Only the server reads a drive's settings; this page is the owner's.
   const [{ data: driveSettings }, { data: driveSetup }, { data: mailServers }, driveAddress, mailAddress, { data: scopeClients }, { data: driveAway }, low] = await Promise.all([
-    drive ? admin.from("connected_accounts").select("settings").eq("id", drive.id).single() : Promise.resolve({ data: null }),
+    drive && group === "email" ? admin.from("connected_accounts").select("settings").eq("id", drive.id).single() : Promise.resolve({ data: null }),
     // What InboxCA set up in the drive after Connect (the drive_setup job).
-    drive ? supabase.from("activity_log").select("details").eq("firm_id", membership.firmId).eq("action", "drive.setup").eq("entity_id", drive.id).order("at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+    drive && group === "email" ? supabase.from("activity_log").select("details").eq("firm_id", membership.firmId).eq("action", "drive.setup").eq("entity_id", drive.id).order("at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
     mailbox?.status === "needs_reconnect" ? admin.from("connected_accounts").select("settings").eq("firm_id", membership.firmId).eq("id", mailbox.id).single() : Promise.resolve({ data: null }),
     drive && crypto.decrypt(membership.firmId, `accounts/${drive.id}/address`, drive.address_enc),
     mailbox && crypto.decrypt(membership.firmId, `accounts/${mailbox.id}/address`, mailbox.address_enc),
     scopeIds.length ? supabase.from("clients").select("id,name").eq("firm_id", membership.firmId).in("id", scopeIds) : Promise.resolve({ data: [] }),
     // The daily check could not reach the drive (drive_check), and how much space a year needs.
     drive ? supabase.from("requests").select("id").eq("firm_id", membership.firmId).eq("kind", "alert").eq("entity_type", "drive_away").eq("status", "pending").maybeSingle() : Promise.resolve({ data: null }),
-    drive ? lowSpace(membership.firmId) : 0,
+    drive && group === "email" ? lowSpace(membership.firmId) : 0,
   ]);
   const folderOrder = (driveSettings?.settings as { folder_order?: string } | undefined)?.folder_order ?? "year_client_work";
   const naming = (driveSettings?.settings as { naming?: string } | undefined)?.naming ?? "client_type_period";
@@ -239,6 +242,19 @@ export default async function Settings({
   const exceptions = exceptionsOf(settings, (standing ?? []).filter((member) => people?.some((person) => person.user_id === member.user_id && person.status === "active")));
   const whoIs = (one: { role?: string; person?: string }) => one.role ? `${one.role in roleNames ? roleLabel(one.role) : one.role} role` : people?.find((person) => person.user_id === one.person)?.email ?? "Someone";
   const problem = (section: string) => error && problems[error]?.[0] === section && <p className="alert" role="alert">{problems[error][1]}</p>;
+  // What is set now, one plain line a group.
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const stages = reminderStages(settings);
+  const lines: Record<string, string> = {
+    email: `${mailbox ? `${mailAddress}, ${mailbox.status === "connected" ? "connected" : "needs connecting again"}` : "No firm email connected yet"}. ${drive ? `Papers are saved to ${driveNames[drive.provider] ?? drive.provider}${driveAway ? ", which cannot be reached now" : ""}` : "No drive connected yet"}.`,
+    access: `${preset ? presets[preset].name : "Custom rules"}. ${access.idle_minutes ? `Signed out after ${access.idle_minutes} minutes without use` : "Nobody is signed out for being idle"}${access.india_only ? ", and everyone but you works from India only" : ""}.`,
+    hours: `${describeHours(hours) || "No open days set"}${holidays.length ? `. ${count(holidays.length, "holiday", "holidays")}` : ""}${hoursOnly ? ". Everyone but you can use InboxCA only in these hours" : ""}.`,
+    people: `${count(headcount ?? 0, "person", "people")}. ${settings.client_visibility === "restricted" ? "Only the people assigned to a client see it" : "Everyone sees every client"}${settings.second_form_approval === true ? ". A second person approves before filing" : ""}.`,
+    reminders: `${settings.reminders === true ? `Clients are emailed ${stages.length === STAGES.length ? "at every stage" : stages.map((day) => stageNames[day].toLowerCase()).join(", ") || "at no stage"}` : "Clients are not emailed before due dates"}. ${records.approve_all === true ? "Every paper asked for waits for approval" : "Routine papers asked for are sent at once"}.`,
+    data: "Your client list, returns, notices and activity log, yours to download any time.",
+    me: `${passkeys ? count(passkeys, "passkey", "passkeys") : "No passkey yet"}. You sign in with the email code${passkeys ? " and a passkey" : " and the 6 digit code"}.`,
+    billing: sub?.paid_until ? `${sub.status === "active" ? "Paid" : sub.status === "grace" ? "Payment due" : sub.status} until ${longDate(sub.paid_until)}.` : "Your firm is on a pilot. Orelu takes no payment for now.",
+  };
   // Connect with Google, Microsoft or Zoho, each shown only once its app's keys are set.
   const signIn = (again?: MailApi) => {
     const button = (provider: MailApi, admin = false) => (
@@ -260,19 +276,14 @@ export default async function Settings({
     <div className="set-page">
       <PageHead title="Settings" sub={<>{owner ? "Only you, the owner, see this page." : "You and the owner can change these."}{group !== "me" && nudge}</>} />
       <GroupAnchor groupOf={groupOf} />
-      <div className="set">
-        <nav className="set-nav" aria-label="Settings">
-          {shown.map(([id, name]) => {
-            const Icon = groupIcons[id];
-            return (
-              <Link key={id} href={`/app/settings?group=${id}`} aria-current={group === id ? "page" : undefined}>
-                <Icon size={16} aria-hidden />
-                {name}
-              </Link>
-            );
-          })}
-        </nav>
-        <div key={group} className="set-body page-in">
+      <ul className="app-rows set-summary panel">
+        {shown.map(([id, name, sections]) => (
+          <Row key={id} lead={<IconTile Icon={groupIcons[id]} kind={cardIcons[sections[0]]?.[1]} />} title={name} meta={lines[id]} action={<Link className="b b-ghost" href={`/app/settings?group=${id}`} scroll={false} aria-label={`Change ${name}`}>Change</Link>} />
+        ))}
+      </ul>
+      <Presence>
+        {group && <SidePanel key={group} id="set-group" title={shown.find(([id]) => id === group)![1]} close="/app/settings">
+        <div className="set-body">
           {group === "email" && <>
           <Card id="mailbox" title="Firm email" line="The address your clients write to. InboxCA reads only your clients' emails, keeps no copy of them, and replies from this address.">
             {mailbox ? (
@@ -870,7 +881,8 @@ export default async function Settings({
 
           {group === "billing" && <BillingCards supabase={supabase} firmId={membership.firmId} ask={{ ...plan, error }} Card={Card} />}
         </div>
-      </div>
+        </SidePanel>}
+      </Presence>
       {saved && savedNames[saved] && <Toast>{savedNames[saved]}</Toast>}
     </div>
   );
