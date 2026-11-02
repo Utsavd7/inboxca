@@ -766,7 +766,7 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
 });
 
 // #26, #55, #56: the shared mailbox cannot sign in; automation runs separately.
-test("the owner connects the firm's mailbox; client mail is sorted, unclear mail waits for the team, a stranger's is skipped", async ({ request, browser }) => {
+test("the owner connects the firm's mailbox; client mail is sorted, unclear mail waits for the team, a stranger's is listed unread", async ({ request, browser }) => {
   // An address already on the team is refused as soon as it becomes the firm's mailbox.
   await owner.goto("/app/people?panel=invite");
   await owner.getByLabel("Their work email").fill(mailboxEmail);
@@ -812,8 +812,9 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   for (const from of [`Client-${tag}@Patel.test`, `stranger-${tag}@else.test`])
     await smtp.sendMail({ from, to: mailboxEmail, subject: "Please send last year's ITR", text: "Thanks" });
   await pollFirmMail(request, firm.firmId);
-  const events = await query(local.dbUrl, "select (client_id is not null) as matched, label from public.email_events where firm_id = $1", [firm.firmId]);
+  const events = await query(local.dbUrl, "select (client_id is not null) as matched, label from public.email_events where firm_id = $1 and reason_code is distinct from 'not_a_client'", [firm.firmId]);
   expect(events).toEqual([{ matched: true, label: "records_past" }]);
+  expect(await query(local.dbUrl, "select (client_id is not null) as matched, label from public.email_events where firm_id = $1 and reason_code = 'not_a_client'", [firm.firmId])).toEqual([{ matched: false, label: "other" }]);
   expect(await mailCount(`stranger-${tag}@else.test`)).toBe(1);
 
   // A second email the rules cannot place waits for the team, and a person corrects a label.

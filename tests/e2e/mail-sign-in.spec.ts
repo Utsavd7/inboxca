@@ -71,7 +71,7 @@ for (const provider of ["gmail", "outlook", "zoho"] as const) {
       await fake.deliver({ from: clientEmail, subject: `Meeting ${tag}`, text: "Dear Sir,\n\nCan we meet next week about the audit?\n\nRegards, Meera" });
       await expect(async () => {
         await readMail(page, firm.firmId);
-        expect(await query(local.dbUrl, "select label from public.email_events where firm_id = $1", [firm.firmId])).toEqual([{ label: "other" }]);
+        expect(await query(local.dbUrl, "select label from public.email_events where firm_id = $1 and reason_code is distinct from 'not_a_client'", [firm.firmId])).toEqual([{ label: "other" }]);
       }).toPass({ timeout: 30_000 });
 
       // The Inbox reads the subject and first line live, through the file worker.
