@@ -1,5 +1,5 @@
+import { columns, services, sheet, sheetType, workbook, xml } from "@/src/lib/client-sheet";
 import { clientKinds, exampleClient, importServices } from "@/src/lib/clients";
-import { zip } from "@/src/lib/firm-download";
 
 // The client list template linked from Clients > Import from Excel: the headings the import
 // reads, lists of the app's client types and services, and checks Excel makes as each number
@@ -7,24 +7,7 @@ import { zip } from "@/src/lib/firm-download";
 // no file to keep in step. Its example row is on How to fill only, never in the data.
 export const dynamic = "force-static";
 
-const services = Object.keys(importServices);
 const choices = (column: string) => Object.keys(importServices[column].choices);
-const columns = ["Name", "Client type", "PAN", "GSTIN", "Email", "TAN", ...services, "Phone", "Looked after by"];
-const widths = [36, 24, 14, 20, 32, 14, 20, 14, 26, 18, 24, 44];
-const xml = (text: string) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
-const main = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
-const rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-const type = "application/vnd.openxmlformats-officedocument.spreadsheetml";
-
-// A sheet of text. style(row, column): 1 bold, 2 grey. The data sheet keeps its headings in
-// view and carries the checks.
-const sheet = (rows: string[][], style: (row: number, column: number) => number, checks = "") =>
-  `${head}<worksheet ${main}>` +
-  (checks && '<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>') +
-  `<cols>${widths.map((width, at) => `<col min="${at + 1}" max="${at + 1}" width="${width}" customWidth="1"/>`).join("")}</cols><sheetData>` +
-  rows.map((cells, row) => `<row r="${row + 1}">${cells.map((text, column) => text && `<c r="${String.fromCharCode(65 + column)}${row + 1}" s="${style(row, column)}" t="inlineStr"><is><t>${xml(text)}</t></is></c>`).join("")}</row>`).join("") +
-  `</sheetData>${checks && `<dataValidations count="${columns.length}">${checks}</dataValidations>`}</worksheet>`;
 
 // One column's check on rows 2 to 2,001 (an import takes 2,000), with what Excel shows on the
 // cell and when a value fails. A formula is written for row 2; Excel moves it down each row.
@@ -50,6 +33,7 @@ export function GET() {
     ...services.map((column) => check(column, 'type="list"', `"${choices(column).join(",")}"`, "Choose from the list what your firm files for this client. Left empty, InboxCA adds none.", `Choose ${column} from the list.`)),
     check("Phone", 'type="textLength" operator="lessThanOrEqual"', "20", "The client's mobile number, for calls and WhatsApp from your team's phones.", "A phone number can have at most 20 characters."),
     check("Looked after by", 'type="textLength" operator="lessThanOrEqual"', "120", "The name or email of the person in your firm who looks after this client, as on People.", "A name can have at most 120 characters."),
+    check("Tags", 'type="textLength" operator="lessThanOrEqual"', "200", "Your firm's own words for this client, separated by commas: Priority, Audit 2027. Up to 10.", "Tags can have at most 200 characters in all."),
   ].join("");
   const help = [
     ["How to fill the client list"],
@@ -70,23 +54,19 @@ export function GET() {
     ["", "Those three are the services your firm files for the client; InboxCA makes their due dates. Left empty, you can choose them later on the Clients list."],
     ["Phone", "The client's mobile number: 10 digits, or + and the country code for a number outside India. For calls and WhatsApp from your team's phones."],
     ["Looked after by", "The name or email of the person in your firm who looks after this client, as on People. They are assigned to the client."],
+    ["Tags", "Your firm's own words for the client, separated by commas, like Priority, Audit 2027. Up to 10. The Clients list filters by them."],
     [],
     ["An example row. Do not copy it into the Clients sheet."],
     columns,
-    [exampleClient.name, exampleClient.kind, exampleClient.pan, exampleClient.gstin, exampleClient.email, "", "Monthly", "", "Business and no audit", exampleClient.phone],
+    [exampleClient.name, exampleClient.kind, exampleClient.pan, exampleClient.gstin, exampleClient.email, "", "Monthly", "", "Business and no audit", exampleClient.phone, "", "Priority"],
   ];
-  const files: Record<string, string> = {
-    "[Content_Types].xml": `${head}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${type}.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="${type}.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="${type}.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="${type}.worksheet+xml"/></Types>`,
-    "_rels/.rels": `${head}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
-    "xl/workbook.xml": `${head}<workbook ${main} xmlns:r="${rel}"><sheets><sheet name="Clients" sheetId="1" r:id="rId1"/><sheet name="How to fill" sheetId="2" r:id="rId2"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `${head}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${rel}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="${rel}/styles" Target="styles.xml"/></Relationships>`,
-    "xl/styles.xml": `${head}<styleSheet ${main}><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><i/><sz val="11"/><color rgb="FF5B6474"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
-    "xl/worksheets/sheet1.xml": sheet([[...columns, "Only Name is needed. See the How to fill sheet."]], (_, column) => (column < columns.length ? 1 : 2), checks),
-    "xl/worksheets/sheet2.xml": sheet(help, (row) => ([0, 5, help.length - 3, help.length - 2].includes(row) ? 1 : 0)),
-  };
-  return new Response(new Uint8Array(zip(Object.entries(files).map(([name, text]) => ({ name, text })))), {
+  const bytes = workbook([
+    { name: "Clients", xml: sheet([[...columns, "Only Name is needed. See the How to fill sheet."]], (_, column) => (column < columns.length ? 1 : 2), checks) },
+    { name: "How to fill", xml: sheet(help, (row) => ([0, 5, help.length - 3, help.length - 2].includes(row) ? 1 : 0)) },
+  ]);
+  return new Response(bytes, {
     headers: {
-      "Content-Type": `${type}.sheet`,
+      "Content-Type": `${sheetType}.sheet`,
       "Content-Disposition": 'attachment; filename="InboxCA client list.xlsx"',
     },
   });

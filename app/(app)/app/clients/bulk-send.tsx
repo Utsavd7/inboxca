@@ -65,6 +65,9 @@ export function BulkSendBar({ types, years, send, list }: { types: string[]; yea
           <Link className="b b-ghost" href={`${list}${list.includes("?") ? "&" : "?"}panel=assign&clients=${ids.join(",")}`} scroll={false}>
             Assign
           </Link>
+          <Link className="b b-ghost" href={`${list}${list.includes("?") ? "&" : "?"}panel=tags&clients=${ids.join(",")}`} scroll={false}>
+            Add tags
+          </Link>
           {send && <>
           <span className="bulk-what">Send them a paper</span>
           <select id="bulk-paper" name="type" required aria-label="Paper" value={type} onChange={(event) => setType(event.target.value)}>

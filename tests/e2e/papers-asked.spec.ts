@@ -143,6 +143,13 @@ test("once the client uploads every paper, the person is told to check the figur
   const link = (await mailTexts(client.email))[0].match(/http\S+\/u\/[\w-]+/)![0];
   const visitor = await (await browser.newContext()).newPage();
   await visitor.goto(link);
+  // The page says what is still needed, when the next reminder comes and that a password is
+  // asked once; it names nothing of the firm beyond its name and office email, and this request.
+  const progress = visitor.getByRole("region", { name: "Progress" });
+  await expect(progress).toContainText("Still needed: Sales bills, Purchase bills, Bank statement.");
+  await expect(progress).toContainText(new RegExp(`Next reminder from Papers Firm ${tag}: (today|\\d+ \\w+ \\d{4})\\.`));
+  await expect(progress).toContainText("If a file has a password, you will be asked for it once.");
+  for (const secret of [ownerEmail, staffEmail, client.email]) expect(await visitor.content()).not.toContain(secret);
   // Registers come as spreadsheets, so the link takes those too (product gaps S5).
   for (const paper of ["Sales bills", "Purchase bills", "Bank statement"]) {
     const item = visitor.getByRole("listitem").filter({ hasText: paper });
