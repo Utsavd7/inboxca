@@ -7,7 +7,8 @@ import { pdfLines, recogniseTaxPdf } from "@/src/lib/tax-papers";
 import type { FolderOrder, Naming } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { mailHealth, openMail } from "@/src/lib/firm-mail";
-import { receive } from "@/src/lib/intake";
+import { asReceived, receive } from "@/src/lib/intake";
+import { queueRescan } from "./rescan";
 import type { NoticeDetails } from "@/src/lib/notices";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { queueRead } from "./read-document";
@@ -96,7 +97,7 @@ async function fileAttachments(
       const about = notice ? { ...described, work: notice.authority, type: described.type === "Document" && /\.pdf$/i.test(file.name) ? "Notice" : described.type } : described;
       const again = known.some((document) => document.sha256 === sha256);
       const registration = gstinFor(about.work, (gstins ?? []).map((row) => row.id));
-      const toCheck = !about.sure || again;
+      const toCheck = !about.sure || again || !!sent.held;
       const folder = await drive.ensureFolder(folderFor(order, client, { ...about, receivedAt: event.received_at, toCheck }));
       const parts = { client, type: about.type, period: filePeriod(about.period), extension: path.extname(file.name) };
       const saved = await placeUnderFreeName(parts, receivedLabel(event.received_at), (name) => drive.save(folder, name, file.bytes), naming);
@@ -109,7 +110,7 @@ async function fileAttachments(
         work_type: about.work,
         document_type: about.type,
         period_key: about.period,
-        status: toCheck ? "to_check" : "filed",
+        ...asReceived(sent, toCheck ? "to_check" : "filed", new Date().toISOString()),
         email_event_id: event.id,
         drive_file_id: saved.id,
         name: saved.name,
@@ -118,13 +119,12 @@ async function fileAttachments(
         sha256,
         received_at: event.received_at,
         registration_id: registration,
-        scanned_at: sent.scanned ? new Date().toISOString() : null,
       });
       if (error) throw new Error("document_not_saved");
       if (!toCheck) await settleVersions(admin, { client_id: event.client_id, work_type: about.work, document_type: about.type, period_key: about.period, registration_id: registration });
       // A paper the client emailed answers what was asked for, as an upload does.
       if (!toCheck) await receiveAsked(admin, event.client_id, about.type, about.period, id);
-      await queueRead(firm, id);
+      await (sent.held ? queueRescan : queueRead)(firm, id);
       if(about.work==="gst" && !toCheck && /\.(xlsx?|ods|csv)$/i.test(file.name)) {const {error}=await queueSales(firm,id);if(error) throw new Error("sales_not_queued");}
       filed.push({ type: about.type, period: about.period, toCheck });
       known.push({ id, email_event_id: event.id, sha256, document_type: about.type, period_key: about.period, status:toCheck ? "to_check" : "filed" });

@@ -6,6 +6,7 @@ import {grantFor} from "@/src/lib/permission-grants";
 import { periodName } from "@/src/lib/documents";
 import { paperType } from "@/src/lib/paper-type";
 import { currentMember } from "@/src/lib/member";
+import { supabaseAdmin } from "@/src/lib/supabase";
 import { Badge, PageHead } from "../../../ui";
 import { Pending } from "../../../pending";
 import {formName,preparedSchema} from "@/src/lib/prepared";
@@ -36,7 +37,9 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
   const canCopy=!membership.viewOnlyUntil && (membership.may("download",file.client_id) || !!await grantFor(membership.firmId,userId,"download",file.client_id,id));
   // A prepared return not yet filed, against the client's Form 26AS and Form 16.
   const differences=meta && /^ITR/.test(meta.form) && meta.status!=="filed" ? (await itrChecks(supabase,membership.firmId,[{client:file.client_id,period:file.period_key,form:meta.form,sources:meta.sources.map(source=>source.id)}]).catch(()=>[]))[0]?.differences ?? [] : [];
-  const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "ods", "json", "txt", "docx", "odt"].includes(extension);
+  // A file held for the virus check (src/lib/intake.ts receive) is not shown until it passes.
+  const held = !file.scanned_at && !!(await supabaseAdmin().from("documents").select("held:details->>held").eq("id", id).maybeSingle()).data?.held;
+  const viewable = !held && ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "ods", "json", "txt", "docx", "odt"].includes(extension);
   const kind = [paperType(file.document_type), periodName(file.period_key)].filter(Boolean).join(", ");
   const stream = `/app/files/${id}/stream${extension==="xlsx" ? `?sheet=${sheet}` : ""}`;
   // A prepared return opens as its form (Form view), with its stamped pages a click away (File view).
@@ -52,7 +55,7 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
       {meta && <span className="hint">Made on the official {formName(meta.form)} form, version {meta.template}.</span>}
       <span className="hint">View only, with your email on every page.</span>
       {/* A file InboxCA made itself needs no virus check; any other says when it had none. */}
-      {!file.scanned_at && !meta && file.document_type !== "Filing record" && <span className="hint">Not virus checked by InboxCA.</span>}
+      {held ? <span className="hint">Waiting for the virus check. Nobody can open it until it passes.</span> : !file.scanned_at && !meta && file.document_type !== "Filing record" && <span className="hint">Not virus checked by InboxCA.</span>}
     </>
   );
   const body = (
@@ -76,7 +79,7 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
       {viewable && (!process.env.FILE_WORKER_URL || !process.env.FILE_WORKER_SECRET) ? <p className="hint viewer-none">Papers cannot be shown yet.</p> : viewable ? (
         <FileViewer key={`${file.id}-${sheet}`} id={file.id} sheet={sheet} hideInactive={membership.settings.viewer_hide_inactive === true} />
       ) : (
-        <p className="hint viewer-none">This kind of file cannot be shown here. Ask the owner for it.</p>
+        <p className="hint viewer-none">{held ? "This paper is waiting for the virus check." : "This kind of file cannot be shown here. Ask the owner for it."}</p>
       )}
       </>}
     </>

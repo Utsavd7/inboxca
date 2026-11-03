@@ -17,7 +17,8 @@ export const when = (at: string) =>
 
 // Why a paper waits under To check (PLAN.md 5.5.0): the same file came in before, else what
 // InboxCA could not tell from its name.
-function waitsFor(paper: { document_type: string; period_key: string }, twin: boolean) {
+function waitsFor(paper: { document_type: string; period_key: string }, twin: boolean, held?: boolean) {
+  if (held) return "the virus check was not running when it came in; InboxCA checks it as soon as the check is back";
   if (twin) return "the same file came in before";
   const unknown = [paper.document_type === "Document" && "type", !paper.period_key && "period"].filter(Boolean).join(" and ");
   return unknown ? `InboxCA could not tell its ${unknown}` : "InboxCA was not sure of its type";
@@ -26,7 +27,7 @@ function waitsFor(paper: { document_type: string; period_key: string }, twin: bo
 // One paper's way in, from what InboxCA recorded: the email's sender, the first log line of who
 // brought it in (an upload with no person came through the client's upload link), or the first
 // import. A GSTR-2A or 2B JSON is a portal file however it came.
-export function originOf(paper: Arrived, seen: { sender?: string; mail?: boolean; line?: Line; by?: string; imported?: boolean; from?: string; twin?: boolean }) {
+export function originOf(paper: Arrived, seen: { sender?: string; mail?: boolean; line?: Line; by?: string; imported?: boolean; from?: string; twin?: boolean; held?: boolean }) {
   const { line, by = "Someone" } = seen;
   const portal = (line?.details as { from?: string } | null)?.from === "portal" || (paper.work_type === "gst" && /^GSTR-2[AB]$/.test(paper.document_type) && /\.json$/i.test(paper.name));
   const sender = seen.sender || paper.clients?.name || "the client";
@@ -46,7 +47,7 @@ export function originOf(paper: Arrived, seen: { sender?: string; mail?: boolean
   const origin: Origin = { short, how, at: when(paper.received_at) };
   if (seen.mail) origin.mail = paper.email_event_id!;
   if (seen.from) origin.from = seen.from;
-  if (paper.status === "to_check") origin.why = waitsFor(paper, !!seen.twin);
+  if (paper.status === "to_check") origin.why = waitsFor(paper, !!seen.twin, seen.held);
   return origin;
 }
 
@@ -65,7 +66,7 @@ export async function paperOrigins(supabase: Awaited<ReturnType<typeof supabaseS
     others.length ? supabase.rpc("firm_people", { target_firm: firmId }) : Promise.resolve({ data: [] }),
     others.length ? admin.from("requests").select("id", { count: "exact", head: true }).eq("firm_id", firmId).eq("kind", "import") : Promise.resolve({ count: 0 }),
     old && others.includes(old) ? admin.from("requests").select("moved:details->moved").eq("firm_id", firmId).eq("kind", "import").contains("details", { moved: [{ document: old }] }).limit(1) : Promise.resolve({ data: [] }),
-    waiting.length ? admin.from("documents").select("id, client_id, sha256").eq("firm_id", firmId).in("client_id", waiting.map((paper) => paper.client_id)).in("sha256", waiting.map((paper) => paper.sha256!)) : Promise.resolve({ data: [] }),
+    waiting.length ? admin.from("documents").select("id, client_id, sha256, held:details->>held").eq("firm_id", firmId).in("client_id", waiting.map((paper) => paper.client_id)).in("sha256", waiting.map((paper) => paper.sha256!)) : Promise.resolve({ data: [] }),
   ]);
   const crypto = serverCrypto();
   const senders = new Map(
@@ -79,7 +80,9 @@ export async function paperOrigins(supabase: Awaited<ReturnType<typeof supabaseS
       const line = first.get(paper.id);
       const twin = copies?.some((copy) => copy.id !== paper.id && copy.client_id === paper.client_id && copy.sha256 === paper.sha256);
       const by = personName(people?.find((person) => person.user_id === line?.actor_id)?.email);
-      return [paper.id, originOf(paper, { sender: senders.get(paper.email_event_id ?? ""), mail: senders.has(paper.email_event_id ?? ""), line, by, imported: !!imports, from: paper.id === old ? from : undefined, twin })] as const;
+      // Held for the virus check (src/lib/intake.ts receive): a paper waits for that first.
+      const held = copies?.some((copy) => copy.id === paper.id && copy.held === "scan");
+      return [paper.id, originOf(paper, { sender: senders.get(paper.email_event_id ?? ""), mail: senders.has(paper.email_event_id ?? ""), line, by, imported: !!imports, from: paper.id === old ? from : undefined, twin, held })] as const;
     }),
   );
 }

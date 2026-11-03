@@ -1,12 +1,16 @@
 // Privacy notice, terms, refund policy and data processing agreement. Every point follows
 // what the product does in code (PLAN.md D5, D6, D33, D36, sections 5.14.1 and 8) and the
 // official texts: the DPDP Act 2023 (sections 5, 6, 8, 11 to 14 and 16), the DPDP Rules 2025,
+// the IT Act 2000 section 43A with the SPDI Rules 2011, the CERT-In directions of 28 Apr 2022,
 // the Consumer Protection (E-Commerce) Rules 2020 and the RBI E-mandate Framework 2026.
+// G.S.R. 843(E) and 846(E) of 13 Nov 2025 start most of the DPDP Act and Rules (sections 3 to 17,
+// rules 3 and 5 to 16) and the end of section 43A eighteen months later, so until May 2027 the
+// SPDI Rules apply and the DPDP duties are named with that start.
 // Sign up records the version dates below as what a firm accepted, so a change that affects
 // firms needs a new date.
 import { analyticsToken, contactEmail } from "@/src/lib/site";
 
-export const legalUpdated = "2 Nov 2026";
+export const legalUpdated = "3 Nov 2026";
 export const legalNote =
   "InboxCA is a product of Orelu, a partnership firm. Orelu's registration is in progress, and its registered name and address will be added here when it completes.";
 
@@ -25,6 +29,7 @@ export const privacySections = [
       "InboxCA is a product of Orelu, a partnership firm in India run by Utsav Doshi and Ria Chheda. Orelu's registration is in progress, and its registered name and address will be added here when it completes.",
       "This notice covers this website and the InboxCA app, and it explains how InboxCA handles a firm's data.",
       "For the personal data of your firm's people, Orelu decides how it is used (it is the data fiduciary). For your clients' data, your firm decides and Orelu only processes it on your firm's instructions, under the data processing agreement.",
+      "Today the Information Technology Act 2000 and its 2011 rules on sensitive personal data apply. Most duties under the Digital Personal Data Protection Act 2023 and its Rules of 2025 start in May 2027, and this notice says where a point starts then.",
     ],
   },
   {
@@ -37,7 +42,7 @@ export const privacySections = [
       "Signing up or signing in sets only the cookies that keep you signed in, remember the plan you chose and remember how you set up the app's screens.",
       "If you sign up, you give us your firm's name, your work email and your firm's state.",
       "Once your firm uses InboxCA, it also keeps your team's work emails and sign in records, the computers and office internet connections your firm approves, the record of who did what, and, for billing, the owner's mobile number and the firm's address and GSTIN.",
-      "We use those details to run your firm's account, to email you sign in codes, payment notices and receipts, and to keep the account safe. We do not sell them or pass them on.",
+      "We use those details to run your firm's account, to email you sign in codes, payment notices and receipts, and to keep the account safe. We do not sell them, and we pass them only to the services that run InboxCA, listed below.",
     ],
   },
   {
@@ -48,6 +53,7 @@ export const privacySections = [
       "Client files stay in your firm's own OneDrive or Dropbox.",
       "InboxCA keeps your client list, your records and the figures read from files, so that it can do its work.",
       "InboxCA does not keep email subjects or email text, portal passwords, OTPs, card details or Aadhaar numbers.",
+      "InboxCA also reads the emails your firm gets from the GST and income tax departments, to find the client they are about.",
       "When someone who is not yet a client writes to your firm, InboxCA does not open the email. It keeps only a record of who wrote and when, so that your firm can add them as a client.",
     ],
   },
@@ -77,7 +83,7 @@ export const privacySections = [
       "A file passing through InboxCA is removed within 24 hours, or within 7 days if your drive cannot be reached.",
       "Safety copies of deleted or changed files are kept for 30 days.",
       "The record of who did what is kept for 12 to 36 months, as your firm chooses.",
-      "When a firm closes its account, it can still sign in and download its data for 30 days. Then InboxCA deletes the firm's records; the activity log is kept one more year, as the DPDP Rules ask, and backups expire within 35 days. The files stay in the firm's drive.",
+      "When a firm closes its account, it can still sign in and download its data for 30 days. Then InboxCA deletes the firm's records; the activity log is kept one more year, as the DPDP Rules 2025 will ask from May 2027, and backups expire within 35 days. The files stay in the firm's drive.",
     ],
   },
   {
@@ -93,7 +99,8 @@ export const privacySections = [
     id: "breach",
     title: "If data is exposed",
     points: [
-      "If personal data that Orelu holds is exposed, Orelu tells each affected person without delay and reports to the Data Protection Board of India, as section 8(6) of the Digital Personal Data Protection Act 2023 and its Rules require.",
+      "If personal data that Orelu holds is exposed, Orelu reports it to CERT-In within 6 hours, as CERT-In's directions of 28 April 2022 ask, and tells each affected person without delay.",
+      "From May 2027, when section 8(6) of the Digital Personal Data Protection Act 2023 starts, Orelu also reports it to the Data Protection Board of India as the Act and its Rules ask.",
       "If your clients' data is affected, Orelu tells your firm within 24 hours with what happened, which data and what to do, and helps your firm make its own reports.",
     ],
   },
@@ -101,7 +108,7 @@ export const privacySections = [
     id: "rights",
     title: "Your rights",
     points: [
-      "You can ask to see a summary of the personal data we hold about you and how it is used, to correct or complete it, or to delete it. You can withdraw a consent you gave.",
+      "You can ask to see a summary of the personal data we hold about you, how it is used and which services it was shared with, to correct or complete it, or to delete it. You can withdraw a consent you gave at any time by writing to the same address.",
       "You can name another person to exercise these rights for you if you die or cannot act.",
       `Write to ${grievanceContact} at ${contactEmail} from the email address your account uses, so that we know it is you. We answer within ${grievanceAnswer}.`,
       "If you are a client of a CA firm, ask your firm first. It decides what happens to your data, and InboxCA helps it answer.",
@@ -111,9 +118,9 @@ export const privacySections = [
     id: "grievance",
     title: "Complaints",
     points: [
-      `${grievanceContact} are the grievance contacts for InboxCA. Write to ${contactEmail}.`,
+      `${grievanceContact} are the grievance officers for InboxCA. Write to ${contactEmail}.`,
       `We acknowledge a complaint within ${grievanceAcknowledge} and answer it within ${grievanceAnswer}.`,
-      "If we do not settle it, you can complain to the Data Protection Board of India.",
+      "From May 2027, when that part of the Digital Personal Data Protection Act 2023 starts, you can also complain to the Data Protection Board of India if we do not settle it.",
     ],
   },
   {
@@ -146,7 +153,7 @@ export const termsSections = [
     id: "service",
     title: "What InboxCA does",
     points: [
-      "InboxCA reads the client emails in your firm's own mailbox, files attachments in your firm's own drive, sends routine replies and reminders from your firm's address, and reads figures from papers to prepare GST and income tax forms and files.",
+      "InboxCA reads the emails from clients and from the GST and income tax departments in your firm's own mailbox, files attachments in your firm's own drive, sends routine replies and reminders from your firm's address, and reads figures from papers to prepare GST and income tax forms and files.",
       "InboxCA prepares. Your team checks every figure, approves every form and files every return on the government portals with its own login, OTP or digital signature. InboxCA is not an e-Return Intermediary and does not file anything itself.",
       "InboxCA gives no tax, legal or accounting advice. Your firm stays responsible for its professional work and for what it files.",
       "Due dates and form versions come from government notifications, and InboxCA says when one is not yet checked. Your firm confirms every date and figure before it relies on it.",
@@ -166,7 +173,7 @@ export const termsSections = [
     title: "Plans and payment",
     points: [
       "Plans are paid monthly or yearly through Cashfree AutoPay, by UPI, card or bank mandate. Each plan's returns, storage, AI credits and team size are shown before you pay and in Settings, Billing.",
-      "The exact amount, with GST where it applies, is shown before you pay, and you confirm it. The same amount is then taken each month or each year, with a notice at least 24 hours before each debit. Orelu never takes more than the mandate's limit shown at setup without asking you.",
+      "The exact amount, with GST where it applies, is shown before you pay, and you confirm it. The same amount is then taken each month or each year, with a notice at least 24 hours before each debit. A card or UPI debit above ₹15,000 needs your approval each time, as the Reserve Bank's rules ask. Orelu never takes more than the mandate's limit shown at setup without asking you.",
       "If your firm uses more than its plan gives, InboxCA moves it to the plan that fits and takes the difference, with an email 3 days before. Moving to a bigger plan applies at once and moving to a smaller one at the next renewal. Extra people and AI top-ups are paid for first, then added.",
       "If a payment fails, for 7 days nothing changes while it is tried again, until day 30 your firm can view but not change anything, and after day 30 the account is paused with its records kept for 30 more days.",
       "The refund policy gives the 14 day money back and how to cancel. You can turn AutoPay off at any time in Settings, Billing or at your bank or UPI app. Until Orelu starts taking payments, firms use InboxCA with no payment, as Settings, Billing shows.",
@@ -208,7 +215,7 @@ export const termsSections = [
     title: "Pausing and ending",
     points: [
       "Orelu may pause a firm's account when a payment stays unpaid as described above, when the account is used against these terms or the law, when the law requires it, or to stop a security problem. Where it can, Orelu emails the owner first.",
-      "Your firm can close its account at any time from Settings. Everyone is signed out, the firm's email and drive are disconnected, and for 30 days the owner can still sign in and download the firm's data. Then InboxCA deletes the firm's records, keeping the activity log one more year as the DPDP Rules ask. Files in your drive are not touched.",
+      "Your firm can close its account at any time from Settings. Everyone is signed out, the firm's email and drive are disconnected, and for 30 days the owner can still sign in and download the firm's data. Then InboxCA deletes the firm's records, keeping the activity log one more year, as the DPDP Rules 2025 will ask from May 2027. Files in your drive are not touched.",
       "Orelu may stop offering InboxCA with 90 days' notice by email. Any payment for time after that date is returned.",
     ],
   },
@@ -298,7 +305,7 @@ export const refundSections = [
 // The data processing agreement between a firm (the data fiduciary for its clients' data)
 // and Orelu (its data processor), as section 8(2) of the DPDP Act 2023 asks. Sign up records
 // this date as the version a firm accepted.
-export const dpaUpdated = "29 Oct 2026";
+export const dpaUpdated = "3 Nov 2026";
 export const dpaSections = [
   {
     id: "parties",
@@ -306,6 +313,7 @@ export const dpaSections = [
     points: [
       "This agreement is between your firm and Orelu, a partnership firm in India that makes InboxCA. It is part of the terms and applies from the day your firm signs up.",
       "For your clients' personal data, your firm is the data fiduciary under the Digital Personal Data Protection Act 2023: it decides why and how that data is used. Orelu is your firm's data processor and acts only on your firm's instructions.",
+      "Most duties under that Act and its Rules of 2025 start in May 2027. Until then the Information Technology Act 2000 and its 2011 rules on sensitive personal data apply, and the safeguards below are the security practices the two sides agree under section 43A of that Act.",
       "For the personal data of your firm's own people, Orelu is the data fiduciary, and the privacy notice applies.",
     ],
   },
@@ -314,7 +322,7 @@ export const dpaSections = [
     title: "The data and the purposes",
     points: [
       "The data: your clients' names, contact details, PAN, GSTIN and other registration numbers, bank details, the papers they send and the figures read from them, the emails handled for them, and the returns and notices prepared for them.",
-      "The purposes: only the work your firm asks InboxCA to do, which is sorting and answering client emails, filing papers in your firm's drive, reminding clients for missing papers, and preparing GST and income tax forms and files for your team to check and file. Nothing else, and never advertising or training AI.",
+      "The purposes: only the work your firm asks InboxCA to do, which is sorting and answering client emails, reading the GST and income tax departments' emails about them, filing papers in your firm's drive, reminding clients for missing papers, and preparing GST and income tax forms and files for your team to check and file. Nothing else, and never advertising or training AI.",
       "Your firm's instructions are its settings and actions in InboxCA, these terms and any written instruction from the owner. Orelu processes the data only on them, and on the law where the law requires it; in that case Orelu tells your firm unless the law forbids it.",
     ],
   },
@@ -322,7 +330,7 @@ export const dpaSections = [
     id: "firm",
     title: "Your firm's duties",
     points: [
-      "Your firm makes sure it may give InboxCA its clients' data, gives its clients the notice the Act asks for and has their consent or another lawful ground, and answers their requests about their data. InboxCA does not collect consent from your clients.",
+      "Your firm makes sure it may give InboxCA its clients' data, gives its clients the notice the Act asks for and has their consent or another lawful ground, and answers their requests about their data. For a client under 18, that includes a parent's consent where section 9 of the Act asks for it, from May 2027. InboxCA does not collect consent from your clients.",
       "Your firm keeps its own mailbox, drive and portal accounts safe, and decides who in its team may see and do what in InboxCA.",
     ],
   },
@@ -353,7 +361,7 @@ export const dpaSections = [
     title: "If data is exposed",
     points: [
       "If your clients' data held by Orelu is exposed, Orelu tells your firm within 24 hours of knowing: what happened, which data, and what to do.",
-      "Your firm, as the data fiduciary, reports to the Data Protection Board of India and to the people affected, as section 8(6) of the Act and the Rules require. Orelu gives your firm what it needs for those reports, and reports to CERT-In itself where the CERT-In directions require it.",
+      "Orelu reports to CERT-In itself within 6 hours where CERT-In's directions of 28 April 2022 ask it to. From May 2027, when section 8(6) of the Act starts, your firm, as the data fiduciary, reports to the Data Protection Board of India and to the people affected, as the Act and the Rules ask. Orelu gives your firm what it needs for those reports.",
     ],
   },
   {
@@ -369,7 +377,7 @@ export const dpaSections = [
     title: "How long, and what happens at the end",
     points: [
       "Orelu keeps your clients' data only as long as your firm uses InboxCA, except the activity log, which is kept 12 to 36 months as your firm chooses, and safety copies of deleted or changed files, which are kept for 30 days.",
-      "When your firm closes its account, the owner can download the firm's records for 30 days. Then Orelu deletes the firm's records, and backups expire within 35 days. The activity log is kept one more year, as the DPDP Rules ask. The files in your firm's drive are not touched.",
+      "When your firm closes its account, the owner can download the firm's records for 30 days. Then Orelu deletes the firm's records, and backups expire within 35 days. The activity log is kept one more year, as the DPDP Rules 2025 will ask from May 2027. The files in your firm's drive are not touched.",
       "Records will be kept in a Supabase database whose region is chosen at launch, with India planned. Temporary files, safety copies and backups are planned for Backblaze B2, outside India, encrypted.",
     ],
   },

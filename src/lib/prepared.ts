@@ -13,7 +13,7 @@ import {confirmedFigures,createDraft} from "./datasets";
 import {workerRead} from "./worker-read";
 import {grantFor} from "./permission-grants";
 import {chooseTemplate,templateSchema} from "./templates";
-import {receive,unsafeText} from "./intake";
+import {HELD_TEXT,receive,unsafeText} from "./intake";
 import {itrChecks,type ItrWork} from "./itr-check";
 
 export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
@@ -142,6 +142,8 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
     // A file the team adds is checked like any other (src/lib/intake.ts).
     const sent=uploaded ? await receive(membership.firmId,userId,{id:document.client_id,name:client.name},{name:file!.name,bytes},drive,false) : null;
     if(sent && "unsafe" in sent) throw new Error(unsafeText[sent.unsafe]);
+    // A form's paper is read at once, so it cannot wait for the scanner.
+    if(sent?.held) throw new Error(HELD_TEXT);
     const checksum=createHash("sha256").update(bytes).digest("hex");
     const {data:prior}=await admin.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",document.client_id).eq("sha256",checksum).eq("document_type",type).eq("period_key",document.period_key).eq("status","filed").maybeSingle();
     paper=prior?.id;
@@ -180,6 +182,7 @@ export async function uploadEditedForm(id:string,file:File) {
   const drive=await openDrive(membership.firmId,account);
   const sent=await receive(membership.firmId,userId,{id:document.client_id,name:client.name},{name:file.name,bytes},drive,false);
   if("unsafe" in sent) throw new Error(unsafeText[sent.unsafe]);
+  if(sent.held) throw new Error(HELD_TEXT);
   const folder=await drive.ensureFolder([workFolder(document.period_key),workYear(document.period_key),safeName(client.name),"Prepared"]);
   const name=`Edited form ${target}.${extension}`,saved=await drive.save(folder,name,bytes);
   if(saved==="taken") throw new Error("Try adding the file again.");
