@@ -1071,15 +1071,15 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await query(local.dbUrl, "insert into public.activity_log (firm_id, action, entity_type) select $1, 'document.downloaded', 'document' from generate_series(1, $2)", [firm.firmId, most]);
   // The client's reply: its attachment is typed by its name, filed, and answers the paper asked for.
   const loanPdf = Buffer.from(pdf("Invented bank account 99231"));
-  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "Re: Documents needed", text: "Attached.", attachments: [{ filename: "bank_statement_sep_2026.pdf", content: loanPdf }] });
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "Re: Documents needed", text: "Bank statement attached for GST data.", attachments: [{ filename: "bank_statement_oct_2026.pdf", content: loanPdf }] });
   await pollFirmMail(request, firm.firmId);
   await owner.reload();
   await expect(owner.getByRole("list", { name: "Papers asked for" })).toContainText("1 of 2 received");
   await expect(rows.filter({ hasText: "Bank statement" })).not.toContainText("To check");
   await expect(rows.filter({ hasText: "Bank statement" })).toContainText(`Saved by InboxCA from ${mailClient}'s email, `);
   // Several files in one reply all arrive; one the name does not type waits under To check.
-  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "Re: Documents needed", text: "The rest.", attachments: [
-    { filename: "sales_bills_sep_2026.pdf", content: Buffer.from(pdf("Invented sales bills")) },
+  await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "Re: Documents needed", text: "Sales bills attached.", attachments: [
+    { filename: "sales_bills_oct_2026.pdf", content: Buffer.from(pdf("Invented sales bills")) },
     { filename: "IMG_79.jpg", content: "invented photo of a sales bill" },
   ] });
   await pollFirmMail(request, firm.firmId);
@@ -1266,7 +1266,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   }
   const reminder = await lastMail(`client-${tag}@patel.test`);
   expect(reminder).toContain("- Test return for Sep 2026: due in 3 days");
-  expect(reminder).toMatch(/still waiting for these documents.*: Sales bills\.\nUpload them here, no sign in needed: http\S+\/u\//);
+  expect(reminder).toMatch(/still waiting for these documents.*: Sales bills\.\nPlease reply to this email with the files attached, or email them to us\./);
   const [{ details }] = await query(local.dbUrl, "select details from public.tasks where client_id = $1 and code = $2", [clientId, code]);
   expect(details.reminded).toHaveLength(1);
   await query(local.dbUrl, "update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-3 where client_id=$1 and code=$2", [clientId,code]);

@@ -717,7 +717,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                       <Row
                         key={request.id}
                         title={`Asked for ${details.items.map((item) => item.type).join(", ")}${details.period ? ` for ${periodName(details.period)}` : ""}`}
-                        meta={`${got} of ${details.items.length} received. The link works until ${dueLabel(request.expires_at!.slice(0, 10))}.`}
+                        meta={`${got} of ${details.items.length} received. Reminders go until ${dueLabel(request.expires_at!.slice(0, 10))}.`}
                         status={<Badge tone={got === details.items.length ? "done" : "warn"}>{got} of {details.items.length}</Badge>}
                         action={
                           !viewOnly && (
