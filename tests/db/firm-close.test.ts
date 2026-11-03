@@ -78,20 +78,23 @@ it("closes the firm only for its owner with its name, and deletes it 30 days lat
       for (const table of ["clients where firm_id=$1", "tasks where firm_id=$1", "firm_members where firm_id=$1", "firm_keys where firm_id=$1"])
         expect((await db.query(`select count(*)::int n from public.${table}`, [s.firm])).rows[0].n).toBe(0);
       expect((await db.query("select count(*)::int n from public.activity_log where firm_id=$1 and action='firm.closed'", [s.firm])).rows[0].n).toBeGreaterThan(0);
-      // The owner's login goes; the staff member still works for another firm.
-      expect((await db.query("select id from auth.users where id = any($1) order by email", [[s.owner, s.staff, s.outsider]])).rows.map((u) => u.id)).toEqual([s.outsider, s.staff]);
+      // The owner's login stays a year with the log (IT Rules 2021, rule 3(1)(h)), signed out.
+      expect((await db.query("select id from auth.users where id = any($1) order by email", [[s.owner, s.staff, s.outsider]])).rows.map((u) => u.id)).toEqual([s.outsider, s.owner, s.staff]);
+      expect((await db.query("select count(*)::int n from auth.sessions where user_id=$1", [s.owner])).rows[0].n).toBe(0);
       expect((await db.query("select count(*)::int n from public.firms where id=$1", [s.other])).rows[0].n).toBe(1);
       expect((await db.query("select count(*)::int n from public.jobs where kind='delete_firm' and entity_id=$1", [s.firm])).rows[0].n).toBe(2);
       // A year later the second run removes the log and the firm itself.
       await db.query("set local role service_role");
       expect((await db.query("select public.delete_firm($1) ok", [s.firm])).rows[0].ok).toBe(false);
       await db.query("reset role");
-      await db.query("update public.firms set settings = jsonb_build_object('data_deleted_on', current_date - 366) where id=$1", [s.firm]);
+      await db.query("update public.firms set settings = settings || jsonb_build_object('data_deleted_on', current_date - 366) where id=$1", [s.firm]);
       await db.query("set local role service_role");
       expect((await db.query("select public.delete_firm($1) ok", [s.firm])).rows[0].ok).toBe(true);
       await db.query("reset role");
       for (const table of ["firms where id=$1", "activity_log where firm_id=$1"])
         expect((await db.query(`select count(*)::int n from public.${table}`, [s.firm])).rows[0].n).toBe(0);
+      // Then the owner's login goes; the staff member still works for another firm.
+      expect((await db.query("select id from auth.users where id = any($1) order by email", [[s.owner, s.staff, s.outsider]])).rows.map((u) => u.id)).toEqual([s.outsider, s.staff]);
     });
   } finally {
     await db.end();
