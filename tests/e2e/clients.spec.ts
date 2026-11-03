@@ -28,6 +28,10 @@ test.beforeAll(async ({ browser }) => {
   await expect(owner).toHaveURL(/\/app$/);
 });
 test.afterAll(() => firm.remove());
+// A failure keeps a picture of this file's own page; Playwright keeps only the page it made.
+test.afterEach(async ({}, info) => {
+  if (info.status !== info.expectedStatus && owner && !owner.isClosed()) await info.attach("owner page", { body: await owner.screenshot({ fullPage: true }), contentType: "image/png" });
+});
 
 test("a client added with only a GSTIN gets its PAN too, and opens with both", async () => {
   await owner.getByRole("link", { name: "Clients", exact: true }).click();
