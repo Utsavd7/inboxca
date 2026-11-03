@@ -243,6 +243,11 @@ export function Plans() {
         ))}
       </ul>
 
+      <p className="plan-note">
+        Every plan has unlimited clients. The client count on each plan is only our suggestion, based on its storage and AI
+        limits.
+      </p>
+
       <div className="plan-foot">
         <ul className="plan-ticks" aria-label="In every plan">
           {planIncludes.map((line) => (
