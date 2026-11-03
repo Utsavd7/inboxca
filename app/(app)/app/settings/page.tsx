@@ -21,6 +21,7 @@ import { lowSpace } from "@/src/jobs/drive-check";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { serverCrypto } from "@/src/lib/crypto";
 import { DAYS, describeHours, longDate, SUGGESTED_HOURS, type Hours, type SpecialHours } from "@/src/lib/hours";
+import { addDays } from "@/src/lib/billing/money";
 import { currentMember } from "@/src/lib/member";
 import { exceptionsOf, IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
 import { Badge, IconTile, NotForYou, PageHead, Row, SidePanel, storage, Toast, type Kind } from "../ui";
@@ -253,7 +254,7 @@ export default async function Settings({
     reminders: `${settings.reminders === true ? `Clients are emailed ${stages.length === STAGES.length ? "at every stage" : stages.map((day) => stageNames[day].toLowerCase()).join(", ") || "at no stage"}` : "Clients are not emailed before due dates"}. ${records.approve_all === true ? "Every paper asked for waits for approval" : "Routine papers asked for are sent at once"}.`,
     data: "Your client list, returns, notices and activity log, yours to download any time.",
     me: `${passkeys ? count(passkeys, "passkey", "passkeys") : "No passkey yet"}. You sign in with the email code${passkeys ? " and a passkey" : " and the 6 digit code"}.`,
-    billing: sub?.paid_until ? `${sub.status === "active" ? "Paid" : sub.status === "grace" ? "Payment due" : sub.status} until ${longDate(sub.paid_until)}.` : "Your firm is on a pilot. Orelu takes no payment for now.",
+    billing: sub?.paid_until ? `${sub.status === "active" ? "Paid" : sub.status === "grace" ? "Payment due" : sub.status} until ${longDate(addDays(sub.paid_until, -1))}.` : "Your firm is on a pilot. Orelu takes no payment for now.",
   };
   // Connect with Google, Microsoft or Zoho, each shown only once its app's keys are set.
   const signIn = (again?: MailApi) => {

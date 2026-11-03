@@ -139,7 +139,9 @@ test("a new firm signs up, pays before anything opens, and the webhook opens the
   // is open and Today shows its setup.
   await expect(page).toHaveURL(/\/app$/);
   await page.goto("/app/settings?group=billing");
-  await expect(page.getByText(/Paid until/)).toBeVisible();
+  // The summary line and the billing card name the same last paid day.
+  const until = await page.locator(".badge", { hasText: /Paid until/ }).textContent();
+  await expect(page.getByText(/Paid until/).first()).toHaveText(new RegExp(`${until!.replace("Paid until ", "")}`));
   await expect(page.getByText(/AutoPay is on with your UPI AutoPay/)).toBeVisible();
   expect(await firm()).toMatchObject({ status: "active", autopay: "active" });
   expect(fake.subscriptions.get((await firm()).mandate)).toMatchObject({ authorization_details: { authorization_amount: 1499, payment_methods: ["upi"] } });
