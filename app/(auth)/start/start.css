@@ -1,24 +1,24 @@
-/* Sign up's plan and payment step, in the sign in card: the steps beside the logo, then the plan
-   on the left and AutoPay on the right, all on one laptop screen. */
-.auth-card:has(.start-wide) { width: min(1040px, 100%); padding: 24px 28px; }
+/* Sign up's plan and payment step, in a wide card on the whole page: the heading with the steps
+   beside it, then the plan on the left and AutoPay on the right, all on one laptop screen. */
+.auth-page:has(.start-wide) { background: var(--grey); }
+.auth-side:has(.start-wide) > * { width: min(1040px, 100%); justify-self: center; }
+.auth-card:has(.start-wide) { padding: 24px 28px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--white); box-shadow: var(--shadow-1); }
 .start-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 16px; color: var(--slate); font-size: 13px; font-weight: 600; }
-.auth-card:has(.start-wide) .start-progress { position: absolute; top: 30px; right: 28px; margin: 0; }
 .start-progress li { display: inline-flex; align-items: center; gap: 6px; }
 .start-progress li + li::before { content: ""; width: 6px; height: 6px; margin-right: 4px; border-top: 1.5px solid var(--line-strong); border-right: 1.5px solid var(--line-strong); transform: rotate(45deg); order: -2; }
 .start-progress .done { color: var(--green-deep); }
 .start-progress [aria-current="step"] { color: var(--navy); }
 .start-progress [aria-current="step"]::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--wash); order: -1; }
 .start h1 { margin-top: 16px; }
-.start .auth-lead { margin-top: 4px; }
+.start-head h1 { margin-top: 0; }
+.start .auth-lead { margin-top: 6px; }
 .start > form:last-child { margin-top: 12px; }
 .start > .btn { margin-top: 16px; }
 .start > .auth-small { margin-top: 12px; }
-.start-wait { display: flex; align-items: center; gap: 10px; }
-.start-wait::before { content: ""; flex: none; width: 16px; height: 16px; border: 2px solid var(--tint); border-top-color: var(--blue); border-radius: 50%; animation: start-spin 0.8s linear infinite; }
-@keyframes start-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .start-wait::before { animation-duration: 2.4s; } }
 
-.start-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.start-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.start-head > :last-child { display: grid; justify-items: end; gap: 10px; }
+.start-head .start-progress { margin: 0; }
 .start-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .start-pay { padding-left: 28px; border-left: 1px solid var(--line); }
 .start h2 { margin-bottom: 10px; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
@@ -68,8 +68,9 @@
 .start-form .field-error { margin: 0; }
 
 @media (max-width: 760px) {
-  .auth-card:has(.start-wide) .start-progress { position: static; margin-top: 16px; }
-  .start-head { flex-wrap: wrap; }
+  .auth-card:has(.start-wide) { padding: 20px 16px; }
+  .start-head { flex-direction: column-reverse; }
+  .start-head > :last-child { justify-items: start; }
   .start-grid { grid-template-columns: minmax(0, 1fr); }
   .start-pay { padding-left: 0; border-left: 0; }
   .start-tabs { flex-wrap: wrap; }

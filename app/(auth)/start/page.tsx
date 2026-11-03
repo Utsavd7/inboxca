@@ -62,7 +62,7 @@ export default async function Start({ searchParams }: { searchParams: Promise<Qu
   if (back && sub?.status === "created" && payment?.status === "created")
     return (
       <Short title="Confirming your payment">
-        <p className="auth-lead start-wait" role="status">Your bank is telling us now. This page moves on by itself.</p>
+        <p className="auth-lead auth-wait" role="status">Your bank is telling us now. This page moves on by itself.</p>
         <Refresh />
         <p className="auth-small">Closed the payment page without paying? <Link href="/start">Try again</Link></p>
       </Short>
@@ -98,13 +98,15 @@ export default async function Start({ searchParams }: { searchParams: Promise<Qu
 
   return (
     <div className="start start-wide">
-      <Steps />
       <header className="start-head">
         <div>
           <h1>Choose your plan and set up AutoPay</h1>
           <p className="auth-lead">{membership.firmName} opens on InboxCA as soon as the first payment is in.</p>
         </div>
-        <SignOut />
+        <div>
+          <Steps />
+          <SignOut />
+        </div>
       </header>
       <div className="start-grid">
         <section className="start-plan" aria-labelledby="plan-title">

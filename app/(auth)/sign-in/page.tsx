@@ -21,7 +21,7 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
   const note = Object.hasOwn(reasons, reason) ? reasons[reason] : Object.hasOwn(refusals, reason) ? refusals[reason](providers[isProvider(via) ? via : "google"].name) : null;
   return (
     <>
-      <h1>Sign in</h1>
+      <h1>Sign in to InboxCA</h1>
       {note && (
         <p className="auth-note" role="status">
           {note}
