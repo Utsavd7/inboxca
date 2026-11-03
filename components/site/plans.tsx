@@ -105,7 +105,7 @@ export function Plans() {
               What kind of practice?
             </span>
             <div
-              className="segment segment-light"
+              className="segment"
               role="group"
               aria-labelledby={`${id}-practice`}
             >
@@ -197,51 +197,50 @@ export function Plans() {
               )
             )}
           </ul>
-          <div className="segment" role="group" aria-label="Billing period">
-            {(
-              [
-                [false, "Monthly"],
-                [true, "Yearly"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={label}
-                type="button"
-                aria-pressed={yearly === value}
-                onClick={() => setYearly(value)}
-              >
-                {yearly === value && (
-                  <motion.span
-                    layoutId="billing-pick"
-                    className="segment-pick"
-                    transition={spring}
-                  />
-                )}
-                <span>
-                  {label}
-                  {value && <em className="free">about 11 months for 12</em>}
-                </span>
-              </button>
-            ))}
+          <div className="quote-billing">
+            <div className="segment" role="group" aria-label="Billing period">
+              {(
+                [
+                  [false, "Monthly"],
+                  [true, "Yearly"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={yearly === value}
+                  onClick={() => setYearly(value)}
+                >
+                  {yearly === value && (
+                    <motion.span
+                      layoutId="billing-pick"
+                      className="segment-pick"
+                      transition={spring}
+                    />
+                  )}
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+            {/* The saving is the real difference: twelve monthly payments against one yearly one. */}
+            <p className="quote-save">
+              {yearly ? (
+                <>
+                  Yearly is about 11 months for 12. You save <span className="num">{rupees(saving)}</span> a year.
+                </>
+              ) : (
+                <button type="button" onClick={() => setYearly(true)}>
+                  Pay yearly and save{" "}
+                  <span className="num">{rupees(saving)}</span>
+                </button>
+              )}
+            </p>
+            {/* PLAN.md D32: prices before GST; the tax setting turns GST and tax invoices on. */}
+            <p className="quote-gst">
+              Prices before GST. Once Orelu is GST registered, GST is added and every payment gets a tax invoice.
+            </p>
           </div>
-          {/* PLAN.md D32: prices before GST; the tax setting turns GST and tax invoices on. */}
-          <p className="quote-gst">
-            Prices before GST. Once Orelu is GST registered, GST is added and every payment gets a tax invoice.
-          </p>
-          {/* The saving is the real difference: twelve monthly payments against one yearly one. */}
-          <p className="quote-save">
-            {yearly ? (
-              <>
-                You save <span className="num">{rupees(saving)}</span> a year.
-              </>
-            ) : (
-              <button type="button" onClick={() => setYearly(true)}>
-                Pay yearly and save{" "}
-                <span className="num">{rupees(saving)}</span>
-              </button>
-            )}
-          </p>
-          <Link className="btn btn-light quote-start" href={start(name)}>
+          <Link className="btn btn-light" href={start(name)}>
             Start with {name}
             <ArrowRight size={18} aria-hidden />
           </Link>
@@ -254,12 +253,18 @@ export function Plans() {
       <ul className="plan-grid" ref={grid} tabIndex={0} aria-label="Plans">
         {plans.map((plan, index) => (
           <li key={plan.name} className={`plan ${fit === index ? "is-fit" : ""}`}>
-            {fit === index && <FitTag />}
-            <h3>{plan.name}</h3>
-            <p className="plan-price">
+            {/* Every card keeps the tag's row, so the names sit level whichever card fits. */}
+            <div className="plan-tag">{fit === index && <FitTag />}</div>
+            <div className="plan-head">
+              <h3>{plan.name}</h3>
+              <p className="plan-suits">
+                Unlimited clients, suits about <span className="num">{plan.clients}</span>
+              </p>
+            </div>
+            <div className="plan-price">
               <Price value={yearly ? plan.yearly : plan.monthly} />
               <small>{per}</small>
-            </p>
+            </div>
             {/* The other way to pay, so the yearly total always sits beside the monthly figure. */}
             <p className="plan-other">
               {yearly ? (
@@ -281,12 +286,6 @@ export function Plans() {
                   </dd>
                 </div>
               ))}
-              <div>
-                <dt>Clients</dt>
-                <dd className="plan-suits">
-                  Unlimited, suits about <span className="num">{plan.clients}</span>
-                </dd>
-              </div>
             </dl>
             <ul className="plan-ticks" aria-label="In every plan">
               {planIncludes.map((line) => (
@@ -306,15 +305,17 @@ export function Plans() {
       <div className={`plan-custom ${result.custom ? "is-fit" : ""}`}>
         {result.custom ? (
           <>
-            <FitTag />
-            <div className="custom-name">
+            <div className="plan-head">
+              <div className="plan-tag">
+                <FitTag />
+              </div>
               <h3>Custom</h3>
               <p className="plan-suits">Worked out for your firm</p>
             </div>
-            <p className="plan-price">
+            <div className="plan-price">
               <Price value={yearly ? result.yearly : result.monthly} />
               <small>{per}</small>
-            </p>
+            </div>
             <dl>
               <div>
                 <dt>Returns a year</dt>
@@ -355,24 +356,27 @@ export function Plans() {
         )}
       </div>
       {/* Add ons at the prices in content/plans.ts; the Custom plan is worked out above. */}
-      <ul className="add-ons" aria-label="Add ons">
-        <li>
-          <span>One more person in your team</span>
-          <span className="num">{rupees(extraPerson)} a month</span>
-        </li>
-        <li>
-          <span>One more block of <span className="num">{number(aiBlock.credits)}</span> AI credits a month</span>
-          <span className="num">{rupees(aiBlock.price)} a month</span>
-        </li>
-        <li>
-          <span>Bigger than Enterprise</span>
-          <span>Custom, worked out from your answers above</span>
-        </li>
-      </ul>
-      <p className="plan-guide">
-        An estimate from your answers. You see the exact price, with GST where
-        it applies, before you pay, and every payment gets a numbered receipt.
-      </p>
+      <div className="add-ons">
+        <h3>Add ons</h3>
+        <dl>
+          <div>
+            <dt>One more person in your team</dt>
+            <dd><span className="num">{rupees(extraPerson)}</span> a month</dd>
+          </div>
+          <div>
+            <dt>One more block of <span className="num">{number(aiBlock.credits)}</span> AI credits a month</dt>
+            <dd><span className="num">{rupees(aiBlock.price)}</span> a month</dd>
+          </div>
+          <div>
+            <dt>Bigger than Enterprise</dt>
+            <dd>Custom, worked out from your answers above</dd>
+          </div>
+        </dl>
+        <p className="plan-guide">
+          An estimate from your answers. You see the exact price, with GST where
+          it applies, before you pay, and every payment gets a numbered receipt.
+        </p>
+      </div>
     </div>
   );
 }
