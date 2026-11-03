@@ -849,6 +849,19 @@ export async function recordAgm(form: FormData) {
   redirect(`/app/clients/${asked.data.client}?tab=returns&${data ? "changed=agm" : "error=agm"}`);
 }
 
+// The financial year of a director's last DIR-3 KYC (public.record_kyc): the next one is due
+// three financial years on, by 30 June. Never guessed.
+export async function recordKyc(form: FormData) {
+  const { supabase, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const asked = z.object({ client: z.uuid(), registration: z.uuid(), year_end: z.string().regex(/^[0-9]{4}-03$/) })
+    .safeParse({ client: form.get("client"), registration: form.get("registration"), year_end: form.get("year_end") });
+  if (!asked.success) redirect("/app/clients");
+  const { data } = await supabase.rpc("record_kyc", { target_firm: membership.firmId, registration: asked.data.registration, year_end: asked.data.year_end });
+  revalidatePath("/app", "layout");
+  redirect(`/app/clients/${asked.data.client}?tab=returns&${data ? "changed=kyc" : "error=kyc"}`);
+}
+
 // Settings → Replies by InboxCA: Auto, Ask me first or Off for each kind of answer.
 export async function saveAnswers(form: FormData) {
   const { supabase, membership } = await currentWriter();

@@ -315,6 +315,25 @@ test("an admin records an extension a CA then checks, saves the office threshold
     expect(await dueOn()).toBe(later(20));
     expect(await logged("admin.rule_verified")).toEqual([{ actor_id: admin.id, details: { code, period: "2026-10", by: "CA Invented Person" } }]);
 
+    // An extension the Sunday check read from an official notice is live at once: the firm sees
+    // it on the Calendar with the notice, and the admin undoes it in one click.
+    const [{ id: nextTask }] = await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, $3, '2026-11', '2026-12-11') returning id", [owner.firm.firmId, clientId, code]);
+    const notice = { id: tag.padEnd(16, "0"), source: "cbic_gst", title: `99/2026-Invented Tax: Seeks to extend the due date for furnishing invented return ${code} for the month of November, 2026 till 31st December, 2026`, link: `https://example.test/invented-notice-${tag}`, did: "extended", why: `Moved ${code} for 2026-11 to 31 Dec 2026 for every firm, from 99/2026-Invented Tax.`, code, period: "2026-11", on: "2026-12-31", notice: "99/2026-Invented Tax" };
+    await query(local.dbUrl, "insert into public.platform_settings (key, value) values ('dates', $1) on conflict (key) do update set value = excluded.value", [{ checked: new Date().toISOString(), week: [notice], done: [notice.id] }]);
+    expect((await query(local.dbUrl, "select public.apply_notice_extension($1, '2026-11', '2026-12-31', $2, '99/2026-Invented Tax') word", [code, notice.link]))[0].word).toBe("extended");
+    const nextDue = async () => (await query(local.dbUrl, "select due_on::text from public.tasks where id = $1", [nextTask]))[0].due_on;
+    expect(await nextDue()).toBe("2026-12-31");
+    await owner.page.goto("/app/calendar?day=2026-12-31");
+    await expect(owner.page.getByRole("row").filter({ hasText: client }).getByRole("link", { name: "Extended by 99/2026-Invented Tax" })).toHaveAttribute("href", notice.link);
+    await admin.page.getByRole("link", { name: "Due dates" }).click();
+    const sunday = admin.page.getByRole("region", { name: "This week's official notices" }).locator(".admin-row").filter({ hasText: notice.title });
+    await expect(sunday).toContainText("Moved");
+    await sunday.getByRole("button", { name: "Undo" }).click();
+    await expect(sunday).toContainText("Undone");
+    await expect(sunday.getByRole("button", { name: "Undo" })).toHaveCount(0);
+    expect(await nextDue()).toBe("2026-12-11");
+    expect(await logged("admin.extension_undone")).toEqual([{ actor_id: admin.id, details: { code, period: "2026-11", on: "2026-12-31", notice: "99/2026-Invented Tax" } }]);
+
     // A change the daily check found waits until an admin marks it reviewed.
     await query(local.dbUrl, "insert into public.platform_settings (key, value) values ('watch', jsonb_build_object('changes', jsonb_build_array($1::jsonb))) on conflict (key) do update set value = jsonb_set(public.platform_settings.value, '{changes}', coalesce(public.platform_settings.value -> 'changes', '[]') || jsonb_build_array($1::jsonb))", [change]);
     await admin.page.getByRole("link", { name: "Today's changes" }).click();
@@ -343,6 +362,7 @@ test("an admin records an extension a CA then checks, saves the office threshold
     await admin.close();
     await owner.close();
     await query(local.dbUrl, "delete from public.compliance_types where code = $1", [code]);
+    await query(local.dbUrl, "delete from public.platform_settings where key = 'dates'");
   }
 });
 

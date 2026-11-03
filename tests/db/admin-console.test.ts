@@ -14,7 +14,7 @@ const session = (id: string) => `${id.slice(0, -3)}c${id.slice(-2)}`;
 const calls = ["admin_firms()", "admin_accounts()", "admin_failed_jobs()", "admin_watch()", "admin_retry_job(0)", "admin_review_change('gstr1', 'x')", "admin_people()", `admin_remove_passkeys('${other}')`,
   "admin_post_incident('x', '{app}', 'down')", `admin_update_incident('${firm}', 'x', true)`, `admin_email_incident('${firm}')`, "admin_incidents()", `admin_firm('${firm}')`,
   "admin_reach('{GSTR1_M}')", "admin_verify_rule('GSTR1_M', '', 'https://example.test', 'CA Invented')", "admin_add_extension('GSTR1_M', '2026-09', '2026-10-30', 'https://example.test')",
-  "admin_set_office(3, 14)", "admin_office(14)", `admin_ask_support('${firm}')`, `admin_support_view('${firm}')`, "admin_billing()", "admin_set_tax('{}')", `admin_pilot('${firm}')`,
+  "admin_undo_extension('GSTR1_M', '2026-09')", "admin_dates()", "admin_set_office(3, 14)", "admin_office(14)", `admin_ask_support('${firm}')`, `admin_support_view('${firm}')`, "admin_billing()", "admin_set_tax('{}')", `admin_pilot('${firm}')`,
   "admin_split_firms()", `admin_check_split('${firm}', '${other}', 'separate')`];
 
 // Acts as a person in their session, with the passkey proof the server sends after a check.
@@ -251,6 +251,51 @@ it("lets an admin record an extension and a CA's check, which clears the rule's 
       { period_key: "", approved_by: "CA Invented Person", checked: true }, { period_key: "2026-09", approved_by: "CA Invented Person", checked: true },
     ]);
     expect((await db.query("select count(*)::int n from public.activity_log where actor_id = $1 and action in ('admin.extension_added', 'admin.rule_verified')", [admin])).rows[0].n).toBe(3);
+  }));
+
+// The Sunday check's extension from an official notice (the user, 3 Nov 2026): it moves only
+// its period's returns not yet filed, at every firm, never earlier, never over an extension a
+// person recorded; one click by an admin puts the dates back; and only the server applies one.
+it("applies a notice's extension to its period at every firm at once, never earlier, and an admin undoes it in one click", () =>
+  rollback(db, async () => {
+    await seed();
+    await asOwner(db);
+    const second = "00000000-0000-4000-8000-000000000ad4";
+    await db.query("insert into public.firms(id,name,state_code,status) values ($1,'Second Admin Test Firm','27','active')", [second]);
+    await db.query("insert into public.compliance_types(code,name,frequency,due_rule) values ('ZZ_NOTICE','Invented return','monthly','{\"for\":\"pan\",\"after\":1,\"day\":11}')");
+    const client = (await db.query("insert into public.clients(firm_id,name,kind) values ($1,'Invented Calendar Client','individual') returning id", [firm])).rows[0].id;
+    const other = (await db.query("insert into public.clients(firm_id,name,kind) values ($1,'Invented Other Client','individual') returning id", [second])).rows[0].id;
+    await db.query("insert into public.tasks(firm_id,client_id,code,period_key,due_on,status,details) values ($1,$2,'ZZ_NOTICE','2026-09','2026-10-11','upcoming','{}'),($1,$2,'ZZ_NOTICE','2026-08','2026-09-11','upcoming','{}'),($1,$2,'ZZ_NOTICE','2026-07','2026-08-11','filed','{\"filed_on\":\"2026-08-10\"}'),($3,$4,'ZZ_NOTICE','2026-09','2026-10-11','in_progress','{}')", [firm, client, second, other]);
+    const dates = async () => (await db.query("select firm_id = $1 mine, period_key, due_on::text from public.tasks where code = 'ZZ_NOTICE' order by firm_id, period_key", [firm])).rows.map((row) => `${row.mine ? "A" : "B"} ${row.period_key} ${row.due_on}`);
+    const apply = async (on: string, earlier: string | null = null, code = "ZZ_NOTICE") => (await db.query("select public.apply_notice_extension($1, '2026-09', $2, 'https://example.test/notice', '99/2026-Invented Tax', $3) word", [code, on, earlier])).rows[0].word;
+    // Not earlier, not the same, not a rule InboxCA has no fixed date for, and not when the notice names another earlier date.
+    expect(await apply("2026-10-10")).toBe("earlier");
+    expect(await apply("2026-10-11")).toBe("earlier");
+    expect(await apply("2026-10-25", "2026-10-20")).toBe("mismatch");
+    expect(await apply("2026-12-31", null, "NOPE")).toBe("unknown");
+    expect(await apply("2026-12-31", null, "AOC4")).toBe("no_fixed_date");
+    expect(await dates()).toEqual(["A 2026-07 2026-08-11", "A 2026-08 2026-09-11", "A 2026-09 2026-10-11", "B 2026-09 2026-10-11"]);
+    // A plain one moves only September's unfiled returns, at both firms, and is checked by the notice itself.
+    expect(await apply("2026-10-25", "2026-10-11")).toBe("extended");
+    expect(await dates()).toEqual(["A 2026-07 2026-08-11", "A 2026-08 2026-09-11", "A 2026-09 2026-10-25", "B 2026-09 2026-10-25"]);
+    expect((await db.query("select due_rule, source_url, verified_on is not null checked from public.compliance_types where code = 'ZZ_NOTICE' and period_key = '2026-09'")).rows[0])
+      .toEqual({ due_rule: { on: "2026-10-25", notice: "99/2026-Invented Tax" }, source_url: "https://example.test/notice", checked: true });
+    // Extended again: a person decides, nothing moves.
+    expect(await apply("2026-11-30")).toBe("exists");
+    expect(await dates()).toContain("A 2026-09 2026-10-25");
+    // Only the server applies one; any admin undoes it, and the dates come back.
+    await asAdmin(admin);
+    expect((await attempt(db, "select public.apply_notice_extension('ZZ_NOTICE', '2026-09', '2026-12-31', 'https://example.test/notice', 'x')")).ok).toBe(false);
+    expect((await db.query("select public.admin_undo_extension('ZZ_NOTICE', '2026-09') ok")).rows[0].ok).toBe(true);
+    expect((await db.query("select public.admin_undo_extension('ZZ_NOTICE', '2026-09') ok")).rows[0].ok).toBe(false);
+    await asOwner(db);
+    expect(await dates()).toEqual(["A 2026-07 2026-08-11", "A 2026-08 2026-09-11", "A 2026-09 2026-10-11", "B 2026-09 2026-10-11"]);
+    expect((await db.query("select action from public.activity_log where entity_type = 'rule' and details ->> 'code' = 'ZZ_NOTICE' order by at")).rows.map((row) => row.action)).toEqual(["watch.extension_applied", "admin.extension_undone"]);
+    // A CA's own extension is never written over by the check.
+    await asAdmin(admin);
+    expect((await db.query("select public.admin_add_extension('ZZ_NOTICE', '2026-09', '2026-10-20', 'https://example.test/by-hand') ok")).rows[0].ok).toBe(true);
+    await asOwner(db);
+    expect(await apply("2026-10-25")).toBe("exists");
   }));
 
 it("shows an admin one firm's health and use, the office thresholds and changes, and nothing more", () =>

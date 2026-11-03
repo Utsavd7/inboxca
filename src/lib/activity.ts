@@ -25,7 +25,7 @@ export const activityNames: Record<string, string> = {
   "document.added": "Acknowledgement saved", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked", "notice.assigned": "Notice given to a person", "notice.replied": "Notice reply recorded", "notice.closed": "Notice closed",
   "contact.added": "Contact added", "contact.changed": "Contact changed",
   "fills.asked": "Fill asked for returns late or due in the next 7 days", "fills.stopped": "Fill stopped before it started",
-  "due_date.confirmed": "Due date confirmed by the owner against the notification", "agm.recorded": "AGM date recorded",
+  "due_date.confirmed": "Due date confirmed by the owner against the notification", "agm.recorded": "AGM date recorded", "kyc.recorded": "Last DIR-3 KYC year recorded",
 };
 
 // Every action written to activity_log and the details it may carry (PLAN.md 8.0, 8.9): ids,
@@ -44,7 +44,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "passkey.added": [], "passkey.removed": ["removed"], "passkey.copied": [], "access.exception_removed": ["rule", "role"],
   "admin.passkey_added": [], "admin.passkey_copied": [], "admin.passkey_used": [], "admin.passkeys_removed": ["removed"], "admin.job_retried": ["job"],
   "admin.incident_posted": ["parts", "level"], "admin.incident_updated": [], "admin.incident_closed": [], "admin.incident_emailed": ["firms"],
-  "admin.rule_verified": ["code", "period", "by"], "admin.extension_added": ["code", "period", "on"], "admin.office_thresholds": ["taps", "days"], "admin.change_reviewed": ["source", "at"], "admin.template_added": ["form", "version", "from", "sha256"],
+  "admin.rule_verified": ["code", "period", "by"], "admin.extension_added": ["code", "period", "on"], "admin.extension_undone": ["code", "period", "on", "notice"], "watch.extension_applied": ["code", "period", "on", "notice", "link"], "admin.office_thresholds": ["taps", "days"], "admin.change_reviewed": ["source", "at"], "admin.template_added": ["form", "version", "from", "sha256"],
   "admin.update_noted": ["item", "uses", "keeps"], "admin.template_ended": ["form", "version", "until", "link"], "form.went_live": ["form", "version", "with", "sha256"],
   "support.asked": [], "support.approved": [], "support.refused": [], "support.ended": [], "support.viewed": [],
   "office.learned": [], "office.refused": ["reason"], "office.no_fixed": [], "branch.hours": ["settings"],
@@ -81,7 +81,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "fills.asked": ["returns", "clients", "batch"], "fills.stopped": ["returns", "batch"],
   // The owner's confirmation of a due date rule, with the official link they confirmed against;
   // a company's AGM date and how many returns took their date from it.
-  "due_date.confirmed": ["code", "source_url"], "agm.recorded": ["year_end", "agm", "returns"],
+  "due_date.confirmed": ["code", "source_url"], "agm.recorded": ["year_end", "agm", "returns"], "kyc.recorded": ["year_end", "returns"],
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"], "notice.assigned": ["person"], "notice.replied": ["on", "document"], "notice.closed": [],
   // A register section said yes to at once: its name, row counts and the totals seen, encrypted.
   "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state", "section", "rows", "flagged", "totals_enc"], "dataset.edit_saved": ["dataset", "line"],

@@ -45,7 +45,7 @@ import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, 
 import { CopyButton, MoreMenu } from "../../ui-client";
 import { CameFrom } from "../../documents/came-from";
 import { UploadForm } from "./upload-form";
-import { recordAgm, remindClient } from "@/app/(app)/actions";
+import { recordAgm, recordKyc, remindClient } from "@/app/(app)/actions";
 import { RemindToast } from "../../remind-toast";
 import { unsafeText } from "@/src/lib/intake";
 import "../clients.css";
@@ -61,6 +61,7 @@ const errors: Record<string, string> = {
   assign: "Choose a person and what they do for this client.",
   licence: "Name the licence or registration and give the date it is valid until.",
   agm: "The AGM date was not saved. Choose the year and a date after it, for a company whose services follow the AGM.",
+  kyc: "The KYC year was not saved. Choose the financial year of the last DIR-3 KYC, for a PAN with the DIR-3 KYC Web service.",
   assigned: "That person is already assigned to this client.",
   contact: "Enter the contact's name and a valid email address.",
   linked: "That contact is already added to this client.",
@@ -115,6 +116,7 @@ const changes: Record<string, string> = {
   "add-number": "Tax number added.", "remove-number": "Tax number removed.", assign: "Assigned.", unassign: "Unassigned.", archive: "Client archived.", restore: "Client restored.",
   reminders: "Reminders saved.", list: "List saved.", sharing: "Sending choice saved.", "add-licence": "Expiry date added. It is on the Calendar.", "remove-licence": "Expiry date removed.",
   agm: "AGM date saved. The returns that follow it are on the Calendar.",
+  kyc: "KYC year saved. The next DIR-3 KYC Web is on the Calendar.",
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
@@ -941,6 +943,20 @@ export default async function Client({ params, searchParams }: { params: Promise
                     <label>Financial year <select name="year_end" defaultValue={`${fyEnd}-03`}>{[fyEnd - 1, fyEnd].map((year) => <option key={year} value={`${year}-03`}>{periodLabel("yearly", `${year}-03`)}</option>)}</select></label>
                     <label>AGM date <input type="date" name="agm" required /></label>
                     <Pending className="b b-secondary b-small" busy="Saving">Save AGM date</Pending>
+                  </form>
+                );
+              })}
+              {/* DIR-3 KYC Web runs on the director's own three year cycle (rule 12A): the year of the last one is asked, never guessed (public.record_kyc). */}
+              {manage && show !== "filed" && numbers.filter((registration) => registration.kind === "pan" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "kyc")).map((registration) => {
+                const fyEnd = Number(today.slice(0, 4)) + (today.slice(5, 7) >= "04" ? 1 : 0);
+                const planned = tasks?.some((task) => task.code === "DIR3KYC" && task.status !== "filed");
+                return (
+                  <form key={registration.id} action={recordKyc} className="app-card-foot agm-form">
+                    <input type="hidden" name="client" value={client.id} />
+                    <input type="hidden" name="registration" value={registration.id} />
+                    <span className="hint grow">{planned ? "DIR-3 KYC Web is due once every three financial years, by 30 June after the third." : "DIR-3 KYC Web needs a date: it is due once every three financial years, by 30 June after the third. Give the financial year of the last KYC and InboxCA puts the next on the Calendar."} After a change of mobile, email or home address the director files it again within 30 days.</span>
+                    <label>Last KYC filed for <select name="year_end" defaultValue="" required><option value="" disabled>Choose a year</option>{[1, 2, 3, 4].map((back) => <option key={back} value={`${fyEnd - back}-03`}>{periodLabel("yearly", `${fyEnd - back}-03`)}</option>)}</select></label>
+                    <Pending className="b b-secondary b-small" busy="Saving">Save KYC year</Pending>
                   </form>
                 );
               })}
