@@ -1,8 +1,9 @@
 -- Due dates checked against official text on 3 Nov 2026 (runbooks/ca-research-3nov.md, local).
 -- Each rule read in the official text gets its link, so a firm's owner can open it and
 -- confirm the date for their firm in one click (public.confirm_due_date). Orelu's own CA check
--- (verified_on, approved_by) is not given here. DPT-3, LLP Form 8 and LLP Form 11 stay without
--- a link: MCA and India Code did not serve their text.
+-- (verified_on, approved_by) is not given here. DPT-3, LLP Form 8 and LLP Form 11 were read in
+-- MCA's own e-Book: Companies (Acceptance of Deposits) Rules 2014 r.16 (G.S.R. 256(E), p.29)
+-- and the LLP Rules 2009 r.24(4) and r.25(1) (G.S.R. 229(E), p.120).
 update public.compliance_types t set source_url = links.url
 from (values
   ('ITR_NA', 'https://www.incometaxindia.gov.in/documents/d/guest/income_tax_act_2025_as_amended_by_fa_act_2026-pdf'),
@@ -25,7 +26,10 @@ from (values
   ('AOC4', 'https://www.indiacode.nic.in/bitstream/123456789/2114/5/A2013-18.pdf'),
   ('MGT7', 'https://www.indiacode.nic.in/bitstream/123456789/2114/5/A2013-18.pdf'),
   ('ADT1', 'https://www.indiacode.nic.in/bitstream/123456789/2114/5/A2013-18.pdf'),
-  ('MSME1', 'https://egazette.gov.in/WriteReadData/2019/195751.pdf')
+  ('MSME1', 'https://egazette.gov.in/WriteReadData/2019/195751.pdf'),
+  ('DPT3', 'https://www.mca.gov.in/bin/ebook/dms/getdocument?doc=MTQyODc=&docCategory=Notifications&type=open'),
+  ('LLP8', 'https://www.mca.gov.in/bin/ebook/dms/getdocument?doc=MTM0NTY=&docCategory=Notifications&type=open'),
+  ('LLP11', 'https://www.mca.gov.in/bin/ebook/dms/getdocument?doc=MTM0NTY=&docCategory=Notifications&type=open')
 ) links (code, url)
 where t.code = links.code and t.period_key = '' and t.verified_on is null;
 
