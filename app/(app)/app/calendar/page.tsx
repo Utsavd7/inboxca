@@ -80,6 +80,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     remindId ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : Promise.resolve({ data: null }),
     remindId ? supabaseAdmin().from("activity_log").select("at", { count: "exact", head: true }).eq("firm_id", membership.firmId).eq("entity_id", remindId).eq("action", "reminder.sent").gte("at", `${today}T00:00:00+05:30`) : Promise.resolve({ count: 0 }),
     Promise.all(views.map((shown) => returns(shown, counted, true))),
+    // The periods moved by an official notice (the Sunday check), named beside their dates.
+    supabase.from("compliance_types").select("code, period_key, due_rule, source_url").neq("period_key", "").not("verified_on", "is", null).not("due_rule->notice", "is", null),
   ]);
   // With no view asked for, it opens on the late returns when there are any: their page is read
   // straight away, and the next 30 days only when nothing is late.
@@ -105,7 +107,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const lead = month ? (new Date(`${month}-01T00:00:00Z`).getUTCDay() + 6) % 7 : 0;
   const cells = month ? Array.from({ length: Math.ceil((lead + new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate()) / 7) * 7 }, (_, at) => addDays(`${month}-01`, at - lead)) : null;
   const span = strip ?? cells;
-  const [{ data: tasks, count: total }, { data: perDay }, [{ data: rules }, { data: marking }, { data: reminding }, { data: remindTasks }, { data: mailbox }, { count: remindedToday }, counts]] = await Promise.all([
+  const [{ data: tasks, count: total }, { data: perDay }, [{ data: rules }, { data: marking }, { data: reminding }, { data: remindTasks }, { data: mailbox }, { count: remindedToday }, counts, { data: extensions }]] = await Promise.all([
     late && view === "overdue" ? late : pageOf(day ? null : view),
     span ? supabase.rpc("calendar_days", { target_firm: membership.firmId, first_day: span[0], last_day: span.at(-1)!, only_code: code || undefined }) : Promise.resolve({ data: null }),
     rest,
@@ -114,6 +116,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   // GST returns and ITRs with figures in but not filled yet, for Fill.
   const stages = await returnStages(supabase, membership.firmId, viewOnly ? [] : (tasks ?? []).filter((task) => task.status !== "filed" && fills(task.code)).map((task) => task.id));
   const rule = new Map(rules?.map((r) => [r.code, r]));
+  const extended = new Map(extensions?.map((row) => [`${row.code}:${row.period_key}`, { notice: (row.due_rule as { notice: string }).notice, link: row.source_url }]));
   const licence = (task: { kind?: string }) => task.kind === "licence";
   const name = (task: { kind?: string; code: string | null; period_key: string | null; details?: unknown }) =>
     licence(task) ? ([(task.details as { label?: string }).label ?? "Licence", "Licence or registration"] as const) : ([rule.get(task.code ?? "")?.name ?? task.code, periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)] as const);
@@ -232,6 +235,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                       <td>
                         {dueLabel(task.due_on)}
                         {!rule.get(task.code ?? "")?.verified_on && "*"}
+                        {extended.has(`${task.code}:${task.period_key}`) && (
+                          <a className="sub" href={extended.get(`${task.code}:${task.period_key}`)!.link ?? undefined} target="_blank" rel="noopener noreferrer">Extended by {extended.get(`${task.code}:${task.period_key}`)!.notice}</a>
+                        )}
                       </td>
                     )}
                     <td>

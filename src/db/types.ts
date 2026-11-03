@@ -816,6 +816,9 @@ isOneToOne: false
 "admin_check_split":
 { Args: { "first": string,"second": string,"verdict": string }; Returns: boolean
                            },
+"admin_dates":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "admin_email_incident":
 { Args: { "incident": string }; Returns: number
                            },
@@ -885,6 +888,9 @@ isOneToOne: false
 "admin_support_view":
 { Args: { "target": string }; Returns: Json
                            },
+"admin_undo_extension":
+{ Args: { "rule_code": string,"rule_period": string }; Returns: boolean
+                           },
 "admin_update_incident":
 { Args: { "finish": boolean,"incident": string,"note": string }; Returns: boolean
                            },
@@ -909,6 +915,9 @@ isOneToOne: false
                            },
 "append_automatic_dataset":
 { Args: { "body": Json,"client": string,"draft": string,"expected": number,"firm": string,"form": string,"period": string }; Returns: boolean
+                           },
+"apply_notice_extension":
+{ Args: { "earlier"?: string,"link": string,"new_date": string,"notice": string,"rule_code": string,"rule_period": string }; Returns: string
                            },
 "assigned_clients":
 { Args: Record<PropertyKey, never>; Returns: string[]
