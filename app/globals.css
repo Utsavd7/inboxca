@@ -521,8 +521,8 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .quote-price .num { font-family: inherit; font-weight: inherit; letter-spacing: inherit; }
 .quote-price small { font-size: var(--fs-small); font-weight: 500; letter-spacing: normal; color: var(--on-navy); }
 .quote-facts { display: grid; gap: 2px; font-size: var(--fs-caption); color: var(--on-navy); }
-.quote-billing { display: grid; justify-items: start; gap: 6px; }
-.quote-save { font-size: var(--fs-caption); color: var(--on-navy); }
+.quote-billing { display: grid; justify-items: start; gap: 6px; min-width: 13.5rem; }
+.quote-save { font-size: var(--fs-caption); color: var(--on-navy); white-space: nowrap; }
 .quote-save button { color: var(--white); font-weight: 700; text-decoration: underline; text-decoration-color: var(--tint); text-decoration-thickness: 2px; text-underline-offset: 4px; transition: text-decoration-color var(--t-micro); }
 .quote-save button:hover { text-decoration-color: var(--white); }
 .plan-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); }

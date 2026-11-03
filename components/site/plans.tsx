@@ -184,7 +184,7 @@ export function Plans() {
             {/* The saving is the real difference: twelve monthly payments against one yearly one. */}
             <p className="quote-save">
               {yearly ? (
-                <>Yearly is about 11 months for 12. You save {rupees(saving)} a year.</>
+                <>You save {rupees(saving)} a year.</>
               ) : (
                 <button type="button" onClick={() => setYearly(true)}>
                   Pay yearly and save {rupees(saving)}
