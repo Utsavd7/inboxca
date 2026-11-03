@@ -40,6 +40,10 @@ export function SignInForm({ email, providers = [] }: { email?: string; provider
             New to InboxCA? <Link href="/sign-up">Set up your firm</Link>
           </p>
         )}
+        {/* IT Rules 2021 rule 3(1)(c) and (f): users hear of the terms and what breaking them means. */}
+        <p className="auth-small">
+          Using InboxCA means following its <Link href="/terms#use">terms</Link> and <Link href="/privacy">privacy policy</Link>. Breaking them or the law can end your access.
+        </p>
       </form>
       </>
     );

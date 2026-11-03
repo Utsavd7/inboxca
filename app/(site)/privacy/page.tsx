@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { privacySections, legalNote, legalUpdated } from "@/content/legal";
+import { grievanceAcknowledge, grievanceAnswer, grievanceContact, privacySections, legalNote, legalUpdated } from "@/content/legal";
 import { Policy } from "@/components/site/policy";
 
 export const metadata: Metadata = {
@@ -16,7 +16,7 @@ export default function Page() {
       note={legalNote}
       sections={privacySections}
       contactTitle="Questions and complaints"
-      contactText="Utsav Doshi and Ria Chheda answer privacy questions, rights requests and complaints: acknowledged within 72 hours, answered within 30 days."
+      contactText={`${grievanceContact}, the grievance officers, answer privacy questions, rights requests and complaints: acknowledged within ${grievanceAcknowledge}, answered within ${grievanceAnswer}.`}
     />
   );
 }
