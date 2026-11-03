@@ -7,7 +7,7 @@ import { aiBlock, custom, extraPerson, planIncludes, planRows, plans, practices,
 import { estimate, type Practice } from "@/src/lib/estimate";
 import { Rolling } from "./rolling";
 
-const spring = { type: "spring", duration: 0.55, bounce: 0.16 } as const;
+const spring = { type: "spring", duration: 0.55, bounce: 0 } as const;
 const number = (value: number) => value.toLocaleString("en-IN");
 
 // The slider is curved so small firms get as much room as large ones.

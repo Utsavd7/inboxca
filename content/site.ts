@@ -39,6 +39,19 @@ export const weekScenes = [
 export const coverage =
   "Today it prepares GSTR-1 and GSTR-3B, with GSTR-2B credit, and ITR-1 to ITR-4; reads Form 16 and Form No. 130, Form 26AS and Form No. 168, AIS and TIS; and keeps a notice tracker.";
 
+// The same, form by form, for the moving strip under the hero: [form, what InboxCA does].
+// The due dates are the calendar's own list (supabase/migrations/20261017100000_calendar.sql).
+export const forms = [
+  ...["GSTR-1", "GSTR-3B"].map((form) => [form, "Prepared"] as const),
+  ["GSTR-2B", "Matched"],
+  ...["ITR-1", "ITR-2", "ITR-3", "ITR-4"].map((form) => [form, "Prepared"] as const),
+  ...["Form No. 130", "Form 16", "Form No. 168", "Form 26AS", "AIS", "TIS"].map((form) => [form, "Read"] as const),
+  ["Notices", "Tracked"],
+  ...["GSTR-9", "GSTR-4", "CMP-08", "TDS 24Q and 26Q", "Advance tax", "Tax audit report", "DIR-3 KYC", "LLP Form 8", "LLP Form 11"].map(
+    (form) => [form, "Due date kept"] as const,
+  ),
+] as const;
+
 // The old way against InboxCA, no rival named. Each right hand cell is checked against the
 // code: drive.ts and folders, reminders.ts, datasets.ts (the source page of a figure),
 // control cards and security.ts (passwords, view only staff, office only).
@@ -169,6 +182,15 @@ export const startSteps = [
   ["Connect email and drive", "Your firm's Gmail, Outlook or Zoho Mail, and your OneDrive or Dropbox."],
 ] as const;
 
+// The policy pages, for the menu in the header and the footer: [path, name, what it covers].
+export const policies = [
+  ["/security", "Security policy", "Where your data lives and who can see it"],
+  ["/privacy", "Privacy policy", "What InboxCA keeps about you, and why"],
+  ["/terms", "Terms", "The agreement for using InboxCA"],
+  ["/refunds", "Refunds and cancelling", "14 day money back, and how to cancel"],
+  ["/dpa", "Data processing agreement", "What your firm accepts at sign up"],
+] as const;
+
 // Shown beside every start button. From the business plan: the first plan payment
 // comes back in full if the firm cancels within 14 days.
 export const guarantee = "14 day money back when you join";
@@ -179,3 +201,9 @@ export const makers = [
   ["Ria Chheda", "Cofounder and CMO"],
 ] as const;
 
+
+// The questions above in two groups on the page, in the same order: using it, then paying.
+export const questionGroups = [
+  ["Using InboxCA", questions.slice(0, 9)],
+  ["Plans and paying", questions.slice(9)],
+] as const;

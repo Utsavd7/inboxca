@@ -37,7 +37,7 @@ function DriveCell() {
                 <motion.span
                   layoutId="drive-pick"
                   className="segment-pick"
-                  transition={{ type: "spring", duration: 0.55, bounce: 0.16 }}
+                  transition={{ type: "spring", duration: 0.55, bounce: 0 }}
                 />
               )}
               <span>{name}</span>
