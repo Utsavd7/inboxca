@@ -447,14 +447,14 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       event ? supabase.from("tasks").select("id").eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1).maybeSingle() : Promise.resolve({ data: null }),
       event ? event.clients?.name ?? (event.reason_code === "not_a_client" ? "Not a client yet" : contactName(firm, event).then((name) => name || "A contact")) : "",
       // AI's sealed draft for an email waiting for a person, or why AI left it to them; not for
-      // someone who may only view, as it may carry the upload link.
+      // someone who may only view.
       request && event && !membership.viewOnlyUntil ? aiDraftOf(firm, request.id, event.id).catch(() => null) : null,
     ]);
     // InboxCA's answer shows on its own above, so the line says what else InboxCA did.
     const outcomes = what?.outcomes ?? [];
     const outcome = outcomes.find((key) => key !== "draft" && key !== "queued") ?? (outcomes.length ? "" : "none");
     const { data: answerRow } = event && (outcomes.includes("draft") || outcomes.includes("queued")) ? await admin.from("email_events").select(answerEvent).eq("id", event.id).maybeSingle() : { data: null };
-    const drafted = answerRow ? await draftAnswer(admin, answerRow, !membership.viewOnlyUntil) : null;
+    const drafted = answerRow ? await draftAnswer(admin, answerRow) : null;
     const held = outcomes.includes("draft");
     const shared = sends?.find((share) => share.status === (outcome === "approval" ? "waiting" : "sent"));
     const eventOf = new Map(threadEvents?.map((row) => [row.provider_message_id, row.id]));

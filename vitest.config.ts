@@ -9,7 +9,5 @@ export default defineConfig({
   test: {
     include: ["tests/unit/**/*.test.ts"],
     environment: "node",
-    // Tests without a scanner keep the optional check; those of the required one say so themselves.
-    env: { SCAN_OPTIONAL: "1" },
   },
 });

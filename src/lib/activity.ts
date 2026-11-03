@@ -22,7 +22,7 @@ export const activityNames: Record<string, string> = {
   "email.assigned": "Email given to a person", "replies.waiting_sent": "Waiting replies emailed to the owner", "incident.emailed": "Owner told InboxCA is not working fully",
   "email.answered": "Reply sent by InboxCA", "email.answer_stopped": "Reply by InboxCA stopped",
   "email.ai_drafted": "Reply drafted by AI for a person to check", "email.ai_left": "Left for the team by AI",
-  "document.added": "Acknowledgement saved", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked", "notice.assigned": "Notice given to a person", "notice.replied": "Notice reply recorded", "notice.closed": "Notice closed",
+  "document.added": "Acknowledgement saved", "document.virus": "File kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked", "notice.assigned": "Notice given to a person", "notice.replied": "Notice reply recorded", "notice.closed": "Notice closed",
   "contact.added": "Contact added", "contact.changed": "Contact changed",
   "fills.asked": "Fill asked for returns late or due in the next 7 days", "fills.stopped": "Fill stopped before it started",
   "due_date.confirmed": "Due date confirmed by the owner against the notification", "agm.recorded": "AGM date recorded", "kyc.recorded": "Last DIR-3 KYC year recorded",
@@ -68,7 +68,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "document.uploaded": ["from"], "document.filed": ["from"], "document.added": ["form", "kind"], "document.renamed": ["from", "to"], "document.removed": ["from"], "document.restored": ["from"],
   "document.viewed": ["thumb", "form"], "document.downloaded": ["stamped", "limit", "sheet", "permission", "zip"], "document.downloaded_by_client": [], "document.sharing": ["policy"],
   "document.shared": ["share", "reply"], "document.missing": [], "document.safety_copy": [], "document.safety_restored": [],
-  // The file worker (5.15): the scanner's name for what it found, or why a file was refused.
+  // The file worker (5.15): why a file was kept out or refused.
   "document.virus": ["found"], "document.refused": ["reason"], "document.password_saved": [], "document.changed_outside": ["renamed"], "document.purged": [],
   "share.code_sent": [], "share.approved": [], "share.refused": [], "bulk_send.asked": ["clients", "type", "period"],
   "request.created": ["auto"], "request.phoned": [], "request.receipt_sent": [], "import.started": ["files", "scope"], "import.finished": ["files"], "import.undo_asked": [], "import.undone": [],

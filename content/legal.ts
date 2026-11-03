@@ -9,6 +9,7 @@
 // Sign up records the version dates below as what a firm accepted, so a change that affects
 // firms needs a new date.
 import { analyticsToken, contactEmail } from "@/src/lib/site";
+import { clientFiles } from "./security";
 
 export const legalUpdated = "3 Nov 2026";
 export const legalNote =
@@ -56,6 +57,7 @@ export const privacySections = [
       "Client files stay in your firm's own OneDrive or Dropbox.",
       "InboxCA keeps your client list, your records and the figures read from files, so that it can do its work.",
       "InboxCA does not keep email subjects or email text, portal passwords, OTPs, card details or Aadhaar numbers.",
+      ...clientFiles,
       "InboxCA also reads the emails your firm gets from the GST and income tax departments, to find the client they are about.",
       "When someone who is not yet a client writes to your firm, InboxCA does not open the email. It keeps only a record of who wrote and when, so that your firm can add them as a client.",
     ],
@@ -348,7 +350,8 @@ export const dpaSections = [
       "PAN, GSTIN, phone numbers, email addresses, bank details and the figures read from your files are encrypted with your firm's own key (AES 256). Each firm has its own key, and the database keeps each firm's records apart from every other firm's.",
       "Every sign in needs two proofs. The owner's login works only on computers the owner approved, and the owner can keep staff to approved office PCs, on the office internet connection, in office hours.",
       "Staff can view files but cannot change or delete the originals. Every view, download, share and delete request is recorded, and nobody can edit the record or delete it early.",
-      "Email subjects and text, portal passwords and OTPs are never kept. Files are checked for viruses before they are opened. A file passes through InboxCA only while it is checked and filed, at most 24 hours, or up to 7 days if your drive cannot be reached.",
+      "Email subjects and text, portal passwords and OTPs are never kept. A file passes through InboxCA only while it is checked and filed, at most 24 hours, or up to 7 days if your drive cannot be reached.",
+      ...clientFiles,
       "Orelu's own team cannot open your firm's data. To fix a problem, support may ask in the app to see your people and client names for one hour; the owner approves it and it is recorded.",
       "Orelu's people who work on InboxCA are bound to keep it confidential.",
     ],

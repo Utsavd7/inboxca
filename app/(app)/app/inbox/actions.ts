@@ -141,7 +141,7 @@ export async function draftEmail(_previous: Draft, form: FormData): Promise<Draf
 export async function draftReply(_previous: Draft, form: FormData): Promise<Draft> {
   const { supabase, membership } = await currentWriter();
   if (!membership || !aiReady()) return { error: "Turns on when AI is set up." };
-  const result = await writeReply(supabase, membership.firmId, membership.firmName, String(form.get("mail") ?? ""), "reply_draft", !membership.viewOnlyUntil);
+  const result = await writeReply(supabase, membership.firmId, membership.firmName, String(form.get("mail") ?? ""), "reply_draft");
   if (!result) return { error: "The email could not be read just now." };
   return result.outcome === "draft" ? { text: result.text, papers: result.papers } : { error: `No draft this time. ${aiReasons[result.reason]}` };
 }

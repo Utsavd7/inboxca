@@ -13,7 +13,7 @@ const records: Record<string, ToolResult> = {
   get_client_overview: { outcome: "found", lines: ["Invented Textiles (business)"] },
   get_task_status: { outcome: "found", lines: ["- GSTR-1 for Sep 2026: filed on 8 Oct 2026, acknowledgement number AA240926000001"] },
   list_upcoming_deadlines: { outcome: "found", lines: ["- GSTR-3B for Oct 2026: due on 20 Nov 2026"] },
-  list_pending_documents: { outcome: "found", lines: ["We still need these papers for Oct 2026:", "- Sales bills", "Upload them here, no sign in needed: https://app.inboxca.test/u/invented-link"] },
+  list_pending_documents: { outcome: "found", lines: ["We still need these papers for Oct 2026:", "- Sales bills", "", "Please reply to this email with the files attached, or email them to us."] },
 };
 // The eval key's own call (an evals project, PLAN.md 5.18), not a firm's credits: the model and
 // settings of a reply draft, kept nowhere by the provider.

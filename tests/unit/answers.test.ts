@@ -94,10 +94,10 @@ describe("answers from InboxCA's records", () => {
     expect(dueAnswer(sep, { form: "GSTR3B", period: "2026-10" }, today)).toEqual({ lines: ["- GSTR3B (monthly) for Oct 2026: due on 20 Nov 2026"] });
   });
 
-  it("lists the papers still asked for with their upload link", () => {
-    const ask = { period: "2026-10", missing: ["Purchase bills", "Bank statement"], link: "https://example.test/u/invented" };
-    expect(papersAnswer([ask, { period: "2026-09", missing: [], link: "x" }], {})).toEqual({ lines: [
-      "We still need these papers for Oct 2026:", "- Purchase bills", "- Bank statement", "Upload them here, no sign in needed: https://example.test/u/invented",
+  it("lists the papers still asked for, to reply with attached", () => {
+    const ask = { period: "2026-10", missing: ["Purchase bills", "Bank statement"] };
+    expect(papersAnswer([ask, { period: "2026-09", missing: [] }], {})).toEqual({ lines: [
+      "We still need these papers for Oct 2026:", "- Purchase bills", "- Bank statement", "", "Please reply to this email with the files attached, or email them to us.",
     ] });
     expect(papersAnswer([ask], { period: "2026-08" })).toEqual({ team: "papers_none" });
     expect(papersAnswer([], {})).toEqual({ team: "papers_none" });

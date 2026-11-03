@@ -34,6 +34,7 @@ export function suggestedReply(reason: string | null | undefined, { name, client
     due_late: "Thank you for your email. We are looking at what is due for you and will get back to you soon about the next steps.",
     due_none: "Thank you for your email. We will check what is coming up for you and let you know.",
     answer_not_allowed: `Thank you for your email. For safety, we share the details of ${client} only with the email addresses on our records. Please ask ${client} to write to us, or to tell us to add your address.`,
+    link_private: "Thank you for your email. We could not open the link you sent. Please reply with the file attached, or set the link to anyone with the link and send it again.",
   };
   return `Dear ${name},\n\n${lines[reason ?? ""] ?? lines.no_rule}\n\nRegards,\n${firm}`;
 }

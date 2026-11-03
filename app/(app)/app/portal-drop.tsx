@@ -35,8 +35,8 @@ export function DroppedNotice({ value }: { value?: string }) {
     filed && `${filed} saved in ${filed === 1 ? "its client's folder" : "their clients' folders"}`,
     again && `${again} already there`,
     left && `${left} not saved: InboxCA did not recognise the file, it has a password, or its GSTIN or PAN does not match any of your clients`,
-    unsafe && `${unsafe} not saved: a virus, a program or a ZIP InboxCA could not open`,
-    unchecked && `${unchecked} could not be checked for viruses just now; add ${unchecked === 1 ? "it" : "them"} again in a minute`,
+    unsafe && `${unsafe} not saved: a kind of file InboxCA does not take, or a ZIP it could not open`,
+    unchecked && `${unchecked} could not be checked just now; add ${unchecked === 1 ? "it" : "them"} again in a minute`,
   ].filter(Boolean);
   const text = `${parts.join("; ") || "No files were added"}.`;
   return left || unsafe || unchecked ? <p className="alert" role="status">{text}</p> : <Toast>{text}</Toast>;

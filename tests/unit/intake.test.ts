@@ -1,33 +1,24 @@
 import { createHash } from "node:crypto";
-import { once } from "node:events";
-import { createServer, type AddressInfo } from "node:net";
 import { craft } from "../fixtures/zip";
-import { afterAll, beforeAll, expect, it, vi } from "vitest";
-import { intakeLimits, readFrames, scanRequired, signView, unsafeFile } from "@/src/lib/file-worker";
+import { expect, it, vi } from "vitest";
+import { intakeLimits, readFrames, signView, unsafeFile } from "@/src/lib/file-worker";
 import { checkFile } from "@/src/lib/intake";
 import { zip } from "@/src/lib/firm-download";
 import { handle } from "@/worker/handler";
-import { scan } from "@/worker/scan";
 import { Refused, unpack, zipEntries } from "@/worker/zip";
 import { pdf } from "../fixtures/pdf";
-import { EICAR, fakeClamd } from "../fixtures/fake-clamd";
 
 const secret = "invented-intake-test-secret";
-const clamd = fakeClamd();
-let port = 0;
-beforeAll(async () => { clamd.listen(0, "127.0.0.1"); await once(clamd, "listening"); port = (clamd.address() as AddressInfo).port; });
-afterAll(() => { clamd.close(); });
-const scanning = () => { vi.stubEnv("CLAMD_HOST", "127.0.0.1"); vi.stubEnv("CLAMD_PORT", String(port)); };
 
 const refusal = (bytes: Buffer) => { try { zipEntries(bytes).forEach(unpack); return null; } catch (error) { return error instanceof Refused ? error.message : "other"; } };
 
-it("refuses programs, scripts and macro files by name or by their first bytes", () => {
+it("takes only papers: programs, scripts, shortcuts, web pages and macro files are refused by name or by their first bytes", () => {
   const office = zip([{ name: "[Content_Types].xml", text: "<Types/>" }, { name: "word/vbaProject.bin", text: "macro" }]);
   const pe = Buffer.alloc(128); pe.write("MZ"); pe.writeUInt32LE(64, 60); pe.write("PE\0\0", 64, "latin1");
-  for (const [name, bytes] of [["invoice.pdf.exe", pdf("x")], ["setup.msi", pdf("x")], ["notes.js", Buffer.from("alert(1)")], ["book.xlsm", Buffer.from("x")], ["page.html", Buffer.from("<p>")],
+  for (const [name, bytes] of [["invoice.pdf.exe", pdf("x")], ["setup.msi", pdf("x")], ["notes.js", Buffer.from("alert(1)")], ["book.xlsm", Buffer.from("x")], ["slides.pptm", Buffer.from("x")], ["page.html", Buffer.from("<p>")], ["logo.svg", Buffer.from("<svg>")], ["bills.lnk", Buffer.from("x")], ["bank.url", Buffer.from("x")], ["bills.rar", Buffer.from("x")], ["bills.7z", Buffer.from("x")], ["noname", pdf("x")],
     ["invoice.pdf", pe], ["run.pdf", Buffer.from("\x7fELF......")], ["tool.txt", Buffer.from("#!/bin/sh\nrm")], ["letter.docx", office]] as const)
     expect(unsafeFile(name, bytes), name).toBe(true);
-  for (const [name, bytes] of [["invoice.pdf", pdf("Invented invoice")], ["bills.zip", zip([{ name: "a.pdf", text: "x" }])], ["register.csv", Buffer.from("MZ Traders,100")], ["sheet.xlsx", zip([{ name: "xl/workbook.xml", text: "<workbook/>" }])]] as const)
+  for (const [name, bytes] of [["invoice.pdf", pdf("Invented invoice")], ["photo.jpg", Buffer.from("x")], ["bills.zip", zip([{ name: "a.pdf", text: "x" }])], ["register.csv", Buffer.from("MZ Traders,100")], ["sheet.xlsx", zip([{ name: "xl/workbook.xml", text: "<workbook/>" }])], ["old.xls", Buffer.from("x")], ["itr.json", Buffer.from("{}")], ["gstr1.xml", Buffer.from("<a/>")], ["notes.txt", Buffer.from("x")]] as const)
     expect(unsafeFile(name, bytes), name).toBe(false);
 });
 
@@ -49,6 +40,7 @@ it("refuses unsafe paths, links, passwords, other archives, lies and too much", 
   expect(refusal(craft([{ name: "inner.zip", bytes: zip([{ name: "a.pdf", text: "x" }]) }]))).toBe("zip");
   expect(refusal(craft([{ name: "renamed.pdf", bytes: zip([{ name: "a.pdf", text: "x" }]) }]))).toBe("zip");
   expect(refusal(craft([{ name: "tool.exe", bytes: paper }]))).toBe("zip");
+  expect(refusal(craft([{ name: "macro.xlsm", bytes: paper }]))).toBe("zip");
   expect(refusal(craft([{ name: "bad.pdf", bytes: paper, crc: 1 }]))).toBe("zip");
   // A zip bomb: a small entry that says 1 KB but unpacks to 100 MB is stopped at 1 KB.
   expect(refusal(craft([{ name: "bomb.pdf", bytes: Buffer.alloc(100 * 1024 * 1024), size: 1024 }]))).toBe("zip");
@@ -60,48 +52,6 @@ it("refuses unsafe paths, links, passwords, other archives, lies and too much", 
   expect(refusal(Buffer.from("PK\x03\x04 not really a zip"))).toBe("zip");
 });
 
-it("asks clamd over TCP, and says when no scanner is set up or it does not answer", async () => {
-  vi.stubEnv("CLAMD_HOST", ""); vi.stubEnv("CLAMD_PORT", ""); vi.stubEnv("SCAN_OPTIONAL", "1");
-  expect(await scan(Buffer.from(EICAR))).toBe("off");
-  scanning();
-  expect(await scan(Buffer.from(pdf("Invented statement")))).toBe("clean");
-  // The string across the 64 KB chunks the stream is sent in.
-  expect(await scan(Buffer.concat([Buffer.alloc(65_530), Buffer.from(EICAR)]))).toEqual({ found: "Eicar-Test-Signature" });
-  vi.stubEnv("CLAMD_PORT", "1");
-  await expect(scan(Buffer.from("x"))).rejects.toThrow();
-  vi.unstubAllEnvs();
-});
-
-// Where the check is required (production, or without SCAN_OPTIONAL=1), a scanner that is
-// missing, away, silent or answering anything else never passes a file, and the worker's health
-// check says so, so the status page shows files down.
-it("never marks a file clean without a scanner that answers OK, where the check is required", async () => {
-  const silent = createServer(() => {}), broken = createServer((socket) => { socket.on("data", () => socket.end("stream: ERROR\0")); });
-  for (const server of [silent, broken]) { server.listen(0, "127.0.0.1"); await once(server, "listening"); }
-  const at = (server: typeof silent) => String((server.address() as AddressInfo).port);
-  const health = async () => (await handle(new Request("http://worker/health"))).status;
-  vi.stubEnv("SCAN_OPTIONAL", "");
-  try {
-    vi.stubEnv("CLAMD_HOST", ""); vi.stubEnv("CLAMD_PORT", "");
-    await expect(scan(Buffer.from("x"))).rejects.toThrow();
-    expect(await health()).toBe(503);
-    vi.stubEnv("CLAMD_HOST", "127.0.0.1"); vi.stubEnv("CLAMD_PORT", "1");
-    await expect(scan(Buffer.from("x"))).rejects.toThrow();
-    expect(await health()).toBe(503);
-    vi.stubEnv("CLAMD_PORT", at(silent));
-    await expect(scan(Buffer.from("x"), AbortSignal.timeout(300))).rejects.toThrow();
-    expect(await health()).toBe(503);
-    vi.stubEnv("CLAMD_PORT", at(broken));
-    await expect(scan(Buffer.from("x"))).rejects.toThrow();
-    scanning();
-    expect(await health()).toBe(200);
-    // Production never does without, whatever SCAN_OPTIONAL says.
-    expect(scanRequired({ NODE_ENV: "production", SCAN_OPTIONAL: "1" })).toBe(true);
-    expect(scanRequired({ NODE_ENV: "development" })).toBe(true);
-    expect(scanRequired({ NODE_ENV: "development", SCAN_OPTIONAL: "1" })).toBe(false);
-  } finally { vi.unstubAllEnvs(); silent.close(); broken.close(); }
-}, 15_000);
-
 // The app's side against the worker's handler, as the fetch between them would carry it.
 async function viaWorker<T>(run: () => Promise<T>) {
   vi.stubEnv("FILE_WORKER_URL", "http://worker"); vi.stubEnv("FILE_WORKER_SECRET", secret);
@@ -112,44 +62,32 @@ const papers = async (checked: Awaited<ReturnType<typeof checkFile>>) => {
   if ("unsafe" in checked) return checked;
   const all = [];
   for await (const paper of checked.papers) all.push([paper.name, Buffer.from(paper.bytes).toString("latin1").includes("Invented")]);
-  return { scanned: checked.scanned, all };
+  return all;
 };
 
-it("checks each file sent in through the worker: a virus, a program, a ZIP's papers", async () => {
+it("checks each file sent in: a program, too large, a ZIP's papers through the worker", async () => {
   const bill = Buffer.from(pdf("Invented bill"));
-  // Where the check is required, no worker and a worker without a scanner both refuse the file.
-  vi.stubEnv("SCAN_OPTIONAL", "");
-  await expect(checkFile({ name: "bill.pdf", bytes: bill })).rejects.toThrow("scan_unavailable");
-  await viaWorker(() => expect(checkFile({ name: "bill.pdf", bytes: bill })).rejects.toThrow("scan_unavailable"));
-  vi.stubEnv("SCAN_OPTIONAL", "1");
-  expect(await papers(await checkFile({ name: "bill.pdf", bytes: bill }))).toEqual({ scanned: false, all: [["bill.pdf", true]] });
+  expect(await papers(await checkFile({ name: "bill.pdf", bytes: bill }))).toEqual([["bill.pdf", true]]);
+  expect(await checkFile({ name: "setup.exe", bytes: bill })).toEqual({ unsafe: "program" });
+  expect(await checkFile({ name: "book.xlsm", bytes: bill })).toEqual({ unsafe: "program" });
+  expect(await checkFile({ name: "big.pdf", bytes: new Uint8Array(intakeLimits.bytes + 1) })).toEqual({ unsafe: "large" });
   await viaWorker(async () => {
-    vi.stubEnv("SCAN_OPTIONAL", "1");
-    expect(await papers(await checkFile({ name: "bill.pdf", bytes: bill }))).toEqual({ scanned: false, all: [["bill.pdf", true]] });
-    vi.stubEnv("SCAN_OPTIONAL", "");
-    scanning();
-    expect(await papers(await checkFile({ name: "bill.pdf", bytes: bill }))).toEqual({ scanned: true, all: [["bill.pdf", true]] });
-    expect(await checkFile({ name: "bill.pdf", bytes: Buffer.from(`${EICAR}\n`) })).toEqual({ unsafe: "virus", found: "Eicar-Test-Signature" });
-    expect(await checkFile({ name: "setup.exe", bytes: bill })).toEqual({ unsafe: "program" });
     const bills = zip([{ name: "Sep/bill 1.pdf", text: pdf("Invented bill 1") }, { name: "bill 2.pdf", text: pdf("Invented bill 2") }]);
-    expect(await papers(await checkFile({ name: "Sep bills.zip", bytes: bills }))).toEqual({ scanned: true, all: [["bill 1.pdf", true], ["bill 2.pdf", true]] });
+    expect(await papers(await checkFile({ name: "Sep bills.zip", bytes: bills }))).toEqual([["bill 1.pdf", true], ["bill 2.pdf", true]]);
     // A ZIP filed as it is when it is not to be opened, as for a file already in the drive.
-    expect(await papers(await checkFile({ name: "Sep bills.zip", bytes: bills }, false))).toEqual({ scanned: true, all: [["Sep bills.zip", false]] });
-    // One deflated file with the test string makes the whole ZIP a virus; nothing in it is given.
-    expect(await checkFile({ name: "bills.zip", bytes: zip([{ name: "a.pdf", text: pdf("Invented") }, { name: "b.txt", text: EICAR }]) })).toEqual({ unsafe: "virus", found: "Eicar-Test-Signature" });
+    expect(await papers(await checkFile({ name: "Sep bills.zip", bytes: bills }, false))).toEqual([["Sep bills.zip", false]]);
+    // One program or archive inside makes the whole ZIP refused; nothing in it is given.
+    expect(await checkFile({ name: "bills.zip", bytes: zip([{ name: "a.pdf", text: pdf("Invented") }, { name: "b.exe", text: "MZ" }]) })).toEqual({ unsafe: "zip" });
+    expect(await checkFile({ name: "bills.zip", bytes: zip([{ name: "a.pdf", text: pdf("Invented") }, { name: "inner.zip", text: "x" }]) })).toEqual({ unsafe: "zip" });
     expect(await checkFile({ name: "bills.zip", bytes: craft([{ name: "../a.pdf", bytes: bill }]) })).toEqual({ unsafe: "zip" });
     expect(await checkFile({ name: "bills.zip", bytes: craft([{ name: "a.pdf", bytes: bill, flags: 1 }]) })).toEqual({ unsafe: "zip_password" });
-    expect(await checkFile({ name: "big.pdf", bytes: new Uint8Array(intakeLimits.bytes + 1) })).toEqual({ unsafe: "large" });
-    // A scanner that is set up but away lets nothing through.
-    vi.stubEnv("CLAMD_PORT", "1");
-    await expect(checkFile({ name: "bill.pdf", bytes: bill })).rejects.toThrow("scan_unavailable");
   });
 });
 
 it("takes only a signed ticket, and only the bytes it names", async () => {
   const bytes = Buffer.from(pdf("Invented"));
   const ticket = JSON.stringify({ size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), zip: false, expires: Math.floor(Date.now() / 1000) + 60 });
-  vi.stubEnv("FILE_WORKER_SECRET", secret); vi.stubEnv("SCAN_OPTIONAL", "1");
+  vi.stubEnv("FILE_WORKER_SECRET", secret);
   try {
     const send = async (signature: string, body: Buffer, sent = ticket) => (await handle(new Request("http://worker/intake", { method: "POST", body: new Uint8Array(body), headers: { authorization: signature, "x-inboxca-intake": sent } }))).status;
     const signed = await signView(ticket, secret);
@@ -161,6 +99,6 @@ it("takes only a signed ticket, and only the bytes it names", async () => {
     expect(await send(await signView(old, secret), bytes, old)).toBe(403);
     const response = await handle(new Request("http://worker/intake", { method: "POST", body: bytes, headers: { authorization: signed, "x-inboxca-intake": ticket } }));
     const [said] = await Array.fromAsync(readFrames(response.body!));
-    expect(JSON.parse(new TextDecoder().decode(said))).toEqual({ scanned: false });
+    expect(JSON.parse(new TextDecoder().decode(said))).toEqual({});
   } finally { vi.unstubAllEnvs(); }
 });

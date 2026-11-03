@@ -20,8 +20,7 @@ import type { Handler } from "./runner";
 export const readDocument: Handler = async (job) => {
   const admin = supabaseAdmin();
   const { data: document } = await admin.from("documents").select("id, firm_id, client_id, registration_id, name, document_type, period_key, original_name_enc, password_enc, drive_file_id, status, work_type, sha256, received_at, details").eq("id", job.entity_id ?? "").maybeSingle();
-  // A file held for the virus check is not opened until it passes (src/jobs/rescan.ts reads it then).
-  if (!document || document.status === "deleted" || (document.details as { held?: string } | null)?.held) return { done: true };
+  if (!document || document.status === "deleted") return { done: true };
   const firm = document.firm_id;
   const { data: copies } = await admin.from("documents").select("id, fingerprint, details").eq("firm_id", firm).eq("client_id", document.client_id).eq("sha256", document.sha256).not("details->text", "is", null).limit(10);
   const copy = copies?.find((other) => other.id === document.id) ?? copies?.[0];

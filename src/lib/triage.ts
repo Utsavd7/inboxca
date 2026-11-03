@@ -41,6 +41,7 @@ export const replyReasons: Record<string, string> = {
   due_late: "Asks what is due. A return looks late",
   due_none: "Asks what is due. Nothing is due in the next 30 days in InboxCA",
   answer_not_allowed: "Asks about the client's returns but may not receive its papers",
+  link_private: "Sent a sharing link InboxCA could not open: private, or a folder. Open it yourself, or wait for the file attached",
 };
 // A Needs reply email snoozed to a later day stays out of Needs reply until that day (India
 // time), as a PostgREST filter on the request's details.

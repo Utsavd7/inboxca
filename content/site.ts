@@ -116,6 +116,10 @@ export const questions = [
   ],
   ["Is there WhatsApp?", "Email only for now. WhatsApp is planned for later."],
   [
+    "How do clients send us papers?",
+    "By email to your firm's own address, as they do today, so your email provider checks attachments as its own policy says before InboxCA reads the mailbox. InboxCA accepts only PDF, pictures, Excel, CSV, XML, JSON, Word and ZIP files and refuses programs and macro files. A file behind a sharing link waits for a person in your firm. The security page quotes each provider's own words.",
+  ],
+  [
     "What does InboxCA not do?",
     "It does not file on the GST or income tax portal, and it never asks for a portal password or OTP. It has no WhatsApp yet. It does not raise your firm's own invoices to clients. Your team files, and your billing stays where it is.",
   ],

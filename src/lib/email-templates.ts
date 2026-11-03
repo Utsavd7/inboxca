@@ -25,20 +25,20 @@ export const emailTemplates={
     const what=paper?.type && paper.type!=="Document" ? `${paperType(paper.type)}${paper.period ? ` for ${periodName(paper.period)}` : ""}` : name;
     return {subject:reply ? `Re: your request for ${what}` : `${what} from ${firm}`,text:[`Dear ${client},`,"",`${firm} has shared ${what} with you.`,"",`Download it here: ${link}`,privatePaper ? "This paper is private. When you open the link, choose Email me a code. We send a 6 digit code to this email address. The link works for 7 days and up to 5 downloads." : "The link works for 7 days and up to 5 downloads.","",firm].join("\n")};
   },
-  request(client:string,firm:string,period:string,items:{type:string}[],link:string) {
+  // Papers asked for (owner, 3 Nov 2026): the client replies with them attached, so the firm's
+  // email provider checks them before InboxCA reads the mailbox and files them.
+  request(client:string,firm:string,period:string,items:{type:string}[]) {
     const when=period ? ` for ${periodName(period)}` : "";
-    return {subject:`Documents needed${when}`,text:[`Dear ${client},`,"",`Please upload these documents${when}:`,...items.map((item)=>`- ${askName(item.type)}`),"",`Upload them here, no sign in needed: ${link}`,"The link works for 30 days.","",firm].join("\n")};
-  },
-  receipt(client:string,firm:string,period:string,items:{type:string;received:string[]}[]) {
-    const when=period ? ` for ${periodName(period)}` : "";
-    const missing=items.filter((item)=>!item.received.length).map((item)=>`- ${item.type}`);
-    const got=items.filter((item)=>item.received.length).map((item)=>`- ${item.type}: ${item.received.length===1 ? "1 file" : `${item.received.length} files`}`);
-    return {subject:`We have received your papers${when}`,text:[`Dear ${client},`,"",`Thank you. We have received these papers${when}:`,...got,"",...(missing.length ? ["Still needed:",...missing,"","Please add them with the upload link we sent you."] : ["That is everything we asked for."]),"",firm].join("\n")};
+    return {subject:`Documents needed${when}`,text:[`Dear ${client},`,"",`Please reply to this email with these documents attached${when}:`,...items.map((item)=>`- ${askName(item.type)}`),"",firm].join("\n")};
   },
   // The text filled into a WhatsApp click to chat link for papers still missing; a person sends it.
-  whatsapp(client:string,firm:string,period:string,items:{type:string}[],link:string) {
+  whatsapp(client:string,firm:string,period:string,items:{type:string}[]) {
     const when=period ? ` for ${periodName(period)}` : "";
-    return [`Dear ${client},`,`${firm} still needs these papers${when}:`,...items.map((item)=>`- ${askName(item.type)}`),link ? `Please upload them here, no sign in needed: ${link}` : "",`Thank you.`].filter(Boolean).join("\n");
+    return [`Dear ${client},`,`${firm} still needs these papers${when}:`,...items.map((item)=>`- ${askName(item.type)}`),`Please reply to our email with them attached, or email them to us.`,`Thank you.`].join("\n");
+  },
+  // A sharing link InboxCA could not open: the file was private, or a folder (src/lib/share-link.ts).
+  openLink(client:string,firm:string) {
+    return {subject:"Please send the file as an attachment",text:[`Dear ${client},`,"","Thank you for your email. We could not open the link you sent, as it is private or is a folder.","","Please reply to this email with the file attached, or set the link to anyone with the link and send it again.","",firm].join("\n")};
   },
   // After an income tax return is marked filed: one reminder to e-verify it, with the last day.
   verify(client:string,firm:string,what:string,filedOn:string,by:string) {

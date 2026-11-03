@@ -1,4 +1,4 @@
-import { DELETED_FOLDER, INCOMING, VIRUS_FOLDER, safeName, workTypes, type FolderOrder, type WorkType } from "./drive";
+import { DELETED_FOLDER, INCOMING, KEPT_OUT_FOLDER, safeName, workTypes, type FolderOrder, type WorkType } from "./drive";
 
 // The Documents folder view: the firm's drive below InboxCA's own folder, one folder at a
 // time, as Dropbox shows it, with only what the person's clients allow (PLAN.md 5.5.0, D18).
@@ -27,8 +27,8 @@ export function placeOf(parts: string[], order: FolderOrder) {
   };
 }
 
-// Files sent from a disk for the first import, removed files and files with a virus: the owner's alone.
-const ownerOnly = new Set([INCOMING, DELETED_FOLDER, "Deleted and old versions", VIRUS_FOLDER]);
+// Files sent from a disk for the first import, removed files and files kept out: the owner's alone.
+const ownerOnly = new Set([INCOMING, DELETED_FOLDER, "Deleted and old versions", KEPT_OUT_FOLDER, "Files with a virus"]);
 
 // Whether a person sees the folder or file at a path. Someone who sees every client sees it
 // all but the owner's own folders. Anyone else sees only what is inside one of their clients'

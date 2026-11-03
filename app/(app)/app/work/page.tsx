@@ -327,7 +327,7 @@ async function sendPreview(supabase: Db, firm: string, what: "late" | "papers") 
     hint:
       what === "late"
         ? "Each client gets one email from your firm's address listing their late returns. Anyone already reminded today, who already sent papers for that period, or whose email your team is answering is skipped."
-        : "Each client gets one email from your firm's address listing the papers still missing, with their upload link. Anyone already reminded today is skipped.",
+        : "Each client gets one email from your firm's address listing the papers still missing, to reply to with them attached. Anyone already reminded today is skipped.",
     button: `Send ${plural(count, "reminder", "reminders")}`,
   };
 }

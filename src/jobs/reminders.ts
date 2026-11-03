@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { emailTemplates, TEMPLATE_VERSION } from "@/src/lib/email-templates";
 import type { Json } from "@/src/db/types";
 import { todayInIndia } from "@/src/lib/calendar";
@@ -98,9 +98,8 @@ export const sendReminders: Handler = async (job) => {
     if (details.skipped?.day !== today) await save({ id: task.id, details }, { skipped: { day: today, reason } });
   }
 
-  const crypto = serverCrypto();
   // A request InboxCA opens today goes in the client's email below, as its first ask.
-  if (!now && process.env.APP_BASE_URL) await openAsks(firm, firmRow.settings as Record<string, unknown>, today, rule);
+  if (!now) await openAsks(firm, firmRow.settings as Record<string, unknown>, today, rule);
   // Document requests still waiting for files, followed up in the same daily email.
   const waiting = admin
     .from("requests")
@@ -112,17 +111,16 @@ export const sendReminders: Handler = async (job) => {
   const { data: requests } = await (one ? waiting.eq("client_id", one) : waiting);
   const follow = new Map<string, (FollowUp & { details: RequestDetails })[]>();
   const people = new Map(tasks.map((task) => [task.client_id, { name: task.name, email_enc: task.email_enc }]));
-  // A follow-up carries the upload link, which needs the app's own address.
-  for (const request of process.env.APP_BASE_URL && now !== "late" ? (requests ?? []) : []) {
+  for (const request of now !== "late" ? (requests ?? []) : []) {
     const details = request.details as unknown as RequestDetails;
     const client = request.clients;
     const missing = followUpDue({ expires_at: request.expires_at!, details }, today, now === "papers" || now === "soon");
-    if (!missing || !client || !client.email_enc || client.reminders_paused || client.archived_at || !details.link_enc || !request.client_id) continue;
-    const link = `${process.env.APP_BASE_URL}/u/${await crypto.decrypt(firm, `requests/${request.id}/link`, details.link_enc)}`;
-    follow.set(request.client_id, [...(follow.get(request.client_id) ?? []), { requestId: request.id, client_id: request.client_id, period: details.period, missing, link, count: details.followups?.length ?? 0, details, first: firstAsk(details), returns: details.returns?.map((code) => rule.get(code)?.name ?? code) }]);
+    if (!missing || !client || !client.email_enc || client.reminders_paused || client.archived_at || !request.client_id) continue;
+    follow.set(request.client_id, [...(follow.get(request.client_id) ?? []), { requestId: request.id, client_id: request.client_id, period: details.period, missing, count: details.followups?.length ?? 0, details, first: firstAsk(details), returns: details.returns?.map((code) => rule.get(code)?.name ?? code) }]);
     people.set(request.client_id, { name: client.name, email_enc: client.email_enc });
   }
 
+  const crypto = serverCrypto();
   const host = new URL(process.env.APP_BASE_URL ?? "http://inboxca.local").host;
   let sentNow = 0;
   let uncertain = false;
@@ -201,8 +199,8 @@ export const sendReminders: Handler = async (job) => {
 };
 
 // Ask early (user, 26 Oct 2026): opens the requests for papers whose day to ask has come, for
-// the firm's clients and from its own lists (planAsks). Each gets its own private upload link;
-// a key made of the client, work and period keeps it to one ever. Logged.
+// the firm's clients and from its own lists (planAsks). A key made of the client, work and
+// period keeps it to one ever. Logged.
 async function openAsks(firm: string, settings: Record<string, unknown>, today: string, rule: Map<string, { code: string; name: string | null; frequency: string | null; verified_on: string | null }>) {
   const admin = supabaseAdmin();
   const days = askDays(settings);
@@ -232,10 +230,8 @@ async function openAsks(firm: string, settings: Record<string, unknown>, today: 
     const papers = await pages((from) => admin.from("documents").select("id, client_id, document_type, period_key").in("client_id", ids.slice(at, at + 100)).in("period_key", periods).neq("status", "deleted").order("id").range(from, from + 999));
     for (const paper of papers) received.add(`${paper.client_id}:${paper.period_key}:${paper.document_type.toUpperCase().replace(/[^A-Z0-9]/g, "")}`);
   }
-  const crypto = serverCrypto();
   for (const ask of planAsks(tasks, today, days, listFor, taken, received)) {
     const id = randomUUID();
-    const token = randomBytes(32).toString("base64url");
     const key = createHash("sha256").update(`${firm}:${ask.client_id}:${ask.work}:${ask.period}`).digest("hex");
     const { data: made, error } = await admin
       .from("requests")
@@ -248,7 +244,7 @@ async function openAsks(firm: string, settings: Record<string, unknown>, today: 
           entity_type: "period",
           entity_id: `${key.slice(0, 8)}-${key.slice(8, 12)}-${key.slice(12, 16)}-${key.slice(16, 20)}-${key.slice(20, 32)}`,
           expires_at: new Date(Date.now() + 30 * DAY).toISOString(),
-          details: { period: ask.period, items: ask.items.map((type) => ({ type, work: ask.work, received: [] })), returns: ask.returns, link_hash: createHash("sha256").update(token).digest("hex"), link_enc: await crypto.encrypt(firm, `requests/${id}/link`, token) },
+          details: { period: ask.period, items: ask.items.map((type) => ({ type, work: ask.work, received: [] })), returns: ask.returns },
         },
         { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true },
       )

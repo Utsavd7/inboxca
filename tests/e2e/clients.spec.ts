@@ -677,7 +677,7 @@ test("the menu's New and the search palette start things, and the bell lists upd
   await expect(owner.getByRole("dialog", { name: "Notifications" })).toBeVisible();
 });
 
-test("a client's row offers Write and Ask for papers; its header copies numbers and the upload link and counts down to the next return", async () => {
+test("a client's row offers Write and Ask for papers; its header copies numbers and counts down to the next return", async () => {
   const [{ id }] = await query(local.dbUrl, "select id from public.clients where firm_id=$1 and name='Patel Textiles Pvt Ltd'", [firm.firmId]);
   await owner.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   const copied = () => owner.evaluate(() => navigator.clipboard.readText());
@@ -689,15 +689,11 @@ test("a client's row offers Write and Ask for papers; its header copies numbers 
   await row.getByRole("link", { name: "Ask for papers" }).click();
   await expect(owner).toHaveURL(new RegExp(`/app/clients/${id}\\?tab=documents&ask=1$`));
 
-  // With no firm email the link is shown once; the header's More keeps a Copy for it while it is open.
+  // With no firm email the papers are noted and the page says no email went.
   await owner.getByLabel("Anything else, by name").fill("Loan statement");
   await owner.getByRole("dialog").getByRole("button", { name: "Ask for papers" }).click();
-  const link = (await owner.locator(".link-once").textContent())!;
+  await expect(owner.getByRole("status").filter({ hasText: "no email went" })).toBeVisible();
   const head = owner.locator(".page-head");
-  await head.getByRole("button", { name: "More" }).click();
-  await owner.getByRole("menuitem", { name: "Copy upload link" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Upload link copied" })).toBeVisible();
-  expect(await copied()).toBe(link);
   await head.getByRole("button", { name: "Copy GSTIN" }).click();
   expect(await copied()).toBe("27AAPFU0939F1ZV");
   await expect(head.getByRole("button", { name: "Copy PAN" })).toBeVisible();

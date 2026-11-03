@@ -3,10 +3,9 @@ import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
 import { PurchaseMatch } from "./purchase-match";
 import { DatasetReview } from "./dataset-review";
-import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, Copy, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
+import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
-import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { Fragment, Suspense, ViewTransition } from "react";
 import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
@@ -71,7 +70,7 @@ const errors: Record<string, string> = {
   drive: "The firm's drive is not connected or could not be reached. Try again in a minute.",
   upload: "Choose up to 20 files, 50 MB in all, and each file's paper type, type of work and period.",
   ...unsafeText,
-  scan: "The file could not be checked for viruses just now. Try again in a minute.",
+  check: "The file could not be checked just now. Try again in a minute.",
   twin: "This client already has this paper, so InboxCA did not save it again.",
   gstin: "Choose the GSTIN this GST paper is for.",
   list: "Put one paper on each line, up to 30, each up to 80 letters and without a colon.",
@@ -123,7 +122,7 @@ const changes: Record<string, string> = {
 export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; request?: string; task?: string; marked?: string; t?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, request: askedRequest, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
   const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "overview";
   const sub = asked === "extraction" || asked === "outputs" ? asked : tab;
   const panel = panels.includes(asked ?? "") ? asked! : "";
@@ -190,10 +189,6 @@ export default async function Client({ params, searchParams }: { params: Promise
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
-  // The upload link InboxCA could not email, shown once from its stored copy, never in the address.
-  const { data: askedLink } = askedFor === "link" && uuid.test(askedRequest ?? "") ? await supabaseAdmin().from("requests").select("details").eq("firm_id", firm).eq("id", askedRequest!).eq("kind", "documents").maybeSingle() : { data: null };
-  const linkEnc = (askedLink?.details as { link_enc?: string } | null)?.link_enc;
-  const askedUploadLink = linkEnc ? `${process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? ""}/u/${await crypto.decrypt(firm, `requests/${askedRequest}/link`, linkEnc)}` : "";
   // Where each open return stands, and who may fill it by hand.
   const stages = await returnStages(supabase, firm, sub === "returns" ? (tasks ?? []).filter((task) => task.status !== "filed").map((task) => task.id) : []);
   const canPrepare = !viewOnly && membership.may("edit_figures", id);
@@ -203,12 +198,11 @@ export default async function Client({ params, searchParams }: { params: Promise
   const months = sub === "returns" ? (tasks ?? []).flatMap((task) => (task.code === "GSTR3B_M" && task.status !== "filed" && task.period_key ? [task.period_key] : [])) : [];
   // And each open ITR's, for its year: Form 16, Form 26AS and AIS.
   const itrYears = sub === "returns" ? (tasks ?? []).flatMap((task) => (task.code?.startsWith("ITR") && task.status !== "filed" && task.period_key ? [task.period_key.slice(0, 4)] : [])) : [];
-  // The latest open request's upload link, opened with the firm's key for those who may ask,
-  // to copy and send by hand.
-  const openAsk = viewOnly ? undefined : (asks ?? []).filter((request) => request.status === "pending" && (request.details as unknown as DocumentRequest).link_enc).sort((a, b) => (b.expires_at ?? "").localeCompare(a.expires_at ?? ""))[0];
+  // The latest open request for papers, for the WhatsApp text below.
+  const openAsk = viewOnly ? undefined : (asks ?? []).filter((request) => request.status === "pending").sort((a, b) => (b.expires_at ?? "").localeCompare(a.expires_at ?? ""))[0];
   // The second and last round: the client's own numbers and contacts opened with the firm's key,
   // and what the shown lists need from them.
-  const [numbers, email, contacts, { data: confirms }, { data: statements }, uploadLink, { data: taxPapers }, phone, engagement] = await Promise.all([
+  const [numbers, email, contacts, { data: confirms }, { data: statements }, { data: taxPapers }, phone, engagement] = await Promise.all([
     Promise.all(client.client_registrations.map(async (registration) => ({ ...registration, number: await crypto.decrypt(firm, `clients/${client.id}/${registration.kind}`, registration.number_enc) }))),
     client.email_enc ? crypto.decrypt(firm, `clients/${client.id}/email`, client.email_enc) : "",
     Promise.all(
@@ -220,16 +214,15 @@ export default async function Client({ params, searchParams }: { params: Promise
     ),
     dated.length ? supabaseAdmin().from("activity_log").select("entity_id, action, actor_id").eq("firm_id", firm).in("entity_id", dated).in("action", confirmAction) : Promise.resolve({ data: [] }),
     months.length ? supabase.from("documents").select("period_key").eq("client_id", id).eq("document_type", "GSTR-2B").neq("status", "deleted").in("period_key", months) : Promise.resolve({ data: [] }),
-    openAsk && (async () => `${process.env.APP_BASE_URL ?? `${(await headers()).get("x-forwarded-proto") ?? "http"}://${(await headers()).get("host")}`}/u/${await crypto.decrypt(firm, `requests/${openAsk.id}/link`, (openAsk.details as unknown as DocumentRequest).link_enc!)}`)(),
     itrYears.length ? supabase.from("documents").select("document_type, period_key").eq("client_id", id).in("document_type", ["Form 16", "Form 130", "Form 26AS", "Form 168", "AIS"]).neq("status", "deleted") : Promise.resolve({ data: [] }),
     client.phone_enc ? crypto.decrypt(firm, `clients/${client.id}/phone`, client.phone_enc) : "",
     client.engagement_enc ? crypto.decrypt(firm, `clients/${client.id}/engagement`, client.engagement_enc) : "",
   ]);
   const licenceLabel = (licence: { details: unknown }) => (licence.details as { label?: string }).label ?? "Licence";
-  // WhatsApp click to chat from the person's own phone, with the papers still missing and the
-  // upload link filled in while papers are asked for (product gaps S6). InboxCA sends nothing.
+  // WhatsApp click to chat from the person's own phone, with the papers still missing filled in
+  // while papers are asked for (product gaps S6), pointing to the email. InboxCA sends nothing.
   const missingAsk = openAsk && (openAsk.details as unknown as DocumentRequest);
-  const whatsapp = phone && whatsappLink(phone, missingAsk && uploadLink ? emailTemplates.whatsapp(client.name, membership.firmName, missingAsk.period, missingAsk.items.filter((item) => !item.received.length), uploadLink) : "");
+  const whatsapp = phone && whatsappLink(phone, missingAsk ? emailTemplates.whatsapp(client.name, membership.firmName, missingAsk.period, missingAsk.items.filter((item) => !item.received.length)) : "");
   const manage = canManageClients(membership.role);
   // Send reminder now on the Returns tab: those who manage clients and those who look after this one.
   const reminds = sub === "returns" && !viewOnly && !!client.email_enc && !client.reminders_paused && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
@@ -512,7 +505,6 @@ export default async function Client({ params, searchParams }: { params: Promise
           <MoreMenu
             items={[
               ...(viewOnly ? [] : [{ label: "Add a notice", icon: <Scale size={16} aria-hidden />, href: `${base}?tab=notice` }]),
-              ...(uploadLink ? [{ label: "Copy upload link", icon: <Copy size={16} aria-hidden />, copy: { text: uploadLink, what: "Upload link" } }] : []),
             ]}
           />
         </>
@@ -696,14 +688,8 @@ export default async function Client({ params, searchParams }: { params: Promise
             <DroppedNotice value={dropped} />
             {askedRight && <Toast>Permission asked. Once allowed, it works here once, within an hour.</Toast>}
             {sharedFile && <Toast>Sent {sharedFile.name}. The link works for 7 days and 5 downloads.</Toast>}
-            {askedFor === "sent" && <Toast>The client was emailed a private upload link. What they upload is saved here.</Toast>}
-            {askedUploadLink && (
-              <p className="note" role="status">
-                <span>
-                  InboxCA could not email the client, so send this private upload link yourself. It works for 30 days: <span className="num link-once">{askedUploadLink}</span>
-                </span>
-              </p>
-            )}
+            {askedFor === "sent" && <Toast>The client was emailed the list of papers. What they reply with is saved here.</Toast>}
+            {askedFor === "nomail" && <p className="note" role="status"><span>The papers are noted, but no email went: connect the firm email in Settings and add the client&apos;s email address, then the reminders go by themselves.</span></p>}
             {noticeFile && (
               <Toast
                 undo={

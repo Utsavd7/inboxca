@@ -1,7 +1,6 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { test, expect, type Page } from "@playwright/test";
-import { serverCrypto } from "@/src/lib/crypto";
 import { appKey, connectTestMailbox, localSupabase, mailTexts, makeMailbox, pollFirmMail, query, runJobs, seedFirm, signIn, testSmtp as smtp } from "./local-supabase";
 
 // Inbox, answered B and C end to end: a client asks whether a return is filed, which papers are
@@ -19,7 +18,6 @@ const ownerKey = appKey();
 const office = `answers-office-${tag}@firm.test`;
 const code = `TA${tag.toUpperCase()}`;
 const client = { name: `Answers Traders ${tag}`, email: `answers-${tag}@client.test`, id: "" };
-const token = randomBytes(32).toString("base64url");
 const day = (ahead: number) => new Date(Date.now() + ahead * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 let firm: Awaited<ReturnType<typeof seedFirm>>;
 let owner: Page;
@@ -60,13 +58,12 @@ test.beforeAll(async ({ browser }) => {
   await expect(owner.locator(".page-head")).toContainText(client.name);
   client.id = new URL(owner.url()).pathname.split("/").at(-1)!;
   // September's GSTR-1, marked filed with its acknowledgement; an invented return due in 5 days
-  // whose date a CA checked; and October's papers asked for, with the upload link.
+  // whose date a CA checked; and October's papers asked for.
   await query(local.dbUrl, "insert into public.compliance_types (code, name, frequency, due_rule, source_url, verified_on, approved_by) values ($1, 'Invented checked return', 'monthly', '{\"for\": \"pan\"}', 'https://example.test/notification', current_date, 'test')", [code]);
   await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on, status, details) values ($1, $2, 'GSTR1_M', '2026-09', $3, 'filed', $4), ($1, $2, $5, '2026-10', $6, 'upcoming', '{}')", [firm.firmId, client.id, day(-10), { filed_on: day(-12), ack: "AA2409261234567" }, code, day(5)]);
   const ask = randomUUID();
   await query(local.dbUrl, "insert into public.requests (id, firm_id, kind, client_id, entity_type, entity_id, expires_at, details) values ($1, $2, 'documents', $3, 'checklist', $1, now() + interval '30 days', $4)", [ask, firm.firmId, client.id, {
     period: "2026-10", items: [{ type: "Purchase bills", work: "gst", received: [] }, { type: "Sales bills", work: "gst", received: [] }],
-    link_hash: createHash("sha256").update(token).digest("hex"), link_enc: await serverCrypto().encrypt(firm.firmId, `requests/${ask}/link`, token),
   }]);
 });
 test.afterAll(async () => {
@@ -103,7 +100,7 @@ test("Ask me first: each answer waits in the Inbox, built from the records, for 
   await owner.goto("/app/inbox?panel=replies");
   await row("Lists the papers still needed").getByRole("link", { name: "Edit" }).click();
   const box = pane().getByLabel("Your reply");
-  await expect(box).toHaveValue(new RegExp(`We still need these papers for Oct 2026:\\n- Purchase bills\\n- Sales bills\\nUpload them here, no sign in needed: http\\S+/u/${token}`));
+  await expect(box).toHaveValue(/We still need these papers for Oct 2026:\n- Purchase bills\n- Sales bills\n\nPlease reply to this email with the files attached, or email them to us\./);
   await box.fill(`${await box.inputValue()}\n\nThe sales bills matter most.`);
   await pane().getByRole("button", { name: "Send reply" }).click();
   await expect(toast("Reply sent")).toBeVisible();
@@ -180,7 +177,7 @@ test("Auto: each answer goes after its 5 minutes, and Undo stops it", async () =
   await runJobs(owner.request, firm.firmId);
   await expect.poll(async () => (await mailTexts(client.email)).length).toBe(before + 3);
   const texts = (await mailTexts(client.email)).slice(before).join("\n---\n");
-  expect(texts).toContain("Upload them here, no sign in needed: http");
+  expect(texts).toContain("Please reply to this email with the files attached, or email them to us.");
   expect(texts).toContain("- Sales bills: saved under GST, Sep 2026");
   expect(texts).not.toContain("We received your notice");
   expect(await query(local.dbUrl, "select state, count(*)::int as n from public.jobs where firm_id = $1 and kind = 'answer_mail' and state = 'cancelled' group by state", [firm.firmId])).toEqual([{ state: "cancelled", n: 2 }]);

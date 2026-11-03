@@ -24,7 +24,7 @@ describe("portal files", () => {
 });
 
 describe("a dropped portal file and what was asked for", () => {
-  const ask = (period: string, ...types: string[]): DocumentRequest => ({ period, link_hash: "x", items: types.map((type) => ({ type, work: "other", received: [] })) });
+  const ask = (period: string, ...types: string[]): DocumentRequest => ({ period, items: types.map((type) => ({ type, work: "other", received: [] })) });
   it("closes the open item of the same name, however it was spelled, for the file's month or no month", () => {
     const monthly = ask("2026-09", "Sales bills", "gstr 2B");
     expect(receiveItem(monthly, "GSTR-2B", "2026-09", "doc1")).toBe(true);

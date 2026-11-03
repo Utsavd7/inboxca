@@ -5,6 +5,18 @@ import { analyticsToken } from "@/src/lib/site";
 
 export const securityUpdated = "3 Nov 2026";
 
+// How files from clients are checked (owner, 3 Nov 2026): the same words on the security page,
+// in the privacy notice and the DPA, and on the website. The provider quotes are their own help
+// pages' wording, read on 3 Nov 2026, and say no more than those pages say.
+export const clientFiles = [
+  "Clients send papers to your firm's own email address. Your email provider checks attachments as its own policy says, before InboxCA reads the mailbox.",
+  "Gmail says: \"Attachments in Gmail messages you send and receive are automatically scanned for viruses.\" (support.google.com/mail/answer/25760)",
+  "Microsoft 365 says: \"In all organizations with cloud mailboxes, anti-malware protection for email is on by default.\" (learn.microsoft.com/en-us/defender-office-365/anti-malware-protection-about)",
+  "Zoho Mail says: \"An anti-virus scanner automatically scans all the incoming emails and processes them to bounce any email with malicious attachments or files.\" (zoho.com/mail/help/secure-attachment-policy.html)",
+  "InboxCA accepts only these kinds of file: PDF, pictures, Excel, CSV, XML, JSON, Word and ZIP. It refuses programs, scripts, shortcuts, web pages and Office files with macros, by their name and by their first bytes, and a ZIP inside a ZIP.",
+  "A file behind a sharing link (Google Drive, Dropbox or OneDrive) was not checked by your email provider. InboxCA reads and names it, then it waits for a person in your firm to save it. A private link or a folder link is not opened: the client is asked for the file attached.",
+] as const;
+
 export const securitySections = [
   {
     id: "where",
@@ -16,6 +28,11 @@ export const securitySections = [
       "Your client list, your records and the figures read from files will be kept in a Supabase database. Its region is chosen at launch, and India is planned.",
       "InboxCA's temporary files and safety copies are planned for Backblaze B2, which is outside India. They are encrypted.",
     ],
+  },
+  {
+    id: "files",
+    title: "Files from clients",
+    points: clientFiles,
   },
   {
     id: "never",

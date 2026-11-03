@@ -4,13 +4,12 @@ import { test, expect, type Page } from "@playwright/test";
 import { Client } from "pg";
 import { serverCrypto } from "@/src/lib/crypto";
 import { pdf } from "../fixtures/pdf";
-import { addPerson, appKey, connectTestMailbox, localSupabase, mailTexts, makeMailbox, query, runJobs, seedFirm, signIn } from "./local-supabase";
+import { addPerson, appKey, connectTestMailbox, localSupabase, mailTexts, makeMailbox, pollFirmMail, query, runJobs, seedFirm, signIn, testSmtp } from "./local-supabase";
 
 // Papers from clients, end to end (user, 26 Oct 2026): the owner chooses when InboxCA asks; the
-// client gets the email with the month's papers and an upload link by itself; after two
-// reminders with nothing back the person who looks after the client is asked to call, and sends
-// a reminder with Undo or marks the call; once the client uploads every paper, they are told to
-// check the figures. Mail goes through the local GreenMail server. Skipped without local Supabase.
+// client gets the email with the month's papers by itself; after two reminders with nothing back
+// the person who looks after the client is asked to call, and sends a reminder with Undo or marks
+// the call; once the client replies with every paper attached, they are told to check the figures. Mail goes through the local GreenMail server. Skipped without local Supabase.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
 test.describe.configure({ mode: "serial", timeout: 120_000 });
@@ -79,7 +78,8 @@ test("the owner chooses how early InboxCA asks for papers, and the client gets t
   const [sent] = await mailTexts(client.email);
   expect(sent).toContain(`Dear ${client.name},`);
   expect(sent).toContain("To prepare your GSTR-1 test return for Oct 2026, please send these documents: Sales bills, Purchase bills, Bank statement.");
-  expect(sent).toMatch(/Upload them here, no sign in needed: http\S+\/u\/[\w-]+/);
+  expect(sent).toContain("Please reply to this email with the files attached, or email them to us.");
+  expect(sent).not.toMatch(/https?:\/\//);
   expect(await ask()).toMatchObject({ status: "pending", details: { period: "2026-10", returns: [code], since: day(0) } });
 
   // Send reminder now on the client's Returns tab: never a second email the same day.
@@ -139,27 +139,20 @@ test("after two reminders with nothing back, the person who looks after the clie
   expect(await query(local.dbUrl, "select 1 from public.activity_log where entity_id = $1 and action = 'request.phoned'", [request.id])).toHaveLength(1);
 });
 
-test("once the client uploads every paper, the person is told to check the figures", async ({ browser }) => {
-  const link = (await mailTexts(client.email))[0].match(/http\S+\/u\/[\w-]+/)![0];
-  const visitor = await (await browser.newContext()).newPage();
-  await visitor.goto(link);
-  // The page says what is still needed, when the next reminder comes and that a password is
-  // asked once; it names nothing of the firm beyond its name and office email, and this request.
-  const progress = visitor.getByRole("region", { name: "Progress" });
-  await expect(progress).toContainText("Still needed: Sales bills, Purchase bills, Bank statement.");
-  await expect(progress).toContainText(new RegExp(`Next reminder from Papers Firm ${tag}: (today|\\d+ \\w+ \\d{4})\\.`));
-  await expect(progress).toContainText("If a file has a password, you will be asked for it once.");
-  for (const secret of [ownerEmail, staffEmail, client.email]) expect(await visitor.content()).not.toContain(secret);
-  // Registers come as spreadsheets, so the link takes those too (product gaps S5).
-  for (const paper of ["Sales bills", "Purchase bills", "Bank statement"]) {
-    const item = visitor.getByRole("listitem").filter({ hasText: paper });
-    const file = paper === "Bank statement" ? { name: "statement.csv", mimeType: "text/csv", buffer: Buffer.from("Date,Narration,Amount\n01-10-2026,Invented entry,100\n") } : { name: `${paper}.pdf`, mimeType: "application/pdf", buffer: Buffer.from(pdf(`Invented ${paper}`)) };
-    await item.getByLabel(`Add ${paper} from camera or files`).setInputFiles(file);
-    await expect(item.getByRole("status")).toHaveText("Received: 1 file");
-  }
-  await expect(visitor.getByRole("heading", { name: "All 3 papers received" })).toBeVisible();
-  await visitor.close();
-  expect((await ask()).status).toBe("done");
+test("once the client replies with every paper attached, the person is told to check the figures", async () => {
+  // The reply's attachments are typed by their names, filed, and matched to the papers asked
+  // for; a register comes as a spreadsheet (product gaps S5).
+  await testSmtp.sendMail({
+    from: client.email, to: office, subject: "Re: Documents needed for Oct 2026", text: "Please find attached.",
+    attachments: [
+      { filename: "sales_bills_oct_2026.pdf", content: Buffer.from(pdf("Invented sales bills")) },
+      { filename: "purchase_bills_oct_2026.pdf", content: Buffer.from(pdf("Invented purchase bills")) },
+      { filename: "bank_statement_oct_2026.csv", content: "Date,Narration,Amount\n01-10-2026,Invented entry,100\n" },
+    ],
+  });
+  await pollFirmMail(staff.request, firm.firmId);
+  await expect.poll(async () => { await runJobs(staff.request, firm.firmId); return (await ask()).status; }, { timeout: 30_000 }).toBe("done");
+  expect((await ask()).details.items.every((item: { received: string[] }) => item.received.length === 1)).toBe(true);
 
   await staff.goto("/app");
   const done = staff.getByRole("listitem").filter({ hasText: `All papers in for ${client.name}` });
