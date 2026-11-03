@@ -25,7 +25,7 @@ export const activityNames: Record<string, string> = {
   "document.added": "Acknowledgement saved", "document.virus": "File with a virus kept out", "document.refused": "Unsafe attachment left out", "document.password_saved": "PDF password saved", "request.created": "Papers asked for", "request.phoned": "Papers asked for by phone", "notice.added": "Notice added", "notice.date_confirmed": "Notice date checked", "notice.assigned": "Notice given to a person", "notice.replied": "Notice reply recorded", "notice.closed": "Notice closed",
   "contact.added": "Contact added", "contact.changed": "Contact changed",
   "fills.asked": "Fill asked for returns late or due in the next 7 days", "fills.stopped": "Fill stopped before it started",
-  "due_date.confirmed": "Due date confirmed by the owner against the notification", "agm.recorded": "AGM date recorded",
+  "due_date.confirmed": "Due date confirmed by the owner against the notification", "agm.recorded": "AGM date recorded", "kyc.recorded": "Last DIR-3 KYC year recorded",
 };
 
 // Every action written to activity_log and the details it may carry (PLAN.md 8.0, 8.9): ids,
@@ -81,7 +81,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "fills.asked": ["returns", "clients", "batch"], "fills.stopped": ["returns", "batch"],
   // The owner's confirmation of a due date rule, with the official link they confirmed against;
   // a company's AGM date and how many returns took their date from it.
-  "due_date.confirmed": ["code", "source_url"], "agm.recorded": ["year_end", "agm", "returns"],
+  "due_date.confirmed": ["code", "source_url"], "agm.recorded": ["year_end", "agm", "returns"], "kyc.recorded": ["year_end", "returns"],
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"], "notice.assigned": ["person"], "notice.replied": ["on", "document"], "notice.closed": [],
   // A register section said yes to at once: its name, row counts and the totals seen, encrypted.
   "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state", "section", "rows", "flagged", "totals_enc"], "dataset.edit_saved": ["dataset", "line"],

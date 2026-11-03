@@ -1177,6 +1177,9 @@ isOneToOne: false
 "record_agm":
 { Args: { "agm": string,"registration": string,"target_firm": string,"year_end": string }; Returns: number
                            },
+"record_kyc":
+{ Args: { "registration": string,"target_firm": string,"year_end": string }; Returns: number
+                           },
 "register_device":
 { Args: { "actor": string,"away"?: boolean,"label": string,"target_firm": string,"token_digest": string }; Returns: {
               "id": string,"status": string

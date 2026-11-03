@@ -343,6 +343,7 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["confirm_due_date", "select public.confirm_due_date($1, 'ADV_TAX_P') r", ["firm"], true],
   ["form_signoffs", "select * from public.form_signoffs($1, array[$2::uuid])", ["firm", "document"], true],
   ["record_agm", "select public.record_agm($1, $2, '2026-03', '2026-09-30') r", ["firm", "registration"], true],
+  ["record_kyc", "select public.record_kyc($1, $2, '2026-03') r", ["firm", "registration"], true],
   ["firm_usage", "select * from public.firm_usage($1, current_date)", ["firm"], true],
   ["due_fills", "select * from public.due_fills($1)", ["firm"], true],
   ["queue_fills", "select * from public.queue_fills($1, gen_random_uuid(), true)", ["firm"], true],
