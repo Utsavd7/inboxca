@@ -91,7 +91,7 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     const checkout = await billing.startAutoPay(firm.id, firm.owner, { plan: solo, cycle: "monthly", method: "upi", phone: "9876543210", address: "2 Invented Lane, Pune", returnUrl });
     expect(checkout).toMatchObject({ kind: "mandate", session: expect.stringContaining("session-") });
     const sub = await subOf(firm.id);
-    expect(fake.subscriptions.get(sub.mandate)).toMatchObject({ authorization_details: { authorization_amount: 1499, authorization_amount_refund: false, payment_methods: ["upi"] }, customer_details: { customer_phone: "9876543210" } });
+    expect(fake.subscriptions.get(sub.mandate)).toMatchObject({ authorization_details: { authorization_amount: 1789, authorization_amount_refund: false, payment_methods: ["upi"] }, customer_details: { customer_phone: "9876543210" } });
     expect(fake.calls.find((call) => call.path === "/pg/plans" && call.body.plan_id === `plan-${sub.mandate}`)?.body).toMatchObject({ plan_type: "ON_DEMAND", plan_max_amount: 2998 });
     expect(await statusOf(firm.id)).toBe("pending");
     // A method the amount does not allow, and a webhook nobody signed, change nothing.
@@ -103,8 +103,8 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     await fake.authorise(sub.mandate, "upi");
     expect(await statusOf(firm.id)).toBe("active");
     const [first] = await paymentsOf(firm.id);
-    expect(first).toMatchObject({ kind: "plan", status: "done", amount_paise: 149_900, gst_paise: 0, provider_ref: `auth-${sub.mandate}` });
-    expect(first.doc).toMatchObject({ kind: "receipt", no: expect.stringMatching(/^RCT\/\d{2}-\d{2}\/\d{5}$/), total: 149_900, seller: { pan: "AAAFI1234B" }, buyer: { address: "2 Invented Lane, Pune" } });
+    expect(first).toMatchObject({ kind: "plan", status: "done", amount_paise: 178_900, gst_paise: 0, provider_ref: `auth-${sub.mandate}` });
+    expect(first.doc).toMatchObject({ kind: "receipt", no: expect.stringMatching(/^RCT\/\d{2}-\d{2}\/\d{5}$/), total: 178_900, seller: { pan: "AAAFI1234B" }, buyer: { address: "2 Invented Lane, Pune" } });
     expect(await subOf(firm.id)).toMatchObject({ status: "active", method: "upi", paid_until: money.addMonths(today(), 1) });
     // The same webhook again: applied once.
     await hook(last!.raw, last!.headers);
@@ -177,7 +177,7 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     const firm = await activeFirm("enach", { clients: 700, practice: "mixed", people: 40, aiBlocks: 0 }, "enach");
     expect(fake.subscriptions.get(firm.mandate)!.authorization_details.authorization_amount).toBe(0);
     expect(await statusOf(firm.id)).toBe("active");
-    expect((await paymentsOf(firm.id, "plan"))[0]).toMatchObject({ status: "done", amount_paise: 1_549_900 });
+    expect((await paymentsOf(firm.id, "plan"))[0]).toMatchObject({ status: "done", amount_paise: 1_986_900 });
     const due = today();
     await db.query("update public.subscriptions set paid_until = $2 where firm_id = $1", [firm.id, due]);
     await billing.dailyBilling(firm.id);
@@ -311,8 +311,8 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     expect(await billing.claimMoneyBack(firm.id, firm.owner)).toBeNull();
     const refunds = await paymentsOf(firm.id, "refund");
     expect(refunds).toHaveLength(1);
-    expect(refunds[0]).toMatchObject({ reason: "money_back", status: "created", amount_paise: 149_900 });
-    expect(fake.refunds.get(refunds[0].id)).toMatchObject({ subscription_id: firm.mandate, payment_id: `auth-${firm.mandate}`, refund_amount: 1499, refund_speed: "STANDARD" });
+    expect(refunds[0]).toMatchObject({ reason: "money_back", status: "created", amount_paise: 178_900 });
+    expect(fake.refunds.get(refunds[0].id)).toMatchObject({ subscription_id: firm.mandate, payment_id: `auth-${firm.mandate}`, refund_amount: 1789, refund_speed: "STANDARD" });
     expect([await statusOf(firm.id), (await subOf(firm.id)).status, fake.subscriptions.get(firm.mandate)!.status]).toEqual(["read_only", "cancelled", "CANCELLED"]);
     expect((await billing.moneyBack(firm.id)).state).toBe("refunding");
     await fake.refund(refunds[0].id, "SUCCESS");
@@ -329,14 +329,14 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     await db.query("update public.platform_settings set value = $1 where key = 'tax'", [{ ...tax, gstin: "27AAAFI1234B1Z5", stateCode: "27", sac: "9983", rate: 18, gstFrom: today(), signatory: "Invented Signatory" }]);
     try {
       const local = await activeFirm("gst-same");
-      expect((await paymentsOf(local.id, "plan"))[0]).toMatchObject({ amount_paise: 176_882, gst_paise: 26_982, doc: { kind: "invoice", cgst: 13_491, sgst: 13_491, igst: 0, rate: 18, sac: "9983", seller: { gstin: "27AAAFI1234B1Z5" } } });
+      expect((await paymentsOf(local.id, "plan"))[0]).toMatchObject({ amount_paise: 211_102, gst_paise: 32_202, doc: { kind: "invoice", cgst: 16_101, sgst: 16_101, igst: 0, rate: 18, sac: "9983", seller: { gstin: "27AAAFI1234B1Z5" } } });
       const away = await activeFirm("gst-away", solo, "upi", { state: "24" });
       const [invoice] = await paymentsOf(away.id, "plan");
-      expect(invoice.doc).toMatchObject({ kind: "invoice", no: expect.stringMatching(/^INV\//), cgst: 0, sgst: 0, igst: 26_982 });
+      expect(invoice.doc).toMatchObject({ kind: "invoice", no: expect.stringMatching(/^INV\//), cgst: 0, sgst: 0, igst: 32_202 });
       fake.settleRefunds("SUCCESS");
       await billing.claimMoneyBack(away.id, away.owner);
       await new Promise((resolve) => setTimeout(resolve, 600));
-      expect((await paymentsOf(away.id, "refund"))[0]).toMatchObject({ status: "done", gst_paise: 26_982, doc: { kind: "credit", no: expect.stringMatching(/^CN\//), igst: 26_982, of: { no: invoice.doc.no }, reason: "money_back", signatory: "Invented Signatory" } });
+      expect((await paymentsOf(away.id, "refund"))[0]).toMatchObject({ status: "done", gst_paise: 32_202, doc: { kind: "credit", no: expect.stringMatching(/^CN\//), igst: 32_202, of: { no: invoice.doc.no }, reason: "money_back", signatory: "Invented Signatory" } });
     } finally {
       fake.settleRefunds(null);
       await db.query("update public.platform_settings set value = $1 where key = 'tax'", [tax]);

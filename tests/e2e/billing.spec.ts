@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect, type Browser, type Page } from "@playwright/test";
-import { chosenPlan, formulaSchema, indiaDay, rupees, taxSchema, withGst, type Cycle } from "@/src/lib/billing/money";
+import { chosenPlan, formulaSchema, indiaDay, rupees, setupFee, taxSchema, withGst, type Cycle } from "@/src/lib/billing/money";
 import { CASHFREE_KEYS, CASHFREE_TEST_URL } from "../../playwright.config";
 import { fakeCashfree } from "../fake-cashfree";
 import { addPerson, appKey, emailStep, latestEmail, localSupabase, query, seedFirm, systemMail, totp } from "./local-supabase";
@@ -58,10 +58,11 @@ test.afterAll(async () => {
 // Each sign in step and the plan and payment step fit a 1280 by 720 laptop screen: nothing scrolls.
 const fits = async (page: Page) => expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= innerHeight)).toBe(true);
 // What the plan and payment step must show for a plan on the site's price list: worked out by
-// the billing code from the server's formula, for a firm in Maharashtra.
+// the billing code from the server's formula, for a firm in Maharashtra, with the first payment's setup fee.
 async function priceOf(plan: string, cycle: Cycle, taxNow: unknown) {
   const formula = formulaSchema.parse((await query(local.dbUrl, "select value from public.platform_settings where key = 'plan_formula'"))[0].value);
-  return withGst(chosenPlan(formula, { plan, cycle })!.price.paise, taxSchema.parse(taxNow), "27", indiaDay(new Date()));
+  const { price } = chosenPlan(formula, { plan, cycle })!;
+  return withGst(price.paise + setupFee(formula, price) * 100, taxSchema.parse(taxNow), "27", indiaDay(new Date()));
 }
 
 test("a new firm signs up, pays before anything opens, and the webhook opens the app", async ({ page, browser }) => {
@@ -144,7 +145,7 @@ test("a new firm signs up, pays before anything opens, and the webhook opens the
   await expect(page.getByText(/Paid until/).first()).toHaveText(new RegExp(`${until!.replace("Paid until ", "")}`));
   await expect(page.getByText(/AutoPay is on with your UPI AutoPay/)).toBeVisible();
   expect(await firm()).toMatchObject({ status: "active", autopay: "active" });
-  expect(fake.subscriptions.get((await firm()).mandate)).toMatchObject({ authorization_details: { authorization_amount: 1499, payment_methods: ["upi"] } });
+  expect(fake.subscriptions.get((await firm()).mandate)).toMatchObject({ authorization_details: { authorization_amount: solo.total / 100, payment_methods: ["upi"] } });
   await expect.poll(() => systemMail(email), { timeout: 15_000 }).toContain("Payment receipt RCT/");
 });
 
