@@ -1,26 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import {
-  ArrowRight,
-  BadgeCheck,
-  Check,
-  Eye,
-  History,
-  IndianRupee,
-  KeyRound,
-  LockKeyhole,
-  MailX,
-  ShieldCheck,
-  Trash2,
-} from "lucide-react";
-import { coverage, forms, guarantee, oldWay, questions, startSteps, worksWith } from "@/content/site";
+import { ArrowRight, Check, History, KeyRound, LockKeyhole, MailX, Plus, Trash2 } from "lucide-react";
+import { beforeAfter, forms, guarantee, questions, worksWith } from "@/content/site";
 import { planIncludes, plans, rupees, SHOW_PLANS } from "@/content/plans";
 import { contactEmail, SITE_PUBLIC, siteDescription } from "@/src/lib/site";
 import { Control } from "@/components/site/control";
 import { Cost } from "@/components/site/cost";
 import { DrawnMark } from "@/components/site/drawn-mark";
-import { Faq } from "@/components/site/faq";
 import { Footer } from "@/components/site/footer";
 import { Nav } from "@/components/site/nav";
 import { Plans } from "@/components/site/plans";
@@ -33,14 +20,13 @@ export const metadata: Metadata = {
   description: `${siteDescription} Files stay in the firm's own drive, and the team approves every form.`,
 };
 
-// Six facts a CA asks about first, each leading to its section of the security policy.
+// Five facts a CA asks about first, each leading to its section of the security policy.
 const trust = [
-  [MailX, "No email text kept", "Your emails stay in your mailbox.", "never"],
-  [KeyRound, "Your firm's own key", "Your records are encrypted with it.", "encryption"],
-  [LockKeyhole, "2 step sign in", "An email code, plus a phone code or an approved office PC.", "access"],
-  [History, "Every action recorded", "Nobody can edit the record, the owner included.", "access"],
-  [Trash2, "Deleted files wait 30 days", "So they can be brought back.", "access"],
-  [Eye, "Your drive checked daily", "You are told if its folder is shared or has a link.", "access"],
+  [MailX, "No email text kept", "never"],
+  [KeyRound, "Your firm's own key", "encryption"],
+  [LockKeyhole, "2 step sign in", "access"],
+  [History, "A record nobody can edit", "access"],
+  [Trash2, "Deleted files wait 30 days", "access"],
 ] as const;
 
 // Search engines read these only when the site is public (robots.ts): the questions as they
@@ -81,18 +67,11 @@ function StartLink({ className = "btn btn-big" }: { className?: string }) {
   );
 }
 
-// A section's small label and heading, the same on every band.
-function Head({ label, title, lead, children }: { label?: string; title: string; lead?: React.ReactNode; children?: React.ReactNode }) {
+// A band's heading, on one line on a laptop.
+function Head({ title }: { title: string }) {
   return (
     <div className="band-head reveal">
-      <div>
-        {label && <p className="eyebrow">{label}</p>}
-        <h2>{title}</h2>
-      </div>
-      <div className="band-side">
-        {lead && <p className="band-lead">{lead}</p>}
-        {children}
-      </div>
+      <h2>{title}</h2>
     </div>
   );
 }
@@ -109,25 +88,22 @@ export default function Home() {
           <div className="hero-bg" aria-hidden />
           <div className="wrap">
             <div className="hero-head">
-              <div>
-                <p className="status">
-                  <span className="status-dot" aria-hidden />
-                  For Indian CA firms. Nothing to install.
-                </p>
-                <h1>
-                  <span className="line">
-                    <span>Every client email,</span>
-                  </span>{" "}
-                  <span className="line">
-                    <span>read, filed and answered.</span>
-                  </span>
-                </h1>
-              </div>
+              <p className="status">
+                <span className="status-dot" aria-hidden />
+                For Indian CA firms. Nothing to install.
+              </p>
+              <h1>
+                <span className="line">
+                  <span>Every client email,</span>
+                </span>{" "}
+                <span className="line">
+                  <span>read, filed and answered.</span>
+                </span>
+              </h1>
               <div className="hero-side">
                 <p className="lead">
-                  InboxCA is an AI back office that works from your firm&apos;s
-                  own email and your own drive. Your team approves every form
-                  before it is filed.
+                  An AI back office that works from your firm&apos;s own email
+                  and drive. Your team approves every form before it is filed.
                 </p>
                 <div className="hero-actions">
                   <StartLink />
@@ -135,22 +111,10 @@ export default function Home() {
                     See it work
                   </a>
                 </div>
-                <ul className="hero-trust">
-                  <li>
-                    <BadgeCheck size={17} aria-hidden />
-                    {guarantee}
-                  </li>
-                  <li>
-                    <ShieldCheck size={17} aria-hidden />
-                    Your emails and files stay with you
-                  </li>
-                  {SHOW_PLANS && (
-                    <li>
-                      <IndianRupee size={17} aria-hidden />
-                      From {rupees(plans[0].monthly)} a month, before GST
-                    </li>
-                  )}
-                </ul>
+                <p className="hero-trust">
+                  {guarantee}
+                  {SHOW_PLANS && <> · From {rupees(plans[0].monthly)} a month, before GST</>}
+                </p>
               </div>
             </div>
             <div className="demo-anchor" id="how-it-works">
@@ -184,10 +148,7 @@ export default function Home() {
         </section>
 
         <section className="covered" id="forms" aria-labelledby="forms-title">
-          <div className="wrap covered-head">
-            <h2 id="forms-title">Covered today</h2>
-            <p>{coverage}</p>
-          </div>
+          <h2 id="forms-title">Prepared, read and tracked today</h2>
           <div className="ticker">
             {[false, true].map((copy) => (
               <ul key={String(copy)} aria-hidden={copy || undefined}>
@@ -202,74 +163,50 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="band band-grey" id="today">
+        <section className="band" id="today">
           <div className="wrap">
-            <Head
-              label="Your firm today"
-              title="What does the chasing cost you today?"
-              lead="Put in your own numbers. This is your firm's time, worked out from what you enter."
-            />
-            <div className="reveal">
+            <Head title="What does the chasing cost you today?" />
+            <div className="site-split reveal">
               <Cost />
-            </div>
-            <div className="reveal">
-              <table className="old-way">
-                <caption className="sr-only">The old way against InboxCA</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      <span className="sr-only">What</span>
-                    </th>
-                    <th scope="col">The old way</th>
-                    <th scope="col" className="old-way-new">
-                      With InboxCA
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {oldWay.map(([what, before, after]) => (
-                    <tr key={what}>
-                      <th scope="row">{what}</th>
-                      <td>{before}</td>
-                      <td className="old-way-new">
-                        <span>
-                          <Check size={16} strokeWidth={3} aria-hidden />
-                          {after}
-                        </span>
-                      </td>
-                    </tr>
+              <div className="site-tile shift">
+                <h3>The old way, and with InboxCA</h3>
+                <ul>
+                  {beforeAfter.map(([before, after]) => (
+                    <li key={before}>
+                      <s>{before}</s>
+                      <span>
+                        <Check size={16} strokeWidth={3} aria-hidden />
+                        {after}
+                      </span>
+                    </li>
                   ))}
-                </tbody>
-              </table>
+                </ul>
+              </div>
             </div>
           </div>
         </section>
 
         <section className="band control" id="control">
           <div className="wrap">
-            <Head
-              label="Privacy and control"
-              title="Private and secure. You stay in control."
-              lead="It works inside what your firm already owns. You decide what it may do."
-            >
-              <Link className="btn btn-ghost" href="/security">
-                Read the security policy
-                <ArrowRight size={18} aria-hidden />
-              </Link>
-            </Head>
+            <Head title="Private and secure. You stay in control." />
             <div className="reveal">
               <Control />
             </div>
-            <ul className="trust reveal">
-              {trust.map(([Icon, title, text, section]) => (
+            <ul className="trust" aria-label="More in the security policy">
+              {trust.map(([Icon, title, section]) => (
                 <li key={title}>
                   <Link href={`/security#${section}`}>
-                    <Icon size={20} aria-hidden />
-                    <strong>{title}</strong>
-                    <span>{text}</span>
+                    <Icon size={16} aria-hidden />
+                    {title}
                   </Link>
                 </li>
               ))}
+              <li className="trust-more">
+                <Link href="/security">
+                  Read the security policy
+                  <ArrowRight size={16} aria-hidden />
+                </Link>
+              </li>
             </ul>
           </div>
         </section>
@@ -277,27 +214,9 @@ export default function Home() {
         {SHOW_PLANS && (
           <section className="band" id="plans">
             <div className="wrap">
-              <Head
-                label="Plans"
-                title="Choose your plan and start."
-                lead="Every plan has every feature and unlimited clients. Prices are estimates, before GST."
-              />
+              <Head title="Priced by the work. Never by clients." />
               <div className="reveal">
                 <Plans />
-              </div>
-              <div className="start-steps reveal">
-                <h3>How to start</h3>
-                <ol>
-                  {startSteps.map(([title, text], step) => (
-                    <li key={title}>
-                      <span className="start-step num" aria-hidden>
-                        {step + 1}
-                      </span>
-                      <strong>{title}</strong>
-                      <span>{text}</span>
-                    </li>
-                  ))}
-                </ol>
               </div>
             </div>
           </section>
@@ -305,31 +224,35 @@ export default function Home() {
 
         <section className="band band-grey" id="questions">
           <div className="wrap faq">
-            <div className="band-head">
-              <p className="eyebrow">Questions</p>
-              <h2>Before you start</h2>
+            <div className="faq-head">
+              <h2>Questions</h2>
               <p className="band-lead">
-                Not answered here? Write to{" "}
+                Anything else? Write to{" "}
                 <a className="link" href={`mailto:${contactEmail}`}>
                   {contactEmail}
                 </a>
               </p>
             </div>
-            <Faq />
+            <div className="faq-list">
+              {questions.map(([question, answer]) => (
+                <details key={question} name="faq">
+                  <summary>
+                    {question}
+                    <Plus size={18} aria-hidden />
+                  </summary>
+                  <p>{answer}</p>
+                </details>
+              ))}
+            </div>
           </div>
           <div className="wrap" id="start">
             <div className="closing reveal">
               <DrawnMark />
               <h2>Nothing pending.</h2>
-              <p>
-                That is the goal for your firm&apos;s inbox. Less chasing. More
-                doing.
-              </p>
+              <p>That is the goal for your firm&apos;s inbox. Less chasing. More doing.</p>
               <StartLink className="btn btn-big btn-light" />
-              <p className="guarantee closing-guarantee">{guarantee}</p>
               <p className="closing-mail">
-                Or write to{" "}
-                <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+                {guarantee}. Or write to <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
               </p>
             </div>
           </div>

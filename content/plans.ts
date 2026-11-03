@@ -72,6 +72,7 @@ export const aiBlock = { credits: 4000, price: 399 } as const;
 
 // What every plan has. Only the figures above differ between plans.
 export const planIncludes = [
+  "Unlimited clients",
   "Emails read, sorted and filed",
   "Replies and reminders from your address",
   "GSTR-1 and GSTR-3B prepared",
