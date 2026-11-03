@@ -461,7 +461,6 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .avatar.a7 { background: var(--a7-bg); color: var(--a7-fg); }
 .who { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
 .sub-head { margin-top: var(--s5); font-size: 14px; font-weight: 600; }
-.link-once { overflow-wrap: anywhere; user-select: all; }
 .send-to { display: grid; justify-items: start; gap: var(--s2); margin-top: var(--s4); }
 .drop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s5); padding: var(--s3) var(--s4); border: 1px dashed var(--line-2); border-radius: var(--r3); }
 .drop > svg { flex: none; color: var(--ink-3); }

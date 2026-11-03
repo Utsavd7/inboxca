@@ -14,7 +14,7 @@ test.skip(!local.url || !local.mailUrl, "Needs local Supabase");
 // Decided 24 Oct 2026: a paper of the same client, type, period and GSTIN becomes current and
 // the older one is kept as an earlier version; a GST paper names its GSTIN when the client
 // has more than one; asking for papers starts from a list for the kind of client.
-test("a newer paper becomes current, the older stays as an earlier version, each under its GSTIN", async ({ page, browser }) => {
+test("a newer paper becomes current, the older stays as an earlier version, each under its GSTIN", async ({ page }) => {
   test.setTimeout(120_000);
   loadEnvConfig(process.cwd());
   const email = `owner-${randomUUID()}@example.test`;
@@ -48,10 +48,10 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     // Uploading GST papers asks which GSTIN they are for.
     await page.goto(`/app/clients/${client}?tab=documents`);
     const rows = page.locator("section[aria-labelledby=files] tbody tr");
-    const upload = async (content: string, gstin?: string) => {
+    const upload = async (content: string, gstin?: string, type = "GSTR-3B") => {
       await page.getByRole("link", { name: "Upload papers" }).click();
       await page.getByLabel("Files", { exact: true }).setInputFiles({ name: "gstr3b.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
-      await page.getByLabel("Paper type", { exact: true }).selectOption("GSTR-3B");
+      await page.getByLabel("Paper type", { exact: true }).selectOption(type);
       await page.getByLabel("Type of work", { exact: true }).selectOption("gst");
       await page.getByLabel("Period", { exact: true }).selectOption({ label: "Sep 2026" });
       if (gstin) await page.getByLabel("GSTIN, for GST papers").selectOption({ label: gstin });
@@ -88,22 +88,18 @@ test("a newer paper becomes current, the older stays as an earlier version, each
     await expect(ask.getByRole("checkbox", { name: "Bank statement" })).toHaveCount(1);
     await expect(ask.getByRole("checkbox", { name: "Trial balance" })).toBeHidden();
     await expect(ask.getByLabel("For", { exact: true })).toHaveValue(due);
-    // Two items, so the link stays open while the client sends the sales bills twice.
     await ask.getByLabel("Sales bills").check();
     await ask.getByLabel("Expense bills").check();
     await ask.getByLabel("GSTIN, for GST papers").selectOption({ label: "27AAACS1234A1Z1" });
     await ask.getByLabel("For", { exact: true }).selectOption({ label: "Sep 2026" });
     await ask.getByRole("button", { name: "Ask for papers" }).click();
-    const link = (await page.locator(".link-once").textContent())!;
-    const visitor = await (await browser.newContext()).newPage();
-    await visitor.goto(link);
-    for (const [content, received] of [["Invented sales bills", "Received: 1 file"], ["More invented sales bills", "Received: 2 files"]]) {
-      const sales = visitor.getByRole("listitem").filter({ hasText: "Sales bills" });
-      // A paper already received offers Add more in place of the large button.
-      await sales.getByLabel(/^Add (more for )?Sales bills/).setInputFiles({ name: "sales.pdf", mimeType: "application/pdf", buffer: Buffer.from(pdf(content)) });
-      await expect(sales).toContainText(received);
+    // No firm email is connected here, so the asking is noted and no email goes.
+    await expect(page.getByRole("status")).toContainText("no email went");
+    await page.goto(`/app/clients/${client}?tab=documents`);
+    for (const content of ["Invented sales bills", "More invented sales bills"]) {
+      await upload(content, "27AAACS1234A1Z1", "Sales bills");
+      await expect(page.getByRole("status")).toContainText("Saved as");
     }
-    await visitor.close();
     expect((await query(local.dbUrl, "select status, registration_id from public.documents where client_id = $1 and document_type = 'Sales bills' order by received_at", [client])).map((row) => [row.status, row.registration_id])).toEqual([["filed", gstins[1]], ["filed", gstins[1]]]);
     // Bills come as many files a month, so both are kept as papers, not one as an earlier version.
     await page.goto(`/app/clients/${client}?tab=documents`);
