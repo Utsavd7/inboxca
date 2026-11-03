@@ -8,7 +8,7 @@ import { Logo } from "./logo";
 // the file name is in figures.
 const steps = [
   [Mail, "An email from a client", "form-130.pdf", "mono"],
-  [FolderCheck, "Filed in the client's folder", "In your OneDrive, with a clear name", undefined],
+  [FolderCheck, "Filed in the client's folder", "In your own drive, with a clear name", undefined],
   [Reply, "Answered from your firm's address", "Anything unusual goes to your team", undefined],
 ] as const;
 const facts = [
