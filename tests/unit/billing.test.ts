@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cashfree } from "@/src/lib/billing/cashfree";
 import { docHtml, docNotes, docRows, taxLines, type Doc } from "@/src/lib/billing/documents";
 import {
-  addMonths, chosenPlan, financialYear, formulaSchema, GB, gstOn, gstSplit, mandateMax, methodsFor, moneyBackLastDay, overdueState, planFit, planPrice, prorate, serialNumber, taxSchema, toYearly, withGst,
+  addMonths, chosenPlan, financialYear, formulaSchema, GB, gstOn, gstSplit, mandateMax, methodsFor, moneyBackLastDay, overdueState, planFit, planPrice, prorate, serialNumber, setupFee, taxSchema, toYearly, withGst,
 } from "@/src/lib/billing/money";
 import { custom, extraPerson, plans, practices } from "@/content/plans";
 
@@ -39,6 +39,13 @@ describe("plan prices from the formula", () => {
     expect(chosenPlan(formula, { plan: "solo", clients: "abc" })).toMatchObject({ plan: { clients: 70, practice: "mixed", people: 1 }, price: { code: "solo" } });
     for (const query of [{}, { plan: "gold", clients: "120", practice: "mixed", people: "5" }, { plan: "custom", clients: "120", practice: "mixed", people: "5" }, { plan: ["growth", "scale"] }])
       expect(chosenPlan(formula, query)).toBeNull();
+  });
+
+  it("charges a plan's setup fee, and a Custom firm Enterprise's rate for each AI credit", () => {
+    const fees = { ...formula, setup: { solo: 290, growth: 730, scale: 1750, enterprise: 4370 } };
+    expect(setupFee(fees, { code: "growth", aiCredits: 10_000 })).toBe(730);
+    expect(setupFee(fees, { code: "custom", aiCredits: 81_000 })).toBe(5900);
+    expect(setupFee(formula, { code: "custom", aiCredits: 81_000 })).toBe(0);
   });
 });
 
