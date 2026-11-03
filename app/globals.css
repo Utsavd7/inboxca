@@ -128,8 +128,12 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .segment-dark { background: rgba(6, 18, 36, 0.5); border-color: var(--line-navy); }
 .segment-dark button { color: var(--on-navy); }
 .segment-dark button[aria-pressed="true"] { color: var(--navy); }
-.deal { padding: 2px 7px; border-radius: var(--r-pill); background: var(--tint); font-size: 11px; font-style: normal; font-weight: 700; color: var(--navy); }
-.segment button[aria-pressed="true"] .deal { background: var(--blue); color: var(--white); }
+/* The Yearly saving: a bright badge that catches the eye on the navy estimate, with a slow shine. */
+.deal { position: relative; overflow: hidden; padding: 3px 10px; border-radius: var(--r-pill); background: var(--white); box-shadow: 0 0 0 3px rgba(194, 211, 247, 0.28); font-size: 12px; font-style: normal; font-weight: 800; color: var(--blue); }
+.deal::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(26, 75, 176, 0.22) 50%, transparent 70%); transform: translateX(-120%); }
+.segment button[aria-pressed="true"] .deal { background: var(--blue); box-shadow: none; color: var(--white); }
+.confetti { position: fixed; z-index: 50; width: 8px; height: 12px; border-radius: 2px; pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) { .deal::after { animation: shine 3.6s ease-in-out infinite; } }
 
 /* Progressive blur under the floating bar: four layers, each blurrier and shorter than the last.
    The strip starts above the top of the screen, because a blur is weakest along its own edge
@@ -723,6 +727,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 @keyframes rise { from { transform: translateY(105%); } to { transform: none; } }
 @keyframes settle { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes float-in { from { opacity: 0; transform: translateY(32px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes shine { 0%, 55% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
 @keyframes ping { to { transform: scale(2.6); opacity: 0; } }
 @keyframes tilt { from { transform: rotateX(12deg) scale(0.95); } }
 @keyframes strike { from { transform: scaleX(0); } }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Check, Minus, Plus } from "lucide-react";
 import { aiBlock, custom, extraPerson, planIncludes, planRows, plans, practices, rupees } from "@/content/plans";
 import { estimate, type Practice } from "@/src/lib/estimate";
+import { confetti } from "./confetti";
 import { Rolling } from "./rolling";
 
 const spring = { type: "spring", duration: 0.55, bounce: 0 } as const;
@@ -26,6 +27,11 @@ const Price = ({ value }: { value: number }) => (
 export function Plans() {
   const id = useId();
   const [yearly, setYearly] = useState(false);
+  // Choosing Yearly is a saving, so it gets a little celebration.
+  const pick = (value: boolean, from: Element) => {
+    if (value && !yearly) confetti(from);
+    setYearly(value);
+  };
   const [clients, setClients] = useState(120);
   const [position, setPosition] = useState(toPosition(120));
   const [practice, setPractice] = useState<Practice>("mixed");
@@ -175,7 +181,7 @@ export function Plans() {
                   [true, "Yearly"],
                 ] as const
               ).map(([value, label]) => (
-                <button key={label} type="button" aria-pressed={yearly === value} onClick={() => setYearly(value)}>
+                <button key={label} type="button" aria-pressed={yearly === value} onClick={(event) => pick(value, event.currentTarget)}>
                   {yearly === value && <motion.span layoutId="billing-pick" className="segment-pick" transition={spring} />}
                   <span>
                     {label}
@@ -190,7 +196,7 @@ export function Plans() {
               {yearly ? (
                 <>You save {rupees(saving)} a year.</>
               ) : (
-                <button type="button" onClick={() => setYearly(true)}>
+                <button type="button" onClick={(event) => pick(true, event.currentTarget)}>
                   Pay yearly and save {rupees(saving)}
                 </button>
               )}
