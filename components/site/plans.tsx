@@ -264,19 +264,19 @@ export function Plans() {
             <div className="plan-price">
               <Price value={yearly ? plan.yearly : plan.monthly} />
               <small>{per}</small>
-              {/* The other way to pay, so the yearly total always sits beside the monthly figure. */}
-              <p className="plan-other">
-                {yearly ? (
-                  <>
-                    or <span className="num">{rupees(plan.monthly)}</span> a month
-                  </>
-                ) : (
-                  <>
-                    <span className="num">{rupees(plan.yearly)}</span> a year, about 11 months for 12
-                  </>
-                )}
-              </p>
             </div>
+            {/* The other way to pay, so the yearly total always sits beside the monthly figure. */}
+            <p className="plan-other">
+              {yearly ? (
+                <>
+                  or <span className="num">{rupees(plan.monthly)}</span> a month
+                </>
+              ) : (
+                <>
+                  <span className="num">{rupees(plan.yearly)}</span> a year, about 11 months for 12
+                </>
+              )}
+            </p>
             <dl>
               {planRows.map(([label, key]) => (
                 <div key={key}>

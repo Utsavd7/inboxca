@@ -479,7 +479,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .plan-price { display: grid; gap: 2px; padding-top: var(--s3); border-top: 1px solid var(--line); }
 .plan-price .num { font-family: inherit; font-size: 32px; font-weight: 800; letter-spacing: var(--ls-display); line-height: 1; }
 .plan-price small { font-size: var(--fs-small); color: var(--slate); }
-.plan-other { font-size: var(--fs-caption); color: var(--slate); }
+.plan-other { margin-top: calc(-1 * var(--s2)); font-size: var(--fs-caption); color: var(--slate); }
 .plan-other .num { color: var(--navy); }
 .plan dl { display: grid; flex: 1; align-content: start; font-size: var(--fs-small); }
 .plan dl div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); padding-block: 8px; border-top: 1px solid var(--line); }
@@ -779,7 +779,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
   .finder,
   .quote { padding: var(--s4); }
   .finder .segment { flex-direction: column; }
-  .finder .segment button { text-align: left; padding-inline: 14px; }
+  .finder .segment button { flex: none; text-align: left; padding-inline: 14px; }
   .finder-team { grid-template-columns: 1fr; }
   .plan-custom { grid-template-columns: 1fr; }
   .plan-custom dl { grid-template-columns: 1fr; }
