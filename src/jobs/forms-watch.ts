@@ -51,16 +51,31 @@ export type Watch = { sources: Record<string, Seen>; changes: Json[]; alerts: Js
 const LIMIT = 100 * 1024 * 1024;
 const sha = (text: string | Uint8Array) => createHash("sha256").update(text).digest("hex");
 
+// Only the official sites are read: the sources' own hosts and any .gov.in site, over https.
+// A redirect elsewhere is refused, so a hijacked or expired page cannot feed the check.
+const hostsOf = (list: Source[]) => new Set(list.flatMap((source) => [source.url, source.feed]).filter((url): url is string => !!url).map((url) => new URL(url).host));
+const allowed = (url: string, hosts: Set<string>) => {
+  const { protocol, host } = new URL(url);
+  return protocol === "https:" && (host.endsWith(".gov.in") || hosts.has(host));
+};
+
 // A file's SHA-256 read as it streams (kept whole only when it is compared), or a page's list
 // of schema, workbook and utility links, or a listing's entries.
-async function fetchBody(url: string, fetcher: typeof fetch, limit: number, keep: boolean, body?: string) {
-  const response = await fetcher(url, {
-    method: body ? "POST" : "GET",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body,
-    redirect: "follow",
-    signal: AbortSignal.timeout(120_000),
-  });
+async function fetchBody(url: string, fetcher: typeof fetch, limit: number, keep: boolean, hosts: Set<string>, body?: string) {
+  let response: Response;
+  for (let hop = 0; ; hop++) {
+    if (!allowed(url, hosts)) throw new Error("Outside the official sites");
+    response = await fetcher(url, {
+      method: body ? "POST" : "GET",
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body,
+      redirect: "manual",
+      signal: AbortSignal.timeout(120_000),
+    });
+    const to = response.headers.get("location");
+    if (response.status < 300 || response.status >= 400 || !to || hop >= 3) break;
+    url = new URL(to, url).href;
+  }
   if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
   const hash = createHash("sha256"), reader = response.body.getReader(), parts: Uint8Array[] = [];
   let size = 0;
@@ -75,8 +90,8 @@ async function fetchBody(url: string, fetcher: typeof fetch, limit: number, keep
   return { hash: hash.digest("hex"), bytes: Buffer.concat(parts) };
 }
 
-async function fingerprint(source: Source, fetcher: typeof fetch) {
-  const read = await fetchBody(source.feed ?? source.url, fetcher, source.kind === "file" ? LIMIT : 5 * 1024 * 1024, source.kind !== "file" || !!source.compare, source.body);
+async function fingerprint(source: Source, fetcher: typeof fetch, hosts: Set<string>) {
+  const read = await fetchBody(source.feed ?? source.url, fetcher, source.kind === "file" ? LIMIT : 5 * 1024 * 1024, source.kind !== "file" || !!source.compare, hosts, source.body);
   if (source.kind === "file") return { hash: read.hash, bytes: read.bytes };
   const html = read.bytes.toString("utf8");
   const entries = source.parse?.(html, source.url).map((entry) => ({ ...entry, id: sha(`${source.key}\n${entry.title}\n${entry.link}`).slice(0, 16) }));
@@ -123,18 +138,18 @@ async function compareFile(compare: Compare, name: string, bytes: Buffer, templa
 // are new only once a source has a baseline, so the first day announces nothing.
 export async function checkSources(previous: Watch, now: Date, fetcher: typeof fetch = fetch, list = sources, templates: Template[] = [], store: Store = officialStore()): Promise<Watch> {
   const next: Watch = { sources: { ...previous.sources }, changes: [...previous.changes], alerts: [...previous.alerts], items: [...(previous.items ?? [])] };
-  const at = now.toISOString(), day = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const at = now.toISOString(), day = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }), hosts = hostsOf(list);
   for (const source of list) {
     if (source.kind === "manual") continue;
     const seen = previous.sources[source.key] ?? {};
     try {
-      const found = await fingerprint(source, fetcher);
+      const found = await fingerprint(source, fetcher, hosts);
       const before = seen.hash ?? source.known;
       if (source.kind !== "list" && before && before !== found.hash) {
         const added = found.links && seen.links ? found.links.filter((link) => !seen.links!.includes(link)) : [];
         const removed = found.links && seen.links ? seen.links.filter((link) => !found.links!.includes(link)) : [];
         const compared = !source.compare ? [] : source.kind === "file" ? [await compareFile(source.compare, source.url.split("/").pop()!, found.bytes!, templates, source.url, store)]
-          : await Promise.all(added.filter((link) => source.compare!.file.test(link)).map((link) => fetchBody(link, fetcher, LIMIT, true).then((file) => compareFile(source.compare!, decodeURIComponent(link.split("/").pop()!), file.bytes, templates, link, store), (error: Error) => ({ file: link, error: error.message.slice(0, 120) }))));
+          : await Promise.all(added.filter((link) => source.compare!.file.test(link)).map((link) => fetchBody(link, fetcher, LIMIT, true, hosts).then((file) => compareFile(source.compare!, decodeURIComponent(link.split("/").pop()!), file.bytes, templates, link, store), (error: Error) => ({ file: link, error: error.message.slice(0, 120) }))));
         next.changes.push({ source: source.key, name: source.name, url: source.url, at, from: before, to: found.hash, added, removed, status: "draft", ...(compared.length ? { compared } : {}) });
       }
       const known = new Set(seen.entries ?? []);

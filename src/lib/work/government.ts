@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { sources, type Area } from "@/src/jobs/forms-watch";
-import { dueLabel } from "@/src/lib/calendar";
+import { dueLabel, periodLabel } from "@/src/lib/calendar";
 import type { currentMember } from "@/src/lib/member";
 
 // What is new from the government for a firm (PLAN.md D42): items the daily check found on the
@@ -8,16 +8,25 @@ import type { currentMember } from "@/src/lib/member";
 // services), each marked dismissed for this person or not, newest first. Titles are the
 // government's own words; the admin's one line is Orelu's.
 type Db = Awaited<ReturnType<typeof currentMember>>["supabase"];
-export type GovUpdate = { id: string; source: string; area: Area; title: string; date?: string; link: string; seen: string; note?: { uses?: string; keeps?: string }; dismissed: boolean; from: string };
+export type GovUpdate = { id: string; source: string; area: Area; title: string; date?: string; link: string; seen: string; note?: { uses?: string; keeps?: string }; dismissed: boolean; from: string; moved?: string[] };
 const names = new Map(sources.map((source) => [source.key, source.name]));
 
 // Read once a request: Today's line and its list both ask.
 export const governmentUpdates = cache(async (supabase: Db, firmId: string) => {
-  const { data, error } = await supabase.rpc("gov_updates", { target_firm: firmId });
+  const [{ data, error }, { data: rules }, { data: extensions }] = await Promise.all([
+    supabase.rpc("gov_updates", { target_firm: firmId }),
+    supabase.from("compliance_types").select("code, name, frequency").eq("period_key", ""),
+    // The due dates the Sunday check moved from a notice, named under the notice itself.
+    supabase.from("compliance_types").select("code, period_key, due_rule, source_url").neq("period_key", "").not("verified_on", "is", null).not("due_rule->notice", "is", null),
+  ]);
   if (error) throw new Error(`Government updates failed: ${error.code}`);
   const found = data as { areas: Area[]; failing: string[]; items: Omit<GovUpdate, "from">[] };
+  const moved = (link: string) => (extensions ?? []).filter((row) => row.source_url === link).map((row) => {
+    const rule = rules?.find((rule) => rule.code === row.code);
+    return `${rule?.name ?? row.code} for ${periodLabel(rule?.frequency ?? null, row.period_key)} to ${dueLabel((row.due_rule as { on: string }).on)}`;
+  });
   return {
-    items: found.items.map((item): GovUpdate => ({ ...item, from: names.get(item.source) ?? "An official site" })),
+    items: found.items.map((item): GovUpdate => ({ ...item, from: names.get(item.source) ?? "An official site", ...(moved(item.link).length ? { moved: moved(item.link) } : {}) })),
     // The official pages InboxCA cannot read for these areas, for people to look at themselves:
     // those that block readers, and any the check has not read for two days.
     unread: sources.filter((source) => (source.kind === "manual" || found.failing.includes(source.key)) && found.areas.includes(source.area)),
@@ -27,7 +36,7 @@ export const governmentUpdates = cache(async (supabase: Db, firmId: string) => {
 // "12 Oct 2026" as published, or the day InboxCA first saw it.
 export const govWhen = (item: GovUpdate) => (item.date ? dueLabel(item.date) : `seen on ${dueLabel(item.seen)}`);
 export const govNote = (item: GovUpdate) =>
-  item.note?.uses ? `InboxCA uses this from ${dueLabel(item.note.uses)}.` : item.note?.keeps ? `InboxCA keeps the earlier version for ${item.note.keeps}.` : null;
+  item.moved ? `Extended by this notice: InboxCA moved ${item.moved.join(", and ")} for every firm.` : item.note?.uses ? `InboxCA uses this from ${dueLabel(item.note.uses)}.` : item.note?.keeps ? `InboxCA keeps the earlier version for ${item.note.keeps}.` : null;
 // The title as published, ended with a full stop only when it has none.
 export const govTitle = (item: GovUpdate) => (/[.!?]$/.test(item.title) ? item.title : `${item.title}.`);
 
