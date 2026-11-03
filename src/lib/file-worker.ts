@@ -7,6 +7,10 @@ export const viewLimits = { bytes: intakeLimits.bytes, pages: 30, rows: 1000, co
 // text a file, a picture up to 25 megapixels by its header, a page drawn at 300 dots an
 // inch within that, a minute a file, one file at a time.
 export const ocrLimits = { pages: 20, pixels: 25_000_000, seconds: 60 };
+// The virus check is required unless SCAN_OPTIONAL=1 says this computer may do without it (a
+// laptop, the unit tests); production never may, so a scanner forgotten there lets nothing
+// through: without one a file waits (src/lib/intake.ts), and the worker does not start.
+export const scanRequired = (env: Record<string, string | undefined> = process.env) => env.NODE_ENV === "production" || env.SCAN_OPTIONAL !== "1";
 // A figure's spot on a page, as parts of the page's width and height, so the viewer can mark it.
 export type ViewMark = { id: string; page: number; x: number; y: number; width: number; height: number };
 export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean; marks?: ViewMark[] };

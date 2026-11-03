@@ -36,10 +36,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (copy && !(await mayDownload(membership.firmId))) return fail(429, membership.role === "owner" ? PAUSED.owner : PAUSED.staff, headers);
   const admin = supabaseAdmin();
   const [{ data: document }, { data: account }] = await Promise.all([
-    admin.from("documents").select("drive_file_id, name, password_enc").eq("firm_id", membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle(),
+    admin.from("documents").select("drive_file_id, name, password_enc, held:details->>held").eq("firm_id", membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle(),
     admin.from("connected_accounts").select("id, provider, credentials_enc").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
   ]);
   if (!document) return fail(404, "This paper is not available. It may have been removed.", headers);
+  // A file held for the virus check is not opened until it passes (src/lib/intake.ts receive).
+  if (document.held) return fail(409, "This paper is waiting for the virus check and cannot be opened yet.", headers);
   if (!account) return fail(409, "Your firm's drive is not connected. Ask the owner to connect it in Settings.", headers);
   try {
     if (!["local", "dropbox", "onedrive"].includes(account.provider)) throw new Error("Drive not supported");

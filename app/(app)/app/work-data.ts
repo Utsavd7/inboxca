@@ -91,6 +91,7 @@ function alertItem(alert: { id: string; entity_id: string; client_id: string | n
     case "request_stalled": return { ...client, title: `Call ${details.client}`, why: "Three reminders went, and the papers asked for are still missing", action: { label: "See papers", href: `/app/papers/${alert.entity_id}` } };
     case "drive_missing": return { title: "Find the papers missing from your drive", why: `${details.files} ${details.files === 1 ? "paper is" : "papers are"} missing from your drive`, action: { label: "See missing papers", href: "/app/documents?year=all&show=missing" } };
     case "virus": return { title: `${details.name} had a virus`, why: "Nobody can open it in InboxCA. It is in the Files with a virus folder of your drive", urgent: true, action: { label: "Got it", href: "" } };
+    case "scan_down": return { title: "The virus check is not running", why: "Files that came in meanwhile wait under To check, unopened, until it is back. Orelu is told by the status page", urgent: true, action: { label: "See papers", href: "/app/documents?show=check" } };
     default: return { title: "Look at your drive", why: "Something in your drive needs a look", action: driveSettings };
   }
 }
@@ -231,7 +232,7 @@ export async function workFor(ctx: Context, late: number) {
       ...(alerts?.data ?? [])
         // Missing papers, files with a virus and the owner's own login on several computers are the
         // owner's to sort out; a person's day of renames, captures or second sign ins only that day.
-        .filter((alert) => (owner || !["drive_missing", "virus", "owner_pcs"].includes(alert.reason_code ?? "")) && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames", "owner_pcs"].includes(alert.reason_code ?? "") || (alert.details as AlertDetails).day === today))
+        .filter((alert) => (owner || !["drive_missing", "virus", "scan_down", "owner_pcs"].includes(alert.reason_code ?? "")) && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames", "owner_pcs"].includes(alert.reason_code ?? "") || (alert.details as AlertDetails).day === today))
         .filter((alert) => alert.reason_code !== "request_stalled" || !calls.some((item) => item.key === `call:${alert.entity_id}`))
         .map((alert) => ({ ...alertItem(alert), key: `${alert.reason_code === "virus" ? "virus" : "alert"}:${alert.id}`, audience: "firm" as const })),
     ]);

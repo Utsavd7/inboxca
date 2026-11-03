@@ -51,7 +51,7 @@ export async function fileDrivePaper(_previous: Result | null, form: FormData): 
       forget(ctx.account!.id);
       return { error: unsafeText[sent.unsafe] };
     }
-    const filed = await fileForClient(ctx, client, { work_type: work as WorkType, document_type: type, period_key: period, status: "filed" }, { name: file.name, bytes }, (folder, name) => ctx.drive!.move(file.id, folder, name), "document.filed", sent.scanned);
+    const filed = await fileForClient(ctx, client, { work_type: work as WorkType, document_type: type, period_key: period, status: "filed" }, { name: file.name, bytes }, (folder, name) => ctx.drive!.move(file.id, folder, name), "document.filed", sent);
     if (filed === "twin") return { error: `${client.name} already has this same file. It stays where it is.` };
     if (filed === "drive") return { error: "The drive did not take the file. Try again." };
     forget(ctx.account!.id);
@@ -89,7 +89,7 @@ export async function uploadToFolder(form: FormData): Promise<Result> {
         const bytes = file.bytes;
         const sure = guess.sure && periodChoices(today).includes(guess.period);
         const values = { work_type: work ?? guess.work, document_type: guess.type, period_key: sure ? guess.period : "", status: sure ? ("filed" as const) : ("to_check" as const) };
-        const saved = await fileForClient(ctx, here.client, values, { name: file.name, bytes }, (folder, name) => ctx.drive!.save(folder, name, bytes), "document.uploaded", sent.scanned);
+        const saved = await fileForClient(ctx, here.client, values, { name: file.name, bytes }, (folder, name) => ctx.drive!.save(folder, name, bytes), "document.uploaded", sent);
         if (saved === "drive") return { error: "The drive did not take the file. Try again." };
         count[saved === "twin" ? "twin" : sure ? "filed" : "check"]++;
       }

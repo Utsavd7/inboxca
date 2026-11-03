@@ -14,6 +14,7 @@ export default defineConfig({
     // Other runs share the database and the machine. A test cut off mid transaction leaves
     // the next one outside it (its rows then commit), so give lock waits and load room.
     testTimeout: 30_000,
-    env: { MAIL_ALLOW_LOCAL: "1" },
+    // Tests without a scanner keep the optional check; those of the required one say so themselves.
+    env: { MAIL_ALLOW_LOCAL: "1", SCAN_OPTIONAL: "1" },
   },
 });
