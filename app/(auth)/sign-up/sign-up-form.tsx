@@ -76,8 +76,8 @@ export function SignUpForm({ account, providers, plan }: { account?: string; pro
       <label className="auth-check">
         <input key={state.fields?.accept} type="checkbox" name="accept" required defaultChecked={state.fields?.accept === "on"} {...invalid("accept")} />
         <span>
-          I accept the <Link href="/terms">terms</Link>, the <Link href="/privacy">privacy notice</Link> and
-          the <Link href="/dpa">data processing agreement</Link>.
+          For my firm, I accept the <Link href="/terms">terms</Link> and the <Link href="/dpa">data processing
+          agreement</Link>, and I have read the <Link href="/privacy">privacy notice</Link>.
         </span>
       </label>
       {error("accept")}

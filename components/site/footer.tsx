@@ -34,7 +34,7 @@ export function Footer() {
         </div>
         <p className="footnote">
           {/* True of the site's pages: the home test checks no cookie is set (security.ts, website). */}
-          {analyticsToken ? "No cookies on this site. Visits are counted without knowing who you are. " : "No cookies, no tracking on this site. "}
+          {analyticsToken ? "No cookies on this site's pages. Visits are counted without knowing who you are. " : "No cookies or tracking on this site's pages. "}
           * Screens show sample data.{" "}
           <Link href="/security#website">About this website</Link>. InboxCA is a
           product of Orelu, a partnership firm. Other names and logos belong to

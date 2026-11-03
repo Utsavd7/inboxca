@@ -3,7 +3,7 @@
 // built. It is reviewed again with the terms and privacy notice before the pilot.
 import { analyticsToken } from "@/src/lib/site";
 
-export const securityUpdated = "29 Oct 2026";
+export const securityUpdated = "3 Nov 2026";
 
 export const securitySections = [
   {
@@ -58,7 +58,7 @@ export const securitySections = [
     points: [
       "AI is the last step, not the first. Rules and fixed readers handle what they can, and AI is used only for what is left.",
       "Only the email or paper being worked on is sent to the AI service, never another client's data.",
-      "The AI service must agree to keep nothing and to train on nothing. If that agreement is not in place for a firm, AI stays off for that firm.",
+      "The AI service must agree to keep nothing and to train on nothing. Until that agreement is in place, AI stays off.",
       "No figure reaches a form until your team has checked it.",
     ],
   },
@@ -78,7 +78,7 @@ export const securitySections = [
     points: [
       "Your firm is told within 24 hours: what happened, which data, and what to do.",
       "Incidents that must be reported go to CERT-In within 6 hours.",
-      "Where Orelu is the data fiduciary, it reports to the Data Protection Board of India as section 8(6) of the DPDP Act and its Rules require; for your clients' data your firm reports, with what Orelu gives it.",
+      "From May 2027, when section 8(6) of the DPDP Act starts, Orelu reports to the Data Protection Board of India where Orelu is the data fiduciary; for your clients' data your firm reports, with what Orelu gives it.",
       "The database is backed up every 6 hours, so at most 6 hours of records could be lost. Your files are in your own drive and are backed up by your drive provider.",
     ],
   },
@@ -86,8 +86,8 @@ export const securitySections = [
     id: "law",
     title: "The law we build to",
     points: [
-      "The Digital Personal Data Protection Act 2023 and its Rules of 2025.",
-      "The Information Technology Act 2000 and the CERT-In directions of April 2022.",
+      "The Information Technology Act 2000, its 2011 rules on sensitive personal data, and the CERT-In directions of April 2022.",
+      "The Digital Personal Data Protection Act 2023 and its Rules of 2025, most of which start in May 2027.",
       "The Reserve Bank's rules for card and AutoPay payments, through Cashfree.",
       "For your clients' data, your firm decides and InboxCA only follows your instructions, under the data processing agreement your firm accepts at sign up.",
     ],
