@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Check, History, KeyRound, LockKeyhole, MailX, Plus, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, BellRing, CalendarClock, Check, FileText, History, KeyRound, LockKeyhole, MailX, Plus, ScanText, Trash2 } from "lucide-react";
 import { beforeAfter, forms, guarantee, questions, worksWith } from "@/content/site";
 import { planIncludes, plans, rupees, SHOW_PLANS } from "@/content/plans";
 import { contactEmail, SITE_PUBLIC, siteDescription } from "@/src/lib/site";
@@ -57,6 +57,10 @@ const structured = SITE_PUBLIC && [
     })),
   },
 ].filter(Boolean);
+
+// The forms strip: what InboxCA does with each, by icon; the dated ones move the other way below.
+const formIcons = { Prepared: FileText, Matched: ArrowLeftRight, Read: ScanText, Tracked: BellRing, "Due date kept": CalendarClock };
+const late = new Set<string>(["Tracked", "Due date kept"]);
 
 // Get started on the page takes the visitor to the plans, where each plan has its own start.
 function StartLink({ className = "btn btn-big" }: { className?: string }) {
@@ -150,18 +154,24 @@ export default function Home() {
 
         <section className="covered" id="forms" aria-labelledby="forms-title">
           <h2 id="forms-title">Prepared, read and tracked today</h2>
-          <div className="ticker">
-            {[false, true].map((copy) => (
-              <ul key={String(copy)} aria-hidden={copy || undefined}>
-                {forms.map(([form, what]) => (
-                  <li key={form}>
-                    <span className="num">{form}</span>
-                    <small>{what}</small>
-                  </li>
-                ))}
-              </ul>
-            ))}
-          </div>
+          {[forms.filter(([, what]) => !late.has(what)), forms.filter(([, what]) => late.has(what))].map((row, at) => (
+            <div key={at} className={`ticker${at ? " ticker-back" : ""}`}>
+              {[false, true].map((copy) => (
+                <ul key={String(copy)} aria-hidden={copy || undefined}>
+                  {row.map(([form, what]) => {
+                    const Icon = formIcons[what];
+                    return (
+                      <li key={form}>
+                        <span className="ticker-icon"><Icon size={15} aria-hidden /></span>
+                        <strong>{form}</strong>
+                        <small>{what}</small>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ))}
+            </div>
+          ))}
         </section>
 
         <section className="band" id="today">
