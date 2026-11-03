@@ -247,7 +247,7 @@ function FormScene({
         <motion.div variants={item} className="form-foot">
           <button
             type="button"
-            className={`approve ${approved ? "is-approved" : ""}`}
+            className={`btn approve ${approved ? "is-approved" : ""}`}
             onClick={approve}
             disabled={approved}
           >

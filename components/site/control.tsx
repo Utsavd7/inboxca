@@ -25,7 +25,7 @@ function DriveCell() {
           folders you can open any time. Your old files stay where they are,
           and a change you make there is picked up within minutes.
         </p>
-        <div className="segment" role="group" aria-label="Choose a drive">
+        <div className="segment segment-dark" role="group" aria-label="Choose a drive">
           {(["OneDrive", "Dropbox"] as const).map((name) => (
             <button
               key={name}
@@ -143,7 +143,7 @@ function ApproveCell() {
         </div>
         <button
           type="button"
-          className={`send ${sent ? "is-sent" : ""}`}
+          className={`btn send ${sent ? "is-sent" : ""}`}
           onClick={() => setSent(!sent)}
           aria-pressed={sent}
         >

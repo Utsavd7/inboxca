@@ -34,7 +34,7 @@ export function Week() {
             </motion.span>
           </AnimatePresence>
         </p>
-        <div className="segment segment-light" role="group" aria-label="Choose a day">
+        <div className="segment" role="group" aria-label="Choose a day">
           {weekScenes.map(([, title], index) => (
             <button key={title} type="button" aria-pressed={pick === index} onClick={() => setPick(index)}>
               {pick === index && <motion.span layoutId="week-pick" className="segment-pick" transition={spring} />}
