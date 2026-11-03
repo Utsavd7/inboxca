@@ -160,6 +160,29 @@ export default function Home() {
           </div>
         </section>
 
+        <section className="works" aria-label="Built to work with">
+          <p>Built to work with what your firm already uses</p>
+          <div className="marquee">
+            {[false, true].map((copy) => (
+              <ul key={String(copy)} aria-hidden={copy || undefined}>
+                {worksWith.map(([name, file, width, height, text]) => (
+                  <li key={name}>
+                    <Image
+                      src={`/brand/tools/${file}`}
+                      alt={text.includes(name) ? "" : name}
+                      width={width}
+                      height={height}
+                      style={{ width, height }}
+                      unoptimized
+                    />
+                    {text}
+                  </li>
+                ))}
+              </ul>
+            ))}
+          </div>
+        </section>
+
         <section className="covered" id="forms" aria-labelledby="forms-title">
           <div className="wrap covered-head">
             <h2 id="forms-title">Covered today</h2>
@@ -176,24 +199,6 @@ export default function Home() {
                 ))}
               </ul>
             ))}
-          </div>
-          <div className="wrap works">
-            <p>Works with what your firm already uses</p>
-            <ul>
-              {worksWith.map(([name, file, width, height, text]) => (
-                <li key={name}>
-                  <Image
-                    src={`/brand/tools/${file}`}
-                    alt={text.includes(name) ? "" : name}
-                    width={width}
-                    height={height}
-                    style={{ width, height }}
-                    unoptimized
-                  />
-                  {text}
-                </li>
-              ))}
-            </ul>
           </div>
         </section>
 

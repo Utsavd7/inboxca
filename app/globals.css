@@ -346,7 +346,18 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .week-note { margin-top: auto; padding-top: var(--s4); }
 .week-rows li { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding-block: 14px; border-top: 1px solid var(--line); }
 
-/* Covered today: the forms, moving past, then the software it works beside */
+/* Built to work with */
+.works { padding: var(--s7) 0 var(--s4); text-align: center; overflow: hidden; }
+.works p { font-size: var(--fs-small); font-weight: 600; color: var(--slate); }
+.marquee {
+  display: flex; gap: var(--s8); width: max-content; margin-top: var(--s5);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.marquee ul { display: flex; align-items: center; gap: var(--s8); animation: marquee 44s linear infinite; }
+.marquee li { display: flex; align-items: center; gap: var(--s3); height: 44px; font-size: var(--fs-body); font-weight: 700; letter-spacing: var(--ls-heading); white-space: nowrap; }
+.marquee img { display: block; flex-shrink: 0; max-width: none; }
+
+/* Covered today: the forms, moving past */
 .covered { padding: var(--s8) 0 var(--s7); overflow: hidden; }
 .covered-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s2) var(--s6); }
 .covered-head h2 { font-size: var(--fs-small); font-weight: 700; letter-spacing: 0; color: var(--blue-deep); }
@@ -360,11 +371,6 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .ticker li { display: inline-flex; align-items: center; gap: var(--s3); height: 44px; padding: 0 16px 0 18px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--white); box-shadow: var(--shadow-1); white-space: nowrap; }
 .ticker .num { font-size: 15px; color: var(--navy); }
 .ticker small { padding-left: var(--s3); border-left: 1px solid var(--line); font-size: var(--fs-caption); font-weight: 600; color: var(--slate); }
-.works { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--s4) var(--s6); margin-top: var(--s6); }
-.works p { font-size: var(--fs-small); font-weight: 600; color: var(--slate); }
-.works ul { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--s3) var(--s5); max-width: 1000px; }
-.works li { display: flex; align-items: center; gap: 10px; height: 40px; font-size: 15px; font-weight: 700; letter-spacing: var(--ls-heading); white-space: nowrap; }
-.works img { display: block; flex-shrink: 0; max-width: none; }
 
 /* Bands: one rhythm */
 .band { padding-block: var(--band); }
@@ -749,6 +755,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 @keyframes demo-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes scan { to { transform: translateX(360%); } }
 @keyframes blink { 50% { opacity: 0; } }
+@keyframes marquee { to { transform: translateX(calc(-100% - 64px)); } }
 @keyframes ticker { to { transform: translateX(calc(-100% - 12px)); } }
 @keyframes reveal { from { transform: translateY(48px) scale(0.98); } }
 @keyframes rise { from { transform: translateY(105%); } to { transform: none; } }
@@ -778,6 +785,9 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
   .ticker { -webkit-mask-image: none; mask-image: none; justify-content: center; }
   .ticker ul { flex-wrap: wrap; flex-shrink: 1; justify-content: center; padding-inline: 24px; animation: none; }
   .ticker ul[aria-hidden] { display: none; }
+  .marquee { width: auto; -webkit-mask-image: none; mask-image: none; justify-content: center; }
+  .marquee ul { flex-wrap: wrap; justify-content: center; gap: 20px 48px; padding-inline: 24px; animation: none; }
+  .marquee ul[aria-hidden] { display: none; }
   .sent { opacity: 1; transform: none; }
 }
 @media (hover: hover) and (pointer: fine) {
@@ -859,7 +869,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
   .stage { margin-inline: -12px; padding: 6px; border-radius: var(--r-lg); }
   .band-head { margin-bottom: var(--s5); }
   .covered { padding: var(--s7) 0 var(--s6); }
-  .works ul { gap: var(--s2) var(--s5); }
+  .works { padding: var(--s6) 0 var(--s3); }
   .footer-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .footer-links > div:last-child { grid-column: 1 / -1; }
   .bento { grid-template-columns: 1fr; }
