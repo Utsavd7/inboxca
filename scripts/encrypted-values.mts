@@ -31,7 +31,6 @@ export const ENCRYPTED: Record<string, string> = {
   "contacts.email": "select firm_id, 'contacts/'||id||'/email', email_enc, 'email', email_bidx from public.contacts",
   "documents.original_name": "select firm_id, 'documents/'||id||'/original_name', original_name_enc, null, null from public.documents where original_name_enc is not null",
   "documents.password": "select firm_id, 'documents/'||id||'/password', password_enc, null, null from public.documents where password_enc is not null",
-  "requests.link": "select firm_id, 'requests/'||id||'/link', details->>'link_enc', null, null from public.requests where details ? 'link_enc'",
   "shares.link": "select firm_id, 'shares/'||id||'/link', delivery->>'link_enc', null, null from public.shares where delivery ? 'link_enc'",
   "datasets.lines": "select d.firm_id, 'datasets/'||d.id||'/lines/'||(l->>'id'), l->>'value_enc', null, null from public.datasets d, jsonb_array_elements(d.data->'lines') l",
   "datasets.edits": `select d.firm_id, 'datasets/'||d.id||'/lines/'||l.key||'/edit/'||p.key, l.value->>'value_enc', null, null
@@ -65,7 +64,6 @@ export const STORED: Record<string, string> = {
   "contacts.email": column("contacts", "email_enc"),
   "documents.original_name": column("documents", "original_name_enc"),
   "documents.password": column("documents", "password_enc"),
-  "requests.link": json("requests", "details"),
   "shares.link": json("shares", "delivery"),
   "datasets.lines": json("datasets", "data"),
   "datasets.edits": json("datasets", "data"),

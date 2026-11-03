@@ -1,6 +1,5 @@
 import { FileCheck2, FileClock } from "lucide-react";
 import Link from "next/link";
-import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { askedByPhone, checkFigures, remindClient, stopSend } from "@/app/(app)/actions";
 import { dueLabel, todayInIndia } from "@/src/lib/calendar";
@@ -48,11 +47,10 @@ export default async function Papers({ params, searchParams }: { params: Promise
   const asked = details.followups?.length ?? 0;
   const live = request.status === "pending" && Date.parse(request.expires_at ?? "") > new Date().getTime();
   const what = details.returns?.length ? details.returns.map((code) => rules?.find((rule) => rule.code === code)?.name ?? code).join(" and ") : "";
-  // Message on WhatsApp: the person's own WhatsApp opens with the missing papers and the upload
-  // link filled in, for a client with a phone number. They press send; InboxCA sends nothing.
-  const crypto = serverCrypto();
-  const whatsapp = acts && live && missing.length > 0 && client.phone_enc && details.link_enc
-    ? whatsappLink(await crypto.decrypt(membership.firmId, `clients/${request.client_id}/phone`, client.phone_enc), emailTemplates.whatsapp(client.name, membership.firmName, details.period, missing, `${process.env.APP_BASE_URL ?? `${(await headers()).get("x-forwarded-proto") ?? "http"}://${(await headers()).get("host")}`}/u/${await crypto.decrypt(membership.firmId, `requests/${request.id}/link`, details.link_enc)}`))
+  // Message on WhatsApp: the person's own WhatsApp opens with the missing papers filled in, for
+  // a client with a phone number. They press send; InboxCA sends nothing.
+  const whatsapp = acts && live && missing.length > 0 && client.phone_enc
+    ? whatsappLink(await serverCrypto().decrypt(membership.firmId, `clients/${request.client_id}/phone`, client.phone_enc), emailTemplates.whatsapp(client.name, membership.firmName, details.period, missing))
     : "";
   // Anything that stops an email going now.
   const stop = mailbox?.status !== "connected" ? "Connect the firm email in Settings first. Reminders go from the firm email." : !client.email_enc ? "This client has no email address. Add one on the client's page." : client.reminders_paused ? "Reminders are paused for this client. Resume them on the client's page." : emailed ? "Already emailed today. The next reminder can go tomorrow." : "";
@@ -117,7 +115,7 @@ export default async function Papers({ params, searchParams }: { params: Promise
           ))}
         </ul>
         <p className="app-card-foot hint">
-          {live ? `The client's upload link works until ${dueLabel(request.expires_at!.slice(0, 10))}.` : request.status === "done" ? "Every paper is in, so the reminders have stopped." : "The upload link has ended. Ask for papers again from the client's page."}{" "}
+          {live ? `The client replies to the email with the papers attached. Reminders go until ${dueLabel(request.expires_at!.slice(0, 10))}.` : request.status === "done" ? "Every paper is in, so the reminders have stopped." : "The asking has ended. Ask for papers again from the client's page."}{" "}
           <Link href={`/app/clients/${request.client_id}?tab=documents`}>Open {client.name}</Link>
         </p>
       </Card>

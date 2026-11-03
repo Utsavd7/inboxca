@@ -76,7 +76,8 @@ export function planReminders(tasks: ReminderTask[], today: string, filed: Set<s
 // 4 times, asking only for what has not arrived. `now` (Chase missing papers on Today) skips the wait.
 // A request InboxCA opened itself goes first in the next email it may send (first); the wait
 // counts from the latest ask: a follow up, the first email, the client's latest paper, or a call.
-export type FollowUp = { requestId: string; client_id: string; period: string; missing: string[]; link: string; count: number; first?: boolean; returns?: string[] };
+export type FollowUp = { requestId: string; client_id: string; period: string; missing: string[]; count: number; first?: boolean; returns?: string[] };
+export const REPLY_ATTACHED = "Please reply to this email with the files attached, or email them to us.";
 export const FOLLOW_UP_DAYS = 3;
 export const MAX_FOLLOW_UPS = 4;
 type Asking = { items: { type: string; received: string[] }[]; followups?: string[]; returns?: string[]; since?: string; chased?: string };
@@ -89,7 +90,7 @@ export function followUpDue(request: { expires_at: string; details: Asking }, to
   return missing.length && count < MAX_FOLLOW_UPS && (now || firstAsk(request.details) || -daysUntil(last, today) >= FOLLOW_UP_DAYS) ? missing : null;
 }
 
-// The day the next follow up for a request may go, for the client's upload page: today when the
+// The day the next follow up for a request may go: today when the
 // first email is still to go or the wait is over, else FOLLOW_UP_DAYS after the latest ask;
 // null once every paper is in or the follow ups are used up.
 export function nextFollowUp(request: { expires_at: string; details: Asking }, today: string) {
@@ -166,7 +167,7 @@ export function reminderEmail(client: string, firm: string, tasks: ReminderTask[
     followUp.first
       ? `${followUp.returns?.length ? `To prepare your ${followUp.returns.join(" and ")}${followUp.period ? ` for ${periodName(followUp.period)}` : ""}, please` : "Please"} send these documents: ${followUp.missing.map(askName).join(", ")}.`
       : `We are still waiting for these documents${followUp.period ? ` for ${periodName(followUp.period)}` : ""}: ${followUp.missing.map(askName).join(", ")}.`,
-    `Upload them here, no sign in needed: ${followUp.link}`,
+    REPLY_ATTACHED,
     "",
   ]);
   return {

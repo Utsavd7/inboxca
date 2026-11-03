@@ -52,7 +52,7 @@ describe("smart reminders", () => {
   });
 
   it("follows up a request every 3 days, up to 4 times, asking only for what is missing", () => {
-    // Asked on 10 Oct (the link runs 30 days, to 9 Nov).
+    // Asked on 10 Oct (the asking runs 30 days, to 9 Nov).
     const request = (followups: string[]) => ({ expires_at: "2026-11-09T00:00:00Z", details: { items: [{ type: "Sales bills", received: ["x"] }, { type: "Purchase bills", received: ["y"] }, { type: "Bank statement", received: [] }], followups } });
     expect(followUpDue(request([]), "2026-10-12")).toBeNull();
     expect(followUpDue(request([]), "2026-10-13")).toEqual(["Bank statement"]);
@@ -62,11 +62,11 @@ describe("smart reminders", () => {
     expect(followUpDue(request(["2026-10-13", "2026-10-16", "2026-10-19", "2026-10-22"]), "2026-10-23", true)).toBeNull();
     expect(followUpDue(request(["2026-10-13", "2026-10-16", "2026-10-19", "2026-10-22"]), "2026-10-30")).toBeNull();
     const { subject, text } = reminderEmail("Patel Textiles", "Demo CA Firm", [], today, [
-      { requestId: "r", client_id: "patel", period: "2026-09", missing: ["Bank statement"], link: "https://inboxca.test/u/abc", count: 1 },
+      { requestId: "r", client_id: "patel", period: "2026-09", missing: ["Bank statement"], count: 1 },
     ]);
     expect(subject).toBe("Documents still needed");
-    expect(text).toContain("We are still waiting for these documents for Sep 2026: Bank statement.");
-    expect(text).toContain("https://inboxca.test/u/abc");
+    expect(text).toContain("We are still waiting for these documents for Sep 2026: Bank statement.\nPlease reply to this email with the files attached, or email them to us.");
+    expect(text).not.toMatch(/https?:\/\//);
   });
 });
 
@@ -153,10 +153,10 @@ describe("asking for papers early", () => {
     expect(followUpDue(request({ since: "2026-11-02", followups: ["2026-11-05", "2026-11-08"], chased: "2026-11-09" }), "2026-11-11")).toBeNull();
     expect(followUpDue(request({ since: "2026-11-02", followups: ["2026-11-05", "2026-11-08"], chased: "2026-11-09" }), "2026-11-12")).toEqual(["Sales bills"]);
     const { subject, text } = reminderEmail("Patel Textiles", "Demo CA Firm", [], "2026-11-02", [
-      { requestId: "r", client_id: "patel", period: "2026-10", missing: ["Sales bills", "Bank statement"], link: "https://inboxca.test/u/abc", count: 0, first: true, returns: ["GSTR-1 (monthly)", "GSTR-3B (monthly)"] },
+      { requestId: "r", client_id: "patel", period: "2026-10", missing: ["Sales bills", "Bank statement"], count: 0, first: true, returns: ["GSTR-1 (monthly)", "GSTR-3B (monthly)"] },
     ]);
     expect(subject).toBe("Documents needed");
     expect(text).toContain("To prepare your GSTR-1 (monthly) and GSTR-3B (monthly) for Oct 2026, please send these documents: Sales bills, Bank statement.");
-    expect(text).toContain("https://inboxca.test/u/abc");
+    expect(text).not.toMatch(/https?:\/\//);
   });
 });

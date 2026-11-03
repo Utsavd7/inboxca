@@ -1,26 +1,21 @@
 import { createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pdf } from "../tests/fixtures/pdf.ts";
-import { fakeClamd } from "../tests/fixtures/fake-clamd.ts";
 import { craft } from "../tests/fixtures/zip.ts";
 import { intakeLimits, readFrames, signView } from "../src/lib/file-worker.ts";
 
 // A fresh worker process, one invented 30 page PDF, and a consumer that discards each image.
 // --large pads the PDF to the 50 MB file limit. --zip instead sends the worker a ZIP of 1,000
-// invented files, about 500 MB unpacked, to check through the test scanner and give back.
+// invented files, about 500 MB unpacked, to check and give back.
 const root = await mkdtemp(join(tmpdir(), "viewer-memory-"));
 const secret = randomBytes(32).toString("hex");
 const port = process.env.FILE_WORKER_PORT || "3191";
 const origin = `http://127.0.0.1:${port}`;
-const clamd = fakeClamd().listen(0, "127.0.0.1");
-await once(clamd, "listening");
 const worker = spawn(process.execPath, ["--experimental-strip-types", "worker/server.ts"], {
-  env: { NODE_ENV: "test", PATH: process.env.PATH, FILE_WORKER_SECRET: secret, FILE_WORKER_PORT: port, FILE_WORKER_TEST: "1", DRIVE_LOCAL_DIR: root, CLAMD_HOST: "127.0.0.1", CLAMD_PORT: String((clamd.address() as AddressInfo).port) }, stdio: ["ignore", "pipe", "inherit"],
+  env: { NODE_ENV: "test", PATH: process.env.PATH, FILE_WORKER_SECRET: secret, FILE_WORKER_PORT: port, FILE_WORKER_TEST: "1", DRIVE_LOCAL_DIR: root }, stdio: ["ignore", "pipe", "inherit"],
 });
 try {
   await new Promise<void>((resolve, reject) => { worker.stdout!.once("data", () => resolve()); worker.once("error", reject); worker.once("exit", (code) => reject(new Error(`Worker stopped: ${code}`))); });
@@ -68,7 +63,6 @@ try {
     console.log(JSON.stringify({ kind: process.argv.includes("--scans") ? "scans" : process.argv.includes("--large") ? "large" : "text", pages: frames - 1, originalBytes: bytes.length, imageBytes, driveReads: counts.reads, elapsedMs: Math.round(performance.now() - start), peakRssMiB: Math.round(counts.peakRssKiB / 1024 * 10) / 10 }));
   }
 } finally {
-  clamd.close();
   worker.kill();
   await new Promise<void>((resolve) => { if (worker.exitCode !== null) resolve(); else worker.once("exit", () => resolve()); });
   await rm(root, { recursive: true, force: true });

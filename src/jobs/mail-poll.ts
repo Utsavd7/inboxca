@@ -6,6 +6,7 @@ import { askedAbout } from "@/src/lib/answers";
 import { classify, statusLabels, type Label } from "@/src/lib/triage";
 import { officialKind, officialSender, taxNumbersIn, type OfficialWork } from "@/src/lib/gov-mail";
 import { todayInIndia } from "@/src/lib/calendar";
+import { sharedLinks } from "@/src/lib/share-link";
 import type { Handler } from "./runner";
 
 // Reads a connected mailbox's new mail (PLAN.md 4.5, 5.5). Mail from an official tax portal
@@ -103,9 +104,9 @@ export const mailPoll: Handler = async (job) => {
       .upsert(events, { onConflict: "account_id,provider_message_id", ignoreDuplicates: true })
       .select("id, client_id, provider_message_id, label, reason_code");
     if (error) return { retry: "events_not_saved" };
-    // A known client's attachments are filed into the firm's drive by a job of their own,
-    // so a drive that is slow or away never holds up reading mail.
-    const withFiles = new Set(read.mail.filter((mail) => mail.content.attachments.length).map((mail) => mail.messageId));
+    // A known client's attachments, or the sharing links in its words, are filed into the firm's
+    // drive by a job of their own, so a drive that is slow or away never holds up reading mail.
+    const withFiles = new Set(read.mail.filter((mail) => mail.content.attachments.length || sharedLinks(mail.content.text).length).map((mail) => mail.messageId));
     const filing = (saved ?? [])
       .filter((event) => event.client_id && event.label !== "notice_received" && withFiles.has(event.provider_message_id))
       .map((event) => ({ firm_id: firm, kind: "file_mail", entity_type: "email", entity_id: event.id, idempotency_key: `file_mail:${event.id}` }));

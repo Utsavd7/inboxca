@@ -581,7 +581,7 @@ function Sheet({ open, close, title, children }: { open: boolean; close: () => v
 }
 
 const answers: [string, string][] = [
-  ["How do clients send us papers?", "Clients email papers to your firm email as they do today. InboxCA saves each paper in your drive, in a folder for the client, the year and the type of work. To ask for papers you still need, use Ask for papers: the client gets an upload link with a list of what is still missing."],
+  ["How do clients send us papers?", "Clients email papers to your firm email as they do today. InboxCA saves each paper in your drive, in a folder for the client, the year and the type of work. To ask for papers you still need, use Ask for papers: the client gets an email listing what is still missing, to reply to with the papers attached."],
   ["How do reminders work?", "At 10:00 each day, InboxCA emails clients about returns that are due soon or late, at most once a day each, from your firm email. The owner picks when in Settings. InboxCA reminds only for due dates it has checked against the government notification. You can pause reminders for any client."],
   ["How do I connect our email and drive?", "The owner does it once in Settings: Firm email for the address your clients write to, and Firm drive for where papers are saved. InboxCA keeps no copy of your emails and no client papers."],
   ["What does Office only do?", "Staff can use InboxCA only in the office, on the office internet connection, and only on PCs the owner approves. The owner can sign in from anywhere."],

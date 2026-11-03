@@ -13,7 +13,7 @@ import {confirmedFigures,createDraft} from "./datasets";
 import {workerRead} from "./worker-read";
 import {grantFor} from "./permission-grants";
 import {chooseTemplate,templateSchema} from "./templates";
-import {HELD_TEXT,receive,unsafeText} from "./intake";
+import {receive,unsafeText} from "./intake";
 import {itrChecks,type ItrWork} from "./itr-check";
 
 export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
@@ -142,8 +142,6 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
     // A file the team adds is checked like any other (src/lib/intake.ts).
     const sent=uploaded ? await receive(membership.firmId,userId,{id:document.client_id,name:client.name},{name:file!.name,bytes},drive,false) : null;
     if(sent && "unsafe" in sent) throw new Error(unsafeText[sent.unsafe]);
-    // A form's paper is read at once, so it cannot wait for the scanner.
-    if(sent?.held) throw new Error(HELD_TEXT);
     const checksum=createHash("sha256").update(bytes).digest("hex");
     const {data:prior}=await admin.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",document.client_id).eq("sha256",checksum).eq("document_type",type).eq("period_key",document.period_key).eq("status","filed").maybeSingle();
     paper=prior?.id;
@@ -152,7 +150,7 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
       const name=`${safeName(client.name,100)} - ${formName(document.prepared.form)} - ${formPeriod(document.period_key)} - ${type} - v${document.prepared.version}.${extension}`;
       const saved=await drive.save(folder,name,bytes);
       if(saved==="taken") throw new Error("An acknowledgement with this name is already in the drive. Choose it from Documents.");
-      const {data:row,error}=await admin.from("documents").insert({firm_id:membership.firmId,client_id:document.client_id,name,document_type:type,work_type:document.period_key.length===4 ? "income_tax" : "gst",period_key:document.period_key,size:bytes.length,sha256:checksum,drive_file_id:saved.id,share_policy:null,scanned_at:sent && sent.scanned ? new Date().toISOString() : null}).select("id").single();
+      const {data:row,error}=await admin.from("documents").insert({firm_id:membership.firmId,client_id:document.client_id,name,document_type:type,work_type:document.period_key.length===4 ? "income_tax" : "gst",period_key:document.period_key,size:bytes.length,sha256:checksum,drive_file_id:saved.id,share_policy:null}).select("id").single();
       if(error || !row) {await drive.trash(saved.id);throw new Error("The acknowledgement could not be saved.");}
       paper=row.id;
       const {error:logError}=await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"document.added",entity_type:"document",entity_id:paper,details:{form:id,kind:uploaded ? "acknowledgement" : "filing_record"}});
@@ -182,13 +180,12 @@ export async function uploadEditedForm(id:string,file:File) {
   const drive=await openDrive(membership.firmId,account);
   const sent=await receive(membership.firmId,userId,{id:document.client_id,name:client.name},{name:file.name,bytes},drive,false);
   if("unsafe" in sent) throw new Error(unsafeText[sent.unsafe]);
-  if(sent.held) throw new Error(HELD_TEXT);
   const folder=await drive.ensureFolder([workFolder(document.period_key),workYear(document.period_key),safeName(client.name),"Prepared"]);
   const name=`Edited form ${target}.${extension}`,saved=await drive.save(folder,name,bytes);
   if(saved==="taken") throw new Error("Try adding the file again.");
   let attached=false;
   try {
-    const {error}=await admin.from("documents").insert({id:target,firm_id:membership.firmId,client_id:document.client_id,name,document_type:formName(meta.form),work_type:document.period_key.length===4 ? "income_tax" : "gst",period_key:document.period_key,size:bytes.length,sha256,drive_file_id:saved.id,share_policy:"internal",scanned_at:sent.scanned ? new Date().toISOString() : null});
+    const {error}=await admin.from("documents").insert({id:target,firm_id:membership.firmId,client_id:document.client_id,name,document_type:formName(meta.form),work_type:document.period_key.length===4 ? "income_tax" : "gst",period_key:document.period_key,size:bytes.length,sha256,drive_file_id:saved.id,share_policy:"internal"});
     if(error) throw error;
     const result=z.object({lines:z.array(z.object({field:z.string(),label:z.string(),value:z.string(),kind:z.enum(["number","text","date"]),page:z.number(),sheet:z.number().optional(),cell:z.string().optional(),path:z.string().optional()})).min(1).max(10000)}).parse(await workerRead(membership.firmId,{id:target,name,sha256},"edited",{template:itr ? {...template,mappings:{format:"json"}} : template,period:document.period_key,...(itr ? {pan:number} : {gstin:number})}));
     const lines=result.lines.map(line=>({...line,id:randomUUID(),source:{document:target,sha256,page:line.page,...(itr ? {path:line.path} : {sheet:line.sheet,cell:line.cell})}}));

@@ -1,5 +1,5 @@
 import { Bell, FileCheck2, FileText, Inbox, Landmark, Phone, ShieldCheck, TriangleAlert } from "lucide-react";
-import { reviewOwnerDevice, seenAlert, setOfficeOnly } from "@/app/(app)/actions";
+import { reviewOwnerDevice, saveLink, seenAlert, setOfficeOnly } from "@/app/(app)/actions";
 import type { currentMember } from "@/src/lib/member";
 import type { Listed } from "@/src/lib/work/today";
 import { Fill } from "./fill";
@@ -46,7 +46,8 @@ export function WorkRows({ items, today, membership, name, more }: { items: List
   );
 }
 
-// The row's one button: Fill for a return not filled yet, Got it for a file with a virus, the
+// The row's one button: Fill for a return not filled yet, Got it for a file kept out, Save for
+// a file from a sharing link, the
 // yes to a new computer or office connection, the official page in a new tab, or the page
 // where it is done.
 function Action({ item, membership }: { item: Listed; membership: Member }) {
@@ -58,6 +59,13 @@ function Action({ item, membership }: { item: Listed; membership: Member }) {
       <form action={seenAlert}>
         <input type="hidden" name="alert" value={item.key.slice(6)} />
         <Pending className="b b-secondary">{label}</Pending>
+      </form>
+    );
+  if (item.key.startsWith("link:"))
+    return (
+      <form action={saveLink}>
+        <input type="hidden" name="alert" value={item.key.slice(5)} />
+        <Pending className="b b-primary" busy="Saving">{label}</Pending>
       </form>
     );
   if (item.key.startsWith("computer:"))

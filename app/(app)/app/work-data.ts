@@ -76,7 +76,7 @@ export const attention = cache(async ({ supabase, membership }: Context) => {
 
 // What the daily drive and sign in checks found, for the owner and partners: what to do and
 // why. The drive being out of reach is a line above the list instead.
-type AlertDetails = { free_bytes?: number; files?: number; client?: string; email?: string; count?: number; name?: string; day?: string };
+type AlertDetails = { free_bytes?: number; files?: number; client?: string; email?: string; count?: number; name?: string; day?: string; folder?: string };
 const driveSettings = { label: "Open drive settings", href: "/app/settings?group=email#drive" };
 function alertItem(alert: { id: string; entity_id: string; client_id: string | null; reason_code: string | null; details: unknown }): Omit<Listed, "key" | "audience" | "area"> {
   const details = alert.details as AlertDetails;
@@ -90,8 +90,10 @@ function alertItem(alert: { id: string; entity_id: string; client_id: string | n
     case "owner_pcs": return { title: `Your login was used on ${details.count} computers at once`, why: "Within one hour today. Each person in your firm needs their own login", action: { label: "Invite people", href: "/app/people" } };
     case "request_stalled": return { ...client, title: `Call ${details.client}`, why: "Three reminders went, and the papers asked for are still missing", action: { label: "See papers", href: `/app/papers/${alert.entity_id}` } };
     case "drive_missing": return { title: "Find the papers missing from your drive", why: `${details.files} ${details.files === 1 ? "paper is" : "papers are"} missing from your drive`, action: { label: "See missing papers", href: "/app/documents?year=all&show=missing" } };
-    case "virus": return { title: `${details.name} had a virus`, why: "Nobody can open it in InboxCA. It is in the Files with a virus folder of your drive", urgent: true, action: { label: "Got it", href: "" } };
-    case "scan_down": return { title: "The virus check is not running", why: "Files that came in meanwhile wait under To check, unopened, until it is back. Orelu is told by the status page", urgent: true, action: { label: "See papers", href: "/app/documents?show=check" } };
+    // A file read from a client's sharing link (src/lib/share-link.ts): named and placed, it waits
+    // for a person's Save, as the firm's email provider did not check it.
+    case "link": return { ...client, title: `Save ${details.name}?`, why: `${details.client} sent a sharing link, not an attachment, so your email provider did not check this file. It goes to ${details.folder}`, action: { label: "Save", href: "" } };
+    case "virus": return { title: `${details.name} was kept out`, why: "A program, script or macro file, so InboxCA did not save it. It is in the Files kept out folder of your drive", urgent: true, action: { label: "Got it", href: "" } };
     default: return { title: "Look at your drive", why: "Something in your drive needs a look", action: driveSettings };
   }
 }
@@ -196,11 +198,13 @@ export async function workFor(ctx: Context, late: number) {
     myQuestions(),
     approver ? Promise.resolve(supabase.from("devices").select("id").eq("firm_id", firm).eq("status", "waiting").throwOnError()) : null,
     Promise.resolve(supabase.rpc("notice_alerts", { target_firm: firm }).limit(10).throwOnError()),
-    lead ? Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, details").eq("kind", "alert").neq("entity_type", "papers_in").neq("entity_type", "owner_device").neq("reason_code", "drive_away").eq("status", "pending").limit(20).throwOnError()) : null,
+    lead ? Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, details").eq("kind", "alert").neq("entity_type", "papers_in").neq("entity_type", "owner_device").neq("entity_type", "link").neq("reason_code", "drive_away").eq("status", "pending").limit(20).throwOnError()) : null,
+    // Files from sharing links wait for whoever sees the client.
+    Promise.resolve(supabase.from("requests").select("id, entity_id, client_id, reason_code, details").eq("kind", "alert").eq("entity_type", "link").eq("status", "pending").gt("expires_at", new Date().toISOString()).limit(20).throwOnError()),
     papers,
     owner ? downloadUse(firm).catch(() => null) : null,
     owner ? aiCredits(firm).catch(() => null) : null,
-  ]).then(async ([asks, devices, notices, alerts, calls, use, ai]): Promise<Listed[]> => {
+  ]).then(async ([asks, devices, notices, alerts, links, calls, use, ai]): Promise<Listed[]> => {
     const waitingIds = devices?.data?.map((device) => device.id) ?? [];
     const { count: seenToday } = waitingIds.length
       ? await supabase.from("activity_log").select("entity_id", { count: "exact", head: true }).eq("firm_id", firm).eq("action", "device.first_seen").in("entity_id", waitingIds).gte("at", dayStart)
@@ -230,11 +234,12 @@ export async function workFor(ctx: Context, late: number) {
         audience: "assigned" as const,
       })),
       ...(alerts?.data ?? [])
-        // Missing papers, files with a virus and the owner's own login on several computers are the
+        // Missing papers, files kept out and the owner's own login on several computers are the
         // owner's to sort out; a person's day of renames, captures or second sign ins only that day.
-        .filter((alert) => (owner || !["drive_missing", "virus", "scan_down", "owner_pcs"].includes(alert.reason_code ?? "")) && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames", "owner_pcs"].includes(alert.reason_code ?? "") || (alert.details as AlertDetails).day === today))
+        .filter((alert) => (owner || !["drive_missing", "virus", "owner_pcs"].includes(alert.reason_code ?? "")) && !alert.reason_code?.startsWith("office_") && (!["captures", "parallel", "renames", "owner_pcs"].includes(alert.reason_code ?? "") || (alert.details as AlertDetails).day === today))
         .filter((alert) => alert.reason_code !== "request_stalled" || !calls.some((item) => item.key === `call:${alert.entity_id}`))
         .map((alert) => ({ ...alertItem(alert), key: `${alert.reason_code === "virus" ? "virus" : "alert"}:${alert.id}`, audience: "firm" as const })),
+      ...(links.data ?? []).map((alert) => ({ ...alertItem(alert), key: `link:${alert.id}`, audience: "firm" as const })),
     ]);
   }).catch(failing("firm"));
 

@@ -18,8 +18,6 @@ import {editedItr} from "./itr.ts";
 import {intake} from "./intake.ts";
 import {ocr} from "./ocr.ts";
 import {fetchOfficial} from "./official.ts";
-import {scannerReady} from "./scan.ts";
-import {scanRequired} from "../src/lib/file-worker.ts";
 
 // Only test runs keep read counts, never file contents or credentials.
 const reads = new Map<string, number>();
@@ -54,8 +52,7 @@ async function original(view: ViewRequest, signal: AbortSignal) {
 // The same Request/Response handler can be wrapped by Lambda's response streaming adapter.
 export async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  // Not ready without its virus scanner where one is required, so the status page says so.
-  if (request.method === "GET" && url.pathname === "/health") return scanRequired() && !(await scannerReady()) ? new Response("No virus scanner", { status: 503 }) : new Response("Ready");
+  if (request.method === "GET" && url.pathname === "/health") return new Response("Ready");
   const secret = process.env.FILE_WORKER_SECRET ?? "";
   if (request.method === "POST" && url.pathname === "/intake") return intake(request, secret);
   if (request.method === "POST" && url.pathname === "/ocr") return ocr(request, secret);

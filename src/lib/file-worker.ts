@@ -7,10 +7,6 @@ export const viewLimits = { bytes: intakeLimits.bytes, pages: 30, rows: 1000, co
 // text a file, a picture up to 25 megapixels by its header, a page drawn at 300 dots an
 // inch within that, a minute a file, one file at a time.
 export const ocrLimits = { pages: 20, pixels: 25_000_000, seconds: 60 };
-// The virus check is required unless SCAN_OPTIONAL=1 says this computer may do without it (a
-// laptop, the unit tests); production never may, so a scanner forgotten there lets nothing
-// through: without one a file waits (src/lib/intake.ts), and the worker does not start.
-export const scanRequired = (env: Record<string, string | undefined> = process.env) => env.NODE_ENV === "production" || env.SCAN_OPTIONAL !== "1";
 // A figure's spot on a page, as parts of the page's width and height, so the viewer can mark it.
 export type ViewMark = { id: string; page: number; x: number; y: number; width: number; height: number };
 export type ViewHeader = { pages: { width: number; height: number }[]; limited: boolean; marks?: ViewMark[] };
@@ -68,12 +64,16 @@ function holds(bytes: Uint8Array, text: string) {
   for (let at = bytes.indexOf(first); at >= 0; at = bytes.indexOf(first, at + 1)) if (starts(bytes, text, at)) return true;
   return false;
 }
-// Programs, scripts and Office files with macros are never taken (PLAN.md 5.15, 8.6), known
-// by their name or their first bytes: a Windows, Linux or Mac program, a script, or an Office
-// file that holds a macro project whatever it is called.
-const programs = /\.(exe|dll|com|scr|pif|cpl|msi|msp|msc|bat|cmd|ps1|psm1|vbs|vbe|js|jse|mjs|wsf|wsh|hta|jar|sh|bash|zsh|command|app|dmg|pkg|deb|rpm|apk|lnk|url|reg|inf|html?|xhtml|svg|xlsm|xltm|xlam|docm|dotm|pptm|potm|ppam|ppsm|sldm)$/i;
+// Only papers are taken (PLAN.md 5.15, 8.6): PDFs, pictures, spreadsheets, CSV, XML, JSON,
+// Word and OpenDocument files, plain text and ZIPs. Everything else is refused by its name,
+// so a program, a script, a shortcut or a web page never gets in; and a file is refused by
+// its first bytes whatever it is called: a Windows, Linux or Mac program, a script, or an
+// Office file that holds a macro project.
+// Old Word (.doc) and OpenDocument files are left out: they can carry macros a first-bytes
+// check cannot see, and a CA firm's papers do not need them. .xls stays for Tally exports.
+export const accepted = /\.(pdf|png|jpe?g|gif|bmp|tiff?|webp|heic|heif|xlsx|xls|csv|xml|json|zip|docx|txt)$/i;
 export function unsafeFile(name: string, bytes: Uint8Array) {
-  if (programs.test(name.replace(/[\s.]+$/, ""))) return true;
+  if (!accepted.test(name.replace(/[\s.]+$/, ""))) return true;
   const word = (at: number) => bytes.length >= at + 4 ? ((bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3]) >>> 0 : 0;
   const pe = bytes.length >= 64 ? bytes[60] | (bytes[61] << 8) | (bytes[62] << 16) | (bytes[63] << 24) : -1;
   if (starts(bytes, "MZ") && pe > 0 && starts(bytes, "PE\0\0", pe) || starts(bytes, "\x7fELF") || starts(bytes, "#!") || [0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe].includes(word(0))) return true;

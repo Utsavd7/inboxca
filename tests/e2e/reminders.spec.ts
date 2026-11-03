@@ -75,14 +75,14 @@ test("Remind all late clients: a preview, Undo before it goes, then one email li
   expect(await mailTexts(papers.email)).toEqual([]);
 });
 
-test("Remind about missing papers emails the client's upload link again, naming what is still missing", async () => {
+test("Remind about missing papers emails the client again, naming what is still missing", async () => {
   await owner.goto(`/app/clients/${papers.id}?tab=files&ask=1`);
   await owner.getByRole("group", { name: "Papers" }).getByRole("checkbox", { name: "Bank statement" }).check();
   await owner.getByLabel("Anything else, by name").fill("Rent receipts");
   await owner.getByRole("button", { name: "Ask for papers" }).click();
-  await expect(owner.getByRole("status")).toContainText("emailed a private upload link");
+  await expect(owner.getByRole("status")).toContainText("emailed the list of papers");
   await expect.poll(async () => (await mailTexts(papers.email)).length).toBe(1);
-  const link = (await mailTexts(papers.email))[0].match(/http\S+\/u\/[\w-]+/)![0];
+  expect((await mailTexts(papers.email))[0]).toMatch(/Please reply to this email with these documents attached( for \w+ \d{4})?:\n- Bank statement\n- Rent receipts/);
 
   await owner.goto("/app/work?show=papers");
   await owner.getByRole("link", { name: "Remind about missing papers" }).click();
@@ -94,7 +94,8 @@ test("Remind about missing papers emails the client's upload link again, naming 
   const [, followUp] = await mailTexts(papers.email);
   expect(followUp).toContain("Bank statement");
   expect(followUp).toContain("Rent receipts");
-  expect(followUp).toContain(link);
+  expect(followUp).toContain("Please reply to this email with the files attached, or email them to us.");
+  expect(followUp).not.toMatch(/https?:\/\//);
   const [{ details }] = await query(local.dbUrl, "select details from public.requests where firm_id = $1 and kind = 'documents'", [firm.firmId]);
   expect(details.followups).toHaveLength(1);
 });

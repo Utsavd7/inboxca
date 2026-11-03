@@ -17,12 +17,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!(await mayDownload(membership.firmId))) return plainPage(429, PAUSED.owner, "/app/settings?group=data#caps", "Go to Settings");
   const admin = supabaseAdmin();
   const [{ data: document }, { data: account }] = await Promise.all([
-    admin.from("documents").select("drive_file_id, name, held:details->>held").eq("id", id).single(),
+    admin.from("documents").select("drive_file_id, name").eq("id", id).single(),
     admin.from("connected_accounts").select("id, provider, credentials_enc").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
   ]);
   if (!document || !account) return plainPage(409, "Your firm's drive is not connected. Connect it in Settings, then try again.", "/app/settings?group=email#drive", "Go to Settings");
-  // A file held for the virus check is not given out until it passes (src/lib/intake.ts receive).
-  if (document.held) return plainPage(409, "This paper is waiting for the virus check and cannot be downloaded yet.", `/app/files/${id}/view`, "Go back to the paper");
   const bytes = await openDrive(membership.firmId, account).then((drive) => drive.read(document.drive_file_id)).catch(() => null);
   if (!bytes) return plainPage(503, "InboxCA could not read this paper from your firm's drive just now. Try again in a minute.", `/app/files/${id}/view`, "Go back to the paper");
   if (!(await logDownloads(membership.firmId, [{ actor_id: userId, action: "document.downloaded", entity_id: id }]))) return plainPage(429, PAUSED.owner, "/app/settings?group=data#caps", "Go to Settings");

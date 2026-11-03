@@ -41,12 +41,12 @@ export type AiOutcome = { outcome: "draft"; text: string; papers: string[] } | {
 // the person may not see, is forbidden.
 export type ToolResult = { outcome: "found"; lines: string[] } | { outcome: "not_found" | "ambiguous" | "stale" | "forbidden" | "unavailable" };
 const outcomeOf: Record<string, "ambiguous" | "stale"> = { status_unclear: "ambiguous", due_late: "ambiguous", due_unchecked: "stale" };
-export async function clientTools(db: Db, firm: string, client: string, asked: Asked = {}, link = true): Promise<Record<string, ToolResult>> {
+export async function clientTools(db: Db, firm: string, client: string, asked: Asked = {}): Promise<Record<string, ToolResult>> {
   const { data: own, error } = await db.from("clients").select("name, kind").eq("firm_id", firm).eq("id", client).maybeSingle();
   const closed: ToolResult = { outcome: error ? "unavailable" : "forbidden" };
   const read = async (kind: "filed" | "due" | "papers"): Promise<ToolResult> => {
     if (!own) return closed;
-    const answer = await recordLines(db, firm, client, kind, asked, link).catch(() => null);
+    const answer = await recordLines(db, firm, client, kind, asked).catch(() => null);
     return !answer ? { outcome: "unavailable" } : "lines" in answer ? { outcome: "found", lines: answer.lines } : { outcome: outcomeOf[answer.team] ?? "not_found" };
   };
   const [get_task_status, list_upcoming_deadlines, list_pending_documents] = await Promise.all([read("filed"), read("due"), read("papers")]);
@@ -90,11 +90,11 @@ export async function draftFrom(ask: (instructions: string, input: string) => Pr
 // client, then one turn, inside the firm's AI limit. With a person's client (Write a reply with
 // AI) all of it is read under their row level security; the job reads as the server, for this
 // firm only. Null when the email cannot be read just now.
-export async function writeReply(db: Db, firm: string, firmName: string, mail: string, reason: AiReason, link = true): Promise<AiOutcome | null> {
+export async function writeReply(db: Db, firm: string, firmName: string, mail: string, reason: AiReason): Promise<AiOutcome | null> {
   const open = await conversation(db, firm, { mail });
   if (!open?.event?.client_id || !open.opened) return null;
   const [records, { data: papers }, name] = await Promise.all([
-    clientTools(db, firm, open.event.client_id, askedAbout(open.opened.subject, open.opened.text), link),
+    clientTools(db, firm, open.event.client_id, askedAbout(open.opened.subject, open.opened.text)),
     db.from("documents").select("id, name").eq("firm_id", firm).eq("client_id", open.event.client_id).eq("status", "filed").order("received_at", { ascending: false }).limit(100),
     open.event.contact_id ? contactName(firm, open.event) : "",
   ]);

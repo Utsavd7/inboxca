@@ -1,7 +1,7 @@
 "use server";
 import { stopAutoPay, teamSize } from "@/src/lib/billing/billing";
 import { grantFor } from "@/src/lib/permission-grants";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
@@ -33,8 +33,7 @@ import { CHALLENGE_COOKIE, PC_LATER_COOKIE, checkAdminKey, checkKeyUse, checkNew
 import { PASSKEY_FACTOR, sealFactor } from "@/src/lib/sign-in";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { recognisePortalPdf } from "@/src/lib/tax-papers";
-import { asReceived, receive, type Received } from "@/src/lib/intake";
-import { queueRescan } from "@/src/jobs/rescan";
+import { receive } from "@/src/lib/intake";
 import { may, mayDecide, rightWords, routeOf, switchable, type Permissions, type Right, type Scope as PermissionScope, type Standing } from "@/src/lib/rights";
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
@@ -52,7 +51,6 @@ import { currentMember, currentWriter, FIRM_COOKIE, myQuestions } from "@/src/li
 import { activityNames } from "@/src/lib/activity";
 import { invitableRoles, personName } from "@/src/lib/roles";
 import { EXCEPTION_RULES, IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
-import { withinLimit } from "@/src/lib/rate-limit";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 import { sendSystemMail, systemMailReady, systemMailUse } from "@/src/lib/system-mail";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
@@ -1412,7 +1410,7 @@ export async function manageDocument(form: FormData) {
 // Saves a file a person brought into the client's folder in the drive and records it,
 // logged with who did it, and whether it was a portal file. Refuses a file the client already
 // has. A GST paper gets the client's GSTIN, or the one chosen; a filed one may become the
-// current version. Scanned says the file worker's virus check passed it (src/lib/intake.ts).
+// current version.
 async function saveForClient(
   membership: { firmId: string },
   userId: string | null,
@@ -1420,7 +1418,6 @@ async function saveForClient(
   values: { work_type: WorkType; document_type: string; period_key: string; status: "filed" | "to_check"; registration_id?: string | null },
   file: { name: string; bytes: Uint8Array },
   opened: NonNullable<Awaited<ReturnType<typeof firmDrive>>>,
-  sent: Received,
   portal = false,
 ) {
   const admin = supabaseAdmin();
@@ -1428,8 +1425,7 @@ async function saveForClient(
   const { data: twin } = await admin.from("documents").select("id").eq("client_id", client.id).eq("sha256", sha256).neq("status", "deleted").limit(1);
   if (twin?.length) return "twin" as const;
   const now = new Date().toISOString();
-  const recorded = asReceived(sent, values.status, now);
-  const folder = await opened.drive.ensureFolder(folderFor(opened.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: recorded.status === "to_check" }));
+  const folder = await opened.drive.ensureFolder(folderFor(opened.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: values.status === "to_check" }));
   const placed = await placeUnderFreeName(
     { client: client.name, type: values.document_type, period: filePeriod(values.period_key), extension: path.extname(file.name) },
     receivedLabel(now),
@@ -1445,7 +1441,6 @@ async function saveForClient(
     firm_id: membership.firmId,
     client_id: client.id,
     ...values,
-    ...recorded,
     registration_id,
     drive_file_id: placed.id,
     name: placed.name,
@@ -1455,8 +1450,8 @@ async function saveForClient(
     received_at: now,
   });
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.uploaded", entity_type: "document", entity_id: id, ...(portal && { details: { from: "portal" } }) });
-  if (recorded.status === "filed") await settleVersions(admin, { client_id: client.id, ...values, registration_id });
-  await (sent.held ? queueRescan : queueRead)(membership.firmId, id);
+  if (values.status === "filed") await settleVersions(admin, { client_id: client.id, ...values, registration_id });
+  await queueRead(membership.firmId, id);
   return { id };
 }
 
@@ -1493,12 +1488,12 @@ export async function uploadDocument(form: FormData) {
   for (const [at, file] of files.entries()) {
     const sent = await receive(membership.firmId, userId, client, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, opened.drive).catch(() => null);
     if (!sent || "unsafe" in sent) {
-      if (files.length === 1) redirect(`${back}&upload=1&error=${sent ? sent.unsafe : "scan"}`);
+      if (files.length === 1) redirect(`${back}&upload=1&error=${sent ? sent.unsafe : "check"}`);
       count[sent ? "unsafe" : "unchecked"]++;
       continue;
     }
     for await (const paper of sent.papers) {
-      const result = await saveForClient(membership, userId, client, { ...values[at], status: "filed", registration_id: registration }, paper, opened, sent);
+      const result = await saveForClient(membership, userId, client, { ...values[at], status: "filed", registration_id: registration }, paper, opened);
       if (result === "drive") redirect(`${back}&error=drive`);
       if (result === "twin") count.twin++;
       else saved.push(result.id);
@@ -1562,11 +1557,11 @@ export async function dropPortalFiles(form: FormData) {
         : { data: null };
       let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
       if (portal && registration?.clients && membership.may("portal_files",registration.client_id)) {
-        saved = await saveForClient(membership, userId, registration.clients, { work_type: kind === "gstin" ? "gst" : "income_tax", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: kind === "gstin" ? registration.id : null }, file, opened, sent, true);
+        saved = await saveForClient(membership, userId, registration.clients, { work_type: kind === "gstin" ? "gst" : "income_tax", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: kind === "gstin" ? registration.id : null }, file, opened, true);
         // The "still missing" item asked for by this file's name closes; a request with every item in closes, and its reminders stop.
         if (typeof saved === "object") await receiveAsked(supabaseAdmin(), registration.client_id, portal.type, portal.period, saved.id);
       } else if (!portal && client && membership.may("upload", client.id)) {
-        saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, file, opened, sent);
+        saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, file, opened);
       }
       if (saved === "twin") count.again++;
       else if (saved && saved !== "drive") count.filed++;
@@ -1613,7 +1608,7 @@ async function fileUnlocked(membership: NonNullable<Awaited<ReturnType<typeof cu
   await receiveAsked(admin, paper.client_id, portal.type, portal.period, id);
 }
 
-// The owner has seen that the virus check stopped a file (src/lib/intake.ts); it leaves Today.
+// The owner has seen that the checks kept a file out (src/lib/intake.ts); it leaves Today.
 // People change only team replies through their own access, so the server closes the alert
 // after checking that this is the firm's owner, and logs who did.
 export async function seenAlert(form: FormData) {
@@ -1676,9 +1671,8 @@ export async function removeDocument(form: FormData) {
 }
 
 // Asks a client for files for one period (PLAN.md 5.3.1, 8.6). Every member may. The client
-// gets a private upload link, sent from the firm's own mailbox to the client's registered
-// email when both exist; the link works for 30 days and only its hash is kept, so the
-// person sees it once to send it themselves otherwise.
+// gets an email from the firm's own mailbox listing each paper, to reply to with them attached
+// (owner, 3 Nov 2026); the asking runs 30 days, with reminders for what is still missing.
 export async function askForDocuments(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   const { data: client } = await supabase.from("clients").select("id, name, email_enc, kind").eq("id", String(form.get("client") ?? "")).maybeSingle();
@@ -1703,7 +1697,6 @@ export async function askForDocuments(form: FormData) {
   const registration = String(form.get("registration") ?? "");
   const { data: gstin } = registration ? await supabase.from("client_registrations").select("id").eq("firm_id", membership.firmId).eq("client_id", client.id).eq("kind", "gstin").eq("id", registration).maybeSingle() : { data: null };
   if (!items.length || items.length > 30 || (period && !periodChoices(todayInIndia()).includes(period)) || (registration && !gstin)) redirect(`${back}&ask=1&error=ask`);
-  const token = randomBytes(32).toString("base64url");
   const id = randomUUID();
   const admin = supabaseAdmin();
   const { error } = await admin.from("requests").insert({
@@ -1714,21 +1707,18 @@ export async function askForDocuments(form: FormData) {
     entity_type: "checklist",
     entity_id: id,
     expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
-    // The token itself is kept encrypted with the firm's key, only so follow-ups can send the same link.
-    details: { period, items, link_hash: createHash("sha256").update(token).digest("hex"), link_enc: await serverCrypto().encrypt(membership.firmId, `requests/${id}/link`, token), ...(gstin && { registration: gstin.id }) },
+    details: { period, items, ...(gstin && { registration: gstin.id }) },
   });
   if (error) redirect(`${back}&ask=1&error=ask`);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.created", entity_type: "request", entity_id: id });
-  const link = `${process.env.APP_BASE_URL ?? (await headers()).get("origin") ?? ""}/u/${token}`;
 
   // Sent from the firm's mailbox to the client's registered address, if both are there.
   const mailer = await firmMailer(membership.firmId, membership.firmName);
   const to = client.email_enc && (await serverCrypto().decrypt(membership.firmId, `clients/${client.id}/email`, client.email_enc));
-  const message=emailTemplates.request(client.name,membership.firmName,period,items,link);
+  const message=emailTemplates.request(client.name,membership.firmName,period,items);
   const sent=!!mailer && !!to && await mailer.send(to,message.subject,message.text);
   revalidatePath("/app", "layout");
-  // The link is shown once, from its stored copy, only when it could not be emailed.
-  redirect(sent ? `${back}&asked=sent` : `${back}&asked=link&request=${id}`);
+  redirect(sent ? `${back}&asked=sent` : `${back}&asked=nomail`);
 }
 
 // The owner, a partner or a manager changes the firm's usual list for this kind of client,
@@ -1750,60 +1740,19 @@ export async function saveChecklist(form: FormData) {
   redirect(`${back}&changed=list`);
 }
 
-// A file the client uploads through their private link, against one item asked for. The
-// link must be current and the request still open. Up to 50 MB a file and 100 files a request,
-// each checked by the file worker first; each file in a ZIP counts for the item.
-// The page sends a pick of several files one at a time, with more set on all but the last,
-// so the request closes only after the whole pick is in. It says what happened.
-export async function uploadToRequest(form: FormData): Promise<"got" | "file" | "full" | "later" | "closed" | "unsafe"> {
-  const token = String(form.get("token") ?? "");
+// A person saves a file InboxCA read from a client's sharing link (src/jobs/file-mail.ts):
+// whoever may upload for the client. The job fetches it again and files it; the card leaves Today.
+export async function saveLink(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const { data: ask } = await supabase.from("requests").select("id, client_id, details").eq("firm_id", membership.firmId).eq("kind", "alert").eq("entity_type", "link").eq("status", "pending").eq("id", String(form.get("alert") ?? "")).maybeSingle();
+  if (!ask?.client_id || !membership.may("upload", ask.client_id)) redirect("/app?error=needs");
   const admin = supabaseAdmin();
-  const linkHash = createHash("sha256").update(token).digest("hex");
-  const { data: request } = await admin
-    .from("requests")
-    .select("id, firm_id, client_id, status, expires_at, details, clients(id, name), firms(name)")
-    .eq("kind", "documents")
-    .eq("details->>link_hash", linkHash)
-    .maybeSingle();
-  if (!request?.clients || request.status !== "pending" || Date.parse(request.expires_at ?? "") < Date.now()) return "closed";
-  // Every file sent counts, saved or not, so one link cannot keep the file worker busy all day.
-  if (!(await withinLimit("upload", linkHash))) return "later";
-  const details = request.details as unknown as DocumentRequest;
-  const item = details.items[Number(form.get("item"))];
-  const file = form.get("file");
-  if (details.items.reduce((sum, entry) => sum + entry.received.length, 0) >= 100) return "full";
-  if (!item || !(file instanceof File) || !file.size || file.size > MAX_UPLOAD) return "file";
-  const opened = await firmDrive(request.firm_id);
-  if (!opened) return "later";
-  const sent = await receive(request.firm_id, null, request.clients, { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }, opened.drive).catch(() => null);
-  if (!sent) return "later";
-  if ("unsafe" in sent) return "unsafe";
-  const before = item.received.length;
-  for await (const paper of sent.papers) {
-    if (details.items.reduce((sum, entry) => sum + entry.received.length, 0) >= 100) break;
-    const saved = await saveForClient(
-      { firmId: request.firm_id },
-      null,
-      request.clients,
-      { work_type: item.work, document_type: item.type, period_key: details.period, status: "filed", registration_id: details.registration },
-      paper,
-      opened,
-      sent,
-    );
-    if (saved === "drive") return "later";
-    if (saved !== "twin") item.received.push(saved.id);
-  }
-  // A paper from the client answers the asking: its follow ups count again from today.
-  if (item.received.length > before && details.followups?.length) Object.assign(details, { followups: [], since: todayInIndia() });
-  const done = !form.get("more") && details.items.every((entry) => entry.received.length > 0);
-  await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: done ? "done" : "pending" }).eq("id", request.id);
-  // One emailed receipt a sitting: each file moves the waiting receipt 10 minutes on, and the
-  // last paper asked for sends it at once.
-  const at = new Date(Date.now() + (done ? 0 : 600_000)).toISOString();
-  const { data: moved } = await admin.from("jobs").update({ run_at: at }).eq("kind", "upload_receipt").eq("entity_type", "request").eq("entity_id", request.id).eq("state", "pending").select("id");
-  if (!moved?.length) await admin.from("jobs").insert({ firm_id: request.firm_id, kind: "upload_receipt", entity_type: "request", entity_id: request.id, run_at: at, idempotency_key: `upload_receipt:${request.id}:${randomUUID()}` });
-  if (done) runJobsSoon();
-  return "got";
+  await admin.from("requests").update({ status: "done", details: { ...(ask.details as Record<string, Json>), by: userId } }).eq("id", ask.id);
+  await admin.from("jobs").insert({ firm_id: membership.firmId, kind: "file_link", entity_type: "request", entity_id: ask.id, idempotency_key: `file_link:${ask.id}` });
+  runJobsSoon();
+  revalidatePath("/app", "layout");
+  redirect("/app");
 }
 
 // A person checks a file the client sent for an item asked for (PLAN.md 5.3.1). Checked keeps

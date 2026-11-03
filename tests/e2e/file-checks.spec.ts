@@ -6,12 +6,11 @@ import nodemailer from "nodemailer";
 import { TEST_DRIVE, TEST_WORKER_SECRET } from "../../playwright.config";
 import { zip } from "@/src/lib/firm-download";
 import { emailStep, localSupabase, query, seedFirm, totp } from "./local-supabase";
-import { EICAR } from "../fixtures/fake-clamd";
 import { lockedPdf, pdf } from "../fixtures/pdf";
 
-// The file worker's checks through the real pages: the virus check (against the test stand
-// in for ClamAV), ZIPs opened within their limits, programs refused, a PDF's password typed
-// once, and Word letters in the viewer.
+// The file checks through the real pages: a program a client sent kept out for the owner, ZIPs
+// opened within their limits, programs refused, a PDF's password typed once, and Word letters in
+// the viewer. Viruses are the email provider's check (content/security.ts).
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase");
 test.describe.configure({ mode: "serial", timeout: 90_000 });
@@ -52,36 +51,23 @@ async function upload(file: { name: string; mimeType: string; buffer: Buffer }, 
   await owner.getByLabel("Period", { exact: true }).selectOption({ label: "No period" });
   await owner.getByRole("button", { name: "Upload", exact: true }).click();
 }
-const papers = () => query(local.dbUrl, "select name, scanned_at from public.documents where client_id = $1 order by name", [clientId]);
-
-test("a file with a virus is kept out of InboxCA, put in the owner's folder for it, and shown on Today", async () => {
-  await upload({ name: "statement.txt", mimeType: "text/plain", buffer: Buffer.from(`Invented statement\n${EICAR}\n`) });
-  await expect(owner.getByRole("alert").filter({ hasText: "found a virus in this file" })).toBeVisible();
-  expect(await papers()).toEqual([]);
-  expect(await readdir(path.join(TEST_DRIVE, "InboxCA", "Files with a virus"))).toContain(`${clientName} - statement.txt`);
-  const [alert] = await query(local.dbUrl, "select id, status, details from public.requests where firm_id = $1 and kind = 'alert' and reason_code = 'virus'", [firm.firmId]);
-  expect(alert).toMatchObject({ status: "pending", details: { name: `${clientName} - statement.txt`, found: "Eicar-Test-Signature" } });
-  expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where firm_id = $1 and action = 'document.virus' and entity_id = $2", [firm.firmId, alert.id]))[0].n).toBe(1);
-  await owner.goto("/app");
-  const card = owner.locator("section[aria-labelledby=t-list]");
-  await expect(card).toContainText(`${clientName} - statement.txt had a virus`);
-  await card.getByRole("button", { name: "Got it" }).click();
-  await expect(owner.locator("section[aria-labelledby=t-list]")).not.toContainText("had a virus");
-  expect((await query(local.dbUrl, "select status from public.requests where id = $1", [alert.id]))[0].status).toBe("done");
-  expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where entity_id = $1 and action = 'request.changed' and actor_id = $2", [alert.id, firm.ownerId]))[0].n).toBe(1);
-});
+const papers = () => query(local.dbUrl, "select name from public.documents where client_id = $1 order by name", [clientId]);
 
 test("a ZIP's papers are each filed and checked; unsafe ZIPs and programs are refused", async () => {
   await upload({ name: "Sep bills.zip", mimeType: "application/zip", buffer: zip([{ name: "Sep/bill 1.pdf", text: pdf("Invented bill 1") }, { name: "bill 2.pdf", text: pdf("Invented bill 2") }, { name: "__MACOSX/._bill 2.pdf", text: "x" }]) }, "Purchase bills");
   await expect(owner.getByRole("status")).toContainText("2 saved");
   const filed = await papers();
   expect(filed).toHaveLength(2);
-  expect(filed.every((paper: { name: string; scanned_at: Date | null }) => paper.name.includes("Purchase bills") && paper.name.endsWith(".pdf") && paper.scanned_at)).toBe(true);
+  expect(filed.every((paper: { name: string }) => paper.name.includes("Purchase bills") && paper.name.endsWith(".pdf"))).toBe(true);
   await upload({ name: "nested.zip", mimeType: "application/zip", buffer: zip([{ name: "inner.zip", text: zip([{ name: "a.pdf", text: pdf("Invented") }]) }]) });
   await expect(owner.getByRole("alert").filter({ hasText: "holds another archive" })).toBeVisible();
   await upload({ name: "setup.exe", mimeType: "application/octet-stream", buffer: Buffer.from("MZ invented") });
-  await expect(owner.getByRole("alert").filter({ hasText: "does not take programs" })).toBeVisible();
+  await expect(owner.getByRole("alert").filter({ hasText: "never programs, scripts or Office files with macros" })).toBeVisible();
+  await upload({ name: "book.xlsm", mimeType: "application/vnd.ms-excel.sheet.macroEnabled.12", buffer: Buffer.from("PK invented") });
+  await expect(owner.getByRole("alert").filter({ hasText: "never programs, scripts or Office files with macros" })).toBeVisible();
   expect(await papers()).toHaveLength(2);
+  // A person's own program is only refused: nothing is kept for the owner.
+  expect(await query(local.dbUrl, "select 1 from public.requests where firm_id = $1 and kind = 'alert' and reason_code = 'virus'", [firm.firmId])).toEqual([]);
 });
 
 test("a PDF with a password opens once a person types it, and the team need not type it again", async () => {
@@ -89,7 +75,6 @@ test("a PDF with a password opens once a person types it, and the team need not 
   await expect(owner.getByRole("status")).toContainText("Saved as");
   const [document] = await query(local.dbUrl, "select id from public.documents where client_id = $1 and name like '%.pdf' and name not like '%Purchase bills%'", [clientId]);
   await owner.goto(`/app/files/${document.id}/view`);
-  await expect(owner.getByText("Not virus checked by InboxCA.")).toHaveCount(0);
   await owner.getByLabel("This PDF has a password. Type it to open the file.").fill("wrong-pass");
   await owner.getByRole("button", { name: "Open", exact: true }).click();
   await owner.getByLabel("That password did not open it. Type it again.").fill("invented-pass");
@@ -99,11 +84,6 @@ test("a PDF with a password opens once a person types it, and the team need not 
   expect(saved.password_enc).toBeTruthy();
   expect(saved.password_enc).not.toContain("invented-pass");
   expect((await query(local.dbUrl, "select count(*)::int n from public.activity_log where entity_id = $1 and action = 'document.password_saved'", [document.id]))[0].n).toBe(2);
-  // A file InboxCA did not check itself, as from the first import, says so plainly.
-  await query(local.dbUrl, "update public.documents set scanned_at = null where id = $1", [document.id]);
-  await owner.reload();
-  await expect(owner.getByRole("img", { name: "Page 1", exact: true })).toBeVisible();
-  await expect(owner.getByText("Not virus checked by InboxCA.")).toBeVisible();
 });
 
 test("a Word letter is shown as its words, view only", async () => {
@@ -116,7 +96,7 @@ test("a Word letter is shown as its words, view only", async () => {
   await expect(owner.getByText("This kind of file cannot be shown here.")).toHaveCount(0);
 });
 
-test("an email's ZIP is filed paper by paper, its virus is kept out and a program is left out", async ({ request }) => {
+test("an email's ZIP is filed paper by paper; its program is kept out for the owner and shown on Today", async ({ request }) => {
   const mailbox = `checks-office-${tag}@firm.test`, from = `client-${tag}@checked.test`, mailClient = `Mail Checked ${tag}`;
   const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
   // The test mail server makes a mailbox when its first email arrives.
@@ -141,14 +121,23 @@ test("an email's ZIP is filed paper by paper, its virus is kept out and a progra
   const bills = zip([{ name: "purchase_bills_sep_2026_a.pdf", text: pdf("Invented bill A") }, { name: "purchase_bills_sep_2026_b.pdf", text: pdf("Invented bill B") }]);
   await smtp.sendMail({
     from, to: mailbox, subject: "GST data", text: "Bills attached.",
-    attachments: [{ filename: "bills.zip", content: bills }, { filename: "notes.txt", content: `Invented notes\n${EICAR}` }, { filename: "tool.exe", content: "MZ invented" }],
+    attachments: [{ filename: "bills.zip", content: bills }, { filename: "tool.exe", content: "MZ invented" }, { filename: "page.html", content: "<p>invented</p>" }],
   });
   await query(local.dbUrl, "select private.queue_mail_polls()");
   // A sweep reads the mail, a later one files its attachments, behind this firm's other jobs.
-  const filed = () => query(local.dbUrl, "select name, scanned_at is not null as scanned from public.documents where client_id = $1 order by name", [client]);
+  const filed = () => query(local.dbUrl, "select name from public.documents where client_id = $1 order by name", [client]);
   await expect.poll(async () => { await request.post("/api/jobs", { headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` } }); return (await filed()).length; }, { timeout: 30_000 }).toBe(2);
-  expect((await filed()).every((paper: { name: string; scanned: boolean }) => paper.name.startsWith(`${mailClient} - Purchase bills - Sep 2026`) && paper.scanned)).toBe(true);
-  expect(await readdir(path.join(TEST_DRIVE, "InboxCA", "Files with a virus"))).toContain(`${mailClient} - notes.txt`);
-  expect(await query(local.dbUrl, "select status from public.requests where client_id = $1 and kind = 'alert' and reason_code = 'virus'", [client])).toEqual([{ status: "pending" }]);
-  expect(await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'document.refused'", [firm.firmId])).toEqual([{ details: { reason: "program" } }]);
+  expect((await filed()).every((paper: { name: string }) => paper.name.startsWith(`${mailClient} - Purchase bills - Sep 2026`))).toBe(true);
+  // The program and the web page go to the owner's folder for files kept out, never opened; the owner is told on Today.
+  const keptOut = await readdir(path.join(TEST_DRIVE, "InboxCA", "Files kept out"));
+  expect(keptOut).toContain(`${mailClient} - tool.exe`);
+  expect(keptOut).toContain(`${mailClient} - page.html`);
+  expect(await query(local.dbUrl, "select status from public.requests where client_id = $1 and kind = 'alert' and reason_code = 'virus' order by id", [client])).toEqual([{ status: "pending" }, { status: "pending" }]);
+  expect(await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'document.refused' order by at", [firm.firmId])).toEqual([{ details: { reason: "program" } }, { details: { reason: "program" } }]);
+  await owner.goto("/app");
+  const today = owner.locator("section[aria-labelledby=t-list]");
+  await expect(today).toContainText(`${mailClient} - tool.exe was kept out`);
+  await today.getByRole("button", { name: "Got it" }).first().click();
+  await expect(today).not.toContainText("tool.exe was kept out");
+  await expect(today).toContainText(`${mailClient} - page.html was kept out`);
 });

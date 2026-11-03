@@ -8,7 +8,7 @@ vi.mock("@/src/lib/supabase",()=>({supabaseAdmin:()=>({from:(table:string)=>({
   select(columns:string){this.columns=columns;return this;},eq(){return this;},is(){return this;},gte(){return this;},lte(){return this;},in(){return this;},neq(){return this;},gt(){return this;},order(){return this;},range(){return this;},
   update(value:{details?:Record<string,unknown>}){if(table==="tasks")mock.details=value.details ?? {};this.write=true;return this;},
   insert(){this.write=true;return this;},
-  async maybeSingle(){return {data:{name:"Invented Firm",settings:{reminders:mock.on}}};},
+  async maybeSingle(){return {data:{name:"Invented Firm",settings:{reminders:mock.on,ask_days:{monthly:0,quarterly:0,yearly:0}}}};},
   then(resolve:(value:unknown)=>void){resolve({error:null,count:mock.sent,data:this.write ? null : table==="tasks" ? mock.filed ? [] : Array.from({length:mock.clients},(_,n)=>({id:`task${n}`,client_id:`client${n}`,code:"GSTR3B_M",period_key:"2026-09",due_on:mock.due,details:mock.details,clients:{name:"Invented Client",email_enc:"encrypted test email",reminders_paused:false}})) : table==="compliance_types" ? [{code:"GSTR3B_M",name:"GSTR-3B",frequency:"monthly",verified_on:"2026-01-01"}] : table==="documents" && mock.data ? [{client_id:"client0",work_type:"gst",period_key:"2026-09"}] : []});},
 })})}));
 import {sendReminders} from "@/src/jobs/reminders";

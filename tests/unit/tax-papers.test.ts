@@ -118,7 +118,7 @@ describe("income tax papers", () => {
 
   it("files each paper by type, closes a Form 16 asked for with Form No. 130, and reads figures only from the layouts it knows", () => {
     expect(["Form No.130 2026-27.pdf", "Form 168.pdf", "XXXPZ0003X_2026_TIS.pdf"].map((name) => describeFile(name, "", null, "2026-10-26").type)).toEqual(["Form 130", "Form 168", "TIS"]);
-    const ask = { period: "2027", link_hash: "x", items: [{ type: "Form 16", work: "income_tax" as const, received: [] as string[] }] };
+    const ask = { period: "2027", items: [{ type: "Form 16", work: "income_tax" as const, received: [] as string[] }] };
     expect(receiveItem(ask, "Form 130", "2027", "doc1")).toBe(true);
     expect(receiveItem({ ...ask, items: [{ type: "Form 26AS", work: "income_tax", received: [] }] }, "Form 168", "2027", "doc1")).toBe(false);
     expect([["Form 26AS", "a.txt"], ["Form 26AS", "a.pdf"], ["Form 16", "a.pdf"], ["Form 130", "a.pdf"], ["AIS", "a.pdf"]].map(([document_type, name]) => readsFigures({ document_type, name, work_type: "income_tax" }))).toEqual([true, false, true, true, false]);

@@ -2,7 +2,7 @@ import { addDays, dueLabel, periodLabel } from "./calendar";
 import { workOfService } from "./checklists";
 import { findPeriod, periodName } from "./documents";
 import { workTypes, type WorkType } from "./drive";
-import { periodsOf } from "./reminders";
+import { periodsOf, REPLY_ATTACHED } from "./reminders";
 
 // Answers by rules (PLAN.md "Inbox, answered" B and C): a client asking whether a return is
 // filed, which papers are still needed or what is due gets a reply built only from InboxCA's
@@ -10,7 +10,7 @@ import { periodsOf } from "./reminders";
 // advice. Each kind is Auto, Ask me first (the default) or Off in Settings.
 export const answerKinds = {
   filed: ["Is my return filed", "The returns marked filed, with the date and the acknowledgement number."],
-  papers: ["Which papers are still needed", "The papers still asked for, with the upload link."],
+  papers: ["Which papers are still needed", "The papers still asked for, to reply with attached."],
   due: ["What is due", "Returns due in the next 30 days, only dates InboxCA has checked."],
   received: ["Papers received", "Which papers arrived and where they were saved."],
   notice: ["Notice received", "That the notice arrived and your CA will look at it. Never advice."],
@@ -36,7 +36,7 @@ export const answerOf = (label: string | null): AnswerKind | null =>
 // What an answer says, for the Inbox: before it goes, and once it went.
 export const answerWords: Record<AnswerKind, [string, string]> = {
   filed: ["Says which returns are filed", "InboxCA told the client which returns are filed."],
-  papers: ["Lists the papers still needed, with the upload link", "InboxCA sent the client the papers still needed, with the upload link."],
+  papers: ["Lists the papers still needed", "InboxCA sent the client the papers still needed."],
   due: ["Lists what is due in the next 30 days", "InboxCA told the client what is due."],
   received: ["Says which papers arrived", "InboxCA told the client their papers arrived."],
   notice: ["Says the notice arrived and your CA will look at it", "InboxCA told the client their notice arrived."],
@@ -90,12 +90,12 @@ export function dueAnswer(tasks: AnswerTask[], asked: Asked, today: string): Lin
   return { lines: open.sort((a, b) => a.due_on.localeCompare(b.due_on)).map((task) => `- ${task.rule.name} for ${periodLabel(task.rule.frequency, task.period_key)}: due on ${dueLabel(task.due_on)}`) };
 }
 
-// Papers still needed: each open ask's missing papers and its upload link.
-export type OpenAsk = { period: string; missing: string[]; link: string };
+// Papers still needed: each open ask's missing papers, to reply with attached.
+export type OpenAsk = { period: string; missing: string[] };
 export function papersAnswer(asks: OpenAsk[], asked: Asked): Lines {
   const open = asks.filter((ask) => ask.missing.length && (!asked.period || !ask.period || ask.period === asked.period));
   if (!open.length) return { team: "papers_none" };
-  return { lines: open.flatMap((ask) => [`We still need these papers${ask.period ? ` for ${periodName(ask.period)}` : ""}:`, ...ask.missing.map((type) => `- ${type}`), `Upload them here, no sign in needed: ${ask.link}`, ""]).slice(0, -1) };
+  return { lines: [...open.flatMap((ask) => [`We still need these papers${ask.period ? ` for ${periodName(ask.period)}` : ""}:`, ...ask.missing.map((type) => `- ${type}`), ""]), REPLY_ATTACHED] };
 }
 
 // Papers received: by where they were saved (work and period); those under To check counted.

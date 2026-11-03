@@ -30,18 +30,15 @@ export async function answerTo(admin: Admin, event: AnswerEvent) {
 // What the records say for a status question (filed, due, papers), read only for this firm's
 // client with the client given (the server's, or a person's under row level security): its
 // lines, or why a person must answer instead. AI's tools read the same (src/lib/ai-reply.ts).
-export async function recordLines(db: Admin, firm: string, client: string, kind: "filed" | "due" | "papers", asked: Asked, link = true): Promise<{ lines: string[] } | { team: string }> {
+export async function recordLines(db: Admin, firm: string, client: string, kind: "filed" | "due" | "papers", asked: Asked): Promise<{ lines: string[] } | { team: string }> {
   const today = todayInIndia();
   if (kind === "papers") {
     const { data: asks, error } = await db.from("requests").select("id, details").eq("firm_id", firm).eq("client_id", client).eq("kind", "documents").eq("status", "pending").gt("expires_at", new Date().toISOString());
     if (error) throw new Error("records_not_read");
-    const crypto = serverCrypto();
-    const open = asks.map((ask) => ({ id: ask.id, details: ask.details as unknown as DocumentRequest })).filter((ask) => ask.details.link_enc);
-    return papersAnswer(await Promise.all(open.map(async ({ id, details }) => ({
-      period: details.period,
-      missing: details.items.filter((item) => !item.received.length).map((item) => item.type),
-      link: link ? `${process.env.APP_BASE_URL ?? ""}/u/${await crypto.decrypt(firm, `requests/${id}/link`, details.link_enc!)}` : "(the upload link)",
-    }))), asked);
+    return papersAnswer(asks.map((ask) => {
+      const details = ask.details as unknown as DocumentRequest;
+      return { period: details.period, missing: details.items.filter((item) => !item.received.length).map((item) => item.type) };
+    }), asked);
   }
   const [{ data: tasks, error }, rules] = await Promise.all([
     db.from("tasks").select("code, period_key, due_on, status, details").eq("firm_id", firm).eq("client_id", client).eq("kind", "compliance").gte("due_on", addDays(today, -400)).lte("due_on", addDays(today, 400)),
@@ -58,13 +55,12 @@ export async function recordLines(db: Admin, firm: string, client: string, kind:
 
 // The answer an email calls for, from the firm's records as they are now: its email, or why a
 // person must answer instead (team), or null when there is nothing to say (no papers saved).
-// The upload link is left out for someone who may only view.
-export async function draftAnswer(admin: Admin, event: AnswerEvent, link = true) {
+export async function draftAnswer(admin: Admin, event: AnswerEvent) {
   const kind = answerOf(event.label);
   if (!kind || !event.client_id || !event.clients || !event.firms) return null;
   const asked = ((event.delivery ?? {}) as Delivery).asked ?? {};
   let answer: { lines: string[] } | { team: string } = { lines: [] };
-  if (kind === "filed" || kind === "due" || kind === "papers") answer = await recordLines(admin, event.firm_id, event.client_id, kind, asked, link);
+  if (kind === "filed" || kind === "due" || kind === "papers") answer = await recordLines(admin, event.firm_id, event.client_id, kind, asked);
   else if (kind === "received") {
     const { data: papers, error } = await admin.from("documents").select("document_type, work_type, period_key, status").eq("email_event_id", event.id).in("status", ["filed", "earlier", "to_check"]);
     if (error) throw new Error("records_not_read");

@@ -33,9 +33,6 @@ async function seed() {
     [contact, FIRM, await seal(`contacts/${contact}/name`, "Invented Accountant"), await seal(`contacts/${contact}/email`, "b@mills.test"), await crypto.blindIndex(FIRM, "email", "b@mills.test")]);
   await db.query("insert into public.documents (id, firm_id, client_id, work_type, document_type, drive_file_id, name, size, sha256, original_name_enc, password_enc) values ($1, $2, $3, 'gst', 'Purchase bills', 'nowhere', 'Invented.pdf', 1, $4, $5, $6)",
     [document, FIRM, client, randomUUID(), await seal(`documents/${document}/original_name`, "scan 0042.pdf"), await seal(`documents/${document}/password`, "invented-password")]);
-  const request = randomUUID();
-  await db.query("insert into public.requests (id, firm_id, client_id, kind, entity_type, entity_id, details) values ($1, $2, $3, 'documents', 'client', $3, $4)",
-    [request, FIRM, client, { period: "2026-09", link_hash: "invented", link_enc: await seal(`requests/${request}/link`, "invented-token") }]);
   // A figure, an unfinished correction of it (whose base is the figure as sealed), its change
   // in the log, and a form's rejection reason.
   const figure = await seal(`datasets/${dataset}/lines/${line}`, '{"label":"Invented sales","value":"100"}');
@@ -57,10 +54,10 @@ describe("sealing older values again after a key rotation", () => {
       const before = await open();
       await crypto.rotate(FIRM);
       const older = await staleCounts(db, FIRM, 1);
-      expect(total(older)).toBe(13);
+      expect(total(older)).toBe(12);
       // Small batches, so each table takes several.
       const counts = await reseal(db, firmCrypto(kek, pgKeyStore(db)), FIRM, 2);
-      expect(Object.values(counts).reduce((sum, count) => sum + count.sealed, 0)).toBe(13);
+      expect(Object.values(counts).reduce((sum, count) => sum + count.sealed, 0)).toBe(12);
       expect(Object.values(counts).every((count) => count.failed === 0)).toBe(true);
       expect(total(await staleCounts(db, FIRM, 1))).toBe(0);
       // The same text in the same place, blind indexes unchanged.
@@ -70,7 +67,7 @@ describe("sealing older values again after a key rotation", () => {
       expect(data.base).toBe(data.figure);
       expect(Buffer.from(data.figure, "base64url")[1]).toBe(1);
       const { rows: log } = await db.query("select action, details from public.activity_log where firm_id = $1 and action in ('keys.resealed', 'client.changed')", [FIRM]);
-      expect(log).toEqual([{ action: "keys.resealed", details: { values: 13, key_number: 1 } }]);
+      expect(log).toEqual([{ action: "keys.resealed", details: { values: 12, key_number: 1 } }]);
     }));
 
   it("carries on where a stopped run left off, and leaves a value that does not open", () =>

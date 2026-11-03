@@ -7,7 +7,7 @@ vi.mock("@/src/lib/crypto", () => ({
     decrypt: async (_firm: string, place: string, value: string) => (place.endsWith("/credentials") ? JSON.stringify({ password: office }) : place.endsWith("/address") ? office : value.replace(/^sealed:/, "")),
   }),
 }));
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
@@ -83,7 +83,7 @@ beforeAll(async () => {
   await db.query("insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) values ($1, $2, 'compliance', $3, '2026-11', $4::date + 20)", [firm, client.later, codes[0], today]);
   // The client already sent its sales bills for the month; another was asked by a person.
   await db.query("insert into public.documents (firm_id, client_id, work_type, document_type, period_key, status, drive_file_id, name, size, sha256) values ($1, $2, 'gst', 'Sales bills', '2026-10', 'filed', 'invented', 'Invented sales bills', 1, 'invented')", [firm, client.asked]);
-  await db.query("insert into public.requests (firm_id, kind, client_id, entity_type, entity_id, expires_at, details) values ($1, 'documents', $2, 'checklist', gen_random_uuid(), now() + interval '20 days', $3)", [firm, client.manual, { period: "2026-10", items: [{ type: "Sales bills", work: "gst", received: [] }], link_hash: `invented-${tag}` }]);
+  await db.query("insert into public.requests (firm_id, kind, client_id, entity_type, entity_id, expires_at, details) values ($1, 'documents', $2, 'checklist', gen_random_uuid(), now() + interval '20 days', $3)", [firm, client.manual, { period: "2026-10", items: [{ type: "Sales bills", work: "gst", received: [] }] }]);
 });
 afterAll(async () => {
   await asOwner(db);
@@ -105,8 +105,8 @@ it("asks a client once for the month's papers still missing, in the day's one em
   expect(ask.details.followups ?? []).toEqual([]);
   const [sent] = await mail(mailbox("asked"));
   expect(sent).toContain(`To prepare your Invented ${codes[0]} and Invented ${codes[1]} for Oct 2026, please send these documents: Purchase bills, Bank statement.`);
-  const token = sent.match(/http:\/\/inboxca\.test\/u\/([\w-]+)/)![1];
-  expect(ask.details.link_hash).toBe(createHash("sha256").update(token).digest("hex"));
+  expect(sent).toContain("Please reply to this email with the files attached, or email them to us.");
+  expect(sent).not.toMatch(/https?:\/\//);
   expect((await db.query("select details from public.activity_log where entity_id = $1 and action = 'request.created'", [ask.id])).rows).toEqual([{ details: { auto: true } }]);
   // Paused, without an email, not yet in its 10 days, or already asked by a person: no request.
   for (const id of [client.paused, client.noEmail, client.later]) expect(await asks(id)).toEqual([]);
