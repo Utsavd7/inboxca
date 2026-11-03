@@ -369,10 +369,15 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .quote-plan { margin-top: calc(-1 * var(--s2)); font-size: var(--fs-h2); font-weight: 800; letter-spacing: var(--ls-display); line-height: 1.1; }
 .quote-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; font-size: clamp(34px, 3vw, 42px); font-weight: 800; letter-spacing: var(--ls-display); line-height: 1; }
 .quote-price .num { font-family: inherit; font-weight: inherit; letter-spacing: inherit; }
-.quote-price small { font-size: var(--fs-body); font-weight: 500; color: var(--on-navy); }
+.quote-price small { font-size: var(--fs-body); font-weight: 500; letter-spacing: normal; color: var(--on-navy); }
 .quote-facts { display: grid; gap: 4px; font-size: var(--fs-small); color: var(--on-navy); }
 .quote-facts .num,
 .quote-save .num { color: var(--white); }
+/* A figure inside a sentence keeps the sentence's font; mono there reads as gaps. */
+.quote-facts .num,
+.quote-save .num,
+.plan-suits .num,
+.plan-other .num { font-family: inherit; font-weight: 600; letter-spacing: inherit; }
 .quote-note { font-size: var(--fs-small); color: var(--on-navy); }
 .quote-cta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s4); margin-top: auto; }
 .quote .btn { align-self: flex-start; }
