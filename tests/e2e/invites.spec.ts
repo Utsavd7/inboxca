@@ -101,6 +101,10 @@ test.beforeAll(async ({ browser }) => {
   person = await (await browser.newContext({ userAgent: pcUserAgent })).newPage();
   await nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true }).sendMail({ from: "setup@invented.test", to: mailboxEmail, subject: "Invented test setup", text: "Makes the test mailbox" });
 });
+// A failure keeps a picture of this file's own page; Playwright keeps only the page it made.
+test.afterEach(async ({}, info) => {
+  if (info.status !== info.expectedStatus && owner && !owner.isClosed()) await info.attach("owner page", { body: await owner.screenshot({ fullPage: true }), contentType: "image/png" });
+});
 test.afterAll(async () => {
   await firm.remove(newEmail, emailOnly, deputyEmail, laptopEmail, mailboxEmail);
   // Also the invented return types, even when a test stopped before removing its own.
