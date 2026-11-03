@@ -69,7 +69,9 @@ function holds(bytes: Uint8Array, text: string) {
 // so a program, a script, a shortcut or a web page never gets in; and a file is refused by
 // its first bytes whatever it is called: a Windows, Linux or Mac program, a script, or an
 // Office file that holds a macro project.
-export const accepted = /\.(pdf|png|jpe?g|gif|bmp|tiff?|webp|heic|heif|xlsx|xls|csv|xml|json|zip|docx|doc|odt|ods|txt)$/i;
+// Old Word (.doc) and OpenDocument files are left out: they can carry macros a first-bytes
+// check cannot see, and a CA firm's papers do not need them. .xls stays for Tally exports.
+export const accepted = /\.(pdf|png|jpe?g|gif|bmp|tiff?|webp|heic|heif|xlsx|xls|csv|xml|json|zip|docx|txt)$/i;
 export function unsafeFile(name: string, bytes: Uint8Array) {
   if (!accepted.test(name.replace(/[\s.]+$/, ""))) return true;
   const word = (at: number) => bytes.length >= at + 4 ? ((bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3]) >>> 0 : 0;
