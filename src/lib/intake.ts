@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { VIRUS_FOLDER, safeName, type Drive } from "./drive";
-import { intakeLimits, isZip, readFrames, signView, unsafeFile } from "./file-worker";
+import { intakeLimits, isZip, readFrames, scanRequired, signView, unsafeFile } from "./file-worker";
 import { supabaseAdmin } from "./supabase";
 
 export type Paper = { name: string; bytes: Uint8Array };
@@ -18,14 +18,18 @@ export const unsafeText: Record<Unsafe, string> = {
 
 // Every file a client or the team sends in (PLAN.md 5.15, 8.6), before it is saved: a program,
 // a script or a macro file is refused, and the file worker scans it and opens a ZIP, giving
-// each file in it as a paper of its own. Without the worker, or with no scanner set up there,
-// the papers are not scanned yet and are saved as before. A worker that is set up but does
-// not answer throws, so the file waits or the person tries again; nothing goes in unchecked.
+// each file in it as a paper of its own. Where the check is optional (scanRequired), without the
+// worker or with no scanner set up there the papers are not scanned yet and are saved as before.
+// Where it is required, that and a worker or scanner that does not answer throw
+// scan_unavailable, so the file waits (receive) or the person tries again; nothing goes in unchecked.
 export async function checkFile(file: Paper, openZip = true): Promise<{ unsafe: Unsafe; found?: string } | { scanned: boolean; papers: Iterable<Paper> | AsyncIterable<Paper> }> {
   if (file.bytes.length > intakeLimits.bytes) return { unsafe: "large" };
   if (unsafeFile(file.name, file.bytes)) return { unsafe: "program" };
   const url = process.env.FILE_WORKER_URL, secret = process.env.FILE_WORKER_SECRET;
-  if (!url || !secret) return { scanned: false, papers: [file] };
+  if (!url || !secret) {
+    if (scanRequired()) throw new Error("scan_unavailable");
+    return { scanned: false, papers: [file] };
+  }
   const zip = openZip && isZip(file.name, file.bytes);
   const ticket = JSON.stringify({ size: file.bytes.length, sha256: createHash("sha256").update(file.bytes).digest("hex"), zip, expires: Math.floor(Date.now() / 1000) + 60 });
   const response = await fetch(`${url.replace(/\/$/, "")}/intake`, {
@@ -39,6 +43,7 @@ export async function checkFile(file: Paper, openZip = true): Promise<{ unsafe: 
   if (said.found || said.refused || !zip) await frames.return(undefined);
   if (said.found) return { unsafe: "virus", found: String(said.found).slice(0, 200) };
   if (said.refused) return { unsafe: said.refused in unsafeText ? said.refused : "zip" };
+  if (said.scanned !== true && scanRequired()) { await frames.return(undefined); throw new Error("scan_unavailable"); }
   if (!zip) return { scanned: said.scanned === true, papers: [file] };
   return {
     scanned: said.scanned === true,
@@ -76,9 +81,23 @@ export async function quarantine(firmId: string, actor: string | null, client: {
   await admin.from("activity_log").insert({ firm_id: firmId, actor_id: actor, action: "document.virus", entity_type: "request", entity_id: alert.id, details: { found } });
 }
 
-// checkFile, with a file the virus check stopped put away for the owner.
+// checkFile, with a file the virus check stopped put away for the owner. Where the check is
+// required and the scanner is away, the file is held instead (held): saved whole under To check,
+// never opened, and scanned again by the rescan job (src/jobs/rescan.ts) until it is back; the
+// owner is told on Today once, until no file of the firm's waits any more.
 export async function receive(firmId: string, actor: string | null, client: { id: string; name: string } | null, file: Paper, drive: Drive, openZip = true) {
-  const checked = await checkFile(file, openZip);
+  let checked: Awaited<ReturnType<typeof checkFile>> & { held?: true };
+  try { checked = await checkFile(file, openZip); }
+  catch (error) {
+    if ((error as Error).message !== "scan_unavailable" || !scanRequired()) throw error;
+    await supabaseAdmin().from("requests").upsert({ firm_id: firmId, kind: "alert", entity_type: "scan", entity_id: firmId, reason_code: "scan_down", status: "pending", details: {} }, { onConflict: "kind,entity_type,entity_id" });
+    checked = { scanned: false, held: true, papers: [file] };
+  }
   if ("unsafe" in checked && checked.unsafe === "virus") await quarantine(firmId, actor, client, file, checked.found ?? "", drive);
   return checked;
 }
+export type Received = { scanned: boolean; held?: true };
+// How a paper is recorded after receive: held ones wait under To check and are marked so.
+export const asReceived = (sent: Received, status: "filed" | "to_check", now: string) =>
+  ({ status: sent.held ? "to_check" as const : status, scanned_at: sent.scanned ? now : null, ...(sent.held && { details: { held: "scan" } }) });
+export const HELD_TEXT = "The virus check is not running just now, so this file was not taken. Try again in a few minutes.";

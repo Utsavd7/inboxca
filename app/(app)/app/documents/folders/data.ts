@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { queueRead } from "@/src/jobs/read-document";
+import { queueRescan } from "@/src/jobs/rescan";
+import { asReceived, type Received } from "@/src/lib/intake";
 import { todayInIndia } from "@/src/lib/calendar";
 import { serverCrypto } from "@/src/lib/crypto";
 import { describeFile, filePeriod, folderFor, gstinFor, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
@@ -209,14 +211,15 @@ export async function fileForClient(
   file: { name: string; bytes: Uint8Array },
   place: (folder: string, name: string) => Promise<{ id: string } | "taken">,
   action: "document.uploaded" | "document.filed",
-  scanned: boolean,
+  sent: Received,
 ) {
   const { admin, membership } = ctx;
   const sha256 = createHash("sha256").update(file.bytes).digest("hex");
   const { data: twin } = await admin.from("documents").select("id").eq("client_id", client.id).eq("sha256", sha256).neq("status", "deleted").limit(1);
   if (twin?.length) return "twin" as const;
   const now = new Date().toISOString();
-  const folder = folderFor(ctx.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: values.status === "to_check" });
+  const recorded = asReceived(sent, values.status, now);
+  const folder = folderFor(ctx.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: recorded.status === "to_check" });
   const target = await ctx.drive!.ensureFolder(folder);
   const placed = await placeUnderFreeName(
     { client: client.name, type: values.document_type, period: filePeriod(values.period_key), extension: path.extname(file.name) },
@@ -233,6 +236,7 @@ export async function fileForClient(
     firm_id: membership.firmId,
     client_id: client.id,
     ...values,
+    ...recorded,
     registration_id,
     drive_file_id: placed.id,
     name: placed.name,
@@ -240,10 +244,9 @@ export async function fileForClient(
     size: file.bytes.length,
     sha256,
     received_at: now,
-    scanned_at: scanned ? now : null,
   });
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: ctx.userId, action, entity_type: "document", entity_id: id, ...(action === "document.filed" && { details: { from: "drive" } }) });
-  if (values.status === "filed") await settleVersions(admin, { client_id: client.id, ...values, registration_id });
-  await queueRead(membership.firmId, id);
+  if (recorded.status === "filed") await settleVersions(admin, { client_id: client.id, ...values, registration_id });
+  await (sent.held ? queueRescan : queueRead)(membership.firmId, id);
   return { id, name: placed.name, folder };
 }

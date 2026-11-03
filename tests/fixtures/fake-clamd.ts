@@ -14,6 +14,7 @@ export function fakeClamd() {
       if (!started) {
         const end = pending.indexOf(0);
         if (end < 0) return;
+        if (pending.subarray(0, end).toString() === "zPING") return void socket.end("PONG\0");
         if (pending.subarray(0, end).toString() !== "zINSTREAM") return void socket.end("UNKNOWN COMMAND\0");
         started = true;
         pending = pending.subarray(end + 1);
