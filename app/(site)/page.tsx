@@ -58,9 +58,10 @@ const structured = SITE_PUBLIC && [
   },
 ].filter(Boolean);
 
+// Get started on the page takes the visitor to the plans, where each plan has its own start.
 function StartLink({ className = "btn btn-big" }: { className?: string }) {
   return (
-    <Link className={className} href="/sign-up">
+    <Link className={className} href="#plans">
       Get started
       <ArrowRight size={18} aria-hidden />
     </Link>
