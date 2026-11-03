@@ -8,7 +8,7 @@ import { sendSystemMail } from "@/src/lib/system-mail";
 import { docText, docTitles, taxLines, type Doc } from "./documents";
 import {
   addDays, daysBetween, financialYear, formulaSchema, GB, gstOn, indiaDay, mandateMax, methodsFor, moneyBackLastDay, newPlanYear, overdueState, periodEnd, planFit, planPrice, prorate,
-  RETRY_DAYS, rupees, serialNumber, sizedByWork, taxSchema, toYearly, withGst, type Cycle, type DocKind, type FirmPlan, type Method, type PlanFormula, type Tax,
+  RETRY_DAYS, rupees, serialNumber, setupFee, sizedByWork, taxSchema, toYearly, withGst, type Cycle, type DocKind, type FirmPlan, type Method, type PlanFormula, type Tax,
 } from "./money";
 import { billingProvider, type BillingEvent, type Checkout, type PaymentProvider } from "./provider";
 
@@ -104,7 +104,7 @@ export async function alertAdmins(admin: Admin, kind: string, ref?: string) {
 // payment also carries the setup fee where the formula sets one.
 export function quote(formula: PlanFormula, tax: Tax | null, stateCode: string, plan: FirmPlan, cycle: Cycle, day: string, first = false) {
   const price = planPrice(formula, plan, cycle);
-  const setupPaise = first ? (formula.setup[price.code] ?? 0) * 100 : 0;
+  const setupPaise = first ? setupFee(formula, price) * 100 : 0;
   const recurring = withGst(price.paise, tax, stateCode, day);
   return { price, setupPaise, recurring, first: withGst(price.paise + setupPaise, tax, stateCode, day), methods: methodsFor(recurring.total) };
 }

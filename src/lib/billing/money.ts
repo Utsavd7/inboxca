@@ -15,7 +15,7 @@ export const formulaSchema = z.object({
   extraPerson: z.number().int().positive(),
   custom: z.object({ base: z.number(), floor: z.number(), ending: z.number(), returnsPerStep: z.number(), includedSteps: z.number(), includedPeople: z.number(), aiCredits: z.number(), aiPerStep: z.number(), yearlyMonths: z.number().int().positive(), yearlyAdd: z.number(), workSlabs: slabs, peopleSlabs: slabs, blockShare: z.number().min(0).max(1) }),
   aiBlock: z.object({ credits: z.number().int().positive(), price: z.number().int().positive() }),
-  // The one time setup fee by plan code, in rupees; empty until the business plan sets it.
+  // The one time setup fee by plan code, in rupees, as the business plan sets it.
   setup: z.record(z.string(), z.number().int().positive()).default({}),
   growthCushion: z.number().min(0).max(1),
   fitEnforced: z.boolean(),
@@ -49,6 +49,14 @@ export function planPrice(formula: PlanFormula, plan: FirmPlan, cycle: Cycle) {
   if (!fit.custom && fit.extraPeople) lines.push({ text: `${fit.extraPeople} more ${fit.extraPeople === 1 ? "person" : "people"} in the team`, paise: paise(fit.extraCost * months) });
   if (plan.aiBlocks) lines.push({ text: `${plan.aiBlocks} more AI ${plan.aiBlocks === 1 ? "block" : "blocks"} of ${formula.aiBlock.credits.toLocaleString("en-IN")} credits a month`, paise: paise(plan.aiBlocks * formula.aiBlock.price * months) });
   return { code: preset?.code ?? "custom", name, lines, paise: lines.reduce((sum, line) => sum + line.paise, 0), people: preset?.people ?? formula.custom.includedPeople, blockCap: cap, aiCredits: preset?.aiCredits ?? fit.aiCredits ?? 0 };
+}
+
+// The one time setup fee in rupees (D5): the formula's figure for a plan. The setup is one month
+// of the plan's AI credits, so a Custom firm pays the largest plan's rate for each of its credits.
+export function setupFee(formula: PlanFormula, price: { code: string; aiCredits: number }) {
+  if (price.code !== "custom") return formula.setup[price.code] ?? 0;
+  const top = formula.plans[formula.plans.length - 1], fee = formula.setup[top.code];
+  return fee ? Math.round((fee * price.aiCredits) / top.aiCredits) : 0;
 }
 
 // A plan chosen on the site's price list, from plain query parameters (plan, cycle and the
