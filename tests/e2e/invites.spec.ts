@@ -772,7 +772,7 @@ test("the owner connects the firm's mailbox; client mail is sorted, unclear mail
   await owner.getByLabel("Their work email").fill(mailboxEmail);
   await owner.getByRole("button", { name: "Send invite" }).click();
   await expect(owner.getByRole("status")).toContainText(`Invited ${mailboxEmail}`);
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const card = owner.locator("section#mailbox");
   await card.getByLabel("The firm's email address").fill(mailboxEmail);
   await card.getByLabel("Its password").fill("wrong");
@@ -875,7 +875,7 @@ test("repeated mailbox failures ask the owner to reconnect, then pending mail re
   expect((await query(local.dbUrl,"select state,last_error_code from public.jobs where firm_id=$1 and kind='reminders'",[firm.firmId]))[0]).toMatchObject({state:"pending",last_error_code:"mail_not_connected"});
   expect(await mailCount(addresses[0])).toBe(1);
   await smtp.sendMail({from:addresses[1],to:mailboxEmail,subject:"Last year's ITR",text:"Please send last year's ITR."});
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const card=owner.locator("section#mailbox");
   await expect(card.getByLabel("The firm's email address")).toHaveValue(mailboxEmail);
   await card.getByLabel("Its password").fill(mailboxEmail);
@@ -894,7 +894,7 @@ test("repeated mailbox failures ask the owner to reconnect, then pending mail re
 });
 
 test("the owner connects a drive only after agreeing to the Drive access terms", async () => {
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const card = owner.locator("section#drive");
   // The test server has OneDrive's invented app keys (tests/fake-onedrive.ts), so it is offered.
   await expect(card.getByLabel(/OneDrive/)).toBeEnabled();
@@ -1458,7 +1458,7 @@ test("bulk papers go as links, private papers wait, missing papers and addresses
   await owner.getByRole("list", { name: "Emails" }).getByText("ITR copy").first().click();
   await expect(owner.getByRole("article", { name: "Open email" })).toContainText("Asks for a paper kept inside your firm");
   expect(name).toContain("ITR-V");
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   for (const section of ["section#mailbox", "section#drive"]) {
     await owner.locator(section).getByRole("link", { name: "Disconnect" }).click();
     await owner.locator(section).getByRole("button", { name: "Yes, disconnect" }).click();

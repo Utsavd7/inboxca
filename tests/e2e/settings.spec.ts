@@ -169,3 +169,18 @@ test("the owner removes a holiday and a special hours day, and each change is lo
   await expect(holidays.getByRole("listitem")).toHaveCount(1);
   await expect(special.getByRole("listitem")).toHaveCount(1);
 });
+
+test("Settings opens as one line a group, and a change made in the panel shows on its line", async () => {
+  await owner.goto("/app/settings");
+  await expect(owner.getByRole("dialog")).toHaveCount(0);
+  await expect(owner.getByText(/Everyone sees every client/)).toBeVisible();
+  await owner.getByRole("link", { name: "Change People's access" }).click();
+  const panel = owner.getByRole("dialog", { name: "People's access" });
+  await panel.getByLabel("Only you, partners and the people assigned to a client see it").check();
+  await panel.getByRole("button", { name: "Save who sees clients" }).click();
+  await expect(saved("Who sees clients saved.")).toBeVisible();
+  await owner.getByRole("dialog", { name: "People's access" }).getByRole("link", { name: "Close" }).click();
+  await expect(owner.getByRole("dialog")).toHaveCount(0);
+  await expect(owner.getByText(/Only the people assigned to a client see it/)).toBeVisible();
+  expect((await settings()).client_visibility).toBe("restricted");
+});

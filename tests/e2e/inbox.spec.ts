@@ -45,7 +45,7 @@ test.beforeAll(async ({ browser }) => {
   await owner.getByLabel("6 digit code from the app").fill(totp(ownerKey));
   await owner.getByRole("button", { name: "Continue" }).click();
   await expect(owner).toHaveURL(/\/app$/);
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const card = owner.locator("section#mailbox");
   await card.getByLabel("The firm's email address").fill(office);
   await card.getByLabel("Its password").fill(office);
@@ -157,7 +157,7 @@ test("the team replies in the conversation from the firm's mailbox, threaded, an
 });
 
 test("an attachment shows where it was saved in the drive, and opens in the viewer", async () => {
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const card = owner.locator("section#drive");
   await card.getByLabel("Test drive on this computer").check();
   await card.getByLabel(/I have read this and I agree/).check();

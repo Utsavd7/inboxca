@@ -25,7 +25,7 @@ test("an ITR that differs from Form 26AS shows each difference and is approved o
     // The firm asks for a second approval, so both approval steps are seen.
     await query(local.dbUrl,"update public.firms set settings=settings||'{\"second_form_approval\":true}' where id=$1",[firm.firmId]);
     await signIn(page,ownerEmail,key);
-    await page.goto("/app/settings");
+    await page.goto("/app/settings?group=email");
     const drive=page.locator("section#drive");
     await drive.getByLabel("Test drive on this computer").check();await drive.getByLabel(/I have read this and I agree/).check();
     await drive.getByRole("button",{name:"Connect drive"}).click();await expect(drive.getByRole("status")).toContainText("Connected");

@@ -31,7 +31,7 @@ test.beforeAll(async ({ browser }) => {
   await owner.getByLabel("6 digit code from the app").fill(totp(key));
   await owner.getByRole("button", { name: "Continue" }).click();
   await expect(owner).toHaveURL(/\/app$/);
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const drive = owner.locator("section#drive");
   await drive.getByLabel("Test drive on this computer").check();
   await drive.getByLabel(/I have read this and I agree/).check();
@@ -121,7 +121,7 @@ test("an email's ZIP is filed paper by paper, its virus is kept out and a progra
   const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
   // The test mail server makes a mailbox when its first email arrives.
   await smtp.sendMail({ from, to: mailbox, subject: "Invented test mailbox", text: "Test setup" });
-  await owner.goto("/app/settings");
+  await owner.goto("/app/settings?group=email");
   const card = owner.locator("section#mailbox");
   await card.getByLabel("The firm's email address").fill(mailbox);
   await card.getByLabel("Its password").fill(mailbox);

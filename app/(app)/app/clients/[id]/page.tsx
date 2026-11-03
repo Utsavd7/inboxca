@@ -12,7 +12,7 @@ import { Fragment, Suspense, ViewTransition } from "react";
 import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
 import { addDays, dueLabel, isItr, periodLabel, taskStatuses, todayInIndia, verifyBy } from "@/src/lib/calendar";
 import { firmChecked } from "@/src/lib/due-dates";
-import { assignmentRoles, canManageClients, clientKinds, usualServices, whatsappLink, type ClientKind } from "@/src/lib/clients";
+import { assignmentLabel, assignmentRoles, assignmentWork, canManageClients, clientKinds, usualServices, whatsappLink, type ClientKind } from "@/src/lib/clients";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { checklists, kindChecklist, workOfService, type DocumentRequest } from "@/src/lib/checklists";
 import { skipReasons, type Skip } from "@/src/lib/reminders";
@@ -152,7 +152,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase
       .from("clients")
       .select(
-        "id, name, kind, archived_at, email_enc, phone_enc, group_id, branch_id, reminders_paused, tags, engagement_enc, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role), contact_clients(contact_id, relation, can_receive_documents, contacts(name_enc, email_enc))",
+        "id, name, kind, archived_at, email_enc, phone_enc, group_id, branch_id, reminders_paused, tags, engagement_enc, client_registrations(id, kind, number_enc, services), client_assignments(user_id, team_id, role, work), contact_clients(contact_id, relation, can_receive_documents, contacts(name_enc, email_enc))",
       )
       .eq("id", id)
       .eq("firm_id", firm)
@@ -655,7 +655,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 {lookers.length ? (
                   <ul className="app-rows">
                     {lookers.map((assignment) => (
-                      <Row key={assignment.value} lead={<Avatar name={who(assignment)} square={!!assignment.team_id} />} title={who(assignment)} meta={assignmentRoles[assignment.role as keyof typeof assignmentRoles]} />
+                      <Row key={assignment.value} lead={<Avatar name={who(assignment)} square={!!assignment.team_id} />} title={who(assignment)} meta={assignmentLabel(assignment)} />
                     ))}
                   </ul>
                 ) : (
@@ -1121,7 +1121,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           <ul className="client-rows">
             {assigned.map((assignment) => (
               <li key={assignment.value}>
-                <span className="grow"><span className="name">{labelOf.get(assignment.value)}</span><span className="sub">{assignmentRoles[assignment.role as keyof typeof assignmentRoles]}</span></span>
+                <span className="grow"><span className="name">{labelOf.get(assignment.value)}</span><span className="sub">{assignmentLabel(assignment)}</span></span>
                 {manage && (
                   <form action={manageClient}>
                     {hidden("team")}
@@ -1148,6 +1148,13 @@ export default async function Client({ params, searchParams }: { params: Promise
                   {Object.entries(assignmentRoles).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </div>
+              <div>
+                <label htmlFor="assign-work">For</label>
+                <select id="assign-work" name="work" defaultValue="">
+                  {Object.entries(assignmentWork).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
+              <p className="hint">GST only or Income tax only puts just that desk&apos;s returns on this person&apos;s list. Papers, notices and emails for the client stay with everyone assigned.</p>
               <Pending className="b b-primary" name="intent" value="assign">Assign</Pending>
             </form>
           )}

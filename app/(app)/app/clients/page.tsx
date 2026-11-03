@@ -8,7 +8,7 @@ import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { assignClients, setServices, tagClients } from "@/app/(app)/actions";
-import { assignmentRoles, canManageClients } from "@/src/lib/clients";
+import { assignmentRoles, assignmentWork, canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { cleanNumber, isGstin, isPan, numberKinds, type NumberKind } from "@/src/lib/identifiers";
 import { clientsIn as clientsMatching, filterKeys, matchingClients, MOST_MATCHING, pills, readFilter, type Lateness, type Pill, columns } from "./matching";
@@ -261,6 +261,12 @@ export default async function Clients({
                 <label htmlFor="assign-role">As</label>
                 <select id="assign-role" name="role" defaultValue="staff">
                   {Object.entries(assignmentRoles).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="assign-work">For</label>
+                <select id="assign-work" name="work" defaultValue="">
+                  {Object.entries(assignmentWork).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </div>
               <Pending className="b b-primary" disabled={tooMany}>Assign to {plural(setNames.length)}</Pending>

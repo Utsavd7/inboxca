@@ -64,13 +64,13 @@ isOneToOne: false
                   ]
                 },"client_assignments": {
                   Row: {
-                    "client_id": string,"firm_id": string,"role": string,"team_id": string | null,"user_id": string | null
+                    "client_id": string,"firm_id": string,"role": string,"team_id": string | null,"user_id": string | null,"work": string | null
                   }
                   Insert: {
-                    "client_id": string,"firm_id": string,"role": string,"team_id"?: string | null,"user_id"?: string | null
+                    "client_id": string,"firm_id": string,"role": string,"team_id"?: string | null,"user_id"?: string | null,"work"?: string | null
                   }
                   Update: {
-                    "client_id"?: string,"firm_id"?: string,"role"?: string,"team_id"?: string | null,"user_id"?: string | null
+                    "client_id"?: string,"firm_id"?: string,"role"?: string,"team_id"?: string | null,"user_id"?: string | null,"work"?: string | null
                   }
                   Relationships: [
                     {
@@ -1116,6 +1116,11 @@ isOneToOne: false
               "firm_id": string,"firm_name": string,"role": string
             }[]
                            },
+"my_work":
+{ Args: { "target_firm": string }; Returns: {
+              "client_id": string,"work": string
+            }[]
+                           },
 "notice_alerts":
 { Args: { "target_firm": string }; Returns: {
               "action_date": string,"assigned_to": string,"client_id": string,"client_name": string,"due_on": string,"id": string
@@ -1283,6 +1288,9 @@ isOneToOne: false
 { Args: { "mine"?: boolean,"since": string,"target_firm": string,"until": string }; Returns: {
               "due": number,"filed": number,"waiting": number
             }[]
+                           },
+"work_of":
+{ Args: { "code": string }; Returns: string
                            }
           }
           Enums: {

@@ -34,7 +34,7 @@ test("the drive's folders as the drive shows them: a hand placed file is filed i
   const firm = await seedFirm(`Folders Firm ${tag}`, ownerEmail, ownerKey);
   try {
     await signIn(page, ownerEmail, ownerKey);
-    await page.goto("/app/settings");
+    await page.goto("/app/settings?group=email");
     const drive = page.locator("section#drive");
     await drive.getByLabel("Test drive on this computer").check();
     await drive.getByLabel(/I have read this and I agree/).check();

@@ -13,7 +13,7 @@ import { emailTemplates } from "@/src/lib/email-templates";
 import { addDays, dueLabel, isItr, periodLabel, todayInIndia, verifyBy } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
-import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, readTags, type ClientInput } from "@/src/lib/clients";
+import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, readTags, readWork, type ClientInput } from "@/src/lib/clients";
 import { chunks, filterKeys, matchingClients, MOST_MATCHING, readFilter } from "@/app/(app)/app/clients/matching";
 import { unsafeCell } from "@/src/lib/client-sheet";
 import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
@@ -616,12 +616,13 @@ export async function assignClients(form: FormData) {
   const role = String(form.get("role") ?? "");
   const [kind, who] = String(form.get("who") ?? "").split(":");
   if (!(role in assignmentRoles) || !z.uuid().safeParse(who).success || (kind !== "team" && kind !== "person")) redirect(to(`${listQuery(form, "assign", ids)}&error=assign`));
+  const work = readWork(form.get("work"));
   let made = 0;
   for (const batch of chunks(ids)) {
     const { data: already } = await supabase.from("client_assignments").select("client_id").eq("firm_id", membership.firmId).in("client_id", batch).eq(kind === "team" ? "team_id" : "user_id", who);
     const fresh = batch.filter((id) => !already?.some((row) => row.client_id === id));
     const { data, error } = fresh.length
-      ? await supabase.from("client_assignments").insert(fresh.map((client_id) => ({ firm_id: membership.firmId, client_id, role, ...(kind === "team" ? { team_id: who } : { user_id: who }) }))).select("client_id")
+      ? await supabase.from("client_assignments").insert(fresh.map((client_id) => ({ firm_id: membership.firmId, client_id, role, work, ...(kind === "team" ? { team_id: who } : { user_id: who }) }))).select("client_id")
       : { data: [], error: null };
     if (error) redirect(to(`${listQuery(form, "assign", ids)}&error=assign`));
     made += data?.length ?? 0;
@@ -731,7 +732,7 @@ export async function manageClient(form: FormData) {
     if (!(role in assignmentRoles) || !who || (kind !== "team" && kind !== "person")) back("assign");
     const { error } = await supabase
       .from("client_assignments")
-      .insert({ firm_id: firm, client_id: id, role, ...(kind === "team" ? { team_id: who } : { user_id: who }) });
+      .insert({ firm_id: firm, client_id: id, role, work: readWork(form.get("work")), ...(kind === "team" ? { team_id: who } : { user_id: who }) });
     if (error) back(error.code === "23505" ? "assigned" : "assign");
   } else if (intent === "unassign") {
     const [kind, who] = String(form.get("who") ?? "").split(":");
@@ -2092,6 +2093,11 @@ export async function manageNotice(form: FormData) {
       const { assigned_to: was, ...rest } = details;
       await supabaseAdmin().from("tasks").update({ details: { ...rest, ...(person && { assigned_to: person }) } as unknown as NonNullable<Json> }).eq("id", notice.id);
       if (person !== (was ?? "")) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.assigned", entity_type: "task", entity_id: notice.id, details: { person } });
+      // The owner is often set just before the reply is recorded, so the notice stays open.
+      if (back === "/app/notices") {
+        revalidatePath("/app", "layout");
+        redirect(`/app/notices?notice=${notice.id}&saved=assign`);
+      }
     }
     // The reply a person sent (never AI): its date, what was sent, the acknowledgement and a paper of
     // this client's. Recording it marks the notice replied, or closes it; closing needs it recorded.

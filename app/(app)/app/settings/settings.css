@@ -1,13 +1,10 @@
-/* Settings: a short list of groups on the left, the chosen group's cards on the right.
-   Each card a tile, a title, one line, its controls and one Save. */
-.set { display: grid; grid-template-columns: 216px minmax(0, 760px); gap: var(--s6); align-items: start; margin-top: var(--s5); }
-.set-nav { position: sticky; top: 72px; display: grid; gap: 2px; padding: var(--s2); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-1); }
-.set-nav a { display: flex; align-items: center; gap: var(--s2); height: var(--control); padding: 0 var(--s2); border-radius: var(--r2); color: var(--ink-2); font-size: 14px; font-weight: 500; text-decoration: none; transition: background var(--fast) var(--out), color var(--fast) var(--out), transform var(--fast) var(--out); }
-.set-nav a svg { flex: none; color: var(--ink-3); transition: color var(--fast) var(--out); }
-.set-nav a:hover { background: var(--hover); color: var(--ink); }
-.set-nav a:active { transform: scale(0.98); }
-.set-nav a[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.set-nav a[aria-current] svg { color: var(--accent); }
+/* Settings: one line a group saying what is set now, with Change; the chosen group's cards
+   open in the side panel. Each card a tile, a title, one line, its controls and one Save. */
+.set-summary { max-width: 860px; margin-top: var(--s5); padding: 0; overflow: hidden; }
+.set-summary .app-row:first-child { border-top: 0; }
+.set-summary .app-row .sub { white-space: normal; }
+.set-page .side-panel { width: min(760px, calc(100vw - var(--s4))); }
+.set-page .side-panel-body { background: var(--canvas); }
 
 .set-body { display: grid; gap: var(--s4); min-width: 0; }
 .set-page .set-body > .panel { min-width: 0; margin: 0; padding: var(--s4) var(--s5) var(--s5); border: 1px solid var(--edge); border-radius: var(--r3); scroll-margin-top: 112px; }
