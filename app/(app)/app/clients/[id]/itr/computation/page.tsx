@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {Fragment} from "react";
 import {ChevronLeft} from "lucide-react";
 import {unstable_rethrow} from "next/navigation";
 import {z} from "zod";
@@ -7,6 +8,7 @@ import {grouped} from "@/src/lib/form-layout";
 import {itrWork} from "@/src/lib/itr";
 import {itrFieldName,itrFields,itrReturns,itrYear,type ItrForm} from "@/src/lib/itr-fields";
 import {formName} from "@/src/lib/prepared";
+import {ageBands,newRegime,oldRegime,type AgeBand} from "@/src/lib/tax";
 import {PageHead} from "../../../../ui";
 import "../../../clients.css";
 
@@ -28,10 +30,12 @@ const paid=["itr.tds.total","itr.tcs.total","itr.advance_tax.total","itr.self_as
 
 // A read only computation for one return: the heads of income, deductions and taxable income
 // from the figures a person has checked, added up by InboxCA beside what the return itself
-// states. Tax under the old and new regime is shown only from official rate text, which
-// InboxCA does not hold for this year, so that part says what is needed instead.
+// states. Tax under the old and new regime is worked out from official rate text (src/lib/tax.ts)
+// for tax year 2026-27 on, for a resident individual's normal income; for AY 2026-27 under the
+// 1961 Act InboxCA holds no rate text, so that part says what is needed instead.
 export default async function Computation({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<Record<string,string|undefined>>}) {
   const {id}=await params,q=await searchParams,form=z.enum(itrReturns).catch("ITR1").parse(q.form),period=/^20\d{2}$/.test(q.year ?? "") ? q.year! : "2026";
+  const age=z.enum(["under60","60","80"]).catch("under60").parse(q.age) as AgeBand;
   const back=`/app/clients/${id}/itr?form=${form}&year=${period}`;
   let work:Awaited<ReturnType<typeof itrWork>>;
   try {work=await itrWork(id,form,period);} catch(error) {
@@ -58,6 +62,10 @@ export default async function Computation({params,searchParams}:{params:Promise<
   const differs=(worked:bigint|null,line?:Line)=>{const value=amount(line);return worked!==null && value!==null && worked!==value;};
   const taxLines=(["tax","rebate","cess","net"] as const).flatMap(key=>{const line=statedAt(key);return line ? [line] : [];});
   const payments=paid.flatMap(field=>{const line=at(field);return line ? [{label:itrFields[field].label,line}] : [];});
+  // Normal income: the taxable income less the heads taxed at their own rates (capital gains).
+  const special=(["itr.capital_gains.total","itr.capital_gains.ltcg112a"] as const).flatMap(field=>{const line=at(field);return line ? [{label:itrFields[field].label,line}] : [];});
+  const normal=taxable===null ? null : special.reduce((left,{line})=>left-(amount(line) ?? BigInt(0)),taxable);
+  const regimes=Number(period)>=2027 && normal!==null ? [newRegime(normal<BigInt(0) ? BigInt(0) : normal),oldRegime(normal<BigInt(0) ? BigInt(0) : normal,age)] : null;
   const row=(label:string,value:string,note?:string,strong=false)=><li className="app-row" key={label+value}><span className="grow">{strong ? <strong>{label}</strong> : label}{note && <span className="sub">{note}</span>}</span><span className="num">{value}</span></li>;
   const shown=(line:Line)=>grouped(line.value,undefined,0);
 
@@ -84,8 +92,18 @@ export default async function Computation({params,searchParams}:{params:Promise<
         </ul>
       </section>
       <section className="panel" aria-labelledby="comp-tax">
-        <div className="panel-head"><h2 id="comp-tax">Tax, old and new regime</h2></div>
-        <p className="hint">Not available yet. InboxCA works out tax only from official rate text, and holds none for {itrYear(period)}: the tax slabs of both regimes, the rebate limit and the surcharge rates are not in its official references. Form No. 130 (Income-tax Rules, 2026) gives only health and education cess at 4%. Once the Income Tax Department&apos;s rate text for the year is added under official references, this part shows both regimes side by side.</p>
+        <div className="panel-head"><h2 id="comp-tax">Tax, old and new regime</h2>{regimes && <span className="hint">Age for the old regime: {(Object.keys(ageBands) as AgeBand[]).map((band,i)=><Fragment key={band}>{i>0 && ", "}{band===age ? <strong>{ageBands[band]}</strong> : <Link href={`${back.replace("/itr?","/itr/computation?")}&age=${band}`}>{ageBands[band]}</Link>}</Fragment>)}</span>}</div>
+        {regimes ? <>
+          <p className="hint">On the normal income worked out by InboxCA, {rupees(normal!<BigInt(0) ? BigInt(0) : normal!)}, for a resident individual: Income-tax Act 2025 and the Finance Act 2026 rates for {itrYear(period)}. {special.length ? `${special.map(({label})=>label).join(" and ")} ${special.length===1 ? "is" : "are"} taxed at special rates and not computed here.` : "Income taxed at special rates (capital gains and the like) is not computed here."}</p>
+          <div className="regimes">
+            {regimes.map(regime=><ul className="app-rows" key={regime.name} aria-label={regime.name}>
+              <li className="app-row"><span className="grow"><strong>{regime.name}</strong></span></li>
+              {regime.steps.map(step=>row(step.label,rupees(step.amount),step.section))}
+              {row("Tax for the year",rupees(regime.total),"Before taxes paid and interest",true)}
+            </ul>)}
+          </div>
+        </> : Number(period)>=2027 ? <p className="hint">The taxable income is not worked out yet, so there is no tax to show. Check the heads of income first.</p>
+          : <p className="hint">Not available for {itrYear(period)}. InboxCA works out tax only from official rate text, and holds the 1961 Act rates for this year (s.115BAC(1A)) in none of its official references. Form No. 130 (Income-tax Rules, 2026) gives only health and education cess at 4%. From tax year 2026-27 both regimes show here side by side.</p>}
         {!!taxLines.length && <>
           <p className="hint">As entered in the return, not worked out by InboxCA:</p>
           <ul className="app-rows">{taxLines.map(line=>row(line.label,shown(line),line.from))}</ul>

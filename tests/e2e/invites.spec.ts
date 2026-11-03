@@ -727,7 +727,10 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.getByRole("button", { name: "Add team" }).click();
   await expect(owner.locator("section[aria-labelledby=teams]").getByRole("listitem")).toContainText("0 people");
   await owner.getByRole("link", { name: "Close" }).click();
+  // The panel has closed and the list is the only one on the page before a row is picked.
+  await expect(owner).toHaveURL(/\/app\/people$/);
   const row = owner.getByRole("row").filter({ hasText: newEmail });
+  await expect(row.getByRole("link", { name: `Change ${newEmail}` })).toHaveCount(1);
   await row.getByRole("link", { name: `Change ${newEmail}` }).click();
   await owner.getByRole("dialog", { name: personName(newEmail) }).getByLabel("Team").selectOption({ label: "GST team" });
   await owner.getByRole("button", { name: "Save changes" }).click();

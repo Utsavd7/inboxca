@@ -76,6 +76,17 @@ export async function addExtension(form: FormData) {
   revalidatePath("/admin", "layout");
 }
 
+// Undoes an extension the Sunday check applied from an official notice: the period's returns go
+// back to the rule's date, logged.
+export async function undoExtension(form: FormData) {
+  const { supabase } = await currentAdmin();
+  const asked = z.object({ code: z.string().regex(/^[A-Z0-9_]{2,20}$/), period: z.string().regex(/^[0-9]{4}-[0-9]{2}$/) }).safeParse({ code: form.get("code"), period: form.get("period") });
+  if (!asked.success) return fail("/admin/due-dates", "undo");
+  const { error } = await supabase.rpc("admin_undo_extension", { rule_code: asked.data.code, rule_period: asked.data.period });
+  if (error) throw new Error(`Undoing the extension failed: ${error.code}`);
+  revalidatePath("/admin", "layout");
+}
+
 // The fixed connection suggestion's thresholds (PLAN.md 5.8).
 export async function setOffice(form: FormData) {
   const { supabase } = await currentAdmin();

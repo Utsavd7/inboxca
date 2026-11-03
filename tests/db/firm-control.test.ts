@@ -78,6 +78,13 @@ it("makes a company's AGM based returns from the AGM date, for those who manage 
     await db.query("delete from public.tasks where registration_id = $1", [registration]);
     await db.query("select private.plan_tasks($1)", [registration]);
     expect((await db.query("select count(*)::int n from public.tasks where registration_id = $1", [registration])).rows[0].n).toBe(0);
+    // A One Person Company holds no AGM: its AOC-4 is dated 180 days from the year end, 27
+    // September (s.137(1) third proviso), in place of the AGM based one.
+    expect((await attempt(db, "update public.client_registrations set services = '{AOC4,AOC4_OPC}' where id = $1", [registration])).ok).toBe(false);
+    await db.query("update public.client_registrations set services = '{AOC4_OPC,MGT7}' where id = $1", [registration]);
+    await db.query("delete from public.tasks where registration_id = $1", [registration]);
+    await db.query("select private.plan_tasks_for($1, null, '2026-04-01')", [registration]);
+    expect((await db.query("select code, period_key, to_char(due_on,'YYYY-MM-DD') due_on from public.tasks where registration_id = $1 order by code", [registration])).rows).toEqual([{ code: "AOC4_OPC", period_key: "2026-03", due_on: "2026-09-27" }]);
   }));
 
 it("shows who is behind and who signed a return off only to those who may see the clients", () =>
@@ -95,4 +102,25 @@ it("shows who is behind and who signed a return off only to those who may see th
     await actAs(db, ownerB);
     expect((await db.query("select * from public.form_signoffs($1,$2)", [firmA, [doc]])).rows).toEqual([]);
     expect((await attempt(db, "select * from public.people_load($1)", [firmA])).rows).toEqual([]);
+  }));
+
+it("dates the next DIR-3 KYC Web three financial years after the last, by 30 June, only once the year is given", () =>
+  rollback(db, async () => {
+    const { other } = await seed();
+    await asOwner(db);
+    const pan = (await db.query("insert into public.client_registrations(firm_id,client_id,kind,number_enc,number_bidx,services) values ($1,$2,'pan','invented-pan','invented-pan-bidx','{DIR3KYC}') returning id", [firmA, other])).rows[0].id;
+    // Rule 12A as substituted by G.S.R. 943(E): nothing is planned until the last KYC's year is known.
+    await db.query("select private.plan_tasks($1)", [pan]);
+    expect((await db.query("select count(*)::int n from public.tasks where registration_id = $1", [pan])).rows[0].n).toBe(0);
+    const record = (year: string) => db.query("select public.record_kyc($1,$2,$3) made", [firmA, pan, year]).then((result) => result.rows[0].made);
+    await actAs(db, staffA);
+    expect(await record("2024-03")).toBe(0);
+    await actAs(db, ownerA);
+    expect(await record("2024-04")).toBe(0);
+    expect(await record("2024-03")).toBe(1);
+    expect((await db.query("select code, period_key, to_char(due_on,'YYYY-MM-DD') due_on, details->>'last_kyc' last_kyc from public.tasks where registration_id = $1", [pan])).rows)
+      .toEqual([{ code: "DIR3KYC", period_key: "2027-03", due_on: "2027-06-30", last_kyc: "2024-03" }]);
+    // A corrected year replaces the task not yet started.
+    expect(await record("2025-03")).toBe(1);
+    expect((await db.query("select period_key, to_char(due_on,'YYYY-MM-DD') due_on from public.tasks where registration_id = $1", [pan])).rows).toEqual([{ period_key: "2028-03", due_on: "2028-06-30" }]);
   }));

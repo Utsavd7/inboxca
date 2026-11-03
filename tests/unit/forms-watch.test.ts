@@ -80,6 +80,18 @@ it("announces a listing's new entries from its second day, seen on India's date,
   expect(watch.items).toHaveLength(1);
 });
 
+it("reads only the official sites over https: a plain http source, or a redirect off them, is a failed read, never a change", async () => {
+  const elsewhere: Source = { key: "elsewhere", name: "Invented unsecured copy", url: "http://official.invalid/tool.zip", area: "gst", kind: "file", known: sha("tool v1") };
+  const moved: Source = { key: "moved", name: "Invented moved page", url: "https://official.invalid/moved", area: "gst", kind: "page" };
+  pages.set(elsewhere.url, "tool v2");
+  const redirecting = (async (url: string | URL | Request) =>
+    String(url) === moved.url ? new Response(null, { status: 302, headers: { location: "https://mirror.invalid/moved" } }) : fetcher(url)) as typeof fetch;
+  let watch = await checkSources(empty, day(0), redirecting, [elsewhere, moved]);
+  watch = await checkSources(watch, day(1), redirecting, [elsewhere, moved]);
+  expect(watch.changes).toEqual([]);
+  expect(watch.alerts).toMatchObject([{ source: "elsewhere", reason: "Outside the official sites" }, { source: "moved", reason: "Outside the official sites" }]);
+});
+
 // The official files InboxCA fills, from reference/official, set beside what a new download holds.
 const official = (file: string) => new Uint8Array(readFileSync(`reference/official/${file}`));
 const templates = JSON.parse(readFileSync("reference/official/templates.json", "utf8")) as Template[];

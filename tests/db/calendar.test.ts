@@ -179,6 +179,16 @@ describe("the compliance calendar", () => {
       expect((await setServices("pan", ["ITR_TP"])).ok).toBe(true);
       await planAsOf("2026-04-01");
       expect(await due("ITR_TP")).toEqual([{ period_key: "2026-03", due_on: "2026-11-30" }]);
+      // s.63(5)(a): the audit report is due a month before the return, 31 October here, 30
+      // September for any other audit case.
+      await db.query("update public.clients set kind = 'tax_audit' where id = $1", [CLIENT]);
+      expect((await setServices("pan", ["ITR_TP", "TAX_AUDIT"])).ok).toBe(true);
+      await planAsOf("2026-04-01");
+      expect(await due("TAX_AUDIT")).toEqual([{ period_key: "2026-03", due_on: "2026-10-31" }]);
+      expect((await setServices("pan", ["ITR_AUDIT", "TAX_AUDIT"])).ok).toBe(true);
+      await planAsOf("2026-04-01");
+      expect(await due("TAX_AUDIT")).toEqual([{ period_key: "2026-03", due_on: "2026-09-30" }]);
+      await db.query("update public.clients set kind = 'business' where id = $1", [CLIENT]);
       // s.408(2): presumptive income pays all its advance tax by 15 March, instead of four instalments.
       expect((await setServices("pan", ["ADV_TAX", "ADV_TAX_P"])).ok).toBe(false);
       expect((await setServices("pan", ["ADV_TAX_P"])).ok).toBe(true);
