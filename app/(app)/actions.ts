@@ -2093,6 +2093,11 @@ export async function manageNotice(form: FormData) {
       const { assigned_to: was, ...rest } = details;
       await supabaseAdmin().from("tasks").update({ details: { ...rest, ...(person && { assigned_to: person }) } as unknown as NonNullable<Json> }).eq("id", notice.id);
       if (person !== (was ?? "")) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "notice.assigned", entity_type: "task", entity_id: notice.id, details: { person } });
+      // The owner is often set just before the reply is recorded, so the notice stays open.
+      if (back === "/app/notices") {
+        revalidatePath("/app", "layout");
+        redirect(`/app/notices?notice=${notice.id}&saved=assign`);
+      }
     }
     // The reply a person sent (never AI): its date, what was sent, the acknowledgement and a paper of
     // this client's. Recording it marks the notice replied, or closes it; closing needs it recorded.
