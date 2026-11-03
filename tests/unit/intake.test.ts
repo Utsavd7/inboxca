@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import type { AddressInfo } from "node:net";
+import { createServer, type AddressInfo } from "node:net";
 import { craft } from "../fixtures/zip";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
-import { intakeLimits, readFrames, signView, unsafeFile } from "@/src/lib/file-worker";
+import { intakeLimits, readFrames, scanRequired, signView, unsafeFile } from "@/src/lib/file-worker";
 import { checkFile } from "@/src/lib/intake";
 import { zip } from "@/src/lib/firm-download";
 import { handle } from "@/worker/handler";
@@ -61,7 +61,7 @@ it("refuses unsafe paths, links, passwords, other archives, lies and too much", 
 });
 
 it("asks clamd over TCP, and says when no scanner is set up or it does not answer", async () => {
-  vi.stubEnv("CLAMD_HOST", ""); vi.stubEnv("CLAMD_PORT", "");
+  vi.stubEnv("CLAMD_HOST", ""); vi.stubEnv("CLAMD_PORT", ""); vi.stubEnv("SCAN_OPTIONAL", "1");
   expect(await scan(Buffer.from(EICAR))).toBe("off");
   scanning();
   expect(await scan(Buffer.from(pdf("Invented statement")))).toBe("clean");
@@ -71,6 +71,36 @@ it("asks clamd over TCP, and says when no scanner is set up or it does not answe
   await expect(scan(Buffer.from("x"))).rejects.toThrow();
   vi.unstubAllEnvs();
 });
+
+// Where the check is required (production, or without SCAN_OPTIONAL=1), a scanner that is
+// missing, away, silent or answering anything else never passes a file, and the worker's health
+// check says so, so the status page shows files down.
+it("never marks a file clean without a scanner that answers OK, where the check is required", async () => {
+  const silent = createServer(() => {}), broken = createServer((socket) => { socket.on("data", () => socket.end("stream: ERROR\0")); });
+  for (const server of [silent, broken]) { server.listen(0, "127.0.0.1"); await once(server, "listening"); }
+  const at = (server: typeof silent) => String((server.address() as AddressInfo).port);
+  const health = async () => (await handle(new Request("http://worker/health"))).status;
+  vi.stubEnv("SCAN_OPTIONAL", "");
+  try {
+    vi.stubEnv("CLAMD_HOST", ""); vi.stubEnv("CLAMD_PORT", "");
+    await expect(scan(Buffer.from("x"))).rejects.toThrow();
+    expect(await health()).toBe(503);
+    vi.stubEnv("CLAMD_HOST", "127.0.0.1"); vi.stubEnv("CLAMD_PORT", "1");
+    await expect(scan(Buffer.from("x"))).rejects.toThrow();
+    expect(await health()).toBe(503);
+    vi.stubEnv("CLAMD_PORT", at(silent));
+    await expect(scan(Buffer.from("x"), AbortSignal.timeout(300))).rejects.toThrow();
+    expect(await health()).toBe(503);
+    vi.stubEnv("CLAMD_PORT", at(broken));
+    await expect(scan(Buffer.from("x"))).rejects.toThrow();
+    scanning();
+    expect(await health()).toBe(200);
+    // Production never does without, whatever SCAN_OPTIONAL says.
+    expect(scanRequired({ NODE_ENV: "production", SCAN_OPTIONAL: "1" })).toBe(true);
+    expect(scanRequired({ NODE_ENV: "development" })).toBe(true);
+    expect(scanRequired({ NODE_ENV: "development", SCAN_OPTIONAL: "1" })).toBe(false);
+  } finally { vi.unstubAllEnvs(); silent.close(); broken.close(); }
+}, 15_000);
 
 // The app's side against the worker's handler, as the fetch between them would carry it.
 async function viaWorker<T>(run: () => Promise<T>) {
@@ -87,9 +117,16 @@ const papers = async (checked: Awaited<ReturnType<typeof checkFile>>) => {
 
 it("checks each file sent in through the worker: a virus, a program, a ZIP's papers", async () => {
   const bill = Buffer.from(pdf("Invented bill"));
+  // Where the check is required, no worker and a worker without a scanner both refuse the file.
+  vi.stubEnv("SCAN_OPTIONAL", "");
+  await expect(checkFile({ name: "bill.pdf", bytes: bill })).rejects.toThrow("scan_unavailable");
+  await viaWorker(() => expect(checkFile({ name: "bill.pdf", bytes: bill })).rejects.toThrow("scan_unavailable"));
+  vi.stubEnv("SCAN_OPTIONAL", "1");
   expect(await papers(await checkFile({ name: "bill.pdf", bytes: bill }))).toEqual({ scanned: false, all: [["bill.pdf", true]] });
   await viaWorker(async () => {
+    vi.stubEnv("SCAN_OPTIONAL", "1");
     expect(await papers(await checkFile({ name: "bill.pdf", bytes: bill }))).toEqual({ scanned: false, all: [["bill.pdf", true]] });
+    vi.stubEnv("SCAN_OPTIONAL", "");
     scanning();
     expect(await papers(await checkFile({ name: "bill.pdf", bytes: bill }))).toEqual({ scanned: true, all: [["bill.pdf", true]] });
     expect(await checkFile({ name: "bill.pdf", bytes: Buffer.from(`${EICAR}\n`) })).toEqual({ unsafe: "virus", found: "Eicar-Test-Signature" });
@@ -112,7 +149,7 @@ it("checks each file sent in through the worker: a virus, a program, a ZIP's pap
 it("takes only a signed ticket, and only the bytes it names", async () => {
   const bytes = Buffer.from(pdf("Invented"));
   const ticket = JSON.stringify({ size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), zip: false, expires: Math.floor(Date.now() / 1000) + 60 });
-  vi.stubEnv("FILE_WORKER_SECRET", secret);
+  vi.stubEnv("FILE_WORKER_SECRET", secret); vi.stubEnv("SCAN_OPTIONAL", "1");
   try {
     const send = async (signature: string, body: Buffer, sent = ticket) => (await handle(new Request("http://worker/intake", { method: "POST", body: new Uint8Array(body), headers: { authorization: signature, "x-inboxca-intake": sent } }))).status;
     const signed = await signView(ticket, secret);

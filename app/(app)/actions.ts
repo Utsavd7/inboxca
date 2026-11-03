@@ -33,7 +33,8 @@ import { CHALLENGE_COOKIE, PC_LATER_COOKIE, checkAdminKey, checkKeyUse, checkNew
 import { PASSKEY_FACTOR, sealFactor } from "@/src/lib/sign-in";
 import { recognisePortalFile } from "@/src/lib/portal-files";
 import { recognisePortalPdf } from "@/src/lib/tax-papers";
-import { receive } from "@/src/lib/intake";
+import { asReceived, receive, type Received } from "@/src/lib/intake";
+import { queueRescan } from "@/src/jobs/rescan";
 import { may, mayDecide, rightWords, routeOf, switchable, type Permissions, type Right, type Scope as PermissionScope, type Standing } from "@/src/lib/rights";
 import { searchTokens, words } from "@/src/lib/search";
 import { readSheet } from "@/src/lib/sheet";
@@ -1406,7 +1407,7 @@ async function saveForClient(
   values: { work_type: WorkType; document_type: string; period_key: string; status: "filed" | "to_check"; registration_id?: string | null },
   file: { name: string; bytes: Uint8Array },
   opened: NonNullable<Awaited<ReturnType<typeof firmDrive>>>,
-  scanned: boolean,
+  sent: Received,
   portal = false,
 ) {
   const admin = supabaseAdmin();
@@ -1414,7 +1415,8 @@ async function saveForClient(
   const { data: twin } = await admin.from("documents").select("id").eq("client_id", client.id).eq("sha256", sha256).neq("status", "deleted").limit(1);
   if (twin?.length) return "twin" as const;
   const now = new Date().toISOString();
-  const folder = await opened.drive.ensureFolder(folderFor(opened.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: values.status === "to_check" }));
+  const recorded = asReceived(sent, values.status, now);
+  const folder = await opened.drive.ensureFolder(folderFor(opened.order, client.name, { work: values.work_type, period: values.period_key, receivedAt: now, toCheck: recorded.status === "to_check" }));
   const placed = await placeUnderFreeName(
     { client: client.name, type: values.document_type, period: filePeriod(values.period_key), extension: path.extname(file.name) },
     receivedLabel(now),
@@ -1430,6 +1432,7 @@ async function saveForClient(
     firm_id: membership.firmId,
     client_id: client.id,
     ...values,
+    ...recorded,
     registration_id,
     drive_file_id: placed.id,
     name: placed.name,
@@ -1437,11 +1440,10 @@ async function saveForClient(
     size: file.bytes.length,
     sha256,
     received_at: now,
-    scanned_at: scanned ? now : null,
   });
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "document.uploaded", entity_type: "document", entity_id: id, ...(portal && { details: { from: "portal" } }) });
-  if (values.status === "filed") await settleVersions(admin, { client_id: client.id, ...values, registration_id });
-  await queueRead(membership.firmId, id);
+  if (recorded.status === "filed") await settleVersions(admin, { client_id: client.id, ...values, registration_id });
+  await (sent.held ? queueRescan : queueRead)(membership.firmId, id);
   return { id };
 }
 
@@ -1483,7 +1485,7 @@ export async function uploadDocument(form: FormData) {
       continue;
     }
     for await (const paper of sent.papers) {
-      const result = await saveForClient(membership, userId, client, { ...values[at], status: "filed", registration_id: registration }, paper, opened, sent.scanned);
+      const result = await saveForClient(membership, userId, client, { ...values[at], status: "filed", registration_id: registration }, paper, opened, sent);
       if (result === "drive") redirect(`${back}&error=drive`);
       if (result === "twin") count.twin++;
       else saved.push(result.id);
@@ -1547,11 +1549,11 @@ export async function dropPortalFiles(form: FormData) {
         : { data: null };
       let saved: Awaited<ReturnType<typeof saveForClient>> | null = null;
       if (portal && registration?.clients && membership.may("portal_files",registration.client_id)) {
-        saved = await saveForClient(membership, userId, registration.clients, { work_type: kind === "gstin" ? "gst" : "income_tax", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: kind === "gstin" ? registration.id : null }, file, opened, sent.scanned, true);
+        saved = await saveForClient(membership, userId, registration.clients, { work_type: kind === "gstin" ? "gst" : "income_tax", document_type: portal.type, period_key: portal.period, status: "filed", registration_id: kind === "gstin" ? registration.id : null }, file, opened, sent, true);
         // The "still missing" item asked for by this file's name closes; a request with every item in closes, and its reminders stop.
         if (typeof saved === "object") await receiveAsked(supabaseAdmin(), registration.client_id, portal.type, portal.period, saved.id);
       } else if (!portal && client && membership.may("upload", client.id)) {
-        saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, file, opened, sent.scanned);
+        saved = await saveForClient(membership, userId, client, { work_type: "other", document_type: "Document", period_key: "", status: "to_check" }, file, opened, sent);
       }
       if (saved === "twin") count.again++;
       else if (saved && saved !== "drive") count.filed++;
@@ -1773,7 +1775,7 @@ export async function uploadToRequest(form: FormData): Promise<"got" | "file" | 
       { work_type: item.work, document_type: item.type, period_key: details.period, status: "filed", registration_id: details.registration },
       paper,
       opened,
-      sent.scanned,
+      sent,
     );
     if (saved === "drive") return "later";
     if (saved !== "twin") item.received.push(saved.id);

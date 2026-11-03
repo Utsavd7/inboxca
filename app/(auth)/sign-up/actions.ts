@@ -70,7 +70,7 @@ export async function setUpFirm(_prev: SignUpState, form: FormData): Promise<Sig
 
 function detailsProblem(state: string, form: FormData): [string, string] | undefined {
   if (!states.some(([code]) => code === state)) return ["Choose your firm's state.", "state"];
-  if (form.get("accept") !== "on") return ["Tick the box to accept the terms, privacy notice and DPA.", "accept"];
+  if (form.get("accept") !== "on") return ["Tick the box to accept the terms and the data processing agreement.", "accept"];
 }
 
 // A public form that makes firms and sends email: at most 30 new firms an hour in all, counted

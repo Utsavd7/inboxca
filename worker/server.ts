@@ -4,8 +4,16 @@ import { Readable } from "node:stream";
 import { handle } from "./handler.ts";
 import {formLimit} from "../src/lib/form-worker.ts";
 import {mailLimits} from "../src/lib/mail-view.ts";
+import {scanRequired} from "../src/lib/file-worker.ts";
+import {scannerSet} from "./scan.ts";
 
 // No .env.local loader: this process never needs the app's database credentials.
+// Where the virus check is required (production, or without SCAN_OPTIONAL=1), the worker does
+// not start without clamd's address, so a scanner forgotten on a server is seen at once.
+if (scanRequired() && !scannerSet()) {
+  console.log("The file worker needs its virus scanner: set CLAMD_SOCKET or CLAMD_HOST and CLAMD_PORT (runbooks/clamav.md), or SCAN_OPTIONAL=1 on a computer that may do without one.");
+  process.exit(1);
+}
 createServer(async (incoming, outgoing) => {
   const stop = new AbortController();
   outgoing.on("close", () => stop.abort());
