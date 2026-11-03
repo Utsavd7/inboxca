@@ -298,6 +298,8 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["add_clients", `select public.add_clients($1, '[{"name": "Taken", "kind": "business"}]') r`, ["firm"], true],
   ["admin_accounts", "select * from public.admin_accounts()", [], false],
   ["admin_add_extension", "select public.admin_add_extension('GSTR1', '2026-09', current_date, 'https://example.test') r", [], true],
+  ["admin_undo_extension", "select public.admin_undo_extension('GSTR1', '2026-09') r", [], true],
+  ["admin_dates", "select public.admin_dates() r", [], true],
   ["admin_ai_report", "select public.admin_ai_report() r", [], false],
   ["admin_billing", "select public.admin_billing() r", [], false],
   ["admin_check_split", "select public.admin_check_split($1, $1, 'separate') r", ["firm"], true],

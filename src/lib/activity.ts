@@ -44,7 +44,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   "passkey.added": [], "passkey.removed": ["removed"], "passkey.copied": [], "access.exception_removed": ["rule", "role"],
   "admin.passkey_added": [], "admin.passkey_copied": [], "admin.passkey_used": [], "admin.passkeys_removed": ["removed"], "admin.job_retried": ["job"],
   "admin.incident_posted": ["parts", "level"], "admin.incident_updated": [], "admin.incident_closed": [], "admin.incident_emailed": ["firms"],
-  "admin.rule_verified": ["code", "period", "by"], "admin.extension_added": ["code", "period", "on"], "admin.office_thresholds": ["taps", "days"], "admin.change_reviewed": ["source", "at"], "admin.template_added": ["form", "version", "from", "sha256"],
+  "admin.rule_verified": ["code", "period", "by"], "admin.extension_added": ["code", "period", "on"], "admin.extension_undone": ["code", "period", "on", "notice"], "watch.extension_applied": ["code", "period", "on", "notice", "link"], "admin.office_thresholds": ["taps", "days"], "admin.change_reviewed": ["source", "at"], "admin.template_added": ["form", "version", "from", "sha256"],
   "admin.update_noted": ["item", "uses", "keeps"], "admin.template_ended": ["form", "version", "until", "link"], "form.went_live": ["form", "version", "with", "sha256"],
   "support.asked": [], "support.approved": [], "support.refused": [], "support.ended": [], "support.viewed": [],
   "office.learned": [], "office.refused": ["reason"], "office.no_fixed": [], "branch.hours": ["settings"],
