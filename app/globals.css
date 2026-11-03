@@ -128,6 +128,8 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .segment-dark { background: rgba(6, 18, 36, 0.5); border-color: var(--line-navy); }
 .segment-dark button { color: var(--on-navy); }
 .segment-dark button[aria-pressed="true"] { color: var(--navy); }
+.deal { padding: 2px 7px; border-radius: var(--r-pill); background: var(--tint); font-size: 11px; font-style: normal; font-weight: 700; color: var(--navy); }
+.segment button[aria-pressed="true"] .deal { background: var(--blue); color: var(--white); }
 
 /* Progressive blur under the floating bar: four layers, each blurrier and shorter than the last.
    The strip starts above the top of the screen, because a blur is weakest along its own edge

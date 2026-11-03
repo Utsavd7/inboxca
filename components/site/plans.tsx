@@ -177,7 +177,11 @@ export function Plans() {
               ).map(([value, label]) => (
                 <button key={label} type="button" aria-pressed={yearly === value} onClick={() => setYearly(value)}>
                   {yearly === value && <motion.span layoutId="billing-pick" className="segment-pick" transition={spring} />}
-                  <span>{label}</span>
+                  <span>
+                    {label}
+                    {/* Yearly is 11 monthly payments for 12 (content/plans.ts yearlyMonths). */}
+                    {value && <em className="deal" aria-hidden>1 month free</em>}
+                  </span>
                 </button>
               ))}
             </div>
