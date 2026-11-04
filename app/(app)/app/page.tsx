@@ -15,7 +15,7 @@ import { OfficePanel } from "./office-panel";
 import { ComputerWaits, problems } from "./new-computers";
 import { GovLine } from "./gov-line";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
-import { Count, Presence, Press } from "./motion";
+import { Count, Hold, Presence, Press } from "./motion";
 import { Pending } from "./pending";
 import { attention, weekFor, workFor } from "./work-data";
 import { WorkRows } from "./work-rows";
@@ -99,10 +99,10 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       </Suspense>
 
       <div className="today-grid">
-        <Suspense fallback={<CardSkeleton title="Your list" rows={5} />}>
+        <Suspense fallback={<Hold shown=".today-list"><CardSkeleton title="Your list" rows={5} /></Hold>}>
           <YourList work={work} ctx={ctx} />
         </Suspense>
-        <Suspense fallback={<CardSkeleton title="This week" rows={3} />}>
+        <Suspense fallback={<Hold shown=".today-week"><CardSkeleton title="This week" rows={3} /></Hold>}>
           <ThisWeek week={week} role={membership.role} />
         </Suspense>
       </div>
