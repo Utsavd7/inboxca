@@ -59,7 +59,7 @@ export const privacySections = [
       "InboxCA does not keep email subjects or email text, portal passwords, OTPs, card details or Aadhaar numbers.",
       ...clientFiles,
       "InboxCA also reads the emails your firm gets from the GST and income tax departments, to find the client they are about.",
-      "When someone who is not yet a client writes to your firm, InboxCA does not open the email. It keeps only a record of who wrote and when, so that your firm can add them as a client.",
+      "When someone who is not yet a client writes to your firm, InboxCA only checks by rules whether the email asks about your firm's services, and keeps none of its words. It keeps a record of who wrote and when, so that your firm can add them as a client.",
     ],
   },
   {
@@ -76,7 +76,7 @@ export const privacySections = [
     title: "Who else handles it",
     points: [
       "Only the services InboxCA runs on, each under its own agreement. They are listed in the security policy and in the data processing agreement.",
-      "The AI service receives only the email or paper being worked on.",
+      "The AI service receives only the email being worked on and that one client's own records, never the papers themselves.",
       "We give data to an authority only when the law requires it.",
     ],
   },
@@ -87,8 +87,8 @@ export const privacySections = [
       "Your files stay in your drive for as long as your firm keeps them.",
       "A file passing through InboxCA is removed within 24 hours, or within 7 days if your drive cannot be reached.",
       "Safety copies of deleted or changed files are kept for 30 days.",
-      "The record of who did what is kept for 12 to 36 months, as your firm chooses.",
-      "When a firm closes its account, it can still sign in and download its data for 30 days. Then InboxCA deletes the firm's records; the activity log and the sign in emails of the firm's people are kept one more year, as the IT Rules 2021 and, from May 2027, the DPDP Rules 2025 ask, and backups expire within 35 days. The files stay in the firm's drive.",
+      "The record of who did what is kept for 36 months.",
+      "When a firm closes its account, its owner can still sign in and download its data for 30 days. Then InboxCA deletes the firm's records; the activity log and the sign in emails of the firm's people are kept one more year, as the IT Rules 2021 and, from May 2027, the DPDP Rules 2025 ask, and backups expire within 35 days. The files stay in the firm's drive.",
     ],
   },
   {
@@ -152,7 +152,7 @@ export const termsSections = [
     title: "This website",
     points: [
       "The screens on this website are illustrations, and the firms, names and figures in them are sample data.",
-      "Prices on this website are estimates, before GST. The exact price, with GST, is shown before you pay.",
+      "Prices on this website are estimates, before GST. The exact price, with GST where it applies, is shown before you pay.",
     ],
   },
   {
@@ -181,7 +181,7 @@ export const termsSections = [
       "Plans are paid monthly or yearly through Cashfree AutoPay, by UPI, card or bank mandate. Each plan's returns, storage, AI credits and team size are shown before you pay and in Settings, Billing.",
       "The exact amount, with GST where it applies, is shown before you pay, and you confirm it. The same amount is then taken each month or each year, with a notice at least 24 hours before each debit. A card or UPI debit above ₹15,000 needs your approval each time, as the Reserve Bank's rules ask. Orelu never takes more than the mandate's limit shown at setup without asking you.",
       "If your firm uses more than its plan gives, InboxCA moves it to the plan that fits and takes the difference, with an email 3 days before. Moving to a bigger plan applies at once and moving to a smaller one at the next renewal. Extra people and AI top-ups are paid for first, then added.",
-      "If a payment fails, for 7 days nothing changes while it is tried again, until day 30 your firm can view but not change anything, and after day 30 the account is paused with its records kept for 30 more days.",
+      "If a payment fails, for 7 days nothing changes while it is tried again, until day 30 your firm can view but not change anything, and after day 30 the firm is closed: its team is signed out, its email and drive are disconnected, and for 30 more days the owner can still sign in and download its data.",
       "The refund policy gives the 14 day money back and how to cancel. You can turn AutoPay off at any time in Settings, Billing or at your bank or UPI app. Until Orelu starts taking payments, firms use InboxCA with no payment, as Settings, Billing shows.",
       "A one time setup fee, when one is shown before you pay, covers bringing in your firm's past papers. Prices can change for a new period with an email 30 days before.",
     ],
@@ -288,7 +288,7 @@ export const refundSections = [
     points: [
       "For 7 days nothing changes while the payment is tried again.",
       "From then until day 30 your firm can view everything but not make changes.",
-      "After day 30 the account is paused. InboxCA keeps your records for 30 more days so that you can come back.",
+      "After day 30 the firm is closed: your team is signed out and the email and drive are disconnected. For 30 more days the owner can still sign in and download your records.",
     ],
   },
   {
@@ -360,7 +360,7 @@ export const dpaSections = [
     id: "others",
     title: "Other services that handle the data",
     points: [
-      "Orelu uses other services to run InboxCA, each under its own agreement that binds it to protect the data. Those planned for launch are: Supabase (database and sign in), DigitalOcean (the app's server, in Bangalore), Amazon Web Services (the key vault, planned for the Mumbai region, and system email), Backblaze B2 (encrypted temporary files, safety copies and backups, outside India), Resend (system email until Amazon's is set up), OpenAI (AI, which receives only the email or paper being worked on), Cashfree (payments) and Sentry (error reports, with personal details removed).",
+      "Orelu uses other services to run InboxCA, each under its own agreement that binds it to protect the data. Those planned for launch are: Supabase (database and sign in), DigitalOcean (the app's server, in Bangalore), Amazon Web Services (the key vault, planned for the Mumbai region, and system email), Backblaze B2 (encrypted temporary files, safety copies and backups, outside India), Resend (system email until Amazon's is set up), OpenAI (AI, which receives only the email being worked on and that client's own records), Cashfree (payments) and Sentry (error reports, with personal details removed).",
       "Backblaze B2, OpenAI, Sentry and Resend keep or handle data outside India. Your firm agrees to this, as the work needs it, and each must protect the data at least as well as these terms and the 2011 rules ask.",
       "Your firm's own mailbox and drive providers act for your firm under its own accounts, not for Orelu.",
       "Orelu emails firms before a new service starts handling their data. A firm that objects can close its account under the terms.",
@@ -386,7 +386,7 @@ export const dpaSections = [
     id: "end",
     title: "How long, and what happens at the end",
     points: [
-      "Orelu keeps your clients' data only as long as your firm uses InboxCA, except the activity log, which is kept 12 to 36 months as your firm chooses, and safety copies of deleted or changed files, which are kept for 30 days.",
+      "Orelu keeps your clients' data only as long as your firm uses InboxCA, except the activity log, which is kept 36 months, and safety copies of deleted or changed files, which are kept for 30 days.",
       "When your firm closes its account, the owner can download the firm's records for 30 days. Then Orelu deletes the firm's records, and backups expire within 35 days. The activity log is kept one more year, as the DPDP Rules 2025 will ask from May 2027. The files in your firm's drive are not touched.",
       "Records will be kept in a Supabase database whose region is chosen at launch, with India planned. Temporary files, safety copies and backups are planned for Backblaze B2, outside India, encrypted.",
     ],
