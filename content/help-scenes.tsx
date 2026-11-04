@@ -9,7 +9,7 @@ import {
   Receipt, Reply, RotateCcw, Scale, Send, ShieldCheck, UserPlus, Users, type LucideIcon,
 } from "lucide-react";
 import type { Frame, Screen } from "@/components/site/help-show";
-import { Btn, Card, Checks, Chip, Chips, Choice, Code, Field, Figures, File, Line, Mail, Meter, Note, Passkey, Plan, Qr, Rename, Rows, Sheet, Split, Ticks, Title, Track, Tree } from "@/components/site/help-art";
+import { Btn, Card, Chip, Chips, Choice, Code, Field, Figures, File, Line, Mail, Meter, Note, Passkey, Plan, Qr, Rename, Rows, Sheet, Split, Ticks, Title, Track, Tree } from "@/components/site/help-art";
 import { aiBlock, extraPerson, plans, rupees } from "./plans";
 
 const f = (at: number, screen: Screen, ...body: ReactNode[]): Frame => ({ at, screen, body: createElement(Fragment, null, ...body) });
@@ -30,7 +30,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
       f(0, [null, "Plans"], <Plan name="Growth"><Line><Btn press>Get started</Btn></Line></Plan>),
       f(
         1,
-        [null, "Sign up", "Set up your firm"],
+        [null, "Sign up", "Set up InboxCA for your firm"],
         <Line><Field label="Firm name" value="Sharma and Co" /><Field label="State" value="Gujarat" select /></Line>,
         <Field label="Your work email" value="ravi@sharmaco.example" />,
         <Ticks items={[["For my firm, I accept the terms and the data processing agreement", true]]} />,
@@ -47,7 +47,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
         4,
         [null, "Plan and payment"],
         <Choice label="How often to pay" items={["Monthly", "Yearly"]} pick={0} row />,
-        <Field label="Team, you included" value="4" />,
+        <Field label="Your team, you included" value="4" />,
         <Rows rows={[["Growth, monthly", "Before GST", <b key="price">{rupees(growth.monthly)}</b>]]} />,
         <Line><Btn press>Pay and start</Btn></Line>,
       ),
@@ -80,7 +80,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
   "connect-drive": {
     icon: HardDrive,
     frames: [
-      f(0, settings("Email and drive"), <Card title="Firm email"><Line><Chip tone="done">Connected</Chip><strong>{firm}</strong></Line></Card>, <Card focus title="Firm drive" line="Client papers are saved in your firm's own drive, in folders by year, client and type of work. InboxCA keeps no copy of them." />),
+      f(0, settings("Email and drive"), <Card title="Firm email"><Line><Chip tone="done">Connected</Chip><strong>{firm}</strong></Line></Card>, <Card focus title="Firm drive" line="Client papers are saved in your firm's own drive, in folders by year, client and type of work." />),
       f(1, settings("Email and drive"), <Card title="Firm drive"><Choice label="Which drive" items={["OneDrive", "Dropbox"]} pick={0} /></Card>),
       f(
         2,
@@ -122,7 +122,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
       f(0, ["Clients", "Patel Textiles", "GSTR-3B"], <Split ours={["Prepares the form"]} yours={["Checks every figure", "Files on the portal with its own login"]} />, <Note>InboxCA never asks for portal passwords or OTPs.</Note>),
       f(3, ["Notices", "Notices"], <Rows rows={[["Patel Textiles", "Intimation u/s 143(1)", <Chip key="c">Open</Chip>]]} />, <Split ours={["Keeps track of the notice"]} yours={["Writes and sends every reply"]} />),
       f(5, [null, "Firm email"], <Mail from="Patel Textiles" line={`To ${firm}`} subject="Papers for September" files={["IMG_2291.pdf", "Sales Sep.xlsx"]} />, <Note>No upload page and no upload link. Clients email papers to your firm&apos;s address, as they do today.</Note>),
-      f(7, ["Documents", "Documents"], <Tree path={drive} file={bills} />, <Note>No copy is kept in InboxCA. Emails stay in your mailbox and papers in your drive.</Note>),
+      f(7, ["Documents", "Documents"], <Tree path={drive} file={bills} />, <Note>Emails stay in your mailbox and papers in your drive.</Note>),
     ],
   },
   "papers-by-email": {
@@ -157,7 +157,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
         <Line><Btn press>Ask for papers</Btn></Line>,
       ),
       f(2, [null, "Client's email"], <Mail from="Sharma and Co" line={`${firm}, to Patel Textiles`} subject="Papers for Sep 2026" body="Please send your bank statement, purchase bills and loan statement. Reply to this email with the papers attached." />, <Note>One email, from your firm&apos;s own address.</Note>),
-      f(3, ["Clients", "Patel Textiles"], <Checks title="Asked for, Sep 2026" rows={[["Bank statement", <small key="s">Received</small>, true], ["Purchase bills", <small key="s">Received</small>, true], ["Loan statement", <Chip key="c">Follow up in 3 days</Chip>, false]]} />),
+      f(3, ["Clients", "Patel Textiles"], <Title>Papers asked for</Title>, <Rows rows={[["Asked for Bank statement, Purchase bills, Loan statement for Sep 2026", "2 of 3 received", <Chip key="c">2 of 3</Chip>]]} />),
     ],
   },
   replies: {
@@ -179,9 +179,9 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     icon: CalendarDays,
     still: 1,
     frames: [
-      f(0, ["Clients", "Patel Textiles", "Details"], <Field label="GST returns" value="Monthly" select />, <Field label="Income tax return" value="Business and no audit" select />, <Field label="TDS returns" value="Yes" select />, <Line><Btn press>Save services</Btn></Line>),
+      f(0, ["Clients", "Patel Textiles", "Services"], <Ticks items={[["GSTR-1 (monthly)", true], ["GSTR-3B (monthly)", true], ["ITR (non-audit)", true], ["TDS returns 24Q/26Q", false]]} />, <Line><Btn press>Save services</Btn></Line>),
       f(1, ["Calendar", "Calendar"], <Choice items={["List", "Month"]} pick={0} row />, <Rows rows={[["Mehta Traders", "GSTR-3B, Sep 2026", <Chip key="c" tone="late">Late</Chip>], ["Patel Textiles", "GSTR-1, Sep 2026", <Chip key="c">Due in 7 days</Chip>], ["Iyer Foods", "TDS return", <Chip key="c">Due in 30 days</Chip>], ["Anita Rao", "ITR", <Chip key="c" tone="done">Filed</Chip>]]} />),
-      f(3, ["Today", "Today"], <Rows rows={[["Mehta Traders", "GSTR-3B, Sep 2026", <Btn key="b" press>Mark filed</Btn>]]} />, <Line><Chip tone="done" cue>Filed</Chip><Btn quiet>Undo</Btn></Line>),
+      f(3, ["Today", "Your list"], <Rows rows={[["Mehta Traders", "GSTR-3B, Sep 2026", <Btn key="b" press>Mark filed</Btn>]]} />, <Line><Chip tone="done" cue>Filed</Chip><Btn quiet>Undo</Btn></Line>),
       f(6, ["Clients", "Mehta Traders"], <Line><Btn press>Remind client</Btn></Line>, <Mail from="Sharma and Co" line={`${firm}, to Mehta Traders`} subject="Your returns and papers" body="Your GSTR-3B for Sep 2026 is late. We still need your bank statement for September." />),
     ],
   },
@@ -212,7 +212,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
       f(0, ["Notices", "Notices"], <Mail from="Income Tax Department" line={`To ${firm}`} subject="Intimation u/s 143(1)" />, <Chips label="InboxCA found the client" items={["Patel Textiles"]} />),
       f(2, ["Notices", "Notices"], <Rows rows={[["Patel Textiles", "Intimation u/s 143(1)", <Chip key="c">Date to check</Chip>]]} />, <Field label="Action date, as the notice states it" value="24 Nov 2026" />, <Line><Btn press>Mark date checked</Btn></Line>),
       f(3, ["Notices", "Notices"], <Track items={["Open", "In progress", "Replied", "Closed"]} done={2} />, <Line><Btn press>Mark replied</Btn></Line>, <Note>People in your firm write and send every reply.</Note>),
-      f(6, ["Notices", "Notices", "Record the reply"], <Field label="Reply sent on" value="12 Nov 2026" />, <Field label="Acknowledgement or reference" value="Response filed on the portal" />, <Line><Btn press>Close notice</Btn></Line>),
+      f(6, ["Notices", "Notices", "Record the reply"], <Field label="Reply sent on" value="12 Nov 2026" />, <Field label="What was sent" value="Response filed on the portal" />, <Field label="Acknowledgement or reference" value="Portal reference" />, <Line><Btn press>Save reply and close</Btn></Line>),
     ],
   },
   "people-and-permissions": {
@@ -231,8 +231,8 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     frames: [
       f(0, settings("Office and sign in"), <Choice label="How your team works" items={["Standard", "Office only", "Office and approved remote", "Remote friendly", "Solo CA"]} pick={1} />),
       f(2, settings("Office and sign in"), <Title>Office only</Title>, <Rows rows={[["Staff, managers and front desk", "Approved PCs, in the office, in office hours"], ["You and partners", "From anywhere"]]} />),
-      f(6, [null, "Sign in to InboxCA"], <Card title="This PC is waiting for approval" line="The owner approves it in Settings." />),
-      f(6, settings("Your computers"), <Rows rows={[["New computer", "Front desk PC", <Btn key="b" press>Approve this computer</Btn>]]} />, <Line><Chip tone="done" cue>Approved</Chip></Line>),
+      f(6, [null, "InboxCA"], <Card title="This PC is waiting for approval" line="Ask the owner to approve it in Settings, then try again."><Line><Btn quiet>Try again</Btn></Line></Card>),
+      f(6, settings("Office and sign in"), <Title>PCs waiting for approval</Title>, <Rows rows={[["Front desk PC", "Chrome on Windows", <Btn key="b" press>Approve as office PC</Btn>]]} />, <Line><Chip tone="done" cue>Approved</Chip></Line>),
       f(7, [null, "Sign in to InboxCA"], <Code label="Code from the email" digits="604218" />, <Chips items={["On the office internet", ["Approved PC", "done"]]} />, <Note>Here the email code is enough.</Note>),
     ],
   },
@@ -252,9 +252,9 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     frames: [
       f(0, [null, "Plans"], <Plan name="Solo" />),
       f(1, [null, "Plans"], <Plan name="Growth" />),
-      f(5, settings("Billing"), <Rows rows={[["One more person", "Paid first, then added", <b key="p">{rupees(extraPerson)} a month</b>], [`${aiBlock.credits.toLocaleString("en-IN")} more AI credits`, "Paid first, then added", <b key="p">{rupees(aiBlock.price)} a month</b>]]} />, <Note>Prices are before GST.</Note>),
-      f(7, settings("Billing"), <Meter label="Returns this year" part={0.8} note="You hear about it at 80%." />),
-      f(9, settings("Billing"), <Choice label="Cashfree AutoPay" items={["UPI", "Card", "Bank mandate"]} pick={0} row />, <Chips items={[["Your bank confirmed AutoPay", "done"]]} />),
+      f(5, settings("Billing"), <Rows rows={[["One more person in your team", "Paid first, then added", <b key="p">{rupees(extraPerson)} a month</b>], [`One more AI block of ${aiBlock.credits.toLocaleString("en-IN")} credits every month`, "Paid first, then added", <b key="p">{rupees(aiBlock.price)} a month</b>]]} />, <Note>Prices are before GST.</Note>),
+      f(7, settings("Billing"), <Meter label="Returns due so far" part={0.8} note="You hear about it at 80%." />),
+      f(9, settings("Billing"), <Choice label="How to pay" items={["UPI AutoPay", "Card AutoPay", "Bank mandate (eNACH)"]} pick={0} row />, <Chips items={[["Your bank confirmed AutoPay", "done"]]} />),
     ],
   },
   "money-back": {

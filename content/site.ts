@@ -62,7 +62,7 @@ export const beforeAfter = [
 export const demoSteps = [
   [
     "Reads the email",
-    "Every email from a client is read and sorted the moment it arrives.",
+    "Every email from a client is read and sorted within minutes of arriving.",
   ],
   [
     "Files the paper",
@@ -119,7 +119,7 @@ export const questions = [
   ],
   [
     "Is there a free trial?",
-    "No. Instead, cancel within 14 days of your first payment and the whole payment comes back. Once for each firm.",
+    "No. Instead, cancel within 14 days of your first payment and the whole payment comes back, apart from the setup fee once your old files are being brought in. Once for each firm.",
   ],
   [
     "What happens if I cancel?",
