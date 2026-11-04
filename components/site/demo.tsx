@@ -38,6 +38,17 @@ function Done({ children }: { children: React.ReactNode }) {
   );
 }
 
+// The rest of the screen under a scene: quiet rows, no words, fading out with the window's foot.
+export function Fill() {
+  return (
+    <div className="demo-fill" aria-hidden>
+      {[0, 1, 2, 3, 4, 5].map((row) => (
+        <span key={row} />
+      ))}
+    </div>
+  );
+}
+
 function Email() {
   return (
     <div className="card mail">
@@ -382,9 +393,9 @@ export function Demo() {
               onClick={() => setPlaying(!playing)}
             >
               {playing ? (
-                <Pause size={15} aria-hidden />
+                <Pause size={14} aria-hidden />
               ) : (
-                <Play size={15} aria-hidden />
+                <Play size={14} aria-hidden />
               )}
               {playing ? "Pause" : "Play"}
             </button>
@@ -409,14 +420,15 @@ export function Demo() {
               </Link>
             </span>
           </div>
-          <AnimatePresence mode="wait" initial={false}>
+          {/* The next scene comes in as this one leaves, so the window never stands empty. */}
+          <AnimatePresence mode="popLayout" initial={false}>
             <motion.div
               key={step}
               className="scene-shell"
-              initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
-              transition={{ duration: 0.36, ease }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease }}
             >
               {step === 0 && <ReadScene />}
               {step === 1 && <FileScene />}
@@ -432,6 +444,7 @@ export function Demo() {
                   }}
                 />
               )}
+              <Fill />
             </motion.div>
           </AnimatePresence>
         </div>

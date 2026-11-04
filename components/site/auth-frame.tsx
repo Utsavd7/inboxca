@@ -2,9 +2,9 @@ import Link from "next/link";
 import { Check, FolderCheck, HardDrive, LockKeyhole, Mail, Reply, UserCheck } from "lucide-react";
 import { Logo } from "./logo";
 
-// One email as InboxCA handles it, for the navy side: read, filed in the firm's own drive, and
-// answered from the firm's own address (content/site.ts demoSteps). No client is named; only
-// the file name is in figures.
+// The line and three facts on the navy side, then one email as InboxCA handles it: read, filed
+// in the firm's own drive, and answered from the firm's own address (content/site.ts
+// demoSteps). No client is named; only the file name is in figures.
 const steps = [
   [Mail, "An email from a client", "form-130.pdf", "mono"],
   [FolderCheck, "Filed in the client's folder", "In your own drive, with a clear name", undefined],
@@ -43,6 +43,15 @@ export function AuthFrame({ children }: { children: React.ReactNode }) {
         <p className="auth-band-title">
           Every client email, <span>read, filed and answered.</span>
         </p>
+        <ul className="auth-facts">
+          {facts.map(([Icon, text]) => (
+            <li key={text}>
+              <Icon size={16} aria-hidden />
+              {text}
+            </li>
+          ))}
+        </ul>
+        {/* The card runs off the foot of the navy side, over rows with no words. */}
         <div className="auth-flow" aria-hidden>
           <p>
             <span className="status-dot" /> One email, handled by InboxCA
@@ -60,16 +69,17 @@ export function AuthFrame({ children }: { children: React.ReactNode }) {
                 <Check className="auth-flow-done" size={16} strokeWidth={3} />
               </li>
             ))}
+            {[0, 1].map((row) => (
+              <li key={row} className="auth-flow-rest">
+                <span className="auth-flow-icon" />
+                <span>
+                  <i />
+                  <i />
+                </span>
+              </li>
+            ))}
           </ol>
         </div>
-        <ul className="auth-facts">
-          {facts.map(([Icon, text]) => (
-            <li key={text}>
-              <Icon size={16} aria-hidden />
-              {text}
-            </li>
-          ))}
-        </ul>
       </aside>
     </div>
   );
