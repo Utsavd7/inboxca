@@ -33,13 +33,18 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
   const held=new Map<string,{value:string;from:string}>(),sourceIds=[...new Set(papers.flatMap(row=>row.data.lines.flatMap(line=>line.source.document ? [line.source.document] : [])))];
   const [{data:names},{data:details}]=await Promise.all([
     sourceIds.length ? supabase.from("documents").select("id,name").eq("firm_id",membership.firmId).eq("client_id",id).in("id",sourceIds) : Promise.resolve({data:[] as {id:string;name:string}[]}),
-    supabase.from("clients").select("email_enc").eq("firm_id",membership.firmId).eq("id",id).single(),
+    supabase.from("clients").select("kind,email_enc,phone_enc").eq("firm_id",membership.firmId).eq("id",id).single(),
   ]);
   const paperName=(row:typeof papers[number])=>names?.find(file=>file.id===row.data.lines[0].source.document)?.name ?? "Figures from a paper";
   for(const row of papers) for(const line of row.data.lines) if(line.state!=="rejected") held.set(line.field,{value:row.figures.get(line.id)!.value,from:paperName(row)});
   // The return against the client's Form 26AS and Form 16 for the year, before anyone approves it.
   const check=await itrChecks(supabase,membership.firmId,[{client:id,period,form}]).then(([one])=>one,()=>null);
   const email=details?.email_enc ? await serverCrypto().decrypt(membership.firmId,`clients/${id}/email`,details.email_enc) : "";
+  // The client's own details offered for the return's name, email and mobile, for a person to
+  // check: an individual's name split into first, middle and last, and a 10 digit Indian mobile.
+  const phone=(details?.phone_enc ? await serverCrypto().decrypt(membership.firmId,`clients/${id}/phone`,details.phone_enc) : "").replace(/\D/g,"").replace(/^91(?=\d{10}$)/,"");
+  const parts=details?.kind==="individual" ? client.name.trim().split(/\s+/) : [];
+  const fromClient:Record<string,string>={"Address.EmailAddress":email,"Address.MobileNo":/^\d{10}$/.test(phone) ? phone : "",...(parts.length>1 && {"AssesseeName.FirstName":parts[0],"AssesseeName.MiddleName":parts.slice(1,-1).join(" "),"AssesseeName.SurNameOrOrgName":parts.at(-1)!})};
   const saved=new Set(own?.data.lines.map(line=>line.field)),missing=new Set(review.missing.flatMap(item=>item.field ? [item.field] : []));
   const groups=[...new Set(entries.map(entry=>entry.group))],group=groups.includes(q.group ?? "") ? q.group! : review.missing[0]?.group ?? groups[0];
   const counts=new Map<string,number>();for(const item of review.missing) counts.set(item.group,(counts.get(item.group) ?? 0)+1);
@@ -81,7 +86,7 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
     <Card id="itr-missing" title="Still to fill" Icon={ListTodo} kind={review.missing.length ? "papers" : "done"} count={review.missing.length || undefined} countLabel={`${review.missing.length} details still to fill`}>
       <div className="itr-body">
       {!!review.issues.length && <ul className="alert" role="alert">{review.issues.map(issue=><li key={issue}>{issue}</li>)}</ul>}
-      {review.missing.length ? <nav className="pills" aria-label="Parts still to fill">{groups.filter(name=>counts.has(name)).map(name=><Link key={name} href={`${base}&group=${encodeURIComponent(name)}`} aria-current={name===group ? "page" : undefined}>{name}: {counts.get(name)}</Link>)}</nav>
+      {review.missing.length ? <nav className="pills" aria-label="Parts still to fill">{groups.filter(name=>counts.has(name)).map(name=><Link key={name} href={`${base}&group=${encodeURIComponent(name)}`} aria-current={name===group ? "page" : undefined} title={name}>{name.length>40 ? `${name.slice(0,38).trim()}…` : name}: {counts.get(name)}</Link>)}</nav>
         : <p className="hint">Nothing left to fill. Check every figure, then prepare the return under <Link href={`/app/clients/${id}?tab=outputs`}>Return files</Link>.</p>}
       </div>
     </Card>
@@ -99,7 +104,7 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
           const field=itrField(entry,rows),from=held.get(field),label=<>{entry.label}{entry.rows>0 && `, row ${rows[0]+1}`} {missing.has(field) && <Badge tone="warn">To fill</Badge>}</>;
           if(field==="itr.personal.pan") return <div key={field}><span className="sub">{label}</span><p><span className="num">{context.number}</span>, from the client&apos;s details</p></div>;
           if(saved.has(field) || from) return <div key={field}><span className="sub">{label}</span><p className="hint">{from ? `${from.value}, from ${from.from}.` : "Already saved."} To change it, use Check the figures.</p></div>;
-          const suggested=field==="itr.personal.email" ? email : "";
+          const suggested=fromClient[entry.path.replace(/^(PartA_GEN1\.)?PersonalInfo\./,"")] ?? "";
           return <div key={field}><label htmlFor={field}>{label}</label>
             {entry.choices || entry.primitive==="boolean" ? <select id={field} name={field} defaultValue=""><option value="">Leave empty</option>{(entry.choices ?? ["true","false"]).map(choice=><option key={choice} value={choice}>{entry.choices ? choice : choice==="true" ? "Yes" : "No"}</option>)}</select>
               : <input id={field} name={field} maxLength={2000} type={entry.kind==="date" ? "date" : "text"} inputMode={entry.kind==="number" ? "decimal" : undefined} defaultValue={suggested}/>}

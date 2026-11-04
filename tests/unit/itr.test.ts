@@ -81,10 +81,12 @@ it("pins the field choices, resolves official repeating entries and keeps assess
   // Plain labels change only what staff read: the field name, its official path and the output stay as they were.
   const claimed=entries.find(entry=>entry.path==="ITR1_IncomeDeductions.UsrDeductUndChapVIA.Section80C");
   expect(claimed?.group).toBe("Income and deductions: Deductions under Chapter VI-A, as claimed");expect(claimed?.label).toBe("Section 80C");expect(claimed?.field).toMatch(/^itr\.f\.[0-9a-f]{16}$/);
-  // A detail InboxCA has no label for reads the schema's own description, else its own name
-  // from the schema, as the utility shows it.
+  // A detail InboxCA has no label for reads the schema's own description, else its keys in
+  // plain words where InboxCA has them (itrKeyWords), else as the schema names them.
   expect(entries.find(entry=>entry.path==='PersonalInfo.DOB')?.label).toBe('Date of Birth of the Assessee');
-  expect(entries.find(entry=>entry.path==='PersonalInfo.Address.RoadOrStreet')?.label).toBe('Address, Road Or Street');
+  expect(entries.find(entry=>entry.path==='PersonalInfo.Address.RoadOrStreet')?.label).toBe('Road or street');
+  expect(entries.find(entry=>entry.path==='PersonalInfo.AlternateAddress.RoadOrStreet')?.label).toBe('Alternate address, Road or street');
+  expect(entries.find(entry=>entry.path==='PersonalInfo.AssesseeName.FirstName')?.label).toBe('First name');
 });
 it.each(["ITR1","ITR4"])("blocks wrong salary, deductions, tax totals and overclaimed credits in %s",form=>{
   // ITR-1 rules 59 to 62, 24 to 28, 96, 98, 104 to 106; ITR-4 63 to 66, 46, 52 to 56, 111, 113, 127 to 129.
