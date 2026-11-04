@@ -23,6 +23,22 @@ export function visibleTo(item: Listed, { role, looked }: Viewer) {
   return lead || !item.client || !!looked?.has(item.client.id);
 }
 
+// Rows that say the same for one client become one ("2 replies to Patel Textiles"): the first
+// row's key and link, red if any is, and the soonest date.
+export function groupRepeats<T extends WorkItem>(items: T[]) {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const key = item.many ? `${item.many.title}:${item.action.label}` : item.key;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  return [...groups.values()].map((group): T => {
+    const [first] = group;
+    if (group.length === 1 || !first.many) return first;
+    const due = group.flatMap((item) => (item.due ? [item.due] : [])).sort()[0];
+    return { ...first, title: `${group.length} ${first.many.title}`, why: first.many.why, urgent: group.some((item) => item.urgent) || undefined, due };
+  });
+}
+
 // Late or red first, then by due date; something with no date counts as today, unless it is red
 // with no date to wait for, which goes first. Each area's own order stays within a day.
 export function rankWork<T extends WorkItem>(items: T[], today: string) {

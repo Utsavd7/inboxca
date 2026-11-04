@@ -59,6 +59,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
     // A PDF with a password: the viewer asks for it, and nothing is shown or logged as viewed.
     if (response.status === 423) return copy ? fail(423, "This PDF has a password. Open it here, type the password, then download again.", headers) : new Response(await response.text(), { status: 423, headers });
+    // The file is in the drive, but InboxCA cannot make pages of it: the owner can download it.
+    if (response.status === 415) { await response.body?.cancel(); return fail(415, `InboxCA cannot preview this file. ${membership.role === "owner" ? "Download it to open it." : "Ask the owner for it."}`, headers); }
     if (!response.ok || !response.body) { await response.body?.cancel(); throw new Error("Worker refused"); }
     if(permission) {
       const {data:spent,error}=await admin.from("requests").update({status:"used"}).eq("id",permission).eq("firm_id",membership.firmId).eq("status","approved").gt("expires_at",new Date().toISOString()).select("id").maybeSingle();

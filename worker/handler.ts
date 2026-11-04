@@ -88,6 +88,8 @@ export async function handle(request: Request): Promise<Response> {
   let view: ViewRequest;
   try { view = await verifyView(await request.text(), request.headers.get("authorization") ?? "", secret, decodeURIComponent(url.pathname.slice(portal || edited ? 8 : sheet ? 7 : 6)), undefined, portal ? "portal" : sheet ? "sheet" : edited ? "edited" : copy ? "copy" : undefined); }
   catch { return new Response("Not allowed", { status: 403 }); }
+  // Set once the file was read from the drive and only its pages could not be made (415).
+  let opening = false;
   try {
     request.signal.throwIfAborted();
     const data = await original(view, request.signal);
@@ -129,6 +131,7 @@ export async function handle(request: Request): Promise<Response> {
       if([first,...more].some(({rows})=>rows.length>viewLimits.rows || rows.some((row)=>row.length>viewLimits.columns || row.some((cell)=>cell.length>2000))) || JSON.stringify([first,...more]).length>3_000_000) throw new Error("Split this register into smaller files");
       return Response.json({rows:first.rows,sheet:first.sheet,more,sha256:createHash("sha256").update(data).digest("hex")},{headers:{"Cache-Control":"private, no-store"}});
     }
+    opening = true;
     const opened = await openView(Buffer.from(data.buffer, data.byteOffset, data.byteLength), view.name, view.label, view.limit, request.signal, view.sheet, view.password, view.find);
     let disposed = false;
     const dispose = async () => { if (!disposed) { disposed = true; await opened.dispose(); } };
@@ -155,6 +158,6 @@ export async function handle(request: Request): Promise<Response> {
   } catch (error) {
     // A PDF with a password says whether one is needed or the one saved did not open it.
     if ((error as Error)?.name === "PasswordException") return new Response(view.password ? "wrong" : "password", { status: 423, headers: { "Cache-Control": "private, no-store" } });
-    return new Response("This file could not be opened.", { status: 422 });
+    return new Response("This file could not be opened.", { status: opening ? 415 : 422 });
   }
 }

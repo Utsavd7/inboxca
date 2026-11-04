@@ -160,7 +160,7 @@ async function openFiling(admin: Filing["admin"], event: Filing["event"] & { cli
 // what is printed in it, never by the words alone.
 async function describe(filing: Filing, file: Paper, hint: string) {
   const named = describeFile(file.name, hint, filing.event.label, filing.event.received_at);
-  const described = layoutTyped.has(named.type) && /\.pdf$/i.test(file.name) ? typeByContent(named, await pdfLines(file.bytes, 10).then(recogniseTaxPdf, () => null)) : named;
+  const described = layoutTyped.has(named.type) && /\.pdf$/i.test(file.name) ? typeByContent(named, await pdfLines(file.bytes, 10).then(recogniseTaxPdf, () => null), file.name) : named;
   return filing.notice ? { ...described, work: filing.notice.authority, type: described.type === "Document" && /\.pdf$/i.test(file.name) ? "Notice" : described.type } : described;
 }
 

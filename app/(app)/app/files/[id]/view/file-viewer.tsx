@@ -59,7 +59,8 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
   const [spots, setSpots] = useState<ViewMark[]>(reused?.marks ?? []);
   const scroller = useRef<HTMLDivElement>(null);
   const [limited, setLimited] = useState(reused?.limited ?? false);
-  const [state, setState] = useState<"loading" | "shown" | "failed" | "nodrive" | "large" | "locked" | "wrong">(reused ? "shown" : "loading");
+  const [state, setState] = useState<"loading" | "shown" | "failed" | "nodrive" | "large" | "locked" | "wrong" | "unreadable">(reused ? "shown" : "loading");
+  const [said, setSaid] = useState("");
   const blank = useCaptureGuard(id, hideInactive);
   const [opening, setOpening] = useState(0);
 
@@ -76,6 +77,8 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
       // A PDF with a password: ask for it, or say the saved one did not open it.
       if (response.status === 423) { const said = await response.text(); if (!controller.signal.aborted) setState(said === "wrong" ? "wrong" : "locked"); return; }
       // A refusal's body is let go at once, or the browser keeps the request open.
+      // A file in the drive that InboxCA cannot make pages of: the stream route says what to do.
+      if (response.status === 415) { const words = await response.text(); if (!controller.signal.aborted) { setSaid(words); setState("unreadable"); } return; }
       if (!response.ok || !response.body) {
         await response.body?.cancel();
         // The stream route says why: no drive connected (409) or a file too large to show (413).
@@ -154,6 +157,7 @@ export function FileViewer({ id, hideInactive = false, page: shownPage, sheet = 
       )}
       {state === "nodrive" && <p className="hint">The firm&apos;s drive is not connected yet, so papers cannot be shown. The owner can connect it in Settings, under Email and drive.</p>}
       {state === "large" && <p className="hint">This file is too large to show here.</p>}
+      {state === "unreadable" && <p className="hint">{said}</p>}
       {(state === "locked" || state === "wrong") && (thumb ? <p className="hint">This PDF has a password.</p> : (
         <form className="form-row" action={async (form) => { if (await savePassword(form) === "saved") { setState("loading"); setOpening((n) => n + 1); } }}>
           <input type="hidden" name="document" value={id} />

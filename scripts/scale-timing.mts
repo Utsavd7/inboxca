@@ -57,7 +57,7 @@ if (countError) throw countError;
 if (clientCount !== 10_000) throw new Error(`Expected 10,000 scale clients, found ${clientCount ?? 0}.`);
 
 const today = todayInIndia();
-const window = calendarViews.month.window(today);
+const window = calendarViews.soon.window(today);
 const shift = (days: number) => new Date(Date.parse(today) + days * 86_400_000).toISOString().slice(0, 10);
 const cards = () =>
   owner

@@ -14,6 +14,11 @@ export function CameFrom({ origin, why = true }: { origin: Origin; why?: boolean
           It used to be at <span className="num">{origin.from}</span>
         </span>
       )}
+      {origin.file && (
+        <span>
+          Its file name was <span className="num">{origin.file}</span>
+        </span>
+      )}
       {origin.mail && (
         <Link className="came-from-mail" href={`/app/inbox?mail=${origin.mail}`}>
           Open the email

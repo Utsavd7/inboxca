@@ -47,6 +47,9 @@ describe("a tax paper's type from its content", () => {
     expect(typeByContent(named, { type: "Form 16" })).toEqual(named);
     expect(typeByContent(named, { type: "Form 130" })).toEqual({ type: "Form 130", sure: true });
     expect(typeByContent(named, null)).toEqual({ type: "Document", sure: false });
+    for (const name of ["form16.pdf", "Form-16 Part B.pdf", "form 16.pdf", "FORM_16.pdf"]) expect(typeByContent(named, null, name), name).toEqual({ type: "Form 16", sure: false });
+    expect(typeByContent({ type: "Form 130", sure: true }, null, "form130.pdf")).toEqual({ type: "Form 130", sure: false });
+    expect(typeByContent(named, null, "statement.pdf")).toEqual({ type: "Document", sure: false });
     expect(typeByContent({ type: "Bank statement", sure: true }, null)).toEqual({ type: "Bank statement", sure: true });
   });
 });

@@ -120,3 +120,15 @@ describe("old regime, Finance Act 2026 Part I-B Paragraph A with the s.156(1) re
     expect(regime.total).toBe(r(total));
   });
 });
+
+describe("AY 2026-27 under the 1961 Act",()=>{
+  // s.115BAC(1A)(iii) and s.87A as amended by the Finance Act 2025, and Part I-A of the Finance
+  // Act 2026, give the same figures as tax year 2026-27; only the sections named differ.
+  it.each([800000,1270000,5010000,25000000])("income %s: the same tax, with 1961 Act sections",income=>{
+    for(const [then,now] of [[newRegime(r(income),2026),newRegime(r(income))],[oldRegime(r(income),"60",2026),oldRegime(r(income),"60")]]) {
+      expect(then.total).toBe(now.total);
+      expect(then.steps.map(step=>step.section).join(" ")).not.toMatch(/2025 s\.|s\.3\(|Part I-B/);
+    }
+    expect(newRegime(r(income),2026).steps[0].section).toBe("Income-tax Act 1961 s.115BAC(1A)(iii)");
+  });
+});

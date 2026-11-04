@@ -67,6 +67,9 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await page.screenshot({path:test.info().outputPath("itr.png"),fullPage:true});
     await page.getByRole("link",{name:/^Client details: \d+$/}).click();
     await expect(page.getByLabel(/^Email address/)).toHaveValue("invented.person@invented.test");
+    // The individual client's name is offered split into first, middle and last, for a person to check.
+    const [first,...others]=person.split(" ");
+    await expect(page.getByLabel(/^First name/)).toHaveValue(first);await expect(page.getByLabel(/^Last name/)).toHaveValue(others.at(-1)!);
     await page.getByRole("button",{name:"Save for checking",exact:true}).click();await expect(page.getByRole("status")).toContainText("Saved for checking");
     await page.getByRole("link",{name:/^Taxes paid: \d+$/}).click();
     await page.getByLabel(/^Total TDS claimed/).fill("5000");await page.getByLabel(/^Taxes Paid, Total Taxes Paid/).fill("5000");
@@ -82,7 +85,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await query(local.dbUrl,"update public.datasets set revision=revision+1,data=jsonb_set(data,'{lines}',data->'lines'||$2::jsonb) where id=$1",[own.id,JSON.stringify(await lines(firm.firmId,own.id,rest,{entered_by:firm.ownerId,entered_at:new Date().toISOString()},firm.ownerId))]);
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${own.id}`);
     await expect(page.getByText(/^Entered by /)).toBeVisible();
-    const pending=own.data.lines.length;expect(pending).toBe(7);
+    const pending=own.data.lines.length;expect(pending).toBe(10);
     for(let n=0;n<pending;n++) {await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${rest.length+n+1} of ${rest.length+pending} checked`)).toBeVisible();}
     await page.goto(`/app/clients/${client}/itr`);await expect(page.getByText("Nothing left to fill.")).toBeVisible();
     // Every figure checked: InboxCA fills the checked return by itself (the return is late), and
@@ -102,7 +105,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     const download=page.waitForEvent("download");await row.getByRole("button",{name:"Download for filing"}).click();const file=await download;
     const output=JSON.parse(await readFile((await file.path())!,"utf8")),validate=officialSchema(request.template.source.file);
     expect(validate(output),JSON.stringify(validate.errors)).toBe(true);
-    expect(output.ITR.ITR1.PersonalInfo).toMatchObject({PAN:pan,Address:{EmailAddress:"invented.person@invented.test"}});expect(output.ITR.ITR1.ITR1_IncomeDeductions.GrossSalary).toBe(600000);
+    expect(output.ITR.ITR1.PersonalInfo).toMatchObject({PAN:pan,AssesseeName:{FirstName:first,SurNameOrOrgName:others.at(-1)},Address:{EmailAddress:"invented.person@invented.test"}});expect(output.ITR.ITR1.ITR1_IncomeDeductions.GrossSalary).toBe(600000);
     expect(output.ITR.ITR1.TDSonSalaries.TDSonSalary[0]).toMatchObject({EmployerOrDeductorOrCollectDetl:{TAN:"HYDZ99999Z"},TotalTDSSal:5000}); // ggignore: invented employer TAN.
     expect(output.ITR.ITR1.CreationInfo.SWCreatedBy).toBe("SW00000000"); // ggignore: the invented test software ID.
     expect((await page.request.get(file.url())).status()).toBe(410);

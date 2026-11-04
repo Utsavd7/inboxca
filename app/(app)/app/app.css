@@ -345,7 +345,6 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 .b-danger { border-color: var(--red-fg); background: var(--red-fg); color: var(--white); }
 .b-danger:hover:not(:disabled) { background: var(--red-fg); opacity: 0.9; }
 /* Back with nowhere to go (Today, opened afresh): dimmed, and still in its place. */
-.topbar .head-back[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
 @media (hover: hover) and (pointer: fine) {
   /* The lifted card still covers the spot it left, so a pointer on its edge does not flicker. */
   a.app-card::after { content: ""; position: absolute; inset: 0 0 -2px; }

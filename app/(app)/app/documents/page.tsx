@@ -44,10 +44,9 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
-  // Folders first (user, 26 Oct 2026: "keep always on folder"): the list opens when asked for
-  // (All papers) or when a link asks for something in it (a search, a year, To check, a panel).
-  const asksList = params.view === "papers" || Object.entries(params).some(([key, value]) => !["view", "path"].includes(key) && value);
-  if (params.view === "folders" || !asksList) return <FoldersView path={params.path} portal={membership.may("portal_files")} upload={!membership.viewOnlyUntil} />;
+  // All papers first, To check at the top (4 Nov 2026); the drive's folder tree is one click
+  // away (Folders, ?view=folders).
+  if (params.view === "folders" || (params.path && params.view !== "papers")) return <FoldersView path={params.path} portal={membership.may("portal_files")} upload={!membership.viewOnlyUntil} />;
   // Financial years by the key of their last month's year: "2027" is FY 2026-27.
   const years = periodChoices(todayInIndia()).filter((key) => key.length === 4);
   const asked = /^(20\d\d)-(\d\d)$/.exec(params.year ?? "");
@@ -178,6 +177,15 @@ export default async function Documents({ searchParams }: { searchParams: Promis
       )}
       <div className="split">
         <nav className="pane docs-folders" aria-label="Folders">
+          <Link className="docs-folder docs-check" href={link({ show: "check", kind: "", page: "", year: "" })} aria-current={checking ? "page" : undefined}>
+            <FileSearch size={16} aria-hidden />
+            <span>To check</span>
+            <span className="docs-n">
+              <Suspense fallback={<span className="docs-wait" aria-label="Counting" />}>
+                <Count of={waiting} warn />
+              </Suspense>
+            </span>
+          </Link>
           <Form action="/app/documents" className="docs-year">
             <input type="hidden" name="view" value="papers" />
             {state.kind && <input type="hidden" name="kind" value={state.kind} />}
@@ -205,15 +213,6 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               </span>
             </Link>
           ))}
-          <Link className="docs-folder docs-check" href={link({ show: "check", kind: "", page: "", year: "" })} aria-current={checking ? "page" : undefined}>
-            <FileSearch size={16} aria-hidden />
-            <span>To check</span>
-            <span className="docs-n">
-              <Suspense fallback={<span className="docs-wait" aria-label="Counting" />}>
-                <Count of={waiting} warn />
-              </Suspense>
-            </span>
-          </Link>
         </nav>
 
         <section className="docs-list" aria-label="Papers">

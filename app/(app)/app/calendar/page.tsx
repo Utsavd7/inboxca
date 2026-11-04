@@ -48,8 +48,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const from = (page - 1) * pageSize;
   // One day, from the strip or the month: everything due that day, filed or not.
   const day = /^\d{4}-\d{2}-\d{2}$/.test(params.day ?? "") ? params.day! : null;
-  // The month grid, when asked for: YYYY-MM.
-  const month = /^20\d\d-(0[1-9]|1[0-2])$/.test(params.month ?? "") ? params.month! : null;
+  // The month grid, when asked for: YYYY-MM, or this month for ?view=month.
+  const month = /^20\d\d-(0[1-9]|1[0-2])$/.test(params.month ?? "") ? params.month! : params.view === "month" ? today.slice(0, 7) : null;
   const code = params.code ?? "";
   const viewOnly = !!membership.viewOnlyUntil;
   const reminds = !viewOnly && canManageClients(membership.role);
@@ -87,7 +87,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   // straight away, and the next 30 days only when nothing is late.
   const asked = params.view && params.view in calendarViews ? (params.view as CalendarView) : null;
   const late = !asked && !day ? pageOf("overdue") : null;
-  const view: CalendarView = asked ?? (late && (await late).count ? "overdue" : "month");
+  const view: CalendarView = asked ?? (late && (await late).count ? "overdue" : "soon");
   const href = (next: { view?: CalendarView; day?: string; page?: number; task?: string; month?: string | null; remind?: string } = {}) => {
     const search = new URLSearchParams();
     const on = next.view ? null : (next.day ?? day);
@@ -102,14 +102,17 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     return `/app/calendar?${search}`;
   };
   // The strip of days ahead, with how many returns are still to file on each; or the month's
-  // weeks, Monday first, with a dot for each kind of return on each day.
-  const strip = month ? null : day || view === "week" || view === "month" ? Array.from({ length: (view === "week" && !day ? 7 : 30) + 1 }, (_, at) => addDays(today, at)) : null;
+  // weeks, Monday first, with what is due on each day.
+  const strip = month ? null : day || view === "week" || view === "soon" ? Array.from({ length: (view === "week" && !day ? 7 : 30) + 1 }, (_, at) => addDays(today, at)) : null;
   const lead = month ? (new Date(`${month}-01T00:00:00Z`).getUTCDay() + 6) % 7 : 0;
   const cells = month ? Array.from({ length: Math.ceil((lead + new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate()) / 7) * 7 }, (_, at) => addDays(`${month}-01`, at - lead)) : null;
   const span = strip ?? cells;
-  const [{ data: tasks, count: total }, { data: perDay }, [{ data: rules }, { data: marking }, { data: reminding }, { data: remindTasks }, { data: mailbox }, { count: remindedToday }, counts, { data: extensions }]] = await Promise.all([
+  const inGrid = cells && supabase.from("tasks").select(columns).eq("firm_id", membership.firmId).in("kind", ["compliance", "licence"]).is("clients.archived_at", null).gte("due_on", cells[0]).lte("due_on", cells.at(-1)!);
+  const [{ data: tasks, count: total }, { data: perDay }, { data: inMonth }, [{ data: rules }, { data: marking }, { data: reminding }, { data: remindTasks }, { data: mailbox }, { count: remindedToday }, counts, { data: extensions }]] = await Promise.all([
     late && view === "overdue" ? late : pageOf(day ? null : view),
     span ? supabase.rpc("calendar_days", { target_firm: membership.firmId, first_day: span[0], last_day: span.at(-1)!, only_code: code || undefined }) : Promise.resolve({ data: null }),
+    // The month's own returns, the first few named in each day.
+    inGrid ? Promise.resolve((code ? inGrid.eq("code", code) : inGrid).order("due_on").order("id").limit(1000)) : Promise.resolve({ data: null }),
     rest,
   ]);
   if (total && from >= total) redirect(href({ page: Math.ceil(total / pageSize) }));
@@ -121,6 +124,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const name = (task: { kind?: string; code: string | null; period_key: string | null; details?: unknown }) =>
     licence(task) ? ([(task.details as { label?: string }).label ?? "Licence", "Licence or registration"] as const) : ([rule.get(task.code ?? "")?.name ?? task.code, periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)] as const);
   const onDay = new Map(perDay?.map((row) => [row.due_on, row]));
+  const named = Map.groupBy(inMonth ?? [], (task) => task.due_on);
   const most = Math.max(1, ...[...onDay.values()].map((row) => row.returns));
 
   // Remind client: anything that stops the email. It names the returns late or due within 7
@@ -248,7 +252,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                       </span>
                     </td>
                     <td className="cal-act">
-                      {reminds && task.status !== "filed" && soon(task.due_on) && (
+                      {/* A client is reminded of returns late or due within 7 days; a licence never. */}
+                      {reminds && !licence(task) && task.status !== "filed" && task.due_on > addDays(today, 7) && <span className="sub cal-later">Remind from {dueLabel(addDays(task.due_on, -7))}</span>}
+                      {reminds && !licence(task) && task.status !== "filed" && soon(task.due_on) && (
                         <Link className={`b b-ghost${compact ? " b-icon" : ""}`} href={href({ page, remind: task.client_id })} scroll={false} aria-label={`Remind ${task.clients.name}`} title="Remind client">
                           <BellRing size={14} aria-hidden />
                           {!compact && "Remind client"}
@@ -413,18 +419,22 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                     aria-label={`${dueLabel(date)}: ${words}`}
                   >
                     <strong>{Number(date.slice(8))}</strong>
-                    {!!tally?.returns && <small>{tally.returns}</small>}
-                    <span className="cal-dots">
-                      {!!late && <i className="d-late" />}
-                      {!!waiting && <i className="d-wait" />}
-                      {!!working && <i className="d-info" />}
-                      {!!filed && <i className="d-done" />}
+                    <span className="cal-items">
+                      {named.get(date)?.slice(0, 3).map((task) => {
+                        const [tone] = status(task);
+                        return (
+                          <span key={task.id} className={`cal-item ${tone === "late" || tone === "done" ? tone : "wait"}`} title={`${task.clients.name}: ${name(task)[0]}`}>
+                            {task.clients.name}: {name(task)[0]}
+                          </span>
+                        );
+                      })}
+                      {(tally?.returns ?? 0) + filed > 3 && <span className="cal-more">{(tally?.returns ?? 0) + filed - 3} more</span>}
                     </span>
                   </Link>
                 );
               })}
             </nav>
-            <ul className="cal-legend" aria-label="What the dots mean">
+            <ul className="cal-legend" aria-label="What the colours mean">
               <li>
                 <i className="d-late" aria-hidden />
                 Late
@@ -432,10 +442,6 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
               <li>
                 <i className="d-wait" aria-hidden />
                 To file
-              </li>
-              <li>
-                <i className="d-info" aria-hidden />
-                In progress
               </li>
               <li>
                 <i className="d-done" aria-hidden />

@@ -30,7 +30,7 @@ import {
 import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
-import { Suspense, createContext, startTransition, use, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { Suspense, createContext, startTransition, use, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { switchFirm } from "@/app/(app)/actions";
 import { signOut } from "@/app/(auth)/actions";
 import { bellItems, markBellRead } from "@/app/(app)/actions";
@@ -231,25 +231,22 @@ export function MenuButton() {
 }
 
 // Back, at the start of every page's header: to the page before when it was InboxCA's (as the
-// browser's Back does), otherwise up to the page above (the last crumb), or Today. On Today
-// with no page of InboxCA's before it, there is nowhere to go, so it shows dimmed.
+// browser's Back does), otherwise up to the page above (the last crumb), or Today. Today has
+// none, as it is where InboxCA starts.
 const inAppBefore = () => {
   const before = tabHistory().behind[0]?.url;
   return !!before && /^\/app(\/|$)/.test(new URL(before).pathname);
 };
-const noChange = () => () => {};
 export function BackButton() {
   const router = useRouter();
-  const path = usePathname();
-  const stuck = useSyncExternalStore(noChange, () => path === "/app" && !inAppBefore(), () => false);
+  if (usePathname() === "/app") return null;
   const back = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (stuck) return;
     if (inAppBefore()) return router.back();
     const crumbs = event.currentTarget.closest(".topbar")?.querySelectorAll<HTMLAnchorElement>(".crumbs a");
     router.push(crumbs?.length ? crumbs[crumbs.length - 1].getAttribute("href")! : "/app");
   };
   return (
-    <button type="button" className="b b-ghost b-icon head-back" aria-label="Back" title="Back" aria-disabled={stuck || undefined} onClick={back}>
+    <button type="button" className="b b-ghost b-icon head-back" aria-label="Back" title="Back" onClick={back}>
       <ArrowLeft size={18} aria-hidden />
     </button>
   );
@@ -582,7 +579,7 @@ function Sheet({ open, close, title, children }: { open: boolean; close: () => v
 
 const answers: [string, string][] = [
   ["How do clients send us papers?", "Clients email papers to your firm email as they do today. InboxCA saves each paper in your drive, in a folder for the client, the year and the type of work. To ask for papers you still need, use Ask for papers: the client gets an email listing what is still missing, to reply to with the papers attached."],
-  ["How do reminders work?", "At 10:00 each day, InboxCA emails clients about returns that are due soon or late, at most once a day each, from your firm email. The owner picks when in Settings. InboxCA reminds only for due dates it has checked against the government notification. You can pause reminders for any client."],
+  ["How do reminders work?", "Each morning, from about 9:30, InboxCA emails clients about returns that are due soon or late, at most once a day each, from your firm email. The owner picks in Settings which days before and after a due date they go. InboxCA reminds only for due dates it has checked against the government notification. You can pause reminders for any client."],
   ["How do I connect our email and drive?", "The owner does it once in Settings: Firm email for the address your clients write to, and Firm drive for where papers are saved. InboxCA keeps no copy of your emails and no client papers."],
   ["What does Office only do?", "Staff can use InboxCA only in the office, on the office internet connection, and only on PCs the owner approves. The owner can sign in from anywhere."],
   ["Who sees what?", "The owner chooses whether everyone sees every client or only the people assigned to it. Each role (partner, manager, staff, front desk) can do only what Permissions allows. For anything more, they ask their manager or the owner for permission."],

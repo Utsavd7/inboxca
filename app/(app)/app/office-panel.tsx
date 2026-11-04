@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { reviewDevice, setOfficeOnly } from "@/app/(app)/actions";
 import { addDays, todayInIndia, dueLabel } from "@/src/lib/calendar";
 import { currentMember } from "@/src/lib/member";
-import { personName } from "@/src/lib/roles";
+import { personName, whose } from "@/src/lib/roles";
 import { firmAdmin, fixedSuggestion, memberOffice, officeApprover, onOfficeLine, requestAddress, type Office } from "@/src/lib/office";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { AutoSelect } from "./auto-select";
@@ -169,7 +169,7 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
         {!!approved.length && <div className="device-list">
           <h3 className="sub-head">Approved computers</h3>
           <ul className="rows">{approved.map((pc) => <li key={pc.id}>
-            <span className="grow"><strong>{pc.name}</strong>, {pc.kind === "office" ? (pc.key_id ? "office PC" : "office PC. Setup is not finished: on this PC, choose Set up this office PC") : pc.kind === "laptop" ? "laptop" : `${personName(emails.get(pc.person_id ?? ""))}'s own laptop, view only away from the office until ${dueLabel(pc.ends_on ?? today)}`}</span>
+            <span className="grow"><strong>{pc.name}</strong>, {pc.kind === "office" ? (pc.key_id ? "office PC" : "office PC. Setup is not finished: on this PC, choose Set up this office PC") : pc.kind === "laptop" ? "laptop" : `${whose(personName(emails.get(pc.person_id ?? "")))} own laptop, view only away from the office until ${dueLabel(pc.ends_on ?? today)}`}</span>
             <form action={reviewDevice} className="end">
               <input type="hidden" name="device" value={pc.id} />
               <Pending className="b b-ghost b-small" name="decision" value="withdraw">Withdraw</Pending>
