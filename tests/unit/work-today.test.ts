@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { weekFor } from "@/app/(app)/app/work-data";
-import { inFilter, rankWork, visibleTo, type Listed } from "@/src/lib/work/today";
+import { groupRepeats, inFilter, rankWork, visibleTo, type Listed } from "@/src/lib/work/today";
 
 // Today by role: every area's items in one list, most urgent first, and only what the person's
 // role and clients allow. Invented clients only.
@@ -46,6 +46,14 @@ it("shows the owner and partners the firm, a manager the approvals, staff their 
   expect(sees("staff", new Set(["shah"]))).toEqual(["late:shah", "gov:new", "reply:shah", "call:shah"]);
   expect(sees("staff", new Set())).toEqual(["gov:new"]);
   expect(sees("front_desk", new Set(["shah"]))).toEqual(["reply:contact", "reply:shah", "call:shah"]);
+});
+
+it("shows the same work for one client once, with how many, and keeps other clients' apart", () => {
+  const reply = (key: string, client: typeof shah, extra: Partial<Listed> = {}) =>
+    item(key, { client, area: "emails", action: { label: "Check and send", href: `/app/inbox?mail=${key}` }, many: { title: `replies to ${client.name}`, why: "Check each" }, ...extra });
+  const list = groupRepeats([reply("a", shah), item("late:shah", { client: shah }), reply("b", shah, { urgent: true, due: "2026-10-20" }), reply("c", mehta)]);
+  expect(list.map((row) => [row.key, row.title])).toEqual([["a", `2 replies to ${shah.name}`], ["late:shah", "late:shah"], ["c", "c"]]);
+  expect(list[0]).toMatchObject({ action: { href: "/app/inbox?mail=a" }, urgent: true, due: "2026-10-20", why: "Check each" });
 });
 
 it("filters the full list: mine, late, approvals and each area", () => {

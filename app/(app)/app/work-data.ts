@@ -19,7 +19,7 @@ import { inboxWeek, inboxWorkItems } from "@/src/lib/work/inbox";
 import { inboxTeamWorkItems } from "@/src/lib/work/inbox-team";
 import { itrCheckWorkItems, itrVerifyWorkItems } from "@/src/lib/work/itr-check";
 import { papersWorkItems } from "@/src/lib/work/papers";
-import { isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
+import { groupRepeats, isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
 import { firmAccounts } from "./shell-data";
 
 // What Today and the full list (/app/work) read for the signed in person, as the row rules
@@ -269,7 +269,7 @@ export async function workFor(ctx: Context, late: number) {
   // Someone who does not lead sees the clients they look after.
   const theirs = lead ? [] : [...new Set(unique.flatMap((item) => (item.audience === "assigned" && item.client ? [item.client.id] : [])))];
   const looked = lead ? null : new Set(theirs.length ? await Promise.resolve(supabase.rpc("looked_after", { target_firm: firm, clients: theirs }).throwOnError()).then(({ data }) => data ?? [], failing("looked_after")) : []);
-  const shown = [...(await asks), ...rankWork(unique.filter((item) => visibleTo(item, { role: membership.role, looked })), today)];
+  const shown = [...(await asks), ...rankWork(groupRepeats(unique.filter((item) => visibleTo(item, { role: membership.role, looked }))), today)];
   return { items: shown, total: shown.length + Math.max(0, lateCount - lateList.length), late: lateCount, failed };
 }
 

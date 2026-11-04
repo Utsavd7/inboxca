@@ -30,7 +30,7 @@ import {
 import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
-import { Suspense, createContext, startTransition, use, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { Suspense, createContext, startTransition, use, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { switchFirm } from "@/app/(app)/actions";
 import { signOut } from "@/app/(auth)/actions";
 import { bellItems, markBellRead } from "@/app/(app)/actions";
@@ -231,25 +231,22 @@ export function MenuButton() {
 }
 
 // Back, at the start of every page's header: to the page before when it was InboxCA's (as the
-// browser's Back does), otherwise up to the page above (the last crumb), or Today. On Today
-// with no page of InboxCA's before it, there is nowhere to go, so it shows dimmed.
+// browser's Back does), otherwise up to the page above (the last crumb), or Today. Today has
+// none, as it is where InboxCA starts.
 const inAppBefore = () => {
   const before = tabHistory().behind[0]?.url;
   return !!before && /^\/app(\/|$)/.test(new URL(before).pathname);
 };
-const noChange = () => () => {};
 export function BackButton() {
   const router = useRouter();
-  const path = usePathname();
-  const stuck = useSyncExternalStore(noChange, () => path === "/app" && !inAppBefore(), () => false);
+  if (usePathname() === "/app") return null;
   const back = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (stuck) return;
     if (inAppBefore()) return router.back();
     const crumbs = event.currentTarget.closest(".topbar")?.querySelectorAll<HTMLAnchorElement>(".crumbs a");
     router.push(crumbs?.length ? crumbs[crumbs.length - 1].getAttribute("href")! : "/app");
   };
   return (
-    <button type="button" className="b b-ghost b-icon head-back" aria-label="Back" title="Back" aria-disabled={stuck || undefined} onClick={back}>
+    <button type="button" className="b b-ghost b-icon head-back" aria-label="Back" title="Back" onClick={back}>
       <ArrowLeft size={18} aria-hidden />
     </button>
   );
