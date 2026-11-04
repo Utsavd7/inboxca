@@ -340,7 +340,8 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         lead: "Cancel within 14 days of your first plan payment and you get that payment back in full.",
         points: [
           "You do it yourself in Settings, Billing, Money back, and confirm with the code from your authenticator app. Nobody needs to approve it. It applies once for each firm, monthly or yearly.",
-          "The one time setup fee is kept once your past papers have started to be brought in. AI credits you bought and used are not returned.",
+          "Payments in those 14 days for a bigger plan, yearly payment, extra people or monthly AI blocks come back too. An AI top up comes back only for its credits not yet used. The one time setup fee is kept once your past papers have started to be brought in.",
+          "After the money back your firm can view everything for 30 days. Then the firm is closed, and for 30 more days the owner can still sign in and download its data. Then InboxCA deletes it.",
           "The refund goes through Cashfree to the same card, UPI or bank account, and usually arrives within 5 to 7 working days.",
           "Cancel later at any time in Settings, Billing or at your bank or UPI app. You keep your plan until the period you paid for ends. After the first 14 days there is no part refund.",
           "If a payment fails, for 7 days nothing changes while it is tried again. Until day 30 your firm can view but not change anything. After day 30 the firm is closed: your team is signed out and the email and drive are disconnected, and for 30 more days the owner can still sign in and download its data.",

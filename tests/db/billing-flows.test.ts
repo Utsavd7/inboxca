@@ -21,6 +21,7 @@ const billing = await import("@/src/lib/billing/billing");
 const money = await import("@/src/lib/billing/money");
 const { POST } = await import("@/app/api/webhooks/cashfree/route");
 const { supabaseAdmin } = await import("@/src/lib/supabase");
+const { aiCredits } = await import("@/src/lib/ai");
 
 let last: { raw: string; headers: Record<string, string> } | null = null;
 const hook = (raw: string, headers: Record<string, string>) => POST(new NextRequest("http://127.0.0.1:9600/api/webhooks/cashfree", { method: "POST", body: raw, headers }));
@@ -323,6 +324,22 @@ describe.skipIf(!ready)("billing against a fake Cashfree", () => {
     const again = await activeFirm("back-again", solo, "upi", { gstin: `24${shared}1Z5` });
     expect((await billing.moneyBack(again.id)).state).toBe("used");
     expect(await billing.claimMoneyBack(again.id, again.owner)).toMatch(/already had its money back/);
+  });
+
+  it("gives back the AI block of the 14 days in full, and each AI top up only for its credits not yet used", async () => {
+    const firm = await activeFirm("back-ai", { clients: 150, practice: "mixed", people: 4, aiBlocks: 0 });
+    for (const kind of ["ai_block", "topup", "topup"] as const) {
+      await billing.buy(firm.id, firm.owner, { kind }, returnUrl);
+      await fake.pay((await paymentsOf(firm.id, kind)).at(-1).id);
+    }
+    // The month's own credits are used up, and 1,000 of the older top up's 4,000.
+    const { available } = (await aiCredits(firm.id))!;
+    await db.query("insert into public.ai_ledger (firm_id, reason, credits, hash) values ($1, 'reply_draft', $2, $3)", [firm.id, available - 8000 + 1000, randomUUID()]);
+    fake.settleRefunds(null);
+    expect(await billing.claimMoneyBack(firm.id, firm.owner)).toBeNull();
+    const refunds = await paymentsOf(firm.id, "refund");
+    const paid = (await paymentsOf(firm.id)).filter((row) => row.kind !== "refund");
+    expect(paid.map((row) => [row.kind, refunds.find((back) => back.refund_of === row.id)?.amount_paise])).toEqual([["plan", paid[0].amount_paise], ["ai_block", paid[1].amount_paise], ["topup", 29_925], ["topup", 39_900]]);
   });
 
   it("issues a tax invoice from the GST start date, IGST to another state, and a credit note for its refund", async () => {

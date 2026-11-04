@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { ArrowRight, Check, Minus, Plus } from "lucide-react";
-import { aiBlock, custom, extraPerson, planIncludes, planRows, plans, practices, rupees } from "@/content/plans";
+import { aiBlock, custom, extraPerson, planIncludes, planRows, plans, practices, rupees, yearlySave } from "@/content/plans";
 import { estimate, type Practice } from "@/src/lib/estimate";
 import { confetti } from "./confetti";
 import { Rolling } from "./rolling";
@@ -185,8 +185,8 @@ export function Plans() {
                   {yearly === value && <motion.span layoutId="billing-pick" className="segment-pick" transition={spring} />}
                   <span>
                     {label}
-                    {/* Yearly is 11 monthly payments for 12 (content/plans.ts yearlyMonths). */}
-                    {value && <em className="deal" aria-hidden>1 month free</em>}
+                    {/* Yearly is 11 monthly payments and ₹10 for 12 (content/plans.ts yearlySave). */}
+                    {value && <em className="deal" aria-hidden>Save {yearlySave}%</em>}
                   </span>
                 </button>
               ))}
@@ -252,6 +252,9 @@ export function Plans() {
       <p className="plan-note">
         Every plan has unlimited clients. The client count on each plan is only our suggestion, based on its storage and AI
         limits.
+        <br />
+        One time setup fee with the first payment, before GST: {plans.map((plan) => `${plan.name} ${rupees(plan.setup)}`).join(", ")}, Custom
+        by its size. It is returned if you cancel within 14 days, before your old files start to be brought in.
       </p>
 
       <div className="plan-foot">

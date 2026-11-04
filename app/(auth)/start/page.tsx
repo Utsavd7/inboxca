@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { startCheckout } from "@/app/(app)/app/settings/billing-actions";
 import { Checkout } from "@/app/(app)/app/settings/checkout";
 import { Methods } from "@/app/(app)/app/settings/methods";
+import { yearlySave } from "@/content/plans";
 import { billingSettings, quote } from "@/src/lib/billing/billing";
 import { chosenPlan, gstOn, indiaDay, mandateMax, planPrice, planSchema, rupees, type Cycle } from "@/src/lib/billing/money";
 import { estimate, type Formula, type Practice } from "@/src/lib/estimate";
@@ -118,7 +119,7 @@ export default async function Start({ searchParams }: { searchParams: Promise<Qu
           </nav>
           <nav className="start-tabs start-cycle" aria-label="How often to pay">
             <Link href={href({ cycle: "monthly" })} aria-current={cycle === "monthly" ? "true" : undefined} scroll={false}>Monthly</Link>
-            <Link href={href({ cycle: "yearly" })} aria-current={cycle === "yearly" ? "true" : undefined} scroll={false}>Yearly <span className="start-free">1 month free</span></Link>
+            <Link href={href({ cycle: "yearly" })} aria-current={cycle === "yearly" ? "true" : undefined} scroll={false}>Yearly <span className="start-free">Save {yearlySave}%</span></Link>
           </nav>
           {priced && (
             <ul className="start-includes" aria-label={`The ${priced.price.name} plan includes`}>

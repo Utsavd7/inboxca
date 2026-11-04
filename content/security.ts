@@ -3,7 +3,7 @@
 // built. It is reviewed again with the terms and privacy notice before the pilot.
 import { analyticsToken } from "@/src/lib/site";
 
-export const securityUpdated = "3 Nov 2026";
+export const securityUpdated = "4 Nov 2026";
 
 // How files from clients are checked (owner, 3 Nov 2026): the same words on the security page,
 // in the privacy notice and the DPA, and on the website. The provider quotes are their own help
@@ -27,6 +27,7 @@ export const securitySections = [
       "A file passes through InboxCA only while it is checked and filed. That is at most 24 hours, or up to 7 days if your drive cannot be reached.",
       "Your client list, your records and the figures read from files will be kept in a Supabase database. Its region is chosen at launch, and India is planned.",
       "InboxCA's temporary files and safety copies are planned for Backblaze B2, which is outside India. They are encrypted.",
+      "InboxCA also keeps the text read from each file, encrypted with your firm's key in Backblaze B2, so it can search the file and read its figures again without opening it. The text is removed when the file is removed.",
     ],
   },
   {
@@ -42,6 +43,7 @@ export const securitySections = [
       "Portal passwords and OTPs. InboxCA never logs in to the GST or income tax portal.",
       "Card and bank details. Payments go through Cashfree's own checkout.",
       "Aadhaar numbers. InboxCA does not ask for them, and a 12 digit number found in a paper is masked in InboxCA's logs.",
+      "Two things are kept, encrypted with your firm's key: a password your team types to open a locked PDF, so the file opens again, and an AI reply draft, until its email is answered or marked done and at most until the email is 7 days old.",
     ],
   },
   {
@@ -117,7 +119,7 @@ export const securitySections = [
       "Supabase: the database and sign in. Region chosen at launch, India planned.",
       "DigitalOcean, in Bangalore: the server that runs the website and the app.",
       "Amazon Web Services: the key vault (KMS, Mumbai region planned) and, later, system email (SES). Resend sends system email until then.",
-      "Backblaze B2: InboxCA's encrypted temporary files, safety copies and backups.",
+      "Backblaze B2: InboxCA's encrypted temporary files, safety copies, the text read from files and backups.",
       "OpenAI: AI, which receives only the email being worked on and that client's own records.",
       "Cashfree: plan payments. Sentry: error reports, with personal details removed.",
       "Your own mailbox (Google, Microsoft or Zoho) and your own drive (Microsoft or Dropbox).",
