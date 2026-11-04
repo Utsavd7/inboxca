@@ -17,6 +17,7 @@ export type WorkItem = {
   urgent?: boolean;
   action: { label: string; href: string };
   audience: "assigned" | "approver" | "firm";
+  many?: { title: string; why: string };
 };
 
 const DAY = 86_400_000;

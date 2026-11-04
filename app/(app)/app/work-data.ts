@@ -19,7 +19,7 @@ import { inboxWeek, inboxWorkItems } from "@/src/lib/work/inbox";
 import { inboxTeamWorkItems } from "@/src/lib/work/inbox-team";
 import { itrCheckWorkItems, itrVerifyWorkItems } from "@/src/lib/work/itr-check";
 import { papersWorkItems } from "@/src/lib/work/papers";
-import { isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
+import { groupRepeats, isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
 import { firmAccounts } from "./shell-data";
 
 // What Today and the full list (/app/work) read for the signed in person, as the row rules
@@ -188,7 +188,8 @@ export async function workFor(ctx: Context, late: number) {
   const licences = Promise.resolve(supabase.from("tasks").select("id, client_id, due_on, details, clients!inner(name, archived_at)").eq("firm_id", firm).eq("kind", "licence").neq("status", "filed").is("clients.archived_at", null).lte("due_on", addDays(today, 30)).order("due_on").limit(50).throwOnError()).then(({ data }) =>
     (data ?? []).map((task): Listed => {
       const label = (task.details as { label?: string }).label ?? "Licence";
-      return { key: `licence:${task.id}`, title: `${label} for ${task.clients.name} ${task.due_on < today ? "has expired" : "expires"}`, why: task.due_on < today ? `It ran out on ${dueLabel(task.due_on)}. Once it is renewed, mark it on the Calendar` : `Valid until ${dueLabel(task.due_on)}`, client: { id: task.client_id, name: task.clients.name }, due: task.due_on, urgent: task.due_on < today, action: { label: "See on Calendar", href: `/app/calendar?day=${task.due_on}` }, audience: "assigned", area: "returns" };
+      // A DSC held by the client itself already names them: "DSC of Ramesh Shah expires".
+      return { key: `licence:${task.id}`, title: `${label.endsWith(` of ${task.clients.name}`) ? label : `${label} for ${task.clients.name}`} ${task.due_on < today ? "has expired" : "expires"}`, why: task.due_on < today ? `It ran out on ${dueLabel(task.due_on)}. Once it is renewed, mark it on the Calendar` : `Valid until ${dueLabel(task.due_on)}`, client: { id: task.client_id, name: task.clients.name }, due: task.due_on, urgent: task.due_on < today, action: { label: "See on Calendar", href: `/app/calendar?day=${task.due_on}` }, audience: "assigned", area: "returns" };
     }), failing("licences"));
 
   // What only the owner or partners act on, and a notice's date close by. A client asked three
@@ -269,7 +270,7 @@ export async function workFor(ctx: Context, late: number) {
   // Someone who does not lead sees the clients they look after.
   const theirs = lead ? [] : [...new Set(unique.flatMap((item) => (item.audience === "assigned" && item.client ? [item.client.id] : [])))];
   const looked = lead ? null : new Set(theirs.length ? await Promise.resolve(supabase.rpc("looked_after", { target_firm: firm, clients: theirs }).throwOnError()).then(({ data }) => data ?? [], failing("looked_after")) : []);
-  const shown = [...(await asks), ...rankWork(unique.filter((item) => visibleTo(item, { role: membership.role, looked })), today)];
+  const shown = [...(await asks), ...rankWork(groupRepeats(unique.filter((item) => visibleTo(item, { role: membership.role, looked }))), today)];
   return { items: shown, total: shown.length + Math.max(0, lateCount - lateList.length), late: lateCount, failed };
 }
 

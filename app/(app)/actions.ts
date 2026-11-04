@@ -712,7 +712,10 @@ export async function manageClient(form: FormData) {
     if (!own) back("role");
     const admin = supabaseAdmin();
     if (intent === "add-licence") {
-      const label = String(form.get("label") ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+      // A DSC names its holder: "DSC of Ramesh Patel".
+      const holder = String(form.get("holder") ?? "").replace(/\s+/g, " ").trim();
+      const named = String(form.get("label") ?? "").replace(/\s+/g, " ").trim();
+      const label = `${named}${named && holder ? ` of ${holder}` : ""}`.slice(0, 60);
       const on = String(form.get("on") ?? "");
       if (!label || !/^\d{4}-\d{2}-\d{2}$/.test(on) || Number.isNaN(Date.parse(on))) back("licence");
       const { data: made } = await admin.from("tasks").insert({ firm_id: firm, client_id: id, kind: "licence", due_on: on, details: { label } }).select("id").single();
@@ -1756,7 +1759,7 @@ export async function saveLink(form: FormData) {
 }
 
 // A person checks a file the client sent for an item asked for (PLAN.md 5.3.1). Checked keeps
-// it; Ask again leaves the file filed but clears the item, so the client's link asks for it
+// it; Ask again leaves the file filed but clears the item, so the next email asks for it
 // once more, reminders count it as missing, and the request is open again.
 export async function checkRequestItem(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
@@ -2597,19 +2600,27 @@ export async function stopSend(form: FormData) {
 // clients in the last 14 days, newest first. Fresh: a question, or anything since the person
 // last marked all read.
 export async function bellItems() {
-  const { supabase, membership } = await currentMember();
+  const { supabase, userId, membership } = await currentMember();
   if (!membership) return [];
   const seen = Date.parse((await cookies()).get("bell_seen")?.value ?? "") || 0;
-  const [questions, { data: lines }, { data: people }] = await Promise.all([
+  const [questions, { data: lines }, { data: people }, { data: teams }] = await Promise.all([
     myQuestions(),
     supabase.rpc("activity_feed", { target_firm: membership.firmId, since: new Date(Date.now() - 14 * 86_400_000).toISOString(), mine: true }),
     supabase.rpc("firm_people", { target_firm: membership.firmId }),
+    supabase.from("groups").select("id, name").eq("firm_id", membership.firmId).eq("kind", "team"),
   ]);
   // A permission request names the person who asks, and the client it is for.
   const asker = (ask: { details: unknown }) => personName(people?.find((person) => person.user_id === (ask.details as { by?: string }).by)?.email);
+  // An assignment names who was given the client, and for which work.
+  const given = (details: unknown) => {
+    const { person, team, work } = (details ?? {}) as { person?: string; team?: string; work?: string };
+    const group = teams?.find((one) => one.id === team)?.name;
+    const who = person === userId ? "You were" : person ? `${personName(people?.find((one) => one.user_id === person)?.email)} was` : group ? `${group} was` : "";
+    return who && `${who} given this client${work && work in workTypes ? ` for ${workTypes[work as WorkType]}` : ""}`;
+  };
   return [
     ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}${ask.clients?.name ? ` for ${ask.clients.name}` : ""}`, who: asker(ask), at: null as string | null, fresh: true })),
-    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: activityNames[line.action] ?? "Client changed", who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
+    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: (line.action === "assignment.added" && given(line.details)) || (activityNames[line.action] ?? "Client changed"), who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
   ].slice(0, 20);
 }
 

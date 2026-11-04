@@ -66,8 +66,11 @@ test("services on a client's GSTIN give it its due dates", async () => {
   const due = owner.locator("section[aria-labelledby=due] li");
   await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");
   await expect(owner.locator(".client-pane")).toContainText("InboxCA has not yet checked");
-  const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed'",[firm.firmId]);
+  const [{n,soon}]=await query(local.dbUrl,"select count(*)::int n, count(*) filter (where t.due_on<=(now() at time zone 'Asia/Kolkata')::date+60)::int soon from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed'",[firm.firmId]);
   expect(n).toBeGreaterThan(12);
+  // The next 60 days first (late ones among them); every return a click away.
+  await expect(due).toHaveCount(soon);
+  await owner.getByRole("link", { name: "Show later returns" }).click();
   await expect(due).toHaveCount(n);
 });
 
@@ -124,8 +127,11 @@ test("Today shows what needs the owner today and the next setup step", async () 
   const views = owner.getByRole("navigation", { name: "Show" });
   await expect(views.getByRole("link", { name: /^Late/ })).toHaveAttribute("aria-current", "page");
   await expect(owner.getByRole("row").filter({ hasText: "GSTR-1 (monthly)" }).first()).toContainText("Late");
-  await owner.goto("/app/calendar?view=month");
+  await owner.goto("/app/calendar?view=soon");
   await expect(views.getByRole("link", { name: /^Due in 30 days/ })).toHaveAttribute("aria-current", "page");
+  // Returns this month opens the month's grid.
+  await owner.goto("/app/calendar?view=month");
+  await expect(owner.getByRole("navigation", { name: "Layout" }).getByRole("link", { name: "Month" })).toHaveAttribute("aria-current", "page");
 });
 
 test("late returns: the week's numbers, a preview before reminding, Mark filed with an undo and Assign to me", async () => {

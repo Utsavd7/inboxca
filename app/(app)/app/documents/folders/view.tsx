@@ -15,11 +15,11 @@ import { browseContext, listing, type Listing } from "./data";
 export function ViewSwitch({ folders }: { folders: boolean }) {
   return (
     <nav className="fb-switch" aria-label="Show papers as">
-      <Link href="/app/documents" aria-current={folders ? "page" : undefined}>
+      <Link href="/app/documents?view=folders" aria-current={folders ? "page" : undefined}>
         <FolderTree size={16} aria-hidden />
         Folders
       </Link>
-      <Link href="/app/documents?view=papers" aria-current={folders ? undefined : "page"}>
+      <Link href="/app/documents" aria-current={folders ? undefined : "page"}>
         <Files size={16} aria-hidden />
         All papers
       </Link>

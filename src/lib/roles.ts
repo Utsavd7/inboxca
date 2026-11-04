@@ -24,6 +24,9 @@ export const pagesFor = (role: string) => [
   ...(role === "owner" ? [{ href: "/app/settings", name: "Settings", place: "workspace" }] : []),
 ];
 
+// A name with its possessive: "Mehta's papers", "Patel Textiles' folders".
+export const whose = (name: string) => `${name}${name.endsWith("s") ? "'" : "'s"}`;
+
 // "Ravi" for ravi.shah@firm.in: how messages name a person. The full name Google or Microsoft
 // gave at sign in (the signed in person's user metadata) comes first when there is one.
 export const personName = (email?: string, full?: unknown) => {

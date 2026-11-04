@@ -20,6 +20,7 @@ export async function answersWorkItems({ supabase, membership }: Context): Promi
       ...(row.client_id && row.clients && { client: { id: row.client_id, name: row.clients.name } }),
       action: { label: "Check and send", href: `/app/inbox?mail=${row.id}` },
       audience: "assigned",
+      ...(row.clients && { many: { title: `replies to ${row.clients.name}`, why: "InboxCA wrote them. Check each, then send" } }),
     }] : [];
   });
 }

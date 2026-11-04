@@ -15,6 +15,8 @@ export type WorkItem = {
   audience: "assigned" | "approver" | "firm";
   // Given to this person by name (a notice's owner): shown whoever looks after the client.
   mine?: boolean;
+  // The row's words when several say the same for one client: "2 replies to Patel Textiles".
+  many?: { title: string; why: string };
 };
 
 const times = (count: number) => (count === 2 ? "twice" : `${count} times`);

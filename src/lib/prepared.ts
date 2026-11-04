@@ -15,6 +15,7 @@ import {grantFor} from "./permission-grants";
 import {chooseTemplate,templateSchema} from "./templates";
 import {receive,unsafeText} from "./intake";
 import {itrChecks,type ItrWork} from "./itr-check";
+import {whose} from "./roles";
 
 export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
 export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : "GSTR-3B";
@@ -137,7 +138,7 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
     if(!extension || !["pdf","png","jpg","jpeg","txt"].includes(extension) || file && file.size>25_000_000) throw new Error("Choose a PDF or picture up to 25 MB.");
     const type=uploaded ? "Acknowledgement" : "Filing record";
     // This is the firm's record of a number, never a made-up portal acknowledgement.
-    const bytes=uploaded ? new Uint8Array(await file!.arrayBuffer()) : new TextEncoder().encode(`Filing details from ${membership.firmName}\nClient: ${client.name}\nReturn: ${formName(document.prepared.form)}\nPeriod: ${formPeriod(document.period_key)}\nAcknowledgement number: ${number}\nThis is ${membership.firmName}'s record. It is not the acknowledgement from the government portal.\n`);
+    const bytes=uploaded ? new Uint8Array(await file!.arrayBuffer()) : new TextEncoder().encode(`Filing details from ${membership.firmName}\nClient: ${client.name}\nReturn: ${formName(document.prepared.form)}\nPeriod: ${formPeriod(document.period_key)}\nAcknowledgement number: ${number}\nThis is ${whose(membership.firmName)} record. It is not the acknowledgement from the government portal.\n`);
     const drive=await openDrive(membership.firmId,account);
     // A file the team adds is checked like any other (src/lib/intake.ts).
     const sent=uploaded ? await receive(membership.firmId,userId,{id:document.client_id,name:client.name},{name:file!.name,bytes},drive,false) : null;

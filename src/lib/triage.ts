@@ -2,6 +2,8 @@
 // attachment names, in English, Hindi, Gujarati and Hinglish. A clear match costs no AI
 // credits; anything unclear is "other", which goes to the team. Runs in memory only: the
 // email itself is never stored.
+import { stripQuoted } from "./mail-view";
+
 export const labels = {
   records_past: "Asks for papers of past years",
   records_current: "Asks for this year's papers",
@@ -41,6 +43,7 @@ export const replyReasons: Record<string, string> = {
   due_late: "Asks what is due. A return looks late",
   due_none: "Asks what is due. Nothing is due in the next 30 days in InboxCA",
   answer_not_allowed: "Asks about the client's returns but may not receive its papers",
+  new_client_enquiry: "Someone who is not a client yet asks about your services or charges. Add them as a client to reply",
   link_private: "Sent a sharing link InboxCA could not open: private, or a folder. Open it yourself, or wait for the file attached",
 };
 // A Needs reply email snoozed to a later day stays out of Needs reply until that day (India
@@ -67,6 +70,11 @@ const words = {
   papers: ["papers", "paper", "documents", "document", "docs", "kagaz", "kaagaz", "from my side", "from our side", "from me", "from us", "meri taraf se", "कागज", "कागजात", "दस्तावेज", "मेरी तरफ से", "કાગળ", "દસ્તાવેજ", "મારી તરફથી"],
   due: ["due", "due date", "last date", "deadline", "kab tak", "कब तक", "आखिरी तारीख", "अंतिम तारीख", "ક્યાં સુધી", "છેલ્લી તારીખ"],
   question: ["whether", "status", "please confirm", "confirm if", "let me know if", "kya", "kab", "क्या", "कब", "શું", "ક્યારે"],
+  // A new client's enquiry, from someone who is not a client yet: a question about the firm's
+  // services or charges. Mail that offers something, or can be unsubscribed from, is not one.
+  enquiry: ["service*", "fee", "fees", "charges", "price*", "pricing", "quote", "quotation", "need a ca", "looking for a ca", "chartered accountant", "सेवा*", "फीस", "સેવા", "ફી"],
+  wanting: ["enquir*", "inquir*", "interested", "looking for", "please share", "please let me know", "let me know", "kindly share", "batao", "bataiye", "बताइए", "बताओ", "જણાવો"],
+  offer: ["unsubscribe", "we offer", "our service*", "our charges", "our price*", "newsletter", "webinar", "discount"],
   advice: ["advice", "advise", "suggest*", "recommend*", "should i", "should we", "opinion", "why", "mean", "meaning", "fee", "fees", "dues", "charges", "your bill", "pay you", "penalty", "refund", "complain*", "salah", "सलाह", "फीस", "સલાહ", "ફી"],
 };
 // Whole words, with plurals; a word ending in "*" also matches longer words it starts.
@@ -81,6 +89,23 @@ const patterns = Object.fromEntries(
 ) as Record<keyof typeof words, RegExp[]>;
 const count = (text: string, key: keyof typeof words) => patterns[key].filter((pattern) => pattern.test(text)).length;
 
+// A thank you and nothing more ("Thanks", "Thank you sir", "Noted, thanks"), its quoted mail
+// and sign off left out: it needs no reply.
+const thanks = /^(?:(?:ok(?:ay)?|noted|received|got it|dear sir|dear madam|hi|hello|sure|done|great)[\s,.!]+)*(?:thanks?|thank you|thankyou|thx|many thanks|dhanyavad|dhanyawad|shukriya|धन्यवाद|शुक्रिया|આભાર)(?:[\s,.!]+(?:so much|a lot|very much|sir|madam|ma'?am|ji|again|noted|received|ok))*[\s,.!🙏]*$/u;
+const signOff = /^(?:regards|best regards|warm regards|kind regards|thanks (?:and|&) regards|rgds)[,.]?$/;
+export function thanksOnly(email: Email) {
+  if (email.attachments.length) return false;
+  const lines = stripQuoted(email.text).toLowerCase().split("\n").map((line) => line.trim()).filter(Boolean);
+  const end = lines.findIndex((line) => signOff.test(line));
+  return thanks.test((end === -1 ? lines : lines.slice(0, end)).join(" "));
+}
+
+// Someone who is not a client yet asking about the firm's services or charges, by rules only.
+export function enquiry(email: Email) {
+  const text = `${email.subject}\n${stripQuoted(email.text)}`.toLowerCase();
+  return count(text, "enquiry") > 0 && (text.includes("?") || count(text, "wanting") > 0) && !count(text, "offer");
+}
+
 // The financial year that today falls in starts in April: on 17 Oct 2026 it is 2026-27.
 const yearStart = (today: string) => Number(today.slice(0, 4)) - (Number(today.slice(5, 7)) < 4 ? 1 : 0);
 
@@ -88,6 +113,9 @@ export function classify(email: Email, today: string): { label: Label; reason: s
   const text = `${email.subject}\n${email.text}`.toLowerCase();
   const files = email.attachments.join(" ").toLowerCase();
   const everything = `${text} ${files}`;
+  // A thank you, even one quoting the firm's own question, unless its subject asks something.
+  const subject = email.subject.toLowerCase();
+  if (thanksOnly(email) && !subject.includes("?") && !count(subject, "ask")) return { label: "other", reason: "thanks_only" };
   // A notice that asks something (a question, or to call) also waits for the team.
   if (count(everything, "notice")) return { label: "notice_received", reason: text.includes("?") || count(text, "call") ? "notice_question" : "notice_words" };
 

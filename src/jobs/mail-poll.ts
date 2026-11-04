@@ -3,7 +3,7 @@ import { serverCrypto } from "@/src/lib/crypto";
 import type { NewMail } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { askedAbout } from "@/src/lib/answers";
-import { classify, statusLabels, type Label } from "@/src/lib/triage";
+import { classify, enquiry, statusLabels, type Label } from "@/src/lib/triage";
 import { officialKind, officialSender, taxNumbersIn, type OfficialWork } from "@/src/lib/gov-mail";
 import { todayInIndia } from "@/src/lib/calendar";
 import { sharedLinks } from "@/src/lib/share-link";
@@ -13,9 +13,10 @@ import type { Handler } from "./runner";
 // sender that passed SPF or DKIM (src/lib/gov-mail.ts) is matched to the client by the PAN or
 // GSTIN in it, and goes to Notices or is filed with the papers. A client's or contact's mail is
 // labelled in memory; only the label and reason are kept, and anything unclear becomes a
-// Needs team reply request. Mail from anyone else is kept as a row only (not a client yet), is
-// not read, and nothing is answered, filed or asked for it; the Inbox lists it for a person to
-// add the sender as a client. Repeated refused passwords mark the mailbox to be connected
+// Needs team reply request. Mail from anyone else is kept as a row only (not a client yet), and
+// nothing is answered, filed or asked for it; the Inbox lists it for a person to add the sender
+// as a client. Its words are only checked by rules for a new client's enquiry, which waits for
+// the owner. Repeated refused passwords mark the mailbox to be connected
 // again, which stops polling until the owner does.
 export const mailPoll: Handler = async (job) => {
   const admin = supabaseAdmin();
@@ -81,7 +82,7 @@ export const mailPoll: Handler = async (job) => {
   const events = await Promise.all(read.mail.map(async (mail) => {
     const sender = senders.get(mail.from)!;
     const work = officialMail.get(mail.messageId);
-    const { client_id, label, reason } = work ? await official(mail, work) : sender.stranger ? { client_id: null, label: "other" as Label, reason: "not_a_client" } : { client_id: sender.client_id, ...classify(mail.content, today) };
+    const { client_id, label, reason } = work ? await official(mail, work) : sender.stranger ? { client_id: null, label: "other" as Label, reason: enquiry(mail.content) ? "new_client_enquiry" : "not_a_client" } : { client_id: sender.client_id, ...classify(mail.content, today) };
     return {
       firm_id: firm,
       account_id: account.id,
@@ -131,10 +132,12 @@ export const mailPoll: Handler = async (job) => {
     const queued = [...filing, ...asking, ...notices, ...status];
     if (queued.length) await admin.from("jobs").upsert(queued, { onConflict: "idempotency_key", ignoreDuplicates: true });
     // Unclear mail, a notice that asks something, or mail whose client is not known yet,
-    // waits for the team. Someone who is not a client yet waits for nobody.
+    // waits for the team; a new client's enquiry for the owner (public.team_replies gives mail
+    // with no client to the owner). Someone else who is not a client yet, or a thank you, waits
+    // for nobody.
     const replies = (saved ?? [])
-      .filter((event) => event.reason_code !== "not_a_client" && (event.label === "other" || event.reason_code === "notice_question" || !event.client_id))
-      .map((event) => ({ firm_id: firm, kind: "team_reply", client_id: event.client_id, entity_type: "email", entity_id: event.id, reason_code: event.client_id ? event.reason_code : event.reason_code?.startsWith("government_") ? "government_unmatched" : "client_unclear" }));
+      .filter((event) => event.reason_code !== "not_a_client" && event.reason_code !== "thanks_only" && (event.label === "other" || event.reason_code === "notice_question" || !event.client_id))
+      .map((event) => ({ firm_id: firm, kind: "team_reply", client_id: event.client_id, entity_type: "email", entity_id: event.id, reason_code: event.client_id || event.reason_code === "new_client_enquiry" ? event.reason_code : event.reason_code?.startsWith("government_") ? "government_unmatched" : "client_unclear" }));
     if (replies.length) await admin.from("requests").upsert(replies, { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true });
   }
   await admin.from("connected_accounts").update({ sync_cursor: read.cursor }).eq("id", account.id);

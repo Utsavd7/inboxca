@@ -784,7 +784,7 @@ isOneToOne: false
                            },
 "activity_feed":
 { Args: { "mine"?: boolean,"since": string,"target_firm": string }; Returns: {
-              "action": string,"at": string,"client_id": string,"client_name": string
+              "action": string,"at": string,"client_id": string,"client_name": string,"details": Json
             }[]
                            },
 "add_clients":

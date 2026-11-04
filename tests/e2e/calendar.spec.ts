@@ -51,7 +51,7 @@ test.afterAll(async () => {
 });
 
 test("a return marked filed from its row is put back by the toast's Undo", async () => {
-  await calendar("month");
+  await calendar("soon");
   await row("Sep 2026").getByRole("link", { name: `Mark ${clientName} Calendar test return filed` }).click();
   const panel = owner.getByRole("dialog", { name: "Mark filed" });
   await panel.getByLabel(/ARN for/).fill("AA2409261234567");
@@ -65,7 +65,7 @@ test("a return marked filed from its row is put back by the toast's Undo", async
 });
 
 test("Mark in progress from the panel; filed returns come back one by their row and the rest chosen together", async () => {
-  await calendar("month");
+  await calendar("soon");
   await row("Aug 2026").getByRole("link", { name: `Mark ${clientName} Calendar test return filed` }).click();
   await owner.getByRole("dialog", { name: "Mark filed" }).getByRole("button", { name: "Mark in progress" }).click();
   await expect(toast("1 return marked in progress.")).toBeVisible();
@@ -90,7 +90,7 @@ test("Mark in progress from the panel; filed returns come back one by their row 
 
 test("Remind client sends one email from the firm's mailbox, and Undo stops it in time", async () => {
   const remind = async () => {
-    await calendar("month");
+    await calendar("soon");
     await row("Sep 2026").getByRole("link", { name: `Remind ${clientName}` }).click();
     const panel = owner.getByRole("dialog", { name: `Remind ${clientName}` });
     await expect(panel.getByRole("listitem").filter({ hasText: "In the email" })).toHaveCount(2);
@@ -114,7 +114,7 @@ test("Remind client sends one email from the firm's mailbox, and Undo stops it i
   expect(sent[0]).toContain("- Calendar test return for Aug 2026: due in 5 days");
 
   // One reminder a client a day.
-  await calendar("month");
+  await calendar("soon");
   await row("Sep 2026").getByRole("link", { name: `Remind ${clientName}` }).click();
   const panel = owner.getByRole("dialog", { name: `Remind ${clientName}` });
   await expect(panel.getByRole("alert")).toContainText("already reminded today");
@@ -131,7 +131,7 @@ test("the list shows 100 returns a page with true counts, and the days and the m
   const on = (days: number) => due.filter((day) => day === days).length;
   const pager = owner.getByRole("navigation", { name: "Calendar pages" });
   const pills = owner.getByRole("navigation", { name: "Show" });
-  await owner.goto(`/app/calendar?view=month&code=${paging}`);
+  await owner.goto(`/app/calendar?view=soon&code=${paging}`);
   await expect(owner.locator(".page-head")).toContainText(": 230 returns.");
   await expect(pills.getByRole("link", { name: "Due in 30 days 230" })).toBeVisible();
   await expect(pills.getByRole("link", { name: `Due in 7 days ${due.filter((day) => day <= 7).length}` })).toBeVisible();
@@ -147,13 +147,13 @@ test("the list shows 100 returns a page with true counts, and the days and the m
 
   // The month's day shows every return due on it, and that day lists them.
   const day = addDays(today, 10);
-  await owner.goto(`/app/calendar?view=month&code=${paging}&month=${day.slice(0, 7)}`);
+  await owner.goto(`/app/calendar?view=soon&code=${paging}&month=${day.slice(0, 7)}`);
   await owner.getByRole("link", { name: `${dueLabel(day)}: ${on(10)} to file`, exact: true }).click();
   await expect(owner.locator(".page-head")).toContainText(`Due on ${dueLabel(day)}: ${on(10)} returns.`);
 
   // An archived client's return leaves every count.
   await query(local.dbUrl, "update public.clients set archived_at = now() where firm_id = $1 and name = $2", [firm.firmId, `Calendar Paging ${tag} 001`]);
-  await owner.goto(`/app/calendar?view=month&code=${paging}`);
+  await owner.goto(`/app/calendar?view=soon&code=${paging}`);
   await expect(owner.locator(".page-head")).toContainText(": 229 returns.");
   await expect(owner.getByRole("navigation", { name: "Days" }).getByRole("link", { name: `${dueLabel(addDays(today, 2))}: ${on(2) - 1} to file`, exact: true })).toBeVisible();
   await query(local.dbUrl, "delete from public.clients where firm_id = $1 and name like 'Calendar Paging %'", [firm.firmId]);

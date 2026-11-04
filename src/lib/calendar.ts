@@ -43,7 +43,7 @@ export const gstPortalClosed = "The GST portal no longer takes this return. It i
 export const calendarViews = {
   overdue: { label: "Late", window: (today: string) => ({ to: addDays(today, -1) }) },
   week: { label: "Due in 7 days", window: (today: string) => ({ from: today, to: addDays(today, 7) }) },
-  month: { label: "Due in 30 days", window: (today: string) => ({ from: today, to: addDays(today, 30) }) },
+  soon: { label: "Due in 30 days", window: (today: string) => ({ from: today, to: addDays(today, 30) }) },
   filed: { label: "Filed in the last 30 days", window: (today: string) => ({ filedSince: addDays(today, -30) }) },
 } as const;
 export type CalendarView = keyof typeof calendarViews;

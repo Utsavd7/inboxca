@@ -36,6 +36,8 @@ export const activityDetails: Record<string, readonly string[]> = {
   // Written by the database as rows change (log_change): what changed, or the new row's kind.
   ...Object.fromEntries(["group", "member", "client", "registration", "assignment", "contact", "contact_link", "task", "account", "email", "request"]
     .flatMap((thing) => [[`${thing}.added`, ["kind"]], [`${thing}.removed`, ["kind"]], [`${thing}.changed`, ["changed"]]])),
+  // Who was given the client or taken off it, and for which work (gst, income_tax).
+  "assignment.added": ["kind", "person", "team", "work"], "assignment.removed": ["kind", "person", "team", "work"],
   // The client list as Excel: how many clients it held, never their numbers or emails.
   "clients.exported": ["clients"], "licence.added": [], "licence.removed": [],
   "firm.signed_up": ["accepted"], "firm.changed": ["name", "settings"], "firm.downloaded": [], "firm.closed": ["reason"], "firm.data_deleted": [],
