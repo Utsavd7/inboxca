@@ -1,6 +1,6 @@
 import { notify } from "@/src/lib/push";
 import { rightWords, type Right } from "@/src/lib/rights";
-import { personName } from "@/src/lib/roles";
+import { personName, whose } from "@/src/lib/roles";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import type { Handler } from "./runner";
 
@@ -37,7 +37,7 @@ export const notifyRequest: Handler = async (job) => {
     const what = request.reason_code === "time" ? "asks to keep using InboxCA after office hours today" : `asks to ${rightWords[request.reason_code as Right]}`;
     await notify(await approvers(request.firm_id, details.route ?? "owner", details.team_id ?? null, details.by ?? ""), { title: "A permission request for you", body: `${await nameOf(details.by)} ${what}.`, url: "/app/inbox" }, request.firm_id);
   } else {
-    const body = request.reason_code === "office_changed" ? "Your office internet connection changed today." : `${await nameOf(details.person)}'s PC is on a different internet connection.`;
+    const body = request.reason_code === "office_changed" ? "Your office internet connection changed today." : `${whose(await nameOf(details.person))} PC is on a different internet connection.`;
     await notify(await approvers(request.firm_id, "owner", null, details.person ?? ""), { title: "Office internet connection", body, url: "/app" }, request.firm_id);
   }
   return { done: true };
@@ -53,7 +53,7 @@ export const notifyDevices: Handler = async (job) => {
 export const approvalNudge: Handler = async (job) => {
   const { data: request } = await supabaseAdmin().from("requests").select("firm_id, status, details").eq("id", job.entity_id!).maybeSingle();
   const by = (request?.details as { by?: string } | undefined)?.by;
-  if (request?.status === "pending") await notify(await approvers(request.firm_id, "owner", null, by ?? ""), { title: "A permission request is waiting", body: `${await nameOf(by)}'s permission request has waited 30 minutes. Their manager has not answered yet.`, url: "/app/inbox" }, request.firm_id);
+  if (request?.status === "pending") await notify(await approvers(request.firm_id, "owner", null, by ?? ""), { title: "A permission request is waiting", body: `${whose(await nameOf(by))} permission request has waited 30 minutes. Their manager has not answered yet.`, url: "/app/inbox" }, request.firm_id);
   return { done: true };
 };
 

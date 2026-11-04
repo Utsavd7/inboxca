@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { states } from "@/app/(auth)/sign-up/states";
 import type { Database, Json } from "@/src/db/types";
+import { whose } from "@/src/lib/roles";
 import { serverCrypto } from "@/src/lib/crypto";
 import { log } from "@/src/lib/logger";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -315,7 +316,7 @@ export async function buy(firmId: string, actor: string, what: Buy, returnUrl: s
     await note(admin, firmId, actor, "billing.order_started", { payment: debit.id, kind: what.kind });
     // Orelu's own notice, as for a renewal (RBI E-mandate Framework 2026, para 6).
     await mail(email, `InboxCA: ${rupees(amount.total)} will be taken on ${long(indiaDay(at))}`, [
-      `Orelu (InboxCA) will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, for ${firm.name}'s switch to yearly payment: ${lines[0].text}.`,
+      `Orelu (InboxCA) will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, for ${whose(firm.name)} switch to yearly payment: ${lines[0].text}.`,
       `AutoPay reference: ${sub.mandate}.`,
       `To stop it, turn AutoPay off in Settings, Billing before then: ${link(BILLING)}`,
     ]);
@@ -783,7 +784,7 @@ export async function dailyBilling(firmId: string, now = new Date()) {
       // Orelu's own notice (RBI E-mandate Framework 2026, para 6: merchant, amount, date and time,
       // mandate reference and reason, and how to opt out), besides the provider's.
       await mail(email, `InboxCA: ${rupees(priced.recurring.total)} will be taken on ${long(indiaDay(at))}`, [
-        `${late > 0 ? "We will try again: " : ""}Orelu (InboxCA) will take ${rupees(priced.recurring.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, for ${firm.name}'s InboxCA plan, ${span(period)}.`,
+        `${late > 0 ? "We will try again: " : ""}Orelu (InboxCA) will take ${rupees(priced.recurring.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, for ${whose(firm.name)} InboxCA plan, ${span(period)}.`,
         `AutoPay reference: ${sub.mandate}.`,
         `To stop it, turn AutoPay off in Settings, Billing before then: ${link(BILLING)}`,
       ]);
@@ -883,7 +884,7 @@ async function fitDay(admin: Admin, provider: PaymentProvider, formula: PlanForm
   const amount = withGst(lines[0].paise, tax, firm.stateCode, today);
   if (amount.total > plan.maxPaise) {
     const { data: asked } = await admin.from("requests").update({ details: json({ approve: today }) }).eq("kind", "alert").eq("entity_id", firm.id).like("entity_type", `plan_fit_%_${year}`).is("details->approve", null).select("id");
-    if (asked?.length) await mail(email, "InboxCA: approve the move to a bigger plan", [`${firm.name}'s work has passed its ${current.name} plan. The ${moved.name} plan costs ${rupees(amount.total)} more for the rest of this period, above the ${rupees(plan.maxPaise)} your AutoPay allows, so InboxCA needs your OK once.`, `Pay it in Settings, Billing: ${link(BILLING)}`, "Your work, filings and reminders carry on meanwhile."]);
+    if (asked?.length) await mail(email, "InboxCA: approve the move to a bigger plan", [`${whose(firm.name)} work has passed its ${current.name} plan. The ${moved.name} plan costs ${rupees(amount.total)} more for the rest of this period, above the ${rupees(plan.maxPaise)} your AutoPay allows, so InboxCA needs your OK once.`, `Pay it in Settings, Billing: ${link(BILLING)}`, "Your work, filings and reminders carry on meanwhile."]);
     return;
   }
   const at = new Date(now.getTime() + 3 * 86_400_000);
@@ -893,7 +894,7 @@ async function fitDay(admin: Admin, provider: PaymentProvider, formula: PlanForm
   await note(admin, firm.id, null, "billing.moved_up", { payment: row.id });
   // Orelu's own notice, as for a renewal (RBI E-mandate Framework 2026, para 6).
   await mail(email, `InboxCA: ${rupees(amount.total)} will be taken on ${long(indiaDay(at))}`, [
-    `${firm.name}'s work has passed its ${current.name} plan, so it moves to the ${moved.name} plan, ${rupees(withGst(moved.paise, tax, firm.stateCode, today).total)} ${per}. Orelu (InboxCA) will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, the difference for ${long(today)} to ${long(until)}.`,
+    `${whose(firm.name)} work has passed its ${current.name} plan, so it moves to the ${moved.name} plan, ${rupees(withGst(moved.paise, tax, firm.stateCode, today).total)} ${per}. Orelu (InboxCA) will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, the difference for ${long(today)} to ${long(until)}.`,
     `AutoPay reference: ${sub.mandate}.`,
     `To stop it, turn AutoPay off in Settings, Billing before then: ${link(BILLING)}`,
   ]);
@@ -910,7 +911,7 @@ async function downDay(admin: Admin, formula: PlanFormula, tax: Tax | null, firm
   const [now, then] = [planPrice(formula, planOf(sub), cycle), planPrice(formula, down.plan, cycle)];
   const price = (paise: number) => `${rupees(withGst(paise, tax, firm.stateCode, down.on).total)} ${cycle === "monthly" ? "a month" : "a year"}${gstOn(tax, down.on) ? " with GST" : ""}`;
   await mail(email, `InboxCA: ${firm.name} fits a smaller plan`, [
-    `${firm.name}'s work this year fits the ${then.name} plan, ${price(then.paise)}, in place of the ${now.name} plan, ${price(now.paise)}.`,
+    `${whose(firm.name)} work this year fits the ${then.name} plan, ${price(then.paise)}, in place of the ${now.name} plan, ${price(now.paise)}.`,
     `To move down at your renewal on ${long(down.on)}, choose Move down in Settings, Billing by ${long(addDays(down.on, -4))}: ${link(BILLING)}`,
     "Nothing changes unless you choose.",
   ]);
@@ -930,7 +931,7 @@ async function addedSince(admin: Admin, sub: Subscription, priced: FirmPlan) {
   const amount = withGst(lines[0].paise, tax, firm.stateCode, today);
   if (sub.status !== "active" || !sub.mandate || amount.total > planOf(sub).maxPaise) {
     await alertAdmins(admin, "added_above_limit", sub.firm_id);
-    return void (await mail(email, "InboxCA: approve your new AutoPay limit", [`${firm.name}'s plan grew after its renewal was raised. What was added costs ${rupees(amount.total)} for ${long(today)} to ${long(addDays(sub.paid_until, -1))}, more than your AutoPay allows. Approve the new limit once in Settings, Billing: ${link(BILLING)}`]));
+    return void (await mail(email, "InboxCA: approve your new AutoPay limit", [`${whose(firm.name)} plan grew after its renewal was raised. What was added costs ${rupees(amount.total)} for ${long(today)} to ${long(addDays(sub.paid_until, -1))}, more than your AutoPay allows. Approve the new limit once in Settings, Billing: ${link(BILLING)}`]));
   }
   const at = new Date(Date.now() + NOTICE_MS);
   const { data: row, error } = await admin.from("payments").insert({ firm_id: sub.firm_id, kind: "upgrade", amount_paise: amount.total, gst_paise: amount.gst, due_at: at.toISOString(), details: json({ lines, via: "charge" } satisfies Details) }).select("*").single();
@@ -945,7 +946,7 @@ async function addedSince(admin: Admin, sub: Subscription, priced: FirmPlan) {
   await note(admin, sub.firm_id, null, "billing.moved_up", { payment: row.id });
   // Orelu's own notice, as for a renewal (RBI E-mandate Framework 2026, para 6).
   await mail(email, `InboxCA: ${rupees(amount.total)} will be taken on ${long(indiaDay(at))}`, [
-    `Orelu (InboxCA) will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, for what was added to ${firm.name}'s plan after its renewal was raised: ${lines[0].text}.`,
+    `Orelu (InboxCA) will take ${rupees(amount.total)} from your ${methodWords[sub.method as Method]} on ${at.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "short" })}, for what was added to ${whose(firm.name)} plan after its renewal was raised: ${lines[0].text}.`,
     `AutoPay reference: ${sub.mandate}.`,
     `To stop it, turn AutoPay off in Settings, Billing before then: ${link(BILLING)}`,
   ]);

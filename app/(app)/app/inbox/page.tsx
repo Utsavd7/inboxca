@@ -6,7 +6,7 @@ import { Suspense, ViewTransition } from "react";
 import { decidePermission, decideShare, manageEmail, undoPermission } from "@/app/(app)/actions";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { rightWords, switchable, type Right } from "@/src/lib/rights";
-import { personName } from "@/src/lib/roles";
+import { personName, whose } from "@/src/lib/roles";
 import { addDays, todayInIndia } from "@/src/lib/calendar";
 import { canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
@@ -67,6 +67,8 @@ const shortTime = (at: string, today: string) => {
 const longTime = (at: string) => india(at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const dayName = (day: string) => india(`${day}T12:00:00+05:30`, { weekday: "short", day: "numeric", month: "short" });
 const uuid = /^[0-9a-f-]{36}$/;
+// Mail from someone who is not a client yet, an enquiry about the firm's services among it.
+const newSender = (reason: string | null) => reason === "not_a_client" || reason === "new_client_enquiry";
 // Papers to attach. InboxCA's own prepared returns stay (a CA often sends a draft to check), named so staff can tell.
 const attachable = (papers: { id: string; name: string; prepared: unknown }[] | null) =>
   (papers ?? []).map(({ id, name, prepared }) => ({ id, name: prepared ? `${name} (Prepared by InboxCA, not the filed copy)` : name }));
@@ -223,7 +225,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           key: event.id,
           href: href({ mail: event.id }),
           dir: "in" as const,
-          client: event.clients?.name ?? (event.reason_code === "not_a_client" ? "Not a client yet" : (await contactName(firm, event)) || "A contact"),
+          client: event.clients?.name ?? (newSender(event.reason_code) ? "Not a client yet" : (await contactName(firm, event)) || "A contact"),
           clientId: event.client_id,
           at: event.received_at,
           messageId: event.provider_message_id,
@@ -445,7 +447,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       event ? supabase.from("email_outcomes").select("outcomes").eq("id", event.id).maybeSingle() : Promise.resolve({ data: null }),
       event ? supabase.from("shares").select("document_id, status, documents(name)").eq("email_event_id", event.id).in("status", ["sent", "waiting"]).limit(10) : Promise.resolve({ data: [] as { document_id: string; status: string; documents: { name: string } | null }[] }),
       event ? supabase.from("tasks").select("id").eq("kind", "notice").eq("details->>email_event_id", event.id).limit(1).maybeSingle() : Promise.resolve({ data: null }),
-      event ? event.clients?.name ?? (event.reason_code === "not_a_client" ? "Not a client yet" : contactName(firm, event).then((name) => name || "A contact")) : "",
+      event ? event.clients?.name ?? (newSender(event.reason_code) ? "Not a client yet" : contactName(firm, event).then((name) => name || "A contact")) : "",
       // AI's sealed draft for an email waiting for a person, or why AI left it to them; not for
       // someone who may only view.
       request && event && !membership.viewOnlyUntil ? aiDraftOf(firm, request.id, event.id).catch(() => null) : null,
@@ -483,7 +485,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       answered: { text: shared ? `InboxCA sent ${shared.documents?.name ?? "the paper"} as a secure link.` : answerWords[answerOf(event.label) ?? "received"][1], link: paperLink },
       replied: { text: "Your team answered it." },
       notice: { text: "InboxCA recorded the notice. Check its dates.", link: notice ? [`/app/notices?notice=${notice.id}`, "Open the notice"] : undefined },
-      filed: { text: `InboxCA saved ${filedHere === 1 ? "its paper" : `its ${filedHere} papers`} in ${open.client?.name ?? "the client"}'s folders.` },
+      filed: { text: `InboxCA saved ${filedHere === 1 ? "its paper" : `its ${filedHere} papers`} in ${whose(open.client?.name ?? "the client")} folders.` },
       none: { text: "Done. Nothing waits for anyone." },
     } as Record<string, { text: string; link?: [string, string] }>)[outcome];
     // The reply box, unless InboxCA's own reply waits in its place (and is not being edited).
@@ -580,14 +582,14 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           <div className="ib-scroll">
             {/* Someone who is not a client yet: nothing is answered or filed for them by itself;
                 a person adds them as a client, their address filled in, or saves the email to one. */}
-            {event && !event.client_id && event.reason_code === "not_a_client" && (
+            {event && !event.client_id && newSender(event.reason_code) && (
               <div className="ib-confirm">
                 <UserPlus size={16} aria-hidden />
-                <span className="grow">{opened?.from ?? "This sender"} is not a client yet. InboxCA answers and files nothing for them until they are.</span>
+                <span className="grow">{opened?.from ?? "This sender"} is not a client yet{event.reason_code === "new_client_enquiry" && " and asks about your services or charges"}. InboxCA answers and files nothing for them until they are.</span>
                 {approver && !membership.viewOnlyUntil && opened?.from && <Link className="b b-secondary" href={`/app/clients?panel=add&email=${encodeURIComponent(opened.from)}`}>Add as a client</Link>}
               </div>
             )}
-            {event && !event.client_id && event.reason_code !== "not_a_client" && (
+            {event && !event.client_id && !newSender(event.reason_code) && (
               <div className="ib-confirm">
                 <FolderInput size={16} aria-hidden />
                 <span className="grow">InboxCA could not tell which client this email is for.</span>

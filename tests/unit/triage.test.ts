@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import samples from "@/tests/fixtures/samples/emails.json";
-import { classify, type Label } from "@/src/lib/triage";
+import { classify, enquiry, type Label } from "@/src/lib/triage";
 
 // The synthetic sample pack: invented emails in English, Hindi, Gujarati and Hinglish, each
 // with the label a CA would give it. M3's acceptance asks for at least 90% right.
@@ -24,6 +24,22 @@ describe("email triage by rules", () => {
     const email = (text: string) => classify({ subject: "Request", text, attachments: [] }, "2026-10-17").label;
     for (const text of ["Please send my ITR acknowledgement for Assessment Year 2025-26", "Please send the ITR-V for A.Y. 2025-26"]) expect(email(text), text).toBe("records_past");
     for (const text of ["Please send my ITR acknowledgement for assessment year 2026-27", "Please send the ITR-V for A.Y. 2026-27"]) expect(email(text), text).toBe("records_current");
+  });
+  it("needs no reply for a thank you alone, but sends anything more to the team", () => {
+    const email = (text: string, attachments: string[] = []) => classify({ subject: "Re: Papers for ITR", text, attachments }, "2026-10-17");
+    for (const text of ["Thanks", "Thank you sir", "Noted, thanks.", "Thank you so much ji 🙏\n\nRegards\nInvented Mehta", "Thanks!\n\nOn Mon, 2 Nov 2026 at 10:00, Invented CA wrote:\n> Please send your Form 16?"])
+      expect(email(text), text).toEqual({ label: "other", reason: "thanks_only" });
+    for (const text of ["Thanks, but which papers are still pending?", "Thank you. When is my ITR due?", "Thanks, will send tomorrow"]) expect(email(text).reason, text).not.toBe("thanks_only");
+    expect(email("Thanks", ["form16.pdf"]).reason).not.toBe("thanks_only");
+    // A subject that asks for something is still that request.
+    expect(classify({ subject: "Please send last year's ITR", text: "Thanks", attachments: [] }, "2026-10-17").label).toBe("records_past");
+  });
+  it("tells a new client's enquiry about services or charges from other mail by someone not a client yet", () => {
+    const mail = (subject: string, text: string) => enquiry({ subject, text, attachments: [] });
+    expect(mail("Need a CA", "I want to start a company. What are your charges for GST registration?")).toBe(true);
+    expect(mail("ITR filing", "Please share your fees for filing my income tax return.")).toBe(true);
+    expect(mail("Webinar", "Join our webinar on GST. We offer accounting services at a discount. Unsubscribe here.")).toBe(false);
+    expect(mail("Hello", "Hope you are well.")).toBe(false);
   });
   it("keeps a notice that asks something for the team as well", () => {
     const notice = (text: string) => classify({ subject: "GST notice", text, attachments: [] }, "2026-10-17");
