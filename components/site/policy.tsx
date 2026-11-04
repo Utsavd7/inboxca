@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { contactEmail } from "@/src/lib/site";
 import { Footer } from "./footer";
 import { Nav } from "./nav";
@@ -11,6 +12,7 @@ export type PolicySection = {
 
 // One layout for every policy page, set like a policy: a narrow reading column in small
 // text, the date it was last updated, a numbered contents list, numbered sections, contact.
+// art: a small picture under the heading.
 export function Policy({
   title,
   lead,
@@ -19,6 +21,7 @@ export function Policy({
   sections,
   contactTitle,
   contactText,
+  art,
 }: {
   title: string;
   lead: string;
@@ -27,6 +30,7 @@ export function Policy({
   sections: readonly PolicySection[];
   contactTitle: string;
   contactText: string;
+  art?: ReactNode;
 }) {
   const all = [...sections, { id: "contact", title: contactTitle }];
   return (
@@ -44,6 +48,7 @@ export function Policy({
               Last updated <span className="num">{updated}</span>. {note}
             </p>
           </header>
+          {art}
           <nav aria-label="Contents" className="policy-toc">
             <p>Contents</p>
             <ol>

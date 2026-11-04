@@ -8,6 +8,7 @@ import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { workTypes } from "@/src/lib/drive";
 import { parsePath } from "@/src/lib/drive-browse";
 import { Empty, PageHead } from "../../ui";
+import { SetupArt } from "../../setup-art";
 import { Crumbs, FolderBrowser } from "./browser";
 import { browseContext, listing, type Listing } from "./data";
 
@@ -62,7 +63,7 @@ async function Loaded({ parts }: { parts: string[] }) {
   if (!ctx) redirect("/app");
   if (!ctx.drive)
     return (
-      <Empty Icon={HardDrive} title="The firm's drive is not connected yet">
+      <Empty Icon={HardDrive} title="The firm's drive is not connected yet" art={<SetupArt scene="documents" />}>
         <span>When the owner connects the drive in Settings, its folders show here.</span>
         {ctx.owner && (
           <Link className="b b-primary" href="/app/settings#drive">

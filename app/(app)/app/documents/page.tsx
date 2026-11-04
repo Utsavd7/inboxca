@@ -24,6 +24,7 @@ import { Pending } from "../pending";
 import { DroppedNotice, PortalDrop } from "../portal-drop";
 import { Item, List, Presence } from "../motion";
 import { Avatar, Badge, Empty, PageHead, Row, SidePanel, Toast } from "../ui";
+import { SetupArt } from "../setup-art";
 import { CopyButton } from "../ui-client";
 import { RowKeys } from "../row-keys";
 import { CameFrom } from "./came-from";
@@ -327,7 +328,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               </Link>
             </Empty>
           ) : (
-            <Empty Icon={FolderOpen} kind="docs" title="No papers yet">
+            <Empty Icon={FolderOpen} kind="docs" title="No papers yet" art={<SetupArt scene="documents" />}>
               <span>Once the firm email and drive are connected, the papers your clients email show here. To add papers now, choose Upload papers or drop files on this page.</span>
               {canUpload && (
                 <Link className="b b-primary" href="/app/documents?view=papers&upload=1" scroll={false}>

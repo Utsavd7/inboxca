@@ -25,6 +25,7 @@ import { addDays } from "@/src/lib/billing/money";
 import { currentMember } from "@/src/lib/member";
 import { exceptionsOf, IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
 import { Badge, IconTile, NotForYou, PageHead, Row, SidePanel, storage, Toast, type Kind } from "../ui";
+import { SetupArt } from "../setup-art";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { STAGES, askChoices, askDays, stageNames, reminderStages } from "@/src/lib/reminders";
@@ -301,6 +302,7 @@ export default async function Settings({
               </div>
             ) : (
               <>
+                <SetupArt scene="inbox" />
                 {signIn()}
                 <MailboxForm />
               </>
@@ -417,6 +419,7 @@ export default async function Settings({
             )}
             {!drive && (
               <form action={connectDrive} className="set-stack">
+                <SetupArt scene="documents" />
                 <fieldset className="set-options">
                   <legend>Which drive</legend>
                   {(["onedrive", "dropbox", ...(process.env.DRIVE_LOCAL_DIR ? ["local"] : [])] as const).map((provider) => (

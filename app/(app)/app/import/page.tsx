@@ -15,6 +15,7 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { Presence } from "../motion";
 import { Pending } from "../pending";
 import { Badge, Empty, PageHead, SidePanel, Toast } from "../ui";
+import { SetupArt } from "../setup-art";
 import { DiskUpload } from "./disk-upload";
 
 const scopes: Record<Scope, string> = {
@@ -86,7 +87,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
       {params.started && <Toast>Moving your files now. Each lands in its client&apos;s folder; this page shows the progress.</Toast>}
       {params.undoing && <Toast>Putting the files back where they were.</Toast>}
       {!drive ? (
-        <Empty Icon={FolderInput} title="No drive connected">
+        <Empty Icon={FolderInput} title="No drive connected" art={<SetupArt scene="documents" />}>
           <span>
             <Link href="/app/settings#drive">Connect the firm&apos;s drive</Link> first. Files on a hard disk are best copied into the drive with its own desktop app.
           </span>

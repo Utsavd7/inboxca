@@ -119,11 +119,12 @@ export function Badge({ tone = "", plain = false, children }: { tone?: Tone; pla
   return <span className={`badge ${tone}${plain ? " plain" : ""}`}>{children}</span>;
 }
 
-// Nothing here yet: a small drawing made of the place's own icon, one line, one button.
-export function Empty({ Icon, title, kind = "", children }: { Icon: LucideIcon; title: string; kind?: Kind; children?: React.ReactNode }) {
+// Nothing here yet: a small drawing made of the place's own icon, one line, one button. art, in
+// place of the drawing: what the place shows once it is set up (setup-art.tsx).
+export function Empty({ Icon, title, kind = "", art, children }: { Icon: LucideIcon; title: string; kind?: Kind; art?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <div className="empty">
-      <span className="empty-art" aria-hidden>
+      {art ?? <span className="empty-art" aria-hidden>
         <svg className={`empty-bg icon-tile k-${kind}`} viewBox="0 0 88 64">
           <rect x="12" y="14" width="40" height="34" rx="8" transform="rotate(-9 32 31)" fill="currentColor" opacity="0.12" />
           <rect x="36" y="14" width="40" height="34" rx="8" transform="rotate(9 56 31)" fill="currentColor" opacity="0.2" />
@@ -132,7 +133,7 @@ export function Empty({ Icon, title, kind = "", children }: { Icon: LucideIcon; 
           <circle cx="79" cy="9" r="2" fill="currentColor" opacity="0.2" />
         </svg>
         <IconTile Icon={Icon} kind={kind} />
-      </span>
+      </span>}
       <strong>{title}</strong>
       {children}
     </div>
