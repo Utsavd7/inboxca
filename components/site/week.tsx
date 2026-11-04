@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { weekScenes } from "@/content/site";
+import { Fill } from "./demo";
 import { Logo } from "./logo";
 
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -39,12 +40,12 @@ export function Week() {
             </Link>
           </span>
         </div>
-        <AnimatePresence mode="wait" initial={false}>
+        <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
             key={when}
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.32, ease }}
           >
             <p className="week-title">
@@ -62,9 +63,10 @@ export function Week() {
                 </li>
               ))}
             </ul>
+            <p className="scene-note week-note">Routine work goes out by itself. Anything unusual waits here for your team.</p>
+            <Fill />
           </motion.div>
         </AnimatePresence>
-        <p className="scene-note week-note">Routine work goes out by itself. Anything unusual waits here for your team.</p>
       </div>
     </div>
   );

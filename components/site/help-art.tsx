@@ -29,7 +29,7 @@ export const Title = ({ children }: { children: ReactNode }) => <p className="hs
 export function File({ name }: { name: string }) {
   return (
     <span className="attachment hs-file">
-      <FileText size={13} aria-hidden />
+      <FileText size={12} aria-hidden />
       <span className="num">{name}</span>
     </span>
   );
@@ -79,7 +79,7 @@ export function Mail({ from, line, subject, body, files = [], scan }: { from: st
         <div className="hs-line">
           {files.map((name, i) => (
             <span key={name} className="attachment hs-pop" style={nth(i)}>
-              <Paperclip size={13} aria-hidden />
+              <Paperclip size={12} aria-hidden />
               <span className="num">{name}</span>
             </span>
           ))}
@@ -187,13 +187,13 @@ export function Tree({ path, file }: { path: readonly string[]; file?: string })
     <div className="card tree">
       {path.map((name, depth) => (
         <div key={name} className="tree-row hs-pop" style={{ paddingLeft: depth * 14, ...nth(depth) }}>
-          <Folder size={15} aria-hidden />
+          <Folder size={14} aria-hidden />
           <span>{name}</span>
         </div>
       ))}
       {file && (
         <div className="tree-row tree-file hs-pop" style={{ paddingLeft: path.length * 14, ...nth(path.length) }}>
-          <FileText size={15} aria-hidden />
+          <FileText size={14} aria-hidden />
           <span className="num">{file}</span>
         </div>
       )}
@@ -290,7 +290,7 @@ export function Plan({ name, children }: { name: string; children?: ReactNode })
       <ul>
         {[`${plan.returns} returns a year`, plan.people === 1 ? "Just you" : `A team of up to ${plan.people}`, `${plan.storage} storage`, `${plan.ai} AI credits a month`, "Unlimited clients"].map((line, i) => (
           <li key={line} className="hs-pop" style={nth(i)}>
-            <Check size={13} strokeWidth={3} aria-hidden />
+            <Check size={12} strokeWidth={3} aria-hidden />
             {line}
           </li>
         ))}
@@ -326,7 +326,7 @@ export function Split({ ours, yours }: { ours: readonly string[]; yours: readonl
           <p className="card-title">{who}</p>
           {items.map((item, i) => (
             <span key={item} className="hs-pop" style={nth(side * 2 + i)}>
-              <Check size={13} strokeWidth={3} aria-hidden />
+              <Check size={12} strokeWidth={3} aria-hidden />
               {item}
             </span>
           ))}
