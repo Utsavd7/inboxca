@@ -130,6 +130,12 @@ test("tags, a note and a licence date on the client; the list filters by tag; th
   await owner.goto(`/app/calendar?day=${until}`);
   await row.getByRole("button", { name: /Mark .* renewed/ }).click();
   await expect(owner.getByRole("row").filter({ hasText: `Mehta Traders ${tag}` })).toContainText("Renewed");
+  // Undo keeps the licence's own label; only the renewal goes.
+  await owner.getByRole("status").getByRole("button", { name: "Undo" }).click();
+  await expect(row).toContainText("Expires");
+  expect(await query(local.dbUrl, "select status, details from public.tasks where client_id = $1 and kind = 'licence'", [id])).toEqual([{ status: "upcoming", details: { label: "FSSAI licence" } }]);
+  await row.getByRole("button", { name: /Mark .* renewed/ }).click();
+  await expect(owner.getByRole("row").filter({ hasText: `Mehta Traders ${tag}` })).toContainText("Renewed");
 
   // The list filters by a tag; Add tags from the ticked bar keeps what each client had.
   await owner.goto(`/app/clients?q=${tag}&tag=Priority`);
@@ -168,9 +174,9 @@ test("tags, a note and a licence date on the client; the list filters by tag; th
   await query(local.dbUrl, "delete from public.clients where id = $1", [formula]);
 });
 
-// A to-do on a client: on Today for its person, or the owner when it names nobody; only those
-// who may change the client mark it done, and Undo opens it again.
-test("a to-do on a client is on its person's Today, and the owner marks it done and undoes it", async ({ browser }) => {
+// A to-do on a client: on Today for its person, or the owner when it names nobody; its person
+// and those who may change the client mark it done, and Undo opens it again.
+test("a to-do on a client is on its person's Today, and its person and the owner mark it done and undo it", async ({ browser }) => {
   const id = clients["Mehta Exports"];
   const theirs = `Call about rent receipts ${tag}`;
   const ownerOnly = `Check the bank statement ${tag}`;
@@ -187,8 +193,12 @@ test("a to-do on a client is on its person's Today, and the owner marks it done 
   const staff = await (await browser.newContext()).newPage();
   await signIn(staff, staffEmail, staffKey);
   await expect(row(staff, theirs)).toContainText(`Mehta Exports ${tag}`);
-  await expect(row(staff, theirs).getByRole("button", { name: `Done: ${theirs}` })).toHaveCount(0);
   await expect(row(staff, ownerOnly)).toHaveCount(0);
+  // Its own person marks it done and undoes it, whatever their role.
+  await row(staff, theirs).getByRole("button", { name: `Done: ${theirs}` }).click();
+  await expect(row(staff, theirs)).toHaveCount(0);
+  await staff.getByRole("status").getByRole("button", { name: "Undo" }).click();
+  await expect(row(staff, theirs)).toBeVisible();
   await owner.goto("/app");
   await expect(row(owner, ownerOnly)).toBeVisible();
   await row(owner, theirs).getByRole("button", { name: `Done: ${theirs}` }).click();

@@ -13,8 +13,10 @@ alter table public.tasks add constraint tasks_status_check check (
   or (kind = 'todo' and status in ('upcoming', 'closed')));
 
 -- Done and Undo follow the rule for changing the client (clients_update): the owner, a partner
--- or a manager.
+-- or a manager, and also the person the to-do is for, whatever their role.
 drop policy if exists tasks_todo_right on public.tasks;
 create policy tasks_todo_right on public.tasks as restrictive for update to authenticated
-  using (kind <> 'todo' or public.member_role(firm_id) in ('owner', 'partner', 'manager'))
-  with check (kind <> 'todo' or public.member_role(firm_id) in ('owner', 'partner', 'manager'));
+  using (kind <> 'todo' or public.member_role(firm_id) in ('owner', 'partner', 'manager')
+    or (public.member_role(firm_id) is not null and details ->> 'for' = (select auth.uid())::text))
+  with check (kind <> 'todo' or public.member_role(firm_id) in ('owner', 'partner', 'manager')
+    or (public.member_role(firm_id) is not null and details ->> 'for' = (select auth.uid())::text));

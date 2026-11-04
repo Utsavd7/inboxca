@@ -309,26 +309,30 @@ it("keeps tags and licence dates inside the firm, and lets only managers change 
   }));
 
 // A to-do is a task of its own kind, added by the server: the firm's people see it, another
-// firm never does, and only those who may change the client mark it done or open it again.
-it("keeps to-dos inside the firm, and lets only those who change the client close them", () =>
+// firm never does, and only its own person and those who may change the client mark it done or
+// open it again.
+it("keeps to-dos inside the firm, and lets only their person and those who change the client close them", () =>
   rollback(db, async () => {
     await seed();
     await actAs(db, OWNER);
     expect(await add(FIRM, CLIENT, [])).toBe(true);
     await asOwner(db);
     const todo = (await db.query("insert into public.tasks (firm_id, client_id, kind, due_on, details) values ($1, $2, 'todo', current_date, jsonb_build_object('title', 'Call about rent receipts', 'for', $3::text)) returning id", [FIRM, CLIENT, STAFF])).rows[0].id;
+    const ownersTodo = (await db.query("insert into public.tasks (firm_id, client_id, kind, due_on, details) values ($1, $2, 'todo', current_date, '{\"title\": \"Check the bank statement\"}') returning id", [FIRM, CLIENT])).rows[0].id;
     expect((await attempt(db, "update public.tasks set status = 'filed' where id = $1", [todo])).ok).toBe(false);
-    const close = async (status: string) => { const result = await attempt(db, "update public.tasks set status = $2 where id = $1", [todo, status]); return result.ok ? result.count : 0; };
+    const close = async (status: string, id = todo) => { const result = await attempt(db, "update public.tasks set status = $2 where id = $1", [id, status]); return result.ok ? result.count : 0; };
     await actAs(db, OUTSIDER);
     expect((await db.query("select id from public.tasks where kind = 'todo'")).rows).toEqual([]);
     expect(await close("closed")).toBe(0);
     await actAs(db, STAFF);
-    expect((await db.query("select id from public.tasks where kind = 'todo'")).rows).toEqual([{ id: todo }]);
-    expect(await close("closed")).toBe(0);
+    expect((await db.query("select id from public.tasks where kind = 'todo' order by id = $1 desc", [todo])).rows).toHaveLength(2);
+    expect(await close("closed", ownersTodo)).toBe(0);
+    expect(await close("closed")).toBe(1);
+    expect(await close("upcoming")).toBe(1);
     await actAs(db, OWNER);
     expect(await close("closed")).toBe(1);
     expect(await close("upcoming")).toBe(1);
     await asOwner(db);
     expect((await db.query("select returns from public.calendar_days($1, current_date, current_date + 30)", [FIRM])).rows).toEqual([]);
-    expect((await db.query("select actor_id from public.activity_log where entity_id = $1 and action = 'task.changed'", [todo])).rows).toEqual([{ actor_id: OWNER }, { actor_id: OWNER }]);
+    expect((await db.query("select actor_id from public.activity_log where entity_id = $1 and action = 'task.changed'", [todo])).rows.map((row) => row.actor_id).sort()).toEqual([STAFF, STAFF, OWNER, OWNER].sort());
   }));

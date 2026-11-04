@@ -27,6 +27,11 @@ export const assignmentLabel = (a: { role: string; work?: string | null }) => `$
 
 // Who may add and change clients; staff view only (PLAN.md 5.17.2).
 export const canManageClients = (role: string) => ["owner", "partner", "manager"].includes(role);
+// Whether a person sees a client, as row level security decides (public.open_firms and
+// public.assigned_clients): the owner and partners always; others in a firm that shows every
+// client to everyone, or when they or their team are assigned to it.
+export const seesClient = (person: { user_id: string; role: string; team_id: string | null }, assigned: { user_id: string | null; team_id: string | null }[], settings: Record<string, unknown>) =>
+  ["owner", "partner"].includes(person.role) || settings.client_visibility !== "restricted" || assigned.some((row) => row.user_id === person.user_id || (!!row.team_id && row.team_id === person.team_id));
 
 export type ClientInput = { name: string; kind: string; pan: string; gstin: string; email: string; phone?: string };
 

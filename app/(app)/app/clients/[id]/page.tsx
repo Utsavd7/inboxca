@@ -11,7 +11,7 @@ import { Fragment, Suspense, ViewTransition } from "react";
 import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
 import { addDays, dueLabel, isItr, periodLabel, taskStatuses, todayInIndia, verifyBy } from "@/src/lib/calendar";
 import { firmChecked } from "@/src/lib/due-dates";
-import { assignmentLabel, assignmentRoles, assignmentWork, canManageClients, clientKinds, usualServices, whatsappLink, type ClientKind } from "@/src/lib/clients";
+import { assignmentLabel, assignmentRoles, assignmentWork, canManageClients, clientKinds, seesClient, usualServices, whatsappLink, type ClientKind } from "@/src/lib/clients";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { checklists, kindChecklist, workOfService, type DocumentRequest } from "@/src/lib/checklists";
 import { skipReasons, type Skip } from "@/src/lib/reminders";
@@ -603,7 +603,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                           title={title}
                           meta={`${todo.due_on === today ? "Today" : `${late ? "Was due" : "By"} ${dueLabel(todo.due_on)}`}, for ${person ? personName(people?.find((row) => row.user_id === person)?.email) : "the owner"}`}
                           status={open ? late && <Badge tone="late">Late</Badge> : <Badge tone="done">Done</Badge>}
-                          action={manage && !viewOnly && (
+                          action={(manage || person === userId) && !viewOnly && (
                             <form action={manageClient}>
                               {hidden("overview")}
                               <input type="hidden" name="todo" value={todo.id} />
@@ -624,7 +624,8 @@ export default async function Client({ params, searchParams }: { params: Promise
                     <label>By <input type="date" name="todo_on" defaultValue={today} required /></label>
                     <label>For <select name="todo_for" defaultValue="">
                       <option value="">The owner</option>
-                      {people?.filter((row) => row.status === "active").map((row) => <option key={row.user_id} value={row.user_id}>{personName(row.email)}</option>)}
+                      {/* Only those who can see this client, so a to-do never goes to someone who cannot. */}
+                      {people?.filter((row) => row.status === "active" && seesClient(row, client.client_assignments, membership.settings)).map((row) => <option key={row.user_id} value={row.user_id}>{personName(row.email)}</option>)}
                     </select></label>
                     <Pending className="b b-secondary b-small" name="intent" value="add-todo">Add a to-do</Pending>
                   </form>

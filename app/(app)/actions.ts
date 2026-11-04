@@ -13,7 +13,7 @@ import { emailTemplates } from "@/src/lib/email-templates";
 import { addDays, dueLabel, isItr, periodLabel, todayInIndia, verifyBy } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
 import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
-import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, readTags, readWork, type ClientInput } from "@/src/lib/clients";
+import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, readTags, readWork, seesClient, type ClientInput } from "@/src/lib/clients";
 import { chunks, filterKeys, matchingClients, MOST_MATCHING, readFilter } from "@/app/(app)/app/clients/matching";
 import { unsafeCell } from "@/src/lib/client-sheet";
 import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
@@ -667,9 +667,10 @@ export async function manageClient(form: FormData) {
     const query = new URLSearchParams({ ...(tab && tab !== "overview" && (error || tab !== "details") && { tab }), ...(error ? { error } : { changed: String(form.get("intent") ?? "") }) }).toString();
     return redirect(`/app/clients/${id}${query ? `?${query}` : ""}`);
   };
-  if (!membership || !canManageClients(membership.role)) back("role");
-  const firm = membership!.firmId;
   const intent = form.get("intent");
+  // Done and Undo are also for the person a to-do is for; row level security checks which.
+  if (!membership || (!canManageClients(membership.role) && intent !== "todo-done" && intent !== "todo-undo")) back("role");
+  const firm = membership!.firmId;
 
   if (intent === "details") {
     const checked = checkClient({ name: String(form.get("name") ?? ""), kind: String(form.get("kind") ?? ""), pan: "", gstin: "", email: String(form.get("email") ?? ""), phone: String(form.get("phone") ?? "") });
@@ -731,19 +732,20 @@ export async function manageClient(form: FormData) {
     const title = String(form.get("todo_title") ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
     const on = String(form.get("todo_on") ?? "");
     const person = String(form.get("todo_for") ?? "");
+    // The person must be able to see the client.
     const [{ data: own }, { data: people }] = await Promise.all([
-      supabase.from("clients").select("id").eq("id", id).eq("firm_id", firm).maybeSingle(),
+      supabase.from("clients").select("id, client_assignments(user_id, team_id)").eq("id", id).eq("firm_id", firm).maybeSingle(),
       person ? supabase.rpc("firm_people", { target_firm: firm }) : Promise.resolve({ data: [] }),
     ]);
     if (!own) back("role");
-    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(on) || Number.isNaN(Date.parse(on)) || (person && !people?.some((row) => row.user_id === person && row.status === "active"))) back("todo");
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(on) || Number.isNaN(Date.parse(on)) || (person && !people?.some((row) => row.user_id === person && row.status === "active" && seesClient(row, own!.client_assignments, membership!.settings)))) back("todo");
     const admin = supabaseAdmin();
     const { data: made } = await admin.from("tasks").insert({ firm_id: firm, client_id: id, kind: "todo", due_on: on, details: { title, ...(person && { for: person }) } }).select("id").single();
     if (made) await admin.from("activity_log").insert({ firm_id: firm, actor_id: userId, action: "todo.added", entity_type: "task", entity_id: made.id });
     revalidatePath("/app", "layout");
   } else if (intent === "todo-done" || intent === "todo-undo") {
     // Done and Undo, here and on Today. Row level security (tasks_todo_right) keeps them to
-    // those who may change the client, and logs each change.
+    // those who may change the client and the to-do's own person, and logs each change.
     const todo = String(form.get("todo") ?? "");
     const { data: changed } = z.uuid().safeParse(todo).success
       ? await supabase.from("tasks").update({ status: intent === "todo-done" ? "closed" : "upcoming" }).eq("id", todo).eq("firm_id", firm).eq("client_id", id).eq("kind", "todo").select("id")
@@ -938,8 +940,8 @@ export async function manageTasks(form: FormData) {
   const typed = String(form.get("filed_on") ?? "");
   const filedOn = /^\d{4}-\d{2}-\d{2}$/.test(typed) && !Number.isNaN(Date.parse(typed)) && typed <= todayInIndia() ? typed : todayInIndia();
   if(!ids.length || ids.length>100 || ids.some(id=>!z.uuid().safeParse(id).success)) redirect("/app/calendar");
-  const {data:tasks}=intent==="filed" || intent==="verified" ? await supabase.from("tasks").select("id,client_id,kind,code,period_key,details,clients(name,email_enc)").eq("firm_id",membership.firmId).in("id",ids) : {data:null};
-  if(tasks && (tasks.length!==ids.length || tasks.some(task=>!membership.may("mark_filed",task.client_id)))) redirect("/app/calendar?error=filing");
+  const {data:tasks}=intent==="filed" || intent==="verified" || intent==="reopen" ? await supabase.from("tasks").select("id,client_id,kind,code,period_key,details,clients(name,email_enc)").eq("firm_id",membership.firmId).in("id",ids) : {data:null};
+  if(tasks && intent!=="reopen" && (tasks.length!==ids.length || tasks.some(task=>!membership.may("mark_filed",task.client_id)))) redirect("/app/calendar?error=filing");
   await Promise.all(
     ids.map((id) => {
       const ack = String(form.get(`ack-${id}`) ?? "").trim().slice(0, 40);
@@ -955,7 +957,8 @@ export async function manageTasks(form: FormData) {
             ? { details: { ...(tasks?.find((task) => task.id === id)?.details as Record<string, unknown>), verified_on: todayInIndia(), verified_by: userId } }
             : intent === "in_progress"
               ? { status: "in_progress" }
-              : { status: "upcoming", details: {} };
+              // Not filed after all: only what marking it filed added goes; a licence keeps its label.
+              : { status: "upcoming", details: Object.fromEntries(Object.entries((task?.details ?? {}) as Record<string, Json>).filter(([key]) => !["filed_on", "by", "ack", "udin", "verified_on", "verified_by"].includes(key))) };
       return supabase.from("tasks").update(change).eq("id", id);
     }),
   );

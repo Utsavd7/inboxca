@@ -62,9 +62,10 @@ function Action({ item, membership }: { item: Listed; membership: Member }) {
         <Pending className="b b-secondary">{label}</Pending>
       </form>
     );
-  // A client's to-do: Done for those who may change the client, else the client's page.
+  // A client's to-do: Done for those who may change the client and for its own person (mine),
+  // else the client's page.
   if (item.key.startsWith("todo:") && item.client)
-    return canManageClients(membership.role) && !membership.viewOnlyUntil ? (
+    return (canManageClients(membership.role) || item.mine) && !membership.viewOnlyUntil ? (
       <form action={manageClient}>
         <input type="hidden" name="client" value={item.client.id} />
         <input type="hidden" name="todo" value={item.key.slice(5)} />
