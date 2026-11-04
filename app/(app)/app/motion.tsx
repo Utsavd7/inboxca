@@ -17,7 +17,7 @@ import { Children, Fragment, cloneElement, createContext, isValidElement, useCon
 // Route changes stay on React's ViewTransition (page-in.tsx). The pieces:
 //   <Press href?>  a link (with href) or a button that presses in (scale .97); lift also
 //                  raises it 2 px under the pointer. Plain .b buttons press in with CSS already.
-//   <Indicator>    the one marker of the current item (sidebar, tabs, pills): render it inside
+//   <Indicator>    the one marker of the current item (tabs, pills): render it inside
 //                  the current item only, with the same id in every item; it glides between them.
 //   <Presence>     wraps a conditional, {open && <SidePanel ... />}, so it animates out as well
 //                  as in. SidePanel brings its own motion.
@@ -166,6 +166,22 @@ export function Item({ as = "li", row, className, children, ...rest }: ItemProps
     >
       {children}
     </Row>
+  );
+}
+
+// A Suspense fallback for a part shown before (found by selector): when a save draws the page
+// afresh, a still copy of that part stays until the new one streams in, instead of its outline
+// flashing for a moment. On the page's first showing it is the outline (children).
+export function Hold({ shown, children }: { shown: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [copy] = useState(() => (typeof document === "undefined" ? null : (document.querySelector(shown)?.cloneNode(true) as Element | undefined)));
+  useLayoutEffect(() => {
+    if (copy) ref.current?.replaceChildren(copy);
+  }, [copy]);
+  return (
+    <div ref={ref} className="hold" inert={!!copy}>
+      {!copy && children}
+    </div>
   );
 }
 
