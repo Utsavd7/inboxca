@@ -110,7 +110,7 @@ test("Documents: tick papers to download one ZIP or preview sending them as link
   await expect(owner.getByText(`Drop to upload for ${patelName}`)).toHaveCount(0);
 });
 
-test("Calendar: a month of days with a dot for each kind of return, a day's returns, and Remind client", async () => {
+test("Calendar: a month of days naming what is due, a day's returns, and Remind client", async () => {
   const code = `TP${tag.toUpperCase()}`;
   await query(local.dbUrl, "insert into public.compliance_types (code, name, frequency, due_rule, source_url, verified_on, approved_by) values ($1, 'Test return', 'monthly', '{\"for\": \"pan\"}', 'https://example.test/notification', current_date, 'test')", [code]);
   const today = todayInIndia();
@@ -124,8 +124,9 @@ test("Calendar: a month of days with a dot for each kind of return, a day's retu
   if (!soon.startsWith(today.slice(0, 7))) await owner.getByRole("link", { name: "Next month" }).click();
   const days = owner.getByRole("navigation", { name: /^Days of/ });
   const cell = days.getByRole("link", { name: `${dueLabel(soon)}: 1 to file, 1 filed` });
-  await expect(cell.locator(".d-wait")).toHaveCount(1);
-  await expect(cell.locator(".d-done")).toHaveCount(1);
+  // Each day names its returns: filed in green, still to file in blue.
+  await expect(cell.locator(".cal-item.wait")).toHaveText(`${patelName}: Test return`);
+  await expect(cell.locator(".cal-item.done")).toHaveText(`Mehta Traders ${tag}: Test return`);
   await cell.click();
   await expect(owner).toHaveURL(new RegExp(`day=${soon}`));
   await expect(cell).toHaveAttribute("aria-current", "date");

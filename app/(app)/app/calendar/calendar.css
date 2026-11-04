@@ -20,34 +20,34 @@
 .cal-day[aria-current] :is(strong, small) { color: var(--accent); }
 .cal-day[aria-current] i::before { background: var(--accent); opacity: 1; }
 
-/* The month: weeks from Monday, a dot for each kind of return due that day, the list beside. */
-.cal-month-split { display: grid; grid-template-columns: minmax(340px, 400px) minmax(0, 1fr); gap: var(--s4); align-items: start; }
-.cal-month { position: sticky; top: 96px; padding-bottom: var(--s3); }
+/* The month: weeks from Monday, the first returns due each day by name (late in red, filed in
+   green), the list below. */
+.cal-month-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); align-items: start; }
+.cal-month { padding-bottom: var(--s3); }
 .cal-month .app-card-head h2 { font-size: 15px; }
 .cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; padding: 0 var(--s3); }
 .cal-week span { padding-bottom: var(--s1); color: var(--ink-3); font-size: 12px; font-weight: 600; text-align: center; }
-.cal-cell { position: relative; display: grid; grid-template-rows: auto 1fr; aspect-ratio: 1 / 0.9; padding: var(--s1) 6px; border-radius: var(--r2); color: var(--ink); text-decoration: none; transition: background var(--fast) var(--out), transform var(--fast) var(--out); animation: rise var(--slow) var(--out) both; }
+.cal-cell { position: relative; display: grid; grid-template-rows: auto 1fr; min-height: 92px; padding: var(--s1) 6px; border-radius: var(--r2); color: var(--ink); text-decoration: none; transition: background var(--fast) var(--out), transform var(--fast) var(--out); animation: rise var(--slow) var(--out) both; }
 .cal-cell:hover { background: var(--hover); }
 .cal-cell:active { transform: scale(0.96); }
 .cal-cell strong { font-size: 13px; font-weight: 600; }
-.cal-cell small { position: absolute; top: var(--s1); right: 6px; color: var(--ink-3); font: 500 11px var(--font-plex), ui-monospace, monospace; }
 .cal-cell.is-out { color: var(--ink-3); }
 .cal-cell.is-out strong { font-weight: 500; }
 .cal-cell.is-today strong { display: inline-grid; place-items: center; width: 22px; height: 22px; margin: -2px 0 0 -4px; border-radius: var(--round); background: var(--accent); color: var(--white); }
 .cal-cell[aria-current] { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--select); }
-.cal-dots { display: flex; flex-wrap: wrap; align-self: end; gap: 3px; }
-.cal-dots i, .cal-legend i { width: 6px; height: 6px; border-radius: var(--round); }
+.cal-items { display: grid; align-content: start; gap: 2px; min-width: 0; margin-top: 2px; }
+.cal-item { overflow: hidden; padding: 1px 6px; border-radius: var(--r1); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.cal-item.wait { background: var(--wait-bg); color: var(--wait-fg); }
+.cal-item.late { background: var(--late-bg); color: var(--late-fg); }
+.cal-item.done { background: var(--done-bg); color: var(--done-fg); }
+.cal-more { padding: 0 6px; color: var(--ink-3); font-size: 12px; }
+.cal-later { display: inline-block; margin-right: var(--s2); }
+.cal-legend i { width: 6px; height: 6px; border-radius: var(--round); }
 .d-late { background: var(--late-dot); }
 .d-wait { background: var(--wait-dot); }
-.d-info { background: var(--info-dot); }
 .d-done { background: var(--done-dot); }
 .cal-legend { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); margin: var(--s3) var(--s4) 0; padding: var(--s3) 0 0; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; list-style: none; }
 .cal-legend li { display: inline-flex; align-items: center; gap: 6px; }
-@media (max-width: 1360px) {
-  .cal-month-split { grid-template-columns: minmax(0, 1fr); }
-  .cal-month { position: static; }
-  .cal-cell { aspect-ratio: auto; min-height: 56px; }
-}
 
 /* The list card: tools on top, the table scrolling on its own, pages at the foot. */
 .cal-list { flex-direction: column; }

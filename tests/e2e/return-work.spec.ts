@@ -45,7 +45,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await signIn(page,email,key);
     const now=page.getByRole("region",{name:"Your list"});
     await expect(now.getByText(`GSTR-1 for ${name}, Sep 2026`)).toHaveCount(0);
-    await page.goto("/app/calendar?view=month");await expect(page.getByRole("button",{name:`Fill ${name} GSTR-1 (monthly)`})).toBeVisible();
+    await page.goto("/app/calendar?view=soon");await expect(page.getByRole("button",{name:`Fill ${name} GSTR-1 (monthly)`})).toBeVisible();
     // Fill by hand, pressed twice: one draft, made from the figures read so far.
     const returns=`/app/clients/${client}?tab=returns`;
     await page.goto(returns);const row=page.locator("li").filter({hasText:"GSTR-1 (monthly) Sep 2026"});
