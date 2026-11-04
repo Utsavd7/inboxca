@@ -149,7 +149,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   const tokens = typed.length ? await searchTokens(firm, typed) : null;
   const owner = membership.role === "owner";
   const namedIds = [edit ?? send, shared, renamed ?? saved ?? removed ?? restored].filter((file): file is string => uuid.test(file ?? ""));
-  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: sheets }, { data: licences }] = await Promise.all([
+  // Returns still to file: those late or due in the next 60 days, unless later ones are asked for.
+  const taskQuery = supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact", head: sub !== "returns"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed");
+  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: sheets }, { data: licences }, { count: kycPlanned }] = await Promise.all([
     supabase
       .from("clients")
       .select(
@@ -161,7 +163,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.rpc("firm_people", { target_firm: firm }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     Promise.resolve(supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on, client_kinds").eq("period_key", "").order("code")).then(async ({ data }) => ({ data: await firmChecked(supabase, firm, data) })),
-    supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact", head: sub !== "returns"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed").order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
+    (show === "filed" || show === "later" ? taskQuery : taskQuery.lte("due_on", addDays(today, 60))).order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
     files ? (tokens ? fileQuery.contains("search_tokens", tokens) : fileQuery).order("received_at", { ascending: false }).order("id", { ascending: false }).range(start, start + 49) : fileQuery,
     supabase.from("requests").select("id, status, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
     supabase.from("tasks").select("id,due_on,status,details",{count:"exact", head: tab !== "overview" && tab !== "notices"}).eq("firm_id",firm).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
@@ -186,6 +188,8 @@ export default async function Client({ params, searchParams }: { params: Promise
     tab === "returns" ? supabase.from("documents").select("id").eq("firm_id", firm).eq("client_id", id).eq("work_type", "gst").eq("status", "filed").filter("name", "imatch", "\\.(xlsx?|ods|csv|json)$").limit(1) : Promise.resolve({ data: [] }),
     // The client's licence and registration expiry dates, as the firm entered them (Details).
     supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "licence").order("due_on").limit(20),
+    // A DIR-3 KYC still to file, which may be years ahead of the Returns tab's 60 days.
+    sub === "returns" ? supabase.from("tasks").select("id", { count: "exact", head: true }).eq("firm_id", firm).eq("client_id", id).eq("code", "DIR3KYC").neq("status", "filed") : Promise.resolve({ count: 0 }),
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
@@ -364,16 +368,17 @@ export default async function Client({ params, searchParams }: { params: Promise
   const base = `/app/clients/${client.id}`;
   const here = `${base}${tab === "overview" ? "" : `?tab=${tab}`}`;
   // The Returns tab as it is, for the filing panel and each filing form to come back to.
-  const returnsHref = `${base}?tab=returns${show === "filed" ? "&show=filed" : ""}${page > 1 ? `&page=${page}` : ""}`;
+  const shows = show === "filed" || show === "later" ? show : "";
+  const returnsHref = `${base}?tab=returns${shows && `&show=${shows}`}${page > 1 ? `&page=${page}` : ""}`;
   const returnsState = (
     <>
       <input type="hidden" name="client" value={client.id} />
-      {show === "filed" && <input type="hidden" name="show" value="filed" />}
+      {shows && <input type="hidden" name="show" value={shows} />}
       {page > 1 && <input type="hidden" name="page" value={page} />}
     </>
   );
   // A page of 50 at a time keeps a busy client's page quick; paging keeps the view's filter.
-  const keep = `${show === "filed" ? "&show=filed" : ""}${find ? `&find=${encodeURIComponent(find)}` : ""}`;
+  const keep = `${shows && `&show=${shows}`}${find ? `&find=${encodeURIComponent(find)}` : ""}`;
   const pager = (total: number, rows: number, label: string, key: string) => (
     <nav className="pager" aria-label={`${label} pages`}>
       <p>Showing {rows ? (start + 1).toLocaleString("en-IN") : 0} to {rows ? (start + rows).toLocaleString("en-IN") : 0} of {total.toLocaleString("en-IN")} {label.toLowerCase()}</p>
@@ -915,8 +920,9 @@ export default async function Client({ params, searchParams }: { params: Promise
                   })}
                 </ul>
               ) : (
-                <p className="app-card-none">{show==="filed" ? "No filed returns on this page." : "No returns due. Add a number and choose its services on Overview."}</p>
+                <p className="app-card-none">{show==="filed" ? "No filed returns on this page." : show==="later" ? "No returns due. Add a number and choose its services on Overview." : "Nothing late or due in the next 60 days."}</p>
               )}
+              {show !== "filed" && <p className="app-card-foot"><Link className="b b-ghost" href={`?tab=returns${show === "later" ? "" : "&show=later"}`}>{show === "later" ? "Show only the next 60 days" : "Show later returns"}</Link></p>}
               {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="app-card-foot hint">InboxCA has not yet checked dates marked * against the government notification.</p>}
               {/* A company's AOC-4, MGT-7 and ADT-1 fall due after its AGM: the date is asked, never guessed (public.record_agm). */}
               {manage && show !== "filed" && numbers.filter((registration) => registration.kind === "cin" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "agm")).map((registration) => {
@@ -935,7 +941,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               {/* DIR-3 KYC Web runs on the director's own three year cycle (rule 12A): the year of the last one is asked, never guessed (public.record_kyc). */}
               {manage && show !== "filed" && numbers.filter((registration) => registration.kind === "pan" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "kyc")).map((registration) => {
                 const fyEnd = Number(today.slice(0, 4)) + (today.slice(5, 7) >= "04" ? 1 : 0);
-                const planned = tasks?.some((task) => task.code === "DIR3KYC" && task.status !== "filed");
+                const planned = !!kycPlanned;
                 return (
                   <form key={registration.id} action={recordKyc} className="app-card-foot agm-form">
                     <input type="hidden" name="client" value={client.id} />
@@ -1198,7 +1204,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             <Pending className="b b-primary" name="intent" value="details">Save details</Pending>
           </form>
           <h3>Licences and registrations</h3>
-          <p className="hint">Expiry dates you enter here, like FSSAI, Shop Act, IEC or MSME, show on the Calendar and Today before the date. InboxCA does not remind the client of them.</p>
+          <p className="hint">Expiry dates you enter here, like a DSC, FSSAI, Shop Act, IEC or MSME, show on the Calendar and Today before the date. InboxCA does not remind the client of them.</p>
           {!!licences?.length && (
             <ul className="app-rows">
               {licences.map((licence) => (
@@ -1215,7 +1221,9 @@ export default async function Client({ params, searchParams }: { params: Promise
           )}
           <form action={manageClient} className="fields">
             {hidden("details")}
-            <div><label htmlFor="licence-label">Licence or registration</label><input id="licence-label" name="label" required maxLength={60} placeholder="FSSAI licence" /></div>
+            <div><label htmlFor="licence-label">Licence or registration</label><input id="licence-label" name="label" required maxLength={60} placeholder="FSSAI licence" list="licence-kinds" /></div>
+            <datalist id="licence-kinds">{["DSC", "FSSAI licence", "Shop Act licence", "IEC", "MSME registration"].map((kind) => <option key={kind} value={kind} />)}</datalist>
+            <div><label htmlFor="licence-holder">Holder&apos;s name, for a DSC</label><input id="licence-holder" name="holder" maxLength={50} placeholder="Optional" /></div>
             <div><label htmlFor="licence-on">Valid until</label><input id="licence-on" name="on" type="date" required /></div>
             <Pending className="b b-secondary" name="intent" value="add-licence">Add expiry date</Pending>
           </form>
@@ -1265,7 +1273,7 @@ export default async function Client({ params, searchParams }: { params: Promise
       {ask && !viewOnly && (
         <SidePanel key="ask-files" id="ask-files" title={`Ask ${client.name} for papers`} close={here}>
           {alert}
-          <p className="hint">The client gets a private link to upload them, no sign in needed. It works for 30 days.</p>
+          <p className="hint">InboxCA emails the client this list from your firm&apos;s email. They reply with the papers attached.</p>
           <form action={askForDocuments}>
             <input type="hidden" name="client" value={client.id} />
             <fieldset className="ask-papers">

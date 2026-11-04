@@ -764,7 +764,7 @@ export default async function Settings({
               </fieldset>
               <fieldset>
                 <legend>Ask for papers before the due date</legend>
-                <p className="hint">InboxCA emails the client a list of the papers each return needs, with a private link to upload them. It leaves out papers you already have. If nothing comes back, it emails again every 3 days. After two of these, the person who looks after the client is asked to call.</p>
+                <p className="hint">InboxCA emails the client a list of the papers each return needs, from your firm&apos;s email, and they reply with the papers attached. It leaves out papers you already have. If nothing comes back, it emails again every 3 days. After two of these, the person who looks after the client is asked to call.</p>
                 <div className="set-fields">{Object.entries({ monthly: "Monthly returns", quarterly: "Quarterly returns", yearly: "Yearly returns" }).map(([often, label]) => (
                   <div key={often}>
                     <label htmlFor={`ask-${often}`}>{label}</label>

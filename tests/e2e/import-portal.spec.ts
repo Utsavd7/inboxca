@@ -130,7 +130,8 @@ test("a Form 26AS text file and a Form 16 added on Documents are filed under the
   await expect(owner.getByText("Choose a field from this official form")).toHaveCount(0);
   // Each open ITR lists the portal files its year still needs, by that year's names; the AIS dropped on Returns closes its item.
   await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, 'ITR_NA', '2026-03', current_date + 5), ($1, $2, 'ITR_NA', '2027-03', current_date + 270)", [firm.firmId, client]);
-  await owner.goto(`/app/clients/${client}?tab=returns`);
+  // The tax year 2026-27 return is due in 270 days, so it is under Show later returns.
+  await owner.goto(`/app/clients/${client}?tab=returns&show=later`);
   const itr = owner.locator("section[aria-labelledby=due] li");
   await expect(itr.filter({ hasText: "AIS for FY 2025-26: not added yet" })).toHaveCount(1);
   await expect(itr.filter({ hasText: "Form No. 130 (was Form 16), Form No. 168 (was Form 26AS) and AIS for Tax year 2026-27: not added yet" })).toHaveCount(1);
