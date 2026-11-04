@@ -45,6 +45,8 @@ export function HelpShow({ frames, still, items, kind, children }: { frames: rea
     setBeat(beat + 1);
   };
   const [page, title, part] = frames[shown].screen;
+  // The rail stays on the page last shown while it folds away for a screen outside the app.
+  const rail = page ?? frames.slice(0, shown).findLast((one) => one.screen[0])?.screen[0] ?? frames.find((one) => one.screen[0])?.screen[0];
   const List = kind === "steps" ? "ol" : "ul";
 
   return (
@@ -62,20 +64,26 @@ export function HelpShow({ frames, still, items, kind, children }: { frames: rea
             )}
           </div>
           <div className={`hs-main${page ? "" : " is-outside"}`}>
-            {page && (
-              <span className="hs-rail">
-                {Object.entries(pages).map(([name, Icon]) => (
-                  <span key={name}>
-                    {name === page && <motion.span layoutId="hs-rail" className="hs-rail-pick" transition={{ duration: 0.45, ease }} />}
-                    <Icon size={15} />
-                  </span>
-                ))}
-              </span>
-            )}
+            <span className="hs-rail">
+              {Object.entries(pages).map(([name, Icon]) => (
+                <span key={name}>
+                  {name === rail && <motion.span layoutId="hs-rail" className="hs-rail-pick" transition={{ duration: 0.45, ease }} />}
+                  <Icon size={16} />
+                </span>
+              ))}
+            </span>
             <div className="hs-view">
-              <AnimatePresence mode="wait" initial={false}>
+              <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div key={`${shown}-${beat}`} className="hs-frame" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0 : 0.22, ease }}>
                   {frames[shown].body}
+                  {/* The rest of an app screen: quiet rows running off the window's foot. */}
+                  {page && (
+                    <span className="hs-rest" aria-hidden>
+                      {[0, 1, 2, 3, 4, 5, 6, 7].map((row) => (
+                        <span key={row} />
+                      ))}
+                    </span>
+                  )}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -84,14 +92,17 @@ export function HelpShow({ frames, still, items, kind, children }: { frames: rea
         <figcaption className="hs-foot">
           <span className="hs-dots" aria-hidden>
             {frames.map((_, index) => (
-              <span key={index} className={index < shown ? "is-past" : undefined}>
-                {index === shown && !reduced && (
+              <span key={index}>
+                {/* Every dot keeps its fill: full once passed, empty ahead, the current one filling. */}
+                {index === shown && !reduced ? (
                   <span
                     key={beat}
                     className="hs-fill"
                     style={{ animationDuration: `${FRAME_MS}ms`, animationPlayState: running ? "running" : "paused" }}
                     onAnimationEnd={() => show((shown + 1) % frames.length)}
                   />
+                ) : (
+                  <span className={`hs-fill${index < shown ? " is-past" : ""}`} />
                 )}
               </span>
             ))}
