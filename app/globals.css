@@ -635,9 +635,54 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .policy-section h2 { display: flex; gap: var(--s3); font-size: 19px; font-weight: 700; letter-spacing: var(--ls-heading); line-height: var(--lh-snug); counter-increment: section; }
 .policy-section h2::before { content: counter(section) "."; flex-shrink: 0; min-width: 2ch; color: var(--slate); font-variant-numeric: tabular-nums; }
 .policy-section ul { display: grid; gap: var(--s2); margin-top: var(--s3); padding-left: calc(2ch + var(--s3)); }
-.policy-section li { position: relative; padding-left: 14px; line-height: 1.6; color: #2b3a52; overflow-wrap: anywhere; }
-.policy-section li::before { content: ""; position: absolute; left: 0; top: 0.72em; width: 5px; height: 5px; border-radius: 50%; background: var(--line-strong); }
+.policy-section li,
+.help-points li { position: relative; padding-left: 14px; line-height: 1.6; color: #2b3a52; overflow-wrap: anywhere; }
+.policy-section li::before,
+.help-points li::before { content: ""; position: absolute; left: 0; top: 0.72em; width: 5px; height: 5px; border-radius: 50%; background: var(--line-strong); }
 .policy-section:target h2 { color: var(--blue-deep); }
+
+/* Help: the index's find box and article cards (help-find.tsx), and an article's numbered steps,
+   points and its group's other articles (app/(site)/help). */
+.help-index .wrap { max-width: 960px; }
+.help-find { position: relative; margin-top: var(--s5); }
+.help-find svg { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--slate); pointer-events: none; }
+.help-find input {
+  width: 100%; height: 48px; padding: 0 16px 0 46px; border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background: var(--white); color: var(--navy); font: inherit; font-size: var(--fs-body); transition: border-color var(--t-micro);
+}
+.help-find input::placeholder { color: var(--slate); }
+.help-find input:focus { border-color: var(--blue); }
+.help-group { margin-top: var(--s6); scroll-margin-top: 112px; }
+.help-group h2,
+.help-part h2 { font-size: 19px; font-weight: 700; letter-spacing: var(--ls-heading); line-height: var(--lh-snug); }
+.help-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); margin-top: var(--s3); }
+.help-cards a {
+  display: grid; align-content: start; gap: 4px; height: 100%; padding: var(--s4) var(--s5); border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--white); transition: border-color var(--t-micro), box-shadow var(--t-ui), transform var(--t-ui) var(--ease-out);
+}
+.help-cards a:hover { border-color: var(--tint); box-shadow: var(--shadow-1); }
+.help-cards strong { font-size: var(--fs-body); font-weight: 700; color: var(--navy); }
+.help-cards span { font-size: var(--fs-small); line-height: 1.5; color: var(--slate); }
+.help-none { margin-top: var(--s5); padding: var(--s4) var(--s5); border-radius: var(--r-md); background: var(--grey); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.help-crumbs { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s4); font-size: var(--fs-small); font-weight: 600; color: var(--slate); }
+.help-crumbs a,
+.help-more a { color: var(--blue-deep); font-weight: 600; }
+.help-crumbs a:hover,
+.help-more a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.help-part { margin-top: var(--s6); }
+.help-steps { display: grid; gap: var(--s3); margin-top: var(--s4); counter-reset: step; }
+.help-steps li { position: relative; min-height: 28px; padding-left: 42px; line-height: 1.6; color: #2b3a52; counter-increment: step; overflow-wrap: anywhere; }
+.help-steps li::before {
+  content: counter(step); position: absolute; left: 0; top: -1px; display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: 50%; background: var(--wash); color: var(--blue-deep); font-size: var(--fs-caption); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.help-points,
+.help-more ul { display: grid; gap: var(--s2); margin-top: var(--s3); }
+.help-more { padding-top: var(--s5); border-top: 1px solid var(--line); }
+.help-more p { margin-top: var(--s5); font-size: var(--fs-small); color: var(--slate); overflow-wrap: anywhere; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) { .help-cards a:hover { transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .help-cards a { transition: none; } }
+@media (max-width: 640px) { .help-cards { grid-template-columns: minmax(0, 1fr); } }
 
 /* Sign in: the form on the left, InboxCA's navy side beside it on a laptop. Every step fits one
    laptop screen (1280 by 720 and up), with 14 px text and 40 px controls. */

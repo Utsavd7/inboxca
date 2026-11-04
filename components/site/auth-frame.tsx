@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Check, FolderCheck, HardDrive, LockKeyhole, Mail, Reply, UserCheck } from "lucide-react";
-import { contactEmail } from "@/src/lib/site";
 import { Logo } from "./logo";
 
 // One email as InboxCA handles it, for the navy side: read, filed in the firm's own drive, and
@@ -36,7 +35,7 @@ export function AuthFrame({ children }: { children: React.ReactNode }) {
             <Link href="/security">Security</Link>
             <Link href="/privacy">Privacy</Link>
             <Link href="/terms">Terms</Link>
-            <a href={`mailto:${contactEmail}`}>Help</a>
+            <Link href="/help">Help</Link>
           </nav>
         </footer>
       </div>

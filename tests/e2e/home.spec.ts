@@ -240,6 +240,20 @@ for (const [path, title] of [
     expect(await axe(page)).toEqual([]);
   });
 
+// Help is linked from the footer, private like the policies, and its find box narrows the list.
+test("help is linked, private and accessible", async ({ page }) => {
+  await page.goto("/", { waitUntil: "networkidle" });
+  await page.getByRole("contentinfo").getByRole("link", { name: "Help", exact: true }).click();
+  await expect(page).toHaveURL(/\/help$/);
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+  expect(await axe(page)).toEqual([]);
+  await page.getByRole("searchbox").fill("passkey");
+  await page.getByRole("link", { name: /lost phone/ }).click();
+  await expect(page).toHaveURL(/\/help\/sign-in$/);
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+  expect(await axe(page)).toEqual([]);
+});
+
 // The firm accepts the data processing agreement at sign up, so it is linked there.
 test("the data processing agreement is linked from sign up, private and accessible", async ({
   page,

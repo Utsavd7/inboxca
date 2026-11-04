@@ -16,7 +16,10 @@ const links = [
   ["questions", "Questions"],
 ];
 
-// The policy pages in a small menu. A mouse opens it by hovering; a click, a tap or Enter
+// Help first, then the policy pages, in the menu and in the phone menu's small links.
+const pages = [["/help", "Help", "Short steps for setting up and using InboxCA"], ...policies] as const;
+
+// Help and the policy pages in a small menu. A mouse opens it by hovering; a click, a tap or Enter
 // opens it too. Escape, a click elsewhere or tabbing past it closes it.
 function PoliciesMenu() {
   const [open, setOpen] = useState(false);
@@ -75,7 +78,7 @@ function PoliciesMenu() {
             transition={{ duration: 0.24, ease }}
           >
             <ul>
-              {policies.map(([href, label, line]) => (
+              {pages.map(([href, label, line]) => (
                 <li key={href}>
                   <a href={href}>
                     <strong>{label}</strong>
@@ -190,9 +193,9 @@ export function Nav({ home = true }: { home?: boolean }) {
                 {label}
               </a>
             ))}
-            <p className="nav-panel-label">Policies</p>
+            <p className="nav-panel-label">Help and policies</p>
             <div className="nav-panel-small">
-              {policies.map(([href, label]) => (
+              {pages.map(([href, label]) => (
                 <a key={href} href={href}>
                   {label}
                 </a>

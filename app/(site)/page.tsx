@@ -238,7 +238,11 @@ export default function Home() {
             <div className="faq-head">
               <h2>Questions</h2>
               <p className="band-lead">
-                Anything else? Write to{" "}
+                More answers in{" "}
+                <Link className="link" href="/help">
+                  Help
+                </Link>
+                . Anything else? Write to{" "}
                 <a className="link" href={`mailto:${contactEmail}`}>
                   {contactEmail}
                 </a>

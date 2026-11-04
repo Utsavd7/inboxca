@@ -13,6 +13,7 @@ const product = [
   ["/#control", "Privacy and control"],
   ...(SHOW_PLANS ? [["/#plans", "Plans"]] : []),
   ["/#questions", "Questions"],
+  ["/help", "Help"],
 ];
 const policyLinks = [
   ["/security", "Security policy"],
