@@ -8,6 +8,7 @@ import { grantFor } from "@/src/lib/permission-grants";
 import { currentMember, viewOnlyWords } from "@/src/lib/member";
 import { checkFigures, draftSchema, openFigures, verifySources, place, type Draft } from "@/src/lib/datasets";
 import { periodName } from "@/src/lib/documents";
+import { periodLabel } from "@/src/lib/calendar";
 import { when } from "@/src/lib/paper-origin";
 import { personName } from "@/src/lib/roles";
 import { askPermission } from "@/app/(app)/actions";
@@ -53,7 +54,7 @@ export async function DatasetReview({clientId,draftId,lineId,check,view}:{client
   const canEdit=membership.may("edit_figures", clientId) || !!await grantFor(membership.firmId,userId,"edit_figures",clientId),viewOnly=!!membership.viewOnlyUntil;
   const kept=draft.edits?.[userId]?.[active.id];
   const candidate=canEdit && kept?.base===active.value_enc ? z.object({value:z.string().max(2000),reason:z.string().max(300)}).parse(JSON.parse(await serverCrypto().decrypt(membership.firmId,`${place(row.id,active.id)}/edit/${userId}`,kept.value_enc))) : null;
-  const name=(item:{form_code:string;period_key:string;target:unknown})=>item.form_code==="ITR" ? `${item.target ? formName(String(item.target)) : "Income tax"} ${itrYear(item.period_key)}` : `${item.form_code.replace(/^GSTR(\d)/,"GSTR-$1")} ${periodName(item.period_key)}`;
+  const name=(item:{form_code:string;period_key:string;target:unknown})=>item.form_code==="ITR" ? `${item.target ? formName(String(item.target)) : "Income tax"} ${itrYear(item.period_key)}` : item.form_code==="TDS140" ? `Form No. 140 ${periodLabel("quarterly",item.period_key)}` : `${item.form_code.replace(/^GSTR(\d)/,"GSTR-$1")} ${periodName(item.period_key)}`;
   const checked=draft.lines.filter((line)=>line.state==="confirmed").length;
   // One rule for the Amount column: paise as two decimals when any amount has them, else none.
   const decimals=shown.some((line)=>{const figure=figures.get(line.id)!;return (!figure.kind || figure.kind==="number") && /\.\d*[1-9]/.test(figure.value);}) ? 2 : 0;

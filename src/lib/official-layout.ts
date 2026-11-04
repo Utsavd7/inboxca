@@ -63,3 +63,29 @@ export function layoutDifferences(before: Layout, after: Layout) {
   }
   return lines;
 }
+
+// Protean's TDS statement file format (Form No. 140), from its own tables: each record's fields
+// as "number type size mandatory" under FH, BH, CD and DD, and each annexure's codes. InboxCA
+// writes the statement itself (src/lib/tds.ts), so a new release is set beside the layout that
+// code writes, not beside a shipped copy.
+const tdsRecords: Record<string, string> = { "File Header": "FH", "Batch Header": "BH", "Challan Detail": "CD", "Deductee Detail": "DD" };
+export function tdsFormatLayout(data: Buffer): Layout {
+  const layout: Layout = {};
+  let part = "";
+  for (const row of readSheet(data, "format.xlsx", { rows: 3000, columns: 8 })) {
+    const [a = "", b = "", c = "", d = "", e = "", f = ""] = row.map((cell) => cell.replace(/\s+/g, " ").trim());
+    const record = /\((File Header|Batch Header|Challan Detail|Deductee Detail) Record\)/.exec(b)?.[1], annexure = /^Annexure\s*-?\s*(\d+)/i.exec(b)?.[1];
+    if (record || annexure) {
+      part = record ? tdsRecords[record] : `Annexure ${annexure}`;
+      layout[part] ??= [];
+      continue;
+    }
+    const entry = Object.values(tdsRecords).includes(part) && /^\d+$/.test(a) && d && e ? `${a} ${d} ${e} ${f}`
+      : part === "Annexure 2" ? (/^\d{4}$/.test(d) ? d : "")
+      : part === "Annexure 6" ? (/^[A-Z]$/.test(b) && /^\d{4}$/.test(d) ? `${b} ${d}` : "")
+      : part.startsWith("Annexure") && /^(\d{2,3}|[A-Z])$/.test(c) ? c : "";
+    if (entry) layout[part].push(entry);
+  }
+  if (!Object.values(tdsRecords).every((key) => layout[key]?.length)) throw new Error("Not a TDS statement file format");
+  return layout;
+}

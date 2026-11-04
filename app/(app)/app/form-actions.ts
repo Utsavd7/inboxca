@@ -32,8 +32,10 @@ async function differencesSeen(input:FormData,work:ItrWork) {
 import {keepReason} from "@/src/lib/reason";
 
 export async function prepareForm(form:FormData) {
-  const client=z.uuid().parse(form.get("client")),back=`/app/clients/${client}?tab=outputs`;
-  const code=z.enum(["GSTR1","GSTR3B",...itrReturns]).parse(form.get("form") ?? "GSTR1"),period=String(form.get("period")),drafts=form.getAll("draft").map(String);
+  const client=z.uuid().parse(form.get("client"));
+  const code=z.enum(["GSTR1","GSTR3B","TDS140",...itrReturns]).parse(form.get("form") ?? "GSTR1"),period=String(form.get("period")),drafts=form.getAll("draft").map(String);
+  // A TDS statement goes back to its own page when it cannot be made, and to Return files when it is.
+  const back=code==="TDS140" ? `/app/clients/${client}/tds?tan=${z.uuid().parse(form.get("registration"))}&period=${encodeURIComponent(period)}&message=check` : `/app/clients/${client}?tab=outputs`;
   let id:string,seen:Awaited<ReturnType<typeof differencesSeen>>;
   try {seen=await differencesSeen(form,{client,period,form:code,sources:drafts});} catch {redirect(`${back}&form=check`);}
   if(!seen) redirect(`${back}&form=differences`);
@@ -41,7 +43,7 @@ export async function prepareForm(form:FormData) {
     id=await prepareDocument({client,registration:String(form.get("registration")),form:code,period,drafts,version:String(form.get("version") ?? "") || undefined,reason:String(form.get("reason") ?? "") || undefined});
     await seen(id);
   } catch(error) {await keepReason(error);redirect(`${back}&form=check`);}
-  revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
+  revalidatePath("/app","layout");redirect(code==="TDS140" ? `/app/clients/${client}?tab=outputs` : `/app/files/${id}/view`);
 }
 
 // Fill, for one return from its row or its pin: InboxCA fills it from every figure it has read,

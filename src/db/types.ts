@@ -95,13 +95,13 @@ isOneToOne: false
                   ]
                 },"client_registrations": {
                   Row: {
-                    "client_id": string,"firm_id": string,"id": string,"identity_hash": string | null,"kind": string,"number_bidx": string,"number_enc": string,"services": (string)[],"state_code": string | null
+                    "client_id": string,"details_enc": string | null,"firm_id": string,"id": string,"identity_hash": string | null,"kind": string,"number_bidx": string,"number_enc": string,"services": (string)[],"state_code": string | null
                   }
                   Insert: {
-                    "client_id": string,"firm_id": string,"id"?: string,"identity_hash"?: string | null,"kind": string,"number_bidx": string,"number_enc": string,"services"?: (string)[],"state_code"?: string | null
+                    "client_id": string,"details_enc"?: string | null,"firm_id": string,"id"?: string,"identity_hash"?: string | null,"kind": string,"number_bidx": string,"number_enc": string,"services"?: (string)[],"state_code"?: string | null
                   }
                   Update: {
-                    "client_id"?: string,"firm_id"?: string,"id"?: string,"identity_hash"?: string | null,"kind"?: string,"number_bidx"?: string,"number_enc"?: string,"services"?: (string)[],"state_code"?: string | null
+                    "client_id"?: string,"details_enc"?: string | null,"firm_id"?: string,"id"?: string,"identity_hash"?: string | null,"kind"?: string,"number_bidx"?: string,"number_enc"?: string,"services"?: (string)[],"state_code"?: string | null
                   }
                   Relationships: [
                     {
@@ -114,13 +114,13 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"engagement_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"phone_enc": string | null,"purchase_mapping_enc": string | null,"reminders_paused": boolean,"sales_mapping_enc": string | null,"tags": (string)[]
+                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"engagement_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"phone_enc": string | null,"purchase_mapping_enc": string | null,"reminders_paused": boolean,"sales_mapping_enc": string | null,"tags": (string)[],"tds_mapping_enc": string | null
                   }
                   Insert: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"engagement_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"phone_enc"?: string | null,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null,"tags"?: (string)[]
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"engagement_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"phone_enc"?: string | null,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null,"tags"?: (string)[],"tds_mapping_enc"?: string | null
                   }
                   Update: {
-                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"engagement_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"phone_enc"?: string | null,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null,"tags"?: (string)[]
+                    "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"engagement_enc"?: string | null,"firm_id"?: string,"group_id"?: string | null,"id"?: string,"kind"?: string,"name"?: string,"phone_enc"?: string | null,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null,"tags"?: (string)[],"tds_mapping_enc"?: string | null
                   }
                   Relationships: [
                     {
