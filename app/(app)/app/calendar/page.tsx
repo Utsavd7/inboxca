@@ -423,7 +423,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                       {named.get(date)?.slice(0, 3).map((task) => {
                         const [tone] = status(task);
                         return (
-                          <span key={task.id} className={`cal-item ${tone === "late" || tone === "done" ? tone : "wait"}`}>
+                          <span key={task.id} className={`cal-item ${tone === "late" || tone === "done" ? tone : "wait"}`} title={`${task.clients.name}: ${name(task)[0]}`}>
                             {task.clients.name}: {name(task)[0]}
                           </span>
                         );
