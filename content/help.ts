@@ -163,7 +163,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         points: [
           "Turn on reminders in Settings, Reminders and papers, and choose when: 7, 3 or 1 day before, on the day, or 1 or 3 days after.",
           "Reminders go each morning from about 9:30, India time, and never after 8 pm. Each client gets at most one email a day, from your firm email.",
-          "If the papers asked for do not come, InboxCA emails again every 3 days. After the third follow up, Today shows a card to call the client.",
+          "If the papers asked for do not come, InboxCA emails again every 3 days. After two follow ups, the person who looks after the client gets a card on Today to call them, and after the third the owner is told.",
           "InboxCA reminds only for due dates it has checked against the government notification.",
           "A reminder is skipped when the return is filed, the client already sent papers for it, or your team is replying to them.",
           "Ask for papers before the due date: choose how many days before, for monthly, quarterly and yearly returns. Papers you already have are left out.",
