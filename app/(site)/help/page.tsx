@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { helpGroups } from "@/content/help";
+import { helpScenes } from "@/content/help-scenes";
 import { Footer } from "@/components/site/footer";
 import { HelpFind } from "@/components/site/help-find";
 import { Nav } from "@/components/site/nav";
@@ -10,8 +11,16 @@ export const metadata: Metadata = {
   description: "Short answers on setting up and using InboxCA: email and drive, client papers, returns, notices, your team and billing.",
 };
 
-// Only titles and first lines go to the browser for the find box; each article is its own page.
-const list = helpGroups.map(({ id, title, articles }) => ({ id, title, articles: articles.map(({ slug, title: name, lead }) => ({ slug, title: name, lead })) }));
+// Only titles, first lines and each scene's icon go to the browser for the find box; each
+// article is its own page.
+const list = helpGroups.map(({ id, title, articles }) => ({
+  id,
+  title,
+  articles: articles.map(({ slug, title: name, lead }) => {
+    const Icon = helpScenes[slug].icon;
+    return { slug, title: name, lead, icon: <Icon size={18} aria-hidden /> };
+  }),
+}));
 
 export default function Page() {
   return (

@@ -1,10 +1,10 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 import { contactEmail } from "@/src/lib/site";
 
-export type HelpList = readonly { id: string; title: string; articles: readonly { slug: string; title: string; lead: string }[] }[];
+export type HelpList = readonly { id: string; title: string; articles: readonly { slug: string; title: string; lead: string; icon: ReactNode }[] }[];
 
 // The help index: every article by group, and a box that narrows the list by title and first
 // line as you type. Without scripts the whole list shows.
@@ -28,9 +28,10 @@ export function HelpFind({ groups }: { groups: HelpList }) {
         <section key={id} id={id} className="help-group" aria-labelledby={`${id}-title`}>
           <h2 id={`${id}-title`}>{title}</h2>
           <ul className="help-cards">
-            {articles.map(({ slug, title: name, lead }) => (
+            {articles.map(({ slug, title: name, lead, icon }) => (
               <li key={slug}>
                 <Link href={`/help/${slug}`}>
+                  <span className="help-icon">{icon}</span>
                   <strong>{name}</strong>
                   <span>{lead}</span>
                 </Link>

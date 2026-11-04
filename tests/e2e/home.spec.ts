@@ -241,7 +241,10 @@ for (const [path, title] of [
   });
 
 // Help is linked from the footer, private like the policies, and its find box narrows the list.
+// An article's picture plays its frames in and out, so it is checked still, as reduced motion
+// shows it.
 test("help is linked, private and accessible", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "networkidle" });
   await page.getByRole("contentinfo").getByRole("link", { name: "Help", exact: true }).click();
   await expect(page).toHaveURL(/\/help$/);
