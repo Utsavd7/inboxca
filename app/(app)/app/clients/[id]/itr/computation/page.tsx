@@ -103,7 +103,7 @@ export default async function Computation({params,searchParams}:{params:Promise<
             </ul>)}
           </div>
         </> : Number(period)>=2027 ? <p className="hint">The taxable income is not worked out yet, so there is no tax to show. Check the heads of income first.</p>
-          : <p className="hint">Not available for {itrYear(period)}. InboxCA works out tax only from official rate text, and holds the 1961 Act rates for this year (s.115BAC(1A)) in none of its official references. Form No. 130 (Income-tax Rules, 2026) gives only health and education cess at 4%. From tax year 2026-27 both regimes show here side by side.</p>}
+          : <p className="hint">Tax for {itrYear(period)} is not worked out yet. InboxCA needs the official rate text for that year.</p>}
         {!!taxLines.length && <>
           <p className="hint">As entered in the return, not worked out by InboxCA:</p>
           <ul className="app-rows">{taxLines.map(line=>row(line.label,shown(line),line.from))}</ul>

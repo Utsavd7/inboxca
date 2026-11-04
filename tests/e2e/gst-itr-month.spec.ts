@@ -109,7 +109,7 @@ test("the computation sheet adds up checked income and deductions beside the ret
   await expect(line("Taxable income, worked out by InboxCA")).toContainText("4,00,000");
   await expect(line("Taxable income, worked out by InboxCA")).toContainText("These differ");
   // AY 2026-27 falls under the 1961 Act, whose s.115BAC(1A) rates InboxCA has not read: no tax figure.
-  await expect(sheet.getByText(/Not available for AY 2026-27/)).toBeVisible();
+  await expect(sheet.getByText(/Tax for AY 2026-27 is not worked out yet/)).toBeVisible();
   await expect(sheet).not.toContainText(/Tax payable[^\n]*₹/);
 });
 
