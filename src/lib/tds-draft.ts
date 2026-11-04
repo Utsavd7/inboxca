@@ -75,7 +75,7 @@ export async function statementBytes(request:FormRequest) {
   if(tan!==request.tan) throw new Error("This TAN changed. Open the page again.");
   const read=readStatement(request.drafts.map(draft=>({id:draft.id,lines:draft.figures.map(([field,figure])=>({id:`${draft.id}:${field}`,field,value:figure.value}))})));
   const today=todayInIndia(),check=checkStatement({tan,pan,deductor,period:request.period,today,...read});
-  if(check.errors.length) throw new Error(`${check.errors[0].text.replace(/\.$/,"")}. Correct it on the statement page first.`);
+  if(check.errors.length) throw new Error("This statement does not pass its checks yet. Correct the figures listed on the statement page first.");
   return new TextEncoder().encode(statementFile({tan,pan,deductor:deductor!,period:request.period,previous:read.previous,token:read.token,today,challans:check.challans}));
 }
 

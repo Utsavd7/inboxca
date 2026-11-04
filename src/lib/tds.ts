@@ -75,18 +75,19 @@ export const tdsField=(kind:"p"|"c",row:number,key:string)=>`tds.${kind}${row}.$
 export function extractTds(rows:string[][],asked:TdsMapping) {
   const mapping=tdsMappingSchema.parse(asked),fields=tdsFields[mapping.kind],used=mapping.columns.filter(column=>column>=0);
   if(!sameHeadings(rows[mapping.header] ?? [],mapping.headings) || mapping.columns.length!==fields.length) throw new Error("The columns changed. Check them again.");
-  if(mapping.columns.slice(0,needed[mapping.kind]).some(column=>column<0)) throw new Error(`Choose a column for ${fields.slice(0,needed[mapping.kind]).map(([,name])=>name).join(", ")}.`);
+  const heading=fields.slice(0,needed[mapping.kind]).map(([,name])=>name).join(", ");
+  if(mapping.columns.slice(0,needed[mapping.kind]).some(column=>column<0)) throw new Error(`Choose a column for ${heading}.`);
   if(new Set(used).size!==used.length || used.some(column=>column>=mapping.headings.length)) throw new Error("Choose a different column for each field.");
   const lines:(Figure & {field:string;row:number;column:number})[]=[];
   for(let row=mapping.header+1;row<rows.length;row++) {
     if(!rows[row].some(cell=>cell.trim()) || rows[row].some(cell=>/^(grand\s+)?total$/i.test(cell.trim()))) continue;
-    fields.forEach(([key,name],index)=>{
+    fields.forEach(([key,heading],index)=>{
       const column=mapping.columns[index],raw=column<0 ? "" : (rows[row][column] ?? "").trim();
       if(!raw) return;
-      const label=`${name}, row ${row+1}`;
-      if(amounts.has(key) && !/^-?(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})*,\d{3})(\.\d{1,2})?$/.test(raw)) throw new Error(`Check ${name} in row ${row+1}. Amounts need digits and up to two decimals.`);
+      const label=`${heading}, row ${row+1}`;
+      if(amounts.has(key) && !/^-?(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})*,\d{3})(\.\d{1,2})?$/.test(raw)) throw new Error(`Check ${heading} in row ${row+1}. Amounts need digits and up to two decimals.`);
       let value=raw;
-      if(dates.has(key)) {try {value=date(raw);} catch {throw new Error(`Check ${name} in row ${row+1}. Dates need a day, month and four digit year.`);}}
+      if(dates.has(key)) {try {value=date(raw);} catch {throw new Error(`Check ${heading} in row ${row+1}. Dates need a day, month and four digit year.`);}}
       else if(amounts.has(key)) value=raw.replaceAll(",","");
       // A spreadsheet keeps a code typed as a number with ".0" (1024.0, 200.0).
       else if(/^\d+\.0+$/.test(raw) && ["section","minor","challan","number","bsr"].includes(key)) value=raw.replace(/\.0+$/,"");
