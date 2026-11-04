@@ -159,8 +159,8 @@ test("Fill all fills an ITR where every detail is there, and the one left says w
     let preview=await open();
     const row=(name:string,text:string)=>preview.getByRole("listitem").filter({hasText:name}).filter({hasText:text});
     await expect(preview).toContainText("2 returns for 2 clients. 2 have figures still to check. 2 of them are ITRs, filled only where every detail its official form needs is there. Any left unfilled shows why here.");
-    await expect(row(names.full,"ITR for FY 2025-26, due in 6 days. 1 figure to check")).toContainText("Filled if every detail is there");
-    await expect(row(names.short,"ITR for FY 2025-26, due in 6 days. 2 figures to check")).toContainText("Filled if every detail is there");
+    await expect(row(names.full,"ITR for AY 2026-27 (FY 2025-26), due in 6 days. 1 figure to check")).toContainText("Filled if every detail is there");
+    await expect(row(names.short,"ITR for AY 2026-27 (FY 2025-26), due in 6 days. 2 figures to check")).toContainText("Filled if every detail is there");
     await preview.getByRole("button",{name:"Fill 2 returns"}).click();
     await expect(page.getByRole("status").filter({hasText:"2 returns for 2 clients will be filled in a minute, 2 ITRs only where every detail is there. Your team still checks each one."})).toBeVisible();
     await query(local.dbUrl,"update public.jobs set run_at=now() where firm_id=$1 and kind='fill_return' and state='pending'",[firm.firmId]);
@@ -172,8 +172,8 @@ test("Fill all fills an ITR where every detail is there, and the one left says w
 
     preview=await open();
     await expect(preview).toContainText("1 return for 1 client. 1 has figures still to check. 1 of them is an ITR");
-    await expect(row(names.full,"ITR for FY 2025-26")).toContainText("Filled already");
-    await expect(row(names.short,"ITR for FY 2025-26, due in 6 days. Not filled last time. Details its official form needs are still empty. Fill them on its income tax page.")).toContainText("Filled if every detail is there");
+    await expect(row(names.full,"ITR for AY 2026-27 (FY 2025-26)")).toContainText("Filled already");
+    await expect(row(names.short,"ITR for AY 2026-27 (FY 2025-26), due in 6 days. Not filled last time. Details its official form needs are still empty. Fill them on its income tax page.")).toContainText("Filled if every detail is there");
     await page.screenshot({path:test.info().outputPath("itr-preview.png")});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   } finally {

@@ -7,7 +7,7 @@ import {supabaseAdmin} from "./supabase";
 import {openDrive} from "./drive-account";
 import {financialYear,safeName} from "./drive";
 import {periodName} from "./documents";
-import {itrReturns,itrYear} from "./itr-fields";
+import {itrReturns} from "./itr-fields";
 import {serverCrypto} from "./crypto";
 import {confirmedFigures,createDraft} from "./datasets";
 import {workerRead} from "./worker-read";
@@ -20,7 +20,9 @@ import {whose} from "./roles";
 export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
 export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : "GSTR-3B";
 
-const formPeriod=(period:string)=>period.length===4 ? itrYear(period) : periodName(period);
+// A prepared return's drive file name keeps the year as first written ("AY 2026-27", "Tax year
+// 2026-27"), so every version of a return keeps one name.
+const formPeriod=(period:string)=>period.length===4 ? Number(period)>=2027 ? `Tax year ${Number(period)-1}-${period.slice(2)}` : `AY ${period}-${String(Number(period)+1).slice(-2)}` : periodName(period);
 const workFolder=(period:string)=>period.length===4 ? "Income tax" : "GST";
 const workYear=(period:string)=>financialYear(period.length===4 ? `${period}-03` : period);
 

@@ -105,7 +105,7 @@ export default async function Computation({params,searchParams}:{params:Promise<
             </ul>)}
           </div>
         </> : worked ? <p className="hint">The taxable income is not worked out yet, so there is no tax to show. Check the heads of income first.</p>
-          : <p className="hint">Tax for {itrYear(period)} is not worked out. InboxCA works out tax from AY 2026-27 on, from official rate text only.</p>}
+          : <p className="hint">Tax for {itrYear(period)} is not worked out. InboxCA works out tax from {itrYear("2026")} on, from official rate text only.</p>}
         {!!taxLines.length && <>
           <p className="hint">As entered in the return, not worked out by InboxCA:</p>
           <ul className="app-rows">{taxLines.map(line=>row(line.label,shown(line),line.from))}</ul>

@@ -5,11 +5,11 @@ export const activityNames: Record<string, string> = {
   "dataset.created": "Figures ready to check", "dataset.checked": "Figure checked", "dataset.changed": "Figure corrected",
   "gst_match.made": "Purchase register matched with GSTR-2B", "gst_match.downloaded": "GSTR-2B differences downloaded",
   "client.added": "Client added", "client.changed": "Client details changed", "clients.exported": "Client list exported to Excel",
-  "licence.added": "Licence or registration date added", "licence.removed": "Licence or registration date removed",
+  "licence.added": "Licence or registration date added", "licence.removed": "Licence or registration date removed", "todo.added": "To-do added",
   "registration.added": "Tax number added", "registration.changed": "Services changed", "registration.removed": "Tax number removed",
   "assignment.added": "Person or team assigned", "assignment.removed": "Assignment removed",
   "contact_link.added": "Contact added", "contact_link.changed": "Contact permissions changed", "contact_link.removed": "Contact removed",
-  "task.added": "Return or notice added", "task.changed": "Return or notice updated", "task.removed": "Return or notice removed", "document.viewed": "Paper viewed",
+  "task.added": "Return or notice added", "task.changed": "Return, notice or to-do updated", "task.removed": "Return or notice removed", "document.viewed": "Paper viewed",
   "document.uploaded": "Paper uploaded", "document.filed": "Paper saved to the client", "document.renamed": "Paper renamed", "document.restored": "Paper restored",
   "document.removed": "Paper removed", "document.shared": "Paper sent", "document.downloaded": "Paper downloaded", "document.downloaded_by_client": "Paper downloaded by the client", "document.sharing": "Sending choice changed",
   "document.missing": "Paper missing in the drive", "document.changed_outside": "Paper changed in the drive", "document.purged": "Removed paper deleted after 30 days",
@@ -39,7 +39,7 @@ export const activityDetails: Record<string, readonly string[]> = {
   // Who was given the client or taken off it, and for which work (gst, income_tax).
   "assignment.added": ["kind", "person", "team", "work"], "assignment.removed": ["kind", "person", "team", "work"],
   // The client list as Excel: how many clients it held, never their numbers or emails.
-  "clients.exported": ["clients"], "licence.added": [], "licence.removed": [],
+  "clients.exported": ["clients"], "licence.added": [], "licence.removed": [], "todo.added": [],
   "firm.signed_up": ["accepted"], "firm.changed": ["name", "settings"], "firm.downloaded": [], "firm.closed": ["reason"], "firm.data_deleted": [],
   "member.invited": ["role"], "member.joined": [], "member.role_changed": ["role"], "member.removed": [], "member.invite_withdrawn": [], "member.restored": [],
   "session.ended_other": ["ended"], "recovery.codes_made": [], "recovery.used": ["left", "passkeys"], "hours.extended": ["until"],

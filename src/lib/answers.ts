@@ -1,6 +1,6 @@
 import { addDays, dueLabel, periodLabel } from "./calendar";
 import { workOfService } from "./checklists";
-import { findPeriod, periodName } from "./documents";
+import { findPeriod, periodName, workOfType } from "./documents";
 import { workTypes, type WorkType } from "./drive";
 import { periodsOf, REPLY_ATTACHED } from "./reminders";
 
@@ -76,7 +76,7 @@ export function filedAnswer(tasks: AnswerTask[], asked: Asked, today: string): L
   if (!chosen.length) return { team: "status_unclear" };
   if (chosen.some((task) => task.status !== "filed" || !task.details.filed_on)) return { team: "status_not_filed" };
   return {
-    lines: chosen.map((task) => `- ${task.rule.name} for ${periodLabel(task.rule.frequency, task.period_key)}: filed on ${dueLabel(task.details.filed_on!)}${task.details.ack ? `, acknowledgement number ${task.details.ack}` : ""}`),
+    lines: chosen.map((task) => `- ${task.rule.name} for ${periodLabel(task.rule.frequency, task.period_key, task.code)}: filed on ${dueLabel(task.details.filed_on!)}${task.details.ack ? `, acknowledgement number ${task.details.ack}` : ""}`),
   };
 }
 
@@ -87,7 +87,7 @@ export function dueAnswer(tasks: AnswerTask[], asked: Asked, today: string): Lin
   if (open.some((task) => !task.rule.verified)) return { team: "due_unchecked" };
   if (open.some((task) => task.due_on < today)) return { team: "due_late" };
   if (!open.length) return { team: "due_none" };
-  return { lines: open.sort((a, b) => a.due_on.localeCompare(b.due_on)).map((task) => `- ${task.rule.name} for ${periodLabel(task.rule.frequency, task.period_key)}: due on ${dueLabel(task.due_on)}`) };
+  return { lines: open.sort((a, b) => a.due_on.localeCompare(b.due_on)).map((task) => `- ${task.rule.name} for ${periodLabel(task.rule.frequency, task.period_key, task.code)}: due on ${dueLabel(task.due_on)}`) };
 }
 
 // Papers still needed: each open ask's missing papers, to reply with attached.
@@ -95,7 +95,7 @@ export type OpenAsk = { period: string; missing: string[] };
 export function papersAnswer(asks: OpenAsk[], asked: Asked): Lines {
   const open = asks.filter((ask) => ask.missing.length && (!asked.period || !ask.period || ask.period === asked.period));
   if (!open.length) return { team: "papers_none" };
-  return { lines: [...open.flatMap((ask) => [`We still need these papers${ask.period ? ` for ${periodName(ask.period)}` : ""}:`, ...ask.missing.map((type) => `- ${type}`), ""]), REPLY_ATTACHED] };
+  return { lines: [...open.flatMap((ask) => [`We still need these papers${ask.period ? ` for ${periodName(ask.period, ...ask.missing.map(workOfType))}` : ""}:`, ...ask.missing.map((type) => `- ${type}`), ""]), REPLY_ATTACHED] };
 }
 
 // Papers received: by where they were saved (work and period); those under To check counted.

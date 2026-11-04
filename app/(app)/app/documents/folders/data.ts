@@ -167,7 +167,7 @@ export async function listing(ctx: Context, parts: string[], cursor?: string): P
       return [{
         ...base,
         paper: {
-          id: paper.id, type: paper.document_type, work: workTypes[paper.work_type as WorkType] ?? "", period: periodName(paper.period_key), status: paper.status, client: paper.client_id,
+          id: paper.id, type: paper.document_type, work: workTypes[paper.work_type as WorkType] ?? "", period: periodName(paper.period_key, paper.work_type), status: paper.status, client: paper.client_id,
           view: viewable(entry.name) && paper.status !== "deleted",
           send: write && paper.status === "filed" && paper.share_policy !== "internal" && ctx.membership.may("send", paper.client_id),
           download: ctx.owner && !paper.prepared && paper.status !== "deleted",

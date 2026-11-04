@@ -193,7 +193,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             <AutoSelect save="year" name="year" defaultValue={state.year || `${Number(years[0]) - 1}-${years[0].slice(2)}`} aria-label="Financial year">
               {[...new Set([...years, ...(year ? [year] : [])])].map((key) => (
                 <option key={key} value={`${Number(key) - 1}-${key.slice(2)}`}>
-                  {periodName(key)}
+                  {periodName(key, state.kind)}
                 </option>
               ))}
               <option value="all">All years</option>
@@ -286,7 +286,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                             <span title={row.clients?.name}>{row.clients?.name}</span>
                           </span>
                         </td>
-                        <td>{periodName(row.period_key) || <span className="docs-faint">No period</span>}</td>
+                        <td>{periodName(row.period_key, row.work_type) || <span className="docs-faint">No period</span>}</td>
                       </Item>
                     ))}
                   </List>
@@ -366,7 +366,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               <FileTile name={paper.name} />
               <span className="grow">
                 <h2>{paper.name}</h2>
-                <span className="sub">{[paperType(paper.document_type), workTypes[paper.work_type as WorkType], periodName(paper.period_key)].filter(Boolean).join(", ")}</span>
+                <span className="sub">{[paperType(paper.document_type), workTypes[paper.work_type as WorkType], periodName(paper.period_key, paper.work_type)].filter(Boolean).join(", ")}</span>
               </span>
             </div>
             {tag(paper.status)}

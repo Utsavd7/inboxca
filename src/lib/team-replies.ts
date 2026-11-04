@@ -1,4 +1,4 @@
-import { periodName } from "./documents";
+import { periodName, workOfType } from "./documents";
 
 // Emails InboxCA could not answer wait for a person (PLAN.md "Inbox, answered" E). Late after
 // this many working days unless the owner chose another in Settings (public.team_replies).
@@ -13,7 +13,7 @@ export const waitingWords = (days: number) => (days < 1 ? "" : `Waiting ${days =
 // is known goes in: the names of the person writing, the client and the firm, and the paper the
 // rules read in the email; never advice, a figure or a date. Any other reason gets the first.
 export function suggestedReply(reason: string | null | undefined, { name, client, firm, paper }: { name: string; client: string; firm: string; paper?: { types: string[]; period: string } }) {
-  const asked = paper?.types.length ? `the ${paper.types[0]}${paper.period ? ` for ${periodName(paper.period)}` : ""}` : "the paper you asked for";
+  const asked = paper?.types.length ? `the ${paper.types[0]}${paper.period ? ` for ${periodName(paper.period, workOfType(paper.types[0]))}` : ""}` : "the paper you asked for";
   const lines: Record<string, string> = {
     no_rule: "Thank you for your email. We are looking into it and will get back to you soon.",
     notice_question: "Thank you for sending the notice. We have received it and our team is going through it. We will get back to you soon about what is needed.",

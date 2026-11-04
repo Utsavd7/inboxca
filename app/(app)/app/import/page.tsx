@@ -178,7 +178,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
                           <td className="hint">{file.from}</td>
                           <td>{file.client ? name.get(file.client) : <Badge tone="warn">Choose above</Badge>}</td>
                           <td>
-                            {[file.type, periodName(file.period), workTypes[file.work as WorkType]].filter(Boolean).join(", ")}
+                            {[file.type, periodName(file.period, file.work), workTypes[file.work as WorkType]].filter(Boolean).join(", ")}
                             {file.toCheck && <Badge tone="warn">To check</Badge>}
                           </td>
                         </tr>

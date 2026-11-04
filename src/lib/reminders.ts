@@ -160,13 +160,13 @@ export function reminderEmail(client: string, firm: string, tasks: ReminderTask[
     const days = daysUntil(due, today);
     return days === 0 ? "today" : days > 0 ? `in ${days} ${days === 1 ? "day" : "days"}` : `${-days} ${days === -1 ? "day" : "days"} ago`;
   };
-  const lines = tasks.map((task) => `- ${task.rule.name} for ${periodLabel(task.rule.frequency, task.period_key)}: due ${when(task.due_on)}, on ${dueLabel(task.due_on)}`);
+  const lines = tasks.map((task) => `- ${task.rule.name} for ${periodLabel(task.rule.frequency, task.period_key, task.code)}: due ${when(task.due_on)}, on ${dueLabel(task.due_on)}`);
   const asks = [...new Set(tasks.flatMap((task) => checklists[workOfService(task.code) as WorkType] ?? []))];
   const late = tasks.filter((task) => daysUntil(task.due_on, today) < 0).length;
   const waiting = followUps.flatMap((followUp) => [
     followUp.first
-      ? `${followUp.returns?.length ? `To prepare your ${followUp.returns.join(" and ")}${followUp.period ? ` for ${periodName(followUp.period)}` : ""}, please` : "Please"} send these documents: ${followUp.missing.map(askName).join(", ")}.`
-      : `We are still waiting for these documents${followUp.period ? ` for ${periodName(followUp.period)}` : ""}: ${followUp.missing.map(askName).join(", ")}.`,
+      ? `${followUp.returns?.length ? `To prepare your ${followUp.returns.join(" and ")}${followUp.period ? ` for ${periodName(followUp.period, ...followUp.missing.map(workOfType))}` : ""}, please` : "Please"} send these documents: ${followUp.missing.map(askName).join(", ")}.`
+      : `We are still waiting for these documents${followUp.period ? ` for ${periodName(followUp.period, ...followUp.missing.map(workOfType))}` : ""}: ${followUp.missing.map(askName).join(", ")}.`,
     REPLY_ATTACHED,
     "",
   ]);
