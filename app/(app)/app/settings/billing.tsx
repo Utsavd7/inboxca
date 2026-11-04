@@ -1,6 +1,7 @@
 import { Gauge } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
+import { yearlySave } from "@/content/plans";
 import { billingSettings, fitOf, methodWords, moneyBack, moveDownFit, movingUp, quote, type SubPlan } from "@/src/lib/billing/billing";
 import { docTitles, type Doc } from "@/src/lib/billing/documents";
 import { addDays, GB, gstOn, indiaDay, mandateMax, planPrice, planSchema, prorate, rupees, toYearly, withGst, type Cycle, type FirmPlan, type Method } from "@/src/lib/billing/money";
@@ -40,7 +41,7 @@ function PlanQuestions({ ask, practices, action, hidden, button }: { ask: PlanAs
       <div><label htmlFor="plan-people">Your team, you included</label><input id="plan-people" name="people" type="number" min={1} max={1000} required defaultValue={ask.people ?? 1} /></div>
       <div>
         <label htmlFor="plan-cycle">Pay</label>
-        <select id="plan-cycle" name="cycle" defaultValue={ask.cycle ?? "monthly"}><option value="monthly">Every month</option><option value="yearly">Every year, one month free</option></select>
+        <select id="plan-cycle" name="cycle" defaultValue={ask.cycle ?? "monthly"}><option value="monthly">Every month</option><option value="yearly">Every year, save {yearlySave}%</option></select>
       </div>
       <div className="set-foot"><button className="b b-secondary" type="submit">{button}</button></div>
     </Form>
@@ -170,7 +171,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
   const ended = back.state === "refunding" || back.state === "refunded";
   return (
     <>
-      {ended ? <Card id="plan" title="Your plan" line="Your plan is cancelled with its money back. Your firm can view everything and download its data in Settings, Your data, for 30 days."><span /></Card> : <>
+      {ended ? <Card id="plan" title="Your plan" line="Your plan is cancelled with its money back. For 30 days after the money back your firm can view everything and download its data in Settings, Your data. Then the firm closes, and for 30 more days the owner can still sign in and download it. Then InboxCA deletes it."><span /></Card> : <>
       <PlanFit firmId={firmId} Card={Card} fit={fit} />
       <Card id="plan" title="Your plan" line={`${priced.price.name} plan, ${rupees(priced.recurring.total)} ${per}${gst}. A team of up to ${team}, ${priced.price.aiCredits.toLocaleString("en-IN")} AI credits a month${plan.aiBlocks ? ` and ${plan.aiBlocks} more AI ${plan.aiBlocks === 1 ? "block" : "blocks"}` : ""}.`}>
         <p role="status">
@@ -178,7 +179,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
           {autopay ? `AutoPay is on with your ${methodWords[sub.method as Method]}${sub.paid_until ? `. Next payment ${rupees(coming.recurring.total)} on ${longDate(sub.paid_until)}` : ""}.` : sub.status === "created" ? "AutoPay is waiting for your bank or payment page." : "AutoPay is off. Nothing more will be taken."}
         </p>
         {retry && <p className="alert" role="alert">A payment was for a plan that had changed, so it was returned. Please try again.</p>}
-        {autopay && <p className="hint">Orelu will never take more than {rupees(plan.maxPaise)} at a time without asking you. You get an email 3 days before each payment. If a payment fails, everything keeps working for 7 days, then your firm can only view until day 30, then it is paused with its records kept 30 more days.</p>}
+        {autopay && <p className="hint">Orelu will never take more than {rupees(plan.maxPaise)} at a time without asking you. You get an email 3 days before each payment. If a payment fails, everything keeps working for 7 days, then your firm can only view until day 30. After day 30 the firm is closed: your team is signed out, the email and drive are disconnected, and for 30 more days the owner can still sign in and download its data.</p>}
         {plan.next && !later && <p className="hint">Moves to the {coming.price.name} plan, {rupees(coming.recurring.total)} {per}, at the renewal on {longDate(sub.paid_until!)}.</p>}
         {abovelimit ? (
           <Checkout action={approveCheckout} label="Approve the new AutoPay limit" busy="Opening the payment page">
@@ -271,7 +272,7 @@ export async function BillingCards({ supabase, firmId, ask, Card }: { supabase: 
 
       {back.state !== "none" && (
         <Card id="money_back" title="Money back" danger={back.state === "open"} line={
-          back.state === "open" ? `Cancel by ${longDate(back.lastDay)}, within 14 days of your first payment, and get it back in full. Your firm can then only view, and you can download your data for 30 days.`
+          back.state === "open" ? `Cancel by ${longDate(back.lastDay)}, within 14 days of your first payment, and get it back in full. Your firm can then only view for 30 days. Then it closes, and for 30 more days you can still sign in and download your data.`
           : back.state === "refunding" ? "Your plan is cancelled and your money is on its way back. Banks usually take 5 to 7 working days."
           : back.state === "refunded" ? "Your plan is cancelled and your money was given back."
           : back.state === "late" ? `The 14 days for money back ended on ${longDate(back.lastDay)}. Turning AutoPay off stops the next payment.`

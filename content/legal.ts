@@ -11,7 +11,7 @@
 import { analyticsToken, contactEmail } from "@/src/lib/site";
 import { clientFiles } from "./security";
 
-export const legalUpdated = "3 Nov 2026";
+export const legalUpdated = "4 Nov 2026";
 export const legalNote =
   "InboxCA is a product of Orelu, a partnership firm. Orelu's registration is in progress, and its registered name and address will be added here when it completes.";
 
@@ -56,10 +56,11 @@ export const privacySections = [
       "Your firm decides what happens to its clients' data. InboxCA only follows your firm's instructions, under the data processing agreement.",
       "Client files stay in your firm's own OneDrive or Dropbox.",
       "InboxCA keeps your client list, your records and the figures read from files, so that it can do its work.",
-      "InboxCA does not keep email subjects or email text, portal passwords, OTPs, card details or Aadhaar numbers.",
+      "InboxCA also keeps the text read from each file, encrypted with your firm's key in InboxCA's own store, planned for Backblaze B2, so it can search the file and read its figures again without opening it. The text is removed when the file is removed.",
+      "InboxCA does not keep email subjects or email text, portal passwords, OTPs, card details or Aadhaar numbers. A password your team types to open a locked PDF is kept, encrypted with your firm's key, so the file opens again. An AI reply draft is kept, encrypted with your firm's key, until the email is answered or marked done, and at most until the email is 7 days old.",
       ...clientFiles,
       "InboxCA also reads the emails your firm gets from the GST and income tax departments, to find the client they are about.",
-      "When someone who is not yet a client writes to your firm, InboxCA does not open the email. It keeps only a record of who wrote and when, so that your firm can add them as a client.",
+      "When someone who is not yet a client writes to your firm, InboxCA only checks by rules whether the email asks about your firm's services, and keeps none of its words. It keeps a record of who wrote and when, so that your firm can add them as a client.",
     ],
   },
   {
@@ -76,7 +77,7 @@ export const privacySections = [
     title: "Who else handles it",
     points: [
       "Only the services InboxCA runs on, each under its own agreement. They are listed in the security policy and in the data processing agreement.",
-      "The AI service receives only the email or paper being worked on.",
+      "The AI service receives only the email being worked on and that one client's own records, never the papers themselves.",
       "We give data to an authority only when the law requires it.",
     ],
   },
@@ -87,8 +88,9 @@ export const privacySections = [
       "Your files stay in your drive for as long as your firm keeps them.",
       "A file passing through InboxCA is removed within 24 hours, or within 7 days if your drive cannot be reached.",
       "Safety copies of deleted or changed files are kept for 30 days.",
-      "The record of who did what is kept for 12 to 36 months, as your firm chooses.",
-      "When a firm closes its account, it can still sign in and download its data for 30 days. Then InboxCA deletes the firm's records; the activity log and the sign in emails of the firm's people are kept one more year, as the IT Rules 2021 and, from May 2027, the DPDP Rules 2025 ask, and backups expire within 35 days. The files stay in the firm's drive.",
+      "The text read from a file is kept until the file is removed. An AI reply draft is kept until its email is answered or marked done, and at most until the email is 7 days old.",
+      "The record of who did what is kept for 36 months.",
+      "When a firm closes its account, its owner can still sign in and download its data for 30 days. Then InboxCA deletes the firm's records; the activity log and the sign in emails of the firm's people are kept one more year, as the IT Rules 2021 and, from May 2027, the DPDP Rules 2025 ask, and backups expire within 35 days. The files stay in the firm's drive.",
     ],
   },
   {
@@ -96,7 +98,7 @@ export const privacySections = [
     title: "Where it is kept",
     points: [
       "Records will be kept in a Supabase database. Its region is chosen at launch, and India is planned.",
-      "InboxCA's temporary files, safety copies and backups are planned for Backblaze B2, which is outside India. They are encrypted.",
+      "InboxCA's temporary files, safety copies, the text read from files and backups are planned for Backblaze B2, which is outside India. They are encrypted.",
       "Your files are wherever your drive provider keeps them.",
     ],
   },
@@ -152,7 +154,7 @@ export const termsSections = [
     title: "This website",
     points: [
       "The screens on this website are illustrations, and the firms, names and figures in them are sample data.",
-      "Prices on this website are estimates, before GST. The exact price, with GST, is shown before you pay.",
+      "Prices on this website are estimates, before GST. The exact price, with GST where it applies, is shown before you pay.",
     ],
   },
   {
@@ -181,7 +183,7 @@ export const termsSections = [
       "Plans are paid monthly or yearly through Cashfree AutoPay, by UPI, card or bank mandate. Each plan's returns, storage, AI credits and team size are shown before you pay and in Settings, Billing.",
       "The exact amount, with GST where it applies, is shown before you pay, and you confirm it. The same amount is then taken each month or each year, with a notice at least 24 hours before each debit. A card or UPI debit above ₹15,000 needs your approval each time, as the Reserve Bank's rules ask. Orelu never takes more than the mandate's limit shown at setup without asking you.",
       "If your firm uses more than its plan gives, InboxCA moves it to the plan that fits and takes the difference, with an email 3 days before. Moving to a bigger plan applies at once and moving to a smaller one at the next renewal. Extra people and AI top-ups are paid for first, then added.",
-      "If a payment fails, for 7 days nothing changes while it is tried again, until day 30 your firm can view but not change anything, and after day 30 the account is paused with its records kept for 30 more days.",
+      "If a payment fails, for 7 days nothing changes while it is tried again, until day 30 your firm can view but not change anything, and after day 30 the firm is closed: its team is signed out, its email and drive are disconnected, and for 30 more days the owner can still sign in and download its data.",
       "The refund policy gives the 14 day money back and how to cancel. You can turn AutoPay off at any time in Settings, Billing or at your bank or UPI app. Until Orelu starts taking payments, firms use InboxCA with no payment, as Settings, Billing shows.",
       "A one time setup fee, when one is shown before you pay, covers bringing in your firm's past papers. Prices can change for a new period with an email 30 days before.",
     ],
@@ -222,7 +224,7 @@ export const termsSections = [
     id: "suspension",
     title: "Pausing and ending",
     points: [
-      "Orelu may pause a firm's account when a payment stays unpaid as described above, when the account is used against these terms or the law, when the law requires it, or to stop a security problem. Where it can, Orelu emails the owner first.",
+      "When a payment stays unpaid, your firm can only view and then is closed, as Plans and payment describes. Orelu may also pause a firm's account when the account is used against these terms or the law, when the law requires it, or to stop a security problem. Where it can, Orelu emails the owner first.",
       "Your firm can close its account at any time from Settings. Everyone is signed out, the firm's email and drive are disconnected, and for 30 days the owner can still sign in and download the firm's data. Then InboxCA deletes the firm's records, keeping the activity log and the sign in emails of the firm's people one more year, as the IT Rules 2021 and, from May 2027, the DPDP Rules 2025 ask. Files in your drive are not touched.",
       "Orelu may stop offering InboxCA with 90 days' notice by email. Any payment for time after that date is returned.",
     ],
@@ -270,7 +272,9 @@ export const refundSections = [
       "Cancel within 14 days of your first plan payment and you get that payment back in full, whether you paid monthly or yearly.",
       "You do it yourself from Settings, Billing. Nobody needs to approve it.",
       "It applies once for each firm.",
-      "The one time setup fee is not returned once your old files have started to be brought in. AI credits you bought and used are not returned.",
+      "Payments in those 14 days for a bigger plan, yearly payment, extra people or monthly AI blocks come back too. An AI top up comes back only for its credits not yet used.",
+      "The one time setup fee is not returned once your old files have started to be brought in.",
+      "After the money back your firm can view everything and download its data for 30 days. Then the firm is closed: your team is signed out and the email and drive are disconnected, and for 30 more days the owner can still sign in and download its data. Then InboxCA deletes the firm's data. Your files stay in your drive.",
     ],
   },
   {
@@ -288,7 +292,7 @@ export const refundSections = [
     points: [
       "For 7 days nothing changes while the payment is tried again.",
       "From then until day 30 your firm can view everything but not make changes.",
-      "After day 30 the account is paused. InboxCA keeps your records for 30 more days so that you can come back.",
+      "After day 30 the firm is closed: your team is signed out and the email and drive are disconnected. For 30 more days the owner can still sign in and download your records.",
     ],
   },
   {
@@ -313,7 +317,7 @@ export const refundSections = [
 // The data processing agreement between a firm (the data fiduciary for its clients' data)
 // and Orelu (its data processor), as section 8(2) of the DPDP Act 2023 asks. Sign up records
 // this date as the version a firm accepted.
-export const dpaUpdated = "3 Nov 2026";
+export const dpaUpdated = "4 Nov 2026";
 export const dpaSections = [
   {
     id: "parties",
@@ -350,7 +354,7 @@ export const dpaSections = [
       "PAN, GSTIN, phone numbers, email addresses, bank details and the figures read from your files are encrypted with your firm's own key (AES 256). Each firm has its own key, and the database keeps each firm's records apart from every other firm's.",
       "Every sign in needs two proofs. The owner's login works only on computers the owner approved, and the owner can keep staff to approved office PCs, on the office internet connection, in office hours.",
       "Staff can view files but cannot change or delete the originals. Every view, download, share and delete request is recorded, and nobody can edit the record or delete it early.",
-      "Email subjects and text, portal passwords and OTPs are never kept. A file passes through InboxCA only while it is checked and filed, at most 24 hours, or up to 7 days if your drive cannot be reached.",
+      "Email subjects and text, portal passwords and OTPs are never kept. A file passes through InboxCA only while it is checked and filed, at most 24 hours, or up to 7 days if your drive cannot be reached. InboxCA also keeps the text read from each file, encrypted with your firm's key in InboxCA's own store, planned for Backblaze B2, so it can search the file and read its figures again without opening it. The text is removed when the file is removed. A password your team types to open a locked PDF is kept, encrypted with your firm's key, so the file opens again. An AI reply draft is kept, encrypted with your firm's key, until the email is answered or marked done, and at most until the email is 7 days old.",
       ...clientFiles,
       "Orelu's own team cannot open your firm's data. To fix a problem, support may ask in the app to see your people and client names for one hour; the owner approves it and it is recorded.",
       "Orelu's people who work on InboxCA are bound to keep it confidential.",
@@ -360,7 +364,7 @@ export const dpaSections = [
     id: "others",
     title: "Other services that handle the data",
     points: [
-      "Orelu uses other services to run InboxCA, each under its own agreement that binds it to protect the data. Those planned for launch are: Supabase (database and sign in), DigitalOcean (the app's server, in Bangalore), Amazon Web Services (the key vault, planned for the Mumbai region, and system email), Backblaze B2 (encrypted temporary files, safety copies and backups, outside India), Resend (system email until Amazon's is set up), OpenAI (AI, which receives only the email or paper being worked on), Cashfree (payments) and Sentry (error reports, with personal details removed).",
+      "Orelu uses other services to run InboxCA, each under its own agreement that binds it to protect the data. Those planned for launch are: Supabase (database and sign in), DigitalOcean (the app's server, in Bangalore), Amazon Web Services (the key vault, planned for the Mumbai region, and system email), Backblaze B2 (encrypted temporary files, safety copies, the text read from files and backups, outside India), Resend (system email until Amazon's is set up), OpenAI (AI, which receives only the email being worked on and that client's own records), Cashfree (payments) and Sentry (error reports, with personal details removed).",
       "Backblaze B2, OpenAI, Sentry and Resend keep or handle data outside India. Your firm agrees to this, as the work needs it, and each must protect the data at least as well as these terms and the 2011 rules ask.",
       "Your firm's own mailbox and drive providers act for your firm under its own accounts, not for Orelu.",
       "Orelu emails firms before a new service starts handling their data. A firm that objects can close its account under the terms.",
@@ -386,9 +390,9 @@ export const dpaSections = [
     id: "end",
     title: "How long, and what happens at the end",
     points: [
-      "Orelu keeps your clients' data only as long as your firm uses InboxCA, except the activity log, which is kept 12 to 36 months as your firm chooses, and safety copies of deleted or changed files, which are kept for 30 days.",
+      "Orelu keeps your clients' data only as long as your firm uses InboxCA, except the activity log, which is kept 36 months, and safety copies of deleted or changed files, which are kept for 30 days.",
       "When your firm closes its account, the owner can download the firm's records for 30 days. Then Orelu deletes the firm's records, and backups expire within 35 days. The activity log is kept one more year, as the DPDP Rules 2025 will ask from May 2027. The files in your firm's drive are not touched.",
-      "Records will be kept in a Supabase database whose region is chosen at launch, with India planned. Temporary files, safety copies and backups are planned for Backblaze B2, outside India, encrypted.",
+      "Records will be kept in a Supabase database whose region is chosen at launch, with India planned. Temporary files, safety copies, the text read from files and backups are planned for Backblaze B2, outside India, encrypted.",
     ],
   },
   {

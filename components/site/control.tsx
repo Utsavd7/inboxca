@@ -20,11 +20,6 @@ function DriveCell() {
     <li className="cell cell-wide">
       <div className="cell-copy">
         <h3>Your files stay in your own drive</h3>
-        <p>
-          Every paper is saved in your firm&apos;s OneDrive or Dropbox, in
-          folders you can open any time. Your old files stay where they are,
-          and a change you make there is picked up within minutes.
-        </p>
         <div className="segment segment-dark" role="group" aria-label="Choose a drive">
           {(["OneDrive", "Dropbox"] as const).map((name) => (
             <button
@@ -37,7 +32,7 @@ function DriveCell() {
                 <motion.span
                   layoutId="drive-pick"
                   className="segment-pick"
-                  transition={{ type: "spring", duration: 0.55, bounce: 0.16 }}
+                  transition={{ type: "spring", duration: 0.55, bounce: 0 }}
                 />
               )}
               <span>{name}</span>
@@ -87,7 +82,6 @@ function OfficeCell() {
     <li className="cell">
       <div className="cell-copy">
         <h3>Office only, with one switch</h3>
-        <p>Keep staff to the PCs you approved, in your office, in your hours.</p>
       </div>
       <div className="widget">
         <div className="switch-row">
@@ -126,10 +120,6 @@ function ApproveCell() {
     <li className="cell">
       <div className="cell-copy">
         <h3>Private papers wait for your OK</h3>
-        <p>
-          Routine papers go to the client by themselves. Private ones wait for
-          one click.
-        </p>
       </div>
       <div className="widget">
         <div className="paper-row">
@@ -162,10 +152,6 @@ export function Control() {
       <li className="cell">
         <div className="cell-copy">
           <h3>No portal passwords</h3>
-          <p>
-            InboxCA never logs in to the GST or income tax portal. Your team
-            files every return itself.
-          </p>
         </div>
         <div className="widget never" aria-hidden>
           {["Portal password", "OTP"].map((secret) => (
@@ -182,10 +168,6 @@ export function Control() {
       <li className="cell">
         <div className="cell-copy">
           <h3>Your login, on your computers only</h3>
-          <p>
-            A new computer waits for your OK. Lost a laptop? Remove it and it is
-            signed out.
-          </p>
         </div>
         <div className="widget never" aria-hidden>
           {[

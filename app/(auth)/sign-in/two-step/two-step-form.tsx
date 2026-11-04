@@ -13,7 +13,7 @@ export function TwoStepForm({ factorId, codes = false }: { factorId?: string; co
     if (!factorId) startEnrollment().then(setSetup);
   }, [factorId]);
 
-  if (!factorId && !setup) return <p className="auth-lead">Preparing your setup.</p>;
+  if (!factorId && !setup) return <p className="auth-lead auth-wait" role="status">Preparing your setup</p>;
   if (setup && "error" in setup)
     return (
       <p className="field-error" role="alert">

@@ -19,7 +19,7 @@ import { useReduced } from "./use-reduced";
 // the asterisk beside the date leads to the note that says so.
 const STEP_MS = 4200;
 const ease = [0.23, 1, 0.32, 1] as const;
-const spring = { type: "spring", duration: 0.6, bounce: 0.14 } as const;
+const spring = { type: "spring", duration: 0.6, bounce: 0 } as const;
 const list = {
   hidden: {},
   show: { transition: { staggerChildren: 0.17, delayChildren: 0.08 } },

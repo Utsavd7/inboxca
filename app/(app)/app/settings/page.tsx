@@ -343,7 +343,7 @@ export default async function Settings({
             </form>
           </Card>
 
-          <Card id="drive" title="Firm drive" line="Client papers are saved in your firm's own drive, in folders by year, client and type of work. InboxCA keeps no copy of them.">
+          <Card id="drive" title="Firm drive" line="Client papers are saved in your firm's own drive, in folders by year, client and type of work. InboxCA keeps a locked safety copy, for 30 days, of a paper it removes or changes.">
             {drive && (
               <form action={reconnectDrive} className="connection">
                 <HardDrive size={16} aria-hidden />

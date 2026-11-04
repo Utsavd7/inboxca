@@ -30,20 +30,20 @@ export function SignUpForm({ account, providers, plan }: { account?: string; pro
 
   return (
     <>
-    {providers.length > 0 && <p className="auth-lead">Set up InboxCA for your firm.</p>}
     <ProviderButtons providers={providers} />
     <form action={send} className="auth-form" noValidate>
-      <p className="auth-lead">
-        {account ? (
-          <>
-            Signed in as <strong>{account}</strong>. Now add your firm&apos;s details.
-          </>
-        ) : providers.length ? (
-          "We will email you a code to sign in."
-        ) : (
-          "Set up InboxCA for your firm. We will email you a code to sign in."
-        )}
-      </p>
+      {/* With Google and Microsoft above, their line already says the email is the other way. */}
+      {!providers.length && (
+        <p className="auth-lead">
+          {account ? (
+            <>
+              Signed in as <strong>{account}</strong>. Now add your firm&apos;s details.
+            </>
+          ) : (
+            "We will email you a code to sign in. No password needed."
+          )}
+        </p>
+      )}
       <div className="auth-row">
         <div>
           <label htmlFor="firm">Firm name</label>

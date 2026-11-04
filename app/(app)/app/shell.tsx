@@ -580,11 +580,11 @@ function Sheet({ open, close, title, children }: { open: boolean; close: () => v
 const answers: [string, string][] = [
   ["How do clients send us papers?", "Clients email papers to your firm email as they do today. InboxCA saves each paper in your drive, in a folder for the client, the year and the type of work. To ask for papers you still need, use Ask for papers: the client gets an email listing what is still missing, to reply to with the papers attached."],
   ["How do reminders work?", "Each morning, from about 9:30, InboxCA emails clients about returns that are due soon or late, at most once a day each, from your firm email. The owner picks in Settings which days before and after a due date they go. InboxCA reminds only for due dates it has checked against the government notification. You can pause reminders for any client."],
-  ["How do I connect our email and drive?", "The owner does it once in Settings: Firm email for the address your clients write to, and Firm drive for where papers are saved. InboxCA keeps no copy of your emails and no client papers."],
-  ["What does Office only do?", "Staff can use InboxCA only in the office, on the office internet connection, and only on PCs the owner approves. The owner can sign in from anywhere."],
+  ["How do I connect our email and drive?", "The owner does it once in Settings: Firm email for the address your clients write to, and Firm drive for where papers are saved. InboxCA keeps no copy of your emails, and papers stay in your drive."],
+  ["What does Office only do?", "Staff, managers and front desk can use InboxCA only in the office, on the office internet connection, and only on PCs the owner approves. The owner and partners can sign in from anywhere."],
   ["Who sees what?", "The owner chooses whether everyone sees every client or only the people assigned to it. Each role (partner, manager, staff, front desk) can do only what Permissions allows. For anything more, they ask their manager or the owner for permission."],
   ["Where are our papers kept?", "In your firm's own drive, in folders by year, client and type of work. InboxCA reads them to help you prepare and check returns. Inside InboxCA, papers open view only."],
-  ["How do I mark a return filed?", "On Today, point at a late client and choose Mark filed, or open the client's Returns tab. You can add the acknowledgement number, and Undo puts it back."],
+  ["How do I mark a return filed?", "In the Calendar or on Your list, point at a late client and choose Mark filed, or open the client's Returns tab. You can add the acknowledgement number, and Undo puts it back."],
   ["How do I add our clients?", "Choose New client, or add them all at once with Import from Excel on the Clients page. Then choose the services you do for each client, and InboxCA works out their due dates."],
 ];
 function HelpSheet({ open, close }: { open: boolean; close: () => void }) {

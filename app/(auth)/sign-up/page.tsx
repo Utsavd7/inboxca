@@ -17,7 +17,7 @@ export default async function SignUp({ searchParams }: { searchParams: Promise<R
   const ask = chosen ? new URLSearchParams({ clients: String(chosen.plan.clients), practice: chosen.plan.practice, people: String(chosen.plan.people), cycle: chosen.cycle }).toString() : undefined;
   return (
     <>
-      <h1>Sign up</h1>
+      <h1>Set up InboxCA for your firm</h1>
       {chosen && (
         <p className="auth-note">
           <strong>{chosen.price.name} plan</strong>, paid {chosen.cycle}: {rupees(chosen.price.paise)} {chosen.cycle === "yearly" ? "a year" : "a month"} before GST. You confirm it before you pay. <Link href="/#plans">Change</Link>

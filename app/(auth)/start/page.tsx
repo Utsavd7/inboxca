@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { startCheckout } from "@/app/(app)/app/settings/billing-actions";
 import { Checkout } from "@/app/(app)/app/settings/checkout";
 import { Methods } from "@/app/(app)/app/settings/methods";
+import { yearlySave } from "@/content/plans";
 import { billingSettings, quote } from "@/src/lib/billing/billing";
 import { chosenPlan, gstOn, indiaDay, mandateMax, planPrice, planSchema, rupees, type Cycle } from "@/src/lib/billing/money";
 import { estimate, type Formula, type Practice } from "@/src/lib/estimate";
@@ -62,7 +63,7 @@ export default async function Start({ searchParams }: { searchParams: Promise<Qu
   if (back && sub?.status === "created" && payment?.status === "created")
     return (
       <Short title="Confirming your payment">
-        <p className="auth-lead start-wait" role="status">Your bank is telling us now. This page moves on by itself.</p>
+        <p className="auth-lead auth-wait" role="status">Your bank is telling us now. This page moves on by itself.</p>
         <Refresh />
         <p className="auth-small">Closed the payment page without paying? <Link href="/start">Try again</Link></p>
       </Short>
@@ -98,13 +99,15 @@ export default async function Start({ searchParams }: { searchParams: Promise<Qu
 
   return (
     <div className="start start-wide">
-      <Steps />
       <header className="start-head">
         <div>
           <h1>Choose your plan and set up AutoPay</h1>
           <p className="auth-lead">{membership.firmName} opens on InboxCA as soon as the first payment is in.</p>
         </div>
-        <SignOut />
+        <div>
+          <Steps />
+          <SignOut />
+        </div>
       </header>
       <div className="start-grid">
         <section className="start-plan" aria-labelledby="plan-title">
@@ -116,7 +119,7 @@ export default async function Start({ searchParams }: { searchParams: Promise<Qu
           </nav>
           <nav className="start-tabs start-cycle" aria-label="How often to pay">
             <Link href={href({ cycle: "monthly" })} aria-current={cycle === "monthly" ? "true" : undefined} scroll={false}>Monthly</Link>
-            <Link href={href({ cycle: "yearly" })} aria-current={cycle === "yearly" ? "true" : undefined} scroll={false}>Yearly <span className="start-free">1 month free</span></Link>
+            <Link href={href({ cycle: "yearly" })} aria-current={cycle === "yearly" ? "true" : undefined} scroll={false}>Yearly <span className="start-free">Save {yearlySave}%</span></Link>
           </nav>
           {priced && (
             <ul className="start-includes" aria-label={`The ${priced.price.name} plan includes`}>

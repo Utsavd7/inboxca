@@ -5,12 +5,15 @@ export const SHOW_PLANS = true;
 
 // `clients` is a guide for a mixed practice, never a limit: clients are unlimited.
 // `maxReturns` and `people` are what the plan includes; they drive the estimate.
+// `setup` is the one time setup fee with the first payment, as plan_formula.setup in the
+// setup fees migration.
 export const plans = [
   {
     name: "Solo",
     clients: 70,
     monthly: 1499,
     yearly: 16499,
+    setup: 290,
     maxReturns: 800,
     people: 1,
     returns: "800",
@@ -23,6 +26,7 @@ export const plans = [
     clients: 170,
     monthly: 3499,
     yearly: 38499,
+    setup: 730,
     maxReturns: 2000,
     people: 10,
     returns: "2,000",
@@ -35,6 +39,7 @@ export const plans = [
     clients: 340,
     monthly: 7499,
     yearly: 82499,
+    setup: 1750,
     maxReturns: 4000,
     people: 20,
     returns: "4,000",
@@ -47,6 +52,7 @@ export const plans = [
     clients: 700,
     monthly: 15499,
     yearly: 170499,
+    setup: 4370,
     maxReturns: 8000,
     people: 40,
     returns: "8,000",
@@ -72,6 +78,7 @@ export const aiBlock = { credits: 4000, price: 399 } as const;
 
 // What every plan has. Only the figures above differ between plans.
 export const planIncludes = [
+  "Unlimited clients",
   "Emails read, sorted and filed",
   "Replies and reminders from your address",
   "GSTR-1 and GSTR-3B prepared",
@@ -112,5 +119,8 @@ export const planRows = [
   ["Team, you included", "team"],
   ["AI credits a month", "ai"],
 ] as const;
+
+// Yearly is 11 months and ₹10 for 12: the saving every plan gets at least, in whole percent.
+export const yearlySave = Math.floor(Math.min(...plans.map((plan) => 100 * (1 - plan.yearly / (12 * plan.monthly)))));
 
 export const rupees = (value: number) => `₹${value.toLocaleString("en-IN")}`;

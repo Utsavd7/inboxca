@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { states } from "@/app/(auth)/sign-up/states";
 import type { Database, Json } from "@/src/db/types";
+import { aiCredits } from "@/src/lib/ai";
 import { whose } from "@/src/lib/roles";
 import { serverCrypto } from "@/src/lib/crypto";
 import { log } from "@/src/lib/logger";
@@ -665,15 +666,21 @@ export async function claimMoneyBack(firmId: string, actor: string) {
   // with the plan; a move still being debited was called off with AutoPay, and goes back if it is
   // taken all the same.
   const back = window.rows.filter((row) => row.status === "done" && ["plan", "upgrade", "yearly", "extra_user", "ai_block", "topup"].includes(row.kind) && indiaDay(new Date(row.created_at)) <= window.lastDay);
+  // A one time AI top-up goes back only for its credits not yet used (the refund policy). Top-ups
+  // are spent oldest first, so what is left of each live one (ai_credits) is the newest top-ups'.
+  const topups = window.rows.filter((row) => row.kind === "topup" && row.status === "done");
+  const [credits, { formula }] = topups.length ? await Promise.all([aiCredits(firmId), billingSettings(admin)]) : [null, { formula: null }];
+  const unused = (row: Payment) => (credits && formula ? (credits.topups[topups.indexOf(row) - (topups.length - credits.topups.length)]?.left ?? 0) / formula.aiBlock.credits : 1);
   const refunds: string[] = [];
   for (const row of back) {
     const setup = row.kind === "plan" && imported ? (detailsOf(row).setupPaise ?? 0) : 0;
     const setupWithGst = setup ? setup + Math.round((row.gst_paise * setup) / (row.amount_paise - row.gst_paise)) : 0;
-    refunds.push((await refund(admin, provider, row, row.amount_paise - setupWithGst, "money_back", sub)) ?? "");
+    const amount = row.kind === "topup" ? Math.round(row.amount_paise * unused(row)) : row.amount_paise - setupWithGst;
+    refunds.push((await refund(admin, provider, row, amount, "money_back", sub)) ?? "");
   }
   await admin.from("firms").update({ status: "read_only" }).eq("id", firmId).in("status", ["active", "grace"]);
   await note(admin, firmId, actor, "billing.money_back", { payments: refunds.filter(Boolean) });
-  await mail(await ownerOf(admin, firmId), "InboxCA: your money is on its way back", ["Your InboxCA plan is cancelled and your payment is being given back to the way you paid. Banks usually take 5 to 7 working days.", `Your firm can still view everything and download its client list, records and activity log for 30 days, in Settings, Your data: ${link("/app/settings?group=data")}. Then InboxCA deletes your firm's data. Papers in your drive stay where they are.`]);
+  await mail(await ownerOf(admin, firmId), "InboxCA: your money is on its way back", ["Your InboxCA plan is cancelled and your payment is being given back to the way you paid. Banks usually take 5 to 7 working days.", `For 30 days your firm can still view everything and download its client list, records and activity log, in Settings, Your data: ${link("/app/settings?group=data")}. Then the firm closes: your team is signed out and the email and drive are disconnected, and for 30 more days you can still sign in and download its data. After that, about 60 days from today, InboxCA deletes your firm's data. Papers in your drive stay where they are.`]);
   return null;
 }
 

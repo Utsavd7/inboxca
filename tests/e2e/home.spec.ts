@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { estimate } from "../../src/lib/estimate";
+import { planIncludes } from "../../content/plans";
 
 const axe = async (page: Page) =>
   (
@@ -82,9 +83,9 @@ test("every plan price ends in 499 and the estimate follows the answers", async 
   const quote = plans.locator(".quote");
   const clients = plans.getByLabel("How many clients?");
   await expect(prices).toHaveText(["₹1,499", "₹3,499", "₹7,499", "₹15,499"]);
-  // The yearly total sits beside each monthly figure, and every card has the same tick list.
+  // The yearly total sits beside each monthly figure, and what every plan has is listed once.
   await expect(plans.locator(".plan-grid .plan-other .num")).toHaveText(["₹16,499", "₹38,499", "₹82,499", "₹1,70,499"]);
-  await expect(plans.locator(".plan-grid .plan-ticks")).toHaveCount(4);
+  await expect(plans.getByRole("list", { name: "In every plan" }).getByRole("listitem")).toHaveText([...planIncludes]);
   await expect(plans.locator(".plan.is-fit h3")).toHaveText("Growth");
   await expect(quote).toContainText("Growth");
   await expect(quote).toContainText("₹3,499");
@@ -238,6 +239,23 @@ for (const [path, title] of [
     await expect(page.getByText("registration is in progress").first()).toBeVisible();
     expect(await axe(page)).toEqual([]);
   });
+
+// Help is linked from the footer, private like the policies, and its find box narrows the list.
+// An article's picture plays its frames in and out, so it is checked still, as reduced motion
+// shows it.
+test("help is linked, private and accessible", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/", { waitUntil: "networkidle" });
+  await page.getByRole("contentinfo").getByRole("link", { name: "Help", exact: true }).click();
+  await expect(page).toHaveURL(/\/help$/);
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+  expect(await axe(page)).toEqual([]);
+  await page.getByRole("searchbox").fill("passkey");
+  await page.getByRole("link", { name: /lost phone/ }).click();
+  await expect(page).toHaveURL(/\/help\/sign-in$/);
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+  expect(await axe(page)).toEqual([]);
+});
 
 // The firm accepts the data processing agreement at sign up, so it is linked there.
 test("the data processing agreement is linked from sign up, private and accessible", async ({

@@ -1,9 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Menu, X } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, Menu, X } from "lucide-react";
 import { Logo } from "./logo";
 import { SHOW_PLANS } from "@/content/plans";
+import { helpTopics } from "@/content/help-topics";
+import { policies } from "@/content/site";
+import { contactEmail } from "@/src/lib/site";
+
+const ease = [0.16, 1, 0.3, 1] as const;
 
 const links = [
   ["how-it-works", "How it works"],
@@ -11,6 +17,86 @@ const links = [
   ...(SHOW_PLANS ? [["plans", "Plans"]] : []),
   ["questions", "Questions"],
 ];
+
+type Item = readonly [href: string, label: string, line: string];
+// The Help menu lists the Help centre's groups; the Policies menu the policy pages.
+const helpItems: readonly Item[] = helpTopics.map(({ id, title, line }) => [`/help#${id}`, title, line]);
+
+// A small menu in the header. A mouse opens it by hovering; a click, a tap or Enter opens it
+// too. Escape, a click elsewhere or tabbing past it closes it.
+function DropMenu({ id, label, items, foot }: { id: string; label: string; items: readonly Item[]; foot: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const hovered = useRef(false);
+  useEffect(() => {
+    if (!open) return;
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      box.current?.querySelector("button")?.focus();
+    };
+    const away = (event: PointerEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener("keydown", key);
+    document.addEventListener("pointerdown", away);
+    return () => {
+      window.removeEventListener("keydown", key);
+      document.removeEventListener("pointerdown", away);
+    };
+  }, [open]);
+  function hover(event: React.PointerEvent) {
+    if (event.pointerType !== "mouse") return;
+    hovered.current = event.type === "pointerenter";
+    setOpen(hovered.current);
+  }
+  return (
+    <div
+      className="nav-drop"
+      ref={box}
+      onPointerEnter={hover}
+      onPointerLeave={hover}
+      onBlur={(event) => {
+        if (!box.current?.contains(event.relatedTarget as Node)) setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        className="nav-drop-button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen(hovered.current || !open)}
+      >
+        {label}
+        <ChevronDown size={15} aria-hidden />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            id={id}
+            className="nav-drop-panel"
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.24, ease }}
+          >
+            <ul>
+              {items.map(([href, label, line]) => (
+                <li key={href}>
+                  <a href={href}>
+                    <strong>{label}</strong>
+                    <span>{line}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <p>{foot}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // On the home page the links jump within the page. Elsewhere they lead back to it.
 export function Nav({ home = true }: { home?: boolean }) {
@@ -67,12 +153,19 @@ export function Nav({ home = true }: { home?: boolean }) {
                 <motion.span
                   layoutId="nav-active"
                   className="nav-active"
-                  transition={{ type: "spring", duration: 0.55, bounce: 0.16 }}
+                  transition={{ type: "spring", duration: 0.55, bounce: 0 }}
                 />
               )}
               <span>{label}</span>
             </a>
           ))}
+          <DropMenu id="nav-help" label="Help" items={helpItems} foot={<Link href="/help">All help articles</Link>} />
+          <DropMenu
+            id="nav-policies"
+            label="Policies"
+            items={policies}
+            foot={<>A question? Write to <a href={`mailto:${contactEmail}`}>{contactEmail}</a></>}
+          />
         </nav>
         <a className="nav-sign-in" href="/sign-in">
           Sign in
@@ -100,13 +193,22 @@ export function Nav({ home = true }: { home?: boolean }) {
             initial={{ opacity: 0, y: -10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.98 }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: 0.3, ease }}
           >
             {links.map(([id, label]) => (
               <a key={id} href={`${base}#${id}`} onClick={() => setOpen(false)}>
                 {label}
               </a>
             ))}
+            <Link href="/help" onClick={() => setOpen(false)}>Help</Link>
+            <p className="nav-panel-label">Policies</p>
+            <div className="nav-panel-small">
+              {policies.map(([href, label]) => (
+                <a key={href} href={href}>
+                  {label}
+                </a>
+              ))}
+            </div>
             <a href="/sign-in">Sign in</a>
           </motion.nav>
         )}

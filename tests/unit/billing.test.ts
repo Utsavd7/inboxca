@@ -1,4 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { cashfree } from "@/src/lib/billing/cashfree";
 import { docHtml, docNotes, docRows, taxLines, type Doc } from "@/src/lib/billing/documents";
@@ -41,8 +42,12 @@ describe("plan prices from the formula", () => {
       expect(chosenPlan(formula, query)).toBeNull();
   });
 
-  it("charges a plan's setup fee, and a Custom firm Enterprise's rate for each AI credit", () => {
-    const fees = { ...formula, setup: { solo: 290, growth: 730, scale: 1750, enterprise: 4370 } };
+  it("charges a plan's setup fee, the one the price list shows, and a Custom firm Enterprise's rate for each AI credit", () => {
+    // The site's setup fees are the ones the migration gives billing, so the two cannot drift.
+    const setup = Object.fromEntries(plans.map((plan) => [plan.name.toLowerCase(), plan.setup]));
+    const sql = readFileSync(new URL("../../supabase/migrations/20261110600000_setup_fees.sql", import.meta.url), "utf8");
+    expect(JSON.parse(/'(\{"setup".*\})'::jsonb/.exec(sql)![1]).setup).toEqual(setup);
+    const fees = { ...formula, setup };
     expect(setupFee(fees, { code: "growth", aiCredits: 10_000 })).toBe(730);
     expect(setupFee(fees, { code: "custom", aiCredits: 81_000 })).toBe(5900);
     expect(setupFee(formula, { code: "custom", aiCredits: 81_000 })).toBe(0);
