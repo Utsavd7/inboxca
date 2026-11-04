@@ -75,8 +75,9 @@ export const periodName = (key: string) => (key.length === 4 && key >= "2027" ? 
 
 // The type, work, period and financial year of an attachment. Sure only when both the type
 // and the period were found; otherwise it is filed under To check for a person to confirm.
+const fileWords = (fileName: string) => fileName.toLowerCase().replace(/[_.]+/g, " ");
 export function describeFile(fileName: string, subject: string, label: string | null, receivedAt: string) {
-  const name = fileName.toLowerCase().replace(/[_.]+/g, " ");
+  const name = fileWords(fileName);
   const found = types.find(([pattern]) => pattern.test(name)) ?? types.find(([pattern]) => pattern.test(subject.toLowerCase()));
   const period = findPeriod(name) || findPeriod(subject.toLowerCase());
   const work = found && found[2] !== "other" ? found[2] : (labelWork[label as Label] ?? "other");
@@ -87,11 +88,14 @@ export function describeFile(fileName: string, subject: string, label: string | 
 // Tax papers whose printed layout InboxCA knows (src/lib/tax-papers.ts). A PDF typed as one of
 // them by a name or an email's words keeps that type only when its content has the layout:
 // a bank statement sent with a Form 16 is an Other paper under To check, and a Form No. 130
-// named as Form 16 is Form 130.
+// named as Form 16 is Form 130. A file whose own name says it (form16.pdf), but whose content
+// InboxCA cannot read as one, keeps that type under To check.
 export const layoutTyped = new Set(["Form 16", "Form 130", "Form 26AS", "Form 168", "AIS", "TIS"]);
-export function typeByContent<T extends { type: string; sure: boolean }>(about: T, found: { type: string } | null): T {
+export function typeByContent<T extends { type: string; sure: boolean }>(about: T, found: { type: string } | null, fileName = ""): T {
   if (!layoutTyped.has(about.type)) return about;
-  return found ? { ...about, type: found.type } : { ...about, type: "Document", sure: false };
+  if (found) return { ...about, type: found.type };
+  const named = types.find(([pattern]) => pattern.test(fileWords(fileName)))?.[1] === about.type;
+  return { ...about, type: named ? about.type : "Document", sure: false };
 }
 
 // The work a paper's type belongs to, by the same rules; "other" when none says.
