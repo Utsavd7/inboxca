@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { importClients, type ImportRow, type ImportState } from "@/app/(app)/actions";
 import { clientKinds, type ClientKind } from "@/src/lib/clients";
+import { SetupArt } from "../setup-art";
 import { SidePanel, Toast } from "../ui";
 
 // Import clients from a spreadsheet: choose a file, see every row's problem, then add the
@@ -24,6 +25,7 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
           {state.late && <> Returns due before today are on it as late until you mark them filed: <Link href="/app/calendar?view=overdue">tick the ones already filed</Link>.</>}
         </Toast>
       ) : null}
+      {!state.rows && <SetupArt scene="import" />}
       {state.rows ? (
         <>
           <p className="hint" role="status">

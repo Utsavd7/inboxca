@@ -27,6 +27,7 @@ import { LinkTabs } from "../link-tabs";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { Avatar, Badge, Empty, PageHead, Row as ListRow, SidePanel, Toast, storage } from "../ui";
+import { SetupArt } from "../setup-art";
 import { clientsOf, contactName, conversation } from "./conversation";
 import { manageAnswer } from "./actions";
 import { ComposeBox, InboxKeys, LinkBusy, Reading, ReplyBox, ReplyButton } from "./inbox-client";
@@ -419,7 +420,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
           <Link className="b b-secondary" href={href({ show: undefined, status: undefined })}>See all email</Link>
         </Empty>
       ) : (
-        <Empty Icon={InboxIcon} kind="reply" title={filtered ? "No emails here" : "No client email yet"}>
+        <Empty Icon={InboxIcon} kind="reply" title={filtered ? "No emails here" : "No client email yet"} art={filtered ? undefined : <SetupArt scene="inbox" />}>
           <span>{filtered ? "Nothing matches these filters." : "New emails from your clients show here, sorted."}</span>
           {filtered && <Link className="b b-secondary" href="/app/inbox">Show all email</Link>}
         </Empty>
@@ -793,7 +794,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Pa
       <Reading>
         <div className="pane ib-list">
           {!connected ? (
-            <Empty Icon={Mail} title="Connect the firm's email">
+            <Empty Icon={Mail} title="Connect the firm's email" art={<SetupArt scene="inbox" />}>
               <span>New client email shows here once the firm email is connected.</span>
               {owner && <Link className="b b-primary" href="/app/settings#mailbox">Connect email</Link>}
             </Empty>

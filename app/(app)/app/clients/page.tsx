@@ -20,6 +20,7 @@ import { ImportForm } from "./import-form";
 import { LinkTabs } from "../link-tabs";
 import { Item, List, Presence } from "../motion";
 import { Avatar, Badge, Card, Empty, PageHead, SidePanel, Toast } from "../ui";
+import { SetupArt } from "../setup-art";
 import { RowKeys } from "../row-keys";
 import "./clients.css";
 
@@ -440,7 +441,7 @@ export default async function Clients({
           <RowKeys />
         </div>
       ) : (
-        <Empty Icon={empty.Icon} kind={empty.kind} title={empty.title}>
+        <Empty Icon={empty.Icon} kind={empty.kind} title={empty.title} art={show === "all" && !countOf.all && !q && !filtered && !archived ? <SetupArt scene="clients" /> : undefined}>
           <span>{empty.text}</span>
           {empty.button}
         </Empty>

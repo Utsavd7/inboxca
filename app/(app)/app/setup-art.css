@@ -1,0 +1,15 @@
+/* SetupArt (setup-art.tsx): the help pages' small window (.hs in globals.css) as a still, light in
+   both themes, inset at the top and sides of its wash and faded out at its foot. */
+.sa.hs {
+  position: relative; top: auto; grid-column: auto; grid-row: auto; width: min(100%, 380px); height: 180px; margin: 0 0 var(--s2); padding: var(--s4) var(--s4) 0;
+  border-radius: var(--r3); overflow: hidden; color-scheme: light; color: var(--navy); --wash: var(--accent-soft); text-align: left; box-shadow: none;
+}
+.sa * { animation: none !important; }
+.sa .hs-window { mask-image: linear-gradient(black 124px, transparent 160px); }
+.sa .hs-bar { height: 36px; }
+.sa.hs strong { color: var(--navy); font-weight: 700; }
+.sa-tag { margin-left: auto; padding: 2px 8px; border-radius: var(--round); background: var(--grey); color: var(--slate); font-size: 11px; font-weight: 600; }
+.sa .hs-view { padding: 4px 12px; }
+.sa .hs-rows { padding: 0; border: 0; border-radius: 0; background: none; }
+.sa-bar { display: block; width: 40%; height: 7px; margin-block: 5px; border-radius: var(--round); background: var(--line); }
+.sa-bar + .sa-bar { width: 62%; height: 6px; }

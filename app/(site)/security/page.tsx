@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { securitySections, securityUpdated } from "@/content/security";
+import { PaperPath } from "@/components/site/paper-path";
 import { Policy } from "@/components/site/policy";
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function Page() {
       sections={securitySections}
       contactTitle="Report a security problem"
       contactText="Please include what you saw and how to see it again."
+      art={<PaperPath />}
     />
   );
 }

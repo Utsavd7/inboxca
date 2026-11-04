@@ -21,6 +21,7 @@ import { fillable, fills } from "@/src/lib/return-work";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Tone } from "../ui";
+import { SetupArt } from "../setup-art";
 import { RowKeys } from "../row-keys";
 
 const columns = "id, client_id, kind, code, period_key, due_on, status, details, clients!inner(name, archived_at)";
@@ -294,7 +295,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
           <RowKeys />
         </div>
       ) : (
-        <Empty Icon={CalendarDays} kind={view === "overdue" && !day ? "done" : "week"} title={day ? `Nothing due on ${dueLabel(day)}` : view === "overdue" ? "Nothing is late" : "No returns here"}>
+        <Empty Icon={CalendarDays} kind={view === "overdue" && !day ? "done" : "week"} title={day ? `Nothing due on ${dueLabel(day)}` : view === "overdue" ? "Nothing is late" : "No returns here"} art={!day && !code && counts.every(({ count }) => !count) ? <SetupArt scene="calendar" /> : undefined}>
           <span>{day ? "Choose another day, or a view above." : view === "overdue" ? "Every return that was due has been filed." : "Choose the services you file on a client's page, and their due dates appear here."}</span>
           {code ? (
             <Link className="b b-secondary" href={day ? `/app/calendar?day=${day}` : `/app/calendar?view=${view}`}>

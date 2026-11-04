@@ -15,6 +15,7 @@ import { LinkTabs } from "../link-tabs";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Tone } from "../ui";
+import { SetupArt } from "../setup-art";
 import { RowKeys } from "../row-keys";
 
 const catalog = ["Intimation u/s 143(1)", "Notice u/s 143(2)", "Notice u/s 142(1)", "Notice u/s 148", "Demand notice u/s 156", "DRC-01", "ASMT-10", "Registration notice", "Show cause notice", "Summons"];
@@ -195,7 +196,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
             <RowKeys />
           </div>
         ) : (
-          <Empty Icon={FileWarning} kind={show === "confirm" ? "done" : "notice"} title={empty[0]}>
+          <Empty Icon={FileWarning} kind={show === "confirm" ? "done" : "notice"} title={empty[0]} art={count.all ? undefined : <SetupArt scene="notices" />}>
             <span>{empty[1]}</span>
             {!viewOnly && (show === "open" || show === "all") && (
               <Link className="b b-secondary" href={href({ add: true })} scroll={false}>
