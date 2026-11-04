@@ -133,12 +133,12 @@ test("a Form 26AS text file and a Form 16 added on Documents are filed under the
   // The tax year 2026-27 return is due in 270 days, so it is under Show later returns.
   await owner.goto(`/app/clients/${client}?tab=returns&show=later`);
   const itr = owner.locator("section[aria-labelledby=due] li");
-  await expect(itr.filter({ hasText: "AIS for FY 2025-26: not added yet" })).toHaveCount(1);
+  await expect(itr.filter({ hasText: "AIS for AY 2026-27 (FY 2025-26): not added yet" })).toHaveCount(1);
   await expect(itr.filter({ hasText: "Form No. 130 (was Form 16), Form No. 168 (was Form 26AS) and AIS for Tax year 2026-27: not added yet" })).toHaveCount(1);
   await owner.getByLabel("Add portal files").setInputFiles({ name: "ais.pdf", mimeType: "application/pdf", buffer: Buffer.from(ais()) });
   await owner.getByRole("button", { name: "Add", exact: true }).click();
   await expect(owner).toHaveURL(/tab=returns&dropped=1-0-0$/);
-  await expect(itr.filter({ hasText: "Form 16, Form 26AS and AIS for FY 2025-26: added" })).toHaveCount(1);
+  await expect(itr.filter({ hasText: "Form 16, Form 26AS and AIS for AY 2026-27 (FY 2025-26): added" })).toHaveCount(1);
 });
 
 test("a locked ITR-V under a client's To check is filed as soon as a person types its password", async () => {

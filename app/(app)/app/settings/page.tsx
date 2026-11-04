@@ -787,7 +787,7 @@ export default async function Settings({
                   <li key={rule.code}>
                     <span className="grow">
                       <strong>{rule.name}</strong>
-                      <span className="sub">{rule.next ? `Next: ${periodLabel(rule.frequency, rule.next.period_key)}, due ${dueLabel(rule.next.due_on)}` : "No return due yet"}{rule.source_url ? <>. <a href={rule.source_url} target="_blank" rel="noreferrer">Open the notification</a></> : ". No official link yet, so InboxCA checks this one itself"}</span>
+                      <span className="sub">{rule.next ? `Next: ${periodLabel(rule.frequency, rule.next.period_key, rule.code)}, due ${dueLabel(rule.next.due_on)}` : "No return due yet"}{rule.source_url ? <>. <a href={rule.source_url} target="_blank" rel="noreferrer">Open the notification</a></> : ". No official link yet, so InboxCA checks this one itself"}</span>
                     </span>
                     {rule.confirmed ? (
                       <Badge tone="done">Confirmed by {personName(rule.confirmed.email)} on {dueLabel(rule.confirmed.confirmed_at.slice(0, 10))}</Badge>

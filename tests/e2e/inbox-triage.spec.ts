@@ -118,12 +118,12 @@ test("a tax portal's mail that passed SPF or DKIM is matched by its PAN, filed, 
   const client = owner.url().split("/").at(-1)!.split("?")[0];
   const [{ id: task }] = await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, 'ITR_NA', '2026', (now() at time zone 'Asia/Kolkata')::date - 2) returning id", [firm.firmId, client]);
   await owner.goto(`/app/clients/${client}?tab=returns`);
-  await owner.getByRole("link", { name: "Mark ITR (no business, no audit) FY 2025-26 filed" }).click();
+  await owner.getByRole("link", { name: "Mark ITR (no business, no audit) AY 2026-27 (FY 2025-26) filed" }).click();
   const panel = owner.getByRole("dialog", { name: "Mark filed" });
   await panel.getByLabel("Email the client to e-verify the return within 30 days").check();
   await panel.getByRole("button", { name: "Mark filed" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "marked filed" })).toBeVisible();
-  const filedRow = () => owner.locator("li.app-row").filter({ hasText: "ITR (no business, no audit) FY 2025-26" });
+  const filedRow = () => owner.locator("li.app-row").filter({ hasText: "ITR (no business, no audit) AY 2026-27 (FY 2025-26)" });
   await owner.goto(`/app/clients/${client}?tab=returns&show=filed`);
   await expect(filedRow()).toContainText("Verify by");
   await expect.poll(async () => (await mailTexts(clientEmail)).some((text) => text.includes("e-verify"))).toBe(true);

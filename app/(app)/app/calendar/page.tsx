@@ -122,7 +122,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const extended = new Map(extensions?.map((row) => [`${row.code}:${row.period_key}`, { notice: (row.due_rule as { notice: string }).notice, link: row.source_url }]));
   const licence = (task: { kind?: string }) => task.kind === "licence";
   const name = (task: { kind?: string; code: string | null; period_key: string | null; details?: unknown }) =>
-    licence(task) ? ([(task.details as { label?: string }).label ?? "Licence", "Licence or registration"] as const) : ([rule.get(task.code ?? "")?.name ?? task.code, periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)] as const);
+    licence(task) ? ([(task.details as { label?: string }).label ?? "Licence", "Licence or registration"] as const) : ([rule.get(task.code ?? "")?.name ?? task.code, periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key, task.code)] as const);
   const onDay = new Map(perDay?.map((row) => [row.due_on, row]));
   const named = Map.groupBy(inMonth ?? [], (task) => task.due_on);
   const most = Math.max(1, ...[...onDay.values()].map((row) => row.returns));
@@ -135,7 +135,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const stillMissing = (asking ?? []).flatMap((request) => {
     const details = request.details as unknown as DocumentRequest;
     const missing = details.items.filter((item) => !item.received.length).map((item) => item.type);
-    return missing.length && (details.followups?.length ?? 0) < MAX_FOLLOW_UPS ? [{ id: request.id, what: `${missing.join(", ")}${details.period ? ` for ${periodName(details.period)}` : ""}` }] : [];
+    return missing.length && (details.followups?.length ?? 0) < MAX_FOLLOW_UPS ? [{ id: request.id, what: `${missing.join(", ")}${details.period ? ` for ${periodName(details.period, ...details.items.map((item) => item.work))}` : ""}` }] : [];
   });
   const stops = reminding && [
     mailbox?.status !== "connected" && "The firm email is not connected. The owner can connect it in Settings. Reminders go from the firm email.",

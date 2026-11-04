@@ -59,6 +59,7 @@ const errors: Record<string, string> = {
   "filed-number": "That number has filed returns, so it stays. To stop its new returns, untick its services and choose Save services.",
   assign: "Choose a person and what they do for this client.",
   licence: "Name the licence or registration and give the date it is valid until.",
+  todo: "Write what is to be done and give a date. That to-do may have changed meanwhile.",
   agm: "The AGM date was not saved. Choose the year and a date after it, for a company whose services follow the AGM.",
   kyc: "The KYC year was not saved. Choose the financial year of the last DIR-3 KYC, for a PAN with the DIR-3 KYC Web service.",
   assigned: "That person is already assigned to this client.",
@@ -114,6 +115,7 @@ const changes: Record<string, string> = {
   details: "Details saved.", services: "Services saved.", "contact-rights": "Contact saved.", "add-contact": "Contact added.", "unlink-contact": "Contact removed.",
   "add-number": "Tax number added.", "remove-number": "Tax number removed.", assign: "Assigned.", unassign: "Unassigned.", archive: "Client archived.", restore: "Client restored.",
   reminders: "Reminders saved.", list: "List saved.", sharing: "Sending choice saved.", "add-licence": "Expiry date added. It is on the Calendar.", "remove-licence": "Expiry date removed.",
+  "add-todo": "To-do added. It is on Today for the person.", "todo-done": "To-do done.", "todo-undo": "To-do open again.",
   agm: "AGM date saved. The returns that follow it are on the Calendar.",
   kyc: "KYC year saved. The next DIR-3 KYC Web is on the Calendar.",
 };
@@ -151,7 +153,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const namedIds = [edit ?? send, shared, renamed ?? saved ?? removed ?? restored].filter((file): file is string => uuid.test(file ?? ""));
   // Returns still to file: those late or due in the next 60 days, unless later ones are asked for.
   const taskQuery = supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact", head: sub !== "returns"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed");
-  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: sheets }, { data: licences }, { count: kycPlanned }] = await Promise.all([
+  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: sheets }, { data: licences }, { count: kycPlanned }, { data: todos }] = await Promise.all([
     supabase
       .from("clients")
       .select(
@@ -190,6 +192,8 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "licence").order("due_on").limit(20),
     // A DIR-3 KYC still to file, which may be years ahead of the Returns tab's 60 days.
     sub === "returns" ? supabase.from("tasks").select("id", { count: "exact", head: true }).eq("firm_id", firm).eq("client_id", id).eq("code", "DIR3KYC").neq("status", "filed") : Promise.resolve({ count: 0 }),
+    // The client's to-dos: every open one, and those done whose date was in the last 30 days.
+    tab === "overview" ? supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "todo").or(`status.eq.upcoming,due_on.gte.${addDays(today, -30)}`).order("due_on").limit(30) : Promise.resolve({ data: [] }),
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
@@ -301,7 +305,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const itrNeeds = new Map(itrYears.map((year) => {
     const papers = (salaried ? ["Form 16", "Form 26AS", "AIS"] : ["Form 26AS", "AIS"]).map((type) => ({ name: paperType(year >= "2027" ? newer[type] ?? type : type), added: held.has(`${year}:${type}`) }));
     const missing = papers.filter((paper) => !paper.added), names = (missing.length ? missing : papers).map((paper) => paper.name).join(", ").replace(/, ([^,]*)$/, " and $1");
-    return [year, { missing: !!missing.length, line: `. ${names} for ${periodName(year)}: ${missing.length ? "not added yet" : "added"}` }];
+    return [year, { missing: !!missing.length, line: `. ${names} for ${periodName(year, "income_tax")}: ${missing.length ? "not added yet" : "added"}` }];
   }));
   // Services sit on a number: GST returns on a GSTIN, TDS on a TAN, income tax on the PAN.
   // Only those for this kind of client, and any already chosen, are offered.
@@ -477,7 +481,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                   {nextDue && (
                     <Link className={`badge plain ${dueIn <= 3 ? "warn" : "blue"}`} href={`${base}?tab=returns`}>
                       <CalendarClock size={13} aria-hidden />
-                      Next due: {rule.get(nextDue.code ?? "")?.name ?? nextDue.code} {periodLabel(rule.get(nextDue.code ?? "")?.frequency ?? null, nextDue.period_key)}, {dueIn === 0 ? "today" : dueIn === 1 ? "tomorrow" : `in ${dueIn} days`}
+                      Next due: {rule.get(nextDue.code ?? "")?.name ?? nextDue.code} {periodLabel(rule.get(nextDue.code ?? "")?.frequency ?? null, nextDue.period_key, nextDue.code)}, {dueIn === 0 ? "today" : dueIn === 1 ? "tomorrow" : `in ${dueIn} days`}
                     </Link>
                   )}
                 </div>
@@ -583,6 +587,47 @@ export default async function Client({ params, searchParams }: { params: Promise
                   </ul>
                 ) : (
                   <p className="app-card-none">Nothing needs you for this client today.</p>
+                )}
+              </Card>
+              {/* The client's to-dos (20261110800000_client_todos.sql): red once late, green once done. */}
+              <Card id="todos" title="To-dos" Icon={ListChecks} kind="approve" count={todos?.filter((todo) => todo.status === "upcoming").length}>
+                {todos?.length ? (
+                  <ul className="app-rows">
+                    {[...todos.filter((todo) => todo.status === "upcoming"), ...todos.filter((todo) => todo.status !== "upcoming")].map((todo) => {
+                      const { title, for: person } = todo.details as { title?: string; for?: string };
+                      const open = todo.status === "upcoming";
+                      const late = open && todo.due_on < today;
+                      return (
+                        <Row
+                          key={todo.id}
+                          title={title}
+                          meta={`${todo.due_on === today ? "Today" : `${late ? "Was due" : "By"} ${dueLabel(todo.due_on)}`}, for ${person ? personName(people?.find((row) => row.user_id === person)?.email) : "the owner"}`}
+                          status={open ? late && <Badge tone="late">Late</Badge> : <Badge tone="done">Done</Badge>}
+                          action={manage && !viewOnly && (
+                            <form action={manageClient}>
+                              {hidden("overview")}
+                              <input type="hidden" name="todo" value={todo.id} />
+                              <Pending className="b b-secondary b-small" name="intent" value={open ? "todo-done" : "todo-undo"} aria-label={`${open ? "Done" : "Undo"}: ${title}`}>{open ? "Done" : "Undo"}</Pending>
+                            </form>
+                          )}
+                        />
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="app-card-none">No to-dos for this client.</p>
+                )}
+                {manage && !viewOnly && (
+                  <form action={manageClient} className="app-card-foot agm-form">
+                    {hidden("overview")}
+                    <label className="grow">To-do <input name="todo_title" required maxLength={120} placeholder="Call about the rent receipts" /></label>
+                    <label>By <input type="date" name="todo_on" defaultValue={today} required /></label>
+                    <label>For <select name="todo_for" defaultValue="">
+                      <option value="">The owner</option>
+                      {people?.filter((row) => row.status === "active").map((row) => <option key={row.user_id} value={row.user_id}>{personName(row.email)}</option>)}
+                    </select></label>
+                    <Pending className="b b-secondary b-small" name="intent" value="add-todo">Add a to-do</Pending>
+                  </form>
                 )}
               </Card>
               <Card id="latest-mail" title="Latest emails" Icon={Mail} kind="reply" end={!!mails?.length && <Link className="b b-ghost" href={`${base}?tab=emails`}>All emails</Link>}>
@@ -721,7 +766,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                     return (
                       <Row
                         key={request.id}
-                        title={`Asked for ${details.items.map((item) => item.type).join(", ")}${details.period ? ` for ${periodName(details.period)}` : ""}`}
+                        title={`Asked for ${details.items.map((item) => item.type).join(", ")}${details.period ? ` for ${periodName(details.period, ...details.items.map((item) => item.work))}` : ""}`}
                         meta={`${got} of ${details.items.length} received. Reminders go until ${dueLabel(request.expires_at!.slice(0, 10))}.`}
                         status={<Badge tone={got === details.items.length ? "done" : "warn"}>{got} of {details.items.length}</Badge>}
                         action={
@@ -791,7 +836,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                               </span>
                             </td>
                             <td>{paperType(document.document_type)}</td>
-                            <td>{periodName(document.period_key) || <span className="hint">None</span>}</td>
+                            <td>{periodName(document.period_key, document.work_type) || <span className="hint">None</span>}</td>
                             <td className="hint">
                               <CameFrom origin={origins.get(document.id)!} why={!twin} />
                             </td>
@@ -868,7 +913,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                     const filed = task.details as { filed_on?: string; by?: string; ack?: string; udin?: string; verified_on?: string };
                     // A filed income tax return waits to be e-verified: by the portal's mail, or by a person.
                     const verify = task.status === "filed" && isItr(task.code);
-                    const title = `${r?.name} ${periodLabel(r?.frequency ?? null, task.period_key)}`;
+                    const title = `${r?.name} ${periodLabel(r?.frequency ?? null, task.period_key, task.code)}`;
                     const [day, month] = dueLabel(task.due_on).split(" ");
                     return (
                       <Row
@@ -1436,7 +1481,7 @@ export default async function Client({ params, searchParams }: { params: Promise
       )}
       {filing && (
         <SidePanel key="mark-filed" id="mark-filed" title="Mark filed" close={returnsHref}>
-          <MarkFiled state={returnsState} rows={[{ id: filing.id, name: `${rule.get(filing.code ?? "")?.name ?? filing.code} ${periodLabel(rule.get(filing.code ?? "")?.frequency ?? null, filing.period_key)}`, sub: `Due ${dueLabel(filing.due_on)}`, itr: isItr(filing.code), udin: filing.code === "TAX_AUDIT" }]} />
+          <MarkFiled state={returnsState} rows={[{ id: filing.id, name: `${rule.get(filing.code ?? "")?.name ?? filing.code} ${periodLabel(rule.get(filing.code ?? "")?.frequency ?? null, filing.period_key, filing.code)}`, sub: `Due ${dueLabel(filing.due_on)}`, itr: isItr(filing.code), udin: filing.code === "TAX_AUDIT" }]} />
         </SidePanel>
       )}
       </Presence>
@@ -1452,7 +1497,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             )
           }
         >
-          {done.length === 1 ? `${rule.get(done[0].code ?? "")?.name ?? done[0].code} ${periodLabel(rule.get(done[0].code ?? "")?.frequency ?? null, done[0].period_key)}` : `${done.length} returns`} {taskChanges[marked!]}.
+          {done.length === 1 ? `${rule.get(done[0].code ?? "")?.name ?? done[0].code} ${periodLabel(rule.get(done[0].code ?? "")?.frequency ?? null, done[0].period_key, done[0].code)}` : `${done.length} returns`} {taskChanges[marked!]}.
         </Toast>
       )}
       {changed && changes[changed] && <Toast>{changes[changed]}</Toast>}

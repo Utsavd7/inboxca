@@ -2,7 +2,7 @@ import { BellOff, CalendarDays, KeyRound, ListChecks, Rocket, TriangleAlert } fr
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { askAwayDevice, joinFirm } from "@/app/(app)/actions";
+import { askAwayDevice, joinFirm, manageClient } from "@/app/(app)/actions";
 import { signOut } from "@/app/(auth)/actions";
 import { PcKey } from "./pc-key";
 import { canManageClients } from "@/src/lib/clients";
@@ -28,7 +28,7 @@ import "./today.css";
 const SHOWN = 7;
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-IN")} ${n === 1 ? one : many}`;
 
-type Params = { dropped?: string; error?: string; asked?: string; panel?: string };
+type Params = { dropped?: string; error?: string; asked?: string; panel?: string; done?: string };
 type Context = Parameters<typeof workFor>[0];
 
 // Today, one screen for each person whatever the firm's size (PLAN.md "Today by role"): a
@@ -38,7 +38,7 @@ type Context = Parameters<typeof workFor>[0];
 // firm, a manager their team and what waits for their approval, staff and front desk their own
 // clients. Every query starts at once and each part shows as soon as its data is in.
 export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
-  const { dropped, error, asked, panel } = await searchParams;
+  const { dropped, error, asked, panel, done } = await searchParams;
   const { supabase, userId, membership, deviceStatus, connectionWaiting, pcKey, ownerDevice } = await currentMember();
   if (ownerDevice) return <ComputerWaits state={ownerDevice} codes={!!((await supabase.auth.getClaims()).data?.claims.app_metadata as { recovery?: string[] } | undefined)?.recovery?.length} error={error} />;
   if (!membership) {
@@ -88,6 +88,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
 
       {asked === "time" && <Toast>The owner is asked for more time today. You can keep working until closing.</Toast>}
       <DroppedNotice value={dropped} />
+      {done && <TodoDone id={done} ctx={ctx} />}
       {error && (todayErrors[error] ?? problems[error]) && (
         <p className="alert" role="alert">
           {todayErrors[error] ?? problems[error]}
@@ -122,6 +123,26 @@ const todayErrors: Record<string, string> = {
   billing: "Your firm can only view until its plan is paid. The owner can pay in Settings, Billing.",
   drive: "Connect the firm's drive in Settings first; portal files are saved there.",
 };
+
+// A to-do just marked done on the list, with its Undo.
+async function TodoDone({ id, ctx }: { id: string; ctx: Context }) {
+  const { data: todo } = /^[0-9a-f-]{36}$/.test(id) ? await ctx.supabase.from("tasks").select("client_id, details").eq("firm_id", ctx.membership.firmId).eq("id", id).eq("kind", "todo").eq("status", "closed").maybeSingle() : { data: null };
+  if (!todo) return null;
+  return (
+    <Toast
+      undo={
+        <form action={manageClient}>
+          <input type="hidden" name="client" value={todo.client_id} />
+          <input type="hidden" name="todo" value={id} />
+          <input type="hidden" name="from" value="today" />
+          <Pending className="b" name="intent" value="todo-undo">Undo</Pending>
+        </form>
+      }
+    >
+      Done: {(todo.details as { title?: string }).title}.
+    </Toast>
+  );
+}
 
 // The greeting's end: how many things need this person.
 async function Things({ work }: { work: ReturnType<typeof workFor> }) {

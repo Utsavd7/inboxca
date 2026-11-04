@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { aiCredits } from "@/src/lib/ai";
-import { addDays, dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
+import { addDays, dueLabel, isItr, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { periodName } from "@/src/lib/documents";
 import { downloadUse } from "@/src/lib/download-use";
 import { firmChecked } from "@/src/lib/due-dates";
@@ -168,7 +168,7 @@ export async function workFor(ctx: Context, late: number) {
       seen.add(group);
       if (file.status === "deleted" || !waiting.has(file.id) || !membership.may("mark_filed", file.client_id)) return [];
       const name = file.clients?.name ?? "";
-      return [{ key: `confirm:${file.id}`, title: `${formName(meta.form)} for ${name}, ${periodName(file.period_key ?? "")}`, why: "The acknowledgement arrived. Check it and mark the return filed", client: { id: file.client_id, name }, action: { label: meta.status === "draft" ? "Review and approve" : "Mark filed", href: `/app/clients/${file.client_id}?tab=outputs` }, audience: "assigned", area: "returns" }];
+      return [{ key: `confirm:${file.id}`, title: `${formName(meta.form)} for ${name}, ${periodName(file.period_key ?? "", isItr(meta.form) ? "income_tax" : null)}`, why: "The acknowledgement arrived. Check it and mark the return filed", client: { id: file.client_id, name }, action: { label: meta.status === "draft" ? "Review and approve" : "Mark filed", href: `/app/clients/${file.client_id}?tab=outputs` }, audience: "assigned", area: "returns" }];
     });
   }, failing("confirmations"));
 
@@ -178,7 +178,7 @@ export async function workFor(ctx: Context, late: number) {
     count: count ?? data?.length ?? 0,
     items: (data ?? []).map((row): Listed => {
       const days = Math.round((Date.parse(today) - Date.parse(row.due_on)) / DAY);
-      const name = `${rule.get(row.code)?.name ?? row.code ?? ""} for ${periodLabel(rule.get(row.code)?.frequency ?? null, row.period_key)}`;
+      const name = `${rule.get(row.code)?.name ?? row.code ?? ""} for ${periodLabel(rule.get(row.code)?.frequency ?? null, row.period_key, row.code)}`;
       return { key: `late:${row.client_id}`, title: `File ${name}`, why: `${plural(days, "day", "days")} late${row.returns > 1 ? `, and ${plural(row.returns - 1, "more late return", "more late returns")}` : ""}`, client: { id: row.client_id, name: row.client_name }, due: row.due_on, urgent: true, action: { label: "See returns", href: `/app/clients/${row.client_id}?tab=due` }, audience: "assigned", area: "returns" };
     }),
   }), (error) => ({ count: 0, items: failing("late_clients")(error) }));
@@ -191,6 +191,14 @@ export async function workFor(ctx: Context, late: number) {
       // A DSC held by the client itself already names them: "DSC of Ramesh Shah expires".
       return { key: `licence:${task.id}`, title: `${label.endsWith(` of ${task.clients.name}`) ? label : `${label} for ${task.clients.name}`} ${task.due_on < today ? "has expired" : "expires"}`, why: task.due_on < today ? `It ran out on ${dueLabel(task.due_on)}. Once it is renewed, mark it on the Calendar` : `Valid until ${dueLabel(task.due_on)}`, client: { id: task.client_id, name: task.clients.name }, due: task.due_on, urgent: task.due_on < today, action: { label: "See on Calendar", href: `/app/calendar?day=${task.due_on}` }, audience: "assigned", area: "returns" };
     }), failing("licences"));
+
+  // A client's to-do (20261110800000_client_todos.sql) from a week before its date: its person's,
+  // or the owner's when it names nobody; the owner and partners see every one.
+  const todos = Promise.resolve(supabase.from("tasks").select("id, client_id, due_on, details, clients!inner(name, archived_at)").eq("firm_id", firm).eq("kind", "todo").eq("status", "upcoming").is("clients.archived_at", null).lte("due_on", addDays(today, 7)).order("due_on").limit(50).throwOnError()).then(({ data }) =>
+    (data ?? []).map((task): Listed => {
+      const { title, for: person } = task.details as { title?: string; for?: string };
+      return { key: `todo:${task.id}`, title: title ?? "To-do", why: task.due_on < today ? `Was due ${dueLabel(task.due_on)}` : task.due_on === today ? "Today" : `By ${dueLabel(task.due_on)}`, client: { id: task.client_id, name: task.clients.name }, due: task.due_on, urgent: task.due_on < today, mine: person ? person === userId : owner, action: { label: "Done", href: `/app/clients/${task.client_id}` }, audience: "firm", area: "firm" };
+    }), failing("todos"));
 
   // What only the owner or partners act on, and a notice's date close by. A client asked three
   // times shows once, as the call for whoever looks after it.
@@ -261,6 +269,7 @@ export async function workFor(ctx: Context, late: number) {
       lateRows.then(({ items }) => items),
       confirmations,
       licences,
+      todos,
       firmItems,
     ])
   ).flat();

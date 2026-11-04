@@ -1194,7 +1194,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   };
   await ask("ITR copy", "Please send my ITR for AY 2025-26 for the loan.");
   const reply = await lastMail(`client-${tag}@patel.test`);
-  expect(reply).toContain("shared ITR-V for FY 2024-25 with you");
+  expect(reply).toContain("shared ITR-V for AY 2025-26 (FY 2024-25) with you");
   expect(reply).toMatch(/Download it here: http\S+\/s\//);
   const routineLink=reply.match(/Download it here: (http\S+)/)![1];
   const opened=await request.get(routineLink);

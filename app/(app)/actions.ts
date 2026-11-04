@@ -725,6 +725,32 @@ export async function manageClient(form: FormData) {
       const { data: gone } = z.uuid().safeParse(licence).success ? await admin.from("tasks").delete().eq("id", licence).eq("firm_id", firm).eq("client_id", id).eq("kind", "licence").select("id") : { data: null };
       if (gone?.length) await admin.from("activity_log").insert({ firm_id: firm, actor_id: userId, action: "licence.removed", entity_type: "task", entity_id: licence });
     }
+  } else if (intent === "add-todo") {
+    // A to-do for the client (20261110800000_client_todos.sql): its words, its date and, if
+    // chosen, one of the firm's active people. Today shows it to them, or to the owner.
+    const title = String(form.get("todo_title") ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+    const on = String(form.get("todo_on") ?? "");
+    const person = String(form.get("todo_for") ?? "");
+    const [{ data: own }, { data: people }] = await Promise.all([
+      supabase.from("clients").select("id").eq("id", id).eq("firm_id", firm).maybeSingle(),
+      person ? supabase.rpc("firm_people", { target_firm: firm }) : Promise.resolve({ data: [] }),
+    ]);
+    if (!own) back("role");
+    if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(on) || Number.isNaN(Date.parse(on)) || (person && !people?.some((row) => row.user_id === person && row.status === "active"))) back("todo");
+    const admin = supabaseAdmin();
+    const { data: made } = await admin.from("tasks").insert({ firm_id: firm, client_id: id, kind: "todo", due_on: on, details: { title, ...(person && { for: person }) } }).select("id").single();
+    if (made) await admin.from("activity_log").insert({ firm_id: firm, actor_id: userId, action: "todo.added", entity_type: "task", entity_id: made.id });
+    revalidatePath("/app", "layout");
+  } else if (intent === "todo-done" || intent === "todo-undo") {
+    // Done and Undo, here and on Today. Row level security (tasks_todo_right) keeps them to
+    // those who may change the client, and logs each change.
+    const todo = String(form.get("todo") ?? "");
+    const { data: changed } = z.uuid().safeParse(todo).success
+      ? await supabase.from("tasks").update({ status: intent === "todo-done" ? "closed" : "upcoming" }).eq("id", todo).eq("firm_id", firm).eq("client_id", id).eq("kind", "todo").select("id")
+      : { data: null };
+    if (!changed?.length) back("todo");
+    revalidatePath("/app", "layout");
+    if (form.get("from") === "today") redirect(intent === "todo-done" ? `/app?done=${todo}` : "/app");
   } else if (intent === "archive" || intent === "restore") {
     await supabase.from("clients").update({ archived_at: intent === "archive" ? new Date().toISOString() : null }).eq("id", id);
   } else if (intent === "assign") {
@@ -940,7 +966,7 @@ export async function manageTasks(form: FormData) {
     const crypto = serverCrypto();
     for (const task of (tasks ?? []).filter((task) => isItr(task.code) && task.clients?.email_enc)) {
       const to = await crypto.decrypt(membership.firmId, `clients/${task.client_id}/email`, task.clients!.email_enc!);
-      const message = emailTemplates.verify(task.clients!.name, membership.firmName, `income tax return ${periodLabel("yearly", task.period_key)}`, dueLabel(filedOn), dueLabel(verifyBy(filedOn)));
+      const message = emailTemplates.verify(task.clients!.name, membership.firmName, `income tax return ${periodLabel("yearly", task.period_key, task.code)}`, dueLabel(filedOn), dueLabel(verifyBy(filedOn)));
       if (mailer && await mailer.send(to, message.subject, message.text)) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "reminder.sent", entity_type: "client", entity_id: task.client_id, details: { template: "verify", tasks: [task.id] } });
     }
   }

@@ -6,14 +6,22 @@ const monthOf = (key: string, offset = 0) => {
   return `${months[index % 12]} ${Math.floor(index / 12)}`;
 };
 
-// "Sep 2026", "Jul to Sep 2026", or "FY 2025-26" for a year ending in March 2026. A year from
-// 1 April 2026 is a tax year under the Income-tax Act, 2025: "Tax year 2026-27".
-export function periodLabel(frequency: string | null, key: string | null) {
+// A year in words, the one rule every page and email follows. key: the March the year ends in
+// ("2026" or "2026-03"). Income tax work: income to 31 March 2026 is assessed under the
+// Income-tax Act, 1961, "AY 2026-27 (FY 2025-26)"; from 1 April 2026 the Income-tax Act, 2025
+// has no assessment year, "Tax year 2026-27". GST, TDS, ROC and the books keep the financial
+// year, "FY 2026-27".
+export function yearName(key: string, incomeTax = false) {
+  const end = Number(key.slice(0, 4));
+  const fy = `${end - 1}-${String(end).slice(2)}`;
+  return !incomeTax ? `FY ${fy}` : end >= 2027 ? `Tax year ${fy}` : `AY ${end}-${String(end + 1).slice(2)} (FY ${fy})`;
+}
+
+// "Sep 2026", "Jul to Sep 2026", or a year by yearName: income tax for the ITR, advance tax and
+// tax audit codes (checklists.ts workOfService).
+export function periodLabel(frequency: string | null, key: string | null, code?: string | null) {
   if (!key) return "";
-  if (frequency === "yearly") {
-    const end = Number(key.slice(0, 4));
-    return `${end >= 2027 ? "Tax year" : "FY"} ${end - 1}-${String(end).slice(2)}`;
-  }
+  if (frequency === "yearly") return yearName(key, /^(ITR|ADV|TAX_AUDIT)/.test(code ?? ""));
   if (frequency === "quarterly") return `${monthOf(key, -2).split(" ")[0]} to ${monthOf(key)}`;
   if (frequency === "half_yearly") return `${monthOf(key, -5).split(" ")[0]} to ${monthOf(key)}`;
   return monthOf(key);

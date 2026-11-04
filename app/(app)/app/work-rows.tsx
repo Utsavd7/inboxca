@@ -1,5 +1,6 @@
-import { Bell, FileCheck2, FileText, Inbox, Landmark, Phone, ShieldCheck, TriangleAlert } from "lucide-react";
-import { reviewOwnerDevice, saveLink, seenAlert, setOfficeOnly } from "@/app/(app)/actions";
+import { Bell, FileCheck2, FileText, Inbox, Landmark, ListChecks, Phone, ShieldCheck, TriangleAlert } from "lucide-react";
+import { manageClient, reviewOwnerDevice, saveLink, seenAlert, setOfficeOnly } from "@/app/(app)/actions";
+import { canManageClients } from "@/src/lib/clients";
 import type { currentMember } from "@/src/lib/member";
 import type { Listed } from "@/src/lib/work/today";
 import { Fill } from "./fill";
@@ -23,7 +24,7 @@ export function WorkRows({ items, today, membership, name, more }: { items: List
       <List name={name} className="app-rows work-rows">
         {items.map((item) => {
           const red = item.urgent || (!!item.due && item.due < today);
-          const [Icon, kind] = red ? [TriangleAlert, "late" as const] : item.key.startsWith("call:") ? [Phone, "notice" as const] : /^(computer|office):/.test(item.key) ? [ShieldCheck, "approve" as const] : icons[item.area];
+          const [Icon, kind] = red ? [TriangleAlert, "late" as const] : item.key.startsWith("call:") ? [Phone, "notice" as const] : /^(computer|office):/.test(item.key) ? [ShieldCheck, "approve" as const] : item.key.startsWith("todo:") ? [ListChecks, "approve" as const] : icons[item.area];
           const client = item.client && !item.title.includes(item.client.name) ? item.client.name : null;
           return (
             <Row
@@ -60,6 +61,18 @@ function Action({ item, membership }: { item: Listed; membership: Member }) {
         <input type="hidden" name="alert" value={item.key.slice(6)} />
         <Pending className="b b-secondary">{label}</Pending>
       </form>
+    );
+  // A client's to-do: Done for those who may change the client, else the client's page.
+  if (item.key.startsWith("todo:") && item.client)
+    return canManageClients(membership.role) && !membership.viewOnlyUntil ? (
+      <form action={manageClient}>
+        <input type="hidden" name="client" value={item.client.id} />
+        <input type="hidden" name="todo" value={item.key.slice(5)} />
+        <input type="hidden" name="from" value="today" />
+        <Pending className="b b-secondary" name="intent" value="todo-done" aria-label={`Done: ${item.title}`}>{label}</Pending>
+      </form>
+    ) : (
+      <WarmLink className="b b-secondary" href={href} aria-label={`See ${item.client.name}`}>See client</WarmLink>
     );
   if (item.key.startsWith("link:"))
     return (

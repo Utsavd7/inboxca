@@ -6,7 +6,7 @@ it("renders the checked English wording from named facts only",()=>{
   expect(emailTemplates.answer("received","Invented Client","Test Firm",["- Sales bills: saved under GST, Sep 2026"]).text).toBe("Dear Invented Client,\n\nThank you. We received these papers:\n- Sales bills: saved under GST, Sep 2026\n\nTest Firm");
   expect(emailTemplates.paper("Invented Client","Test Firm","ITR-V","https://example.test/s/invented",true,false).text).toContain("choose Email me a code");
   // The subject names the paper's type and period, not the drive's file name.
-  expect(emailTemplates.paper("Invented Client","Test Firm","Invented Client - Form 16 - FY 2025-26 - v1.pdf","https://example.test/s/invented",false,false,{type:"Form 16",period:"2026"}).subject).toBe("Form 16 for FY 2025-26 from Test Firm");
+  expect(emailTemplates.paper("Invented Client","Test Firm","Invented Client - Form 16 - FY 2025-26 - v1.pdf","https://example.test/s/invented",false,false,{type:"Form 16",period:"2026"}).subject).toBe("Form 16 for AY 2026-27 (FY 2025-26) from Test Firm");
   // Papers are asked for by email and come back as attachments: no link, no InboxCA.
   const request=emailTemplates.request("Invented Client","Test Firm","2026-09",[{type:"Bank statement"}]);
   expect(request.text).toContain("Please reply to this email with these documents attached for Sep 2026:\n- Bank statement");
