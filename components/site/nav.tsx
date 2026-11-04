@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import Link from "next/link";
 import { ChevronDown, Menu, X } from "lucide-react";
 import { Logo } from "./logo";
 import { SHOW_PLANS } from "@/content/plans";
+import { helpTopics } from "@/content/help-topics";
 import { policies } from "@/content/site";
 import { contactEmail } from "@/src/lib/site";
 
@@ -16,12 +18,13 @@ const links = [
   ["questions", "Questions"],
 ];
 
-// Help first, then the policy pages, in the menu and in the phone menu's small links.
-const pages = [["/help", "Help", "Short steps for setting up and using InboxCA"], ...policies] as const;
+type Item = readonly [href: string, label: string, line: string];
+// The Help menu lists the Help centre's groups; the Policies menu the policy pages.
+const helpItems: readonly Item[] = helpTopics.map(({ id, title, line }) => [`/help#${id}`, title, line]);
 
-// Help and the policy pages in a small menu. A mouse opens it by hovering; a click, a tap or Enter
-// opens it too. Escape, a click elsewhere or tabbing past it closes it.
-function PoliciesMenu() {
+// A small menu in the header. A mouse opens it by hovering; a click, a tap or Enter opens it
+// too. Escape, a click elsewhere or tabbing past it closes it.
+function DropMenu({ id, label, items, foot }: { id: string; label: string; items: readonly Item[]; foot: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const hovered = useRef(false);
@@ -61,16 +64,16 @@ function PoliciesMenu() {
         type="button"
         className="nav-drop-button"
         aria-expanded={open}
-        aria-controls="nav-policies"
+        aria-controls={id}
         onClick={() => setOpen(hovered.current || !open)}
       >
-        Policies
+        {label}
         <ChevronDown size={15} aria-hidden />
       </button>
       <AnimatePresence>
         {open && (
           <motion.div
-            id="nav-policies"
+            id={id}
             className="nav-drop-panel"
             initial={{ opacity: 0, y: -6, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -78,7 +81,7 @@ function PoliciesMenu() {
             transition={{ duration: 0.24, ease }}
           >
             <ul>
-              {pages.map(([href, label, line]) => (
+              {items.map(([href, label, line]) => (
                 <li key={href}>
                   <a href={href}>
                     <strong>{label}</strong>
@@ -87,9 +90,7 @@ function PoliciesMenu() {
                 </li>
               ))}
             </ul>
-            <p>
-              A question? Write to <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
-            </p>
+            <p>{foot}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -158,7 +159,13 @@ export function Nav({ home = true }: { home?: boolean }) {
               <span>{label}</span>
             </a>
           ))}
-          <PoliciesMenu />
+          <DropMenu id="nav-help" label="Help" items={helpItems} foot={<Link href="/help">All help articles</Link>} />
+          <DropMenu
+            id="nav-policies"
+            label="Policies"
+            items={policies}
+            foot={<>A question? Write to <a href={`mailto:${contactEmail}`}>{contactEmail}</a></>}
+          />
         </nav>
         <a className="nav-sign-in" href="/sign-in">
           Sign in
@@ -193,9 +200,10 @@ export function Nav({ home = true }: { home?: boolean }) {
                 {label}
               </a>
             ))}
-            <p className="nav-panel-label">Help and policies</p>
+            <Link href="/help" onClick={() => setOpen(false)}>Help</Link>
+            <p className="nav-panel-label">Policies</p>
             <div className="nav-panel-small">
-              {pages.map(([href, label]) => (
+              {policies.map(([href, label]) => (
                 <a key={href} href={href}>
                   {label}
                 </a>

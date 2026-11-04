@@ -3,6 +3,7 @@
 // calendar, work/gst, people), src/lib (rights.ts, presets.ts, answers.ts, reminders.ts,
 // calendar.ts, paper-origin.ts), and content/security.ts, legal.ts and plans.ts. Prices come
 // only from plans.ts, before GST. Nothing planned is described.
+import { helpTopics } from "./help-topics";
 import { aiBlock, custom, extraPerson, plans, rupees } from "./plans";
 
 export type HelpArticle = {
@@ -14,11 +15,11 @@ export type HelpArticle = {
 };
 
 const top = plans[plans.length - 1];
+const topic = (id: (typeof helpTopics)[number]["id"]) => ({ id, title: helpTopics.find((group) => group.id === id)!.title });
 
 export const helpGroups: readonly { id: string; title: string; articles: readonly HelpArticle[] }[] = [
   {
-    id: "start",
-    title: "Getting started",
+    ...topic("start"),
     articles: [
       {
         slug: "sign-up",
@@ -111,8 +112,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
     ],
   },
   {
-    id: "papers",
-    title: "Papers and clients",
+    ...topic("papers"),
     articles: [
       {
         slug: "papers-by-email",
@@ -188,8 +188,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
     ],
   },
   {
-    id: "returns",
-    title: "Returns and notices",
+    ...topic("returns"),
     articles: [
       {
         slug: "due-dates",
@@ -259,8 +258,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
     ],
   },
   {
-    id: "team",
-    title: "Your team and signing in",
+    ...topic("team"),
     articles: [
       {
         slug: "people-and-permissions",
@@ -317,8 +315,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
     ],
   },
   {
-    id: "billing",
-    title: "Plans and billing",
+    ...topic("billing"),
     articles: [
       {
         slug: "plans",
