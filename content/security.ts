@@ -27,7 +27,7 @@ export const securitySections = [
       "A file passes through InboxCA only while it is checked and filed. That is at most 24 hours, or up to 7 days if your drive cannot be reached.",
       "Your client list, your records and the figures read from files will be kept in a Supabase database. Its region is chosen at launch, and India is planned.",
       "InboxCA's temporary files and safety copies are planned for Backblaze B2, which is outside India. They are encrypted.",
-      "InboxCA also keeps the text read from each file, encrypted with your firm's key in Backblaze B2, so it can search the file and read its figures again without opening it. The text is removed when the file is removed.",
+      "InboxCA also keeps the text read from each file, encrypted with your firm's key in InboxCA's own store, planned for Backblaze B2, so it can search the file and read its figures again without opening it. The text is removed when the file is removed.",
     ],
   },
   {
