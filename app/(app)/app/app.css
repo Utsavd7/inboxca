@@ -764,6 +764,8 @@ a.app-card { position: relative; text-decoration: none; transition: box-shadow v
 .help-list summary svg { margin-left: auto; color: var(--ink-3); transition: transform var(--base) var(--out); }
 .help-list details[open] summary svg { transform: rotate(180deg); }
 .help-list p { padding: 0 var(--s3) var(--s3); color: var(--ink-2); font-size: 13px; line-height: 1.6; }
+.help-see { display: inline-flex; align-items: center; gap: var(--s1); margin: 0 var(--s3) var(--s3); color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: none; }
+.help-see:hover { text-decoration: underline; }
 /* An answer opens its room and fades in, and the questions under it glide down with it. */
 @media (prefers-reduced-motion: no-preference) {
   .help-list { interpolate-size: allow-keywords; }
