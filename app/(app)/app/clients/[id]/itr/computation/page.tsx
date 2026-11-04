@@ -65,7 +65,9 @@ export default async function Computation({params,searchParams}:{params:Promise<
   // Normal income: the taxable income less the heads taxed at their own rates (capital gains).
   const special=(["itr.capital_gains.total","itr.capital_gains.ltcg112a"] as const).flatMap(field=>{const line=at(field);return line ? [{label:itrFields[field].label,line}] : [];});
   const normal=taxable===null ? null : special.reduce((left,{line})=>left-(amount(line) ?? BigInt(0)),taxable);
-  const regimes=Number(period)>=2027 && normal!==null ? [newRegime(normal<BigInt(0) ? BigInt(0) : normal),oldRegime(normal<BigInt(0) ? BigInt(0) : normal,age)] : null;
+  // From AY 2026-27 (period 2026, the 1961 Act's last year) on; earlier years are not worked out.
+  const year=Number(period),worked=year>=2026;
+  const regimes=worked && normal!==null ? [newRegime(normal<BigInt(0) ? BigInt(0) : normal,year),oldRegime(normal<BigInt(0) ? BigInt(0) : normal,age,year)] : null;
   const row=(label:string,value:string,note?:string,strong=false)=><li className="app-row" key={label+value}><span className="grow">{strong ? <strong>{label}</strong> : label}{note && <span className="sub">{note}</span>}</span><span className="num">{value}</span></li>;
   const shown=(line:Line)=>grouped(line.value,undefined,0);
 
@@ -94,7 +96,7 @@ export default async function Computation({params,searchParams}:{params:Promise<
       <section className="panel" aria-labelledby="comp-tax">
         <div className="panel-head"><h2 id="comp-tax">Tax, old and new regime</h2>{regimes && <span className="hint">Age for the old regime: {(Object.keys(ageBands) as AgeBand[]).map((band,i)=><Fragment key={band}>{i>0 && ", "}{band===age ? <strong>{ageBands[band]}</strong> : <Link href={`${back.replace("/itr?","/itr/computation?")}&age=${band}`}>{ageBands[band]}</Link>}</Fragment>)}</span>}</div>
         {regimes ? <>
-          <p className="hint">On the normal income worked out by InboxCA, {rupees(normal!<BigInt(0) ? BigInt(0) : normal!)}, for a resident individual: Income-tax Act 2025 and the Finance Act 2026 rates for {itrYear(period)}. {special.length ? `${special.map(({label})=>label).join(" and ")} ${special.length===1 ? "is" : "are"} taxed at special rates and not computed here.` : "Income taxed at special rates (capital gains and the like) is not computed here."}</p>
+          <p className="hint">On the normal income worked out by InboxCA, {rupees(normal!<BigInt(0) ? BigInt(0) : normal!)}, for a resident individual: {year<2027 ? "Income-tax Act 1961" : "Income-tax Act 2025"} and the Finance Act 2026 rates for {itrYear(period)}. {special.length ? `${special.map(({label})=>label).join(" and ")} ${special.length===1 ? "is" : "are"} taxed at special rates and not computed here.` : "Income taxed at special rates (capital gains and the like) is not computed here."}</p>
           <div className="regimes">
             {regimes.map(regime=><ul className="app-rows" key={regime.name} aria-label={regime.name}>
               <li className="app-row"><span className="grow"><strong>{regime.name}</strong></span></li>
@@ -102,8 +104,8 @@ export default async function Computation({params,searchParams}:{params:Promise<
               {row("Tax for the year",rupees(regime.total),"Before taxes paid and interest",true)}
             </ul>)}
           </div>
-        </> : Number(period)>=2027 ? <p className="hint">The taxable income is not worked out yet, so there is no tax to show. Check the heads of income first.</p>
-          : <p className="hint">Tax for {itrYear(period)} is not worked out yet. InboxCA needs the official rate text for that year.</p>}
+        </> : worked ? <p className="hint">The taxable income is not worked out yet, so there is no tax to show. Check the heads of income first.</p>
+          : <p className="hint">Tax for {itrYear(period)} is not worked out. InboxCA works out tax from AY 2026-27 on, from official rate text only.</p>}
         {!!taxLines.length && <>
           <p className="hint">As entered in the return, not worked out by InboxCA:</p>
           <ul className="app-rows">{taxLines.map(line=>row(line.label,shown(line),line.from))}</ul>

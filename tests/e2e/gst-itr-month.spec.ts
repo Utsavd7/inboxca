@@ -84,7 +84,7 @@ test("GST month end: every client's month in one list, by tag, with GSTR-1 by ra
   await page.context().close();
 });
 
-test("the computation sheet adds up checked income and deductions beside the return's own figures, and says tax is not available",async()=>{
+test("the computation sheet adds up checked income and deductions beside the return's own figures, and works out AY 2026-27 tax under the 1961 Act",async()=>{
   const client=randomUUID(),registration=randomUUID(),account=randomUUID(),draft=randomUUID(),pan="ZZZPZ0002Z"; // ggignore: invented PAN.
   await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind) values($1,$2,$3,'individual')",[client,firm.firmId,names.person]);
   await query(local.dbUrl,"insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values($1,$2,$3,'pan',$4,$5)",[registration,firm.firmId,client,await crypto.encrypt(firm.firmId,`clients/${client}/pan`,pan),await crypto.blindIndex(firm.firmId,"pan",pan)]);
@@ -108,9 +108,13 @@ test("the computation sheet adds up checked income and deductions beside the ret
   await expect(line("Gross total income, added up by InboxCA")).toContainText("the same");
   await expect(line("Taxable income, worked out by InboxCA")).toContainText("4,00,000");
   await expect(line("Taxable income, worked out by InboxCA")).toContainText("These differ");
-  // AY 2026-27 falls under the 1961 Act, whose s.115BAC(1A) rates InboxCA has not read: no tax figure.
-  await expect(sheet.getByText(/Tax for AY 2026-27 is not worked out yet/)).toBeVisible();
-  await expect(sheet).not.toContainText(/Tax payable[^\n]*₹/);
+  // AY 2026-27 falls under the 1961 Act: both regimes, with its sections. 4 lakh pays nothing in
+  // either: nil band in the new regime, and the s.87A rebate takes the 7,500 in the old one.
+  const fresh=sheet.getByRole("list",{name:"New regime, s.115BAC(1A)"}),old=sheet.getByRole("list",{name:/^Old regime/});
+  await expect(fresh).toContainText("Income-tax Act 1961 s.115BAC(1A)(iii)");
+  await expect(old).toContainText("Finance Act 2026 First Schedule Part I-A Paragraph A");
+  await expect(old.getByRole("listitem").filter({hasText:"Less rebate"})).toContainText("Income-tax Act 1961 s.87A");
+  for(const regime of [fresh,old]) await expect(regime.getByRole("listitem").filter({hasText:"Tax for the year"})).toContainText(/interest(₹)?0(\.00)?$/);
 });
 
 test("Set services and Assign for every client the list matches, with the count shown first",async()=>{
