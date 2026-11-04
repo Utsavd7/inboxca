@@ -9,7 +9,7 @@ export type Pin=Work & {kind:string;task:string;form:string|null;client:string;c
 // page).
 export const returnOf=(code:string|null)=>/^GSTR1_/.test(code ?? "") ? "GSTR-1" : /^GSTR3B_/.test(code ?? "") ? "GSTR-3B" : /^ITR_/.test(code ?? "") ? "ITR" : null;
 export const fills=(code:string|null)=>/^(GSTR1|GSTR3B|ITR)_/.test(code ?? "");
-export const returnPeriod=(code:string,period:string)=>periodLabel(/_Q$/.test(code) ? "quarterly" : /^ITR_/.test(code) ? "yearly" : "monthly",period);
+export const returnPeriod=(code:string,period:string)=>periodLabel(/_Q$/.test(code) ? "quarterly" : /^ITR_/.test(code) ? "yearly" : "monthly",period,code);
 // Fill is offered while a return has figures but no draft made from them.
 export const fillable=(work?:Work)=>!!work && ["figures","checked"].includes(work.stage) && !work.missing;
 

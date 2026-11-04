@@ -66,11 +66,11 @@ export async function firmDownload(firmId: string, data: Export, rules: { code: 
     { name: "returns-and-notices.csv", text: csv(["Client", "Return or notice", "Return", "Period", "Due on", "Status"],
       data.tasks.map((task) => [
         names.get(task.client_id), task.kind === "notice" ? "Notice" : "Return", task.code && (rule.get(task.code)?.name ?? task.code),
-        task.code && rule.has(task.code) ? periodLabel(rule.get(task.code)!.frequency, task.period_key) : periodName(task.period_key ?? ""), task.due_on,
+        task.code && rule.has(task.code) ? periodLabel(rule.get(task.code)!.frequency, task.period_key, task.code) : periodName(task.period_key ?? ""), task.due_on,
         (task.kind === "notice" ? noticeStatuses[task.status as keyof typeof noticeStatuses] : taskStatuses[task.status as keyof typeof taskStatuses]) ?? task.status,
       ])) },
     { name: "papers.csv", text: csv(["Client", "File name", "Paper type", "Type of work", "Period", "Status", "Received"],
-      data.documents.map((document) => [names.get(document.client_id), document.name, paperType(document.document_type), workTypes[document.work_type as WorkType] ?? document.work_type, periodName(document.period_key ?? ""), paperStates[document.status] ?? document.status, receivedLabel(document.received_at)])) },
+      data.documents.map((document) => [names.get(document.client_id), document.name, paperType(document.document_type), workTypes[document.work_type as WorkType] ?? document.work_type, periodName(document.period_key ?? "", document.work_type), paperStates[document.status] ?? document.status, receivedLabel(document.received_at)])) },
     { name: "activity-log.csv", text: csv(["When", "Person", "What happened", "About", "Record", "Details"],
       data.activity.map((entry) => [entry.at, entry.email, activityNames[entry.action] ?? entry.action, entry.entity_type, entry.entity_id, entry.details])) },
   ]);

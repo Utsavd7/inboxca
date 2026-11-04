@@ -21,7 +21,7 @@ it("suggests a short reply for every reason an email waits, with the names fille
 });
 
 it("names the paper and year the rules read in the email, or none", () => {
-  expect(suggestedReply("record_not_found", { ...names, paper: { types: ["ITR-V", "Acknowledgement"], period: "2026" } })).toContain("We could not find the ITR-V for FY 2025-26 in our records just now.");
+  expect(suggestedReply("record_not_found", { ...names, paper: { types: ["ITR-V", "Acknowledgement"], period: "2026" } })).toContain("We could not find the ITR-V for AY 2026-27 (FY 2025-26) in our records just now.");
   expect(suggestedReply("record_internal", { ...names, paper: { types: ["Balance sheet"], period: "" } })).toContain("We have your request for the Balance sheet.");
   expect(suggestedReply("record_not_found", { ...names, paper: { types: [], period: "2026" } })).toContain("We could not find the paper you asked for in our records");
 });

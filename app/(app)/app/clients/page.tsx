@@ -1,6 +1,5 @@
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
-import { itrYear } from "@/src/lib/itr-fields";
 import { paperType } from "@/src/lib/paper-type";
 import { sendSkip, type BulkSend } from "@/src/lib/records";
 import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lucide-react";
@@ -111,7 +110,7 @@ export default async function Clients({
     const name = rule?.name ?? task.code;
     if (task.due_on >= today) return [name, `Due ${dueLabel(task.due_on)}`];
     const since = task.due_on.slice(0, 4) === today.slice(0, 4) ? dueLabel(task.due_on).slice(0, -5) : dueLabel(task.due_on);
-    return [`${name} ${periodLabel(rule?.frequency ?? null, task.period_key)}`.trim(), `Late since ${since}`];
+    return [`${name} ${periodLabel(rule?.frequency ?? null, task.period_key, task.code)}`.trim(), `Late since ${since}`];
   };
   const branches = groups?.filter((group) => group.kind === "branch") ?? [];
   const filtered = params.group || params.branch || tag;
@@ -474,7 +473,7 @@ export default async function Clients({
           types={documentTypes}
           years={periodChoices(todayInIndia())
             .filter((key) => key.length === 4)
-            .map((key) => [key, key >= "2027" ? periodName(key) : `${periodName(key)} (${itrYear(key)})`])}
+            .map((key) => [key, periodName(key, "income_tax")])}
         />
       )}
     </div>

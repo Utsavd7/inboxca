@@ -25,7 +25,7 @@ import { PreparedForm } from "./prepared-form";
 export async function Paper({ id, asked, show, from, pane = false }: { id: string; asked?: string; show?: string; from?: string; pane?: boolean }) {
   const { supabase, membership, userId } = await currentMember();
   if (!membership) redirect("/app");
-  const { data: file } = await supabase.from("documents").select("id, client_id, name, document_type, period_key, status, prepared, size, clients(name)").eq("firm_id",membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle();
+  const { data: file } = await supabase.from("documents").select("id, client_id, name, document_type, work_type, period_key, status, prepared, size, clients(name)").eq("firm_id",membership.firmId).eq("id", id).neq("status", "deleted").maybeSingle();
   if (!file) return pane ? <DocPane name="Paper not found"><p className="hint">This paper is not available. It may have been removed.</p></DocPane> : notFound();
   const meta=file.prepared ? preparedSchema.parse(file.prepared) : null;
   const {data:template}=meta ? await supabase.from("templates").select("*").eq("form_code",meta.form).eq("version",meta.template).maybeSingle() : {data:null};
@@ -37,7 +37,7 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
   // A prepared return not yet filed, against the client's Form 26AS and Form 16.
   const differences=meta && /^ITR/.test(meta.form) && meta.status!=="filed" ? (await itrChecks(supabase,membership.firmId,[{client:file.client_id,period:file.period_key,form:meta.form,sources:meta.sources.map(source=>source.id)}]).catch(()=>[]))[0]?.differences ?? [] : [];
   const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "ods", "json", "txt", "docx", "odt"].includes(extension);
-  const kind = [paperType(file.document_type), periodName(file.period_key)].filter(Boolean).join(", ");
+  const kind = [paperType(file.document_type), periodName(file.period_key, file.work_type)].filter(Boolean).join(", ");
   const stream = `/app/files/${id}/stream${extension==="xlsx" ? `?sheet=${sheet}` : ""}`;
   // A prepared return opens as its form (Form view), with its stamped pages a click away (File view).
   const formable = !!meta && !!template && file.size > 0 && ["GSTR1", "GSTR3B", "ITR1", "ITR2", "ITR3", "ITR4"].includes(meta.form);

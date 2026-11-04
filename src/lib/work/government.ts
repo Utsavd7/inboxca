@@ -23,7 +23,7 @@ export const governmentUpdates = cache(async (supabase: Db, firmId: string) => {
   const found = data as { areas: Area[]; failing: string[]; items: Omit<GovUpdate, "from">[] };
   const moved = (link: string) => (extensions ?? []).filter((row) => row.source_url === link).map((row) => {
     const rule = rules?.find((rule) => rule.code === row.code);
-    return `${rule?.name ?? row.code} for ${periodLabel(rule?.frequency ?? null, row.period_key)} to ${dueLabel((row.due_rule as { on: string }).on)}`;
+    return `${rule?.name ?? row.code} for ${periodLabel(rule?.frequency ?? null, row.period_key, row.code)} to ${dueLabel((row.due_rule as { on: string }).on)}`;
   });
   return {
     items: found.items.map((item): GovUpdate => ({ ...item, from: names.get(item.source) ?? "An official site", ...(moved(item.link).length ? { moved: moved(item.link) } : {}) })),

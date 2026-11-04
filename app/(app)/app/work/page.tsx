@@ -292,7 +292,7 @@ async function marked(supabase: Db, client: string, today: string) {
     supabase.from("compliance_types").select("code, name, frequency").eq("period_key", ""),
   ]);
   const rule = new Map(rules?.map((row) => [row.code, row]));
-  return (rows ?? []).map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${rule.get(task.code ?? "")?.name ?? task.code ?? ""} for ${periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key)}, due ${dueLabel(task.due_on)}` }));
+  return (rows ?? []).map((task) => ({ id: task.id, name: task.clients?.name ?? "", sub: `${rule.get(task.code ?? "")?.name ?? task.code ?? ""} for ${periodLabel(rule.get(task.code ?? "")?.frequency ?? null, task.period_key, task.code)}, due ${dueLabel(task.due_on)}` }));
 }
 
 // Who gets what when every late client, or every client still missing papers, is reminded at

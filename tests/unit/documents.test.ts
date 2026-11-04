@@ -20,9 +20,10 @@ describe("what an attachment is", () => {
 });
 
 describe("a period in words", () => {
-  it("names a year from April 2026 a tax year for people, while drive file names keep FY", () => {
-    expect(periodName("2026")).toBe("FY 2025-26");
-    expect(periodName("2027")).toBe("Tax year 2026-27");
+  it("names an income tax paper's year by its Act, while other work and drive file names keep FY", () => {
+    expect(periodName("2026", "income_tax")).toBe("AY 2026-27 (FY 2025-26)");
+    expect(periodName("2027", "gst", "income_tax")).toBe("Tax year 2026-27");
+    expect(periodName("2027", "gst")).toBe("FY 2026-27");
     expect(periodName("2026-09")).toBe("Sep 2026");
     expect(filePeriod("2027")).toBe("FY 2026-27");
     expect(filePeriod("2026-09")).toBe("Sep 2026");

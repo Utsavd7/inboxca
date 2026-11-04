@@ -64,7 +64,7 @@ test("each email waiting for a person is for the client's person, with a reply s
   await expect(pane().getByRole("heading", { name: `Old ITR ${tag}` })).toBeVisible();
   await pane().getByRole("button", { name: /^Reply to/ }).click();
   await expect(pane().getByLabel(/^For Anita/)).toBeVisible();
-  await expect(owner.getByLabel("Your reply")).toHaveValue(`Dear ${client.name},\n\nThank you for your email. We could not find the ITR-V for FY 2023-24 in our records just now. We will look for it and send it to you as soon as we have it.\n\nRegards,\n${firmName}`);
+  await expect(owner.getByLabel("Your reply")).toHaveValue(`Dear ${client.name},\n\nThank you for your email. We could not find the ITR-V for AY 2024-25 (FY 2023-24) in our records just now. We will look for it and send it to you as soon as we have it.\n\nRegards,\n${firmName}`);
   await expect(pane().getByRole("link", { name: "Ask for papers" })).toHaveAttribute("href", `/app/clients/${client.id}?tab=documents&ask=1`);
   // A quick reply still takes the suggested one's place, and Esc still closes an unchanged one.
   await pane().getByRole("group", { name: "Quick replies" }).getByRole("button", { name: "We will call you" }).click();

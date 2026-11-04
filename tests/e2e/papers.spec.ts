@@ -136,7 +136,7 @@ test("papers chosen in Documents go from the firm's mailbox as secure links; pri
   await expect(owner.getByRole("status").filter({ hasText: "2 papers sent as secure links. 3 were not sent. Choose them again to see why." })).toBeVisible();
 
   // The routine paper opens at once; the private one only after a one-time code.
-  await expect.poll(async () => (await lastMail(routine.email))?.text ?? "").toContain("shared ITR-V for FY 2025-26 with you");
+  await expect.poll(async () => (await lastMail(routine.email))?.text ?? "").toContain("shared ITR-V for AY 2026-27 (FY 2025-26) with you");
   const plain = (await lastMail(routine.email))!;
   expect(plain.from?.text).toContain(office);
   expect(plain.text).toContain("The link works for 7 days and up to 5 downloads.");

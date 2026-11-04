@@ -68,16 +68,16 @@ test("an ITR that differs from Form 26AS shows each difference and is approved o
 
     // Prepare is the first approval: the caution must be ticked, in the browser and again on the server.
     await page.goto(`/app/clients/${client}?tab=outputs`);
-    const prepare=page.locator("form").filter({has:page.getByRole("group",{name:"ITR-1 AY 2026-27",exact:true})});
+    const prepare=page.locator("form").filter({has:page.getByRole("group",{name:"ITR-1 AY 2026-27 (FY 2025-26)",exact:true})});
     await expect(prepare.getByRole("listitem")).toHaveText([missing,booked]);
     await page.screenshot({path:test.info().outputPath("itr-check-prepare.png"),fullPage:true});
     const tick=prepare.getByLabel("I have looked at these differences");
     await tick.evaluate(box=>box.removeAttribute("required"));
-    await prepare.getByRole("button",{name:"Prepare ITR-1 AY 2026-27"}).click();
+    await prepare.getByRole("button",{name:"Prepare ITR-1 AY 2026-27 (FY 2025-26)"}).click();
     await expect(page).toHaveURL(/form=differences/);await expect(page.getByText("This return differs from Form 26AS or Form 16. Look at the differences and tick the box, then approve again.")).toBeVisible();
     expect((await query(local.dbUrl,"select count(*)::int n from public.documents where firm_id=$1 and prepared is not null",[firm.firmId]))[0].n).toBe(0);
     await prepare.getByLabel("I have looked at these differences").check();
-    await prepare.getByRole("button",{name:"Prepare ITR-1 AY 2026-27"}).click();await expect(page).toHaveURL(/\/files\/.*\/view/);
+    await prepare.getByRole("button",{name:"Prepare ITR-1 AY 2026-27 (FY 2025-26)"}).click();await expect(page).toHaveURL(/\/files\/.*\/view/);
     const [prepared]=await query(local.dbUrl,"select id,name,prepared from public.documents where firm_id=$1 and prepared->>'form'='ITR1'",[firm.firmId]);
     expect(prepared.prepared.status).toBe("draft");
     // The return's draft shows the same differences.

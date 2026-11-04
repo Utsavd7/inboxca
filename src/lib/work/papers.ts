@@ -32,7 +32,7 @@ export async function papersWorkItems(ctx: { supabase: SupabaseClient<Database>;
   const names = new Map(rules?.map((rule) => [rule.code, rule.name]));
   return (rows ?? []).map((row): WorkItem => {
     const details = row.details as unknown as DocumentRequest;
-    const period = details.period ? ` for ${periodName(details.period)}` : "";
+    const period = details.period ? ` for ${periodName(details.period, ...details.items.map((item) => item.work))}` : "";
     const base = { client: { id: row.client_id, name: row.client_name }, audience: "assigned" as const };
     if (row.kind === "call") {
       const missing = details.items.filter((item) => !item.received.length).map((item) => item.type);

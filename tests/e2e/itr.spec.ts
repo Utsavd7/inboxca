@@ -58,7 +58,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await page.goto(`/app/clients/${client}?tab=returns`);await page.getByRole("link",{name:"Figures",exact:true}).click();
     await expect(page.getByRole("heading",{name:"Income tax return"})).toBeVisible();
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${paper}`);
-    await expect(page.getByText("Income tax AY 2026-27",{exact:true})).toBeVisible();
+    await expect(page.getByText("Income tax AY 2026-27 (FY 2025-26)",{exact:true})).toBeVisible();
     for(let n=0;n<fromForm16.length;n++) {await expect(page.getByText("Invented Form 16.pdf. Page 1")).toBeVisible();await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${n+1} of ${fromForm16.length} checked`)).toBeVisible();}
     // The return: PAN and Form 16 are already filled; the rest is listed to fill.
     await page.goto(`/app/clients/${client}/itr`);
@@ -94,9 +94,9 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await expect.poll(async()=>(await query(local.dbUrl,checked,[firm.firmId])).length,{timeout:60_000}).toBe(1);
     // Prepared forms: the approved file is in Prepared, downloaded once and logged.
     await page.goto(`/app/clients/${client}?tab=outputs`);
-    const prepare=page.locator("form").filter({has:page.getByRole("group",{name:"ITR-1 AY 2026-27",exact:true})});
+    const prepare=page.locator("form").filter({has:page.getByRole("group",{name:"ITR-1 AY 2026-27 (FY 2025-26)",exact:true})});
     await page.screenshot({path:test.info().outputPath("itr-prepare.png"),fullPage:true});
-    await expect(prepare).toContainText("Invented Form 16.pdf");await prepare.getByRole("button",{name:"Prepare ITR-1 AY 2026-27"}).click();await expect(page).toHaveURL(/\/files\/.*\/view/);
+    await expect(prepare).toContainText("Invented Form 16.pdf");await prepare.getByRole("button",{name:"Prepare ITR-1 AY 2026-27 (FY 2025-26)"}).click();await expect(page).toHaveURL(/\/files\/.*\/view/);
     let [prepared]=await query(local.dbUrl,checked,[firm.firmId]);
     expect(prepared.prepared.status).toBe("approved");expect(prepared.name).toMatch(new RegExp(`^${person} - ITR-1 - AY 2026-27 - v\\d\\.json$`));expect(prepared.drive_file_id).toContain("Income tax/");expect(prepared.drive_file_id).toContain("/Prepared/");
     expect(prepared.prepared.sources.map((source:{id:string})=>source.id).sort()).toEqual([own.id,paper].sort());
@@ -150,7 +150,7 @@ test("ITR-2, ITR-3 and ITR-4 are prepared from checked figures, and a return cor
       await query(local.dbUrl,"insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values($1,$2,$3,'ITR','2026',$4)",[id,firm.firmId,client,{target:{form,version:request.template.version},lines:await lines(firm.firmId,id,request.drafts[0].figures,{entered_by:firm.ownerId,entered_at:new Date().toISOString()},firm.ownerId),checks:[]}]);
       await page.goto(`/app/clients/${client}/itr?form=${form}`);await expect(page.getByText("Nothing left to fill.")).toBeVisible();
       await page.goto(`/app/clients/${client}?tab=outputs`);
-      await page.locator("form").filter({has:page.getByRole("group",{name:`${name} AY 2026-27`,exact:true})}).getByRole("button",{name:`Prepare ${name} AY 2026-27`}).click();await expect(page).toHaveURL(/\/files\/.*\/view/);
+      await page.locator("form").filter({has:page.getByRole("group",{name:`${name} AY 2026-27 (FY 2025-26)`,exact:true})}).getByRole("button",{name:`Prepare ${name} AY 2026-27 (FY 2025-26)`}).click();await expect(page).toHaveURL(/\/files\/.*\/view/);
       const [saved]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'=$2",[firm.firmId,form]);
       expect(saved.prepared.status).toBe("approved");expect(saved.document_type).toBe(name);
       const output=JSON.parse(Buffer.from(await drive.read(saved.drive_file_id)).toString()),validate=officialSchema(request.template.source.file);
@@ -198,7 +198,7 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     await query(local.dbUrl,"insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values($1,$2,$3,'ITR','2026',$4)",[own,firm.firmId,client,{target:{form:"ITR1",version:request.template.version},lines:[...await lines(firm.firmId,own,others,entered,firm.ownerId),...await lines(firm.firmId,own,email,entered)],checks:[]}]);
     // Fill by hand: one draft from every figure, the one still to check shown.
     const returns=`/app/clients/${client}?tab=returns`;
-    await page.goto(returns);const row=page.locator("li").filter({hasText:"ITR (no business, no audit) FY 2025-26"});
+    await page.goto(returns);const row=page.locator("li").filter({hasText:"ITR (no business, no audit) AY 2026-27 (FY 2025-26)"});
     await expect(row.getByText("Papers in, not filled yet. 1 figure not checked yet")).toBeVisible();
     await row.getByRole("button",{name:/^Fill /}).click();await expect(page).toHaveURL(/\/files\/.*\/view/,{timeout:60_000});
     const checks=page.getByRole("region",{name:"Figures not checked yet"});

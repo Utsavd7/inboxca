@@ -8,6 +8,7 @@ import {enterItr,itrField,itrWork} from "@/src/lib/itr";
 import {itrChecks} from "@/src/lib/itr-check";
 import {itrReady,itrReturns,itrYear} from "@/src/lib/itr-fields";
 import {formName} from "@/src/lib/prepared";
+import {todayInIndia} from "@/src/lib/calendar";
 import {serverCrypto} from "@/src/lib/crypto";
 import {askPermission} from "@/app/(app)/actions";
 import {grantFor} from "@/src/lib/permission-grants";
@@ -27,6 +28,11 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
     return <><PageHead crumbs={[[`/app/clients/${id}?tab=extraction`,"Client"]]} title="Income tax return"/><p className="hint">InboxCA cannot open this return yet. Check that the client has a PAN. If it has one, InboxCA does not yet have the official form for {itrYear(period)}. Try again later.</p></>;
   }
   const {context,entries,drafts,review}=work,{membership,supabase,client}=context;
+  // The years InboxCA has an official ITR form for (src/lib/templates.ts chooseTemplate), up to
+  // the tax year running now when a form has no end, and the one open.
+  const now=todayInIndia(),running=Number(now.slice(0,4))+(now.slice(5,7)>="04" ? 1 : 0);
+  const {data:forms}=await supabase.from("templates").select("valid_from,valid_until").like("form_code","ITR%").neq("status","draft");
+  const years=[...new Set([period,...(forms ?? []).flatMap(row=>{const from=Number(row.valid_from?.slice(0,4)),to=row.valid_until ? Number(row.valid_until.slice(0,4))-1 : running;return Array.from({length:Math.max(0,to-from+1)},(_,n)=>String(from+n));})])].sort();
   const canEdit=!membership.viewOnlyUntil && (membership.may("edit_figures",id) || !!await grantFor(membership.firmId,context.userId,"edit_figures",id));
   // The return's own entered figures, and figures read from the client's papers for the year.
   const own=drafts.find(row=>row.data.target && row.data.lines.some(line=>line.source.entered_by)),papers=drafts.filter(row=>!row.data.target);
@@ -68,7 +74,7 @@ export default async function ItrPage({params,searchParams}:{params:Promise<{id:
     <div className="pane client-pane">
     <Form action={`/app/clients/${id}/itr`} className="form-row">
       <div><label htmlFor="return">Return</label><select id="return" name="form" defaultValue={form}>{itrReturns.map(code=><option key={code} value={code}>{formName(code)}</option>)}</select></div>
-      <div><label htmlFor="year">Year (type 2026 for AY 2026-27, 2027 for tax year 2026-27)</label><input id="year" name="year" defaultValue={period} inputMode="numeric" pattern="20[0-9]{2}" required/></div>
+      <div><label htmlFor="year">Year</label><select id="year" name="year" defaultValue={period}>{years.map(year=><option key={year} value={year}>{itrYear(year)}</option>)}</select></div>
       <button className="b b-secondary">Open</button>
     </Form>
     {q.message && <p className="alert" role="status">{(await keptReason()) ?? "InboxCA could not save these entries. Amounts need digits only, and dates must be real days. To change a figure already saved, use Check the figures."}</p>}

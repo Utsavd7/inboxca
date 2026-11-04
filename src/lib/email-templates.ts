@@ -1,5 +1,5 @@
 import type { AnswerKind } from "./answers";
-import { periodName } from "./documents";
+import { periodName, workOfType } from "./documents";
 import { askName, paperType } from "./paper-type";
 import { reminderEmail } from "./reminders";
 import { CODE_MINUTES } from "./share-codes";
@@ -22,18 +22,18 @@ export const emailTemplates={
   // The client reads the paper's type and period ("Form 16 for FY 2025-26"), never the drive's
   // file name with its version; a paper of no known type keeps its name.
   paper(client:string,firm:string,name:string,link:string,privatePaper:boolean,reply:boolean,paper?:{type:string;period:string}) {
-    const what=paper?.type && paper.type!=="Document" ? `${paperType(paper.type)}${paper.period ? ` for ${periodName(paper.period)}` : ""}` : name;
+    const what=paper?.type && paper.type!=="Document" ? `${paperType(paper.type)}${paper.period ? ` for ${periodName(paper.period, workOfType(paper.type))}` : ""}` : name;
     return {subject:reply ? `Re: your request for ${what}` : `${what} from ${firm}`,text:[`Dear ${client},`,"",`${firm} has shared ${what} with you.`,"",`Download it here: ${link}`,privatePaper ? "This paper is private. When you open the link, choose Email me a code. We send a 6 digit code to this email address. The link works for 7 days and up to 5 downloads." : "The link works for 7 days and up to 5 downloads.","",firm].join("\n")};
   },
   // Papers asked for (owner, 3 Nov 2026): the client replies with them attached, so the firm's
   // email provider checks them before InboxCA reads the mailbox and files them.
   request(client:string,firm:string,period:string,items:{type:string}[]) {
-    const when=period ? ` for ${periodName(period)}` : "";
+    const when=period ? ` for ${periodName(period, ...items.map((item)=>workOfType(item.type)))}` : "";
     return {subject:`Documents needed${when}`,text:[`Dear ${client},`,"",`Please reply to this email with these documents attached${when}:`,...items.map((item)=>`- ${askName(item.type)}`),"",firm].join("\n")};
   },
   // The text filled into a WhatsApp click to chat link for papers still missing; a person sends it.
   whatsapp(client:string,firm:string,period:string,items:{type:string}[]) {
-    const when=period ? ` for ${periodName(period)}` : "";
+    const when=period ? ` for ${periodName(period, ...items.map((item)=>workOfType(item.type)))}` : "";
     return [`Dear ${client},`,`${firm} still needs these papers${when}:`,...items.map((item)=>`- ${askName(item.type)}`),`Please reply to our email with them attached, or email them to us.`,`Thank you.`].join("\n");
   },
   // A sharing link InboxCA could not open: the file was private, or a folder (src/lib/share-link.ts).
