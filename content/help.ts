@@ -59,7 +59,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
       {
         slug: "connect-drive",
         title: "Connect your firm's drive",
-        lead: "Client papers are saved in your firm's own OneDrive or Dropbox. InboxCA keeps only a locked safety copy, for 30 days, of a paper it removes or changes.",
+        lead: "Client papers are saved in your firm's own OneDrive or Dropbox. InboxCA keeps a locked safety copy, for 30 days, of a paper it removes or changes, and the text it reads from each paper, encrypted with your firm's key, until the paper is removed.",
         steps: [
           "Open Settings, then Email and drive, and find Firm drive.",
           "Choose OneDrive or Dropbox.",
@@ -105,7 +105,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "It does not read or send WhatsApp messages. For a client with a phone number, Message on WhatsApp opens your own WhatsApp with the missing papers filled in.",
           "It has no upload page or upload link for clients. Clients email papers to your firm's address, as they do today.",
           "It has no live connection to Tally. It reads Tally exports, Excel, Word and PDFs.",
-          "It keeps no copy of your emails. Emails stay in your mailbox and papers in your drive, apart from a locked 30 day safety copy of a paper InboxCA removes or changes.",
+          "It keeps no copy of your emails. Emails stay in your mailbox and papers in your drive, apart from a locked 30 day safety copy of a paper InboxCA removes or changes, and the text read from each paper, kept encrypted until the paper is removed.",
           "It never uses your data for advertising or to train AI, and it does not ask for Aadhaar numbers.",
         ],
       },

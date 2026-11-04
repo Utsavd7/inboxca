@@ -60,7 +60,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: var(--r-sm); }
 .control :focus-visible,
 .plans .quote :focus-visible,
-.closing :focus-visible { outline-color: var(--white); }
+.closing:not(.alert) :focus-visible { outline-color: var(--white); }
 .wrap { max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); }
 .mono,
 .num { font-family: var(--font-figures); font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
@@ -583,17 +583,17 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 
 /* Closing */
 #start { margin-top: var(--s8); }
-.closing {
+.closing:not(.alert) {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s4); padding: var(--s7) var(--s5) 56px; overflow: hidden; border-radius: var(--r-xl);
   text-align: center; color: var(--white); background-color: var(--navy);
   background-image:
     radial-gradient(720px 400px at 50% 120%, rgba(26, 75, 176, 0.8), transparent 70%),
     repeating-linear-gradient(to bottom, transparent 0 47px, rgba(194, 211, 247, 0.05) 47px 48px);
 }
-.closing h2 { font-size: var(--fs-display); letter-spacing: -0.05em; line-height: 1; }
-.closing p { font-size: var(--fs-lead); color: var(--on-navy); }
-.closing .btn { margin-top: var(--s2); }
-.closing .closing-mail { font-size: var(--fs-small); overflow-wrap: anywhere; }
+.closing:not(.alert) h2 { font-size: var(--fs-display); letter-spacing: -0.05em; line-height: 1; }
+.closing:not(.alert) p { font-size: var(--fs-lead); color: var(--on-navy); }
+.closing:not(.alert) .btn { margin-top: var(--s2); }
+.closing:not(.alert) .closing-mail { font-size: var(--fs-small); overflow-wrap: anywhere; }
 .closing-mail a { color: var(--white); text-decoration: underline; text-underline-offset: 4px; }
 
 /* Phone only: the start button stays in reach while scrolling */
@@ -1152,7 +1152,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
   .finder .segment { flex-direction: column; }
   .finder .segment button { flex: none; text-align: left; padding-inline: 14px; }
   .faq summary { font-size: var(--fs-body); }
-  .closing { padding: var(--s7) var(--s4); }
+  .closing:not(.alert) { padding: var(--s7) var(--s4); }
   .policy { padding-top: 104px; }
   .policy-toc ol { grid-template-columns: 1fr; }
   .policy-section ul { padding-left: 0; }

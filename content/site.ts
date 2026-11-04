@@ -123,7 +123,7 @@ export const questions = [
   ],
   [
     "What happens if I cancel?",
-    "Your plan runs to the end of the period you paid for. Your files are already in your own drive, and for 30 days you can download your records as one ZIP.",
+    "Your plan runs to the end of the period you paid for. Then your firm can only view for 30 days, then it closes, and the owner has 30 more days to download your records as one ZIP. Your files are already in your own drive.",
   ],
 ] as const;
 
