@@ -168,5 +168,20 @@
     "mappings": {
       "format": "json"
     }
+  },
+  {
+    "form_code": "TDS140",
+    "version": "1.2",
+    "valid_from": "2026-04-01",
+    "valid_until": null,
+    "status": "active",
+    "source": {
+      "file": "protean/Form140_File_Format_V1.2.xlsx",
+      "url": "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html",
+      "sha256": "ec5d8a1138ac84fd5ed59f62aabb5b097479007d501cca98a27ba9c400a05f40"
+    },
+    "mappings": {
+      "format": "txt"
+    }
   }
 ]

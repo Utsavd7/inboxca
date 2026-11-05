@@ -3,6 +3,8 @@ import { PortalInput } from "./portal-input";
 import { SalesInput } from "./sales-input";
 import { PurchaseMatch } from "./purchase-match";
 import { DatasetReview } from "./dataset-review";
+import { TdsDetails } from "./tds-details";
+import { statementPeriod } from "@/src/lib/tds";
 import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
@@ -105,8 +107,8 @@ const DAY = 86_400_000;
 // files, due dates, figures and forms open their tab; the rest open Overview with their panel.
 const mains = { overview: "Overview", emails: "Emails", documents: "Documents", returns: "Returns", notices: "Notices" } as const;
 type Main = keyof typeof mains;
-const tabOf: Record<string, Main> = { files: "documents", due: "returns", extraction: "returns", outputs: "returns", notice: "notices", numbers: "overview", services: "overview", contacts: "overview", team: "overview", details: "overview", activity: "overview" };
-const panels = ["notice", "numbers", "services", "contacts", "team", "details", "activity"];
+const tabOf: Record<string, Main> = { files: "documents", due: "returns", extraction: "returns", outputs: "returns", notice: "notices", numbers: "overview", services: "overview", contacts: "overview", team: "overview", details: "overview", activity: "overview", tds: "overview" };
+const panels = ["notice", "numbers", "services", "contacts", "team", "details", "activity", "tds"];
 const lookAfter = ["partner_in_charge", "manager", "staff"];
 const uuid = /^[0-9a-f-]{36}$/;
 const taskChanges: Record<string, string> = { filed: "marked filed", in_progress: "marked in progress", reopen: "marked not filed", verified: "marked e-verified" };
@@ -118,13 +120,14 @@ const changes: Record<string, string> = {
   "add-todo": "To-do added. It is on Today for the person.", "todo-done": "To-do done.", "todo-undo": "To-do open again.",
   agm: "AGM date saved. The returns that follow it are on the Calendar.",
   kyc: "KYC year saved. The next DIR-3 KYC Web is on the Calendar.",
+  tds: "TDS statement details saved.",
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; request?: string; task?: string; marked?: string; t?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; request?: string; task?: string; marked?: string; t?: string; tan?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds, tan }] = await Promise.all([params, searchParams]);
   const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "overview";
   const sub = asked === "extraction" || asked === "outputs" ? asked : tab;
   const panel = panels.includes(asked ?? "") ? asked! : "";
@@ -152,7 +155,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const owner = membership.role === "owner";
   const namedIds = [edit ?? send, shared, renamed ?? saved ?? removed ?? restored].filter((file): file is string => uuid.test(file ?? ""));
   // Returns still to file: those late or due in the next 60 days, unless later ones are asked for.
-  const taskQuery = supabase.from("tasks").select("id, code, period_key, due_on, status, details",{count:"exact", head: sub !== "returns"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed");
+  const taskQuery = supabase.from("tasks").select("id, code, period_key, due_on, status, details, registration_id",{count:"exact", head: sub !== "returns"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed");
   const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: sheets }, { data: licences }, { count: kycPlanned }, { data: todos }] = await Promise.all([
     supabase
       .from("clients")
@@ -678,7 +681,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                   <ul className="app-rows">
                     {numbers.map((registration) => {
                       const name = numberKinds[registration.kind as NumberKind].name;
-                      return <Row key={registration.id} title={name} status={idNumber(name, registration.number)} />;
+                      return <Row key={registration.id} title={name} status={idNumber(name, registration.number)} action={registration.kind === "tan" && manage && <Link className="b b-ghost b-small" href={`${base}?tab=tds&tan=${registration.id}`} scroll={false}>TDS statement details</Link>} />;
                     })}
                   </ul>
                 ) : (
@@ -947,6 +950,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                         }
                         action={<>
                           {canPrepare && fills(task.code) && fillable(stages.get(task.id)) && <Fill task={task.id} label={title} />}
+                          {task.code === "TDS_RET" && task.status !== "filed" && task.registration_id && statementPeriod(task.period_key ?? "") && <Link className="b b-secondary" href={`${base}/tds?tan=${task.registration_id}&period=${task.period_key}`} aria-label={`Prepare ${title}`}>Prepare statement</Link>}
                           {stages.get(task.id)?.stage === "filled" && <Link className="b b-secondary" href={`/app/files/${stages.get(task.id)!.form}/view`} aria-label={`Check figures of ${title}`}>Check figures</Link>}
                           {canFile && task.status !== "filed" ? (
                             task.due_on <= addDays(today, 30) && <Link className={`b ${(canPrepare && fills(task.code) && fillable(stages.get(task.id))) || stages.get(task.id)?.stage === "filled" ? "b-ghost" : "b-secondary"}`} href={`${returnsHref}&task=${task.id}`} scroll={false} aria-label={`Mark ${title} filed`}>Mark filed</Link>
@@ -1285,6 +1289,11 @@ export default async function Client({ params, searchParams }: { params: Promise
             <p className="hint">{client.archived_at ? "Archived clients are hidden from the list. Nothing was deleted." : "Archiving hides the client from the list. Nothing is deleted, and you can restore it."}</p>
             <Pending className="b b-secondary" name="intent" value={client.archived_at ? "restore" : "archive"}>{client.archived_at ? "Restore client" : "Archive client"}</Pending>
           </form>
+        </SidePanel>
+      )}
+      {panel === "tds" && manage && (
+        <SidePanel key="tds" id="tds" title="TDS statement details" close={base}>
+          <TdsDetails client={client.id} name={client.name} tans={numbers.filter((registration) => registration.kind === "tan")} tan={tan} error={error} />
         </SidePanel>
       )}
       {panel === "activity" && (

@@ -7,7 +7,7 @@ import {currentMember,viewOnlyWords} from "@/src/lib/member";
 import {preparedSchema,formName} from "@/src/lib/prepared";
 import {draftSchema} from "@/src/lib/datasets";
 import {periodName} from "@/src/lib/documents";
-import {gstPortalTakes} from "@/src/lib/calendar";
+import {dueLabel,gstPortalTakes,periodLabel} from "@/src/lib/calendar";
 import {irnColumn} from "@/src/lib/gstr1-fields";
 import {itrReady,itrYear} from "@/src/lib/itr-fields";
 import {itrWork} from "@/src/lib/itr";
@@ -18,6 +18,7 @@ import {Pending} from "./pending";
 import {ItrDifferences} from "./itr-check";
 import {keptReason} from "@/src/lib/reason";
 import {signoffLines} from "@/src/lib/signoffs";
+import {formatChanged} from "@/src/lib/tds-draft";
 import {Badge,IconTile,Toast,type Tone} from "./ui";
 import {MenuClose,Refresh} from "./returns-client";
 import {addEditedForm,decideForm,markFormFiled,prepareForm,setDraftRegistration} from "./form-actions";
@@ -60,8 +61,8 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     const review=forms?.filter(file=>latest.has(file.id) && file.status!=="deleted" && (preparedSchema.parse(file.prepared).status==="draft" || waiting?.some(item=>item.entity_id===file.id)));
     return review?.length ? <section className="panel"><h2>Forms to review</h2><ul className="rows">{review.map(file=><li key={file.id}><Link href={`/app/clients/${file.client_id}?tab=outputs`}>{file.clients?.name}: {file.name}</Link>{waiting?.some(item=>item.entity_id===file.id) && <span className="hint">An acknowledgement arrived. Mark it filed.</span>}</li>)}</ul></section> : null;
   }
-  const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations},{data:pans},{data:itrRows},{data:signoffs},{data:people}]=await Promise.all([
-    supabase.from("datasets").select("id,form_code,period_key,revision,data").eq("firm_id",membership.firmId).eq("client_id",client).in("form_code",["GSTR1","GSTR3B"]).order("period_key",{ascending:false}).limit(100),
+  const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations},{data:pans},{data:itrRows},{data:signoffs},{data:people},{data:tans}]=await Promise.all([
+    supabase.from("datasets").select("id,form_code,period_key,revision,data").eq("firm_id",membership.firmId).eq("client_id",client).in("form_code",["GSTR1","GSTR3B","TDS140"]).order("period_key",{ascending:false}).limit(100),
     supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","gstin"),
     supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",client).in("document_type",["Acknowledgement","ITR-V"]).eq("status","filed").limit(100),
     supabase.from("requests").select("entity_id,details").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","form_confirmation").eq("status","pending"),
@@ -70,6 +71,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     // Who prepared, approved and filed each version (src/lib/signoffs.ts).
     supabase.rpc("form_signoffs",{target_firm:membership.firmId,docs:(forms ?? []).map(file=>file.id)}),
     supabase.rpc("firm_people",{target_firm:membership.firmId}),
+    supabase.from("client_registrations").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","tan"),
   ]);
   const emailOf=(person:string|null)=>people?.find(one=>one.user_id===person)?.email;
   // Income tax: one return per form and year that has figures entered for it, built with the
@@ -101,6 +103,8 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   const einvoiced=(meta:{sources:{id:string}[]})=>meta.sources.some(source=>(rows ?? []).some(row=>row.id===source.id && draftSchema.parse(row.data).lines.some(line=>{const hit=/^([a-z0-9]+)\.r\d+\.c(\d+)$/.exec(line.field);return !!hit && Number(hit[2])===irnColumn(hit[1]);})));
   const label=(row:{form_code:string;data:unknown})=>{const data=draftSchema.parse(row.data);return `${row.form_code==="GSTR3B" ? "GSTR-2B credit" : sourceNames?.find(source=>source.id===data.lines[0].source.document)?.name ?? "Source file"}, ${data.lines.length} figures${data.lines.every(line=>line.state==="confirmed") ? ", checked" : ", check these first"}`;};
   const reason=message ? await keptReason() : undefined;
+  // A Form No. 140 format with a changed layout, not yet mapped by Orelu's admin.
+  const tdsChanged=(forms ?? []).some(file=>preparedSchema.parse(file.prepared).form==="TDS140") ? await formatChanged() : null;
   // Why this person cannot take a step, by the same rules the server keeps.
   const approver=["owner","partner","manager"].includes(membership.role);
   const viewOnly=viewOnlyWords(membership.viewOnlyUntil);
@@ -128,7 +132,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
   const card=(file:NonNullable<typeof forms>[number],older:NonNullable<typeof forms>)=>{
     const meta=preparedSchema.parse(file.prepared),head=latest.has(file.id),active=head && !membership.viewOnlyUntil && file.size>0,{open,stage}=stageOf(file);
     const {done,word,tone}=stages[stage],decides=head && stage==="waiting";
-    const period=meta.form.startsWith("ITR") ? itrYear(file.period_key) : periodName(file.period_key),number=gstins.length>1 ? gstins.find(reg=>reg.id===meta.registration)?.number : undefined;
+    const period=meta.form.startsWith("ITR") ? itrYear(file.period_key) : meta.form==="TDS140" ? periodLabel("quarterly",file.period_key) : periodName(file.period_key),number=gstins.length>1 ? gstins.find(reg=>reg.id===meta.registration)?.number : undefined;
     const download=(primary:boolean)=><form action={`/app/files/${file.id}/filing`} method="post"><button className={`b ${primary ? "b-primary" : "b-secondary"}`} disabled={!active}>Download for filing</button></form>;
     const arrived=confirmations?.some(item=>item.entity_id===file.id);
     let primary:React.ReactNode=null,second:React.ReactNode=null,note:React.ReactNode=null;
@@ -152,12 +156,12 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         <p className="hint">If you type only the number, InboxCA makes a short filing note from your firm for the client. It is not the portal acknowledgement. A private paper is sent only after someone approves it in the Inbox.</p>
         <Pending className="b b-primary">Mark filed</Pending>
       </form></div></details> : <button className="b b-secondary" disabled>Mark filed</button>;
-      note=viewOnly || (arrived ? "An acknowledgement arrived. Check it, then mark the return filed." : !membership.may("mark_filed",client) ? "Ask your firm's owner for permission to mark returns filed." : "Download it, file it on the portal, then mark it filed here.");
+      note=viewOnly || (arrived ? "An acknowledgement arrived. Check it, then mark the return filed." : !membership.may("mark_filed",client) ? "Ask your firm's owner for permission to mark returns filed." : meta.form==="TDS140" ? "Download it, validate it with Protean's FVU, file it, then mark it filed here." : "Download it, file it on the portal, then mark it filed here.");
     }
     else if(stage==="filed") second=active && download(false);
     else if(stage==="rejected") {primary=head && <Link className="b b-primary" href={`?tab=extraction&draft=${meta.sources[0].id}`}>Correct the figures</Link>;note="Draft sent back. Correct the figures, then prepare it again.";}
     if(!head) {primary=second=null;note="An earlier version.";}
-    const reject=active && decides && approver,upload=active && canPrepare;
+    const reject=active && decides && approver,upload=active && canPrepare && meta.form!=="TDS140";
     return <li key={file.id} className={`rf-card is-${stage}`}>
       <div className="rf-top">
         <IconTile Icon={FileText} kind={stage==="filed" ? "done" : "docs"}/>
@@ -187,6 +191,8 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
       </div>
       <Steps done={done} busy={stage==="preparing" || stage==="making"}/>
       {note && <p className={`rf-note${stage==="preparing" || stage==="making" ? " is-busy" : ""}`}>{note}</p>}
+      {meta.form==="TDS140" && tdsChanged && <p className="rf-notice"><Info size={15} aria-hidden/>The official Form No. 140 format changed on {dueLabel(tdsChanged)}. Check before filing.</p>}
+      {meta.form==="TDS140" && <p className="rf-notice"><Info size={15} aria-hidden/>Validate this file with Protean&apos;s free File Validation Utility (FVU) and the challan file (.csi) from the TIN website before filing.</p>}
       {meta.form==="GSTR1" && einvoiced(meta) && <p className="rf-notice"><Info size={15} aria-hidden/>Invoices and notes with an IRN are left out of the JSON, because the portal has them from e-invoices and uploading them again would wipe their IRN details.</p>}
       {meta.form==="GSTR1" && meta.template==="2.0" && <p className="rf-notice"><Info size={15} aria-hidden/>This older official workbook leaves out supplies through e-commerce operators (tables 14 and 15). Add them in the offline tool or on the portal before filing.</p>}
       {meta.form==="GSTR3B" && <details className="rf-tables"><summary><Check size={15} aria-hidden/>InboxCA filled {filled3b.length} parts from your checked GSTR-1 and GSTR-2B figures. Add {left3b.length} more on the portal before filing.<ChevronDown size={15} aria-hidden/></summary>
@@ -209,7 +215,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     {toast ? <Toast>{toast}</Toast> : message && <p className="alert" role="status">{reason ?? (message==="edited" ? "InboxCA could not use this file. Choose the official workbook or return file you filled, with its headings unchanged. You also need permission to edit figures." : message==="ack" ? "The return was not marked filed. Choose or upload the acknowledgement, or type its number, then try again." : message==="approval" ? "The approval was not saved. Someone other than the person who checked the figures must approve. To reject, choose a reason and say what must change." : message==="differences" ? "This return differs from Form 26AS or Form 16. Look at the differences and tick the box, then approve again." : "InboxCA could not prepare this return. Check that every figure is checked and that your firm's drive is connected, then try again.")}</p>}
     {!!versions.size && <ul className="rf-list">{[...versions.values()].map(([file,...older])=>card(file,older))}</ul>}
     {[...versions.values()].some(([file])=>{const {stage,open}=stageOf(file);return stage==="preparing" || stage==="making" || stage==="outdated" && !open;}) && <Refresh/>}
-    {(!!rows?.length || !!pans?.length) && <div className="app-card rf-prepare">
+    {(!!rows?.length || !!pans?.length || !!tans?.length) && <div className="app-card rf-prepare">
       <header className="app-card-head"><IconTile Icon={FilePlus2} kind="docs"/><h2>Prepare a return</h2><span className="hint">InboxCA fills the official file from checked figures only.</span></header>
       {!!rows?.length && (canPrepare ? <>
         {!!unassigned.length && <div className="rf-group"><h3>Which GSTIN is each register for?</h3><p className="hint">This client has more than one GSTIN. Each register belongs to one of them.</p>{unassigned.map(row=><form action={setDraftRegistration} className="rf-row" key={`reg-${row.id}`}>
@@ -235,6 +241,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
               {prepareButton([client,period,"GSTR3B",reg.id].join(":"),`Prepare GSTR-3B ${periodName(period)}`)}</form>)}</div>}
           </Fragment>;})}
       </> : !membership.viewOnlyUntil ? <div className="rf-group">{ask}</div> : <p className="rf-row hint">{viewOnly}</p>)}
+      {!!tans?.length && <div className="rf-group"><h3>TDS statements</h3><div className="rf-row"><span className="grow">Form No. 140, for payments other than salary, from the quarter&apos;s registers and challans.</span><Link className="b b-secondary" href={`/app/clients/${client}/tds?tan=${tans[0].id}`}>Open the TDS statement</Link></div></div>}
       {!!pans?.length && <div className="rf-group"><h3>Income tax returns</h3>
         {pans.length!==1 ? <p className="rf-notice"><Info size={15} aria-hidden/>This client has more than one PAN. Keep only one PAN to prepare an income tax return.</p> : !itr.length && <div className="rf-row"><span className="grow">No return started yet.</span><Link className="b b-secondary" href={`/app/clients/${client}/itr`}>Fill an income tax return</Link></div>}
         {canPrepare ? itr.map(({form,period,missing})=>{

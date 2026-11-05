@@ -16,7 +16,7 @@ export async function formContext(input:Work,edit=true) {
   if(!membership) throw new Error("Sign in to your firm first.");
   const permission=edit && !membership.may("edit_figures",input.client) ? await grantFor(membership.firmId,userId,"edit_figures",input.client) : null;
   if(edit && !membership.may("edit_figures",input.client) && !permission) throw new Error("Ask for permission to prepare a return.");
-  const itr=/^ITR[1-6]$/.test(input.form),kind=itr ? "pan" : "gstin";
+  const itr=/^ITR[1-6]$/.test(input.form),tds=input.form==="TDS140",kind=itr ? "pan" : tds ? "tan" : "gstin";
   const [{data:client},{data:registrations},{data:templates}]=await Promise.all([
     supabase.from("clients").select("id,name").eq("firm_id",membership.firmId).eq("id",input.client).maybeSingle(),
     supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",input.client).eq("kind",kind),
@@ -27,10 +27,10 @@ export async function formContext(input:Work,edit=true) {
   if(itr && registrations?.length!==1) throw new Error("Keep only one PAN for this client before preparing this return.");
   const template=chooseTemplate((templates ?? []).map(row=>templateSchema.parse(row)),input.form,input.period,input.version,input.reason);
   const number=await serverCrypto().decrypt(membership.firmId,`clients/${input.client}/${kind}`,registration.number_enc);
-  return {supabase,membership,userId,permission,client,registration,registrations:registrations?.length ?? 0,template,period:input.period,number,itr};
+  return {supabase,membership,userId,permission,client,registration,registrations:registrations?.length ?? 0,template,period:input.period,number,itr,tds};
 }
 export function requestFor(context:Awaited<ReturnType<typeof formContext>>,drafts:FormRequest["drafts"],purpose:FormRequest["purpose"]="prepare") {
-  return formRequest.parse({purpose,firm:context.membership.firmId,client:context.client.id,registration:context.registration.id,...(context.itr ? {pan:context.number} : {gstin:context.number}),period:context.period,template:context.template,drafts,expires:Math.floor(Date.now()/1000)+60});
+  return formRequest.parse({purpose,firm:context.membership.firmId,client:context.client.id,registration:context.registration.id,...(context.itr ? {pan:context.number} : context.tds ? {tan:context.number} : {gstin:context.number}),period:context.period,template:context.template,drafts,expires:Math.floor(Date.now()/1000)+60});
 }
 
 // The caller spends a one-use permission atomically when saving the prepared form.
@@ -45,8 +45,10 @@ export async function checkedForm(input:Work & {registration:string;drafts:strin
   // Existing registers have no registration choice. Never guess in a multi-number client.
   // Each register must name this GST number, or the client must have only one.
   const named=(row:{data:unknown})=>(row.data as {registration?:string} | null)?.registration;
-  if(!context.itr && (input.form==="GSTR1" ? rows : rows.filter(row=>row.form_code==="GSTR1")).some(row=>named(row) ? named(row)!==context.registration.id : context.registrations!==1))
+  if(!context.itr && !context.tds && (input.form==="GSTR1" ? rows : rows.filter(row=>row.form_code==="GSTR1")).some(row=>named(row) ? named(row)!==context.registration.id : context.registrations!==1))
     throw new Error("Choose the GSTIN for each register of this client before preparing the return.");
+  // A TDS statement's figures always name their TAN.
+  if(context.tds && rows.some(row=>named(row)!==context.registration.id)) throw new Error("These figures are for another TAN of this client.");
   const drafts=[];
   for(const row of rows) {
     if(context.itr && draftSchema.parse(row.data).target?.form && draftSchema.parse(row.data).target!.form!==input.form) throw new Error("Choose the figures for this return.");

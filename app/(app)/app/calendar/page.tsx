@@ -18,13 +18,14 @@ import { MarkFiled } from "../mark-filed";
 import { Fill } from "../fill";
 import { returnStages } from "../return-work";
 import { fillable, fills } from "@/src/lib/return-work";
+import { statementPeriod } from "@/src/lib/tds";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
 import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Tone } from "../ui";
 import { SetupArt } from "../setup-art";
 import { RowKeys } from "../row-keys";
 
-const columns = "id, client_id, kind, code, period_key, due_on, status, details, clients!inner(name, archived_at)";
+const columns = "id, client_id, registration_id, kind, code, period_key, due_on, status, details, clients!inner(name, archived_at)";
 const uuid = /^[0-9a-f-]{36}$/;
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const saved: Record<string, string> = { filed: "marked filed", in_progress: "marked in progress", reopen: "marked not filed" };
@@ -234,6 +235,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                     <td>
                       {form}
                       {compact && <span className="sub">{of}</span>}
+                      {/* The quarter's TDS return opens its Form No. 140 statement. */}
+                      {!viewOnly && task.code === "TDS_RET" && task.status !== "filed" && task.registration_id && statementPeriod(task.period_key ?? "") && <Link className="sub" href={`/app/clients/${task.client_id}/tds?tan=${task.registration_id}&period=${task.period_key}`} aria-label={`Prepare ${task.clients.name} ${form}`}>Prepare statement</Link>}
                     </td>
                     {!compact && <td>{of}</td>}
                     {!(compact && day) && (

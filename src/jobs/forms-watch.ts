@@ -7,7 +7,8 @@ import { itrReviewSchema, type FormRequest } from "@/src/lib/form-worker";
 import type { ItrForm } from "@/src/lib/itr-fields";
 import { officialFile, officialStore, type Store } from "@/src/lib/official-files";
 import { workerForm } from "@/src/lib/prepare-form";
-import { layoutDifferences, schemaLayout, workbookLayout } from "@/src/lib/official-layout";
+import { layoutDifferences, schemaLayout, tdsFormatLayout, workbookLayout, type Layout } from "@/src/lib/official-layout";
+import { form140Layout } from "@/src/lib/tds";
 import { xlsxEntries } from "@/src/lib/sheet";
 import { version, type Template } from "@/src/lib/templates";
 import { cbicUpdates, efilingNews, gstNews, gstOfflineTools, itrDownloads, proteanDownloads, type Entry } from "./gov-pages";
@@ -28,9 +29,12 @@ import type { Handler } from "./runner";
 export type Area = "gst" | "income_tax" | "tds" | "company_law";
 // An official file InboxCA fills, compared with the copy it fills today when a new one comes:
 // the file inside the download, the form whose newest version it is set beside (or a fixed
-// copy), and how many rows of each sheet hold headings.
-type Compare = { file: RegExp; form?: string; current?: { file: string; version: string; sha256: string }; rows?: number };
-export type Source = { key: string; name: string; url: string; area: Area; kind: "file" | "page" | "list" | "manual"; feed?: string; body?: string; known?: string; codes?: string[]; parse?: (text: string, url: string) => Entry[]; compare?: Compare };
+// copy), and how many rows of each sheet hold headings. A format InboxCA writes to itself (the TDS
+// statement) is set beside the layout its own code writes instead of a shipped copy.
+type Compare = { file: RegExp; form?: string; current?: { file: string; version: string; sha256: string }; rows?: number; layout?: { of: (data: Buffer) => Layout; expected: Layout } };
+// entry: a file found each day on its page as the link of the entry these words name, its version
+// read from them (Protean names its files by date, and says the version beside the link).
+export type Source = { key: string; name: string; url: string; area: Area; kind: "file" | "page" | "list" | "manual"; feed?: string; body?: string; known?: string; codes?: string[]; parse?: (text: string, url: string) => Entry[]; compare?: Compare; entry?: RegExp };
 export const sources: Source[] = [
   { key: "gst_offline_tool", name: "GST returns offline tool (GSTR-1 workbooks)", url: "https://tutorial.gst.gov.in/offlineutilities/returns/gst_offline_tool.zip", area: "gst", kind: "file", known: "f0a7d6f66bf71b30e9ecd045a664dda428c8fac239f51127d656e6faac60e312", codes: ["GSTR1_M", "GSTR1_Q"], compare: { file: /GSTR1_Excel_Workbook_Template_V([\d.]+)\.xlsx$/i, form: "GSTR1", rows: 4 } },
   { key: "gstr3b_utility", name: "GSTR-3B offline utility", url: "https://tutorial.gst.gov.in/offlineutilities/returns_gstr3b/GSTR3B_Excel_Utility.zip", area: "gst", kind: "file", known: "54e7a39b0d1db41cd726b93e14fce616695a2651cca633ed26124e8cc9211f03", codes: ["GSTR3B_M", "GSTR3B_Q"], compare: { file: /GSTR3B_Excel_Utility_V([\d.]+)\.xlsm$/i, current: { file: "gstr3b-v5.8/GSTR3B_Excel_Utility_V5.8.xlsm", version: "5.8", sha256: "e7d2f3f5183d4275a4455b5385baffde47d87b364ccfff2b0cd9352b6051c3ce" }, rows: 200 } },
@@ -42,6 +46,7 @@ export const sources: Source[] = [
   { key: "efiling_news", name: "Income tax e-filing portal news", url: "https://www.incometax.gov.in/iec/foportal/latest-news", area: "income_tax", kind: "list", parse: efilingNews },
   { key: "itd_notifications", name: "Income Tax Department notifications and circulars", url: "https://www.incometaxindia.gov.in/", area: "income_tax", kind: "manual" },
   { key: "protean_etds", name: "Protean e-TDS utilities (RPU and FVU)", url: "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html", area: "tds", kind: "list", parse: proteanDownloads },
+  { key: "protean_form140", name: "Protean file format for Form No. 140 (TDS on payments other than salary)", url: "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html", area: "tds", kind: "file", known: "ec5d8a1138ac84fd5ed59f62aabb5b097479007d501cca98a27ba9c400a05f40", codes: ["TDS_RET"], parse: proteanDownloads, entry: /^File Format for Form Number 140\b.*\bVersion ([\d.]+)/i, compare: { file: /\.xlsx$/i, form: "TDS140", layout: { of: tdsFormatLayout, expected: form140Layout } } },
   { key: "traces", name: "TRACES what's new", url: "https://traces.tdscpc.gov.in/", area: "tds", kind: "manual" },
   { key: "mca", name: "MCA news and forms", url: "https://www.mca.gov.in/", area: "company_law", kind: "manual" },
 ];
@@ -91,6 +96,13 @@ async function fetchBody(url: string, fetcher: typeof fetch, limit: number, keep
 }
 
 async function fingerprint(source: Source, fetcher: typeof fetch, hosts: Set<string>) {
+  if (source.entry) {
+    const page = await fetchBody(source.url, fetcher, 5 * 1024 * 1024, true, hosts);
+    const found = source.parse!(page.bytes.toString("utf8"), source.url).map((entry) => ({ entry, version: source.entry!.exec(entry.title)?.[1] })).find((hit) => hit.version);
+    if (!found) throw new Error("The entry is no longer on the page");
+    const file = await fetchBody(found.entry.link, fetcher, LIMIT, true, hosts);
+    return { hash: file.hash, bytes: file.bytes, file: { name: decodeURIComponent(found.entry.link.split("/").pop()!), link: found.entry.link, version: found.version! } };
+  }
   const read = await fetchBody(source.feed ?? source.url, fetcher, source.kind === "file" ? LIMIT : 5 * 1024 * 1024, source.kind !== "file" || !!source.compare, hosts, source.body);
   if (source.kind === "file") return { hash: read.hash, bytes: read.bytes };
   const html = read.bytes.toString("utf8");
@@ -106,7 +118,7 @@ async function fingerprint(source: Source, fetcher: typeof fetch, hosts: Set<str
 // of a form InboxCA fills, in a version it does not have, is kept in the store with the version
 // it would become (its official link, and a name beside the one it matches), for Orelu's admin
 // to use from a period.
-async function compareFile(compare: Compare, name: string, bytes: Buffer, templates: Template[], url: string, store: Store) {
+async function compareFile(compare: Compare, name: string, bytes: Buffer, templates: Template[], url: string, store: Store, named?: string) {
   const form = compare.form ?? `ITR${compare.file.exec(name)?.[1]}`;
   const newest = templates.filter((template) => template.form_code === form && template.status !== "draft").sort((a, b) => version(a.version, b.version))[0];
   const current = compare.current ?? (newest && { file: newest.source.file, version: newest.version, sha256: newest.source.sha256 });
@@ -117,17 +129,18 @@ async function compareFile(compare: Compare, name: string, bytes: Buffer, templa
     if (name.endsWith(".zip") && !inside) throw new Error("The download no longer holds the form");
     const file = inside ? inside[1]() : bytes, found = inside?.[0].split("/").pop() ?? name;
     const layout = (data: Buffer) => (/\.json$/i.test(current.file) ? schemaLayout(JSON.parse(data.toString("utf8"))) : workbookLayout(data, compare.rows));
-    const differences = layoutDifferences(layout(await officialFile(current.file, current.sha256, store)), layout(file));
+    const differences = compare.layout ? layoutDifferences(compare.layout.expected, compare.layout.of(file)) : layoutDifferences(layout(await officialFile(current.file, current.sha256, store)), layout(file));
     if (differences.length) return { file: found, with: current.version, differences: differences.slice(0, 40), more: Math.max(0, differences.length - 40) };
-    const next = compare.file.exec(found)?.at(-1) ?? "";
-    if (compare.current || !/^\d+(\.\d+){0,3}$/.test(next) || sha(file) === current.sha256 || templates.some((template) => template.form_code === form && (template.source.sha256 === sha(file) || (template.version === next && basename(template.source.file) === found)))) return { file: found, with: current.version, same: true };
+    const next = named ?? compare.file.exec(found)?.at(-1) ?? "";
+    if (compare.current || !/^\d+(\.\d+){0,3}$/.test(next) || sha(file) === current.sha256 || templates.some((template) => template.form_code === form && (template.source.sha256 === sha(file) || (template.version === next && (!!named || basename(template.source.file) === found))))) return { file: found, with: current.version, same: true };
     await store.keep(file);
     // A newer version named as the one it matches but for its number (so for the same year) goes
     // live by itself for that one's periods (D42, forms_go_live). One named otherwise (an ITR
     // schema for another year) is marked, so Orelu's admin confirms the year before using it.
-    const named = basename(current.file).replace(`V${current.version}.`, `V${next}.`) === found;
-    const live = version(current.version, next) > 0 && named;
-    return { file: found, with: current.version, same: true, ...(live ? { live } : {}), ...(named ? {} : { renamed: true }), template: { form_code: form, version: next, source: { file: `${dirname(current.file).replace(/-v[\d.]+$/, `-v${next}`)}/${found}`, url, sha256: sha(file) } } };
+    // A version read from its entry's words is the same form's by those words.
+    const same = !!named || basename(current.file).replace(`V${current.version}.`, `V${next}.`) === found;
+    const live = version(current.version, next) > 0 && same;
+    return { file: found, with: current.version, same: true, ...(live ? { live } : {}), ...(same ? {} : { renamed: true }), template: { form_code: form, version: next, source: { file: `${dirname(current.file).replace(/-v[\d.]+$/, `-v${next}`)}/${found.replace(/[^A-Za-z0-9_.-]+/g, "_")}`, url, sha256: sha(file) } } };
   } catch (error) {
     return { file: name, with: current.version, error: error instanceof Error ? error.message.slice(0, 120) : "unreadable" };
   }
@@ -148,7 +161,7 @@ export async function checkSources(previous: Watch, now: Date, fetcher: typeof f
       if (source.kind !== "list" && before && before !== found.hash) {
         const added = found.links && seen.links ? found.links.filter((link) => !seen.links!.includes(link)) : [];
         const removed = found.links && seen.links ? seen.links.filter((link) => !found.links!.includes(link)) : [];
-        const compared = !source.compare ? [] : source.kind === "file" ? [await compareFile(source.compare, source.url.split("/").pop()!, found.bytes!, templates, source.url, store)]
+        const compared = !source.compare ? [] : source.kind === "file" ? [await compareFile(source.compare, found.file?.name ?? source.url.split("/").pop()!, found.bytes!, templates, found.file?.link ?? source.url, store, found.file?.version)]
           : await Promise.all(added.filter((link) => source.compare!.file.test(link)).map((link) => fetchBody(link, fetcher, LIMIT, true, hosts).then((file) => compareFile(source.compare!, decodeURIComponent(link.split("/").pop()!), file.bytes, templates, link, store), (error: Error) => ({ file: link, error: error.message.slice(0, 120) }))));
         next.changes.push({ source: source.key, name: source.name, url: source.url, at, from: before, to: found.hash, added, removed, status: "draft", ...(compared.length ? { compared } : {}) });
       }
@@ -180,7 +193,9 @@ export async function checkLive(watch: Watch, at: string, templates: Template[])
     for (const kept of change.at === at ? (change.compared ?? []) : []) {
       if (!kept.live || !kept.template) continue;
       const twin = templates.find((template) => template.form_code === kept.template!.form_code && template.version === kept.with && template.status === "active");
-      const failed = twin ? await ownReturn({ ...twin, ...kept.template }, twin).then(fillAtWorker).catch((error: Error) => error.message.slice(0, 200) || "It could not be checked") : "No version in use to check it with";
+      // A TDS statement is written by InboxCA's own code to the layout just found unchanged; no
+      // official file goes into it, so there is no return to make again with the new one.
+      const failed = twin?.mappings.format === "txt" ? null : twin ? await ownReturn({ ...twin, ...kept.template }, twin).then(fillAtWorker).catch((error: Error) => error.message.slice(0, 200) || "It could not be checked") : "No version in use to check it with";
       if (failed) {
         delete kept.live;
         kept.failed = failed;

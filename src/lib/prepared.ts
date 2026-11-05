@@ -16,14 +16,17 @@ import {chooseTemplate,templateSchema} from "./templates";
 import {receive,unsafeText} from "./intake";
 import {itrChecks,type ItrWork} from "./itr-check";
 import {whose} from "./roles";
+import {periodLabel} from "./calendar";
+import {statementBytes} from "./tds-draft";
 
-export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
-export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : "GSTR-3B";
+export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B","TDS140",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
+export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : form==="TDS140" ? "Form No. 140" : "GSTR-3B";
 
 // A prepared return's drive file name keeps the year as first written ("AY 2026-27", "Tax year
-// 2026-27"), so every version of a return keeps one name.
-const formPeriod=(period:string)=>period.length===4 ? Number(period)>=2027 ? `Tax year ${Number(period)-1}-${period.slice(2)}` : `AY ${period}-${String(Number(period)+1).slice(-2)}` : periodName(period);
-const workFolder=(period:string)=>period.length===4 ? "Income tax" : "GST";
+// 2026-27"), so every version of a return keeps one name. A TDS statement is named by its quarter
+// ("Jul to Sep 2026") and kept with the client's income tax work.
+export const formPeriod=(period:string,form="")=>form==="TDS140" ? periodLabel("quarterly",period) : period.length===4 ? Number(period)>=2027 ? `Tax year ${Number(period)-1}-${period.slice(2)}` : `AY ${period}-${String(Number(period)+1).slice(-2)}` : periodName(period);
+const workFolder=(period:string,form="")=>period.length===4 || form==="TDS140" ? "Income tax" : "GST";
 const workYear=(period:string)=>financialYear(period.length===4 ? `${period}-03` : period);
 
 export async function prepareDocument(input:Parameters<typeof checkedForm>[0]) {
@@ -42,9 +45,9 @@ export async function savePrepared(request:FormRequest,userId:string|null,permis
   ]);
   if(!client || !account) throw new Error("Connect your firm's drive before preparing a return.");
   // Refuse unavailable ITR exports before reserving a name in the drive.
-  const itrResponse=request.pan ? await workerForm(request) : null;
+  const itrResponse=request.pan ? await workerForm(request) : request.tan ? new Response(await statementBytes(request)) : null;
   const sources=request.drafts.map(({id,revision})=>({id,revision})).sort((a,b)=>a.id.localeCompare(b.id));
-  const work={firm:request.firm,client:request.client,registration:request.registration,form:request.template.form_code,period:request.period,template:request.template.version,sources,person:userId as string,prefix:`${safeName(client.name,100)} - ${formName(request.template.form_code)} - ${formPeriod(request.period)}`,extension:request.template.mappings.format};
+  const work={firm:request.firm,client:request.client,registration:request.registration,form:request.template.form_code,period:request.period,template:request.template.version,sources,person:userId as string,prefix:`${safeName(client.name,100)} - ${formName(request.template.form_code)} - ${formPeriod(request.period,request.template.form_code)}`,extension:request.template.mappings.format};
   const {data:reserved,error}=fill ? await admin.rpc("fill_form",work) : await admin.rpc("reserve_form",{...work,choice:reason ? {reason_code:["amendment","software","correction"].includes(reason) ? reason : "other"} : {}});
   if(error || !reserved) throw new Error(fill ? "This return could not be filled. It may be filed already, or its figures changed. Open it again." : "These figures changed. Check them before preparing the return again.");
   const saved=z.object({id:z.uuid(),name:z.string(),ready:z.boolean()}).parse(reserved);
@@ -52,7 +55,7 @@ export async function savePrepared(request:FormRequest,userId:string|null,permis
   const drive=await openDrive(request.firm,account);
   const response=itrResponse ?? await workerForm(request),bytes=new Uint8Array(await response.arrayBuffer());
   if(!bytes.length || bytes.length>25_000_000) throw new Error("This return is too large. Split its registers first.");
-  const folder=await drive.ensureFolder([workFolder(request.period),workYear(request.period),safeName(client.name),"Prepared"]);
+  const folder=await drive.ensureFolder([workFolder(request.period,request.template.form_code),workYear(request.period),safeName(client.name),"Prepared"]);
   const file=await drive.save(folder,saved.name,bytes);
   if(file==="taken") {
     // A second Prepare or Fill of the same work while the first is saving opens the same file once saved.
@@ -140,7 +143,7 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
     if(!extension || !["pdf","png","jpg","jpeg","txt"].includes(extension) || file && file.size>25_000_000) throw new Error("Choose a PDF or picture up to 25 MB.");
     const type=uploaded ? "Acknowledgement" : "Filing record";
     // This is the firm's record of a number, never a made-up portal acknowledgement.
-    const bytes=uploaded ? new Uint8Array(await file!.arrayBuffer()) : new TextEncoder().encode(`Filing details from ${membership.firmName}\nClient: ${client.name}\nReturn: ${formName(document.prepared.form)}\nPeriod: ${formPeriod(document.period_key)}\nAcknowledgement number: ${number}\nThis is ${whose(membership.firmName)} record. It is not the acknowledgement from the government portal.\n`);
+    const bytes=uploaded ? new Uint8Array(await file!.arrayBuffer()) : new TextEncoder().encode(`Filing details from ${membership.firmName}\nClient: ${client.name}\nReturn: ${formName(document.prepared.form)}\nPeriod: ${formPeriod(document.period_key,document.prepared.form)}\nAcknowledgement number: ${number}\nThis is ${whose(membership.firmName)} record. It is not the acknowledgement from the government portal.\n`);
     const drive=await openDrive(membership.firmId,account);
     // A file the team adds is checked like any other (src/lib/intake.ts).
     const sent=uploaded ? await receive(membership.firmId,userId,{id:document.client_id,name:client.name},{name:file!.name,bytes},drive,false) : null;
@@ -149,11 +152,11 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
     const {data:prior}=await admin.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",document.client_id).eq("sha256",checksum).eq("document_type",type).eq("period_key",document.period_key).eq("status","filed").maybeSingle();
     paper=prior?.id;
     if(!paper) {
-      const folder=await drive.ensureFolder([workFolder(document.period_key),workYear(document.period_key),safeName(client.name),"Prepared"]);
-      const name=`${safeName(client.name,100)} - ${formName(document.prepared.form)} - ${formPeriod(document.period_key)} - ${type} - v${document.prepared.version}.${extension}`;
+      const folder=await drive.ensureFolder([workFolder(document.period_key,document.prepared.form),workYear(document.period_key),safeName(client.name),"Prepared"]);
+      const name=`${safeName(client.name,100)} - ${formName(document.prepared.form)} - ${formPeriod(document.period_key,document.prepared.form)} - ${type} - v${document.prepared.version}.${extension}`;
       const saved=await drive.save(folder,name,bytes);
       if(saved==="taken") throw new Error("An acknowledgement with this name is already in the drive. Choose it from Documents.");
-      const {data:row,error}=await admin.from("documents").insert({firm_id:membership.firmId,client_id:document.client_id,name,document_type:type,work_type:document.period_key.length===4 ? "income_tax" : "gst",period_key:document.period_key,size:bytes.length,sha256:checksum,drive_file_id:saved.id,share_policy:null}).select("id").single();
+      const {data:row,error}=await admin.from("documents").insert({firm_id:membership.firmId,client_id:document.client_id,name,document_type:type,work_type:workFolder(document.period_key,document.prepared.form)==="GST" ? "gst" : "income_tax",period_key:document.period_key,size:bytes.length,sha256:checksum,drive_file_id:saved.id,share_policy:null}).select("id").single();
       if(error || !row) {await drive.trash(saved.id);throw new Error("The acknowledgement could not be saved.");}
       paper=row.id;
       const {error:logError}=await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"document.added",entity_type:"document",entity_id:paper,details:{form:id,kind:uploaded ? "acknowledgement" : "filing_record"}});
@@ -169,6 +172,7 @@ export async function uploadEditedForm(id:string,file:File) {
   const permission=membership.may("edit_figures", document.client_id) ? null : await grantFor(membership.firmId,userId,"edit_figures",document.client_id);
   if(!membership.may("edit_figures", document.client_id) && !permission) throw new Error("Ask to edit figures first.");
   const meta=document.prepared,itr=meta.form.startsWith("ITR"),kind=itr ? "pan" : "gstin",extension=itr ? "json" : "xlsx";
+  if(meta.form==="TDS140") throw new Error("Correct a TDS statement's figures in InboxCA, then prepare it again.");
   if(!(itr ? /\.json$/i : /\.xlsx$/i).test(file.name) || !file.size || file.size>25_000_000) throw new Error("Choose the filled official return, up to 25 MB.");
   const [{data:client},{data:account},{data:registration},{data:templates}]=await Promise.all([
     supabase.from("clients").select("name").eq("firm_id",membership.firmId).eq("id",document.client_id).single(),

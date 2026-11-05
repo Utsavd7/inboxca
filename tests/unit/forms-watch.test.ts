@@ -222,3 +222,53 @@ it("goes live by itself only when InboxCA's own returns pass every official chec
   expect(stricter.live).toBeUndefined();
   expect(stricter.failed).toMatch(/10 characters/);
 }, 60_000); // A 7 MB workbook is filled.
+
+// Protean's Form No. 140 format, as an invented workbook laid out like the official one (its
+// records' fields and annexures' codes), built from the layout InboxCA writes the statement to.
+const formatBook = (layout: Record<string, string[]>) => {
+  const titles: Record<string, string> = { FH: "File Header", BH: "Batch Header", CD: "Challan Detail", DD: "Deductee Detail" };
+  const row = (cells: string[]) => `<row>${cells.map((value, at) => value && `<c r="${"ABCDEFG"[at]}1" t="inlineStr"><is><t>${value.replace(/&/g, "&amp;")}</t></is></c>`).join("")}</row>`;
+  const rows = Object.entries(layout).flatMap(([key, entries]) => [
+    row(["", titles[key] ? `Invented statement (${titles[key]} Record)` : `${key.replace(" ", " - ")}`]),
+    ...entries.map((entry) => { const [a, b, c, d] = entry.split(" "); return row(titles[key] ? [a, "Field", "", b, c, d] : key === "Annexure 2" ? ["", "Payment", "Section", a] : key === "Annexure 6" ? ["", a, "Section", b] : ["", "Name", a]); }),
+  ]);
+  return zip([{ name: "xl/worksheets/sheet1.xml", text: `<worksheet><sheetData>${rows.join("")}</sheetData></worksheet>` }]);
+};
+
+it("watches the Form No. 140 format by its entry on Protean's page: a same layout version goes live, a changed one lists its differences", async () => {
+  const { form140Layout } = await import("@/src/lib/tds");
+  const { proteanDownloads } = await import("@/src/jobs/gov-pages");
+  const base = formatBook(form140Layout), kept: Buffer[] = [];
+  const store = { keep: async (bytes: Buffer) => void kept.push(bytes), read: async (hash: string) => kept.find((file) => sha256(file) === hash) ?? null };
+  const page = (name: string, version: string) => `<section class="main-content-area"><a href="/f/${encodeURIComponent(name)}">File Format for Form Number 140 Q1 to Q4 Version ${version}</a></section>`;
+  const format: Source = { key: "f140", name: "Invented format", url: "https://official.invalid/etds", area: "tds", kind: "file", known: sha256(base), parse: proteanDownloads, entry: /^File Format for Form Number 140\b.*\bVersion ([\d.]+)/i, compare: { file: /\.xlsx$/i, form: "TDS140", layout: { of: (await import("@/src/lib/official-layout")).tdsFormatLayout, expected: form140Layout } } };
+  pages.set(format.url, page("Form Number 140 - Q1 to Q4_22072026.xlsx", "1.2"));pages.set("https://official.invalid/f/Form%20Number%20140%20-%20Q1%20to%20Q4_22072026.xlsx", new Uint8Array(base));
+  let watch = await checkSources(empty, day(0), fetcher, [format], templates, store);
+  expect(watch.changes).toEqual([]);
+  // A newer version under a new name, the same layout: kept, and goes live by itself.
+  const again = formatBook({ ...form140Layout, FH: [...form140Layout.FH].reverse() });
+  pages.set(format.url, page("Form Number 140 - Q1 to Q4_15102026.xlsx", "1.3"));pages.set("https://official.invalid/f/Form%20Number%20140%20-%20Q1%20to%20Q4_15102026.xlsx", new Uint8Array(again));
+  watch = await checkSources(watch, day(1), fetcher, [format], templates, store);
+  expect(watch.changes).toMatchObject([{ source: "f140", compared: [{ file: "Form Number 140 - Q1 to Q4_15102026.xlsx", with: "1.2", same: true, live: true, template: { form_code: "TDS140", version: "1.3", source: { file: "protean/Form_Number_140_-_Q1_to_Q4_15102026.xlsx", sha256: sha256(again) } } }] }]);
+  expect(kept).toHaveLength(1);
+  await checkLive(watch, day(1).toISOString(), templates);
+  expect((watch.changes[0] as { compared: { live?: true }[] }).compared[0].live).toBe(true);
+  // A changed field size and a new section code are listed for Orelu's admin, never live.
+  const changed = formatBook({ ...form140Layout, DD: form140Layout.DD.map((field) => (field === "28 DECIMAL 7 M" ? "28 DECIMAL 8 M" : field)), "Annexure 2": [...form140Layout["Annexure 2"], "1099"] });
+  pages.set(format.url, page("Form Number 140 - Q1 to Q4_01122026.xlsx", "1.4"));pages.set("https://official.invalid/f/Form%20Number%20140%20-%20Q1%20to%20Q4_01122026.xlsx", new Uint8Array(changed));
+  watch = await checkSources(watch, day(2), fetcher, [format], templates, store);
+  expect(watch.changes.at(-1)).toMatchObject({ compared: [{ with: "1.2", differences: ["In DD, heading added: 28 DECIMAL 8 M", "In DD, heading removed: 28 DECIMAL 7 M", "In Annexure 2, heading added: 1099"] }] });
+  expect((watch.changes.at(-1) as { compared: { live?: true }[] }).compared[0].live).toBeUndefined();
+});
+
+it("shows the Form No. 138 Q4 format as new from the government once Protean links it", async () => {
+  const { proteanDownloads } = await import("@/src/jobs/gov-pages");
+  const etds: Source = { key: "etds", name: "Invented e-TDS downloads", url: "https://official.invalid/etds-list", area: "tds", kind: "list", parse: proteanDownloads };
+  pages.set(etds.url, '<section class="main-content-area"><a href="#">File Format for Form Number 138 Q4 Version 1.0 (Expected to be released soon.)</a></section>');
+  let watch = await checkSources(empty, day(0), fetcher, [etds]);
+  watch = await checkSources(watch, day(1), fetcher, [etds]);
+  expect(watch.items).toEqual([]);
+  pages.set(etds.url, '<section class="main-content-area"><a href="/f/Form%20Number%20138-24Q%20-%20Q4.xlsx">File Format for Form Number 138 Q4 Version 1.0</a></section>');
+  watch = await checkSources(watch, day(2), fetcher, [etds]);
+  expect(watch.items).toMatchObject([{ source: "etds", area: "tds", title: "File Format for Form Number 138 Q4 Version 1.0", link: "https://official.invalid/f/Form%20Number%20138-24Q%20-%20Q4.xlsx" }]);
+});
