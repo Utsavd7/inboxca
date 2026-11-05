@@ -184,7 +184,7 @@ test("the security policy is linked, private and accessible", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "networkidle" });
-  await expect(page.getByText("* Screens show sample data.")).toBeVisible();
+  await expect(page.getByText("Screens show sample data.")).toBeVisible();
   await page
     .getByRole("contentinfo")
     .getByRole("link", { name: "Security policy" })

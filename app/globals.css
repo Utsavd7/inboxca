@@ -623,7 +623,9 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .footer-links a:hover { color: var(--navy); }
 .footer-maker { margin-top: var(--s2); color: var(--navy); font-weight: 600; line-height: var(--lh-snug); }
 .footer-maker small { display: block; font-size: var(--fs-caption); font-weight: 500; color: var(--slate); }
-.footnote { margin-top: var(--s6); padding-top: var(--s4); border-top: 1px solid var(--line); font-size: var(--fs-caption); }
+.footnote { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s2) var(--s6); margin-top: var(--s6); padding-top: var(--s4); border-top: 1px solid var(--line); font-size: var(--fs-caption); }
+.footnote p { color: var(--navy); font-weight: 600; }
+.footnote ul { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s5); }
 .footnote a { text-decoration: underline; text-underline-offset: 3px; }
 
 /* Policy pages: a narrow reading column, small quiet text, numbered headings, a contents list */

@@ -78,14 +78,21 @@ export function Footer() {
             </div>
           </nav>
         </div>
-        <p className="footnote">
-          {/* True of the site's pages: the home test checks no cookie is set (security.ts, website). */}
-          {analyticsToken ? "No cookies on this site's pages. Visits are counted without knowing who you are. " : "No cookies or tracking on this site's pages. "}
-          * Screens show sample data.{" "}
-          <Link href="/security#website">About this website</Link>. Orelu, a software company from Mumbai,
-          builds software that takes repeated office work off a team. InboxCA is its product for chartered
-          accountant firms. Other names and logos belong to their owners and imply no partnership.
-        </p>
+        {/* Who makes InboxCA on the left; the short notes about this site on the right. The no cookie
+            line is true of the site's pages: the home test checks no cookie is set (security.ts, website). */}
+        <div className="footnote">
+          <p>
+            © {new Date().getFullYear()} Orelu, a software company from Mumbai. InboxCA is its product for chartered
+            accountant firms.
+          </p>
+          <ul>
+            <li>{analyticsToken ? "No cookies. Visits are counted without knowing who you are." : "No cookies or tracking."}</li>
+            <li>
+              Screens show sample data. <Link href="/security#website">About this website</Link>
+            </li>
+            <li>Other names and logos belong to their owners.</li>
+          </ul>
+        </div>
       </div>
     </footer>
   );
