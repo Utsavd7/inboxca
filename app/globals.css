@@ -367,6 +367,9 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .marquee ul { display: flex; align-items: center; gap: var(--s8); animation: marquee 44s linear infinite; }
 .marquee li { display: flex; align-items: center; gap: var(--s3); height: 44px; font-size: var(--fs-body); font-weight: 700; letter-spacing: var(--ls-heading); white-space: nowrap; }
 .marquee img { display: block; flex-shrink: 0; max-width: none; }
+.marquee + p { margin-top: var(--s6); }
+.marquee-back ul { animation-direction: reverse; }
+.marquee small { font-size: var(--fs-small); font-weight: 600; letter-spacing: 0; color: var(--slate); }
 
 /* The forms covered today, moving past under the logos */
 .covered { padding: var(--s2) 0 56px; overflow: hidden; text-align: center; }

@@ -98,6 +98,20 @@ export const worksWith = [
   ["Excel", "excel.svg", 27, 28, "Excel, Word and PDF"],
 ] as const;
 
+// Filing software whose makers say, on their own help pages or videos (checked 5 Nov 2026),
+// that it imports the official file named beside it. Never "partners", "integrated" or "certified".
+// Same columns, then the files. SAG Infotech and Saral are only twice their shown size, as their
+// own files are smaller. Electrocom makes EasyGST, EasyOFFICE and EasyTDS.
+export const importsInto = [
+  ["KDK Software", "kdk.svg", 74, 28, "", "GSTR-1 and ITR"],
+  ["Winman", "winman.webp", 97, 20, "", "GSTR-1, ITR and TDS"],
+  ["SAG Infotech", "sag.webp", 47, 34, "", "GSTR-1"],
+  ["TaxPower GST", "taxpower.webp", 28, 28, "TaxPower GST", "GSTR-1"],
+  ["Saral", "saral.webp", 66, 23, "", "GSTR-1 and TDS"],
+  ["Electrocom", "electrocom.webp", 125, 18, "", "GSTR-1, ITR and TDS"],
+  ["ClearTax", "cleartax.svg", 120, 20, "", "GSTR-1"],
+] as const;
+
 // PLAN.md D3, D6, D18, D19, D21, D36. The six a firm asks before it pays; the rest lives on the
 // security policy, the terms and the refunds page.
 export const questions = [

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeftRight, ArrowRight, BellRing, CalendarClock, Check, FileText, History, KeyRound, LockKeyhole, MailX, Plus, ScanText, Trash2 } from "lucide-react";
-import { beforeAfter, forms, guarantee, questions, worksWith } from "@/content/site";
+import { beforeAfter, forms, guarantee, importsInto, questions, worksWith } from "@/content/site";
 import { planIncludes, plans, rupees, SHOW_PLANS } from "@/content/plans";
 import { contactEmail, SITE_PUBLIC, siteDescription } from "@/src/lib/site";
 import { Control } from "@/components/site/control";
@@ -81,6 +81,33 @@ function Head({ title }: { title: string }) {
   );
 }
 
+// A looping row of other companies' logos, with the files each imports when given.
+// Three copies, so the row still fills a wide screen.
+function Logos({ list, back }: { list: readonly (readonly [string, string, number, number, string, string?])[]; back?: boolean }) {
+  return (
+    <div className={`marquee${back ? " marquee-back" : ""}`}>
+      {[0, 1, 2].map((copy) => (
+        <ul key={copy} aria-hidden={copy > 0 || undefined}>
+          {list.map(([name, file, width, height, text, files]) => (
+            <li key={name}>
+              <Image
+                src={`/brand/tools/${file}`}
+                alt={text.includes(name) ? "" : name}
+                width={width}
+                height={height}
+                style={{ width, height }}
+                unoptimized
+              />
+              {text}
+              {files && <small>{files}</small>}
+            </li>
+          ))}
+        </ul>
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   return (
     <MotionRoot>
@@ -131,26 +158,9 @@ export default function Home() {
 
         <section className="works" aria-label="Built to work with">
           <p>Built to work with what your firm already uses</p>
-          <div className="marquee">
-            {/* Three copies, so the row still fills a wide screen now that it has fewer logos. */}
-            {[0, 1, 2].map((copy) => (
-              <ul key={copy} aria-hidden={copy > 0 || undefined}>
-                {worksWith.map(([name, file, width, height, text]) => (
-                  <li key={name}>
-                    <Image
-                      src={`/brand/tools/${file}`}
-                      alt={text.includes(name) ? "" : name}
-                      width={width}
-                      height={height}
-                      style={{ width, height }}
-                      unoptimized
-                    />
-                    {text}
-                  </li>
-                ))}
-              </ul>
-            ))}
-          </div>
+          <Logos list={worksWith} />
+          <p>InboxCA writes the official files this filing software imports</p>
+          <Logos list={importsInto} back />
         </section>
 
         <section className="covered" id="forms" aria-labelledby="forms-title">
