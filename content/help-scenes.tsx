@@ -48,7 +48,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
         [null, "Plan and payment"],
         <Choice label="How often to pay" items={["Monthly", "Yearly"]} pick={0} row />,
         <Field label="Your team, you included" value="4" />,
-        <Rows rows={[["Growth, monthly", "Before GST", <b key="price">{rupees(growth.monthly)}</b>]]} />,
+        <Rows rows={[["Growth, monthly", "No GST charged", <b key="price">{rupees(growth.monthly)}</b>]]} />,
         <Line><Btn press>Pay and start</Btn></Line>,
       ),
     ],
@@ -273,7 +273,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     frames: [
       f(0, [null, "Plans"], <Plan name="Solo" />),
       f(1, [null, "Plans"], <Plan name="Growth" />),
-      f(5, settings("Billing"), <Rows rows={[["One more person in your team", "Paid first, then added", <b key="p">{rupees(extraPerson)} a month</b>], [`One more AI block of ${aiBlock.credits.toLocaleString("en-IN")} credits every month`, "Paid first, then added", <b key="p">{rupees(aiBlock.price)} a month</b>]]} />, <Note>Prices are before GST.</Note>),
+      f(5, settings("Billing"), <Rows rows={[["One more person in your team", "Paid first, then added", <b key="p">{rupees(extraPerson)} a month</b>], [`One more AI block of ${aiBlock.credits.toLocaleString("en-IN")} credits every month`, "Paid first, then added", <b key="p">{rupees(aiBlock.price)} a month</b>]]} />, <Note>No GST is charged: Orelu is not GST registered yet.</Note>),
       f(7, settings("Billing"), <Meter label="Returns due so far" part={0.8} note="You hear about it at 80%." />),
       f(9, settings("Billing"), <Choice label="How to pay" items={["UPI AutoPay", "Card AutoPay", "Bank mandate (eNACH)"]} pick={0} row />, <Chips items={[["Your bank confirmed AutoPay", "done"]]} />),
     ],

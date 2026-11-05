@@ -30,7 +30,7 @@ const trust = [
 ] as const;
 
 // Search engines read these only when the site is public (robots.ts): the questions as they
-// are on the page, and the plans from content/plans.ts, before GST.
+// are on the page, and the plans from content/plans.ts (no GST: Orelu is not GST registered).
 const structured = SITE_PUBLIC && [
   {
     "@context": "https://schema.org",
@@ -52,7 +52,7 @@ const structured = SITE_PUBLIC && [
       name: `${plan.name} plan`,
       price: plan.monthly,
       priceCurrency: "INR",
-      description: `${plan.returns} returns a year, ${plan.storage} InboxCA storage a year, team ${plan.team.toLowerCase()}, before GST. ${planIncludes.join(", ")}.`,
+      description: `${plan.returns} returns a year, ${plan.storage} InboxCA storage a year, team ${plan.team.toLowerCase()}, no GST charged. ${planIncludes.join(", ")}.`,
       availability: "https://schema.org/InStock",
     })),
   },
@@ -118,7 +118,7 @@ export default function Home() {
                 </div>
                 <p className="hero-trust">
                   {guarantee}
-                  {SHOW_PLANS && <> · From {rupees(plans[0].monthly)} a month, before GST</>}
+                  {SHOW_PLANS && <> · From {rupees(plans[0].monthly)} a month</>}
                 </p>
               </div>
             </div>

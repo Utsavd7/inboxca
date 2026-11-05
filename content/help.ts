@@ -2,7 +2,7 @@
 // the app says and does: its screens' own words (app/(app)/app, settings, clients, notices,
 // calendar, work/gst, people), src/lib (rights.ts, presets.ts, answers.ts, reminders.ts,
 // calendar.ts, paper-origin.ts), and content/security.ts, legal.ts and plans.ts. Prices come
-// only from plans.ts, before GST. Nothing planned is described.
+// only from plans.ts (no GST is charged while Orelu is not GST registered). Nothing planned is described.
 import { helpTopics } from "./help-topics";
 import { aiBlock, custom, extraPerson, plans, rupees } from "./plans";
 
@@ -357,7 +357,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
       {
         slug: "plans",
         title: "Plans, extra people and AI credits",
-        lead: "Every plan has unlimited clients. Plans differ by returns a year, InboxCA storage, team and AI credits. Prices are before GST.",
+        lead: "Every plan has unlimited clients. Plans differ by returns a year, InboxCA storage, team and AI credits. No GST is charged: Orelu is not GST registered yet.",
         points: [
           ...plans.map(
             (plan) =>

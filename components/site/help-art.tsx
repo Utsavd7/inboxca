@@ -278,14 +278,14 @@ export function Meter({ label, part, note }: { label: string; part: number; note
   );
 }
 
-// A plan as plans.ts gives it, before GST.
+// A plan as plans.ts gives it (no GST is charged).
 export function Plan({ name, children }: { name: string; children?: ReactNode }) {
   const plan = plans.find((one) => one.name === name)!;
   return (
     <div className="card hs-plan">
       <p className="card-title">{plan.name}</p>
       <p className="hs-price">
-        {rupees(plan.monthly)} <small>a month, before GST</small>
+        {rupees(plan.monthly)} <small>a month</small>
       </p>
       <ul>
         {[`${plan.returns} returns a year`, plan.people === 1 ? "Just you" : `A team of up to ${plan.people}`, `${plan.storage} storage`, `${plan.ai} AI credits a month`, "Unlimited clients"].map((line, i) => (
