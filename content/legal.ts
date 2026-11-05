@@ -11,7 +11,7 @@
 import { analyticsToken, contactEmail } from "@/src/lib/site";
 import { clientFiles } from "./security";
 
-export const legalUpdated = "4 Nov 2026";
+export const legalUpdated = "5 Nov 2026";
 export const legalNote =
   "InboxCA is a product of Orelu, a partnership firm. Orelu's registration is in progress, and its registered name and address will be added here when it completes.";
 
@@ -144,7 +144,8 @@ export const termsSections = [
     id: "about",
     title: "About these terms",
     points: [
-      "InboxCA is a product of Orelu, a partnership firm in India. These terms cover this website and your firm's use of InboxCA.",
+      "InboxCA is a product of Orelu, a partnership firm in India. Orelu builds software that takes repeated office work off a team, and InboxCA is its product for chartered accountant firms. These terms cover this website and your firm's use of InboxCA.",
+      "The CA in InboxCA stands for the chartered accountant firms it is built for. Orelu does not practise as chartered accountants and is not part of, or approved by, the Institute of Chartered Accountants of India.",
       "By signing up, the person signing up agrees to these terms on behalf of their firm and confirms they may do so. The data processing agreement and the privacy notice are part of these terms.",
       "InboxCA is sold only to firms, for their professional work, and not for anyone's personal or household use.",
     ],
@@ -163,7 +164,7 @@ export const termsSections = [
     points: [
       "InboxCA reads the emails from clients and from the GST and income tax departments in your firm's own mailbox, files attachments in your firm's own drive, sends routine replies and reminders from your firm's address, and reads figures from papers to prepare GST and income tax forms and files.",
       "InboxCA prepares. Your team checks every figure, approves every form and files every return on the government portals with its own login, OTP or digital signature. InboxCA is not an e-Return Intermediary and does not file anything itself.",
-      "InboxCA gives no tax, legal or accounting advice. Your firm stays responsible for its professional work and for what it files.",
+      "InboxCA gives no accounting, audit, tax or legal advice, and it does not sign or certify any document or award any certificate, badge or designation. Your firm's own chartered accountants do the professional work, sign what they sign, and stay responsible for what the firm files.",
       "Due dates and form versions come from government notifications, and InboxCA says when one is not yet checked. Your firm confirms every date and figure before it relies on it.",
     ],
   },
@@ -243,7 +244,8 @@ export const termsSections = [
     id: "names",
     title: "Names and logos",
     points: [
-      "InboxCA, the InboxCA logo and Orelu belong to Orelu. InboxCA is licensed to your firm for its use, not sold.",
+      "InboxCA™ and Orelu™ are trade marks of Orelu. They are not registered yet, so they carry ™ and not ®. InboxCA, the InboxCA logo and Orelu belong to Orelu. InboxCA is licensed to your firm for its use, not sold.",
+      "InboxCA does not use the name, emblem or logo of the Institute of Chartered Accountants of India.",
       "Other companies' names and logos belong to their owners. They are shown only to say what InboxCA is built to work with, and do not mean a partnership, endorsement or certification.",
     ],
   },
