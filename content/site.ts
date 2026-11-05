@@ -84,32 +84,31 @@ export const demoSteps = [
   ],
 ] as const;
 
-// What InboxCA is built to work beside (PLAN.md 4.1, D21, D36). Each logo is the
-// owner's own file, unchanged but for the pictures, saved at 3 times their shown size:
-// [name shown, file in /brand/tools, width, height, text beside it].
-// The Zoho Mail file already carries its name, so no text sits beside it.
+// The tools a firm already uses, by name only: Microsoft allows its product names but not its
+// logos without a licence, and Google, Zoho and Dropbox ask to be asked before their logos are
+// shown (checked 5 Nov 2026). A logo comes back only with its owner's written yes. [name, caption].
 export const worksWith = [
-  ["Gmail", "gmail.svg", 36, 28, "Gmail"],
-  ["Outlook", "outlook.svg", 30, 28, "Outlook"],
-  ["Zoho Mail", "zoho-mail.svg", 78, 34, ""],
-  ["OneDrive", "onedrive.svg", 46, 28, "OneDrive"],
-  ["Dropbox", "dropbox.svg", 28, 28, "Dropbox"],
-  ["Tally", "tally.webp", 44, 44, "exports"],
-  ["Excel", "excel.svg", 27, 28, "Excel, Word and PDF"],
+  ["Gmail"],
+  ["Microsoft Outlook"],
+  ["Zoho Mail"],
+  ["Microsoft OneDrive"],
+  ["Dropbox"],
+  ["Tally", "exports"],
+  ["Microsoft Excel and Word"],
+  ["PDF and scans"],
 ] as const;
 
 // Filing software whose makers say, on their own help pages or videos (checked 5 Nov 2026),
-// that it imports the official file named beside it. Never "partners", "integrated" or "certified".
-// Same columns, then the files. SAG Infotech and Saral are only twice their shown size, as their
-// own files are smaller. Electrocom makes EasyGST, EasyOFFICE and EasyTDS.
+// that it imports the official file named beside it: names only, never "partners", "integrated"
+// or "certified", and no links. Saral is left out: Relyon allows its name only with written
+// consent. Electrocom makes EasyGST, EasyOFFICE and EasyTDS.
 export const importsInto = [
-  ["KDK Software", "kdk.svg", 74, 28, "", "GSTR-1 and ITR"],
-  ["Winman", "winman.webp", 97, 20, "", "GSTR-1, ITR and TDS"],
-  ["SAG Infotech", "sag.webp", 47, 34, "", "GSTR-1"],
-  ["TaxPower GST", "taxpower.webp", 28, 28, "TaxPower GST", "GSTR-1"],
-  ["Saral", "saral.webp", 66, 23, "", "GSTR-1 and TDS"],
-  ["Electrocom", "electrocom.webp", 125, 18, "", "GSTR-1, ITR and TDS"],
-  ["ClearTax", "cleartax.svg", 120, 20, "", "GSTR-1"],
+  ["KDK Software", "GSTR-1 and ITR"],
+  ["Winman", "GSTR-1, ITR and TDS"],
+  ["SAG Infotech", "GSTR-1"],
+  ["TaxPower GST", "GSTR-1"],
+  ["EasyOFFICE", "GSTR-1, ITR and TDS"],
+  ["ClearTax", "GSTR-1"],
 ] as const;
 
 // PLAN.md D3, D6, D18, D19, D21, D36. The six a firm asks before it pays; the rest lives on the

@@ -118,7 +118,6 @@ Next.js App Router, strict TypeScript, Tailwind CSS, shadcn's Base UI dialog, Lu
 | `app/fonts/` | Only the self hosted fonts in use, with SIL licences |
 | `app/licences.txt/route.ts` | The open source licences page, written at build time from the installed packages and fonts, linked from the footer |
 | `public/brand/` | Only assets the page uses |
-| `public/brand/tools/` | Other companies' logos for the two rows under the demo, each the owner's own file, unchanged but for size (Gmail, Outlook, OneDrive, Dropbox and Excel from svgl.app; Zoho Mail, Tally, KDK, Winman, SAG Infotech, TaxPower GST, Saral, Electrocom (EasyOFFICE) and ClearTax from their own sites). The filing software row shows only the official files each maker says, on its own pages, that it imports. Check each brand's usage rules before the site is public |
 | `docs/architecture.html`, `docs/assets/architecture.png` | Architecture source and README image |
 | `tests/` | Unit, database and browser tests |
 | `scripts/` | Local setup, the demo firm, page audit and timing, social image, secret scan, key rotation and restore drill |

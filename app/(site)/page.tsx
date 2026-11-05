@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeftRight, ArrowRight, BellRing, CalendarClock, Check, FileText, History, KeyRound, LockKeyhole, MailX, Plus, ScanText, Trash2 } from "lucide-react";
 import { beforeAfter, forms, guarantee, importsInto, questions, worksWith } from "@/content/site";
@@ -81,24 +80,16 @@ function Head({ title }: { title: string }) {
   );
 }
 
-// A looping row of other companies' logos, with the files each imports when given.
-// Three copies, so the row still fills a wide screen.
-function Logos({ list, back }: { list: readonly (readonly [string, string, number, number, string, string?])[]; back?: boolean }) {
+// A looping row of other companies' names, with the files each imports when given. Three
+// copies, so the row still fills a wide screen.
+function Names({ list, back }: { list: readonly (readonly [string, string?])[]; back?: boolean }) {
   return (
     <div className={`marquee${back ? " marquee-back" : ""}`}>
       {[0, 1, 2].map((copy) => (
         <ul key={copy} aria-hidden={copy > 0 || undefined}>
-          {list.map(([name, file, width, height, text, files]) => (
+          {list.map(([name, files]) => (
             <li key={name}>
-              <Image
-                src={`/brand/tools/${file}`}
-                alt={text.includes(name) ? "" : name}
-                width={width}
-                height={height}
-                style={{ width, height }}
-                unoptimized
-              />
-              {text}
+              {name}
               {files && <small>{files}</small>}
             </li>
           ))}
@@ -158,9 +149,9 @@ export default function Home() {
 
         <section className="works" aria-label="Built to work with">
           <p>Built to work with what your firm already uses</p>
-          <Logos list={worksWith} />
+          <Names list={worksWith} />
           <p>InboxCA writes the official files this filing software imports</p>
-          <Logos list={importsInto} back />
+          <Names list={importsInto} back />
         </section>
 
         <section className="covered" id="forms" aria-labelledby="forms-title">
