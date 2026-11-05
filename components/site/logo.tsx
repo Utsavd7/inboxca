@@ -22,7 +22,11 @@ export function Logo({
         />
         <path className="tick" pathLength="100" d="M100 18L40 41L52 57" />
       </svg>
-      {!markOnly && <span>InboxCA</span>}
+      {!markOnly && (
+        <span>
+          InboxCA<span className="tm" aria-hidden="true">™</span>
+        </span>
+      )}
     </span>
   );
 }

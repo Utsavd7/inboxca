@@ -37,7 +37,7 @@ export function Footer() {
             <p className="maker">
               A product by
               <a href={oreluUrl} target="_blank" rel="noopener" aria-label="Orelu, opens the Orelu website in a new tab">
-                <Image src="/brand/orelu.png" alt="" width={77} height={22} />
+                <Image src="/brand/orelu.png" alt="" width={83} height={22} />
               </a>
             </p>
           </div>

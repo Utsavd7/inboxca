@@ -75,6 +75,8 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 
 /* Logo */
 .logo { display: inline-flex; align-items: center; gap: 9px; font-weight: 800; font-size: 20px; letter-spacing: var(--ls-display); color: var(--navy); }
+/* ™ after the last letter, its top level with the top of the "A"; hidden from screen readers. */
+.logo .tm { position: relative; top: -1.12em; margin-left: .1em; font-size: .4em; font-weight: 600; letter-spacing: 0; }
 .mark { display: block; width: 30px; height: auto; overflow: visible; }
 .mark .tile { fill: var(--navy); }
 .mark .tray { fill: none; stroke: var(--white); stroke-width: 10; stroke-linecap: round; }
