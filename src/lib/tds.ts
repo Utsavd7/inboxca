@@ -114,6 +114,47 @@ const paidBefore=new Set(["1059","1034","1038","1061"]);
 // Row 14: a payment under a nil challan needs a reason for no or lower deduction (all but C).
 const nilReasons=new Set(["A","B","D","E","N","O","P","Q","Y","S","T","Z"]);
 
+// The health checks below take every rate, section and date only from the Act and Rules as the
+// Income Tax Department shows them, read on 5 Nov 2026; each figure is an estimate staff check,
+// never a figure InboxCA changes.
+// Section 393(1) Table, column D (https://www.incometaxindia.gov.in/w/section-393-5): the rate in
+// hundredths of a percent for the Form No. 140 codes whose rate the code alone settles. Left out:
+// "rates in force" (Sl. Nos. 1(i), 5), rates on part of a sum (8(i), 8(ii)), the trusts and funds
+// (4(ii) to 4(iv)), benefits (8(iv)) and every code of section 393(3) or 392.
+const actRates:Record<string,number>={
+  "1006":200, // Sl. No. 1(ii): commission or brokerage, 2%.
+  "1008":200,"1009":1000, // Sl. No. 2(ii): rent, (a) 2% for machinery, plant or equipment, (b) 10% for land, building or furniture.
+  "1011":1000, // Sl. No. 3(ii): consideration under the agreement of section 67(14), 10%.
+  "1012":1000, // Sl. No. 3(iii): compensation on compulsory acquisition, 10%.
+  "1013":1000, // Sl. No. 4(i): income from units, 10%.
+  "1023":100,"1024":200, // Sl. No. 6(i): contractors, (a) 1% for an individual or HUF, (b) 2% for others.
+  "1026":200,"1027":1000,"1028":1000, // Sl. No. 6(iii): (a) 2% for technical services, film royalty, call centres; (b) 10% otherwise.
+  "1029":1000, // Sl. No. 7: dividend, 10%.
+  "1035":10, // Sl. No. 8(v): e-commerce operator, 0.1% of the gross amount.
+  "1037":100, // Sl. No. 8(vi): transfer of a virtual digital asset, 1%.
+};
+// Section 397(2)(b) (https://www.incometaxindia.gov.in/w/section-397-5): with no valid PAN, tax is
+// deducted at the higher of the Act's rate, the rates in force, or 5% for section 393(1) Table Sl.
+// Nos. 8(ii) and 8(v) (codes 1031, 1035) and 20% otherwise; collected at the higher of twice the
+// rate or 5%, not above 20%. So at least 20% (or 5%) on Form No. 140 and 5% on Form No. 143.
+// Forms No. 138 and 144 are left out: salary below the taxable limit and the non residents of
+// section 397(2)(c) take conditions InboxCA cannot see.
+const noPanRate=(form:TdsForm,section:string)=>form==="TDS143" ? 500 : form==="TDS140" ? Math.max(["1031","1035"].includes(section) ? 500 : 2000,actRates[section] ?? 0) : 0;
+// Rule 218(2) (https://www.incometaxindia.gov.in/w/rule-218-1): a deductor or collector other
+// than an office of the Government pays tax by 30 April for March, else within seven days from
+// the end of the month of deduction or collection. Rule 218(4) quarterly payment, allowed by the
+// Assessing Officer in special cases, is not seen here, so the estimate says check before filing.
+const payBy=(day:string)=>{const [year,month]=day.split("-").map(Number);return month===3 ? `${year}-04-30` : `${month===12 ? year+1 : year}-${String(month%12+1).padStart(2,"0")}-07`;};
+// Section 398(3)(a)(ii) (https://www.incometaxindia.gov.in/w/section-398-5): simple interest at
+// 1.5% for every month or part of a month from the date of deduction or collection to the date
+// actually paid. A part month counts whole: 10 July to 6 September is 2 months, to 11 September 3.
+const lateMonths=(from:string,to:string)=>{const [fy,fm,fd]=from.split("-").map(Number),[ty,tm,td]=to.split("-").map(Number);return Math.max(1,(ty-fy)*12+tm-fm+(td>fd ? 1 : 0));};
+// Rule 219(4) (https://www.incometaxindia.gov.in/w/rule-219-1): each quarter's statement is due
+// 31 July, 31 October, 31 January, and 31 May after the tax year. Section 427
+// (https://www.incometaxindia.gov.in/w/section-427-5): a fee of ₹200 for every day the failure
+// continues, not above the tax deductible or collectible.
+const statementDue=(period:string)=>{const [year,month]=period.split("-").map(Number);return month===12 ? `${year+1}-01-31` : `${year}-${month===3 ? "05" : month===6 ? "07" : "10"}-31`;};
+
 // The client's registers (payments, salaries, payments to non residents, collections) and its
 // challan register: the columns a person matches once, as for a purchase register
 // (src/lib/purchase-register.ts), remembered for the client's next one. The first fields of each
@@ -193,7 +234,7 @@ type Line={draft:string;line:string;field:string;value:string};
 type Row={draft:string;row:number;lines:Map<string,string>;values:Map<string,string>};
 export type Issue={text:string;line?:string};
 export type Payment={draft:string;row:number;pan:string;name:string;section:string;paidOn:string;amount:bigint;tds:bigint;deposited:bigint;deductedOn:string;rate:string;challan:string;remark:string;certificate:string;form121:string;cash:bigint|null;line:string;lines:Map<string,string>;more:Record<string,string>};
-export type Challan={draft:string;row:number;bsr:string;date:string;number:string;minor:string;tax:bigint;interest:bigint;fee:bigint;others:bigint;line:string;nil?:boolean;payments:Payment[]};
+export type Challan={draft:string;row:number;bsr:string;date:string;number:string;minor:string;tax:bigint;interest:bigint;fee:bigint;others:bigint;line:string;nil?:boolean;payments:Payment[];estimate?:bigint};
 export type Statement={form?:TdsForm;tan:string;pan:string;deductor:Deductor;period:string;previous:string;token:string;today:string;challans:Challan[]};
 
 const money=(paise:bigint)=>`${paise<BigInt(0) ? "-" : ""}${(paise<BigInt(0) ? -paise : paise)/BigInt(100)}.${String((paise<BigInt(0) ? -paise : paise)%BigInt(100)).padStart(2,"0")}`;
@@ -315,13 +356,19 @@ export function checkStatement(input:{form?:TdsForm;tan:string;pan:string;deduct
     const at=pay.line,name=`Row ${pay.row}`,line=(key:string)=>pay.lines.get(key) ?? at,zero=BigInt(0);
     const valid=isPan(pay.pan),known=noPans.includes(pay.pan);
     const flag=(key:string)=>(pay.more[key] ?? "").toUpperCase(),given=(key:string)=>pay.more[key] ?? "";
-    if(!pay.pan) add(warnings,`${name}: no PAN. InboxCA writes PANNOTAVBL, as the format asks when the ${f.payee} gave no PAN. Tax should be at the higher rate, with reason code C.`,at);
+    if(!pay.pan) add(warnings,`${name}: no PAN. InboxCA writes PANNOTAVBL, as the format asks when the ${f.payee} gave no PAN. Tax should be at the higher rate of section 397(2)(b), with reason code C.`,at);
     else if(known) add(warnings,`${name}: the PAN is given as ${pay.pan}. Check the ${f.payee}'s declaration.`,line("pan"));
     else if(!valid) add(errors,`${name}: the PAN is not a valid PAN. Write it as 5 letters, 4 digits and a letter, or as PANAPPLIED, PANINVALID or PANNOTAVBL.`,line("pan"));
     if(!pay.name || special.test(pay.name)) add(errors,`${name}: the ${f.payee}'s name is missing.`,at);
     else if(pay.name.length>75) add(errors,`${name}: the ${f.payee}'s name is longer than 75 letters.`,line("name"));
     if(!codes[pay.section]) {add(errors,`${name}: the ${form==="TDS143" ? "collection" : "section"} code must be one of the official four digit codes of ${named}, such as ${f.example}.`,line("section"));continue;}
     if(paidBeforeHere.has(pay.section) && !valid) add(errors,`${name}: code ${pay.section} needs the ${f.payee}'s real PAN.`,line("pan"));
+    // Section 397(2)(b): no valid PAN, so at least the higher rate; section 393(1): the Act's rate.
+    // A reason code is a lower deduction the CA chose, so only the PAN rule then applies.
+    const least=paidBeforeHere.has(pay.section) ? 0 : valid ? (form==="TDS140" && !pay.remark ? actRates[pay.section] ?? 0 : 0) : pay.remark && pay.tds===zero ? 0 : noPanRate(form,pay.section);
+    const due=pay.amount*BigInt(least)/BigInt(10000);
+    if(least && pay.amount>zero && pay.tds>=zero && due-pay.tds>BigInt(100)) add(warnings,valid ? `${name}: tax ${f.tax} ${rupees(pay.tds)} is less than ${rupees(due)}, the ${least/100}% section ${sectionCodes[pay.section]} sets for code ${pay.section}, short by ${rupees(due-pay.tds)}. Check the rate, or give the reason code for a lower ${taken}.`
+      : `${name}: with no valid PAN, section 397(2)(b) asks for at least ${least/100}%, ${rupees(due)} on ${rupees(pay.amount)}. The tax ${f.tax} is ${rupees(pay.tds)}, short by ${rupees(due-pay.tds)}.`,line("tds"));
     if(!/^\d{4}-\d{2}-\d{2}$/.test(pay.paidOn) || pay.paidOn<first || pay.paidOn>last) add(errors,`${name}: the date of payment or credit must be within the quarter.`,line("paid_on"));
     else if(pay.paidOn>input.today) add(errors,`${name}: the date of payment or credit is later than today.`,line("paid_on"));
     if(pay.amount<=zero) add(errors,`${name}: the amount paid must be more than 0.`,line("amount"));
@@ -388,6 +435,18 @@ export function checkStatement(input:{form?:TdsForm;tan:string;pan:string;deduct
     else if(deposited>challan.tax) add(errors,`${name}: does not cover its rows. They show ${rupees(deposited)} of tax deposited, more than its tax of ${rupees(challan.tax)}, short by ${rupees(deposited-challan.tax)}. Correct the challan or link some rows to another challan.`,challan.line);
     else if(deposited<challan.tax) add(warnings,`${name}: ${rupees(challan.tax-deposited)} of its tax is not linked to any payment in this statement.`,challan.line);
     if(challan.minor==="100" && challan.payments.some(pay=>pay.paidOn<challan.date)) add(errors,`${name}: with minor head 100 the challan must be paid on or before each payment's date.`,challan.line);
+    // Section 398(3)(a)(ii) on each row's tax paid after its Rule 218(2) date; an office of the
+    // Government (Rule 218(1)) is left out.
+    if(!d || ["A","S"].includes(d.type) || !/^\d{4}-\d{2}-\d{2}$/.test(challan.date)) continue;
+    const late=challan.payments.filter(pay=>pay.deposited>BigInt(0) && /^\d{4}-\d{2}-\d{2}$/.test(pay.deductedOn) && challan.date>payBy(pay.deductedOn));
+    challan.estimate=late.reduce((sum,pay)=>sum+pay.deposited*BigInt(15*lateMonths(pay.deductedOn,challan.date))/BigInt(1000),BigInt(0));
+    if(late.length) add(warnings,`${name}: tax of ${late.length===1 ? "1 row was" : `${late.length} rows were`} paid after the date of Rule 218(2). Interest estimate: ${rupees(challan.estimate)} (section 398(3)(a)(ii)), check before filing. The challan shows ${rupees(challan.interest)} of interest.`,challan.line);
+  }
+  // Section 427: the fee for a statement delivered after its Rule 219(4) date, if delivered today.
+  const filingDue=statementDue(input.period),days=Math.round((Date.parse(input.today)-Date.parse(filingDue))/86400000);
+  if(days>0) {
+    const most=input.payments.reduce((sum,pay)=>sum+(pay.tds>BigInt(0) ? pay.tds : BigInt(0)),BigInt(0)),fee=BigInt(20000*days)<most ? BigInt(20000*days) : most;
+    add(warnings,`${named} was due on ${filingDue.split("-").reverse().join("-")}. Fee estimate: ${rupees(fee)} (section 427), ₹200 for each of ${days} days to today, at most the tax ${f.tax}, check before filing. The challans show ${rupees(challans.reduce((sum,c)=>sum+c.fee,BigInt(0)))} of fee.`);
   }
   return {errors,warnings,challans:[...challans,...(nil.payments.length ? [nil] : [])]};
 }

@@ -54,7 +54,9 @@ it("writes Form No. 140 record by record, field by field, as Protean's format se
   expect([4,5,8,18,24,25,27,28,32].map(n=>at(dd4,n))).toEqual(["1","3","ZZZPZ0004Z","Y","0.00","0.00","","0.0000","Y"]);
   // The batch total is every challan's total (row 90).
   expect(at(bh,47)).toBe("13150.00");
-  expect(checked.warnings.map(issue=>issue.text)).toEqual([expect.stringContaining("Row 4: no PAN")]);
+  // Row 2's tax, deducted 10 July, was due by 7 August and paid 6 September: 2 months at 1.5%.
+  expect(checked.warnings.map(issue=>issue.text)).toEqual([expect.stringContaining("Row 4: no PAN"),expect.stringMatching(/^Challan 123: .*₹60\.00 \(section 398\(3\)\(a\)\(ii\)\)/)]);
+  expect(checked.challans.map(c=>c.estimate)).toEqual([BigInt(6000),BigInt(0),undefined]);
 });
 
 it("checks each rule of the format before a statement is made",()=>{
@@ -147,7 +149,8 @@ it("writes Form No. 138 (salary, Q1 to Q3) field by field from its own format",(
     deductee("5","2","1",{8:"PANNOTAVBL",9:"Invented Trainee",15:"1002",19:"31082026",20:"30000.00",24:"6000.00",25:"6000.00",27:"31082026",29:"07092026",32:"C"}),
     nilChallan("6","2","1"),
     deductee("7","1","2",{8:"ZZZPZ0004Z",9:"Invented Senior",15:"1032",19:"30092026",20:"40000.00",24:"0.00",25:"0.00",32:"A",33:"ZZZCERT001"})]);
-  expect(warnings).toEqual([expect.stringContaining("Row 3: no PAN")]);
+  // Row 2's ₹5,000 deducted 31 July, paid 7 September: 2 months at 1.5%.
+  expect(warnings).toEqual([expect.stringContaining("Row 3: no PAN"),expect.stringMatching(/^Challan 11: .*₹150\.00/)]);
 });
 it("checks Form No. 138 by its own rules, and waits for Protean's Q4 format",()=>{
   const s=salaries();
@@ -176,7 +179,8 @@ it("writes Form No. 144 (payments to non residents) field by field from its own 
     deductee("5","2","1",{8:"PANNOTAVBL",9:"Invented Investor",12:"2",14:"N",15:"1048",16:"27",17:"267",19:"10082026",20:"50000.00",21:"N",24:"5000.00",25:"5000.00",27:"10082026",28:"10.0000",30:"B",32:"C",37:"1 Invented Street London",38:"investor@invented.test",39:"441234567890",41:"INV12345"}),
     nilChallan("6","2","1"),
     deductee("7","1","2",{8:"ZZZPZ0004Z",9:"Invented Winner",12:"2",14:"Y",15:"1059",17:"265",19:"20092026",20:"20000.00",21:"N",24:"0.00",25:"0.00",28:"0.0000",30:"A",32:"Y"})]);
-  expect(warnings).toEqual([expect.stringContaining("Row 3: no PAN")]);
+  // Row 2's ₹10,000 deducted 15 July, paid 5 September: 2 months at 1.5%.
+  expect(warnings).toEqual([expect.stringContaining("Row 3: no PAN"),expect.stringMatching(/^Challan 7: .*₹300\.00/)]);
 });
 it("checks Form No. 144 by its own rules: status, country, remittance, DTAA and the details of a deductee with no PAN",()=>{
   const s=abroad();
@@ -238,4 +242,65 @@ it("reads a non resident register only with its status and country columns chose
   const mapping={kind:"nonresident" as const,header:0,headings:rows[0],columns:[0,1,2,3,4,5,6,7,...Array(16).fill(-1)]};
   expect(extractTds(rows,mapping).map(line=>[line.field,line.value])).toEqual([["tds.p2.pan","ZZZPZ0002Z"],["tds.p2.name","Invented Overseas Ltd"],["tds.p2.section","1057"],["tds.p2.paid_on","2026-07-15"],["tds.p2.amount","100000"],["tds.p2.tds","10000"],["tds.p2.status","1"],["tds.p2.country","265"]]);
   expect(()=>extractTds(rows,{...mapping,columns:[0,1,2,3,4,5,6,-1,...Array(16).fill(-1)]})).toThrow(/Choose a column for .*Country code/);
+});
+
+// Health checks before approval, each figure worked by hand from the Act's own rates and dates
+// (sources beside each rule in src/lib/tds.ts). They warn; no figure is changed.
+const warned=(statement:Parameters<typeof checkStatement>[0])=>{const checked=checkStatement(statement);expect(checked.errors).toEqual([]);return checked.warnings.map(issue=>issue.text).join("\n");};
+const tdsOf=(rupees:number)=>({tds:BigInt(rupees*100),deposited:BigInt(rupees*100)});
+it("warns when tax with no valid PAN is below the higher rate of section 397(2)(b)",()=>{
+  const s=base(),changed=(row:number,values:Partial<Payment>)=>edited(s as ReturnType<typeof statementOf>,row,values);
+  // Row 4: ₹30,000 of rent with no PAN needs at least 20%, ₹6,000; ₹3,000 is short by ₹3,000.
+  expect(warned(changed(4,{...tdsOf(3000),rate:"10"}))).toMatch(/Row 4: .*397\(2\)\(b\).*₹6,000\.00 on ₹30,000\.00.*short by ₹3,000\.00/);
+  expect(warned(changed(4,{pan:"PANINVALID",...tdsOf(3000),rate:"10"}))).toMatch(/Row 4: .*short by ₹3,000\.00/);
+  expect(warned(s)).not.toMatch(/short by/);
+  // Code 1035 (section 393(1) Table Sl. No. 8(v)) takes 5% with no PAN: ₹1,00,000 needs ₹5,000.
+  expect(warned(changed(4,{section:"1035",amount:BigInt(10000000),...tdsOf(1000),rate:"1",remark:""}))).toMatch(/Row 4: .*at least 5%, ₹5,000\.00.*short by ₹4,000\.00/);
+  // Tax collected with no PAN: at least 5%. ₹2,00,000 of scrap needs ₹10,000.
+  const c=collections();
+  expect(warned(edited({...c,challans:c.challans.map(one=>({...one,tax:BigInt(200000)}))},2,{pan:""}))).toMatch(/Row 2: .*at least 5%, ₹10,000\.00.*short by ₹8,000\.00/);
+  // Salary and non residents take conditions InboxCA cannot see: no rate warning.
+  expect(warned(edited(salaries(),3,{...tdsOf(1000),remark:""}))).not.toMatch(/short by/);
+});
+it("warns when tax deducted is below the section 393(1) rate of its code",()=>{
+  const s=base(),changed=(row:number,values:Partial<Payment>)=>edited(s as ReturnType<typeof statementOf>,row,values);
+  // Code 1024 (Sl. No. 6(i), 2%): ₹1,00,000 needs ₹2,000.
+  expect(warned(changed(2,{...tdsOf(1000),rate:"1"}))).toMatch(/Row 2: .*₹2,000\.00, the 2% section 393\(1\) Table Sl\. No\. 6\(i\)\.D\(b\).*short by ₹1,000\.00/);
+  // Code 1023 (Sl. No. 6(i), 1% for an individual or HUF): ₹1,000 is right.
+  expect(warned(changed(2,{section:"1023",...tdsOf(1000),rate:"1"}))).not.toMatch(/short by/);
+  // Code 1027 (Sl. No. 6(iii)(b), 10%): ₹50,000 needs ₹5,000; code 1026 (6(iii)(a)) takes 2%.
+  expect(warned(changed(3,{...tdsOf(1000),rate:"2"}))).toMatch(/Row 3: .*₹5,000\.00, the 10%.*short by ₹4,000\.00/);
+  expect(warned(changed(3,{section:"1026",...tdsOf(1000),rate:"2"}))).not.toMatch(/short by/);
+  // Within a rupee, or with a reason code for lower deduction, is not flagged.
+  expect(warned(changed(2,{tds:BigInt(199950),deposited:BigInt(199950)}))).not.toMatch(/short by/);
+  expect(warned(changed(2,{...tdsOf(1000),rate:"1",remark:"A",certificate:"ZZZCERT001"}))).not.toMatch(/short by/);
+});
+it("warns of a challan no row uses",()=>{
+  const s=base(),spare={...s.challans[0],row:3,number:"77",line:"spare",payments:[]};
+  expect(checkStatement({...s,challans:[...s.challans,spare]}).warnings).toContainEqual({text:expect.stringMatching(/^Challan 77: /),line:"spare"});
+});
+it("estimates interest under section 398(3)(a)(ii) and the fee under section 427, by the Rules' dates",()=>{
+  const s=base(),dated=(date:string)=>({...s,challans:s.challans.map(c=>c.row===1 ? {...c,date} : c)});
+  // Row 2: ₹2,000 deducted 10 July, due by 7 August; row 3: ₹5,000 deducted 4 August, due by
+  // 7 September. Paid 7 September: row 2 only, 2 months at 1.5%, ₹60. Paid 10 September: ₹60
+  // and row 3's 2 months, ₹150. Paid 11 September: row 2 is 3 months, ₹90, with ₹150.
+  expect(checkStatement(dated("2026-09-07")).challans[0].estimate).toBe(BigInt(6000));
+  expect(checkStatement(dated("2026-09-10")).challans[0].estimate).toBe(BigInt(21000));
+  expect(checkStatement(dated("2026-09-11")).challans[0].estimate).toBe(BigInt(24000));
+  // Paid by 7 August: no interest.
+  expect(checkStatement(dated("2026-08-07")).challans[0].estimate).toBe(BigInt(0));
+  // An office of the Government pays by Rule 218(1): no estimate.
+  expect(checkStatement({...s,deductor:{...deductor,type:"A",ministry:"11"},pan:"PANNOTREQD"}).challans[0].estimate).toBeUndefined();
+  // March tax is due by 30 April (Rule 218(2)(a)); the statement by 31 May (Rule 219(4)).
+  const march=(date:string,today:string)=>checkStatement({...readStatement([{id:draft,lines:[...lines("p",2,{pan:"ZZZPZ0002Z",name:"Invented Contractor",section:"1024",paid_on:"2027-03-15",amount:"100000",tds:"2000",rate:"2",challan:"5"}),
+    ...lines("c",1,{bsr:"510308",date,number:"5",tax:"2000",minor:"200"}),{id:"s1",field:"tds.s.previous",value:"N"}]}]),tan,pan,deductor,period:"2027-03",today});
+  expect(march("2027-04-30","2027-05-31").challans[0].estimate).toBe(BigInt(0));
+  expect(march("2027-05-01","2027-05-31").challans[0].estimate).toBe(BigInt(6000));
+  expect(march("2027-04-30","2027-05-31").warnings.map(issue=>issue.text).join("\n")).not.toMatch(/section 427/);
+  // Two days late: ₹200 a day is ₹400.
+  expect(march("2027-04-30","2027-06-02").warnings.map(issue=>issue.text).join("\n")).toMatch(/₹400\.00 \(section 427\)/);
+  // The Q2 statement was due 31 October: 5 days to 5 November is ₹1,000; by 1 February 2027,
+  // 93 days, the fee stops at the ₹13,000 of tax deducted.
+  expect(warned({...s,today:"2026-11-05"})).toMatch(/₹1,000\.00 \(section 427\)/);
+  expect(warned({...s,today:"2027-02-01"})).toMatch(/₹13,000\.00 \(section 427\)/);
 });
