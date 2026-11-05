@@ -90,7 +90,9 @@ export function Footer() {
             <li>
               Screens show sample data. <Link href="/security#website">About this website</Link>
             </li>
-            <li>Other names and logos belong to their owners.</li>
+            <li>
+              Other names and logos belong to their owners. <a href="/licences.txt">Open source licences</a>
+            </li>
           </ul>
         </div>
       </div>
