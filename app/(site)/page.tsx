@@ -159,7 +159,7 @@ export default function Home() {
         <section className="works" aria-label="Built to work with">
           <p>Built to work with what your firm already uses</p>
           <Logos list={worksWith} />
-          <p>Writes the official GST, ITR and TDS files that this software imports</p>
+          <p>InboxCA writes the official files this filing software imports</p>
           <Logos list={importsInto} back />
         </section>
 
