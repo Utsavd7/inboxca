@@ -8,6 +8,7 @@ import {formLimit,formRequest,type FormRequest} from "./form-worker";
 import {signView} from "./file-worker";
 import {officialLink} from "./official-files";
 import {gstPortalClosed,gstPortalTakes} from "./calendar";
+import {isTdsForm} from "./tds";
 
 type Work={client:string;registration?:string;form:string;period:string;version?:string;reason?:string};
 export async function formContext(input:Work,edit=true) {
@@ -16,7 +17,7 @@ export async function formContext(input:Work,edit=true) {
   if(!membership) throw new Error("Sign in to your firm first.");
   const permission=edit && !membership.may("edit_figures",input.client) ? await grantFor(membership.firmId,userId,"edit_figures",input.client) : null;
   if(edit && !membership.may("edit_figures",input.client) && !permission) throw new Error("Ask for permission to prepare a return.");
-  const itr=/^ITR[1-6]$/.test(input.form),tds=input.form==="TDS140",kind=itr ? "pan" : tds ? "tan" : "gstin";
+  const itr=/^ITR[1-6]$/.test(input.form),tds=isTdsForm(input.form),kind=itr ? "pan" : tds ? "tan" : "gstin";
   const [{data:client},{data:registrations},{data:templates}]=await Promise.all([
     supabase.from("clients").select("id,name").eq("firm_id",membership.firmId).eq("id",input.client).maybeSingle(),
     supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",input.client).eq("kind",kind),

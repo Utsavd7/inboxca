@@ -12,6 +12,7 @@ import {currentMember,currentWriter} from "@/src/lib/member";
 import {grantFor} from "@/src/lib/permission-grants";
 import {itrReady,itrReturns} from "@/src/lib/itr-fields";
 import {itrChecks,type ItrWork} from "@/src/lib/itr-check";
+import {isTdsForm,tdsForms} from "@/src/lib/tds";
 import {supabaseAdmin} from "@/src/lib/supabase";
 
 // An ITR whose figures differ from the client's Form 26AS or Form 16 (src/lib/itr-check.ts) is
@@ -33,17 +34,18 @@ import {keepReason} from "@/src/lib/reason";
 
 export async function prepareForm(form:FormData) {
   const client=z.uuid().parse(form.get("client"));
-  const code=z.enum(["GSTR1","GSTR3B","TDS140",...itrReturns]).parse(form.get("form") ?? "GSTR1"),period=String(form.get("period")),drafts=form.getAll("draft").map(String);
-  // A TDS statement goes back to its own page when it cannot be made, and to Return files when it is.
-  const back=code==="TDS140" ? `/app/clients/${client}/tds?tan=${z.uuid().parse(form.get("registration"))}&period=${encodeURIComponent(period)}&message=check` : `/app/clients/${client}?tab=outputs`;
+  const code=z.enum(["GSTR1","GSTR3B",...Object.keys(tdsForms) as (keyof typeof tdsForms)[],...itrReturns]).parse(form.get("form") ?? "GSTR1"),period=String(form.get("period")),drafts=form.getAll("draft").map(String);
+  // A TDS or TCS statement goes back to its own page when it cannot be made, and to Return files when it is.
+  const tds=isTdsForm(code),back=tds ? `/app/clients/${client}/tds?tan=${z.uuid().parse(form.get("registration"))}&period=${encodeURIComponent(period)}&form=${code}&message=check` : `/app/clients/${client}?tab=outputs`;
+  const failed=tds ? back : `${back}&form=check`;
   let id:string,seen:Awaited<ReturnType<typeof differencesSeen>>;
-  try {seen=await differencesSeen(form,{client,period,form:code,sources:drafts});} catch {redirect(`${back}&form=check`);}
+  try {seen=await differencesSeen(form,{client,period,form:code,sources:drafts});} catch {redirect(failed);}
   if(!seen) redirect(`${back}&form=differences`);
   try {
     id=await prepareDocument({client,registration:String(form.get("registration")),form:code,period,drafts,version:String(form.get("version") ?? "") || undefined,reason:String(form.get("reason") ?? "") || undefined});
     await seen(id);
-  } catch(error) {await keepReason(error);redirect(`${back}&form=check`);}
-  revalidatePath("/app","layout");redirect(code==="TDS140" ? `/app/clients/${client}?tab=outputs` : `/app/files/${id}/view`);
+  } catch(error) {await keepReason(error);redirect(failed);}
+  revalidatePath("/app","layout");redirect(tds ? `/app/clients/${client}?tab=outputs` : `/app/files/${id}/view`);
 }
 
 // Fill, for one return from its row or its pin: InboxCA fills it from every figure it has read,

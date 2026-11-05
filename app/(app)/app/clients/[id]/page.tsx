@@ -957,7 +957,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                         }
                         action={<>
                           {canPrepare && fills(task.code) && fillable(stages.get(task.id)) && <Fill task={task.id} label={title} />}
-                          {task.code === "TDS_RET" && task.status !== "filed" && task.registration_id && statementPeriod(task.period_key ?? "") && <Link className="b b-secondary" href={`${base}/tds?tan=${task.registration_id}&period=${task.period_key}`} aria-label={`Prepare ${title}`}>Prepare statement</Link>}
+                          {(task.code === "TDS_RET" || task.code === "TCS_RET") && task.status !== "filed" && task.registration_id && statementPeriod(task.period_key ?? "") && <Link className="b b-secondary" href={`${base}/tds?tan=${task.registration_id}&period=${task.period_key}${task.code === "TCS_RET" ? "&form=TDS143" : ""}`} aria-label={`Prepare ${title}`}>Prepare statement</Link>}
                           {stages.get(task.id)?.stage === "filled" && <Link className="b b-secondary" href={`/app/files/${stages.get(task.id)!.form}/view`} aria-label={`Check figures of ${title}`}>Check figures</Link>}
                           {canFile && task.status !== "filed" ? (
                             task.due_on <= addDays(today, 30) && <Link className={`b ${(canPrepare && fills(task.code) && fillable(stages.get(task.id))) || stages.get(task.id)?.stage === "filled" ? "b-ghost" : "b-secondary"}`} href={`${returnsHref}&task=${task.id}`} scroll={false} aria-label={`Mark ${title} filed`}>Mark filed</Link>
