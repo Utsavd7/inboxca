@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { askedByPhone, checkFigures, remindClient, stopSend } from "@/app/(app)/actions";
 import { dueLabel, todayInIndia } from "@/src/lib/calendar";
-import type { DocumentRequest } from "@/src/lib/checklists";
+import { tdsOnly, type DocumentRequest } from "@/src/lib/checklists";
 import { canManageClients, whatsappLink } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
 import { periodName } from "@/src/lib/documents";
@@ -94,7 +94,7 @@ export default async function Papers({ params, searchParams }: { params: Promise
               {open && (
                 <form action={checkFigures}>
                   {hidden}
-                  <Pending className="b b-primary">Check the figures</Pending>
+                  <Pending className="b b-primary">{tdsOnly(details) ? "Prepare the statement" : "Check the figures"}</Pending>
                 </form>
               )}
             </>

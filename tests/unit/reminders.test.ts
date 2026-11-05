@@ -145,6 +145,16 @@ describe("asking for papers early", () => {
     expect(papersFor(["Trust deed"], "gst")).toEqual(["Sales bills", "Purchase bills", "Bank statement"]);
   });
 
+  it("asks a TDS client for the quarter's TDS papers 15 days before its TDS return is due", () => {
+    const tds = gst({ id: "t", code: "TDS_RET", period_key: "2026-12", due_on: "2027-01-31", rule: { name: "TDS returns 24Q/26Q", frequency: "quarterly", verified: true } });
+    expect(plan([tds], "2027-01-15")).toEqual([]);
+    expect(plan([tds], "2027-01-16")).toEqual([{ client_id: "patel", work: "tds", period: "2026-12", returns: ["TDS_RET"], items: ["TDS register", "Salary register", "TDS challans"] }]);
+    // A challan already in for a month of the quarter is not asked for again.
+    expect(plan([tds], "2027-01-16", new Set(), new Set(["patel:2026-12:TDSCHALLANS"]))[0].items).toEqual(["TDS register", "Salary register"]);
+    const { text } = reminderEmail("Patel Textiles", "Demo CA Firm", [], "2027-01-16", [{ requestId: "r", client_id: "patel", period: "2026-12", missing: ["TDS register", "Salary register", "TDS challans"], count: 0, first: true, returns: ["TDS returns 24Q/26Q"] }]);
+    expect(text).toContain("for Oct to Dec 2026, please send these documents: TDS register (payments and the tax deducted on them), Salary register (if tax was deducted from salaries), TDS challans (the tax deposited).");
+  });
+
   it("emails InboxCA's own ask at once, then follows up 3 days after the latest ask, a call included", () => {
     const request = (details: object) => ({ expires_at: "2026-12-02T00:00:00Z", details: { items: [{ type: "Sales bills", received: [] }], returns: ["GSTR1_M"], ...details } });
     expect(followUpDue(request({}), "2026-11-02")).toEqual(["Sales bills"]);

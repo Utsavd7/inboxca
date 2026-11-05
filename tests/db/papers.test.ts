@@ -18,6 +18,7 @@ import { clientReplied, receiveAsked } from "@/src/lib/checklists";
 import { todayInIndia } from "@/src/lib/calendar";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { sendReminders } from "@/src/jobs/reminders";
+import { papersWorkItems } from "@/src/lib/work/papers";
 import type { Job } from "@/src/jobs/runner";
 import { actAs, asOwner, connect } from "./db";
 
@@ -31,7 +32,7 @@ const people = { owner: randomUUID(), staff: randomUUID(), manager: randomUUID()
 const team = randomUUID();
 const codes = [`GSTR1T${tag}`, `GSTR3T${tag}`];
 const mailbox = (name: string) => `papers-${name}-${tag.toLowerCase()}@invented.test`;
-const client = { asked: randomUUID(), paused: randomUUID(), noEmail: randomUUID(), later: randomUUID(), manual: randomUUID() };
+const client = { asked: randomUUID(), paused: randomUUID(), noEmail: randomUUID(), later: randomUUID(), manual: randomUUID(), tds: randomUUID() };
 const today = todayInIndia();
 let db: Client;
 const run = () => sendReminders({ entity_id: firm, entity_type: "firm" } as Job, { markSending: async () => {} });
@@ -65,7 +66,7 @@ beforeAll(async () => {
   vi.stubEnv("APP_BASE_URL", "http://inboxca.test");
   vi.stubEnv("REMINDERS_ANY_HOUR", "1");
   const smtp = nodemailer.createTransport({ host: "127.0.0.1", port: 3025, secure: false, ignoreTLS: true });
-  for (const address of [office, mailbox("asked")]) await smtp.sendMail({ from: "setup@invented.test", to: address, subject: "Invented test setup", text: "Makes the test mailbox" });
+  for (const address of [office, mailbox("asked"), mailbox("tds")]) await smtp.sendMail({ from: "setup@invented.test", to: address, subject: "Invented test setup", text: "Makes the test mailbox" });
   await asOwner(db);
   for (const [role, id] of Object.entries(people)) await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `papers-${role}-${tag.toLowerCase()}@invented.test`]);
   await db.query("insert into public.firms (id, name, state_code, status, settings) values ($1, 'Papers Test Firm', '24', 'active', '{\"reminders\": true}')", [firm]);
@@ -81,6 +82,9 @@ beforeAll(async () => {
   for (const id of [client.asked, client.paused, client.noEmail, client.manual])
     await db.query("insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) values ($1, $2, 'compliance', $3, '2026-10', $4::date + 5), ($1, $2, 'compliance', $5, '2026-10', $4::date + 12)", [firm, id, codes[0], today, codes[1]]);
   await db.query("insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) values ($1, $2, 'compliance', $3, '2026-11', $4::date + 20)", [firm, client.later, codes[0], today]);
+  // A TDS client's statement for Oct to Dec, due in 10 days, on a date the firm confirmed.
+  await db.query("insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) values ($1, $2, 'compliance', 'TDS_RET', '2026-12', $3::date + 10)", [firm, client.tds, today]);
+  await db.query("insert into public.firm_due_dates (firm_id, code, confirmed_by, source_url) values ($1, 'TDS_RET', $2, 'https://example.test/notification')", [firm, people.owner]);
   // The client already sent its sales bills for the month; another was asked by a person.
   await db.query("insert into public.documents (firm_id, client_id, work_type, document_type, period_key, status, drive_file_id, name, size, sha256) values ($1, $2, 'gst', 'Sales bills', '2026-10', 'filed', 'invented', 'Invented sales bills', 1, 'invented')", [firm, client.asked]);
   await db.query("insert into public.requests (firm_id, kind, client_id, entity_type, entity_id, expires_at, details) values ($1, 'documents', $2, 'checklist', gen_random_uuid(), now() + interval '20 days', $3)", [firm, client.manual, { period: "2026-10", items: [{ type: "Sales bills", work: "gst", received: [] }] }]);
@@ -148,4 +152,21 @@ it("tells them to check the figures once every paper is in, and not after a pape
   expect(await items(people.other)).toEqual([]);
   await db.query("update public.requests set status = 'pending' where id = $1", [ask.id]);
   expect(await items(people.staff)).toEqual([]);
+});
+
+it("asks a TDS client for the quarter's TDS papers before its TDS return, lists them as missing close to the due date, and tells them to prepare the statement once in", async () => {
+  const [ask] = await asks(client.tds);
+  expect(ask.details).toMatchObject({ period: "2026-12", returns: ["TDS_RET"], items: ["TDS register", "Salary register", "TDS challans"].map((type) => ({ type, work: "tds", received: [] })) });
+  const [sent] = await mail(mailbox("tds"));
+  expect(sent).toContain("for Oct to Dec 2026, please send these documents: TDS register (payments and the tax deducted on them), Salary register (if tax was deducted from salaries), TDS challans (the tax deposited).");
+  // Missing 10 days before the due date: a card for a firm that pins returns 10 days ahead, none at
+  // the usual 5, and none for another firm.
+  const cards = (firmId: string, days?: number) => papersWorkItems({ supabase: supabaseAdmin(), membership: { firmId, settings: { pin_days: days } }, userId: people.owner }).then((list) => list.map((item) => [item.key, item.title]));
+  expect(await cards(firm, 10)).toEqual([[`tds_missing:${ask.id}`, "TDS papers for Oct to Dec 2026 are missing"]]);
+  expect(await cards(firm)).toEqual([]);
+  expect(await cards(randomUUID(), 10)).toEqual([]);
+  for (const type of ["TDS challans", "TDS register", "Salary register"]) await receiveAsked(supabaseAdmin(), client.tds, type, "2026-12", randomUUID());
+  expect((await asks(client.tds))[0].status).toBe("done");
+  expect(await items(people.owner)).toContainEqual({ kind: "papers_in", client_id: client.tds });
+  expect(await cards(firm, 10)).toEqual([]);
 });

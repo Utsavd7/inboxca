@@ -3,7 +3,7 @@ import path from "node:path";
 import type { Json } from "@/src/db/types";
 import { clientReplied, receiveAsked } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
-import { describeFile, filePeriod, folderFor, gstinFor, layoutTyped, placeUnderFreeName, receivedLabel, settleVersions, typeByContent } from "@/src/lib/documents";
+import { describeFile, filePeriod, folderFor, gstinFor, layoutTyped, placeUnderFreeName, receivedLabel, settleVersions, tdsChallanText, typeByContent } from "@/src/lib/documents";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { pdfLines, recogniseTaxPdf } from "@/src/lib/tax-papers";
 import type { FolderOrder, Naming } from "@/src/lib/drive";
@@ -157,9 +157,12 @@ async function openFiling(admin: Filing["admin"], event: Filing["event"] & { cli
 }
 
 // What a paper is, by its name and the email's words; a PDF named as a tax paper is typed by
-// what is printed in it, never by the words alone.
+// what is printed in it, never by the words alone. A challan or unknown PDF whose first pages
+// print a TDS challan's form or minor head is a TDS challan.
 async function describe(filing: Filing, file: Paper, hint: string) {
-  const named = describeFile(file.name, hint, filing.event.label, filing.event.received_at);
+  const plain = describeFile(file.name, hint, filing.event.label, filing.event.received_at);
+  const challan = !filing.notice && /\.pdf$/i.test(file.name) && ["Challan", "Document"].includes(plain.type) && (await pdfLines(file.bytes, 2).then((lines) => tdsChallanText(lines.map((line) => line.text).join("\n")), () => false));
+  const named = challan ? describeFile(file.name, hint, filing.event.label, filing.event.received_at, "TDS challans") : plain;
   const described = layoutTyped.has(named.type) && /\.pdf$/i.test(file.name) ? typeByContent(named, await pdfLines(file.bytes, 10).then(recogniseTaxPdf, () => null), file.name) : named;
   return filing.notice ? { ...described, work: filing.notice.authority, type: described.type === "Document" && /\.pdf$/i.test(file.name) ? "Notice" : described.type } : described;
 }

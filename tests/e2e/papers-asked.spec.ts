@@ -168,3 +168,47 @@ test("once the client replies with every paper attached, the person is told to c
   await expect(staff.locator("section[aria-labelledby=t-list]")).toBeVisible();
   await expect(done).toHaveCount(0);
 });
+
+test("a TDS client is asked for the quarter's TDS papers, its reply is filed under TDS, and the person is told to prepare the statement", async () => {
+  const tds = { name: `TDS Traders ${tag}`, email: `tds-${tag}@patel.test`, id: "" };
+  await makeMailbox(tds.email);
+  await owner.goto("/app/clients?panel=add");
+  await owner.getByLabel("Name", { exact: true }).fill(tds.name);
+  await owner.getByLabel("Email", { exact: true }).fill(tds.email);
+  await owner.getByRole("button", { name: "Add client" }).click();
+  await expect(owner.locator(".page-head")).toContainText(tds.name);
+  tds.id = owner.url().split("/").at(-1)!;
+  await query(local.dbUrl, "insert into public.client_assignments (firm_id, client_id, user_id, role) select $1, $2, user_id, 'staff' from public.firm_members where firm_id = $1 and role = 'staff'", [firm.firmId, tds.id]);
+  // Its TDS statement for Oct to Dec, due in 10 days, on a date the owner confirmed for the firm.
+  await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, 'TDS_RET', '2026-12', $3)", [firm.firmId, tds.id, day(10)]);
+  await query(local.dbUrl, "insert into public.firm_due_dates (firm_id, code, confirmed_by, source_url) select $1, 'TDS_RET', user_id, 'https://example.test/notification' from public.firm_members where firm_id = $1 and role = 'owner'", [firm.firmId]);
+  await query(local.dbUrl, "insert into public.jobs (firm_id, kind, entity_type, entity_id, idempotency_key) values ($1, 'reminders', 'firm', $1, $2)", [firm.firmId, `reminders:test:${randomUUID()}`]);
+  await runJobs(owner.request, firm.firmId);
+  const [sent] = await mailTexts(tds.email);
+  expect(sent).toContain("for Oct to Dec 2026, please send these documents: TDS register (payments and the tax deducted on them), Salary register (if tax was deducted from salaries), TDS challans (the tax deposited).");
+
+  // The reply: two registers by their names, and a challan receipt known only by what it prints.
+  await testSmtp.sendMail({
+    from: tds.email, to: office, subject: "Re: Documents needed", text: "Please find attached.",
+    attachments: [
+      { filename: "TDS register Q3 2026-27.csv", content: "Deductee PAN,Deductee name,Section code\n" },
+      { filename: "salary_register_dec_2026.csv", content: "Employee,Salary\n" },
+      { filename: "receipt_dec_2026.pdf", content: Buffer.from(pdf("Challan No./ITNS 281N")) },
+    ],
+  });
+  await pollFirmMail(staff.request, firm.firmId);
+  const request = async () => (await query(local.dbUrl, "select id, status from public.requests where client_id = $1 and kind = 'documents'", [tds.id]))[0];
+  await expect.poll(async () => { await runJobs(staff.request, firm.firmId); return (await request()).status; }, { timeout: 30_000 }).toBe("done");
+  expect(await query(local.dbUrl, "select document_type, work_type, period_key, status from public.documents where client_id = $1 order by document_type", [tds.id])).toEqual(
+    ["Salary register", "TDS challans", "TDS register"].map((document_type) => ({ document_type, work_type: "tds", period_key: "2026-12", status: "filed" })),
+  );
+
+  await staff.goto("/app");
+  const ready = staff.getByRole("listitem").filter({ hasText: "TDS papers for Oct to Dec 2026 are in" });
+  await expect(ready).toContainText("Prepare the statement. 2 registers are ready to read");
+  await ready.getByRole("button", { name: `Prepare statement: ${tds.name}` }).click();
+  await expect(staff).toHaveURL(new RegExp(`/app/clients/${tds.id}/tds\\?period=2026-12`));
+  await staff.goto("/app");
+  await expect(staff.locator("section[aria-labelledby=t-list]")).toBeVisible();
+  await expect(ready).toHaveCount(0);
+});
