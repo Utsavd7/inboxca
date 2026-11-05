@@ -21,7 +21,8 @@ on conflict (code, period_key) do nothing;
 update public.compliance_types set name = 'TDS returns 138/140/144 (24Q/26Q/27Q)'
 where code = 'TDS_RET' and period_key = '' and verified_on is null;
 
--- As 20261111410000_tds_statements.sql, for every statement on the client's TAN, named by its form.
+-- As 20261111410000_tds_statements.sql, for every statement on the client's TAN, named by its form
+-- and kept with the client's TDS work (20261111470000_tds_papers.sql).
 create or replace function public.reserve_form(firm uuid, client uuid, registration uuid, form text, period text, template text, sources jsonb, person uuid, prefix text, extension text, choice jsonb default '{}')
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare saved public.documents; number int; body jsonb; itr boolean := form ~ '^ITR[1-6]$'; tds boolean := form in ('TDS138','TDS140','TDS143','TDS144'); day date;
@@ -46,7 +47,7 @@ begin
     where d.firm_id=firm and d.client_id=client and d.period_key=period and d.prepared->>'form'=form and d.prepared->>'registration'=registration::text;
   body=jsonb_build_object('form',form,'registration',registration,'version',number,'template',template,'sources',sources,'status','draft');
   insert into public.documents(firm_id,client_id,work_type,document_type,period_key,name,size,sha256,drive_file_id,share_policy,prepared)
-    values(firm,client,case when itr or tds then 'income_tax' else 'gst' end,case when itr then replace(form,'ITR','ITR-') when tds then 'Form No. '||substr(form,4) when form='GSTR1' then 'GSTR-1' else 'GSTR-3B' end,period,prefix||' - v'||number||'.'||extension,0,'','','internal',body) returning * into saved;
+    values(firm,client,case when itr then 'income_tax' when tds then 'tds' else 'gst' end,case when itr then replace(form,'ITR','ITR-') when tds then 'Form No. '||substr(form,4) when form='GSTR1' then 'GSTR-1' else 'GSTR-3B' end,period,prefix||' - v'||number||'.'||extension,0,'','','internal',body) returning * into saved;
   insert into public.activity_log(firm_id,actor_id,action,entity_type,entity_id,details)
     values(firm,person,'form.started','document',saved.id,jsonb_build_object('version',number,'template',template)||choice);
   return jsonb_build_object('id',saved.id,'name',saved.name,'ready',false);

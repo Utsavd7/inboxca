@@ -29,14 +29,15 @@ test("prepares Forms No. 143 and 144 from their registers, and files the TCS ret
     await query(local.dbUrl,"insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx,details_enc) values($1,$2,$3,'tan',$4,$5,$6)",[registration,firm.firmId,client,await crypto.encrypt(firm.firmId,`clients/${client}/tan`,tan),await crypto.blindIndex(firm.firmId,"tan",tan),await crypto.encrypt(firm.firmId,`clients/${client}/tan/${registration}/details`,JSON.stringify(details))]);
     await query(local.dbUrl,"insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc) values($1,$2,'drive','local',$3,$4)",[account,firm.firmId,await crypto.encrypt(firm.firmId,`accounts/${account}/address`,"Test drive"),await crypto.encrypt(firm.firmId,`accounts/${account}/credentials`,"{}")]);
     await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,'TCS_RET','2026-09','2026-10-31')",[firm.firmId,client,registration]);
-    // The client's collection and non resident registers, with their own column names.
-    const register=async(name:string,lines:string[])=>{
+    // The client's collection and non resident registers, with their own column names; the second
+    // filed as the quarter's TDS register under its TDS work, as one sent by email is.
+    const register=async(name:string,lines:string[],work="income_tax",type="Document")=>{
       const bytes=Buffer.from(lines.join("\n")),saved=await drive.save(await drive.ensureFolder([firm.firmId]),name,bytes);
       if(saved==="taken") throw new Error("Test collision");files.push(saved.id);
-      await query(local.dbUrl,"insert into public.documents(firm_id,client_id,work_type,document_type,period_key,name,size,sha256,drive_file_id) values($1,$2,'income_tax','Document','2026-09',$3,$4,$5,$6)",[firm.firmId,client,name,bytes.length,createHash("sha256").update(bytes).digest("hex"),saved.id]);
+      await query(local.dbUrl,"insert into public.documents(firm_id,client_id,work_type,document_type,period_key,name,size,sha256,drive_file_id) values($1,$2,$7,$8,'2026-09',$3,$4,$5,$6)",[firm.firmId,client,name,bytes.length,createHash("sha256").update(bytes).digest("hex"),saved.id,work,type]);
     };
     await register("Invented TCS register.csv",["Buyer PAN,Buyer,Code,Received on,Amount,TCS,Buyer type,Rate %,Challan no","ZZZPZ0002Z,Invented Scrap Buyer,1073,20/07/2026,200000.00,2000.00,7,1,21"]);
-    await register("Invented foreign payments.csv",["PAN,Party,Code,Paid on,Gross,TDS,Status,Country,Rate %,Act or DTAA,Remittance,Challan no","ZZZPZ0003Z,Invented Overseas Ltd,1057,15/07/2026,100000.00,10000.00,1,265,10,B,49,7"]);
+    await register("Invented foreign payments.csv",["PAN,Party,Code,Paid on,Gross,TDS,Status,Country,Rate %,Act or DTAA,Remittance,Challan no","ZZZPZ0003Z,Invented Overseas Ltd,1057,15/07/2026,100000.00,10000.00,1,265,10,B,49,7"],"tds","TDS register");
 
     await emailStep(page,email);await page.getByLabel("6 digit code from the app").fill(totp(key));await page.getByRole("button",{name:"Continue"}).click();await expect(page).toHaveURL(/\/app$/);
     const today=todayInIndia(),created=`${today.slice(8,10)}${today.slice(5,7)}${today.slice(0,4)}`;
@@ -53,7 +54,7 @@ test("prepares Forms No. 143 and 144 from their registers, and files the TCS ret
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
       await page.getByRole("button",{name:`Prepare Form No. ${form}`}).click();await expect(page).toHaveURL(/tab=outputs/);
       const [made]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'=$2",[firm.firmId,`TDS${form}`]);files.push(made.drive_file_id);
-      expect(made.name).toBe(`Invented TDS Client - Form No. ${form} - Jul to Sep 2026 - v1.txt`);
+      expect(made.name).toBe(`Invented TDS Client - Form No. ${form} - Jul to Sep 2026 - v1.txt`);expect(made.work_type).toBe("tds");
       const card=page.locator("li").filter({has:page.getByRole("link",{name:made.name,exact:true})});
       const download=page.waitForEvent("download",{timeout:20_000});await card.getByRole("button",{name:"Download for filing"}).click();
       const records=(await readFile((await (await download).path())!,"latin1")).split("\r\n");
@@ -64,6 +65,8 @@ test("prepares Forms No. 143 and 144 from their registers, and files the TCS ret
     // The quarter's TCS return opens its Form No. 143.
     await page.goto(`/app/clients/${client}?tab=returns`);await page.getByRole("link",{name:/^Prepare TCS return/}).click();
     await expect(page.getByRole("heading",{name:"Form No. 143, Jul to Sep 2026"})).toBeVisible();
+    // The quarter's TDS register comes first in the list.
+    await expect(page.getByRole("list",{name:"Registers"}).getByRole("listitem").first()).toContainText("Invented foreign payments.csvTDS register for this quarter, received");
     const tcs=await statement("143","Invented TCS register.csv","collections",[["Collectee PAN","A: Buyer PAN"],["Collectee name","B: Buyer"],["Collection code","C: Code"],["Date received or debited","D: Received on"],["Amount received or debited","E: Amount"],["Tax collected","F: TCS"],["Collectee code","G: Buyer type"],["Rate","H: Rate %"],["Challan serial number","I: Challan no"]],"21","2000");
     expect(tcs.records.slice(0,3)).toEqual([`1^FH^TC1^R^${created}^1^D^${tan}^1^InboxCA^^^^^^^^`,expect.stringMatching(new RegExp(`^2\\^BH\\^1\\^1\\^143\\^\\^\\^\\^\\^\\^\\^\\^${tan}\\^\\^${pan}\\^202728\\^202627\\^Q2\\^Invented TDS Client\\^`)),"3^CD^1^1^1^N^^2000.00^0.00^0.00^0.00^2000.00^C^^0510308^^00021^^07082026^^2000.00^2000.00^200^0.00^0.00^^^^^"]);
     expect(tcs.records[3]).toBe(record({1:"4",2:"DD",3:"1",4:"1",5:"1",6:"O",8:"ZZZPZ0002Z",9:"Invented Scrap Buyer",11:"N",12:"7",14:"N",15:"1073",18:"Y",19:"20072026",20:"200000.00",24:"2000.00",25:"2000.00",27:"20072026",28:"1.0000"}));

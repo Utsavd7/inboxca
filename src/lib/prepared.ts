@@ -25,9 +25,10 @@ export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR
 
 // A prepared return's drive file name keeps the year as first written ("AY 2026-27", "Tax year
 // 2026-27"), so every version of a return keeps one name. A TDS statement is named by its quarter
-// ("Jul to Sep 2026") and kept with the client's income tax work.
+// ("Jul to Sep 2026") and kept with the client's TDS work, as its TDS papers are.
 export const formPeriod=(period:string,form="")=>isTdsForm(form) ? periodLabel("quarterly",period) : period.length===4 ? Number(period)>=2027 ? `Tax year ${Number(period)-1}-${period.slice(2)}` : `AY ${period}-${String(Number(period)+1).slice(-2)}` : periodName(period);
-const workFolder=(period:string,form="")=>period.length===4 || isTdsForm(form) ? "Income tax" : "GST";
+const workOf=(period:string,form="")=>isTdsForm(form) ? "tds" : period.length===4 ? "income_tax" : "gst";
+const workFolder=(period:string,form="")=>({tds:"TDS",income_tax:"Income tax",gst:"GST"})[workOf(period,form)];
 const workYear=(period:string)=>financialYear(period.length===4 ? `${period}-03` : period);
 
 export async function prepareDocument(input:Parameters<typeof checkedForm>[0]) {
@@ -157,7 +158,7 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
       const name=`${safeName(client.name,100)} - ${formName(document.prepared.form)} - ${formPeriod(document.period_key,document.prepared.form)} - ${type} - v${document.prepared.version}.${extension}`;
       const saved=await drive.save(folder,name,bytes);
       if(saved==="taken") throw new Error("An acknowledgement with this name is already in the drive. Choose it from Documents.");
-      const {data:row,error}=await admin.from("documents").insert({firm_id:membership.firmId,client_id:document.client_id,name,document_type:type,work_type:workFolder(document.period_key,document.prepared.form)==="GST" ? "gst" : "income_tax",period_key:document.period_key,size:bytes.length,sha256:checksum,drive_file_id:saved.id,share_policy:null}).select("id").single();
+      const {data:row,error}=await admin.from("documents").insert({firm_id:membership.firmId,client_id:document.client_id,name,document_type:type,work_type:workOf(document.period_key,document.prepared.form),period_key:document.period_key,size:bytes.length,sha256:checksum,drive_file_id:saved.id,share_policy:null}).select("id").single();
       if(error || !row) {await drive.trash(saved.id);throw new Error("The acknowledgement could not be saved.");}
       paper=row.id;
       const {error:logError}=await admin.from("activity_log").insert({firm_id:membership.firmId,actor_id:userId,action:"document.added",entity_type:"document",entity_id:paper,details:{form:id,kind:uploaded ? "acknowledgement" : "filing_record"}});

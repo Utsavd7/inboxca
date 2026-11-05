@@ -28,7 +28,7 @@ it("keeps TDS statement details and statements to the firm, its TAN and its chec
   const reserve=async(registration:string,extension:string,period="2026-09")=>(await db.query("select public.reserve_form($1,$2,$3,'TDS140',$6,'1.2',$4,$5,'Invented - Form No. 140 - Jul to Sep 2026',$7) saved",[firm,client,registration,sources,owner,period,extension])).rows[0].saved;
   expect(await reserve(gstin,"txt")).toBeNull();expect(await reserve(tan,"xlsx")).toBeNull();expect(await reserve(tan,"txt","2026-08")).toBeNull();
   const saved=await reserve(tan,"txt");expect(saved.name).toBe("Invented - Form No. 140 - Jul to Sep 2026 - v1.txt");
-  expect((await db.query("select work_type,document_type,prepared->>'form' form from public.documents where id=$1",[saved.id])).rows[0]).toEqual({work_type:"income_tax",document_type:"Form No. 140",form:"TDS140"});
+  expect((await db.query("select work_type,document_type,prepared->>'form' form from public.documents where id=$1",[saved.id])).rows[0]).toEqual({work_type:"tds",document_type:"Form No. 140",form:"TDS140"});
   // GST returns keep their own files: a GSTR-1 never takes a text file.
   expect((await db.query("select public.reserve_form($1,$2,$3,'GSTR1','2026-09','2.2',$4,$5,'Invented','txt') saved",[firm,client,gstin,sources,owner])).rows[0].saved).toBeNull();
   // Figures read for another TAN cannot make this one's statement.

@@ -10,6 +10,7 @@ import {keptReason} from "@/src/lib/reason";
 import {workerSheet} from "@/src/lib/worker-read";
 import {sameHeadings} from "@/src/lib/sales-register";
 import {preparedSchema} from "@/src/lib/prepared";
+import {tdsRegisters} from "@/src/lib/documents";
 import {formatChanged,savedTdsMappings,tdsWork} from "@/src/lib/tds-draft";
 import {isTdsForm,minorHeads,neededTds,rupees,statementPeriod,suggestTds,tdsFields,tdsForms,tdsName,waitsForFormat,type TdsForm,type TdsKind} from "@/src/lib/tds";
 import {askPermission} from "@/app/(app)/actions";
@@ -87,7 +88,9 @@ export default async function TdsPage({params,searchParams}:{params:Promise<{id:
   // A register read into any statement (or other figures) is read once only.
   const {data:taken}=sheets.length ? await supabase.from("datasets").select("id").eq("firm_id",firm).eq("client_id",id).in("id",sheets.map(file=>file.id)) : {data:[]};
   for(const row of taken ?? []) read.add(row.id);
-  const registers=sheets.filter(file=>!read.has(file.id)),chosen=registers.find(file=>file.id===q.source),kind:TdsKind=q.kind==="challans" ? "challans" : f.kind;
+  // The quarter's TDS and salary registers filed under the client's TDS work come first.
+  const filedFor=new Map((await tdsRegisters(supabase,firm,[id],[period])).map(paper=>[paper.id,paper.document_type]));
+  const registers=sheets.filter(file=>!read.has(file.id)).sort((a,b)=>Number(filedFor.has(b.id))-Number(filedFor.has(a.id))),chosen=registers.find(file=>file.id===q.source),kind:TdsKind=q.kind==="challans" ? "challans" : f.kind;
   let rows:string[][]=[],problem="";
   if(chosen) {try {rows=await workerSheet(firm,chosen);} catch {problem="InboxCA could not read this register. Check that your firm's drive is connected, and that the first sheet has at most 1,000 rows and 26 columns.";}}
   const remembered=rows.length ? (await savedTdsMappings(firm,id)).filter(map=>map.kind===kind && sameHeadings(rows[map.header] ?? [],map.headings)) : [];
@@ -117,7 +120,7 @@ export default async function TdsPage({params,searchParams}:{params:Promise<{id:
       <div className="itr-body">
       <p className="hint">Choose a register the client sent, then its columns. A register of {rowsOf[f.kind]} has one row each; a challan register one row a challan. InboxCA remembers the columns for this client&apos;s next register.</p>
       {work.drafts.filter(draft=>draft.id!==entered?.id).map(draft=><p key={draft.id} className="sub">{sheets.find(file=>file.id===draft.id)?.name ?? "Register"}: {draft.data.lines.length} figures, {draft.data.lines.filter(line=>line.state==="confirmed").length} checked. <Link href={`/app/clients/${id}?tab=extraction&draft=${draft.id}&view=list`}>Look at the figures</Link></p>)}
-      {registers.length ? <ul className="app-rows" aria-label="Registers">{registers.slice(0,10).map(file=><li className={`app-row${chosen?.id===file.id ? " is-on" : ""}`} key={file.id}><span className="grow"><strong>{file.name}</strong><span className="sub">Received {day(file.received_at.slice(0,10))}</span></span>
+      {registers.length ? <ul className="app-rows" aria-label="Registers">{registers.slice(0,10).map(file=><li className={`app-row${chosen?.id===file.id ? " is-on" : ""}`} key={file.id}><span className="grow"><strong>{file.name}</strong><span className="sub">{filedFor.has(file.id) ? `${filedFor.get(file.id)} for this quarter, received` : "Received"} {day(file.received_at.slice(0,10))}</span></span>
         <Link className="b b-secondary b-small" href={`${base}&source=${file.id}&kind=${f.kind}`} aria-label={`Read ${file.name} as ${rowsOf[f.kind]}`}>Read {rowsOf[f.kind]}</Link><Link className="b b-ghost b-small" href={`${base}&source=${file.id}&kind=challans`} aria-label={`Read ${file.name} as challans`}>Read challans</Link></li>)}</ul>
         : <p className="hint">{sheets.length ? "Every register here is read. To read another," : "No register to read yet. To read one,"} add it under <Link href={`/app/clients/${id}?tab=documents`}>Documents</Link>, or ask the client for it.</p>}
       {problem && <p className="alert" role="alert">{problem}</p>}
