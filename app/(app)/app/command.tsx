@@ -6,7 +6,7 @@ import { useEffect, useState, useSyncExternalStore, useTransition } from "react"
 import { findClients, findDocuments } from "@/app/(app)/actions";
 import { clientKinds, type ClientKind } from "@/src/lib/clients";
 import { going } from "./nav-progress";
-import { ASK_EVENT, quickActions, type QuickAction } from "./ui-client";
+import { ASK_EVENT, quickActions, REPORT_EVENT, type QuickAction } from "./ui-client";
 
 type Page = { href: string; name: string };
 type Hit = { href: string; name: string; note: string; action?: QuickAction };
@@ -14,6 +14,8 @@ type Hit = { href: string; name: string; note: string; action?: QuickAction };
 // True in the browser when a field has the keyboard, so a typed letter is not a shortcut.
 export const typing = (target: EventTarget | null) => target instanceof HTMLElement && !!target.closest("input, textarea, select, [contenteditable]");
 const nothing = () => () => {};
+// The words that find Report a problem or idea.
+const report = "report a problem or idea, bug, feedback, feature, out of date";
 
 // Find a client or a page, or start something, from anywhere: the search box in the sidebar, / or
 // Ctrl K (⌘K on a Mac). Ask for papers first asks which client, then opens its Ask panel.
@@ -72,6 +74,7 @@ export function Command({ pages, manage = false, write = false }: { pages: Page[
     : [
         ...quickActions({ manage, write }).filter((action) => action.label.toLowerCase().includes(typed)).map((action) => ({ href: action.href ?? `#${action.key}`, name: action.label, note: "Start", action })),
         ...pages.filter((page) => page.name.toLowerCase().includes(typed)).map((page) => ({ ...page, note: "Page" })),
+        ...(report.includes(typed) ? [{ href: "#report", name: "Report a problem or idea", note: "Help" }] : []),
         ...found,
       ];
   const go = (hit: Hit | undefined) => {
@@ -85,6 +88,7 @@ export function Command({ pages, manage = false, write = false }: { pages: Page[
     setOpen(false);
     setAsking(false);
     setText("");
+    if (hit.href === "#report") return void window.dispatchEvent(new Event(REPORT_EVENT));
     // The paper already open beside the page stays as it is (following it again empties the page).
     if (hit.href === location.pathname && document.querySelector(".doc-pane")) return;
     going(hit.href);
