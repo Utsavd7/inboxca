@@ -16,7 +16,7 @@ const payments=[
 ].flat();
 const challans=[
   lines("c",1,{bsr:"510308",date:"2026-09-06",number:"123",tax:"7000",interest:"0",minor:"200"}),
-  lines("c",2,{bsr:"0510308",date:"2026-10-05",number:"00045",tax:"6000",interest:"150",fee:"0",others:"0"}),
+  lines("c",2,{bsr:"0510308",date:"2026-10-05",number:"00045",tax:"6000",interest:"150",fee:"0",others:"0",minor:"400"}),
   lines("p",9,{name:"Invented Shop",pan:"ZZZPZ0004Z",section:"1031",paid_on:"2026-09-20",amount:"20000",tds:"0",remark:"Y"}),
 ].flat();
 const read=()=>readStatement([{id:draft,lines:payments},{id:entered,lines:[...challans,{id:"s1",field:"tds.s.previous",value:"N"}]}]);
@@ -42,7 +42,7 @@ it("writes Form No. 140 record by record, field by field, as Protean's format se
   // Challans (rows 120 to 149): tax, interest, fee, others, total, mode, BSR, serial, date,
   // the payments' deposited and deducted totals, minor head and the allocations.
   expect(cd1).toEqual(["3","CD","1","1","2","N","","7000.00","0.00","0.00","0.00","7000.00","C","","0510308","","00123","","06092026","","7000.00","7000.00","200","0.00","0.00","","","","",""]);
-  expect(cd2.slice(3,25)).toEqual(["2","1","N","","6000.00","150.00","0.00","0.00","6150.00","C","","0510308","","00045","","05102026","","6000.00","6000.00","","150.00","0.00"]);
+  expect(cd2.slice(3,25)).toEqual(["2","1","N","","6000.00","150.00","0.00","0.00","6150.00","C","","0510308","","00045","","05102026","","6000.00","6000.00","400","150.00","0.00"]);
   // A nil challan (row 125): no amounts, mode, BSR code or serial; dated the quarter's last day.
   expect(nil.slice(3,25)).toEqual(["3","1","Y","","0.00","0.00","0.00","0.00","0.00","","","","","","","30092026","","0.00","0.00","","0.00","0.00"]);
   // Deductees (rows 154 to 198), numbered under each challan, referring to it.
@@ -83,6 +83,8 @@ it("checks each rule of the format before a statement is made",()=>{
   expect(texts(changed(2,{remark:"A"}))).toMatch(/needs the certificate number/);
   expect(texts(changed(4,{remark:"T",section:"1024"}))).toMatch(/transporter\) needs the deductee's PAN/);
   expect(texts(changed(2,{section:"1059",tds:BigInt(0),deposited:BigInt(0),rate:"0"}))).toBe("");
+  expect(texts(changed(9,{section:"1059"}))).toMatch(/Row 9: for code 1059 give the serial number of the challan/);
+  expect(texts({...base(),challans:base().challans.map(c=>({...c,minor:""}))})).toMatch(/Challan 123: the minor head must be 200, 400 or 100[\s\S]*Challan 00045: the minor head/);
   expect(texts(changed(4,{section:"1034"}))).toMatch(/code 1034 needs the deductee's real PAN[\s\S]*must be 0/);
   expect(texts(changed(9,{remark:"",tds:BigInt(0)}))).toMatch(/Give the reason code for no deduction/);
   expect(texts(changed(2,{section:"1065"}))).toMatch(/needs the cash withdrawn/);
@@ -119,7 +121,7 @@ it("reads a register under the columns a person chose, and refuses a changed lay
 const record=(count:number,values:Record<number,string>)=>Array.from({length:count},(_,at)=>values[at+1] ?? "");
 const head=(fileType:string)=>record(18,{1:"1",2:"FH",3:fileType,4:"R",5:"20102026",6:"1",7:"D",8:tan,9:"1",10:"InboxCA"});
 const batch=(form:string,challans:string,total:string)=>record(72,{1:"2",2:"BH",3:"1",4:challans,5:form,13:tan,15:pan,16:"202728",17:"202627",18:"Q2",19:"Invented Traders",20:"India",21:"12 Invented Lane",23:"Test Road",25:"Invented District",26:"24",27:"380001",28:"tds@invented.test",29:"91",30:"9000000001",32:"F",
-  33:"Invented Partner",34:"Partner",35:"12 Invented Lane",40:"24",41:"380001",43:"India",44:"91",45:"9000000002",47:total,52:"N",59:"ZZZPZ0009Z"});
+  33:"Invented Partner",34:"Partner",35:"12 Invented Lane",40:"24",41:"380001",43:"India",44:"91",45:"9000000002",47:total,49:form==="138" ? "0" : "",52:"N",59:"ZZZPZ0009Z"});
 const challan=(line:string,at:string,rows:string,values:Record<number,string>)=>record(30,{1:line,2:"CD",3:"1",4:at,5:rows,6:"N",9:"0.00",10:"0.00",11:"0.00",13:"C",24:"0.00",25:"0.00",...values});
 const nilChallan=(line:string,at:string,rows:string)=>record(30,{1:line,2:"CD",3:"1",4:at,5:rows,6:"Y",8:"0.00",9:"0.00",10:"0.00",11:"0.00",12:"0.00",19:"30092026",21:"0.00",22:"0.00",24:"0.00",25:"0.00"});
 const deductee=(line:string,n:string,at:string,values:Record<number,string>)=>record(45,{1:line,2:"DD",3:"1",4:n,5:at,6:"O",18:"Y",...values});
@@ -167,18 +169,18 @@ it("checks Form No. 138 by its own rules, and waits for Protean's Q4 format",()=
 const abroad=()=>statementOf("TDS144",[
   lines("p",2,{pan:"ZZZPZ0002Z",name:"Invented Overseas Ltd",section:"1057",paid_on:"2026-07-15",amount:"100000",tds:"10000",status:"1",country:"265",rate:"10",dtaa:"B",remittance:"49",challan:"7",form121:"INVENTEDFORMNUMBERABCDEFGH"}),
   lines("p",3,{pan:"",name:"Invented Investor",section:"1048",paid_on:"2026-08-10",amount:"50000",tds:"5000",status:"2",country:"267",rate:"10",dtaa:"b",remittance:"27",challan:"7",remark:"C",address:"1 Invented Street London",email:"investor@invented.test",phone:"+44 1234 567890",tin:"INV12345"}),
-  lines("p",4,{pan:"ZZZPZ0004Z",name:"Invented Winner",section:"1059",paid_on:"2026-09-20",amount:"20000",tds:"0",rate:"0",status:"2",country:"265",dtaa:"A",remark:"Y",grossed:"n",opted_out:"Y"}),
+  lines("p",4,{pan:"ZZZPZ0004Z",name:"Invented Winner",section:"1059",paid_on:"2026-09-20",amount:"20000",tds:"0",rate:"0",status:"2",country:"265",dtaa:"A",remark:"Y",grossed:"n",opted_out:"Y",challan:"7"}),
   lines("c",1,{bsr:"510308",date:"2026-09-05",number:"7",tax:"15000",minor:"200"}),
 ].flat());
 it("writes Form No. 144 (payments to non residents) field by field from its own format",()=>{
   const {records,warnings}=written(abroad());
-  expect(records).toEqual([head("NS1"),batch("144","2","15000.00"),
-    challan("3","1","2",{8:"15000.00",12:"15000.00",15:"0510308",17:"00007",19:"05092026",21:"15000.00",22:"15000.00",23:"200"}),
+  expect(records).toEqual([head("NS1"),batch("144","1","15000.00"),
+    challan("3","1","3",{8:"15000.00",12:"15000.00",15:"0510308",17:"00007",19:"05092026",21:"15000.00",22:"15000.00",23:"200"}),
     // Rows 165 to 194: status, opting out (empty is N), remittance, country, grossing up, rate, DTAA, Form No. 121 and the details abroad.
     deductee("4","1","1",{8:"ZZZPZ0002Z",9:"Invented Overseas Ltd",12:"1",14:"N",15:"1057",16:"49",17:"265",19:"15072026",20:"100000.00",21:"N",24:"10000.00",25:"10000.00",27:"15072026",28:"10.0000",30:"B",31:"INVENTEDFORMNUMBERABCDEFGH"}),
     deductee("5","2","1",{8:"PANNOTAVBL",9:"Invented Investor",12:"2",14:"N",15:"1048",16:"27",17:"267",19:"10082026",20:"50000.00",21:"N",24:"5000.00",25:"5000.00",27:"10082026",28:"10.0000",30:"B",32:"C",37:"1 Invented Street London",38:"investor@invented.test",39:"441234567890",41:"INV12345"}),
-    nilChallan("6","2","1"),
-    deductee("7","1","2",{8:"ZZZPZ0004Z",9:"Invented Winner",12:"2",14:"Y",15:"1059",17:"265",19:"20092026",20:"20000.00",21:"N",24:"0.00",25:"0.00",28:"0.0000",30:"A",32:"Y"})]);
+    // Codes 1059 and 1061 go under the challan the tax was paid with, never a nil one (FVU T_FV_6537).
+    deductee("6","3","1",{8:"ZZZPZ0004Z",9:"Invented Winner",12:"2",14:"Y",15:"1059",17:"265",19:"20092026",20:"20000.00",21:"N",24:"0.00",25:"0.00",28:"0.0000",30:"A",32:"Y"})]);
   // Row 2's ₹10,000 deducted 15 July, paid 5 September: 2 months at 1.5%.
   expect(warnings).toEqual([expect.stringContaining("Row 3: no PAN"),expect.stringMatching(/^Challan 7: .*₹300\.00/)]);
 });
@@ -211,7 +213,7 @@ it("writes Form No. 143 (TCS) field by field from its own format",()=>{
     // Rows 164 to 189: non resident (empty is N), collectee code, permanent establishment, opting out, rate, and the TDS answers of reason F.
     deductee("4","1","1",{8:"ZZZPZ0002Z",9:"Invented Scrap Buyer",11:"N",12:"7",14:"N",15:"1073",19:"20072026",20:"200000.00",24:"2000.00",25:"2000.00",27:"20072026",28:"1.0000"}),
     nilChallan("5","2","1"),
-    deductee("6","1","2",{8:"ZZZPZ0003Z",9:"Invented Traveller",11:"Y",12:"2",13:"N",14:"N",15:"1089",19:"12082026",20:"900000.00",24:"0.00",25:"0.00",28:"0.0000",32:"F",34:"Y",35:"456",36:"12082026"})]);
+    deductee("6","1","2",{8:"ZZZPZ0003Z",9:"Invented Traveller",11:"Y",12:"2",13:"N",14:"N",15:"1089",19:"12082026",20:"900000.00",24:"0.00",25:"0.00",28:"0.0000",32:"F",34:"Y",35:"00456",36:"12082026"})]);
   expect(warnings).toEqual([]);
 });
 it("checks Form No. 143 by its own rules, in a collector's words",()=>{

@@ -26,6 +26,9 @@ export const form140={code:"TDS140",version:"1.2",name:"Form No. 140"} as const;
 // for salary, 144 for payments to non residents, 140 for other payments, 143 for tax collected
 // under section 394(1). Rows below are of each form's own sheet. Form No. 138 for the fourth
 // quarter (with each employee's salary details) waits for its format, not yet published.
+// Each form's file was also run through Protean's TDS_STANDALONE_FVU_1.2.zip (SHA-256
+// 21f7a5a45b42cdd2c952aa633a0049d6c81612e87d43d1d02720bd781943c06d, 5 Nov 2026, not kept); the
+// rules it enforces beyond the sheets are cited below by its error code.
 export type TdsForm="TDS140"|"TDS138"|"TDS144"|"TDS143";
 export const tdsForms={
   TDS140:{number:"140",was:"26Q",about:"TDS on payments other than salary",fileType:"NS1",kind:"payments",who:"deductor",payee:"deductee",tax:"deducted",example:"1024 for contractors and 1027 for professional fees",sha256:"ec5d8a1138ac84fd5ed59f62aabb5b097479007d501cca98a27ba9c400a05f40",task:"TDS_RET"},
@@ -338,7 +341,8 @@ export function checkStatement(input:{form?:TdsForm;tan:string;pan:string;deduct
     // Row 138: on or after 1 April of the previous financial year, and never a future day (note 8).
     if(!/^\d{4}-\d{2}-\d{2}$/.test(challan.date)) add(errors,`${name}: the date of deposit is missing.`,at);
     else if(challan.date<`${taxYear-1}-04-01` || challan.date>input.today) add(errors,`${name}: the date of deposit must be on or after 1 April ${taxYear-1} and not later than today.`,at);
-    if(challan.minor && !minorHeads[challan.minor]) add(errors,`${name}: the minor head must be 200, 400 or 100.`,at);
+    // FVU T-FV-3159: every challan names its minor head.
+    if(!minorHeads[challan.minor]) add(errors,`${name}: the minor head must be 200, 400 or 100.`,at);
     if(challan.minor==="100" && challan.date && (challan.date<first || challan.date>last)) add(errors,`${name}: with minor head 100 the date of deposit must be within the quarter.`,at);
     // Rows 127 to 131: whole rupees, as 1000.00.
     for(const [value,what] of [[challan.tax,"tax"],[challan.interest,"interest"],[challan.fee,"fee"],[challan.others,"penalty or others"]] as const)
@@ -419,6 +423,9 @@ export function checkStatement(input:{form?:TdsForm;tan:string;pan:string;deduct
       else if(liable==="Y" && (!/^\d{1,5}$/.test(digits(given("f_challan"))) || !/^\d{4}-\d{2}-\d{2}$/.test(given("f_paid_on")))) add(errors,`${name}: with Y, give the TDS challan number (up to 5 digits) and its date of payment.`,line("f_challan"));
     }
     if(!pay.challan && pay.tds===zero) {
+      // FVU T_FV_6535 (Form No. 140) and T_FV_6537 (Form No. 144): a challan with a row of these
+      // codes is paid by challan (mode C), and a nil challan has no mode (T-FV-3164).
+      if(paidBeforeHere.has(pay.section)) {add(errors,`${name}: for code ${pay.section} give the serial number of the challan the tax was paid with before release.`,line("challan"));continue;}
       if(!nilOf[form].has(pay.remark)) add(errors,`${name}: no tax was ${f.tax} and no challan is given. Give the reason code for no ${taken}, such as ${form==="TDS138" ? "A for a certificate under section 395(1)" : "Y for below the threshold"}.`,line("remark"));
       nil.payments.push(pay);continue;
     }
@@ -461,14 +468,15 @@ const rateOf=(pay:Payment)=>pay.tds>BigInt(0) ? rate4(pay.rate) : "0.0000";
 // The deductee or collectee fields each form takes besides the common ones: Form No. 140 rows 175
 // to 184; Form No. 138 row 181 (the date of deposit, the challan's, written as a date as its
 // remarks ask though the row says DECIMAL 7); Form No. 144 rows 165 to 194 (Y or N answers left
-// empty are No); Form No. 143 rows 164 to 189.
+// empty are No); Form No. 143 rows 164 to 189 (FVU T_FV_6460: the TDS challan number in five
+// digits, as the challan's own serial number).
 const deducteeFields:Record<TdsForm,(pay:Payment,challan:Challan)=>Record<number,string>>={
   TDS140:pay=>({...cashOf(pay),28:rateOf(pay),31:pay.form121}),
   TDS138:(pay,challan)=>({29:pay.deposited>BigInt(0) && !challan.nil ? ddmmyyyy(challan.date) : ""}),
   TDS144:pay=>({12:String(Number(pay.more.status)),14:flagOf(pay,"opted_out") || "N",16:two(pay.more.remittance ?? ""),17:two(pay.more.country ?? ""),21:flagOf(pay,"grossed") || "N",...cashOf(pay),28:rateOf(pay),30:flagOf(pay,"dtaa"),31:pay.form121,
     37:pay.more.address ?? "",38:pay.more.email ?? "",39:digits(pay.more.phone ?? ""),41:pay.more.tin ?? ""}),
   TDS143:pay=>{const away=flagOf(pay,"non_resident") || "N",liable=flagOf(pay,"f_tds");
-    return {11:away,12:String(Number(pay.more.status)),13:away==="Y" ? flagOf(pay,"establishment") : "",14:flagOf(pay,"opted_out") || "N",28:rateOf(pay),34:liable,35:liable==="Y" ? digits(pay.more.f_challan ?? "") : "",36:liable==="Y" ? ddmmyyyy(pay.more.f_paid_on ?? "") : ""};},
+    return {11:away,12:String(Number(pay.more.status)),13:away==="Y" ? flagOf(pay,"establishment") : "",14:flagOf(pay,"opted_out") || "N",28:rateOf(pay),34:liable,35:liable==="Y" ? digits(pay.more.f_challan ?? "").padStart(5,"0") : "",36:liable==="Y" ? ddmmyyyy(pay.more.f_paid_on ?? "") : ""};},
 };
 export function statementFile(statement:Statement) {
   const form=statement.form ?? "TDS140",{quarter,taxYear}=quarterOf(statement.period),d=statement.deductor,lines:string[][]=[];
@@ -477,12 +485,13 @@ export function statementFile(statement:Statement) {
   // File header, 18 fields (rows 22 to 39).
   record(18,{2:"FH",3:tdsForms[form].fileType,4:"R",5:ddmmyyyy(statement.today),6:"1",7:"D",8:statement.tan,9:"1",10:"InboxCA"});
   // Batch header, 72 fields (rows 44 to 115). Assessment year 202728 and tax year 202627 for
-  // tax year 2026-27 (rows 59 and 60).
+  // tax year 2026-27 (rows 59 and 60). FVU T-FV-2127: Form No. 138 for the first three quarters
+  // counts 0 salary detail records.
   const p=d.person;
   record(72,{2:"BH",3:"1",4:String(challans.length),5:tdsForms[form].number,9:statement.previous==="Y" ? statement.token : "",13:statement.tan,15:statement.pan,16:`${taxYear+1}${String(taxYear+2).slice(2)}`,17:`${taxYear}${String(taxYear+1).slice(2)}`,18:quarter,
     19:d.name,20:d.country,21:d.flat,22:d.post,23:d.road,24:d.area,25:d.district,26:d.state,27:d.pin,28:d.email,29:d.code,30:d.phone,32:d.type,
     33:p.name,34:p.designation,35:p.flat,36:p.post,37:p.road,38:p.area,39:p.district,40:p.state,41:p.pin,42:p.email,43:p.country,44:p.code,45:p.phone,
-    47:money(total),52:statement.previous,54:d.govt_state,57:d.ministry,58:d.ministry==="99" ? d.ministry_other : "",59:p.pan});
+    47:money(total),49:form==="TDS138" ? "0" : "",52:statement.previous,54:d.govt_state,57:d.ministry,58:d.ministry==="99" ? d.ministry_other : "",59:p.pan});
   challans.forEach((challan,at)=>{
     const deducted=challan.payments.reduce((sum,pay)=>sum+pay.tds,BigInt(0)),deposited=challan.payments.reduce((sum,pay)=>sum+pay.deposited,BigInt(0));
     // Challan detail, 30 fields (rows 120 to 149). A nil challan has no mode, BSR code or serial
