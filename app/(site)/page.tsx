@@ -132,8 +132,9 @@ export default function Home() {
         <section className="works" aria-label="Built to work with">
           <p>Built to work with what your firm already uses</p>
           <div className="marquee">
-            {[false, true].map((copy) => (
-              <ul key={String(copy)} aria-hidden={copy || undefined}>
+            {/* Three copies, so the row still fills a wide screen now that it has fewer logos. */}
+            {[0, 1, 2].map((copy) => (
+              <ul key={copy} aria-hidden={copy > 0 || undefined}>
                 {worksWith.map(([name, file, width, height, text]) => (
                   <li key={name}>
                     <Image

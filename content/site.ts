@@ -96,8 +96,6 @@ export const worksWith = [
   ["Dropbox", "dropbox.svg", 28, 28, "Dropbox"],
   ["Tally", "tally.webp", 44, 44, "exports"],
   ["Excel", "excel.svg", 27, 28, "Excel, Word and PDF"],
-  ["TaxPower GST", "taxpower.webp", 28, 28, "TaxPower GST"],
-  ["KDK Spectrum", "kdk.webp", 28, 28, "KDK Spectrum"],
 ] as const;
 
 // PLAN.md D3, D6, D18, D19, D21, D36. The six a firm asks before it pays; the rest lives on the
@@ -113,7 +111,7 @@ export const questions = [
   ],
   [
     "Does it work with my current software?",
-    "Yes. It reads Tally exports, Excel, Word and PDFs, and prepares files TaxPower GST and KDK Spectrum can import. There is no live connection to Tally.",
+    "Yes. It reads Tally exports, Excel, Word and PDFs, and writes the official GST, ITR, TDS and TCS files that CA software imports. There is no live connection to Tally.",
   ],
   [
     "Does my client count change the price?",
