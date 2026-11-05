@@ -42,7 +42,8 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
 
     await page.getByRole("link", { name: "Documents", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Documents", level: 1 })).toBeVisible();
-    // Documents opens on every paper.
+    await page.getByRole("navigation", { name: "Show papers as" }).getByRole("link", { name: "All papers" }).click();
+    // Documents opens on the folders; All papers lists every paper.
     const papers = page.getByRole("region", { name: "Papers" });
     await expect(papers.getByRole("row")).toHaveCount(3);
     await expect(papers.getByRole("row", { name: /Form 16/ })).toContainText("From the drive");
@@ -269,7 +270,7 @@ test("with no drive linked, no page asks for a paper's preview or offers its dow
   }
 });
 
-test("Documents opens on all papers, To check first; the firm's folders are one click away", async ({ page }) => {
+test("Documents opens on the firm's folders; all papers, To check first, are one click away", async ({ page }) => {
   const email = `owner-${randomUUID()}@example.test`;
   const key = Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
   const firm = await seedFirm("Documents Folders First Firm", email, key);
@@ -280,12 +281,12 @@ test("Documents opens on all papers, To check first; the firm's folders are one 
     await expect(page).toHaveURL(/\/app$/);
     await page.goto("/app/documents");
     const views = page.getByRole("navigation", { name: "Show papers as" });
+    await expect(views.getByRole("link", { name: "Folders" })).toHaveAttribute("aria-current", "page");
+    await views.getByRole("link", { name: "All papers" }).click();
+    await expect(page).toHaveURL(/\/app\/documents\?view=papers$/);
     await expect(views.getByRole("link", { name: "All papers" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("navigation", { name: "Folders" }).getByRole("link").first()).toContainText("To check");
     await expect(page.locator("header").getByRole("link", { name: "Upload papers" })).toBeVisible();
-    await views.getByRole("link", { name: "Folders" }).click();
-    await expect(page).toHaveURL(/\/app\/documents\?view=folders$/);
-    await expect(views.getByRole("link", { name: "Folders" })).toHaveAttribute("aria-current", "page");
   } finally {
     await firm.remove();
   }
