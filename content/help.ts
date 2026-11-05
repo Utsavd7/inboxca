@@ -35,7 +35,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         points: [
           "Before you pay you see the exact amount, with GST where it applies, and you confirm it.",
           "Until Orelu starts taking payments, nothing is charged, and Settings, Billing says so.",
-          "Cancel within 14 days of your first payment and the whole payment comes back, apart from the one time setup fee once your past papers have started to be brought in.",
+          "Cancel within 14 days of your first payment and the whole payment comes back, apart from the one time setup fee once your past papers have started to be brought in, and AI top up credits already used.",
           "Joining a firm that already uses InboxCA? Do not sign up. Ask the owner to invite you on People.",
         ],
       },
@@ -99,7 +99,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         lead: "InboxCA prepares and keeps track. Some things stay with your team, always.",
         points: [
           "It does not file returns. It prepares the form, and your team checks every figure and files on the portal with its own login, OTP or digital signature.",
-          "It never asks for portal passwords or OTPs, and never logs in to the GST or income tax portal.",
+          "It never asks for portal passwords or OTPs, and never logs in to the GST or income tax portal or TRACES.",
           "It gives no accounting, audit, tax or legal advice, and it never signs or certifies a document. Questions about advice, fees or what a notice means always wait for your team.",
           "It is software, not a firm of chartered accountants. Orelu, which makes it, does not practise as chartered accountants and is not part of, or approved by, ICAI. The CA in InboxCA stands for the firms it is built for.",
           "It never writes or sends a reply to a notice. People in your firm do.",
@@ -203,6 +203,8 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "Every due date is checked against the government notification before InboxCA reminds clients. Until Orelu has checked one, the owner can confirm it from the notification linked beside it, in Settings, Reminders and papers.",
           "A filed ITR shows the date to verify it by, 30 days after filing.",
           "Remind client sends one email now about the client's returns late or due in 7 days, and the papers still missing.",
+          "On a client's Overview, To-dos: write what is to be done, by when and for whom, then choose Add a to-do. It shows on Today for that person.",
+          "In a client's Details, Licences and registrations, add an expiry date, such as a DSC, FSSAI licence or IEC. It shows on the Calendar and Today before the date. InboxCA does not remind the client of it.",
         ],
       },
       {
@@ -250,7 +252,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "Clients email their TDS papers as they do today. Registers and challans are filed under TDS for their quarter, and Ask for papers asks for them before each TDS return.",
           "On the Calendar or the client's Returns, choose Prepare statement for the quarter. Choose the register and match its columns once; InboxCA remembers them.",
           "Add the challans, then check the figures. Rows that need a look are listed one by one; choose Yes, these figures are right for the rest.",
-          "Choose Prepare the statement file and download it. Validate it with Protean's free File Validation Utility, file it, then mark it filed here.",
+          "Under Prepare the statement file, choose Prepare and the form's number, then approve and download it under Return files. Validate it with Protean's free File Validation Utility, file it, then mark it filed there.",
         ],
         points: [
           "InboxCA prepares Form No. 140 (was 26Q), Form No. 144 (was 27Q) and Form No. 143 (TCS, was 27EQ) for every quarter, and Form No. 138 (salaries, was 24Q) for April to December.",
@@ -369,6 +371,26 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "Your plan follows the returns due in the year and InboxCA storage, and you hear about it at 80%. If your firm uses more than its plan gives, Settings, Billing shows the plan that fits, and nothing changes until you choose.",
           "Moving up starts at once, and you pay the difference for the rest of the period. Moving down starts at your next renewal.",
           "You pay by Cashfree AutoPay: UPI, card or bank mandate.",
+        ],
+      },
+      {
+        slug: "setup-fee",
+        title: "The one time setup fee",
+        lead: "The setup fee pays for bringing in your firm's old papers at the start. It is charged once, with your first payment.",
+        steps: [
+          "At the plan step, your first payment shows One time setup of InboxCA for your firm, with your plan's fee.",
+          "Once your firm is open and your drive is connected, choose Add old files in Settings, Email and drive, Firm drive.",
+          "Choose what to bring: Final papers only (recommended), One year in full, or Everything in these folders. Tick the folders in your drive, then choose Show what would move.",
+          "InboxCA matches each folder to a client by its name and shows where every file would go. Choose the client for any folder with no client found.",
+          "Choose Move these files. Each file is renamed and filed by year, client and type of work. Undo the move puts them back.",
+        ],
+        points: [
+          `The fee by plan: ${plans.map((plan) => `${plan.name} ${rupees(plan.setup)}`).join(", ")}. For Custom it is worked out from its AI credits, and shown before you pay.`,
+          "It is worked out from one month of your plan's AI credits. No GST is charged: Orelu is not GST registered yet.",
+          "Old files are optional. InboxCA works on new emails from the first day, with or without them.",
+          "The files stay in your drive and are only moved and renamed, so nothing is uploaded again. Files on a computer go into your drive's Incoming folder first, from the same page.",
+          "In your first 14 days, only the latest three months of old files are brought in. The rest follows after.",
+          "Cancel within 14 days of your first payment, before your old files start to be brought in, and the setup fee comes back with the rest. Once they have started, it is kept.",
         ],
       },
       {

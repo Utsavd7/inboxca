@@ -7,6 +7,7 @@ import { aiBlock, custom, extraPerson, gstLine, planIncludes, planRows, plans, p
 import { estimate, type Practice } from "@/src/lib/estimate";
 import { confetti } from "./confetti";
 import { Rolling } from "./rolling";
+import { SetupFee } from "./setup-fee";
 
 const spring = { type: "spring", duration: 0.55, bounce: 0 } as const;
 const number = (value: number) => value.toLocaleString("en-IN");
@@ -249,13 +250,13 @@ export function Plans() {
         ))}
       </ul>
 
-      <p className="plan-note">
+      <div className="plan-note">
         Every plan has unlimited clients. The client count on each plan is only our suggestion, based on its storage and AI
         limits.
         <br />
-        One time setup fee with the first payment: {plans.map((plan) => `${plan.name} ${rupees(plan.setup)}`).join(", ")}, Custom
+        <SetupFee plan={name} fee={result.custom ? "worked out from its size and shown before you pay" : rupees(plans[fit].setup)} /> with the first payment: {plans.map((plan) => `${plan.name} ${rupees(plan.setup)}`).join(", ")}, Custom
         by its size. It is returned if you cancel within 14 days, before your old files start to be brought in.
-      </p>
+      </div>
 
       <div className="plan-foot">
         <ul className="plan-ticks" aria-label="In every plan">

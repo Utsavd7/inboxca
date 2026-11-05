@@ -566,7 +566,18 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .plan dt { color: var(--slate); }
 .plan dd { text-align: right; white-space: nowrap; }
 .plan-start { width: 100%; height: 40px; margin-top: auto; }
-.plan-note { margin-top: calc(-1 * var(--s2)); font-size: var(--fs-caption); color: var(--slate); text-align: center; }
+.plan-note { margin-top: calc(-1 * var(--s2)); font-size: var(--fs-caption); color: var(--slate); text-align: center; position: relative; }
+/* The setup fee's button reads as a link in the note; its card floats under the note, so nothing moves. */
+.setup-fee { color: var(--blue-deep); font: inherit; font-weight: 700; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.setup-card {
+  position: absolute; z-index: 5; top: calc(100% + 8px); left: 50%; translate: -50% 0; width: min(380px, calc(100vw - 32px)); padding: var(--s4);
+  display: grid; gap: var(--s2); text-align: left; border-radius: var(--r-lg); background: var(--white); border: 1px solid var(--line); box-shadow: var(--shadow-2);
+}
+.setup-card:focus { outline: none; }
+.setup-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.setup-card strong { color: var(--navy); font-size: var(--fs-small); }
+.setup-card ul { display: grid; gap: 6px; padding-left: 16px; list-style: disc; }
+.setup-card a { justify-self: start; color: var(--blue-deep); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .plan-foot { display: grid; gap: var(--s3); padding: var(--s4) var(--s5); border-radius: var(--r-lg); background: var(--grey); }
 .plan-ticks { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); font-size: var(--fs-small); font-weight: 600; }
 .plan-ticks li { display: inline-flex; align-items: center; gap: 6px; }

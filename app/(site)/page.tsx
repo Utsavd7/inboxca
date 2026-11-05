@@ -17,7 +17,7 @@ import { StickyStart } from "@/components/site/sticky-start";
 
 export const metadata: Metadata = {
   title: "InboxCA | Every client email, read, filed and answered",
-  description: `${siteDescription} Files stay in the firm's own drive, and the team approves every form.`,
+  description: `${siteDescription} It prepares GST returns, ITRs and TDS and TCS statements. Files stay in the firm's own drive, and the team approves every form.`,
 };
 
 // Five facts a CA asks about first, each leading to its section of the security policy.
@@ -132,8 +132,9 @@ export default function Home() {
         <section className="works" aria-label="Built to work with">
           <p>Built to work with what your firm already uses</p>
           <div className="marquee">
-            {[false, true].map((copy) => (
-              <ul key={String(copy)} aria-hidden={copy || undefined}>
+            {/* Three copies, so the row still fills a wide screen now that it has fewer logos. */}
+            {[0, 1, 2].map((copy) => (
+              <ul key={copy} aria-hidden={copy > 0 || undefined}>
                 {worksWith.map(([name, file, width, height, text]) => (
                   <li key={name}>
                     <Image
