@@ -1,5 +1,5 @@
 import { Bell, FileCheck2, FileText, Inbox, Landmark, ListChecks, Phone, ShieldCheck, TriangleAlert } from "lucide-react";
-import { manageClient, reviewOwnerDevice, saveLink, seenAlert, setOfficeOnly } from "@/app/(app)/actions";
+import { checkFigures, manageClient, reviewOwnerDevice, saveLink, seenAlert, setOfficeOnly } from "@/app/(app)/actions";
 import { canManageClients } from "@/src/lib/clients";
 import type { currentMember } from "@/src/lib/member";
 import type { Listed } from "@/src/lib/work/today";
@@ -74,6 +74,14 @@ function Action({ item, membership }: { item: Listed; membership: Member }) {
       </form>
     ) : (
       <WarmLink className="b b-secondary" href={href} aria-label={`See ${item.client.name}`}>See client</WarmLink>
+    );
+  // Every TDS paper in: the statement page opens, and the card leaves the list.
+  if (item.key.startsWith("tds_in:"))
+    return (
+      <form action={checkFigures}>
+        <input type="hidden" name="request" value={item.key.slice(7)} />
+        <Pending className="b b-secondary" aria-label={named}>{label}</Pending>
+      </form>
     );
   if (item.key.startsWith("link:"))
     return (

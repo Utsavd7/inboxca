@@ -1,5 +1,6 @@
 import { todayInIndia } from "./calendar";
 import type { ClientKind } from "./clients";
+import { quarterEnd } from "./documents";
 import type { WorkType } from "./drive";
 import type { Json } from "@/src/db/types";
 import type { supabaseAdmin } from "./supabase";
@@ -10,6 +11,9 @@ export const checklists: Partial<Record<WorkType, string[]>> = {
   gst: ["Sales bills", "Purchase bills", "Bank statement"],
   income_tax: ["Form 16", "Interest certificate", "Capital gains statement", "Investment proofs", "Rent receipts", "Bank statement"],
   tax_audit: ["Trial balance", "Ledger", "Bank statement", "Stock statement", "Fixed asset register"],
+  // A TDS statement's quarter: payments and the tax deducted on them, salaries paid to staff, and
+  // the challans the tax was deposited with.
+  tds: ["TDS register", "Salary register", "TDS challans"],
 };
 
 // Practice lists: papers CA firms commonly ask each kind of client for, a place to start.
@@ -29,8 +33,9 @@ export const kindChecklist = (settings: Record<string, unknown>, kind: string) =
   (settings.checklists as Partial<Record<string, string[]>> | undefined)?.[kind] ?? kindChecklists[kind as ClientKind] ?? [];
 
 // The work a service code belongs to, from its first letters: GSTR, CMP and PMT are GST,
-// ITR and ADV income tax, TAX_AUDIT the tax audit.
+// ITR and ADV income tax, TAX_AUDIT the tax audit, TDS_RET (the quarterly statements) TDS.
 export function workOfService(code: string): WorkType | null {
+  if (code === "TDS_RET") return "tds";
   if (/^(GSTR|CMP|PMT)/.test(code)) return "gst";
   if (/^(ITR|ADV)/.test(code)) return code === "ITR_AUDIT" ? "tax_audit" : "income_tax";
   if (code === "TAX_AUDIT") return "tax_audit";
@@ -42,16 +47,19 @@ export type RequestItem = { type: string; work: WorkType; received: string[]; ch
 // round of asking began (its first email, or the client's latest paper). chased: the last day a
 // person chased the papers, by phone or by a reminder sent by hand.
 export type DocumentRequest = { period: string; items: RequestItem[]; followups?: string[]; registration?: string; returns?: string[]; since?: string; chased?: string };
+// A request asking only for TDS papers: its next step is the quarter's TDS statement.
+export const tdsOnly = (details: DocumentRequest) => details.items.length > 0 && details.items.every((item) => item.work === "tds");
 
 // A portal file dropped in (PLAN.md 5.3.1) is received against the open item asked for by its
 // name, however it was spelled ("GSTR-2B", "gstr 2b"), when the request is for its month or
 // for no month. Form No. 130 replaces Form 16 from tax year 2026-27 (Income-tax Rules 2026,
-// rule 215), so it answers a Form 16 asked for. Returns whether an item was received.
+// rule 215), so it answers a Form 16 asked for. A TDS paper answers a request for any month of
+// its quarter. Returns whether an item was received.
 export function receiveItem(request: DocumentRequest, type: string, period: string, documentId: string) {
   const plain = (name: string) => name.toUpperCase().replace(/[^A-Z0-9]/g, "");
   const names = [type, ...(type === "Form 130" ? ["Form 16"] : [])].map(plain);
   const item = request.items.find((entry) => !entry.received.length && names.includes(plain(entry.type)));
-  if (!item || (request.period && request.period !== period)) return false;
+  if (!item || (request.period && (item.work === "tds" ? quarterEnd(request.period) : request.period) !== period)) return false;
   item.received.push(documentId);
   return true;
 }

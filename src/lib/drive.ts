@@ -155,6 +155,7 @@ export const workTypes = {
   gst: "GST",
   income_tax: "Income tax",
   tax_audit: "Tax audit",
+  tds: "TDS",
   audit: "Audit",
   roc: "ROC",
   other: "Other",

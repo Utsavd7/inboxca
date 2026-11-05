@@ -20,7 +20,7 @@ import { skipReasons, type Skip } from "@/src/lib/reminders";
 import { activityNames } from "@/src/lib/activity";
 import { type Right } from "@/src/lib/rights";
 import { serverCrypto } from "@/src/lib/crypto";
-import { documentTypes, folderFor, periodChoices, periodName, receivedLabel, workOfType } from "@/src/lib/documents";
+import { documentTypes, folderFor, periodChoices, periodName, quarterEnd, receivedLabel, workOfType } from "@/src/lib/documents";
 import { paperType } from "@/src/lib/paper-type";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
@@ -239,7 +239,8 @@ export default async function Client({ params, searchParams }: { params: Promise
   const reminds = sub === "returns" && !viewOnly && !!client.email_enc && !client.reminders_paused && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
   const confirmedBy = new Map([...confirmers(confirms ?? [])].map(([notice, by]) => [notice, personName(people?.find((person) => person.user_id === by)?.email)]));
   // The lists for the work this client's services need are ticked when asking for files.
-  const usualWork = new Set(client.client_registrations.flatMap((registration) => (registration.services ?? []).map(workOfService)));
+  // A client with a TAN has TDS work, whatever services it has.
+  const usualWork = new Set(client.client_registrations.flatMap((registration) => [...(registration.services ?? []).map(workOfService), ...(registration.kind === "tan" ? ["tds" as const] : [])]));
   const documents = pageFiles ?? [];
   const removedFiles = (namedFiles ?? []).filter((file) => file.status === "deleted");
   const live = (fileId?: string) => (namedFiles ?? []).find((file) => file.id === fileId && file.status !== "deleted" && file.status !== "earlier");
@@ -299,6 +300,12 @@ export default async function Client({ params, searchParams }: { params: Promise
   const order = ((drive?.settings as { folder_order?: FolderOrder } | undefined)?.folder_order ?? "year_client_work") as FolderOrder;
   const rule = new Map(rules?.map((r) => [r.code, r]));
   const needs2b = new Set(months.filter((month) => !statements?.some((row) => row.period_key === month)));
+  // The TDS papers asked for a quarter, on its TDS return: those still missing, or all in.
+  const tdsPapers = (period: string) => {
+    const items = (asks ?? []).flatMap((request) => { const details = request.details as unknown as DocumentRequest; return details.period && quarterEnd(details.period) === period ? details.items.filter((item) => item.work === "tds") : []; });
+    const missing = items.filter((item) => !item.received.length).map((item) => item.type);
+    return !items.length ? "" : missing.length ? `. TDS papers still missing: ${missing.join(", ")}` : ". TDS papers are in";
+  };
   // Form No. 130 and Form No. 168 replace Form 16 and Form 26AS from tax year 2026-27, and either
   // name answers either. Only a salary has a Form 16, so it is listed for an individual on the
   // non-business return (ITR_NA) or a client with one on file.
@@ -354,7 +361,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   // The firm's usual list for this kind of client, then the lists by work, each paper once.
   const kindList = kindChecklist(membership.settings, client.kind);
   const askItems = new Map(kindList.map((type) => [type, `kind:${type}`]));
-  for (const [work, list] of Object.entries(checklists)) for (const type of list) if (!askItems.has(type)) askItems.set(type, `${work}:${type}`);
+  for (const [work, list] of Object.entries(checklists)) for (const type of list) if (!askItems.has(type) && (work !== "tds" || usualWork.has("tds"))) askItems.set(type, `${work}:${type}`);
   // Papers for the return in hand start ticked (an ITR client gets the ITR papers only), else
   // for every work the client's services need; More papers opens when one of its own is.
   const inHand = due?.[0]?.code ? workOfService(due[0].code) : null;
@@ -932,7 +939,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                         meta={
                           task.status === "filed"
                             ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}{filed.udin && <>, UDIN <span className="num">{filed.udin}</span></>}{verify &&(filed.verified_on ? `. E-verified ${dueLabel(filed.verified_on)}` : `. Verify by ${dueLabel(verifyBy(filed.filed_on ?? task.due_on))}`)}</>
-                            : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}{task.code?.startsWith("ITR") && itrNeeds.get(task.period_key?.slice(0, 4) ?? "")?.line}<StageLine code={task.code} work={stages.get(task.id)} /></>
+                            : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}{task.code === "TDS_RET" && tdsPapers(task.period_key ?? "")}{task.code?.startsWith("ITR") && itrNeeds.get(task.period_key?.slice(0, 4) ?? "")?.line}<StageLine code={task.code} work={stages.get(task.id)} /></>
                         }
                         status={
                           <Badge tone={task.status === "filed" ? "done" : overdue ? "late" : task.status === "in_progress" ? "blue" : ""}>
