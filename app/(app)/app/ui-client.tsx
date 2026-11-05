@@ -22,6 +22,8 @@ export const quickActions = ({ manage, write, portal = false }: { manage: boolea
 export const ASK_EVENT = "inboxca:ask";
 // The C key opens the New menu (shell.tsx Keys).
 export const NEW_EVENT = "inboxca:new";
+// The search palette's Report a problem or idea opens its panel (shell.tsx).
+export const REPORT_EVENT = "inboxca:report";
 
 // The New button at the top of the sidebar.
 export function NewMenu({ manage, write, portal }: { manage: boolean; write: boolean; portal: boolean }) {

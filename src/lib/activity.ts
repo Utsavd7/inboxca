@@ -100,4 +100,6 @@ export const activityDetails: Record<string, readonly string[]> = {
   "billing.state": ["status"], "billing.auto_topup": ["payment", "blocks"], "billing.pilot": [], "admin.tax_saved": ["registered", "from"],
   // Fair use (5.14, D26): the owner's OK for more downloads this month; an admin's verdict on two firms that may be one.
   "usage.downloads_allowed": ["month"], "admin.split_checked": ["firms", "verdict"],
+  // A report a person sent Orelu from Report a problem or idea: its kind, never its words.
+  "feedback.sent": ["kind"],
 };

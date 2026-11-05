@@ -1,0 +1,58 @@
+import { randomUUID } from "node:crypto";
+import { beforeEach, expect, it, vi } from "vitest";
+
+// Report a problem or idea: the server checks every report again, whatever the panel let
+// through, before anything reaches Orelu's email; a flood stops at the rate limit.
+const mocked = vi.hoisted(() => ({ member: vi.fn(), limit: vi.fn(), send: vi.fn(), insert: vi.fn() }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers({ "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36" }) }));
+vi.mock("@/src/lib/member", () => ({ currentMember: mocked.member }));
+vi.mock("@/src/lib/rate-limit", () => ({ withinLimit: mocked.limit }));
+vi.mock("@/src/lib/system-mail", () => ({ sendSystemMail: mocked.send, systemMailReady: () => true }));
+vi.mock("@/src/lib/supabase", () => ({
+  supabaseAdmin: () => ({ from: (table: string) => ({ insert: (row: unknown) => (mocked.insert(table, row), { select: () => ({ single: async () => ({ data: { id: randomUUID() } }) }), error: null }) }) }),
+}));
+const { sendReport } = await import("@/app/(app)/app/report-actions");
+
+const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+const report = (files: File[] = [], fields: Record<string, string> = {}) => {
+  const form = new FormData();
+  for (const [name, value] of Object.entries({ kind: "broken", subject: "Upload does nothing", details: "", which: "", path: "/app/documents?client=x", screen: "1440x900", ...fields })) form.set(name, value);
+  for (const file of files) form.append("files", file);
+  return sendReport(form);
+};
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocked.member.mockResolvedValue({ userId: randomUUID(), membership: { firmId: randomUUID(), firmName: "Invented Firm", role: "staff", name: "Neha", email: "neha@invented.test" } });
+  mocked.limit.mockResolvedValue(true);
+  mocked.send.mockResolvedValue(true);
+});
+
+it("refuses files that are not pictures, recordings or PDFs by their bytes, too many or too large, and a kind not offered", async () => {
+  // A program named as a picture, and a HEIC picture whose box looks like an MP4's.
+  const program = new File([Uint8Array.from([0x4d, 0x5a, 0x90, 0])], "shot.png", { type: "image/png" });
+  const heic = new File([Uint8Array.from([0, 0, 0, 24, ...Buffer.from("ftypheic")])], "clip.mp4", { type: "video/mp4" });
+  for (const files of [[program], [heic]]) expect((await report(files)).error).toMatch(/not a picture/);
+  expect((await report([1, 2, 3, 4].map((n) => new File([png], `${n}.png`)))).error).toMatch(/at most 3/);
+  expect((await report([new File([png, new Uint8Array(10 * 1024 * 1024)], "big.png")])).error).toMatch(/10 MB/);
+  expect((await report([], { kind: "spam" })).error).toBeTruthy();
+  expect((await report([], { subject: "  " })).error).toBeTruthy();
+  expect((await report([], { kind: "old" })).error).toMatch(/which form/);
+  expect(mocked.send).not.toHaveBeenCalled();
+  expect(mocked.insert).not.toHaveBeenCalled();
+});
+
+it("stops a flood at the limit, and sends a good report to Orelu with its files and the person to reply to", async () => {
+  mocked.limit.mockResolvedValueOnce(false);
+  expect((await report()).error).toMatch(/try again later/);
+  expect(mocked.send).not.toHaveBeenCalled();
+
+  expect(await report([new File([png], "Screen shot.png")])).toEqual({});
+  const [to, subject, text, firm, extra] = mocked.send.mock.calls[0];
+  expect([to, subject, firm]).toEqual(["orelu.team@gmail.com", "[InboxCA] Something is broken: Upload does nothing", undefined]);
+  expect(extra).toMatchObject({ replyTo: "neha@invented.test", attachments: [{ filename: "Screen shot.png", contentType: "image/png" }] });
+  expect(text).toContain("Page: /app/documents\n");
+  const [table, row] = mocked.insert.mock.calls[0];
+  expect(table).toBe("feedback");
+  expect(row).toMatchObject({ kind: "broken", context: { page: "/app/documents", role: "Staff", browser: "Chrome on Mac, version 141", screen: "1440x900" } });
+  expect(JSON.stringify(row)).not.toContain("Screen shot");
+});

@@ -313,6 +313,24 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "Everyone else who loses their phone: ask your firm's owner for help.",
         ],
       },
+      {
+        slug: "report-a-problem",
+        title: "Report a problem or an idea",
+        lead: "Anyone in your firm can tell Orelu when something is broken, does not work as expected or is out of date, or when you need something new.",
+        steps: [
+          "Choose Help in the sidebar, then Report a problem or idea. Or type Report in the search box.",
+          "Choose what it is: Something is broken, Something does not work as expected, An idea or a feature I need, or Something is out of date. For something out of date, say which form, rule, due date or file.",
+          "Type a short subject, and the details if you like.",
+          "Attach up to 3 files if they help. Take a screenshot, or Record the screen for up to 1 minute: Chrome asks which tab or window to share. Or choose a picture, a recording or a PDF.",
+          "Choose Send to Orelu. We reply to your email.",
+        ],
+        points: [
+          "With the report go the page you were on, your role, your browser and the time, never anything else from the page.",
+          "Pictures and recordings can show client details, such as PANs or names. They go only to Orelu support and are used only to fix and improve InboxCA.",
+          "Orelu keeps each report for 12 months.",
+          "Each person can send up to 5 reports a day, one a minute.",
+        ],
+      },
     ],
   },
   {

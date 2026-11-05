@@ -78,6 +78,7 @@ export const privacySections = [
     points: [
       "Only the services InboxCA runs on, each under its own agreement. They are listed in the security policy and in the data processing agreement.",
       "The AI service receives only the email being worked on and that one client's own records, never the papers themselves.",
+      "When someone in your firm sends Report a problem or idea, Orelu receives what they type and attach, with their work email, the page they were on, their role, their browser and the time. Orelu uses it only to fix and improve InboxCA, and keeps the report for 12 months.",
       "We give data to an authority only when the law requires it.",
     ],
   },

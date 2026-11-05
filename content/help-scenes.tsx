@@ -5,7 +5,7 @@
 // visitor asks for less motion (the last one when not given).
 import { createElement, Fragment, type ReactNode } from "react";
 import {
-  CalendarDays, FileSpreadsheet, FileText, HardDrive, IndianRupee, KeyRound, ListChecks, Mail as MailIcon, Monitor, Paperclip,
+  CalendarDays, FileSpreadsheet, FileText, HardDrive, IndianRupee, KeyRound, ListChecks, Mail as MailIcon, MessageSquareWarning, Monitor, Paperclip,
   Receipt, Reply, RotateCcw, Scale, Send, ShieldCheck, UserPlus, Users, type LucideIcon,
 } from "lucide-react";
 import type { Frame, Screen } from "@/components/site/help-show";
@@ -244,6 +244,16 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
       f(0, [null, "Sign in to InboxCA"], <Code label="Code from the email" digits="482913" />, <Line><Btn press>Continue</Btn></Line>),
       f(1, [null, "Enter your 2 step code"], <Code label="6 digit code from the app" digits="705316" />, <Note>Codes in the app change every 30 seconds.</Note>, <Line><Btn press>Continue</Btn></Line>),
       f(1, [null, "Confirm it is you"], <Passkey />, <Note>Or use your passkey in place of the 6 digit code.</Note>),
+    ],
+  },
+  "report-a-problem": {
+    icon: MessageSquareWarning,
+    frames: [
+      f(0, [null, "Help"], <Note>Contact Orelu support, or tell us from here.</Note>, <Line><Btn press>Report a problem or idea</Btn></Line>),
+      f(1, [null, "Report a problem or idea"], <Choice label="What is it" items={["Something is broken", "Something does not work as expected", "An idea or a feature I need", "Something is out of date"]} pick={0} />),
+      f(2, [null, "Report a problem or idea"], <Field label="Subject" value="Upload papers does nothing" />, <Field label="Details, if you like" value="I chose the file and nothing happened." />),
+      f(3, [null, "Report a problem or idea"], <Line><Btn quiet>Take a screenshot</Btn><Btn quiet>Record the screen</Btn></Line>, <File name="Screenshot.png" />),
+      f(4, [null, "Report a problem or idea"], <Note>Pictures and recordings can show client details. They go only to Orelu support.</Note>, <Line><Btn press>Send to Orelu</Btn></Line>, <Chips items={[["Sent to Orelu", "done"]]} />),
     ],
   },
   plans: {

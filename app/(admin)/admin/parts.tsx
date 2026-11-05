@@ -1,5 +1,5 @@
 "use client";
-import { Activity, CalendarCheck, Building2, FileStack, IndianRupee, KeyRound, Mail, Network, RotateCcw, ScanSearch, Sparkles } from "lucide-react";
+import { Activity, CalendarCheck, Building2, FileStack, IndianRupee, KeyRound, Mail, MessageSquareWarning, Network, RotateCcw, ScanSearch, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useFormStatus } from "react-dom";
@@ -11,6 +11,7 @@ const pages = [
   { href: "/admin/ai", name: "AI use", Icon: Sparkles },
   { href: "/admin/mailboxes", name: "Mailboxes", Icon: Mail },
   { href: "/admin/jobs", name: "Failed jobs", Icon: RotateCcw },
+  { href: "/admin/feedback", name: "Reports", Icon: MessageSquareWarning },
   { href: "/admin/due-dates", name: "Due dates", Icon: CalendarCheck },
   { href: "/admin/forms", name: "Form versions", Icon: FileStack },
   { href: "/admin/status", name: "Status", Icon: Activity },

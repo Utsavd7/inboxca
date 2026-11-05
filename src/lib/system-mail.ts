@@ -23,10 +23,12 @@ async function room(firmId?: string) {
 }
 
 // One plain message, written and sent in memory and never kept (D6). False when not set up, or
-// when the firm named has used today's emails.
-export async function sendSystemMail(to: string, subject: string, text: string, firmId?: string) {
+// when the firm named has used today's emails. extra: a reply address and files, for a report
+// to Orelu (report-actions.ts).
+type Extra = { replyTo?: string; attachments?: { filename: string; content: Buffer; contentType: string }[] };
+export async function sendSystemMail(to: string, subject: string, text: string, firmId?: string, extra: Extra = {}) {
   if (!systemMailReady() || !(await room(firmId))) return false;
-  await nodemailer.createTransport(process.env.SYSTEM_MAIL_URL!).sendMail({ from: `InboxCA <no-reply@${process.env.EMAIL_FROM_DOMAIN}>`, to, subject, text });
+  await nodemailer.createTransport(process.env.SYSTEM_MAIL_URL!).sendMail({ from: `InboxCA <no-reply@${process.env.EMAIL_FROM_DOMAIN}>`, to, subject, text, ...extra });
   return true;
 }
 

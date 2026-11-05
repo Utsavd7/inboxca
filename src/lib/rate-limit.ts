@@ -15,6 +15,8 @@ export const LIMITS = {
   recovery: { most: 5, seconds: 3600 }, // recovery codes tried by one person
   notice: { most: 1000, seconds: 3600 }, // OneDrive change notices posted from one internet address
   ai: { most: 120, seconds: 3600 }, // AI drafts and reminder openings for one firm (PLAN.md 5.11)
+  report: { most: 5, seconds: 86_400 }, // reports to Orelu from one person a day (report-actions.ts)
+  reportMinute: { most: 1, seconds: 60 }, // and one a minute
 } as const;
 
 // The database's key for a limit: a keyed digest, never the address or the person's id.
@@ -23,7 +25,7 @@ export const limitKey = (kind: keyof typeof LIMITS, who: string) =>
     .update(`${kind}:${who.trim().toLowerCase()}`)
     .digest("base64url");
 
-// Counts one try; false once the limit is reached, until the hour is over.
+// Counts one try; false once the limit is reached, until its window is over.
 export async function withinLimit(kind: keyof typeof LIMITS, who: string) {
   const { most, seconds } = LIMITS[kind];
   const { data, error } = await supabaseAdmin().rpc("rate_limit", { bucket: limitKey(kind, who), most, seconds });

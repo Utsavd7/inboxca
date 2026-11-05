@@ -265,6 +265,7 @@ async function seedEvery(tag: string) {
   await run("insert into public.subscriptions (firm_id, cycle, plan) values ($1, 'monthly', '{}')", []);
   await run("insert into public.payments (firm_id, kind, amount_paise) values ($1, 'plan', 100)", []);
   await run("insert into public.firm_due_dates (firm_id, code, confirmed_by, source_url) values ($1, 'ADV_TAX', $2, 'https://www.incometax.gov.in/')", [people.owner]);
+  await run("insert into public.feedback (firm_id, user_id, kind, subject) values ($1, $2, 'idea', 'Invented idea')", [people.staff]);
   return { ...ids, name, people };
 }
 
@@ -310,6 +311,7 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["admin_email_incident", "select public.admin_email_incident(gen_random_uuid()) r", [], true],
   ["admin_end_template", "select public.admin_end_template('GSTR1', '2.2', current_date, 'https://cbic-gst.gov.in/x.pdf') r", [], true],
   ["admin_failed_jobs", "select * from public.admin_failed_jobs()", [], false],
+  ["admin_feedback", "select * from public.admin_feedback()", [], false],
   ["admin_firm", "select public.admin_firm($1) r", ["firm"], true],
   ["admin_firms", "select * from public.admin_firms()", [], false],
   ["admin_incidents", "select * from public.admin_incidents()", [], false],

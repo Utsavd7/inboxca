@@ -17,6 +17,7 @@ import {
   Keyboard,
   LogOut,
   Menu as MenuIcon,
+  MessageSquareWarning,
   Monitor,
   Moon,
   PanelLeftClose,
@@ -39,18 +40,19 @@ import { contactEmail } from "@/src/lib/site";
 import { typing } from "./command";
 import { MotionRoot, spring, springSoft } from "./motion";
 import { going } from "./nav-progress";
-import { Avatar } from "./ui";
-import { NEW_EVENT } from "./ui-client";
+import { ReportSheet } from "./report";
+import { Avatar, Toast } from "./ui";
+import { NEW_EVENT, REPORT_EVENT } from "./ui-client";
 import { news, newsLatest, type News } from "./whats-new";
 
 // The app's frame around every page (layout.tsx draws the sidebar and the stage on the
 // server; this keeps what changes in the browser): the theme, the folded sidebar, the phone
-// drawer, the help, what's new and shortcuts panels, the keys that work everywhere, and the
+// drawer, the help, report, what's new and shortcuts panels, the keys that work everywhere, and the
 // header's tools that every PageHead shows.
 
 export type Theme = "light" | "dark" | "system";
 export type Me = { member: boolean; name: string; email: string; role: string; firm: string; firmId: string; firms: { id: string; name: string }[]; owner: boolean; people: boolean };
-type Panel = "help" | "news" | "keys" | null;
+type Panel = "help" | "report" | "news" | "keys" | null;
 type Shell = {
   me: Me;
   theme: Theme;
@@ -76,6 +78,7 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
   const [panel, setPanel] = useState<Panel>(null);
   const [newsFresh, setNewsFresh] = useState(newsSeen < newsLatest);
   const [tip, setTip] = useState<{ text: string; top: number } | null>(null);
+  const [reported, setReported] = useState(0);
   const path = usePathname();
   const router = useRouter();
   // The drawer closes when a link in it is followed.
@@ -93,6 +96,15 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
   const [unfolded, setUnfolded] = useState(false);
   if (!paper && unfolded) setUnfolded(false);
   const folded = paper ? !unfolded : rail;
+  // The search palette's Report a problem or idea (command.tsx) opens the report panel.
+  useEffect(() => {
+    const report = () => {
+      setDrawer(false);
+      setPanel("report");
+    };
+    window.addEventListener(REPORT_EVENT, report);
+    return () => window.removeEventListener(REPORT_EVENT, report);
+  }, []);
   // One value while nothing it holds changes: a new one would redraw the parts of the page
   // still streaming in (shown twice for a moment) and every header tool.
   const shell = useMemo<Shell>(() => ({
@@ -173,6 +185,8 @@ export function ShellFrame({ me, theme: savedTheme, rail: savedRail, newsSeen, b
         <Keys />
         <NoSideways />
         <HelpSheet open={panel === "help"} close={() => setPanel(null)} />
+        <ReportSheet open={panel === "report"} close={() => setPanel(null)} done={() => { setPanel(null); setReported(reported + 1); }} />
+        {!!reported && <Toast key={reported}>Sent to Orelu. We reply to your email.</Toast>}
         <NewsSheet open={panel === "news"} close={() => setPanel(null)} />
         <KeysOverlay open={panel === "keys"} close={() => setPanel(null)} />
       </ShellContext>
@@ -553,8 +567,8 @@ function BellCount({ count }: { count: number }) {
   );
 }
 
-// A panel from the right edge (help, what's new): it springs in and leaves the same way.
-function Sheet({ open, close, title, children }: { open: boolean; close: () => void; title: string; children: React.ReactNode }) {
+// A panel from the right edge (help, report, what's new): it springs in and leaves the same way.
+export function Sheet({ open, close, title, children }: { open: boolean; close: () => void; title: string; children: React.ReactNode }) {
   return (
     <Dialog.Root open={open} onOpenChange={(now) => !now && close()}>
       <AnimatePresence>
@@ -614,6 +628,12 @@ function HelpSheet({ open, close }: { open: boolean; close: () => void }) {
         <span>
           Contact Orelu support: <strong>{contactEmail}</strong>
         </span>
+        {shell?.me.member && (
+          <button type="button" className="b b-primary" onClick={() => shell.open("report")}>
+            <MessageSquareWarning size={16} aria-hidden />
+            Report a problem or idea
+          </button>
+        )}
         <button type="button" className="b b-secondary" onClick={() => shell?.open("keys")}>
           <Keyboard size={16} aria-hidden />
           Keyboard shortcuts

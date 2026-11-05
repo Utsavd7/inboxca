@@ -343,6 +343,25 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"feedback": {
+                  Row: {
+                    "context": NonNullable<Json>,"created_at": string,"details": string | null,"firm_id": string,"id": string,"kind": string,"subject": string,"user_id": string
+                  }
+                  Insert: {
+                    "context"?: NonNullable<Json>,"created_at"?: string,"details"?: string | null,"firm_id": string,"id"?: string,"kind": string,"subject": string,"user_id": string
+                  }
+                  Update: {
+                    "context"?: NonNullable<Json>,"created_at"?: string,"details"?: string | null,"firm_id"?: string,"id"?: string,"kind"?: string,"subject"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "feedback_firm_id_fkey"
+      columns: ["firm_id"]
+isOneToOne: false
+      referencedRelation: "firms"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"firm_due_dates": {
                   Row: {
                     "code": string,"confirmed_at": string,"confirmed_by": string,"firm_id": string,"source_url": string
@@ -828,6 +847,11 @@ isOneToOne: false
 "admin_failed_jobs":
 { Args: Record<PropertyKey, never>; Returns: {
               "at": string,"attempts": number,"error": string,"firm": string,"id": number,"kind": string
+            }[]
+                           },
+"admin_feedback":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "at": string,"details": string,"firm": string,"id": string,"kind": string,"page": string,"person": string,"subject": string
             }[]
                            },
 "admin_firm":
