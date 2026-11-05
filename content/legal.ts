@@ -156,7 +156,7 @@ export const termsSections = [
     title: "This website",
     points: [
       "The screens on this website are illustrations, and the firms, names and figures in them are sample data.",
-      "Prices on this website are estimates, before GST. The exact price, with GST where it applies, is shown before you pay.",
+      "Prices on this website are estimates. Orelu is not GST registered yet, so no GST is charged. If Orelu registers, GST is added from then on, with an email 30 days before. The exact price is shown before you pay.",
     ],
   },
   {

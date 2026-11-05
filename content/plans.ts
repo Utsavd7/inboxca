@@ -1,4 +1,5 @@
-// All pricing, allowances and plan figures live here. Estimates only, before GST.
+// All pricing, allowances and plan figures live here. Estimates only. Orelu is not GST registered,
+// so these are the full prices: no GST is added (the billing code adds it only from a GST start date).
 // Keep every number in step with the business plan. No price is typed in a component.
 // Set false to hide the section AND its navigation link.
 export const SHOW_PLANS = true;
@@ -124,3 +125,6 @@ export const planRows = [
 export const yearlySave = Math.floor(Math.min(...plans.map((plan) => 100 * (1 - plan.yearly / (12 * plan.monthly)))));
 
 export const rupees = (value: number) => `₹${value.toLocaleString("en-IN")}`;
+
+// The one line every page uses for GST on Orelu's own prices, while Orelu is not GST registered.
+export const gstLine = "No GST is charged: Orelu is not GST registered yet.";

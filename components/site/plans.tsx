@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { ArrowRight, Check, Minus, Plus } from "lucide-react";
-import { aiBlock, custom, extraPerson, planIncludes, planRows, plans, practices, rupees, yearlySave } from "@/content/plans";
+import { aiBlock, custom, extraPerson, gstLine, planIncludes, planRows, plans, practices, rupees, yearlySave } from "@/content/plans";
 import { estimate, type Practice } from "@/src/lib/estimate";
 import { confetti } from "./confetti";
 import { Rolling } from "./rolling";
@@ -138,7 +138,7 @@ export function Plans() {
 
         <div className="quote">
           <div className="quote-main">
-            <p className="quote-label">Your estimate, before GST</p>
+            <p className="quote-label">Your estimate</p>
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.p
                 key={name}
@@ -253,7 +253,7 @@ export function Plans() {
         Every plan has unlimited clients. The client count on each plan is only our suggestion, based on its storage and AI
         limits.
         <br />
-        One time setup fee with the first payment, before GST: {plans.map((plan) => `${plan.name} ${rupees(plan.setup)}`).join(", ")}, Custom
+        One time setup fee with the first payment: {plans.map((plan) => `${plan.name} ${rupees(plan.setup)}`).join(", ")}, Custom
         by its size. It is returned if you cancel within 14 days, before your old files start to be brought in.
       </p>
 
@@ -276,7 +276,7 @@ export function Plans() {
             </>
           )}{" "}
           One more person is {rupees(extraPerson)} a month, and {number(aiBlock.credits)} more AI credits{" "}
-          {rupees(aiBlock.price)} a month. The exact price, with GST where it applies, is shown before you pay.
+          {rupees(aiBlock.price)} a month. {gstLine} The exact price is shown before you pay.
         </p>
       </div>
     </div>

@@ -20,7 +20,7 @@ export default async function SignUp({ searchParams }: { searchParams: Promise<R
       <h1>Set up InboxCA for your firm</h1>
       {chosen && (
         <p className="auth-note">
-          <strong>{chosen.price.name} plan</strong>, paid {chosen.cycle}: {rupees(chosen.price.paise)} {chosen.cycle === "yearly" ? "a year" : "a month"} before GST. You confirm it before you pay. <Link href="/#plans">Change</Link>
+          <strong>{chosen.price.name} plan</strong>, paid {chosen.cycle}: {rupees(chosen.price.paise)} {chosen.cycle === "yearly" ? "a year" : "a month"}. You confirm it before you pay. <Link href="/#plans">Change</Link>
         </p>
       )}
       <SignUpForm account={account?.email} providers={account ? [] : providerChoices()} plan={ask} />

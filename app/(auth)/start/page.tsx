@@ -150,7 +150,7 @@ export default async function Start({ searchParams }: { searchParams: Promise<Qu
               <dl className="start-price">
                 {priced.price.lines.map((line) => <div key={line.text}><dt>{line.text}</dt><dd>{rupees(line.paise)}</dd></div>)}
                 {priced.setupPaise > 0 && <div><dt>One time setup of InboxCA for your firm</dt><dd>{rupees(priced.setupPaise)}</dd></div>}
-                {(priced.price.lines.length > 1 || priced.setupPaise > 0) && <div><dt>Before GST</dt><dd>{rupees(priced.first.taxable)}</dd></div>}
+                {gst > 0 && (priced.price.lines.length > 1 || priced.setupPaise > 0) && <div><dt>Before GST</dt><dd>{rupees(priced.first.taxable)}</dd></div>}
                 <div><dt>{gst ? `GST at ${gst}%` : "GST"}</dt><dd>{gst ? rupees(priced.first.gst) : "None"}</dd></div>
                 <div className="start-total"><dt>You pay today</dt><dd>{rupees(priced.first.total)}</dd></div>
               </dl>
