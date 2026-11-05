@@ -23,7 +23,7 @@ try {
   *{box-sizing:border-box;margin:0}body{width:1200px;height:630px;overflow:hidden;position:relative;background:#fff;color:#0B1F3A;font-family:Jakarta,sans-serif;font-weight:500;
     background-image:radial-gradient(700px 360px at 30% -80px,rgba(26,75,176,.2),transparent 70%),repeating-linear-gradient(to bottom,transparent 0 47px,rgba(11,31,58,.055) 47px 48px)}
   .left{position:absolute;left:72px;top:64px;width:600px}
-  .logo{display:flex;align-items:center;gap:12px;font-size:32px;font-weight:800;letter-spacing:-1.4px}.logo svg{width:46px;height:43px}
+  .logo{display:flex;align-items:center;gap:12px;font-size:32px;font-weight:800;letter-spacing:-1.4px}.logo svg{width:46px;height:43px}.tm{position:relative;top:-1.12em;margin-left:.1em;font-size:.4em;font-weight:600;letter-spacing:0}
   h1{margin-top:84px;font-size:68px;font-weight:800;line-height:1.04;letter-spacing:-3.4px}
   .sub{margin-top:26px;font-size:25px;line-height:1.4;color:#51607A}
   .maker{position:absolute;left:72px;bottom:58px;font-size:20px;font-weight:600;color:#51607A}
@@ -36,7 +36,7 @@ try {
   .dot{display:grid;place-items:center;flex-shrink:0;width:30px;height:30px;border-radius:50%;background:#12905F}.dot svg{width:17px;height:17px}
   .row b{display:block;font-size:18px;font-weight:700}.row i{display:block;font-style:normal;font-size:14.5px;color:#C2D3F7}
   </style><body>
-  <div class="left"><div class="logo">${mark}InboxCA</div><h1>Every client email, read, filed and answered.</h1><p class="sub">An AI back office for Indian CA firms.</p></div>
+  <div class="left"><div class="logo">${mark}<span>InboxCA<span class="tm">™</span></span></div><h1>Every client email, read, filed and answered.</h1><p class="sub">An AI back office for Indian CA firms.</p></div>
   <p class="maker">A product by Orelu</p>
   <div class="card"><div class="from"><span class="av">PT</span><span><b>Patel Textiles</b><i>Purchase bills for September</i></span></div>
   ${rows.map(([what, detail]) => `<div class="row"><span class="dot">${tick}</span><span><b>${what}</b><i>${detail}</i></span></div>`).join("")}
