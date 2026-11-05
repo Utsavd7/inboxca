@@ -8,7 +8,7 @@ import type { ItrForm } from "@/src/lib/itr-fields";
 import { officialFile, officialStore, type Store } from "@/src/lib/official-files";
 import { workerForm } from "@/src/lib/prepare-form";
 import { layoutDifferences, schemaLayout, tdsFormatLayout, workbookLayout, type Layout } from "@/src/lib/official-layout";
-import { form140Layout } from "@/src/lib/tds";
+import { form140Layout, tdsLayouts } from "@/src/lib/tds";
 import { xlsxEntries } from "@/src/lib/sheet";
 import { version, type Template } from "@/src/lib/templates";
 import { cbicUpdates, efilingNews, gstNews, gstOfflineTools, itrDownloads, proteanDownloads, type Entry } from "./gov-pages";
@@ -47,6 +47,11 @@ export const sources: Source[] = [
   { key: "itd_notifications", name: "Income Tax Department notifications and circulars", url: "https://www.incometaxindia.gov.in/", area: "income_tax", kind: "manual" },
   { key: "protean_etds", name: "Protean e-TDS utilities (RPU and FVU)", url: "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html", area: "tds", kind: "list", parse: proteanDownloads },
   { key: "protean_form140", name: "Protean file format for Form No. 140 (TDS on payments other than salary)", url: "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html", area: "tds", kind: "file", known: "ec5d8a1138ac84fd5ed59f62aabb5b097479007d501cca98a27ba9c400a05f40", codes: ["TDS_RET"], parse: proteanDownloads, entry: /^File Format for Form Number 140\b.*\bVersion ([\d.]+)/i, compare: { file: /\.xlsx$/i, form: "TDS140", layout: { of: tdsFormatLayout, expected: form140Layout } } },
+  // The other statements' formats on the same page (src/lib/tds.ts), each by its own entry: Form No.
+  // 138 only for Q1 to Q3, so its Q4 entry stays on the e-TDS list above until Protean links it.
+  { key: "protean_form138", name: "Protean file format for Form No. 138, Q1 to Q3 (TDS on salary)", url: "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html", area: "tds", kind: "file", known: "d58fd86b69932c6a7a4f518990c17d2112f55c65042d9c3bf2799ed201cbaf6c", codes: ["TDS_RET"], parse: proteanDownloads, entry: /^File Format for Form Number 138 Q1 to Q3\b.*\bVersion ([\d.]+)/i, compare: { file: /\.xlsx$/i, form: "TDS138", layout: { of: tdsFormatLayout, expected: tdsLayouts.TDS138 } } },
+  { key: "protean_form144", name: "Protean file format for Form No. 144 (TDS on payments to non residents)", url: "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html", area: "tds", kind: "file", known: "5e78534c065133936a4bb594f310c10a44e25a0825fe9f7ff023b342730fd5da", codes: ["TDS_RET"], parse: proteanDownloads, entry: /^File Format for Form Number 144\b.*\bVersion ([\d.]+)/i, compare: { file: /\.xlsx$/i, form: "TDS144", layout: { of: tdsFormatLayout, expected: tdsLayouts.TDS144 } } },
+  { key: "protean_form143", name: "Protean file format for Form No. 143 (TCS)", url: "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html", area: "tds", kind: "file", known: "c487ddd78125433aefc4063ccb93ebe820156c42e1d2a58986ae110c50fc51a7", codes: ["TCS_RET"], parse: proteanDownloads, entry: /^File Format for Form Number 143\b.*\bVersion ([\d.]+)/i, compare: { file: /\.xlsx$/i, form: "TDS143", layout: { of: tdsFormatLayout, expected: tdsLayouts.TDS143 } } },
   { key: "traces", name: "TRACES what's new", url: "https://traces.tdscpc.gov.in/", area: "tds", kind: "manual" },
   { key: "mca", name: "MCA news and forms", url: "https://www.mca.gov.in/", area: "company_law", kind: "manual" },
 ];

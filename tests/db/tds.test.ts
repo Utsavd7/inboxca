@@ -44,3 +44,37 @@ it("keeps TDS statement details and statements to the firm, its TAN and its chec
   expect((await db.query("select public.file_prepared_form($1,$2,'invented token 123',null) saved",[saved.id,owner])).rows[0].saved).toBe(true);
   expect((await db.query("select status,details->>'ack' ack from public.tasks where id=$1",[task])).rows[0]).toEqual({status:"filed",ack:"invented token 123"});
 }));
+
+// Forms No. 138, 144 and 143: each statement is named by its form; the quarter's TDS return on a
+// TAN is filed only once each of its TDS statements with figures is, the TCS return by Form No. 143.
+it("closes the TDS return once every TDS statement of the quarter is filed, and the TCS return with Form No. 143",()=>rollback(db,async()=>{
+  const firm=randomUUID(),owner=randomUUID(),client=randomUUID(),tan=randomUUID();
+  await db.query("insert into auth.users(id,email) values ($1,$2)",[owner,`${owner}@invented.test`]);
+  await db.query("insert into public.firms(id,name,state_code,status) values ($1,'TDS Forms Firm','24','active')",[firm]);
+  await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active')",[firm,owner]);
+  await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Forms Client','business')",[client,firm]);
+  await db.query("insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values ($1,$2,$3,'tan','invented encrypted TAN',$4)",[tan,firm,client,randomUUID()]);
+  const prepare=async(form:string)=>{
+    const draft=randomUUID(),line={id:randomUUID(),field:"tds.p2.amount",value_enc:"invented encrypted figure",state:"confirmed",by:owner,at:new Date().toISOString()};
+    await db.query("insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values ($1,$2,$3,$4,'2026-09',$5)",[draft,firm,client,form,{lines:[line],checks:[],registration:tan}]);
+    const saved=(await db.query("select public.reserve_form($1,$2,$3,$4,'2026-09','1.2',$5,$6,'Invented','txt') saved",[firm,client,tan,form,JSON.stringify([{id:draft,revision:1}]),owner])).rows[0].saved;
+    expect((await db.query("select public.finish_form($1,$2,$3,'invented-file',$4,100,null) saved",[saved.id,firm,owner,"a".repeat(64)])).rows[0].saved).toBe(true); // ggignore: invented checksum.
+    return saved.id as string;
+  };
+  const [form140,form144,form143]=[await prepare("TDS140"),await prepare("TDS144"),await prepare("TDS143")];
+  expect((await db.query("select document_type from public.documents where id=any($1) order by document_type",[[form140,form144,form143]])).rows.map(row=>row.document_type)).toEqual(["Form No. 140","Form No. 143","Form No. 144"]);
+  const tds=randomUUID(),tcs=randomUUID();
+  await db.query("insert into public.tasks(id,firm_id,client_id,registration_id,code,period_key,due_on) values ($1,$3,$4,$5,'TDS_RET','2026-09','2026-10-31'),($2,$3,$4,$5,'TCS_RET','2026-09','2026-10-31')",[tds,tcs,firm,client,tan]);
+  const status=async(task:string)=>(await db.query("select status from public.tasks where id=$1",[task])).rows[0].status;
+  const file=async(id:string,ack:string)=>(await db.query("select public.file_prepared_form($1,$2,$3,null) saved",[id,owner,ack])).rows[0].saved;
+  // Only Form No. 143's figures are the TCS return's; only the TDS statements are the TDS return's.
+  expect((await db.query("select form_code from public.return_drafts($1)",[tcs])).rows).toEqual([{form_code:"TDS143"}]);
+  expect((await db.query("select form_code from public.return_drafts($1)",[tds])).rows.map(row=>row.form_code)).toEqual(["TDS140","TDS144"]);
+  expect((await db.query("select stage from public.return_stages($1,$2)",[firm,[tcs]])).rows[0].stage).toBe("approved");
+  expect(await file(form140,"111111111111111")).toBe(true);
+  expect(await status(tds)).toBe("in_progress");expect(await status(tcs)).toBe("upcoming");
+  expect(await file(form144,"222222222222222")).toBe(true);expect(await status(tds)).toBe("filed");
+  expect(await file(form143,"333333333333333")).toBe(true);expect(await status(tcs)).toBe("filed");
+  // Each statement keeps its own token, for the next quarter's statement of the same form.
+  expect((await db.query("select prepared->>'form' form,prepared->>'ack' ack from public.documents where id=any($1) order by 1",[[form140,form144]])).rows).toEqual([{form:"TDS140",ack:"111111111111111"},{form:"TDS144",ack:"222222222222222"}]);
+}));

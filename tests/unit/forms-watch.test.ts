@@ -225,12 +225,14 @@ it("goes live by itself only when InboxCA's own returns pass every official chec
 
 // Protean's Form No. 140 format, as an invented workbook laid out like the official one (its
 // records' fields and annexures' codes), built from the layout InboxCA writes the statement to.
-const formatBook = (layout: Record<string, string[]>) => {
-  const titles: Record<string, string> = { FH: "File Header", BH: "Batch Header", CD: "Challan Detail", DD: "Deductee Detail" };
+// Forms No. 138, 144 and 143 lay some annexures out otherwise: a reason with whether it needs a
+// PAN, a reason with a row of codes, a remittance code with its section.
+const formatBook = (layout: Record<string, string[]>, payee = "Deductee") => {
+  const titles: Record<string, string> = { FH: "File Header", BH: "Batch Header", CD: "Challan Detail", DD: `${payee} Detail` };
   const row = (cells: string[]) => `<row>${cells.map((value, at) => value && `<c r="${"ABCDEFG"[at]}1" t="inlineStr"><is><t>${value.replace(/&/g, "&amp;")}</t></is></c>`).join("")}</row>`;
   const rows = Object.entries(layout).flatMap(([key, entries]) => [
     row(["", titles[key] ? `Invented statement (${titles[key]} Record)` : `${key.replace(" ", " - ")}`]),
-    ...entries.map((entry) => { const [a, b, c, d] = entry.split(" "); return row(titles[key] ? [a, "Field", "", b, c, d] : key === "Annexure 2" ? ["", "Payment", "Section", a] : key === "Annexure 6" ? ["", a, "Section", b] : ["", "Name", a]); }),
+    ...entries.map((entry) => { const [a, b, c, d] = entry.split(" "); return row(titles[key] ? [a, "Field", "", b, c, d] : key === "Annexure 2" ? ["", "Payment", "Section", a] : key === "Annexure 6" ? (/^\d{4}$/.test(b) ? ["", a, "Section", b] : ["", "Reason", a, b]) : key === "Annexure 9" ? ["", "Nature", a, b] : ["", "Name", a]); }),
   ]);
   return zip([{ name: "xl/worksheets/sheet1.xml", text: `<worksheet><sheetData>${rows.join("")}</sheetData></worksheet>` }]);
 };
@@ -271,4 +273,32 @@ it("shows the Form No. 138 Q4 format as new from the government once Protean lin
   pages.set(etds.url, '<section class="main-content-area"><a href="/f/Form%20Number%20138-24Q%20-%20Q4.xlsx">File Format for Form Number 138 Q4 Version 1.0</a></section>');
   watch = await checkSources(watch, day(2), fetcher, [etds]);
   expect(watch.items).toMatchObject([{ source: "etds", area: "tds", title: "File Format for Form Number 138 Q4 Version 1.0", link: "https://official.invalid/f/Form%20Number%20138-24Q%20-%20Q4.xlsx" }]);
+});
+
+it("watches the Forms No. 138, 144 and 143 formats each by its own entry and layout; the Form No. 138 Q4 entry is not taken for Q1 to Q3", async () => {
+  const { sources } = await import("@/src/jobs/forms-watch");
+  const { tdsLayouts } = await import("@/src/lib/tds");
+  const { proteanDownloads } = await import("@/src/jobs/gov-pages");
+  const watched = sources.filter((source) => ["protean_form138", "protean_form144", "protean_form143"].includes(source.key));
+  expect(watched.map((source) => [source.key, source.compare?.form, source.codes])).toEqual([["protean_form138", "TDS138", ["TDS_RET"]], ["protean_form144", "TDS144", ["TDS_RET"]], ["protean_form143", "TDS143", ["TCS_RET"]]]);
+  const kept: Buffer[] = [], store = { keep: async (bytes: Buffer) => void kept.push(bytes), read: async (hash: string) => kept.find((file) => sha256(file) === hash) ?? null };
+  const url = watched[0].url, link = (name: string) => `https://tinpan.proteantech.in/f/${encodeURIComponent(name)}`;
+  const page = (version: string) => `<section class="main-content-area"><a href="#">File Format for Form Number 138 Q4 Version 1.0 (Expected to be released soon.)</a><a href="/f/138.xlsx">File Format for Form Number 138 Q1 to Q3 Version ${version}</a><a href="/f/144.xlsx">File Format for Form Number 144 Q1 to Q4 Version ${version}</a><a href="/f/143.xlsx">File Format for Form Number 143 Q1 to Q4 Version ${version}</a></section>`;
+  const books = { TDS138: formatBook(tdsLayouts.TDS138), TDS144: formatBook(tdsLayouts.TDS144), TDS143: formatBook(tdsLayouts.TDS143, "Collectee") };
+  for (const [form, book] of Object.entries(books)) pages.set(link(`${form.slice(3)}.xlsx`), new Uint8Array(book));
+  pages.set(url, page("1.2"));
+  expect(proteanDownloads(page("1.2"), url).filter((entry) => watched[0].entry!.test(entry.title)).map((entry) => entry.title)).toEqual(["File Format for Form Number 138 Q1 to Q3 Version 1.2"]);
+  // The same version as InboxCA writes: each file read is its own form's, with no difference.
+  let watch = await checkSources(empty, day(0), fetcher, watched, templates, store);
+  expect(watch.changes.map((change) => (change as { compared: object[] }).compared[0])).toEqual([{ file: "138.xlsx", with: "1.2", same: true }, { file: "144.xlsx", with: "1.2", same: true }, { file: "143.xlsx", with: "1.2", same: true }]);
+  // A new release with a new country code and a changed collection field is listed, never live.
+  pages.set(url, page("1.3"));
+  pages.set(link("144.xlsx"), new Uint8Array(formatBook({ ...tdsLayouts.TDS144, "Annexure 10": [...tdsLayouts.TDS144["Annexure 10"], "287"] })));
+  pages.set(link("143.xlsx"), new Uint8Array(formatBook({ ...tdsLayouts.TDS143, DD: tdsLayouts.TDS143.DD.map((field) => (field === "12 INTEGER 2 M" ? "12 INTEGER 3 M" : field)) }, "Collectee")));
+  watch = await checkSources(watch, day(1), fetcher, watched, templates, store);
+  expect(watch.changes.slice(3).map((change) => (change as { source: string; compared: { differences?: string[]; live?: true }[] }))).toMatchObject([
+    { source: "protean_form144", compared: [{ with: "1.2", differences: ["In Annexure 10, heading added: 287"] }] },
+    { source: "protean_form143", compared: [{ with: "1.2", differences: ["In DD, heading added: 12 INTEGER 3 M", "In DD, heading removed: 12 INTEGER 2 M"] }] },
+  ]);
+  expect(watch.changes.slice(3).some((change) => (change as { compared: { live?: true }[] }).compared[0].live)).toBe(false);
 });

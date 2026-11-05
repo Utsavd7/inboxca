@@ -12,7 +12,7 @@ export const regenerateForm:Handler=async(job)=>{
   const {data:old,error}=await admin.from("documents").select("client_id,period_key,prepared").eq("firm_id",firm).eq("id",job.entity_id!).neq("status","deleted").maybeSingle();
   if(error) return {retry:"form_not_read"};
   if(!old?.prepared) return {done:true};
-  const meta=preparedSchema.parse(old.prepared),itr=meta.form.startsWith("ITR"),kind=itr ? "pan" : meta.form==="TDS140" ? "tan" : "gstin";
+  const meta=preparedSchema.parse(old.prepared),itr=meta.form.startsWith("ITR"),kind=itr ? "pan" : /^TDS/.test(meta.form) ? "tan" : "gstin";
   if(meta.status==="filed" || meta.status==="rejected") return {done:true};
   const [{data:rows},{data:registration},{data:templates}]=await Promise.all([
     admin.from("datasets").select("id,revision,data").eq("firm_id",firm).eq("client_id",old.client_id).eq("form_code",itr ? "ITR" : meta.form).eq("period_key",old.period_key).in("id",meta.sources.map(source=>source.id)),

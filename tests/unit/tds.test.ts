@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {checkStatement,extractTds,readStatement,statementFile,type Deductor,type Payment} from "@/src/lib/tds";
+import {checkStatement,extractTds,readStatement,statementFile,type Deductor,type Payment,type TdsForm} from "@/src/lib/tds";
 
 // An invented deductor with two challans and three payments. Every TAN, PAN and name is
 // invented and clearly fake (ggignore: invented test identifiers, not secrets).
@@ -110,4 +110,132 @@ it("reads a register under the columns a person chose, and refuses a changed lay
   expect(()=>extractTds([["Other"],...rows.slice(1)],mapping)).toThrow(/columns changed/);
   expect(()=>extractTds(rows,{...mapping,columns:[0,1,2,3,4,-1,6,7,-1,-1,-1,-1,-1,-1]})).toThrow(/Choose a column for/);
   expect(()=>extractTds([rows[0],["ZZZPZ0002Z","Invented","1024","10/07/2026","one lakh","2000","2","1"]],mapping)).toThrow(/Amount paid or credited in row 2/);
+});
+
+// Forms No. 138, 144 and 143, each written for the invented deductor above from its own format:
+// every field of every record is compared by position (a record given as its filled fields).
+const record=(count:number,values:Record<number,string>)=>Array.from({length:count},(_,at)=>values[at+1] ?? "");
+const head=(fileType:string)=>record(18,{1:"1",2:"FH",3:fileType,4:"R",5:"20102026",6:"1",7:"D",8:tan,9:"1",10:"InboxCA"});
+const batch=(form:string,challans:string,total:string)=>record(72,{1:"2",2:"BH",3:"1",4:challans,5:form,13:tan,15:pan,16:"202728",17:"202627",18:"Q2",19:"Invented Traders",20:"India",21:"12 Invented Lane",23:"Test Road",25:"Invented District",26:"24",27:"380001",28:"tds@invented.test",29:"91",30:"9000000001",32:"F",
+  33:"Invented Partner",34:"Partner",35:"12 Invented Lane",40:"24",41:"380001",43:"India",44:"91",45:"9000000002",47:total,52:"N",59:"ZZZPZ0009Z"});
+const challan=(line:string,at:string,rows:string,values:Record<number,string>)=>record(30,{1:line,2:"CD",3:"1",4:at,5:rows,6:"N",9:"0.00",10:"0.00",11:"0.00",13:"C",24:"0.00",25:"0.00",...values});
+const nilChallan=(line:string,at:string,rows:string)=>record(30,{1:line,2:"CD",3:"1",4:at,5:rows,6:"Y",8:"0.00",9:"0.00",10:"0.00",11:"0.00",12:"0.00",19:"30092026",21:"0.00",22:"0.00",24:"0.00",25:"0.00"});
+const deductee=(line:string,n:string,at:string,values:Record<number,string>)=>record(45,{1:line,2:"DD",3:"1",4:n,5:at,6:"O",18:"Y",...values});
+const statementOf=(form:TdsForm,rows:{id:string;field:string;value:string}[],period="2026-09")=>({form,tan,pan,deductor,period,today:"2026-10-20",...readStatement([{id:draft,lines:[...rows,{id:"s1",field:"tds.s.previous",value:"N"}]}])});
+const written=(statement:ReturnType<typeof statementOf>)=>{
+  const checked=checkStatement(statement);
+  expect(checked.errors).toEqual([]);
+  const file=statementFile({...statement,challans:checked.challans});
+  expect(/^[\x20-\x7e\r\n]+$/.test(file) && file.endsWith("\r\n")).toBe(true);
+  return {records:file.slice(0,-2).split("\r\n").map(line=>line.split("^")),warnings:checked.warnings.map(issue=>issue.text)};
+};
+const errorsOf=(statement:Parameters<typeof checkStatement>[0])=>checkStatement(statement).errors.map(issue=>issue.text).join("\n");
+const edited=(statement:ReturnType<typeof statementOf>,row:number,values:Partial<Payment>,more:Record<string,string>={})=>({...statement,payments:statement.payments.map(pay=>pay.row!==row ? pay : {...pay,...values,more:{...pay.more,...more}})});
+
+const salaries=()=>statementOf("TDS138",[
+  lines("p",2,{pan:"ZZZPZ0002Z",name:"Invented Employee",section:"1002",paid_on:"2026-07-31",amount:"80000",tds:"5000",challan:"11"}),
+  lines("p",3,{pan:"",name:"Invented Trainee",section:"1002",paid_on:"2026-08-31",amount:"30000",tds:"6000",challan:"11",remark:"C"}),
+  lines("p",4,{pan:"ZZZPZ0004Z",name:"Invented Senior",section:"1032",paid_on:"2026-09-30",amount:"40000",tds:"0",remark:"A",certificate:"ZZZCERT001"}),
+  lines("c",1,{bsr:"510308",date:"2026-09-07",number:"11",tax:"11000",minor:"200"}),
+].flat());
+it("writes Form No. 138 (salary, Q1 to Q3) field by field from its own format",()=>{
+  const {records,warnings}=written(salaries());
+  expect(records).toEqual([head("SL1"),batch("138","2","11000.00"),
+    challan("3","1","2",{8:"11000.00",12:"11000.00",15:"0510308",17:"00011",19:"07092026",21:"11000.00",22:"11000.00",23:"200"}),
+    // Row 181: the date of deposit is the challan's; Form No. 138 has no rate (row 180).
+    deductee("4","1","1",{8:"ZZZPZ0002Z",9:"Invented Employee",15:"1002",19:"31072026",20:"80000.00",24:"5000.00",25:"5000.00",27:"31072026",29:"07092026"}),
+    deductee("5","2","1",{8:"PANNOTAVBL",9:"Invented Trainee",15:"1002",19:"31082026",20:"30000.00",24:"6000.00",25:"6000.00",27:"31082026",29:"07092026",32:"C"}),
+    nilChallan("6","2","1"),
+    deductee("7","1","2",{8:"ZZZPZ0004Z",9:"Invented Senior",15:"1032",19:"30092026",20:"40000.00",24:"0.00",25:"0.00",32:"A",33:"ZZZCERT001"})]);
+  expect(warnings).toEqual([expect.stringContaining("Row 3: no PAN")]);
+});
+it("checks Form No. 138 by its own rules, and waits for Protean's Q4 format",()=>{
+  const s=salaries();
+  expect(errorsOf({...s,period:"2027-03"})).toMatch(/waits for Protean's file format for the fourth quarter/);
+  expect(errorsOf(edited(s,2,{deposited:BigInt(400000)}))).toMatch(/Row 2: the tax deposited must equal the tax deducted/);
+  expect(errorsOf(edited(s,2,{remark:"C"}))).toMatch(/Row 2: reason code C is only for an employee with no valid PAN/);
+  expect(errorsOf(edited(s,3,{tds:BigInt(500000),deposited:BigInt(500000)}))).toMatch(/Row 3: reason code C is only[\s\S]*at least 20%/);
+  expect(errorsOf(edited(s,4,{pan:""}))).toMatch(/Row 4: reason code A needs the employee's PAN/);
+  expect(errorsOf(edited(s,2,{section:"1027"}))).toMatch(/official four digit codes of Form No. 138/);
+  expect(errorsOf(edited(s,4,{remark:""}))).toMatch(/Row 4: no tax was deducted and no challan is given. Give the reason code for no deduction, such as A/);
+  expect(errorsOf(edited(s,4,{remark:"Y"}))).toMatch(/reason code Y does not go with section code 1032/);
+});
+
+const abroad=()=>statementOf("TDS144",[
+  lines("p",2,{pan:"ZZZPZ0002Z",name:"Invented Overseas Ltd",section:"1057",paid_on:"2026-07-15",amount:"100000",tds:"10000",status:"1",country:"265",rate:"10",dtaa:"B",remittance:"49",challan:"7",form121:"INVENTEDFORMNUMBERABCDEFGH"}),
+  lines("p",3,{pan:"",name:"Invented Investor",section:"1048",paid_on:"2026-08-10",amount:"50000",tds:"5000",status:"2",country:"267",rate:"10",dtaa:"b",remittance:"27",challan:"7",remark:"C",address:"1 Invented Street London",email:"investor@invented.test",phone:"+44 1234 567890",tin:"INV12345"}),
+  lines("p",4,{pan:"ZZZPZ0004Z",name:"Invented Winner",section:"1059",paid_on:"2026-09-20",amount:"20000",tds:"0",rate:"0",status:"2",country:"265",dtaa:"A",remark:"Y",grossed:"n",opted_out:"Y"}),
+  lines("c",1,{bsr:"510308",date:"2026-09-05",number:"7",tax:"15000",minor:"200"}),
+].flat());
+it("writes Form No. 144 (payments to non residents) field by field from its own format",()=>{
+  const {records,warnings}=written(abroad());
+  expect(records).toEqual([head("NS1"),batch("144","2","15000.00"),
+    challan("3","1","2",{8:"15000.00",12:"15000.00",15:"0510308",17:"00007",19:"05092026",21:"15000.00",22:"15000.00",23:"200"}),
+    // Rows 165 to 194: status, opting out (empty is N), remittance, country, grossing up, rate, DTAA, Form No. 121 and the details abroad.
+    deductee("4","1","1",{8:"ZZZPZ0002Z",9:"Invented Overseas Ltd",12:"1",14:"N",15:"1057",16:"49",17:"265",19:"15072026",20:"100000.00",21:"N",24:"10000.00",25:"10000.00",27:"15072026",28:"10.0000",30:"B",31:"INVENTEDFORMNUMBERABCDEFGH"}),
+    deductee("5","2","1",{8:"PANNOTAVBL",9:"Invented Investor",12:"2",14:"N",15:"1048",16:"27",17:"267",19:"10082026",20:"50000.00",21:"N",24:"5000.00",25:"5000.00",27:"10082026",28:"10.0000",30:"B",32:"C",37:"1 Invented Street London",38:"investor@invented.test",39:"441234567890",41:"INV12345"}),
+    nilChallan("6","2","1"),
+    deductee("7","1","2",{8:"ZZZPZ0004Z",9:"Invented Winner",12:"2",14:"Y",15:"1059",17:"265",19:"20092026",20:"20000.00",21:"N",24:"0.00",25:"0.00",28:"0.0000",30:"A",32:"Y"})]);
+  expect(warnings).toEqual([expect.stringContaining("Row 3: no PAN")]);
+});
+it("checks Form No. 144 by its own rules: status, country, remittance, DTAA and the details of a deductee with no PAN",()=>{
+  const s=abroad();
+  expect(errorsOf(edited(s,2,{},{remittance:""}))).toMatch(/Row 2: code 1057 needs the nature of remittance code, one of 27, 73, 16/);
+  expect(errorsOf(edited(s,2,{},{remittance:"71"}))).toMatch(/code 1057 needs the nature of remittance code/);
+  expect(errorsOf(edited(s,2,{section:"1004"}))).toMatch(/code 1004 takes no nature of remittance code/);
+  expect(errorsOf(edited(s,2,{},{country:"99"}))).toMatch(/Row 2: the country code must be one of the official codes/);
+  expect(errorsOf(edited(s,2,{},{status:"11"}))).toMatch(/Row 2: the status code must be 1 to 10/);
+  expect(errorsOf(edited(s,2,{},{dtaa:""}))).toMatch(/under the Act \(A\) or a DTAA \(B\)/);
+  expect(errorsOf(edited(s,2,{},{grossed:"Yes"}))).toMatch(/grossed up and opted out of section 202\(1\) are Y or N/);
+  expect(errorsOf(edited(s,3,{},{tin:""}))).toMatch(/Row 3: with no PAN, a rate below 20%, reason C and this nature of remittance, the format needs/);
+  const other=checkStatement(edited(edited(s,3,{},{tin:""}),3,{remark:""}));
+  expect(other.errors).toEqual([]);expect(other.warnings.map(issue=>issue.text)).toContainEqual(expect.stringMatching(/Row 3: no PAN. Give the deductee's address abroad/));
+  expect(errorsOf(edited(s,4,{pan:"PANNOTAVBL"}))).toMatch(/code 1059 needs the deductee's real PAN/);
+  expect(errorsOf(edited(s,4,{remark:"C"}))).toMatch(/reason code C does not go with section code 1059/);
+  expect(errorsOf(edited(s,2,{section:"1027"}))).toMatch(/official four digit codes of Form No. 144/);
+});
+
+const collections=()=>statementOf("TDS143",[
+  lines("p",2,{pan:"ZZZPZ0002Z",name:"Invented Scrap Buyer",section:"1073",paid_on:"2026-07-20",amount:"200000",tds:"2000",status:"7",rate:"1",challan:"21"}),
+  lines("p",3,{pan:"ZZZPZ0003Z",name:"Invented Traveller",section:"1089",paid_on:"2026-08-12",amount:"900000",tds:"0",rate:"0",status:"2",remark:"F",f_tds:"Y",f_challan:"456",f_paid_on:"2026-08-12",non_resident:"y",establishment:"N"}),
+  lines("c",1,{bsr:"510308",date:"2026-08-07",number:"21",tax:"2000",minor:"200"}),
+].flat());
+it("writes Form No. 143 (TCS) field by field from its own format",()=>{
+  const {records,warnings}=written(collections());
+  expect(records).toEqual([head("TC1"),batch("143","2","2000.00"),
+    challan("3","1","1",{8:"2000.00",12:"2000.00",15:"0510308",17:"00021",19:"07082026",21:"2000.00",22:"2000.00",23:"200"}),
+    // Rows 164 to 189: non resident (empty is N), collectee code, permanent establishment, opting out, rate, and the TDS answers of reason F.
+    deductee("4","1","1",{8:"ZZZPZ0002Z",9:"Invented Scrap Buyer",11:"N",12:"7",14:"N",15:"1073",19:"20072026",20:"200000.00",24:"2000.00",25:"2000.00",27:"20072026",28:"1.0000"}),
+    nilChallan("5","2","1"),
+    deductee("6","1","2",{8:"ZZZPZ0003Z",9:"Invented Traveller",11:"Y",12:"2",13:"N",14:"N",15:"1089",19:"12082026",20:"900000.00",24:"0.00",25:"0.00",28:"0.0000",32:"F",34:"Y",35:"456",36:"12082026"})]);
+  expect(warnings).toEqual([]);
+});
+it("checks Form No. 143 by its own rules, in a collector's words",()=>{
+  const s=collections();
+  expect(errorsOf({...s,deductor:{...deductor,type:""}})).toMatch(/Choose the type of collector/);
+  expect(errorsOf(edited(s,2,{deposited:BigInt(100000)}))).toMatch(/Row 2: the tax deposited must equal the tax collected/);
+  expect(errorsOf(edited(s,2,{},{status:""}))).toMatch(/Row 2: the collectee code must be 1 to 10/);
+  expect(errorsOf(edited(s,2,{},{establishment:"Y"}))).toMatch(/permanent establishment answer is only for a non resident collectee/);
+  expect(errorsOf(edited(s,3,{},{establishment:""}))).toMatch(/Row 3: say whether this non resident collectee has a permanent establishment/);
+  expect(errorsOf(edited(s,2,{},{f_tds:"N"}))).toMatch(/only for reason code F with codes 1086 to 1089/);
+  expect(errorsOf(edited(s,3,{},{f_challan:""}))).toMatch(/Row 3: with Y, give the TDS challan number/);
+  expect(errorsOf(edited(s,3,{remark:"Y"}))).toMatch(/reason code Y does not go with section code 1089/);
+  expect(errorsOf(edited(s,2,{section:"1024"}))).toMatch(/official four digit codes of Form No. 143/);
+  expect(errorsOf(edited(s,3,{remark:""}))).toMatch(/no tax was collected and no challan is given. Give the reason code for no collection/);
+});
+
+// Where CAs lose time: tax with no challan, or a challan that does not cover its rows, is flagged.
+it("flags tax no challan covers, for every form",()=>{
+  for(const s of [salaries(),abroad(),collections()]) {
+    expect(errorsOf(edited(s,2,{challan:""}))).toMatch(/Row 2: tax was (deducted|collected), so give the serial number of the challan it was paid with. Until then no challan covers it/);
+    expect(errorsOf(edited(s,2,{challan:"999"}))).toMatch(/Row 2: no challan with serial number 999 is in this statement, so no challan covers this tax/);
+    expect(errorsOf({...s,challans:s.challans.map(c=>({...c,tax:BigInt(100000)}))})).toMatch(/Challan \d+: does not cover its rows. They show ₹[\d,.]+ of tax deposited, more than its tax of ₹1,000.00, short by ₹/);
+  }
+});
+
+it("reads a non resident register only with its status and country columns chosen",()=>{
+  const rows=[["PAN","Name","Code","Paid","Amount","TDS","Status","Country"],["ZZZPZ0002Z","Invented Overseas Ltd","1057.0","15/07/2026","100000","10000","1.0","265"]];
+  const mapping={kind:"nonresident" as const,header:0,headings:rows[0],columns:[0,1,2,3,4,5,6,7,...Array(16).fill(-1)]};
+  expect(extractTds(rows,mapping).map(line=>[line.field,line.value])).toEqual([["tds.p2.pan","ZZZPZ0002Z"],["tds.p2.name","Invented Overseas Ltd"],["tds.p2.section","1057"],["tds.p2.paid_on","2026-07-15"],["tds.p2.amount","100000"],["tds.p2.tds","10000"],["tds.p2.status","1"],["tds.p2.country","265"]]);
+  expect(()=>extractTds(rows,{...mapping,columns:[0,1,2,3,4,5,6,-1,...Array(16).fill(-1)]})).toThrow(/Choose a column for .*Country code/);
 });

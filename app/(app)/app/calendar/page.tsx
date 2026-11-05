@@ -235,8 +235,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                     <td>
                       {form}
                       {compact && <span className="sub">{of}</span>}
-                      {/* The quarter's TDS return opens its Form No. 140 statement. */}
-                      {!viewOnly && task.code === "TDS_RET" && task.status !== "filed" && task.registration_id && statementPeriod(task.period_key ?? "") && <Link className="sub" href={`/app/clients/${task.client_id}/tds?tan=${task.registration_id}&period=${task.period_key}`} aria-label={`Prepare ${task.clients.name} ${form}`}>Prepare statement</Link>}
+                      {/* The quarter's TDS return opens its statements (Form No. 140 first), the TCS return its Form No. 143. */}
+                      {!viewOnly && (task.code === "TDS_RET" || task.code === "TCS_RET") && task.status !== "filed" && task.registration_id && statementPeriod(task.period_key ?? "") && <Link className="sub" href={`/app/clients/${task.client_id}/tds?tan=${task.registration_id}&period=${task.period_key}${task.code === "TCS_RET" ? "&form=TDS143" : ""}`} aria-label={`Prepare ${task.clients.name} ${form}`}>Prepare statement</Link>}
                     </td>
                     {!compact && <td>{of}</td>}
                     {!(compact && day) && (

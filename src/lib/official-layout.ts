@@ -64,27 +64,32 @@ export function layoutDifferences(before: Layout, after: Layout) {
   return lines;
 }
 
-// Protean's TDS statement file format (Form No. 140), from its own tables: each record's fields
-// as "number type size mandatory" under FH, BH, CD and DD, and each annexure's codes. InboxCA
-// writes the statement itself (src/lib/tds.ts), so a new release is set beside the layout that
-// code writes, not beside a shipped copy.
-const tdsRecords: Record<string, string> = { "File Header": "FH", "Batch Header": "BH", "Challan Detail": "CD", "Deductee Detail": "DD" };
+// Protean's TDS and TCS statement file formats (Forms No. 140, 138, 144 and 143), from their own
+// tables: each record's fields as "number type size mandatory" under FH, BH, CD and DD, and each
+// annexure's codes. InboxCA writes the statements itself (src/lib/tds.ts), so a new release is
+// set beside the layout that code writes, not beside a shipped copy. Annexure 6 pairs a reason
+// with a code (one a row, or the codes of a row; Form No. 138 gives the reason and whether it
+// needs a PAN), Annexure 9 a remittance code with the section above it.
+const tdsRecords: Record<string, string> = { "File Header": "FH", "Batch Header": "BH", "Challan Detail": "CD", "Deductee Detail": "DD", "Collectee Detail": "DD" };
 export function tdsFormatLayout(data: Buffer): Layout {
   const layout: Layout = {};
-  let part = "";
+  let part = "", section = "";
   for (const row of readSheet(data, "format.xlsx", { rows: 3000, columns: 8 })) {
     const [a = "", b = "", c = "", d = "", e = "", f = ""] = row.map((cell) => cell.replace(/\s+/g, " ").trim());
-    const record = /\((File Header|Batch Header|Challan Detail|Deductee Detail) Record\)/.exec(b)?.[1], annexure = /^Annexure\s*-?\s*(\d+)/i.exec(b)?.[1];
+    const record = /\((File Header|Batch Header|Challan Detail|Deductee Detail|Collectee Detail) Record\)/.exec(b)?.[1], annexure = /^Annexure\s*-?\s*(\d+)/i.exec(b)?.[1];
     if (record || annexure) {
       part = record ? tdsRecords[record] : `Annexure ${annexure}`;
       layout[part] ??= [];
       continue;
     }
-    const entry = Object.values(tdsRecords).includes(part) && /^\d+$/.test(a) && d && e ? `${a} ${d} ${e} ${f}`
-      : part === "Annexure 2" ? (/^\d{4}$/.test(d) ? d : "")
-      : part === "Annexure 6" ? (/^[A-Z]$/.test(b) && /^\d{4}$/.test(d) ? `${b} ${d}` : "")
-      : part.startsWith("Annexure") && /^(\d{2,3}|[A-Z])$/.test(c) ? c : "";
-    if (entry) layout[part].push(entry);
+    if (part === "Annexure 9" && /^\d{4}$/.test(d)) section = d;
+    const entries = Object.values(tdsRecords).includes(part) && /^\d+$/.test(a) && d && e ? [`${a} ${d} ${e} ${f}`]
+      : part === "Annexure 2" ? (/^\d{4}$/.test(d) ? [d] : [])
+      : part === "Annexure 6" ? (!/^[A-Z]$/.test(b) ? (/^[A-Z]$/.test(c) ? [`${c} ${d}`] : []) : /^\d{4}$/.test(d) ? [`${b} ${d}`] : /^\d{4}( \d{4})*$/.test(e) ? e.split(" ").map((code) => `${b} ${code}`) : [])
+      : part === "Annexure 8" ? (/^\d{1,2}$/.test(c) ? [c] : [])
+      : part === "Annexure 9" ? (/^\d{2}$/.test(c) && section ? [`${c} ${section}`] : [])
+      : part.startsWith("Annexure") && /^(\d{2,3}|[A-Z])$/.test(c) ? [c] : [];
+    layout[part]?.push(...entries);
   }
   if (!Object.values(tdsRecords).every((key) => layout[key]?.length)) throw new Error("Not a TDS statement file format");
   return layout;

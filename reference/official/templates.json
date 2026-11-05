@@ -170,6 +170,21 @@
     }
   },
   {
+    "form_code": "TDS138",
+    "version": "1.2",
+    "valid_from": "2026-04-01",
+    "valid_until": null,
+    "status": "active",
+    "source": {
+      "file": "protean/Form138_Q1_Q3_File_Format_V1.2.xlsx",
+      "url": "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html",
+      "sha256": "d58fd86b69932c6a7a4f518990c17d2112f55c65042d9c3bf2799ed201cbaf6c"
+    },
+    "mappings": {
+      "format": "txt"
+    }
+  },
+  {
     "form_code": "TDS140",
     "version": "1.2",
     "valid_from": "2026-04-01",
@@ -179,6 +194,36 @@
       "file": "protean/Form140_File_Format_V1.2.xlsx",
       "url": "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html",
       "sha256": "ec5d8a1138ac84fd5ed59f62aabb5b097479007d501cca98a27ba9c400a05f40"
+    },
+    "mappings": {
+      "format": "txt"
+    }
+  },
+  {
+    "form_code": "TDS143",
+    "version": "1.2",
+    "valid_from": "2026-04-01",
+    "valid_until": null,
+    "status": "active",
+    "source": {
+      "file": "protean/Form143_File_Format_V1.2.xlsx",
+      "url": "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html",
+      "sha256": "c487ddd78125433aefc4063ccb93ebe820156c42e1d2a58986ae110c50fc51a7"
+    },
+    "mappings": {
+      "format": "txt"
+    }
+  },
+  {
+    "form_code": "TDS144",
+    "version": "1.2",
+    "valid_from": "2026-04-01",
+    "valid_until": null,
+    "status": "active",
+    "source": {
+      "file": "protean/Form144_File_Format_V1.2.xlsx",
+      "url": "https://tinpan.proteantech.in/downloads/e-tds/eTDS-download-regular.html",
+      "sha256": "5e78534c065133936a4bb594f310c10a44e25a0825fe9f7ff023b342730fd5da"
     },
     "mappings": {
       "format": "txt"

@@ -5,9 +5,9 @@ import {deductorTypes,ministryCodes,stateCodes,type Deductor} from "@/src/lib/td
 import {Pending} from "../../pending";
 import {saveTdsDetails} from "./tds-actions";
 
-// The details a TDS statement (Form No. 140) needs about the deductor and the person responsible
-// for deduction, one set for each of the client's TANs. Most come from the client's own papers:
-// the TAN allotment letter and the challans it pays with.
+// The details a TDS or TCS statement (Forms No. 140, 138, 144 and 143) needs about the deductor
+// or collector and the person responsible, one set for each of the client's TANs. Most come from
+// the client's own papers: the TAN allotment letter and the challans it pays with.
 export async function TdsDetails({client,name,tans,tan,error}:{client:string;name:string;tans:{id:string;number:string}[];tan?:string;error?:string}) {
   const {supabase,membership}=await currentMember();
   if(!membership) return null;

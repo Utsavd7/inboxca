@@ -18,15 +18,16 @@ import {itrChecks,type ItrWork} from "./itr-check";
 import {whose} from "./roles";
 import {periodLabel} from "./calendar";
 import {statementBytes} from "./tds-draft";
+import {isTdsForm,tdsForms,tdsName} from "./tds";
 
-export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B","TDS140",...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
-export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : form==="TDS140" ? "Form No. 140" : "GSTR-3B";
+export const preparedSchema=z.object({form:z.enum(["GSTR1","GSTR3B",...Object.keys(tdsForms) as (keyof typeof tdsForms)[],...itrReturns]),registration:z.uuid(),version:z.number().int().positive(),template:z.string(),sources:z.array(z.object({id:z.uuid(),revision:z.number().int().positive()})).min(1).max(25),status:z.enum(["draft","approved","filed","rejected"]),acknowledgement:z.uuid().nullable().optional(),external:z.boolean().optional(),filled:z.boolean().optional()});
+export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR","ITR-") : form==="GSTR1" ? "GSTR-1" : isTdsForm(form) ? tdsName(form) : "GSTR-3B";
 
 // A prepared return's drive file name keeps the year as first written ("AY 2026-27", "Tax year
 // 2026-27"), so every version of a return keeps one name. A TDS statement is named by its quarter
 // ("Jul to Sep 2026") and kept with the client's income tax work.
-export const formPeriod=(period:string,form="")=>form==="TDS140" ? periodLabel("quarterly",period) : period.length===4 ? Number(period)>=2027 ? `Tax year ${Number(period)-1}-${period.slice(2)}` : `AY ${period}-${String(Number(period)+1).slice(-2)}` : periodName(period);
-const workFolder=(period:string,form="")=>period.length===4 || form==="TDS140" ? "Income tax" : "GST";
+export const formPeriod=(period:string,form="")=>isTdsForm(form) ? periodLabel("quarterly",period) : period.length===4 ? Number(period)>=2027 ? `Tax year ${Number(period)-1}-${period.slice(2)}` : `AY ${period}-${String(Number(period)+1).slice(-2)}` : periodName(period);
+const workFolder=(period:string,form="")=>period.length===4 || isTdsForm(form) ? "Income tax" : "GST";
 const workYear=(period:string)=>financialYear(period.length===4 ? `${period}-03` : period);
 
 export async function prepareDocument(input:Parameters<typeof checkedForm>[0]) {
@@ -172,7 +173,7 @@ export async function uploadEditedForm(id:string,file:File) {
   const permission=membership.may("edit_figures", document.client_id) ? null : await grantFor(membership.firmId,userId,"edit_figures",document.client_id);
   if(!membership.may("edit_figures", document.client_id) && !permission) throw new Error("Ask to edit figures first.");
   const meta=document.prepared,itr=meta.form.startsWith("ITR"),kind=itr ? "pan" : "gstin",extension=itr ? "json" : "xlsx";
-  if(meta.form==="TDS140") throw new Error("Correct a TDS statement's figures in InboxCA, then prepare it again.");
+  if(isTdsForm(meta.form)) throw new Error("Correct a TDS statement's figures in InboxCA, then prepare it again.");
   if(!(itr ? /\.json$/i : /\.xlsx$/i).test(file.name) || !file.size || file.size>25_000_000) throw new Error("Choose the filled official return, up to 25 MB.");
   const [{data:client},{data:account},{data:registration},{data:templates}]=await Promise.all([
     supabase.from("clients").select("name").eq("firm_id",membership.firmId).eq("id",document.client_id).single(),
