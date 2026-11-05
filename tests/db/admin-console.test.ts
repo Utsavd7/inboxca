@@ -15,7 +15,7 @@ const calls = ["admin_firms()", "admin_accounts()", "admin_failed_jobs()", "admi
   "admin_post_incident('x', '{app}', 'down')", `admin_update_incident('${firm}', 'x', true)`, `admin_email_incident('${firm}')`, "admin_incidents()", `admin_firm('${firm}')`,
   "admin_reach('{GSTR1_M}')", "admin_verify_rule('GSTR1_M', '', 'https://example.test', 'CA Invented')", "admin_add_extension('GSTR1_M', '2026-09', '2026-10-30', 'https://example.test')",
   "admin_undo_extension('GSTR1_M', '2026-09')", "admin_dates()", "admin_set_office(3, 14)", "admin_office(14)", `admin_ask_support('${firm}')`, `admin_support_view('${firm}')`, "admin_billing()", "admin_set_tax('{}')", `admin_pilot('${firm}')`,
-  "admin_split_firms()", `admin_check_split('${firm}', '${other}', 'separate')`, "admin_feedback()"];
+  "admin_split_firms()", `admin_check_split('${firm}', '${other}', 'separate')`];
 
 // Acts as a person in their session, with the passkey proof the server sends after a check.
 async function asAdmin(person: string, { seconds = 3600, key = "", forSession = session(person) } = {}) {
@@ -97,19 +97,6 @@ it("lets an admin remove another admin's passkeys, which signs them out and is l
     ]);
     await asAdmin(other);
     expect((await db.query("select public.is_orelu_admin() ok")).rows[0].ok).toBe(false);
-  }));
-
-it("lists the reports people sent Orelu to an admin alone, never to the firm's own people", () =>
-  rollback(db, async () => {
-    await seed();
-    await db.query("insert into public.feedback(firm_id,user_id,kind,subject,context) values ($1,$2,'broken','Invented upload problem','{\"page\":\"/app/documents\"}')", [firm, owner]);
-    await actAs(db, owner, "aal2", session(owner));
-    expect((await attempt(db, "select * from public.feedback")).ok).toBe(false);
-    expect((await attempt(db, "insert into public.feedback(firm_id,user_id,kind,subject) values ($1,$2,'idea','x')", [firm, owner])).ok).toBe(false);
-    await asAdmin(admin);
-    expect((await attempt(db, "select * from public.feedback")).ok).toBe(false);
-    const reports = (await db.query("select * from public.admin_feedback() where firm = 'Admin Console Test Firm'")).rows;
-    expect(reports).toMatchObject([{ person: "owner@admin-console.test", kind: "broken", subject: "Invented upload problem", page: "/app/documents" }]);
   }));
 
 it("shows an admin each firm's health and no client data, and lets them retry a job and review a change", () =>

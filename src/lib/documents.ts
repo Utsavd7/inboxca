@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { yearName } from "./calendar";
+import { periodLabel, yearName } from "./calendar";
 import { fileName, financialYear, folderPath, type FolderOrder, type Naming, type WorkType } from "./drive";
 import type { supabaseAdmin } from "./supabase";
 import type { Label } from "./triage";
@@ -9,6 +9,12 @@ import type { Label } from "./triage";
 // specific name comes first; a type's work is used unless it says "other".
 const types: [RegExp, string, WorkType][] = [
   [/itr[\s-]?v\b/, "ITR-V", "income_tax"],
+  // TDS papers for the quarterly statements. ITNS 281 is the TDS challan under the 1961 Act and
+  // ITNS 281N from tax year 2026-27 (incometax.gov.in, "Create Challan through PAN login
+  // (ITNS 281N)" FAQ).
+  [/itns[\s-]?281|\btds\b.*\bchallans?\b|\bchallans?\b.*\btds\b/, "TDS challans", "tds"],
+  [/salary register|payroll/, "Salary register", "tds"],
+  [/\btds\b.*\b(register|deductions?)\b|\b(deduction|payment)s? register\b/, "TDS register", "tds"],
   [/acknowledg/, "Acknowledgement", "other"],
   [/audit report|\b3c[abd]\b/, "Audit report", "tax_audit"],
   [/computation/, "Computation", "income_tax"],
@@ -48,6 +54,9 @@ const types: [RegExp, string, WorkType][] = [
 // Final papers: what clients ask for in later years, and what the first import brings by
 // default (PLAN.md 5.16).
 export const finalPapers = new Set(["ITR-V", "Acknowledgement", "Audit report", "GSTR-1", "GSTR-3B", "Notice", "Order", "Certificate", "Challan", "Form 16", "Form 130", "Balance sheet", "Computation"]);
+// A TDS challan receipt by what it prints: its form, or the minor head of TDS deposited by the
+// deductor (the same FAQ).
+export const tdsChallanText = (text: string) => /\bITNS\s?281N?\b|TDS\/TCS Payable by Taxpayer/i.test(text);
 const labelWork: Partial<Record<Label, WorkType>> = { data_gst: "gst", data_income_tax: "income_tax", data_tax_audit: "tax_audit" };
 const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const monthNames = months.map((month) => month[0].toUpperCase() + month.slice(1));
@@ -65,6 +74,20 @@ export function findPeriod(text: string) {
   return yearFirst ? `${yearFirst[1]}-${yearFirst[2]}` : "";
 }
 
+// A TDS paper is for the quarter of its statement, kept as the month the quarter ends, as the
+// calendar's TDS_RET task keeps it ("2026-09" for July to September 2026): named as Q2 of a year
+// ("Q2 2026-27"), as its months ("Jul-Sep 2026") or by a month in it. Anything else is unclear.
+export const quarterEnd = (key: string) => (key.length === 7 ? `${key.slice(0, 5)}${String(Math.ceil(Number(key.slice(5)) / 3) * 3).padStart(2, "0")}` : key);
+export function findQuarter(text: string) {
+  const q = text.match(/\bq([1-4])\b[\s,-]*(?:fy|tax year)?\s?(20\d\d)\s?[-/]\s?(?:20)?(\d\d)\b/);
+  if (q && (Number(q[2]) + 1) % 100 === Number(q[3])) return q[1] === "4" ? `${Number(q[2]) + 1}-03` : `${q[2]}-${String(Number(q[1]) * 3 + 3).padStart(2, "0")}`;
+  const months = text.match(/\b(apr|jul|oct|jan)[a-z]*\s?(?:-|to)\s?(jun|sep|dec|mar)[a-z]*[\s-]?'?(?:20)?(\d\d)\b/);
+  const ends: Record<string, string> = { apr: "jun", jul: "sep", oct: "dec", jan: "mar" };
+  if (months && ends[months[1]] === months[2]) return quarterEnd(`20${months[3]}-${String(["jan", "apr", "jul", "oct"].indexOf(months[1]) * 3 + 1).padStart(2, "0")}`);
+  const month = findPeriod(text);
+  return month.length === 7 ? quarterEnd(month) : "";
+}
+
 // "FY 2026-27" or "Sep 2026" as drive file names write a period. Names never change, so a
 // firm's drive keeps one layout.
 export const filePeriod = (key: string) =>
@@ -72,16 +95,19 @@ export const filePeriod = (key: string) =>
 
 // The period in words for people: a month as "Sep 2026", a year by calendar.ts yearName, as
 // income tax when any work given is ("Tax year 2026-27"), else "FY 2026-27" (a balance sheet's
-// tax_audit work too: the books keep the financial year).
-export const periodName = (key: string, ...work: (string | null | undefined)[]) => (key.length === 4 ? yearName(key, work.includes("income_tax")) : filePeriod(key));
+// tax_audit work too: the books keep the financial year). TDS papers alone name their quarter.
+export const periodName = (key: string, ...work: (string | null | undefined)[]) =>
+  key.length === 4 ? yearName(key, work.includes("income_tax")) : work.length && work.every((one) => one === "tds") ? periodLabel("quarterly", quarterEnd(key)) : filePeriod(key);
 
 // The type, work, period and financial year of an attachment. Sure only when both the type
 // and the period were found; otherwise it is filed under To check for a person to confirm.
+// A challan sent about TDS, or one whose content reads as a TDS challan (typed), is a TDS challan.
 const fileWords = (fileName: string) => fileName.toLowerCase().replace(/[_.]+/g, " ");
-export function describeFile(fileName: string, subject: string, label: string | null, receivedAt: string) {
+export function describeFile(fileName: string, subject: string, label: string | null, receivedAt: string, typed?: string) {
   const name = fileWords(fileName);
-  const found = types.find(([pattern]) => pattern.test(name)) ?? types.find(([pattern]) => pattern.test(subject.toLowerCase()));
-  const period = findPeriod(name) || findPeriod(subject.toLowerCase());
+  const named = (typed ? types.find(([, type]) => type === typed) : types.find(([pattern]) => pattern.test(name))) ?? types.find(([pattern]) => pattern.test(subject.toLowerCase()));
+  const found = named?.[1] === "Challan" && /\btds\b/.test(subject.toLowerCase()) ? types.find(([, type]) => type === "TDS challans") : named;
+  const period = found?.[2] === "tds" ? findQuarter(name) || findQuarter(subject.toLowerCase()) : findPeriod(name) || findPeriod(subject.toLowerCase());
   const work = found && found[2] !== "other" ? found[2] : (labelWork[label as Label] ?? "other");
   const year = financialYear(period.length === 4 ? `${period}-03` : period || receivedAt.slice(0, 7));
   return { type: found?.[1] ?? "Document", work, period, year, sure: !!found && !!period };
@@ -110,13 +136,22 @@ export const gstinFor = (work: string, gstins: string[], chosen?: string | null)
 
 // Papers a client often sends several of in one period, each its own paper, never versions:
 // a Form 16 for each employer and often its Part A and Part B apart, and Form 26AS as both
-// its PDF and its text file.
-const manyAPeriod = new Set(["Acknowledgement", "Challan", "Notice", "Order", "Certificate", "Document", "Form 16", "Form 130", "Form 26AS"]);
+// its PDF and its text file. A quarter's TDS registers and challans often come a month at a time.
+const manyAPeriod = new Set(["TDS challans", "TDS register", "Salary register", "Acknowledgement", "Challan", "Notice", "Order", "Certificate", "Document", "Form 16", "Form 130", "Form 26AS"]);
 // Bills, statements, slips and the like also come many to a period, each file its own paper; only a
 // spreadsheet of them (a register InboxCA reads for a return) replaces an earlier spreadsheet, so a
 // corrected register is read once and never added to the one it corrects.
 const loose = new Set(["Purchase bills", "Sales bills", "E-way bills", "Invoices", "Salary slips", "Rent receipts", "Investment proofs", "Bank statement", "Interest certificate", "Capital gains statement", "Ledger"]);
 const spreadsheet = (name: string) => /\.(xlsx?|ods|csv)$/i.test(name);
+
+// The TDS registers of a quarter the TDS statement page can read: the spreadsheets filed under a
+// client's TDS work for that quarter, newest first. The page offers every filed spreadsheet of the
+// client not read yet, so these are among them; a page may list them first.
+export async function tdsRegisters(db: Pick<ReturnType<typeof supabaseAdmin>, "from">, firm: string, clients: string[], quarters: string[]) {
+  const { data } = await db.from("documents").select("id, client_id, period_key, name, document_type, received_at").eq("firm_id", firm).in("client_id", clients).in("period_key", quarters).eq("work_type", "tds").eq("status", "filed").is("prepared", null)
+    .in("document_type", ["TDS register", "Salary register"]).order("received_at", { ascending: false }).limit(500).throwOnError();
+  return (data ?? []).filter((paper) => spreadsheet(paper.name));
+}
 
 // Versions (decided 24 Oct 2026): of a client's filed papers of one type, period and GSTIN,
 // the latest to arrive is current and the others are kept as earlier versions, their files

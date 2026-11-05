@@ -4,11 +4,9 @@ import { z } from "zod";
 import { deviceName } from "@/src/lib/device";
 import { log } from "@/src/lib/logger";
 import { currentMember } from "@/src/lib/member";
-import { withinLimit } from "@/src/lib/rate-limit";
 import { reportFiles, reportFileType, reportKinds, type ReportKind } from "@/src/lib/report";
 import { roleLabel } from "@/src/lib/roles";
 import { contactEmail } from "@/src/lib/site";
-import { supabaseAdmin } from "@/src/lib/supabase";
 import { sendSystemMail, systemMailReady } from "@/src/lib/system-mail";
 
 const line = (most: number) => z.string().trim().max(most).transform((text) => text.replace(/\s+/g, " "));
@@ -22,10 +20,20 @@ const fields = z.object({
   screen: z.string().regex(/^\d{2,5}x\d{2,5}$/).or(z.literal("")),
 });
 
+// Each person's recent reports, at most 5 a day and 1 a minute. It lives in the server's memory
+// and resets when the server restarts, which is fine for one server.
+const sent = new Map<string, number[]>();
+function room(person: string, now = Date.now()) {
+  const recent = (sent.get(person) ?? []).filter((at) => now - at < 86_400_000);
+  if (recent.length >= 5 || recent.some((at) => now - at < 60_000)) return false;
+  sent.set(person, [...recent, now]);
+  return true;
+}
+
 // A report from any active member of a firm, whatever their role (Help, Report a problem or
 // idea): checked again here, then emailed to Orelu support with its files and the person as the
-// reply address, and kept as one row (without the files) for the admin console. Only what the
-// person typed and attached and where they were go with it, never the page's content.
+// reply address. Nothing of it is kept: the files stay in memory until the email goes. Only what
+// the person typed and attached and where they were go with it, never the page's content.
 export async function sendReport(form: FormData): Promise<{ error?: string }> {
   const { userId, membership } = await currentMember();
   if (!membership) return { error: "Sign in to your firm first." };
@@ -45,17 +53,17 @@ export async function sendReport(form: FormData): Promise<{ error?: string }> {
     attachments.push({ filename: `${name}.${type.ext}`, content, contentType: type.type });
   }
   if (!systemMailReady()) return { error: `Reports cannot be sent from InboxCA yet. Please write to ${contactEmail}.` };
-  if (!(await withinLimit("reportMinute", userId)) || !(await withinLimit("report", userId))) return { error: "You have sent several reports already. Please try again later." };
+  if (!room(userId)) return { error: "You have sent several reports already. Please try again later." };
 
   const agent = (await headers()).get("user-agent") ?? "";
   const version = agent.match(/(?:Edg|Firefox|Chrome|Version)\/(\d+)/)?.[1];
-  const context = { page: path, role: roleLabel(membership.role), browser: `${deviceName(agent)}${version ? `, version ${version}` : ""}`, screen, ...(which && { which }) };
+  const browser = `${deviceName(agent)}${version ? `, version ${version}` : ""}`;
   const time = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
   const text = [
     `${reportKinds[kind]}: ${subject}`,
     details,
     which && `Out of date: ${which}`,
-    [`From: ${membership.name} <${membership.email}>, ${context.role} at ${membership.firmName}`, `Page: ${path || "Not known"}`, `Browser: ${context.browser}`, screen && `Screen: ${screen}`, `Time in India: ${time}`, `Files: ${attachments.length || "None"}`].filter(Boolean).join("\n"),
+    [`From: ${membership.name} <${membership.email}>, ${roleLabel(membership.role)} at ${membership.firmName}`, `Page: ${path || "Not known"}`, `Browser: ${browser}`, screen && `Screen: ${screen}`, `Time in India: ${time}`, `Files: ${attachments.length || "None"}`].filter(Boolean).join("\n"),
   ].filter(Boolean).join("\n\n");
   try {
     if (!(await sendSystemMail(contactEmail, `[InboxCA] ${reportKinds[kind]}: ${subject}`, text, undefined, { replyTo: membership.email, attachments }))) throw new Error("not sent");
@@ -63,10 +71,5 @@ export async function sendReport(form: FormData): Promise<{ error?: string }> {
     log.warn("report.not_sent");
     return { error: "It did not send. Please try again in a minute." };
   }
-  // The email has reached Orelu, so a row that cannot be kept is logged and the person told it went.
-  const admin = supabaseAdmin();
-  const { data: row, error } = await admin.from("feedback").insert({ firm_id: membership.firmId, user_id: userId, kind, subject, details: details || null, context }).select("id").single();
-  const { error: logged } = await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "feedback.sent", entity_type: "feedback", entity_id: row?.id, details: { kind } });
-  if (error || logged) log.error("report.not_kept", { code: error?.code ?? logged?.code });
   return {};
 }

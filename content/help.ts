@@ -325,9 +325,8 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "Choose Send to Orelu. We reply to your email.",
         ],
         points: [
-          "With the report go the page you were on, your role, your browser and the time, never anything else from the page.",
+          "The report goes by email to Orelu support, with the page you were on, your role, your browser and the time, never anything else from the page. InboxCA keeps no copy of it.",
           "Pictures and recordings can show client details, such as PANs or names. They go only to Orelu support and are used only to fix and improve InboxCA.",
-          "Orelu keeps each report for 12 months.",
           "Each person can send up to 5 reports a day, one a minute.",
         ],
       },

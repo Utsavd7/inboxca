@@ -156,11 +156,6 @@ test("an Orelu admin signs in with a passkey, sees firm health and retries a fai
 
     await page.getByRole("link", { name: "Due dates" }).click();
     await expect(page.getByRole("row").filter({ hasText: "GSTR1_M" })).toBeVisible();
-
-    // A report someone in the firm sent from Help, words only.
-    await query(local.dbUrl, "insert into public.feedback (firm_id, user_id, kind, subject) values ($1, $2, 'idea', 'Invented idea for the list')", [firm.firmId, firm.ownerId]);
-    await page.getByRole("link", { name: "Reports" }).click();
-    await expect(page.getByRole("row").filter({ hasText: name })).toContainText("An idea or a feature I needInvented idea for the list");
   } finally {
     await context.close().catch(() => {});
     await adminContext.close().catch(() => {});

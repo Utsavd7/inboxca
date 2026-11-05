@@ -3,11 +3,11 @@ import { test, expect } from "@playwright/test";
 import { ImapFlow } from "imapflow";
 import { simpleParser, type ParsedMail } from "mailparser";
 import { contactEmail } from "@/src/lib/site";
-import { addPerson, appKey, localSupabase, query, seedFirm, signIn } from "./local-supabase";
+import { addPerson, appKey, localSupabase, seedFirm, signIn } from "./local-supabase";
 
 // Report a problem or idea: anyone in the firm, here a staff member, opens it from Help, sends a
 // subject with a picture, and Orelu support gets the email with the picture and the person to
-// reply to; the admin console's row keeps the words only.
+// reply to; InboxCA keeps nothing of it.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase");
 
@@ -55,7 +55,7 @@ test("a staff member reports a problem with a picture, and Orelu support gets it
     expect(mail!.replyTo?.value[0].address).toBe(staff);
     expect(mail!.attachments.map((file) => [file.filename, file.contentType, file.size])).toEqual([["invented.png", "image/png", png.length]]);
     expect(mail!.text).toContain("Page: /app\n");
-    expect(await query(local.dbUrl, "select kind, context ->> 'role' role from public.feedback where firm_id = $1", [firm.firmId])).toEqual([{ kind: "broken", role: "Staff" }]);
+    expect(mail!.text).toContain(`${staff}>, Staff at Invented Report Firm`);
   } finally {
     await firm.remove(staff);
   }

@@ -12,12 +12,12 @@ import { answerKinds, answerModes } from "@/src/lib/answers";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { addDays, dueLabel, isItr, periodLabel, todayInIndia, verifyBy } from "@/src/lib/calendar";
 import type { Json } from "@/src/db/types";
-import { checklists, kindChecklist, receiveAsked, type DocumentRequest } from "@/src/lib/checklists";
+import { checklists, kindChecklist, receiveAsked, tdsOnly, type DocumentRequest } from "@/src/lib/checklists";
 import { assignmentRoles, canManageClients, checkClient, exampleClient, importServices, readKind, readServices, readTags, readWork, seesClient, type ClientInput } from "@/src/lib/clients";
 import { chunks, filterKeys, matchingClients, MOST_MATCHING, readFilter } from "@/app/(app)/app/clients/matching";
 import { unsafeCell } from "@/src/lib/client-sheet";
 import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
-import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
+import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, quarterEnd, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, renewDrive, saveDrive, unwatchDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
@@ -1032,16 +1032,19 @@ export async function askedByPhone(form: FormData) {
   redirect(`/app/papers/${request.id}?phoned=1`);
 }
 
-// A paper item: every paper is in; opening the figures to check them takes it off the list.
+// A paper item: every paper is in; opening the figures to check them takes it off the list. For
+// a quarter's TDS papers that is the quarter's TDS statement page.
 export async function checkFigures(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const { data: item } = await supabase.from("requests").select("id, client_id").eq("firm_id", membership.firmId).eq("kind", "alert").eq("entity_type", "papers_in").eq("entity_id", String(form.get("request") ?? "")).maybeSingle();
+  const { data: asked } = item ? await supabase.from("requests").select("details").eq("firm_id", membership.firmId).eq("kind", "documents").eq("id", String(form.get("request"))).maybeSingle() : { data: null };
   if (!item?.client_id || !(canManageClients(membership.role) || (await supabase.rpc("looks_after", { target_firm: membership.firmId, client: item.client_id })).data)) redirect("/app");
   const { data: seen } = await supabaseAdmin().from("requests").update({ status: "done" }).eq("id", item.id).eq("status", "pending").select("id").maybeSingle();
   if (seen) await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.changed", entity_type: "request", entity_id: item.id });
   revalidatePath("/app", "layout");
-  redirect(`/app/clients/${item.client_id}?tab=extraction`);
+  const details = asked?.details as unknown as DocumentRequest | undefined;
+  redirect(details && tdsOnly(details) ? `/app/clients/${item.client_id}/tds?period=${quarterEnd(details.period)}` : `/app/clients/${item.client_id}?tab=extraction`);
 }
 
 export type MailboxState = { error?: string; values?: Record<string, string> };
@@ -1342,14 +1345,14 @@ export async function findDocuments(text: string) {
 }
 
 // The type, work and period a person chose for a file, or null when they do not fit. An
-// upload of several files sends one set a file, in the files' order.
+// upload of several files sends one set a file, in the files' order. A TDS paper is kept by its quarter.
 function documentValues(form: FormData, at = 0) {
   const field = (name: string) => String(form.getAll(name)[at] ?? "");
   const type = field("type") === "Other" ? field("custom").trim() : field("type");
   const work = field("work");
   const period = field("period") === "none" ? "" : field("period");
   if (!type || type.length > 80 || !(work in workTypes) || (period && !periodChoices(todayInIndia()).includes(period))) return null;
-  return { work_type: work as WorkType, document_type: type, period_key: period };
+  return { work_type: work as WorkType, document_type: type, period_key: work === "tds" ? quarterEnd(period) : period };
 }
 
 // Other names the owner, a partner or a manager adds to the firm's own types, which everyone
