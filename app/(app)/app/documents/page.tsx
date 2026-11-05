@@ -45,9 +45,11 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
-  // All papers first, To check at the top (4 Nov 2026); the drive's folder tree is one click
-  // away (Folders, ?view=folders).
-  if (params.view === "folders" || (params.path && params.view !== "papers")) return <FoldersView path={params.path} portal={membership.may("portal_files")} upload={!membership.viewOnlyUntil} />;
+  // The drive's folder tree first (5 Nov 2026); All papers, with To check at the top, is one
+  // click away (?view=papers), and any paper choice in the address (a year, To check, a paper)
+  // opens it too.
+  const paperView = params.view === "papers" || (params.view !== "folders" && Object.keys(params).some((key) => key !== "view" && key !== "path"));
+  if (!paperView) return <FoldersView path={params.path} portal={membership.may("portal_files")} upload={!membership.viewOnlyUntil} />;
   // Financial years by the key of their last month's year: "2027" is FY 2026-27.
   const years = periodChoices(todayInIndia()).filter((key) => key.length === 4);
   const asked = /^(20\d\d)-(\d\d)$/.exec(params.year ?? "");
