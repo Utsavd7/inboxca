@@ -83,6 +83,7 @@ export const planIncludes = [
   "Replies and reminders from your address",
   "GSTR-1 and GSTR-3B prepared",
   "ITR-1 to ITR-4 prepared",
+  "TDS and TCS statements prepared",
   "Notice tracker",
   "Office only lock and view only staff",
   "Activity record nobody can edit",

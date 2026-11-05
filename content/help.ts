@@ -242,6 +242,25 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         ],
       },
       {
+        slug: "tds",
+        title: "TDS and TCS statements",
+        lead: "InboxCA prepares the quarterly TDS and TCS statement files from the client's registers and challans. Your team validates and files them.",
+        steps: [
+          "Add the client's TAN under Tax numbers, then choose TDS statement details and fill in the deductor's details and the person responsible.",
+          "Clients email their TDS papers as they do today. Registers and challans are filed under TDS for their quarter, and Ask for papers asks for them before each TDS return.",
+          "On the Calendar or the client's Returns, choose Prepare statement for the quarter. Choose the register and match its columns once; InboxCA remembers them.",
+          "Add the challans, then check the figures. Rows that need a look are listed one by one; choose Yes, these figures are right for the rest.",
+          "Choose Prepare the statement file and download it. Validate it with Protean's free File Validation Utility, file it, then mark it filed here.",
+        ],
+        points: [
+          "InboxCA prepares Form No. 140 (was 26Q), Form No. 144 (was 27Q) and Form No. 143 (TCS, was 27EQ) for every quarter, and Form No. 138 (salaries, was 24Q) for April to December.",
+          "Form No. 138 for January to March waits for Protean's official format. InboxCA checks Protean's page every day and shows when it is published.",
+          "A payment with no challan, or a challan that does not cover its payments, stops the statement and says how much it is short by.",
+          "Every rule comes from Protean's official file formats. InboxCA says when a format changes.",
+          "InboxCA never files on the portal and never logs in to TRACES. Your team files, and downloads certificates from TRACES.",
+        ],
+      },
+      {
         slug: "notices",
         title: "Notices from the departments",
         lead: "InboxCA reads the notice emails your firm gets from the GST and income tax departments and keeps track of each one.",
