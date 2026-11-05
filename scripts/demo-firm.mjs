@@ -1,6 +1,7 @@
 // Makes a demo firm on local Supabase to sign in to and show the app, with invented data
 // only. Its owner's 2 step key is written to .env.local (DEMO_OWNER_TOTP), never printed:
-// add it to an authenticator app, or let `npm run demo:code` show the current code.
+// add it to an authenticator app, or let `npm run demo:code` show the current code
+// (`npm run demo:code staff` for another demo person's, scripts/demo-data.mts).
 // Run after `npm run db:env`. Running it again keeps the same firm and key.
 import { createHmac, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -27,7 +28,9 @@ export function code(secret, at = Date.now()) {
 }
 
 if (process.argv[2] === "code") {
-  console.log(code(env.DEMO_OWNER_TOTP));
+  const role = (process.argv[3] ?? "owner").toUpperCase().replace(/-/g, "_");
+  if (!env[`DEMO_${role}_TOTP`]) throw new Error(`No 2 step key for ${role.toLowerCase()}: run npm run preview, or npm run demo and npm run demo:data.`);
+  console.log(code(env[`DEMO_${role}_TOTP`]));
   process.exit(0);
 }
 
@@ -42,11 +45,14 @@ if (!user) {
   if (error) throw error;
   user = data.user;
 }
-await db.query("delete from auth.mfa_factors where user_id = $1", [user.id]);
-await db.query(
-  "insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, secret, created_at, updated_at) values (gen_random_uuid(), $1, 'Demo app', 'totp', 'verified', $2, now(), now())",
-  [user.id, key],
-);
+// Kept when it is already there, so a browser signed in with it stays signed in.
+if (!(await db.query("select 1 from auth.mfa_factors where user_id = $1 and secret = $2 and status = 'verified'", [user.id, key])).rowCount) {
+  await db.query("delete from auth.mfa_factors where user_id = $1", [user.id]);
+  await db.query(
+    "insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, secret, created_at, updated_at) values (gen_random_uuid(), $1, 'Demo app', 'totp', 'verified', $2, now(), now())",
+    [user.id, key],
+  );
+}
 if (!(await db.query("select 1 from public.firm_members where user_id = $1", [user.id])).rowCount) {
   const [{ id: firm }] = (await db.query("insert into public.firms (name, state_code, status) values ('Demo CA Firm', '24', 'active') returning id")).rows;
   await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, 'owner', 'active')", [firm, user.id]);

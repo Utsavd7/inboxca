@@ -20,7 +20,8 @@
     "demo": "node scripts/demo-firm.mjs",
     "demo:code": "node scripts/demo-firm.mjs code",
     "demo:data": "npx --yes tsx scripts/demo-data.mts",
-    "demo:mail": "npx --yes tsx scripts/demo-mail.mts"
+    "demo:mail": "npx --yes tsx scripts/demo-mail.mts",
+    "preview": "node --experimental-strip-types scripts/preview.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
