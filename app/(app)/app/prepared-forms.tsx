@@ -35,6 +35,11 @@ const stages:Record<string,{done:number;word:string;tone:Tone}>={
 // the offline utility or the portal (worker/gstr3b.ts).
 const filled3b=["3.1 (a)","3.1 (b)","3.1 (c)","3.1 (e)","3.1.1 (ii)","3.2 Supplies to unregistered persons","4(A)","4(D)(2)"];
 const left3b=["3.1 (d) Reverse charge purchases","ITC on import of services","ITC reversals","Other ineligible ITC","Exempt inward supplies","Interest"];
+// What each official file is, said where it is downloaded: the CA checks it and files it with
+// their own OTP or DSC. A TDS statement's note says to validate it first (below).
+const fileUse=(form:string)=>form==="GSTR1" ? "This is the official GSTR-1 JSON for the GST portal's Prepare Offline upload, and More has the Excel workbook for the Returns Offline Tool. You check it, then file it on the portal with your own OTP or DSC."
+  : form==="GSTR3B" ? "This is the GSTR-3B JSON in the official offline utility's layout, for the GST portal's Prepare Offline upload. You check it, then file it on the portal with your own OTP or DSC."
+  : "This is the official ITR JSON for upload on the income tax portal's offline filing. You check it, then file and verify it on the portal with your own OTP or DSC.";
 // A file still being saved is shown as preparing for two minutes after it was started.
 const recent=(at:string)=>Date.now()-Date.parse(at)<120_000;
 
@@ -136,7 +141,10 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     const {done,word,tone}=stages[stage],decides=head && stage==="waiting";
     const period=meta.form.startsWith("ITR") ? itrYear(file.period_key) : isTdsForm(meta.form) ? periodLabel("quarterly",file.period_key) : periodName(file.period_key),number=gstins.length>1 ? gstins.find(reg=>reg.id===meta.registration)?.number : undefined;
     const download=(primary:boolean)=><form action={`/app/files/${file.id}/filing`} method="post"><button className={`b ${primary ? "b-primary" : "b-secondary"}`} disabled={!active}>Download for filing</button></form>;
-    const arrived=confirmations?.some(item=>item.entity_id===file.id);
+    // An acknowledgement that arrived (a paper filed from mail, or the portal's email with its
+    // number read): one click marks the return filed with it, after a person checks it.
+    const arrival=confirmations?.find(item=>item.entity_id===file.id),arrived=!!arrival,{ack,paper}=(arrival?.details ?? {}) as {ack?:string;paper?:string};
+    const quick=(ack || paper) && active && membership.may("mark_filed",client) ? <form action={markFormFiled}><input type="hidden" name="document" value={file.id}/>{ack && <input type="hidden" name="ack" value={ack}/>}{paper && <input type="hidden" name="paper" value={paper}/>}<Pending className="b b-primary">Mark filed</Pending></form> : null;
     let primary:React.ReactNode=null,second:React.ReactNode=null,note:React.ReactNode=null;
     if(stage==="preparing") note=<span aria-live="polite">InboxCA is preparing this file. It shows here when it is ready.</span>;
     else if(stage==="stalled") note="This file was not finished. Prepare it again below.";
@@ -149,8 +157,8 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
       note=viewOnly || (!approver ? "Only the firm's owner, a partner or a manager can give the second approval." : "Check the file, then give the second approval.");
     }
     else if(stage==="approved") {
-      primary=download(true);
-      second=active && membership.may("mark_filed",client) ? <details className="rf-menu"><summary className="b b-secondary">Mark filed<ChevronDown size={14} aria-hidden/></summary><div className="rf-pop is-end"><form action={markFormFiled} className="rf-pop-form">
+      primary=quick ?? download(true);
+      second=active && membership.may("mark_filed",client) ? <details className="rf-menu"><summary className="b b-secondary">{quick ? "Other acknowledgement" : "Mark filed"}<ChevronDown size={14} aria-hidden/></summary><div className="rf-pop is-end"><form action={markFormFiled} className="rf-pop-form">
         <input type="hidden" name="document" value={file.id}/>
         <div><label htmlFor={`paper-${file.id}`}>Acknowledgement already in Documents</label><select id={`paper-${file.id}`} name="paper"><option value="">Choose, or add one below</option>{acknowledgements?.filter(paper=>paper.period_key===file.period_key).map(paper=><option key={paper.id} value={paper.id}>{paper.name}</option>)}</select></div>
         <div><label htmlFor={`ack-${file.id}`}>Acknowledgement number, if known</label><input id={`ack-${file.id}`} name="ack" maxLength={80}/></div>
@@ -158,7 +166,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
         <p className="hint">If you type only the number, InboxCA makes a short filing note from your firm for the client. It is not the portal acknowledgement. A private paper is sent only after someone approves it in the Inbox.</p>
         <Pending className="b b-primary">Mark filed</Pending>
       </form></div></details> : <button className="b b-secondary" disabled>Mark filed</button>;
-      note=viewOnly || (arrived ? "An acknowledgement arrived. Check it, then mark the return filed." : !membership.may("mark_filed",client) ? "Ask your firm's owner for permission to mark returns filed." : isTdsForm(meta.form) ? "Download it, validate it with Protean's FVU, file it, then mark it filed here." : "Download it, file it on the portal, then mark it filed here.");
+      note=viewOnly || (arrived ? `${ack ? `The portal's email gives acknowledgement number ${ack}` : "An acknowledgement arrived"}. Check it, then mark the return filed.` : !membership.may("mark_filed",client) ? "Ask your firm's owner for permission to mark returns filed." : isTdsForm(meta.form) ? "Download it, validate it with Protean's FVU, file it, then mark it filed here." : "Download it, file it on the portal, then mark it filed here.");
     }
     else if(stage==="filed") second=active && download(false);
     else if(stage==="rejected") {primary=head && <Link className="b b-primary" href={`?tab=extraction&draft=${meta.sources[0].id}`}>Correct the figures</Link>;note="Draft sent back. Correct the figures, then prepare it again.";}
@@ -194,6 +202,7 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
       <Steps done={done} busy={stage==="preparing" || stage==="making"}/>
       {note && <p className={`rf-note${stage==="preparing" || stage==="making" ? " is-busy" : ""}`}>{note}</p>}
       {isTdsForm(meta.form) && tdsChanged.get(meta.form) && <p className="rf-notice"><Info size={15} aria-hidden/>The official {tdsName(meta.form)} format changed on {dueLabel(tdsChanged.get(meta.form)!)}. Check before filing.</p>}
+      {active && ["approved","filed"].includes(stage) && !isTdsForm(meta.form) && <p className="rf-notice"><Info size={15} aria-hidden/>{fileUse(meta.form)}</p>}
       {isTdsForm(meta.form) && <p className="rf-notice"><Info size={15} aria-hidden/>Validate this file with Protean&apos;s free File Validation Utility (FVU) and the challan file (.csi) from the TIN website before filing.</p>}
       {meta.form==="GSTR1" && einvoiced(meta) && <p className="rf-notice"><Info size={15} aria-hidden/>Invoices and notes with an IRN are left out of the JSON, because the portal has them from e-invoices and uploading them again would wipe their IRN details.</p>}
       {meta.form==="GSTR1" && meta.template==="2.0" && <p className="rf-notice"><Info size={15} aria-hidden/>This older official workbook leaves out supplies through e-commerce operators (tables 14 and 15). Add them in the offline tool or on the portal before filing.</p>}

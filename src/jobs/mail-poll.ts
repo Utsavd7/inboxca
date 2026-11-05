@@ -4,7 +4,7 @@ import type { NewMail } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { askedAbout } from "@/src/lib/answers";
 import { classify, enquiry, statusLabels, type Label } from "@/src/lib/triage";
-import { officialKind, officialSender, taxNumbersIn, type OfficialWork } from "@/src/lib/gov-mail";
+import { filedReturn, officialKind, officialSender, taxNumbersIn, type OfficialWork } from "@/src/lib/gov-mail";
 import { todayInIndia } from "@/src/lib/calendar";
 import { sharedLinks } from "@/src/lib/share-link";
 import type { Handler } from "./runner";
@@ -68,15 +68,25 @@ export const mailPoll: Handler = async (job) => {
 
   await mailHealth(account.id,"read",false,account.credentials_enc);
   const today = todayInIndia();
-  // An official mail's client is the one whose PAN or GSTIN it names; several, or none, wait
+  // An official mail's client is the one whose PAN, GSTIN or TAN it names; several, or none, wait
   // for the team. Its label comes from its words, never from the triage rules for clients.
+  const filedForms = new Map<string, { document: string; ack: string }>();
   const official = async (mail: typeof read.mail[number], work: OfficialWork) => {
     const numbers = taxNumbersIn(`${mail.content.subject}\n${mail.content.text}`);
-    const indexes = await Promise.all([...numbers.gstins.map((n) => crypto.blindIndex(firm, "gstin", n)), ...numbers.pans.map((n) => crypto.blindIndex(firm, "pan", n))]);
-    const { data: found } = indexes.length ? await admin.from("client_registrations").select("client_id").eq("firm_id", firm).in("number_bidx", indexes) : { data: [] };
+    const indexes = await Promise.all([...numbers.gstins.map((n) => crypto.blindIndex(firm, "gstin", n)), ...numbers.pans.map((n) => crypto.blindIndex(firm, "pan", n)), ...numbers.tans.map((n) => crypto.blindIndex(firm, "tan", n))]);
+    const { data: found } = indexes.length ? await admin.from("client_registrations").select("id, client_id").eq("firm_id", firm).in("number_bidx", indexes) : { data: [] };
     const clients = [...new Set((found ?? []).map((row) => row.client_id))];
     const kind = officialKind(mail.content.subject, mail.content.text);
     const label: Label = kind === "notice" ? "notice_received" : kind === "other" ? "other" : work === "gst" ? "data_gst" : "data_income_tax";
+    // A filing acknowledgement for the client's one approved return of that form, number and
+    // period is offered on the return for a person to mark filed; it is never marked filed here.
+    const ack = kind === "acknowledgement" && clients.length === 1 ? filedReturn(work, mail.content.subject, mail.content.text) : null;
+    if (ack?.period) {
+      const { data: forms } = await admin.from("documents").select("id, prepared").eq("firm_id", firm).eq("client_id", clients[0]).eq("period_key", ack.period).neq("status", "deleted").eq("prepared->>status", "approved").in("prepared->>registration", (found ?? []).map((row) => row.id));
+      const fit = (forms ?? []).map((row) => ({ id: row.id, ...(row.prepared as { form: string; registration: string; version: number }) })).filter((row) => ack.form.test(row.form)).sort((a, b) => b.version - a.version);
+      const { data: ready } = fit.length && fit.every((row) => row.form === fit[0].form && row.registration === fit[0].registration) ? await admin.rpc("form_ready", { target: fit[0].id }) : { data: false };
+      if (ready) filedForms.set(mail.messageId, { document: fit[0].id, ack: ack.number });
+    }
     return { client_id: clients.length === 1 ? clients[0] : null, label, reason: `government_${kind === "other" ? "mail" : kind}` };
   };
   const events = await Promise.all(read.mail.map(async (mail) => {
@@ -129,6 +139,11 @@ export const mailPoll: Handler = async (job) => {
       const { data: waiting } = await admin.from("tasks").select("id, details").eq("firm_id", firm).eq("client_id", event.client_id!).eq("status", "filed").like("code", "ITR%").is("details->>verified_on", null);
       if (waiting?.length === 1) await admin.from("tasks").update({ details: { ...(waiting[0].details as Record<string, unknown>), verified_on: today, verified_by: "portal" } }).eq("id", waiting[0].id);
     }
+    const confirming = (saved ?? []).flatMap((event) => {
+      const form = filedForms.get(event.provider_message_id);
+      return form && event.client_id ? [{ firm_id: firm, client_id: event.client_id, kind: "form_confirmation", entity_type: "document", entity_id: form.document, reason_code: "matched_mail", details: { email: event.id, ...(form.ack && { ack: form.ack }) } }] : [];
+    });
+    if (confirming.length) await admin.from("requests").upsert(confirming, { onConflict: "kind,entity_type,entity_id", ignoreDuplicates: true });
     const queued = [...filing, ...asking, ...notices, ...status];
     if (queued.length) await admin.from("jobs").upsert(queued, { onConflict: "idempotency_key", ignoreDuplicates: true });
     // Unclear mail, a notice that asks something, or mail whose client is not known yet,
