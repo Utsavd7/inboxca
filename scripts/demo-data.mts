@@ -3,10 +3,10 @@
 // teams, branches, people, contacts and sorted client mail. Every name, number and email
 // here is made up. When the demo firm has a drive connected, invented client papers that look
 // like the real ones (scripts/demo-files.mts) are saved into its client folders there, as
-// InboxCA would file them from client mail. Run with `npm run demo:data` after `npm run demo`; running it again
+// InboxCA would file them from client mail; more papers come by email (npm run demo:mail). Run with `npm run demo:data` after `npm run demo`; running it again
 // replaces the demo firm's data with a fresh copy.
-import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 
 for (const line of readFileSync(".env.local", "utf8").split("\n")) {
   const at = line.indexOf("=");
@@ -19,29 +19,31 @@ const { describeFile, filePeriod } = await import("../src/lib/documents");
 const { fileName, folderPath } = await import("../src/lib/drive");
 const { openDrive } = await import("../src/lib/drive-account");
 const { demoFiles, gstin } = await import("./demo-files.mts");
+const { DEMO_PEOPLE, demoKeyName } = await import("../src/lib/dev-login");
 
 
 type Client = { name: string; kind: string; email?: string; pan: string; gst?: [string, string[]]; tan?: string[]; panServices?: string[]; llpin?: [string, string[]]; group?: string; branch?: string };
 const clients: Client[] = [
-  { name: "Mehta Traders", kind: "business", email: "accounts@mehtatraders.example", pan: "AAPFM1234K", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
-  { name: "Shah & Sons", kind: "business", email: "shahandsons@example.in", pan: "AAJFS2345L", gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
-  { name: "Patel Textiles Pvt Ltd", kind: "company", email: "finance@pateltextiles.example", pan: "AACCP3456M", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], group: "Patel group", branch: "Surat" },
-  { name: "Patel Exim LLP", kind: "llp", email: "exim@pateltextiles.example", pan: "AAKFP4567N", gst: ["24", ["GSTR1_M", "GSTR3B_M"]], llpin: ["AAB-1234", ["LLP11", "LLP8"]], group: "Patel group", branch: "Surat" },
-  { name: "Rajesh Desai", kind: "individual", email: "rajesh.desai@example.in", pan: "ABCPD5678P", panServices: ["ITR_NA", "ADV_TAX"], group: "Desai family", branch: "Ahmedabad" },
-  { name: "Meena Desai", kind: "individual", email: "meena.desai@example.in", pan: "ABCPD6789Q", panServices: ["ITR_NA"], group: "Desai family", branch: "Ahmedabad" },
-  { name: "Kapoor Enterprises", kind: "tax_audit", email: "kapoor.ent@example.in", pan: "AAGFK7890R", gst: ["27", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], panServices: ["TAX_AUDIT", "ITR_AUDIT"], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
-  { name: "Iyer Consultants", kind: "individual", email: "iyer.consult@example.in", pan: "ABDPI8901S", panServices: ["ITR_BIZ", "ADV_TAX"], gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
-  { name: "S.K. Builders", kind: "business", email: "skbuilders@example.in", pan: "AAHFS9012T", gst: ["24", ["GSTR1_M", "GSTR3B_M"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Surat" },
-  { name: "Trivedi Foods", kind: "business", email: "trivedi.foods@example.in", pan: "AAIFT0123U", gst: ["24", ["CMP08", "GSTR4"]], branch: "Surat" },
-  { name: "Bhatt Dental Clinic", kind: "individual", email: "dr.bhatt@example.in", pan: "ABEPB1234V", panServices: ["ITR_BIZ", "ADV_TAX"], branch: "Ahmedabad" },
-  { name: "Rao Exports Pvt Ltd", kind: "company", email: "accounts@raoexports.example", pan: "AADCR2345W", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
-  { name: "Nair Charitable Trust", kind: "trust", email: "trustee@nairtrust.example", pan: "AAATN3456X", panServices: ["ITR_NA"], branch: "Ahmedabad" },
+  { name: "Mehta Traders", kind: "business", email: "accounts@mehtatraders.example", pan: "ZZZFZ0101Z", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
+  { name: "Shah & Sons", kind: "business", email: "shahandsons@example.in", pan: "ZZZFZ0102Z", gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
+  { name: "Patel Textiles Pvt Ltd", kind: "company", email: "finance@pateltextiles.example", pan: "ZZZCZ0103Z", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], group: "Patel group", branch: "Surat" },
+  { name: "Patel Exim LLP", kind: "llp", email: "exim@pateltextiles.example", pan: "ZZZFZ0104Z", gst: ["24", ["GSTR1_M", "GSTR3B_M"]], llpin: ["AAB-1234", ["LLP11", "LLP8"]], group: "Patel group", branch: "Surat" },
+  { name: "Rajesh Desai", kind: "individual", email: "rajesh.desai@example.in", pan: "ZZZPZ0105Z", panServices: ["ITR_NA", "ADV_TAX"], group: "Desai family", branch: "Ahmedabad" },
+  { name: "Meena Desai", kind: "individual", email: "meena.desai@example.in", pan: "ZZZPZ0106Z", panServices: ["ITR_NA"], group: "Desai family", branch: "Ahmedabad" },
+  { name: "Kapoor Enterprises", kind: "tax_audit", email: "kapoor.ent@example.in", pan: "ZZZFZ0107Z", gst: ["27", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], panServices: ["TAX_AUDIT", "ITR_AUDIT"], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
+  { name: "Iyer Consultants", kind: "individual", email: "iyer.consult@example.in", pan: "ZZZPZ0108Z", panServices: ["ITR_BIZ", "ADV_TAX"], gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
+  { name: "S.K. Builders", kind: "business", email: "skbuilders@example.in", pan: "ZZZFZ0109Z", gst: ["24", ["GSTR1_M", "GSTR3B_M"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Surat" },
+  { name: "Trivedi Foods", kind: "business", email: "trivedi.foods@example.in", pan: "ZZZFZ0110Z", gst: ["24", ["CMP08", "GSTR4"]], branch: "Surat" },
+  { name: "Bhatt Dental Clinic", kind: "individual", email: "dr.bhatt@example.in", pan: "ZZZPZ0111Z", panServices: ["ITR_BIZ", "ADV_TAX"], branch: "Ahmedabad" },
+  { name: "Rao Exports Pvt Ltd", kind: "company", email: "accounts@raoexports.example", pan: "ZZZCZ0112Z", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
+  { name: "Nair Charitable Trust", kind: "trust", email: "trustee@nairtrust.example", pan: "ZZZTZ0113Z", panServices: ["ITR_NA"], branch: "Ahmedabad" },
 ];
 const people = [
-  ["priya.manager@demo.inboxca.test", "manager", "GST team"],
-  ["ravi.staff@demo.inboxca.test", "staff", "GST team"],
+  [DEMO_PEOPLE.partner, "partner", null],
+  [DEMO_PEOPLE.manager, "manager", "GST team"],
+  [DEMO_PEOPLE.staff, "staff", "GST team"],
   ["anita.staff@demo.inboxca.test", "staff", "Income tax team"],
-  ["kiran.frontdesk@demo.inboxca.test", "front_desk", null],
+  [DEMO_PEOPLE.front_desk, "front_desk", null],
 ] as const;
 
 const db = new pg.Client({ connectionString: process.env.TEST_DB_URL });
@@ -71,8 +73,11 @@ const groups = new Map<string, string>();
 for (const [kind, name] of [["team", "GST team"], ["team", "Income tax team"], ["branch", "Ahmedabad"], ["branch", "Surat"], ["client_group", "Patel group"], ["client_group", "Desai family"]])
   groups.set(name, await group(kind, name));
 
-// The firm's people: invented staff who can not sign in (they have no 2 step code).
+// The firm's people. One of each role signs in (src/lib/dev-login.ts) with their own 2 step key,
+// written to .env.local as DEMO_<ROLE>_TOTP and never printed (npm run demo:code <role> shows
+// the code); kept once made, so an authenticator app set up with it keeps working.
 const staff = new Map<string, string>();
+const newKeys: string[] = [];
 for (const [email, role, team] of people) {
   const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
   let user = data.users.find((u) => u.email === email);
@@ -81,7 +86,18 @@ for (const [email, role, team] of people) {
     firm, user.id, role, team ? groups.get(team) : null, groups.get("Ahmedabad"),
   ]);
   staff.set(email, user.id);
+  if (DEMO_PEOPLE[role] !== email) continue;
+  const name = demoKeyName(role);
+  const key = process.env[name] ?? Array.from(randomBytes(16), (byte) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[byte % 32]).join("");
+  if (!process.env[name]) newKeys.push(`${name}=${key}`);
+  if ((await db.query("select 1 from auth.mfa_factors where user_id = $1 and secret = $2 and status = 'verified'", [user.id, key])).rowCount) continue;
+  await db.query("delete from auth.mfa_factors where user_id = $1", [user.id]);
+  await db.query(
+    "insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, secret, created_at, updated_at) values (gen_random_uuid(), $1, 'Demo app', 'totp', 'verified', $2, now(), now())",
+    [user.id, key],
+  );
 }
+if (newKeys.length) writeFileSync(".env.local", readFileSync(".env.local", "utf8").replace(/\n?$/, "\n") + newKeys.join("\n") + "\n");
 
 const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 const ids = new Map<string, string>();
@@ -94,7 +110,7 @@ for (const client of clients) {
   );
   const numbers: [string, string, string[], string | null][] = [["pan", client.pan, client.panServices ?? [], null]];
   if (client.gst) numbers.push(["gstin", gstin(client.gst[0], client.pan), client.gst[1], client.gst[0]]);
-  if (client.tan) numbers.push(["tan", `AHMD${client.pan.slice(5, 9)}${client.pan[0] === "A" ? "1" : "2"}${client.pan[9]}`, client.tan, null]);
+  if (client.tan) numbers.push(["tan", `ZZZZ${client.pan.slice(5, 9)}1Z`, client.tan, null]);
   if (client.llpin) numbers.push(["llpin", client.llpin[0], client.llpin[1], null]);
   for (const [kind, number, services, state] of numbers) {
     const [{ id: registration }] = (
@@ -128,7 +144,13 @@ for (const reg of gstins)
 // Who does what for a few clients.
 const assign = (client: string, user: string | null, team: string | null, role: string) =>
   db.query("insert into public.client_assignments (firm_id, client_id, user_id, team_id, role) values ($1, $2, $3, $4, $5)", [firm, ids.get(client), user, team, role]);
-await assign("Mehta Traders", staff.get("priya.manager@demo.inboxca.test")!, null, "manager");
+await assign("Mehta Traders", staff.get(DEMO_PEOPLE.partner)!, null, "partner_in_charge");
+await assign("Patel Textiles Pvt Ltd", staff.get(DEMO_PEOPLE.partner)!, null, "partner_in_charge");
+await assign("Mehta Traders", staff.get(DEMO_PEOPLE.manager)!, null, "manager");
+await assign("S.K. Builders", staff.get(DEMO_PEOPLE.manager)!, null, "manager");
+await assign("Shah & Sons", staff.get(DEMO_PEOPLE.staff)!, null, "staff");
+await assign("S.K. Builders", staff.get(DEMO_PEOPLE.staff)!, null, "staff");
+await assign("Trivedi Foods", staff.get(DEMO_PEOPLE.staff)!, null, "staff");
 await assign("Mehta Traders", null, groups.get("GST team")!, "staff");
 await assign("Kapoor Enterprises", staff.get("anita.staff@demo.inboxca.test")!, null, "staff");
 await assign("Patel Textiles Pvt Ltd", null, groups.get("GST team")!, "staff");
@@ -187,7 +209,8 @@ await db.query(
 );
 
 const [driveAccount] = (await db.query("select id, provider, credentials_enc from public.connected_accounts where firm_id = $1 and kind = 'drive'", [firm])).rows;
-const files = demoFiles(lastMonth, today);
+// The papers that come by email are sent by npm run demo:mail, for InboxCA to file itself.
+const files = demoFiles(lastMonth, today).filter((file) => !file.mail);
 if (driveAccount) {
   const drive = await openDrive(firm, driveAccount);
   for (const { client, original, bytes } of files) {
@@ -195,13 +218,17 @@ if (driveAccount) {
     const about = describeFile(original, "", event.label, new Date().toISOString());
     const folder = await drive.ensureFolder([...folderPath("year_client_work", about.year, client, about.work), ...(about.sure ? [] : ["To check"])]);
     const name = fileName({ client, type: about.type, period: filePeriod(about.period), extension: original.split(".").pop()! });
-    // Already there from an earlier run: the same file, used again.
-    const saved = await drive.save(folder, name, bytes);
+    // Already there from an earlier run: that copy gives way to this run's, so the paper and its
+    // record agree (InboxCA reads a paper only when its bytes are the ones recorded).
+    let saved = await drive.save(folder, name, bytes);
+    if (saved === "taken") saved = await drive.trash(`${folder}/${name}`).then(() => drive.save(folder, name, bytes));
     const id = randomUUID();
     await db.query(
       "insert into public.documents (id, firm_id, client_id, work_type, document_type, period_key, status, email_event_id, drive_file_id, name, original_name_enc, size, sha256) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
       [id, firm, ids.get(client), about.work, about.type, about.period, about.sure ? "filed" : "to_check", event.id, saved === "taken" ? `${folder}/${name}` : saved.id, name, await crypto.encrypt(firm, `documents/${id}/original_name`, original), bytes.length, createHash("sha256").update(bytes).digest("hex")],
     );
+    // Read as InboxCA reads every paper it files (src/jobs/read-document.ts), so its figures show.
+    await db.query("insert into public.jobs (firm_id, kind, entity_type, entity_id, idempotency_key) values ($1, 'read_document', 'document', $2, $3)", [firm, id, `read_document:${id}`]);
   }
 }
 await db.end();

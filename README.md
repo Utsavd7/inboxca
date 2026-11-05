@@ -21,6 +21,48 @@ Supporting services are kept outside the overview so the main path stays readabl
 
 Cloud accounts, provider registrations and production configuration remain prerequisites. The diagram does not mean those services have been deployed.
 
+## See the app on your laptop
+
+The real app with an invented firm, Demo CA Firm, for anyone who wants to look around or check a change. Every firm, person, client, paper and email in it is made up.
+
+You need Node 22 or newer, Docker (on a Mac, `brew install colima docker`) and `npm ci` once; the Supabase command line comes with it. Then:
+
+```sh
+npm run preview              # PORT=3400 npm run preview for another port
+```
+
+It starts Docker, the local Supabase and the test mail server when they are stopped, writes the local lines into `.env.local` when they are missing (other lines stay as they are), applies new database changes, makes or refreshes the demo firm, builds when the code changed (`--no-build` uses the last build), starts the app with its file worker and jobs runner on http://127.0.0.1:3300 and opens the sign in page.
+
+Sign in the real way, with two codes:
+
+| Role | Email |
+| --- | --- |
+| Owner | demo-owner@inboxca.test |
+| Partner | nikhil.partner@demo.inboxca.test |
+| Manager | priya.manager@demo.inboxca.test |
+| Staff | ravi.staff@demo.inboxca.test |
+| Front desk | kiran.frontdesk@demo.inboxca.test |
+
+1. The email code lands in the local mail viewer, http://127.0.0.1:54324. Nothing leaves the laptop.
+2. The 2 step code: `npm run demo:code` for the owner, `npm run demo:code staff` (or `partner`, `manager`, `front-desk`) for the others. Each key is in `.env.local` as `DEMO_<ROLE>_TOTP`; it is never printed, and you can add it to an authenticator app instead.
+
+Or click a person in the bar at the foot of the page, "Developer preview, demo firm only", which does both steps for you. It is for developers only and works only when all six hold, checked on every request; otherwise it is not found:
+
+1. `npm run preview` set `DEV_LOGIN=1` for the server it started (never in a file).
+2. It is not a production server, or, as `next start` always says production, check 3 holds.
+3. The app uses the local Supabase on this laptop (127.0.0.1 or localhost).
+4. The person is one of the five demo people above, in Demo CA Firm.
+5. The page was asked for at this laptop's own address (localhost, 127.0.0.1 or [::1]); the app listens only there.
+6. Nobody else: no other address, not even a real account on this laptop.
+
+The demo clients send their papers to the firm's mailbox on the test mail server (GreenMail): sales and purchase bills, GST registers, a bank statement, Form 16, Form 26AS, AIS, TIS, TDS and salary registers and challans, all marked as samples. To see them read and filed, sign in as the owner and connect "Test drive on this computer" in Settings. Other emails the app sends go to GreenMail too. If there is no `greenmail` container yet, make it once:
+
+```sh
+docker run -d --name greenmail -p 3025:3025 -p 3143:3143 -e GREENMAIL_OPTS="-Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=office:secret@firm.test -Dgreenmail.users.login=email" greenmail/standalone:2.1.2
+```
+
+Ctrl C stops the app, its file worker and jobs runner. Docker keeps running; stop it with `npx supabase stop`, then `colima stop`. Running `npm run preview` again gives the demo firm a fresh copy of its data.
+
 ## The product, locally
 
 Local Supabase runs on Docker (on this Mac, through Colima):
