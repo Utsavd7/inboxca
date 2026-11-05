@@ -34,16 +34,18 @@ export const weekScenes = [
 ] as const;
 
 // The forms and papers the code handles today (worker/gstr1.ts, worker/gstr3b.ts,
-// src/lib/itr-fields.ts, src/lib/tax-papers.ts, app/(app)/app/notices), for the moving strip
+// src/lib/itr-fields.ts, src/lib/tds.ts, src/lib/tax-papers.ts, app/(app)/app/notices), for the moving strip
 // under the hero: [form, what InboxCA does]. Nothing planned is listed.
 // The due dates are the calendar's own list (supabase/migrations/20261017100000_calendar.sql).
 export const forms = [
   ...["GSTR-1", "GSTR-3B"].map((form) => [form, "Prepared"] as const),
   ["GSTR-2B", "Matched"],
   ...["ITR-1", "ITR-2", "ITR-3", "ITR-4"].map((form) => [form, "Prepared"] as const),
+  // TDS and TCS statements (src/lib/tds.ts): Form No. 138 only to December until Protean publishes its Q4 format.
+  ...["Form No. 140", "Form No. 138, Apr to Dec", "Form No. 144", "Form No. 143"].map((form) => [form, "Prepared"] as const),
   ...["Form No. 130", "Form 16", "Form No. 168", "Form 26AS", "AIS", "TIS"].map((form) => [form, "Read"] as const),
   ["Notices", "Tracked"],
-  ...["GSTR-9", "GSTR-4", "CMP-08", "TDS 24Q and 26Q", "Advance tax", "Tax audit report", "DIR-3 KYC", "LLP Form 8", "LLP Form 11"].map(
+  ...["GSTR-9", "GSTR-4", "CMP-08", "Advance tax", "Tax audit report", "DIR-3 KYC", "LLP Form 8", "LLP Form 11"].map(
     (form) => [form, "Due date kept"] as const,
   ),
 ] as const;

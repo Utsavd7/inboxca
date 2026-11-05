@@ -205,6 +205,17 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
       f(3, ["Clients", "Anita Rao", "ITR-1"], <Track items={itrSteps} done={3} />, <Line><Btn press>Download for filing</Btn></Line>, <Note>Your team files it on the income tax portal, then marks it filed here.</Note>),
     ],
   },
+  tds: {
+    icon: FileText,
+    still: 3,
+    frames: [
+      f(0, ["Clients", "Patel Textiles", "TDS statement details"], <Field label="Deductor's name as on the TAN" value="Patel Textiles" />, <Field label="Person responsible" value="Ramesh Patel" />, <Line><Btn press>Save details</Btn></Line>),
+      f(1, ["Documents", "Documents"], <Rows rows={[[num("TDS register Jul to Sep 2026.xlsx"), "Email from Patel Textiles", <Chip key="c" tone="done">Saved</Chip>], [num("Challan ITNS 281.pdf"), "Email from Patel Textiles", <Chip key="c" tone="done">Saved</Chip>]]} />, <Note>Filed under TDS, Jul to Sep 2026.</Note>),
+      f(2, ["Clients", "Patel Textiles", "TDS statement"], <Figures rows={[["Payments read", "TDS register, sheet 1", "42"], ["Tax deducted", "TDS register, sheet 1", "₹1,84,300"], ["Challans", "Added by Ravi Kumar", "3"]]} />, <Note>Columns are matched once and remembered.</Note>),
+      f(3, ["Clients", "Patel Textiles", "TDS statement"], <Figures checked rows={[["Payments read", "TDS register, sheet 1", "42"], ["Tax deducted", "TDS register, sheet 1", "₹1,84,300"], ["Challans", "Added by Ravi Kumar", "3"]]} />, <Line><Btn press>Yes, these figures are right</Btn></Line>),
+      f(4, ["Clients", "Patel Textiles", "TDS statement"], <Line><Btn press>Prepare the statement file</Btn></Line>, <Note>Validate it with Protean&apos;s File Validation Utility, file it, then mark it filed here.</Note>),
+    ],
+  },
   notices: {
     icon: Scale,
     still: 1,
