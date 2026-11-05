@@ -3,7 +3,7 @@
 // teams, branches, people, contacts and sorted client mail. Every name, number and email
 // here is made up. When the demo firm has a drive connected, invented client papers that look
 // like the real ones (scripts/demo-files.mts) are saved into its client folders there, as
-// InboxCA would file them from client mail. Run with `npm run demo:data` after `npm run demo`; running it again
+// InboxCA would file them from client mail; more papers come by email (npm run demo:mail). Run with `npm run demo:data` after `npm run demo`; running it again
 // replaces the demo firm's data with a fresh copy.
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -23,19 +23,19 @@ const { demoFiles, gstin } = await import("./demo-files.mts");
 
 type Client = { name: string; kind: string; email?: string; pan: string; gst?: [string, string[]]; tan?: string[]; panServices?: string[]; llpin?: [string, string[]]; group?: string; branch?: string };
 const clients: Client[] = [
-  { name: "Mehta Traders", kind: "business", email: "accounts@mehtatraders.example", pan: "AAPFM1234K", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
-  { name: "Shah & Sons", kind: "business", email: "shahandsons@example.in", pan: "AAJFS2345L", gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
-  { name: "Patel Textiles Pvt Ltd", kind: "company", email: "finance@pateltextiles.example", pan: "AACCP3456M", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], group: "Patel group", branch: "Surat" },
-  { name: "Patel Exim LLP", kind: "llp", email: "exim@pateltextiles.example", pan: "AAKFP4567N", gst: ["24", ["GSTR1_M", "GSTR3B_M"]], llpin: ["AAB-1234", ["LLP11", "LLP8"]], group: "Patel group", branch: "Surat" },
-  { name: "Rajesh Desai", kind: "individual", email: "rajesh.desai@example.in", pan: "ABCPD5678P", panServices: ["ITR_NA", "ADV_TAX"], group: "Desai family", branch: "Ahmedabad" },
-  { name: "Meena Desai", kind: "individual", email: "meena.desai@example.in", pan: "ABCPD6789Q", panServices: ["ITR_NA"], group: "Desai family", branch: "Ahmedabad" },
-  { name: "Kapoor Enterprises", kind: "tax_audit", email: "kapoor.ent@example.in", pan: "AAGFK7890R", gst: ["27", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], panServices: ["TAX_AUDIT", "ITR_AUDIT"], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
-  { name: "Iyer Consultants", kind: "individual", email: "iyer.consult@example.in", pan: "ABDPI8901S", panServices: ["ITR_BIZ", "ADV_TAX"], gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
-  { name: "S.K. Builders", kind: "business", email: "skbuilders@example.in", pan: "AAHFS9012T", gst: ["24", ["GSTR1_M", "GSTR3B_M"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Surat" },
-  { name: "Trivedi Foods", kind: "business", email: "trivedi.foods@example.in", pan: "AAIFT0123U", gst: ["24", ["CMP08", "GSTR4"]], branch: "Surat" },
-  { name: "Bhatt Dental Clinic", kind: "individual", email: "dr.bhatt@example.in", pan: "ABEPB1234V", panServices: ["ITR_BIZ", "ADV_TAX"], branch: "Ahmedabad" },
-  { name: "Rao Exports Pvt Ltd", kind: "company", email: "accounts@raoexports.example", pan: "AADCR2345W", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
-  { name: "Nair Charitable Trust", kind: "trust", email: "trustee@nairtrust.example", pan: "AAATN3456X", panServices: ["ITR_NA"], branch: "Ahmedabad" },
+  { name: "Mehta Traders", kind: "business", email: "accounts@mehtatraders.example", pan: "ZZZFZ0101Z", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
+  { name: "Shah & Sons", kind: "business", email: "shahandsons@example.in", pan: "ZZZFZ0102Z", gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
+  { name: "Patel Textiles Pvt Ltd", kind: "company", email: "finance@pateltextiles.example", pan: "ZZZCZ0103Z", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], group: "Patel group", branch: "Surat" },
+  { name: "Patel Exim LLP", kind: "llp", email: "exim@pateltextiles.example", pan: "ZZZFZ0104Z", gst: ["24", ["GSTR1_M", "GSTR3B_M"]], llpin: ["AAB-1234", ["LLP11", "LLP8"]], group: "Patel group", branch: "Surat" },
+  { name: "Rajesh Desai", kind: "individual", email: "rajesh.desai@example.in", pan: "ZZZPZ0105Z", panServices: ["ITR_NA", "ADV_TAX"], group: "Desai family", branch: "Ahmedabad" },
+  { name: "Meena Desai", kind: "individual", email: "meena.desai@example.in", pan: "ZZZPZ0106Z", panServices: ["ITR_NA"], group: "Desai family", branch: "Ahmedabad" },
+  { name: "Kapoor Enterprises", kind: "tax_audit", email: "kapoor.ent@example.in", pan: "ZZZFZ0107Z", gst: ["27", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], panServices: ["TAX_AUDIT", "ITR_AUDIT"], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
+  { name: "Iyer Consultants", kind: "individual", email: "iyer.consult@example.in", pan: "ZZZPZ0108Z", panServices: ["ITR_BIZ", "ADV_TAX"], gst: ["24", ["GSTR1_Q", "GSTR3B_Q", "PMT06"]], branch: "Ahmedabad" },
+  { name: "S.K. Builders", kind: "business", email: "skbuilders@example.in", pan: "ZZZFZ0109Z", gst: ["24", ["GSTR1_M", "GSTR3B_M"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Surat" },
+  { name: "Trivedi Foods", kind: "business", email: "trivedi.foods@example.in", pan: "ZZZFZ0110Z", gst: ["24", ["CMP08", "GSTR4"]], branch: "Surat" },
+  { name: "Bhatt Dental Clinic", kind: "individual", email: "dr.bhatt@example.in", pan: "ZZZPZ0111Z", panServices: ["ITR_BIZ", "ADV_TAX"], branch: "Ahmedabad" },
+  { name: "Rao Exports Pvt Ltd", kind: "company", email: "accounts@raoexports.example", pan: "ZZZCZ0112Z", gst: ["24", ["GSTR1_M", "GSTR3B_M", "GSTR9"]], tan: ["TDS_PAY", "TDS_RET"], branch: "Ahmedabad" },
+  { name: "Nair Charitable Trust", kind: "trust", email: "trustee@nairtrust.example", pan: "ZZZTZ0113Z", panServices: ["ITR_NA"], branch: "Ahmedabad" },
 ];
 const people = [
   ["priya.manager@demo.inboxca.test", "manager", "GST team"],
@@ -94,7 +94,7 @@ for (const client of clients) {
   );
   const numbers: [string, string, string[], string | null][] = [["pan", client.pan, client.panServices ?? [], null]];
   if (client.gst) numbers.push(["gstin", gstin(client.gst[0], client.pan), client.gst[1], client.gst[0]]);
-  if (client.tan) numbers.push(["tan", `AHMD${client.pan.slice(5, 9)}${client.pan[0] === "A" ? "1" : "2"}${client.pan[9]}`, client.tan, null]);
+  if (client.tan) numbers.push(["tan", `ZZZZ${client.pan.slice(5, 9)}1Z`, client.tan, null]);
   if (client.llpin) numbers.push(["llpin", client.llpin[0], client.llpin[1], null]);
   for (const [kind, number, services, state] of numbers) {
     const [{ id: registration }] = (
@@ -187,7 +187,8 @@ await db.query(
 );
 
 const [driveAccount] = (await db.query("select id, provider, credentials_enc from public.connected_accounts where firm_id = $1 and kind = 'drive'", [firm])).rows;
-const files = demoFiles(lastMonth, today);
+// The papers that come by email are sent by npm run demo:mail, for InboxCA to file itself.
+const files = demoFiles(lastMonth, today).filter((file) => !file.mail);
 if (driveAccount) {
   const drive = await openDrive(firm, driveAccount);
   for (const { client, original, bytes } of files) {

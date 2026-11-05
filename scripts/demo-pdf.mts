@@ -1,12 +1,14 @@
 // A small A4 PDF writer for the demo firm's invented papers: text in the standard Helvetica
-// fonts (so InboxCA can read it back), lines and shaded boxes. Every page carries a tiny
-// "Demo" mark; government papers also carry a light "SAMPLE" across the page, and no
-// emblem, seal or signature is ever drawn.
+// fonts (so InboxCA can read it back), lines and shaded boxes. Every page carries a small
+// footer saying it is a sample with invented data; government papers also carry a light
+// "SAMPLE" across the page, and no emblem, seal or signature is ever drawn.
 
 // Helvetica's character widths (Adobe's standard metrics), space to tilde, per 1000 units.
 const widths = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
 export const textWidth = (text: string, size: number, bold = false) =>
   [...text].reduce((sum, char) => sum + (widths[char.charCodeAt(0) - 32] ?? 556), 0) * size * (bold ? 1.06 : 1) / 1000;
+
+export const SAMPLE = "Sample paper for the InboxCA demo. Every name, number and amount on it is invented.";
 
 type Style = { size?: number; bold?: boolean; align?: "left" | "right" | "center"; gray?: number };
 const clean = (text: string) => text.replace(/[^\x20-\x7e]/g, "-").replace(/[()\\]/g, "\\$&");
@@ -36,7 +38,7 @@ export class Paper {
     const streams = this.pages.map((ops) => [
       ...(this.sample ? [`0.9 g BT /F2 96 Tf 0.819 0.574 -0.574 0.819 150 260 Tm (SAMPLE) Tj ET 0 g`] : []),
       ...ops,
-      `0.6 g BT /F1 5 Tf 548 14 Td (Demo) Tj ET 0 g`,
+      `0.55 g BT /F1 6 Tf 40 16 Td (${clean(SAMPLE)}) Tj ET 0 g`,
     ].join("\n"));
     const objects = [
       "<< /Type /Catalog /Pages 2 0 R >>",
