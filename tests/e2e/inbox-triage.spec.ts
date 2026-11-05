@@ -1,14 +1,17 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { loadEnvConfig } from "@next/env";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { TEST_DRIVE } from "../../playwright.config";
+import { serverCrypto } from "@/src/lib/crypto";
 import { appKey, connectTestMailbox, localSupabase, mailTexts, makeMailbox, pollFirmMail, query, runJobs, seedFirm, signIn, testSmtp as smtp } from "./local-supabase";
 
 // Inbox steps the other specs leave out: mail from a contact who writes for two clients waits
 // until someone says which client, and its attachment is then filed in that client's folder;
 // a snoozed email is brought back to Needs reply at once; a tax portal's mail is matched by
-// PAN, filed, and closes the e-verification, while a forged one is skipped. The mail arrives in the firm's
+// PAN, filed, and closes the e-verification, while a forged one is skipped; a portal's filing
+// acknowledgement offers the matching approved return to mark filed with its number. The mail arrives in the firm's
 // mailbox on the local GreenMail server. Skipped when local Supabase is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
@@ -144,4 +147,26 @@ test("a tax portal's mail that passed SPF or DKIM is matched by its PAN, filed, 
   expect(await query(local.dbUrl, "select document_type, status from public.documents where client_id = $1", [client])).toEqual([{ document_type: "ITR-V", status: "filed" }]);
   await owner.goto(`/app/clients/${client}?tab=returns&show=filed`);
   await expect(filedRow()).toContainText("E-verified");
+});
+
+test("a portal's acknowledgement email offers the client's approved statement with its token number, filed only on a person's click", async () => {
+  // An approved Form No. 140 for the client's TAN, July to September 2026. Invented TAN.
+  const tan = `${[...tag.slice(0, 4)].map((c) => "ABCDEFGHIJKLMNOP"[parseInt(c, 16)]).join("")}${String(parseInt(tag.slice(4, 8), 16) % 100000).padStart(5, "0")}Z`;
+  loadEnvConfig(process.cwd());
+  const [client, registration, draft] = [ids[0], randomUUID(), randomUUID()], crypto = serverCrypto();
+  await query(local.dbUrl, "insert into public.client_registrations (id, firm_id, client_id, kind, number_enc, number_bidx) values ($1, $2, $3, 'tan', $4, $5)", [registration, firm.firmId, client, await crypto.encrypt(firm.firmId, `clients/${client}/tan`, tan), await crypto.blindIndex(firm.firmId, "tan", tan)]);
+  await query(local.dbUrl, "insert into public.datasets (id, firm_id, client_id, form_code, period_key, data) values ($1, $2, $3, 'TDS140', '2026-09', $4)", [draft, firm.firmId, client, { registration, lines: [{ id: randomUUID(), field: "tds.total", value_enc: "invented encrypted figure", state: "confirmed", source: { entered_by: firm.ownerId, entered_at: new Date().toISOString() }, by: firm.ownerId, at: new Date().toISOString() }], checks: [] }]);
+  const [{ id: form }] = await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, period_key, name, size, sha256, drive_file_id, prepared) values ($1, $2, 'tds', 'Prepared return', '2026-09', $3, 1, repeat('a', 64), 'invented-statement', $4) returning id", [firm.firmId, client, `${names[0]} - Form No. 140 - Jul to Sep 2026 - v1.txt`, { form: "TDS140", registration, version: 1, template: "9.1", sources: [{ id: draft, revision: 1 }], status: "approved" }]);
+  const token = Array.from({ length: 15 }, () => randomInt(10)).join("");
+  const auth = "mx.google.com; dkim=pass header.i=@incometax.gov.in header.s=sel; spf=pass smtp.mailfrom=donotreply@incometax.gov.in";
+  await smtp.sendMail({ from: "donotreply@incometax.gov.in", to: office, subject: `Acknowledgement of TDS statement ${tag}`, text: `TAN ${tan}\nQuarter: Q2 2026-27\nToken number: ${token}\nUploaded on 12/11/2026`, headers: { "Authentication-Results": auth } });
+  await readMail();
+  // Offered with its number, never filed by the mail itself.
+  expect(await query(local.dbUrl, "select details->>'ack' as ack from public.requests where kind = 'form_confirmation' and entity_id = $1", [form])).toEqual([{ ack: token }]);
+  expect((await query(local.dbUrl, "select prepared->>'status' as status from public.documents where id = $1", [form]))[0].status).toBe("approved");
+  await owner.goto(`/app/clients/${client}?tab=outputs`);
+  const card = owner.locator("li.rf-card").filter({ hasText: "Form No. 140" });
+  await expect(card).toContainText(`acknowledgement number ${token}`);
+  await card.getByRole("button", { name: "Mark filed", exact: true }).click();
+  await expect.poll(async () => (await query(local.dbUrl, "select prepared->>'status' as status, prepared->>'ack' as ack from public.documents where id = $1", [form]))[0]).toEqual({ status: "filed", ack: token });
 });
