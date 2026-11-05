@@ -17,7 +17,7 @@ import { StickyStart } from "@/components/site/sticky-start";
 
 export const metadata: Metadata = {
   title: "InboxCA | Every client email, read, filed and answered",
-  description: `${siteDescription} Files stay in the firm's own drive, and the team approves every form.`,
+  description: `${siteDescription} It prepares GST returns, ITRs and TDS and TCS statements. Files stay in the firm's own drive, and the team approves every form.`,
 };
 
 // Five facts a CA asks about first, each leading to its section of the security policy.

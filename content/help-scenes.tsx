@@ -5,7 +5,7 @@
 // visitor asks for less motion (the last one when not given).
 import { createElement, Fragment, type ReactNode } from "react";
 import {
-  CalendarDays, FileSpreadsheet, FileText, HardDrive, IndianRupee, KeyRound, ListChecks, Mail as MailIcon, MessageSquareWarning, Monitor, Paperclip,
+  CalendarDays, FileSpreadsheet, FileText, FolderInput, HardDrive, IndianRupee, KeyRound, ListChecks, Mail as MailIcon, MessageSquareWarning, Monitor, Paperclip,
   Receipt, Reply, RotateCcw, Scale, Send, ShieldCheck, UserPlus, Users, type LucideIcon,
 } from "lucide-react";
 import type { Frame, Screen } from "@/components/site/help-show";
@@ -179,7 +179,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     icon: CalendarDays,
     still: 1,
     frames: [
-      f(0, ["Clients", "Patel Textiles", "Services"], <Ticks items={[["GSTR-1 (monthly)", true], ["GSTR-3B (monthly)", true], ["ITR (non-audit)", true], ["TDS returns 24Q/26Q", false]]} />, <Line><Btn press>Save services</Btn></Line>),
+      f(0, ["Clients", "Patel Textiles", "Services"], <Ticks items={[["GSTR-1 (monthly)", true], ["GSTR-3B (monthly)", true], ["ITR (no business, no audit)", true], ["TDS returns 138/140/144 (24Q/26Q/27Q)", false]]} />, <Line><Btn press>Save services</Btn></Line>),
       f(1, ["Calendar", "Calendar"], <Choice items={["List", "Month"]} pick={0} row />, <Rows rows={[["Mehta Traders", "GSTR-3B, Sep 2026", <Chip key="c" tone="late">Late</Chip>], ["Patel Textiles", "GSTR-1, Sep 2026", <Chip key="c">Due in 7 days</Chip>], ["Iyer Foods", "TDS return", <Chip key="c">Due in 30 days</Chip>], ["Anita Rao", "ITR", <Chip key="c" tone="done">Filed</Chip>]]} />),
       f(3, ["Today", "Your list"], <Rows rows={[["Mehta Traders", "GSTR-3B, Sep 2026", <Btn key="b" press>Mark filed</Btn>]]} />, <Line><Chip tone="done" cue>Filed</Chip><Btn quiet>Undo</Btn></Line>),
       f(6, ["Clients", "Mehta Traders"], <Line><Btn press>Remind client</Btn></Line>, <Mail from="Sharma and Co" line={`${firm}, to Mehta Traders`} subject="Your returns and papers" body="Your GSTR-3B for Sep 2026 is late. We still need your bank statement for September." />),
@@ -209,11 +209,11 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     icon: FileText,
     still: 3,
     frames: [
-      f(0, ["Clients", "Patel Textiles", "TDS statement details"], <Field label="Deductor's name as on the TAN" value="Patel Textiles" />, <Field label="Person responsible" value="Ramesh Patel" />, <Line><Btn press>Save details</Btn></Line>),
+      f(0, ["Clients", "Patel Textiles", "TDS statement details"], <Field label="Name as on the TAN" value="Patel Textiles" />, <Field label="Person responsible for deduction" value="Ramesh Patel" />, <Line><Btn press>Save statement details</Btn></Line>),
       f(1, ["Documents", "Documents"], <Rows rows={[[num("TDS register Jul to Sep 2026.xlsx"), "Email from Patel Textiles", <Chip key="c" tone="done">Saved</Chip>], [num("Challan ITNS 281.pdf"), "Email from Patel Textiles", <Chip key="c" tone="done">Saved</Chip>]]} />, <Note>Filed under TDS, Jul to Sep 2026.</Note>),
       f(2, ["Clients", "Patel Textiles", "TDS statement"], <Figures rows={[["Payments read", "TDS register, sheet 1", "42"], ["Tax deducted", "TDS register, sheet 1", "₹1,84,300"], ["Challans", "Added by Ravi Kumar", "3"]]} />, <Note>Columns are matched once and remembered.</Note>),
       f(3, ["Clients", "Patel Textiles", "TDS statement"], <Figures checked rows={[["Payments read", "TDS register, sheet 1", "42"], ["Tax deducted", "TDS register, sheet 1", "₹1,84,300"], ["Challans", "Added by Ravi Kumar", "3"]]} />, <Line><Btn press>Yes, these figures are right</Btn></Line>),
-      f(4, ["Clients", "Patel Textiles", "TDS statement"], <Line><Btn press>Prepare the statement file</Btn></Line>, <Note>Validate it with Protean&apos;s File Validation Utility, file it, then mark it filed here.</Note>),
+      f(4, ["Clients", "Patel Textiles", "TDS statement"], <Title>Prepare the statement file</Title>, <Line><Btn press>Prepare Form No. 140</Btn></Line>, <Note>Validate it with Protean&apos;s File Validation Utility, file it, then mark it filed here.</Note>),
     ],
   },
   notices: {
@@ -276,6 +276,17 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
       f(5, settings("Billing"), <Rows rows={[["One more person in your team", "Paid first, then added", <b key="p">{rupees(extraPerson)} a month</b>], [`One more AI block of ${aiBlock.credits.toLocaleString("en-IN")} credits every month`, "Paid first, then added", <b key="p">{rupees(aiBlock.price)} a month</b>]]} />, <Note>No GST is charged: Orelu is not GST registered yet.</Note>),
       f(7, settings("Billing"), <Meter label="Returns due so far" part={0.8} note="You hear about it at 80%." />),
       f(9, settings("Billing"), <Choice label="How to pay" items={["UPI AutoPay", "Card AutoPay", "Bank mandate (eNACH)"]} pick={0} row />, <Chips items={[["Your bank confirmed AutoPay", "done"]]} />),
+    ],
+  },
+  "setup-fee": {
+    icon: FolderInput,
+    still: 4,
+    frames: [
+      f(0, [null, "Plan and payment"], <Rows rows={[["Growth, monthly", "No GST charged", <b key="p">{rupees(growth.monthly)}</b>], ["One time setup of InboxCA for your firm", null, <b key="s">{rupees(growth.setup)}</b>]]} />, <Line><Btn press>Pay and start</Btn></Line>),
+      f(1, settings("Email and drive"), <Card title="Firm drive"><Line><Chip tone="done">Connected</Chip><strong>OneDrive</strong></Line></Card>, <Note>Old papers already in your drive? Add old files moves them into their client folders.</Note>, <Line><Btn press>Add old files</Btn></Line>),
+      f(2, [null, "Add old files"], <Choice label="Which files" items={["Final papers only (recommended)", "One year in full", "Everything in these folders"]} pick={0} />, <Ticks items={[["Old clients/Patel Textiles", true], ["Old clients/Iyer Foods", true]]} />, <Line><Btn press>Show what would move</Btn></Line>),
+      f(3, [null, "Add old files"], <Rows rows={[["GSTR3B Mar25.pdf", "Patel Textiles"], ["ITR ack 2025.pdf", "Iyer Foods"]]} />, <Note>Nothing moves until you choose to move the files.</Note>),
+      f(4, [null, "Add old files"], <Rename from="GSTR3B Mar25.pdf" to="Patel Textiles - GSTR-3B - Mar 2025.pdf" />, <Tree path={["Your OneDrive", "InboxCA", "FY 2024-25", "Patel Textiles", "GST"]} />, <Line><Btn press>Move these files</Btn></Line>),
     ],
   },
   "money-back": {

@@ -2,7 +2,7 @@
 
 // Three sample days on the Today screen, shown under the demo: [when, title, rows as
 // [what, state, done]]. Invented firms and figures; every state is one the product shows
-// (work-data.ts, src/jobs/reminders.ts, worker/gstr3b.ts, src/lib/itr-fields.ts, notices).
+// (work-data.ts, src/jobs/reminders.ts, worker/gstr3b.ts, src/lib/itr-fields.ts, src/lib/tds.ts, notices).
 export const weekScenes = [
   [
     "17 Oct 2026",
@@ -10,7 +10,7 @@ export const weekScenes = [
     [
       ["12 GSTR-3B drafts for September, filled from GSTR-1 tables and GSTR-2B", "Ready to check", false],
       ["Purchase bills matched with GSTR-2B for 9 clients", "Matched", true],
-      ["3 clients still owe a bank statement, each reminded once this morning", "Waiting", false],
+      ["5 Form No. 140 statements for Jul to Sep, made from the clients' TDS registers", "Ready to check", false],
     ],
   ],
   [
@@ -105,7 +105,7 @@ export const worksWith = [
 export const questions = [
   [
     "Does InboxCA file returns?",
-    "No. It prepares the form. Your team checks every figure and files with its own OTP or digital signature.",
+    "No. It prepares GSTR-1, GSTR-3B, ITR-1 to ITR-4 and TDS and TCS statements. Your team checks every figure, validates TDS and TCS files with Protean's free utility, and files with its own OTP or digital signature.",
   ],
   [
     "How do client papers reach it?",
@@ -121,11 +121,11 @@ export const questions = [
   ],
   [
     "Is there a free trial?",
-    "No. Instead, cancel within 14 days of your first payment and the whole payment comes back, apart from the setup fee once your old files are being brought in. Once for each firm.",
+    "No. Instead, cancel within 14 days of your first payment and the whole payment comes back, apart from the setup fee once your old files are being brought in, and AI top up credits already used. Once for each firm.",
   ],
   [
     "What happens if I cancel?",
-    "Your plan runs to the end of the period you paid for. Then your firm can only view for 30 days, then it closes, and the owner has 30 more days to download your records as one ZIP. Your files are already in your own drive.",
+    "Your plan runs to the end of the period you paid for. A week later your firm can only view, after day 30 it closes, and the owner has 30 more days to download your records as one ZIP. Your files are already in your own drive.",
   ],
 ] as const;
 
