@@ -46,7 +46,7 @@ Sign in the real way, with two codes:
 1. The email code lands in the local mail viewer, http://127.0.0.1:54324. Nothing leaves the laptop.
 2. The 2 step code: `npm run demo:code` for the owner, `npm run demo:code staff` (or `partner`, `manager`, `front-desk`) for the others. Each key is in `.env.local` as `DEMO_<ROLE>_TOTP`; it is never printed, and you can add it to an authenticator app instead.
 
-Or click a person in the bar at the foot of the page, "Developer preview, demo firm only", which does both steps for you. It is for developers only and works only when all six hold, checked on every request; otherwise it is not found:
+Or click the small DEV chip at the bottom of the page, beside the shortcuts hint, and choose a person: it does both steps for you, and the chip shows who you are signed in as. It is for developers only and works only when all six hold, checked on every request; otherwise it is not found:
 
 1. `npm run preview` set `DEV_LOGIN=1` for the server it started (never in a file).
 2. It is not a production server, or, as `next start` always says production, check 3 holds.
@@ -116,8 +116,9 @@ Next.js App Router, strict TypeScript, Tailwind CSS, shadcn's Base UI dialog, Lu
 | `content/` | Source based copy and estimated plans |
 | `src/lib/submit-invite.ts` | Validation and the single `submitInvite()` connection point |
 | `app/fonts/` | Only the self hosted fonts in use, with SIL licences |
+| `app/licences.txt/route.ts` | The open source licences page, written at build time from the installed packages and fonts, linked from the footer |
 | `public/brand/` | Only assets the page uses |
-| `public/brand/tools/` | Other companies' logos for the "built to work with" row, each the owner's own file, unchanged (Gmail, Outlook, OneDrive, Dropbox and Excel from svgl.app; Zoho Mail, Tally, TaxPower GST and KDK Spectrum from their own sites). Check each brand's usage rules before the site is public |
+| `public/brand/tools/` | Other companies' logos for the two rows under the demo, each the owner's own file, unchanged but for size (Gmail, Outlook, OneDrive, Dropbox and Excel from svgl.app; Zoho Mail, Tally, KDK, Winman, SAG Infotech, TaxPower GST, Saral, Electrocom (EasyOFFICE) and ClearTax from their own sites). The filing software row shows only the official files each maker says, on its own pages, that it imports. Check each brand's usage rules before the site is public |
 | `docs/architecture.html`, `docs/assets/architecture.png` | Architecture source and README image |
 | `tests/` | Unit, database and browser tests |
 | `scripts/` | Local setup, the demo firm, page audit and timing, social image, secret scan, key rotation and restore drill |
