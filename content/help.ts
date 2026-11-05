@@ -100,7 +100,8 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         points: [
           "It does not file returns. It prepares the form, and your team checks every figure and files on the portal with its own login, OTP or digital signature.",
           "It never asks for portal passwords or OTPs, and never logs in to the GST or income tax portal.",
-          "It gives no tax, legal or accounting advice. Questions about advice, fees or what a notice means always wait for your team.",
+          "It gives no accounting, audit, tax or legal advice, and it never signs or certifies a document. Questions about advice, fees or what a notice means always wait for your team.",
+          "It is software, not a firm of chartered accountants. Orelu, which makes it, does not practise as chartered accountants and is not part of, or approved by, ICAI. The CA in InboxCA stands for the firms it is built for.",
           "It never writes or sends a reply to a notice. People in your firm do.",
           "It does not read or send WhatsApp messages. For a client with a phone number, Message on WhatsApp opens your own WhatsApp with the missing papers filled in.",
           "It has no upload page or upload link for clients. Clients email papers to your firm's address, as they do today.",
