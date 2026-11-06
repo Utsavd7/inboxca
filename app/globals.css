@@ -334,6 +334,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 
 /* Scene 5: the form */
 .form-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: var(--s2); }
+.form .hs-track { margin-bottom: var(--s2); }
 .figure-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); padding-block: 10px; border-top: 1px solid var(--line); }
 .figure-row span:first-child { color: var(--slate); }
 .form-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s4); padding-top: var(--s4); border-top: 1px solid var(--line); }
@@ -814,6 +815,10 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .hs-track .is-done i { border: 0; background: var(--green); color: var(--white); }
 .hs-track .is-next { color: var(--blue-deep); }
 .hs-track .is-next i { border-color: var(--blue); }
+/* Five steps or more, as a return's own page shows them: each dot over its name, in one row. */
+.hs-track:has(> :nth-child(5)) { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding-inline: 6px; }
+.hs-track:has(> :nth-child(5)) > span { flex-direction: column; gap: 4px; text-align: center; }
+@media (max-width: 480px) { .hs-track:has(> :nth-child(5)) { gap: 2px; padding-inline: 4px; font-size: 10.5px; } }
 .hs-meter-head { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
 .hs-meter { display: block; height: 8px; border-radius: 4px; background: var(--wash); overflow: hidden; }
 .hs-meter span { display: block; height: 100%; background: var(--blue); transform-origin: left; }

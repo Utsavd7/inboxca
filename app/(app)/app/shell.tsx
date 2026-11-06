@@ -600,7 +600,7 @@ const answers: [string, string, string][] = [
   ["What does Office only do?", "Staff, managers and front desk can use InboxCA only in the office, on the office internet connection, and only on PCs the owner approves. The owner and partners can sign in from anywhere.", "office-only"],
   ["Who sees what?", "The owner chooses whether everyone sees every client or only the people assigned to it. Each role (partner, manager, staff, front desk) can do only what Permissions allows. For anything more, they ask their manager or the owner for permission.", "people-and-permissions"],
   ["Where are our papers kept?", "In your firm's own drive, in folders by year, client and type of work. InboxCA reads them to help you prepare and check returns. Inside InboxCA, papers open view only.", "connect-drive"],
-  ["How do I mark a return filed?", "In the Calendar or on Your list, point at a late client and choose Mark filed, or open the client's Returns tab. You can add the acknowledgement number, and Undo puts it back.", "due-dates"],
+  ["How do I mark a return filed?", "Open the return and its File step: download it, file it on the portal, then choose Mark filed. When the portal's acknowledgement email arrives, Mark filed there takes its number. In the Calendar or on Your list, point at a late client and choose Mark filed. Undo puts it back.", "working-on-a-return"],
   ["How do I add our clients?", "Choose New client, or add them all at once with Import from Excel on the Clients page. Then choose the services you do for each client, and InboxCA works out their due dates.", "import-clients"],
 ];
 function HelpSheet({ open, close }: { open: boolean; close: () => void }) {

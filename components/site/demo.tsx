@@ -12,6 +12,7 @@ import {
   Play,
 } from "lucide-react";
 import { demoSteps } from "@/content/site";
+import { Track } from "./help-art";
 import { Logo } from "./logo";
 import { useReduced } from "./use-reduced";
 
@@ -242,9 +243,13 @@ function FormScene({
             GSTR-3B, <span className="num">September 2026</span>
           </p>
           <span className={`chip ${approved ? "chip-done" : ""}`}>
-            {approved ? "Approved" : "Ready to check"}
+            {approved ? "Approved" : "Waiting approval"}
           </span>
         </div>
+        {/* The return's own page: its steps, Approve now, File once approved. */}
+        <motion.div variants={item}>
+          <Track items={["Papers", "Figures", "Draft", "Check", "Approve", "File"]} done={approved ? 5 : 4} />
+        </motion.div>
         {[
           ["Outward taxable supplies", "₹18,42,300"],
           ["Input tax credit", "₹2,11,640"],

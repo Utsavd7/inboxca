@@ -6,7 +6,7 @@
 import { createElement, Fragment, type ReactNode } from "react";
 import {
   CalendarDays, FileSpreadsheet, FileText, FolderInput, HardDrive, IndianRupee, KeyRound, ListChecks, Mail as MailIcon, MessageSquareWarning, Monitor, Paperclip,
-  Receipt, Reply, RotateCcw, Scale, Send, ShieldCheck, UserPlus, Users, type LucideIcon,
+  Receipt, Reply, RotateCcw, Route, Scale, Send, ShieldCheck, UserPlus, Users, type LucideIcon,
 } from "lucide-react";
 import type { Frame, Screen } from "@/components/site/help-show";
 import { Btn, Card, Chip, Chips, Choice, Code, Field, Figures, File, Line, Mail, Meter, Note, Passkey, Plan, Qr, Rename, Rows, Sheet, Split, Ticks, Title, Track, Tree } from "@/components/site/help-art";
@@ -20,7 +20,8 @@ const drive = ["Your OneDrive", "InboxCA", "FY 2026-27", "Patel Textiles", "GST"
 const bills = "Patel Textiles - Purchase bills - Sep 2026.pdf";
 const settings = (part: string): Screen => ["Settings", "Settings", part];
 const growth = plans.find((plan) => plan.name === "Growth")!;
-const itrSteps = ["Figures checked", "Prepared", "Approved", "Filed"];
+const steps = ["Papers", "Figures", "Draft", "Check", "Approve", "File"];
+const tdsSteps = steps.filter((step) => step !== "Check");
 
 export const helpScenes: Record<string, { icon: LucideIcon; still?: number; frames: readonly Frame[] }> = {
   "sign-up": {
@@ -139,9 +140,9 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     still: 0,
     frames: [
       f(0, ["Documents", "Documents"], <Choice items={["All papers", "To check"]} pick={1} row />, <Rows rows={[[num("IMG_0412.jpg"), "InboxCA could not tell its type and period", <Chip key="c">To check</Chip>], [num("Scan 0917.pdf"), "InboxCA could not tell its period", <Chip key="c">To check</Chip>]]} />),
-      f(1, ["Clients", "Patel Textiles", "Documents"], <Rows rows={[[num("IMG_0412.jpg"), "Email from Patel Textiles", <Btn key="b" quiet press>Check</Btn>], [num(bills), "Email from Patel Textiles"]]} />),
+      f(1, ["Clients", "Patel Textiles", "Papers"], <Rows rows={[[num("IMG_0412.jpg"), "Email from Patel Textiles", <Btn key="b" quiet press>Check</Btn>], [num(bills), "Email from Patel Textiles"]]} />),
       f(2, ["Clients", "Patel Textiles", "IMG_0412.jpg"], <Note>Check its paper type and period, then choose Save.</Note>, <Field label="Paper type" value="Bank statement" select />, <Field label="Period" value="Sep 2026" select />, <Line><Btn press>Save</Btn></Line>),
-      f(2, ["Clients", "Patel Textiles", "Documents"], <Rename from="IMG_0412.jpg" to="Patel Textiles - Bank statement - Sep 2026.jpg" />, <Note>InboxCA moves and renames the file in your firm&apos;s drive to match.</Note>),
+      f(2, ["Clients", "Patel Textiles", "Papers"], <Rename from="IMG_0412.jpg" to="Patel Textiles - Bank statement - Sep 2026.jpg" />, <Note>InboxCA moves and renames the file in your firm&apos;s drive to match.</Note>),
     ],
   },
   "ask-for-papers": {
@@ -157,7 +158,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
         <Line><Btn press>Ask for papers</Btn></Line>,
       ),
       f(2, [null, "Client's email"], <Mail from="Sharma and Co" line={`${firm}, to Patel Textiles`} subject="Papers for Sep 2026" body="Please send your bank statement, purchase bills and loan statement. Reply to this email with the papers attached." />, <Note>One email, from your firm&apos;s own address.</Note>),
-      f(3, ["Clients", "Patel Textiles"], <Title>Papers asked for</Title>, <Rows rows={[["Asked for Bank statement, Purchase bills, Loan statement for Sep 2026", "2 of 3 received", <Chip key="c">2 of 3</Chip>]]} />),
+      f(3, ["Clients", "Patel Textiles", "Papers"], <Title>Papers asked for</Title>, <Rows rows={[["Asked for Bank statement, Purchase bills, Loan statement for Sep 2026", "2 of 3 received", <Chip key="c">2 of 3</Chip>]]} />),
     ],
   },
   replies: {
@@ -181,8 +182,21 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     frames: [
       f(0, ["Clients", "Patel Textiles", "Services"], <Ticks items={[["GSTR-1 (monthly)", true], ["GSTR-3B (monthly)", true], ["ITR (no business, no audit)", true], ["TDS returns 138/140/144 (24Q/26Q/27Q)", false]]} />, <Line><Btn press>Save services</Btn></Line>),
       f(1, ["Calendar", "Calendar"], <Choice items={["List", "Month"]} pick={0} row />, <Rows rows={[["Mehta Traders", "GSTR-3B, Sep 2026", <Chip key="c" tone="late">Late</Chip>], ["Patel Textiles", "GSTR-1, Sep 2026", <Chip key="c">Due in 7 days</Chip>], ["Iyer Foods", "TDS return", <Chip key="c">Due in 30 days</Chip>], ["Anita Rao", "ITR", <Chip key="c" tone="done">Filed</Chip>]]} />),
-      f(3, ["Today", "Your list"], <Rows rows={[["Mehta Traders", "GSTR-3B, Sep 2026", <Btn key="b" press>Mark filed</Btn>]]} />, <Line><Chip tone="done" cue>Filed</Chip><Btn quiet>Undo</Btn></Line>),
-      f(6, ["Clients", "Mehta Traders"], <Line><Btn press>Remind client</Btn></Line>, <Mail from="Sharma and Co" line={`${firm}, to Mehta Traders`} subject="Your returns and papers" body="Your GSTR-3B for Sep 2026 is late. We still need your bank statement for September." />),
+      f(2, ["Calendar", "Calendar"], <Field label="Step" value="Ready to prepare" select />, <Rows rows={[["Patel Textiles", "GSTR-1, Sep 2026", <Chip key="c">Due in 7 days</Chip>], ["Iyer Foods", "GSTR-3B, Sep 2026", <Chip key="c">Due in 9 days</Chip>]]} />, <Line><Btn press>Fill all due in 7 days</Btn></Line>),
+      f(3, ["Today", "Today"], <Title>Work by step</Title>, <Rows rows={[["Ask for papers", null, <b key="n">4</b>], ["Ready to prepare", null, <b key="n">7</b>], ["Figures to check", null, <b key="n">3</b>], ["Waiting approval", null, <b key="n">2</b>], ["Ready to file", null, <b key="n">5</b>]]} />),
+      f(5, ["Today", "Your list"], <Rows rows={[["Mehta Traders", "GSTR-3B, Sep 2026", <Btn key="b" press>Mark filed</Btn>]]} />, <Line><Chip tone="done" cue>Filed</Chip><Btn quiet>Undo</Btn></Line>),
+      f(8, ["Clients", "Mehta Traders", "Work"], <Line><Btn press>Send reminder now</Btn></Line>, <Mail from="Sharma and Co" line={`${firm}, to Mehta Traders`} subject="Your returns and papers" body="Your GSTR-3B for Sep 2026 is late. We still need your bank statement for September." />),
+    ],
+  },
+  "working-on-a-return": {
+    icon: Route,
+    still: 2,
+    frames: [
+      f(0, ["Clients", "Patel Textiles", "Work"], <Title>Due soon</Title>, <Rows rows={[["GSTR-3B (monthly) Sep 2026", "Due 20 Oct 2026. Next: Check 3 figures"], ["GSTR-1 (monthly) Oct 2026", "Due 11 Nov 2026. Next: Ask for papers"]]} />),
+      f(1, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Line><Chip>Due 20 Oct 2026, in 4 days</Chip><Note>Looked after by Ravi Kumar</Note></Line>, <Track items={steps} done={3} />),
+      f(2, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Track items={steps} done={3} />, <Card title="Next step: Check" line="Filled. 3 figures not checked yet"><Line><Btn press>Check 3 figures</Btn></Line></Card>),
+      f(3, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Track items={steps} done={4} />, <Card title="Next step: Approve"><Line><Btn press>Give second approval</Btn></Line></Card>, <Note>Only the firm&apos;s owner, a partner or a manager can give the second approval.</Note>),
+      f(4, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Track items={steps} done={5} />, <Card title="Next step: File" line="An acknowledgement arrived. Check it, then mark the return filed."><Line><Btn press>Mark filed</Btn></Line></Card>, <Line><Chip tone="done" cue>Filed</Chip></Line>),
     ],
   },
   "gst-month-end": {
@@ -199,10 +213,10 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     icon: FileText,
     still: 2,
     frames: [
-      f(0, ["Clients", "Anita Rao", "Documents"], <Rows rows={[[num("Form 16.pdf"), "Email from Anita Rao", <Chip key="c" tone="done">Saved</Chip>], [num("Form 26AS.pdf"), "Portal file, added by Ravi Kumar", <Chip key="c" tone="done">Saved</Chip>], [num("AIS.pdf"), "Portal file, added by Ravi Kumar", <Chip key="c" tone="done">Saved</Chip>], [num("TIS.pdf"), "Portal file, added by Ravi Kumar", <Chip key="c" tone="done">Saved</Chip>]]} />),
+      f(0, ["Clients", "Anita Rao", "Papers"], <Rows rows={[[num("Form 16.pdf"), "Email from Anita Rao", <Chip key="c" tone="done">Saved</Chip>], [num("Form 26AS.pdf"), "Portal file, added by Ravi Kumar", <Chip key="c" tone="done">Saved</Chip>], [num("AIS.pdf"), "Portal file, added by Ravi Kumar", <Chip key="c" tone="done">Saved</Chip>], [num("TIS.pdf"), "Portal file, added by Ravi Kumar", <Chip key="c" tone="done">Saved</Chip>]]} />),
       f(1, ["Clients", "Anita Rao", "ITR-1"], <Figures rows={[["Salary", "Form 16, page 2", "₹12,40,000"], ["Tax deducted", "Form 26AS, page 1", "₹1,02,500"], ["Savings interest", "AIS, page 3", "₹8,420"]]} />, <Note>Every figure opens the page it was read from.</Note>),
-      f(2, ["Clients", "Anita Rao", "ITR-1"], <Figures checked rows={[["Salary", "Form 16, page 2", "₹12,40,000"], ["Tax deducted", "Form 26AS, page 1", "₹1,02,500"], ["Savings interest", "AIS, page 3", "₹8,420"]]} />, <Track items={itrSteps} done={1} />),
-      f(3, ["Clients", "Anita Rao", "ITR-1"], <Track items={itrSteps} done={3} />, <Line><Btn press>Download for filing</Btn></Line>, <Note>Your team files it on the income tax portal, then marks it filed here.</Note>),
+      f(2, ["Clients", "Anita Rao", "ITR-1"], <Figures checked rows={[["Salary", "Form 16, page 2", "₹12,40,000"], ["Tax deducted", "Form 26AS, page 1", "₹1,02,500"], ["Savings interest", "AIS, page 3", "₹8,420"]]} />, <Track items={steps} done={4} />),
+      f(3, ["Clients", "Anita Rao", "ITR-1"], <Track items={steps} done={5} />, <Line><Btn press>Download for filing</Btn></Line>, <Note>Your team files it on the income tax portal, then marks it filed here.</Note>),
     ],
   },
   tds: {
@@ -211,9 +225,9 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     frames: [
       f(0, ["Clients", "Patel Textiles", "TDS statement details"], <Field label="Name as on the TAN" value="Patel Textiles" />, <Field label="Person responsible for deduction" value="Ramesh Patel" />, <Line><Btn press>Save statement details</Btn></Line>),
       f(1, ["Documents", "Documents"], <Rows rows={[[num("TDS register Jul to Sep 2026.xlsx"), "Email from Patel Textiles", <Chip key="c" tone="done">Saved</Chip>], [num("Challan ITNS 281.pdf"), "Email from Patel Textiles", <Chip key="c" tone="done">Saved</Chip>]]} />, <Note>Filed under TDS, Jul to Sep 2026.</Note>),
-      f(2, ["Clients", "Patel Textiles", "TDS statement"], <Figures rows={[["Payments read", "TDS register, sheet 1", "42"], ["Tax deducted", "TDS register, sheet 1", "₹1,84,300"], ["Challans", "Added by Ravi Kumar", "3"]]} />, <Note>Columns are matched once and remembered.</Note>),
-      f(3, ["Clients", "Patel Textiles", "TDS statement"], <Figures checked rows={[["Payments read", "TDS register, sheet 1", "42"], ["Tax deducted", "TDS register, sheet 1", "₹1,84,300"], ["Challans", "Added by Ravi Kumar", "3"]]} />, <Line><Btn press>Yes, these figures are right</Btn></Line>),
-      f(4, ["Clients", "Patel Textiles", "TDS statement"], <Title>Prepare the statement file</Title>, <Line><Btn press>Prepare Form No. 140</Btn></Line>, <Note>Validate it with Protean&apos;s File Validation Utility, file it, then mark it filed here.</Note>),
+      f(2, ["Clients", "Patel Textiles", "TDS return, Jul to Sep 2026"], <Figures rows={[["Payments read", "TDS register, sheet 1", "42"], ["Tax deducted", "TDS register, sheet 1", "₹1,84,300"], ["Challans", "Added by Ravi Kumar", "3"]]} />, <Note>Columns are matched once and remembered.</Note>),
+      f(3, ["Clients", "Patel Textiles", "TDS return, Jul to Sep 2026"], <Figures checked rows={[["Payments read", "TDS register, sheet 1", "42"], ["Tax deducted", "TDS register, sheet 1", "₹1,84,300"], ["Challans", "Added by Ravi Kumar", "3"]]} />, <Line><Btn press>Yes, these figures are right</Btn></Line>),
+      f(4, ["Clients", "Patel Textiles", "TDS return, Jul to Sep 2026"], <Track items={tdsSteps} done={2} />, <Title>Prepare the statement file</Title>, <Line><Btn press>Prepare Form No. 140</Btn></Line>, <Note>Validate it with Protean&apos;s File Validation Utility, file it, then mark it filed here.</Note>),
     ],
   },
   notices: {
