@@ -51,9 +51,10 @@ test("prepares a Form No. 140 statement from a register and a challan, approved 
     for(const [name,value] of [["d_flat","12 Invented Lane"],["d_district","Invented District"],["d_pin","380001"],["d_email","tds@invented.test"],["d_phone","9000000001"],["p_name","Invented Partner"],["p_designation","Partner"],["p_pan","ZZZPZ0009Z"],["p_flat","12 Invented Lane"],["p_pin","380001"],["p_phone","9000000002"]]) await page.locator(`[name="${name}"]`).fill(value);
     await page.locator('[name="d_state"]').selectOption("24");await page.locator('[name="p_state"]').selectOption("24");
     await page.getByRole("button",{name:"Save statement details"}).click();await expect(page).toHaveURL(/changed=tds/);
-    // The quarter's TDS return opens its statement.
+    // The quarter's TDS return opens its statement in the Draft step of the return's own page.
     await page.goto(`/app/clients/${client}?tab=returns`);await page.getByRole("link",{name:/^Prepare TDS returns/}).click();
-    await expect(page.getByRole("heading",{name:"Form No. 140, Jul to Sep 2026"})).toBeVisible();
+    const here=/\/app\/clients\/[0-9a-f-]{36}\/returns\/[0-9a-f-]{36}/;
+    await expect(page).toHaveURL(new RegExp(`${here.source}\\?step=draft$`));await expect(page.getByText(/^Form No\. 140: Statement of/)).toBeVisible();
     // Read the register with the columns a person chose.
     await page.getByRole("link",{name:"Read Invented TDS register.csv as payments"}).click();
     for(const [field,column] of [["Deductee PAN","A: Party PAN"],["Deductee name","B: Party"],["Section code","C: Code"],["Date of payment or credit","D: Paid on"],["Amount paid or credited","E: Gross"],["Tax deducted","F: TDS"],["Rate","G: Rate %"],["Challan serial number","H: Challan no"]] as const)
@@ -65,7 +66,7 @@ test("prepares a Form No. 140 statement from a register and a challan, approved 
     await expect(page.getByRole("button",{name:"Prepare Form No. 140"})).toBeDisabled();
     await page.getByRole("button",{name:"Yes, these figures are right"}).click();await expect(page.getByText("Every figure is checked. Prepare the statement below.")).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-    await page.getByRole("button",{name:"Prepare Form No. 140"}).click();await expect(page).toHaveURL(/tab=outputs/);
+    await page.getByRole("button",{name:"Prepare Form No. 140"}).click();await expect(page).toHaveURL(new RegExp(`${here.source}$`));
     const [made]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'='TDS140'",[firm.firmId]);files.push(made.drive_file_id);
     expect(made.prepared.status).toBe("draft");expect(made.name).toBe("Invented TDS Client - Form No. 140 - Jul to Sep 2026 - v1.txt");
     // The owner checked the figures, so a second person approves.
@@ -73,7 +74,7 @@ test("prepares a Form No. 140 statement from a register and a challan, approved 
     await expect(card.getByText(/Validate this file with Protean/)).toBeVisible();
     await card.getByRole("button",{name:"Give second approval"}).click();await expect(page.getByRole("status")).toContainText("Another person must approve");
     const other=await managerContext.newPage();await emailStep(other,managerEmail);await other.getByLabel("6 digit code from the app").fill(totp(managerKey));await other.getByRole("button",{name:"Continue"}).click();await expect(other).toHaveURL(/\/app$/);
-    await other.goto(`/app/clients/${client}?tab=outputs`);const approved=other.locator("li").filter({has:other.getByRole("link",{name:made.name,exact:true})});
+    await other.goto(new URL(page.url()).pathname);const approved=other.locator("li").filter({has:other.getByRole("link",{name:made.name,exact:true})});
     await approved.getByRole("button",{name:"Give second approval"}).click();
     const download=other.waitForEvent("download",{timeout:20_000});await approved.getByRole("button",{name:"Download for filing"}).click();const downloaded=await download;
     expect(downloaded.suggestedFilename()).toBe(made.name);

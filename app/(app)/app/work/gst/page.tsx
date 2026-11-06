@@ -24,9 +24,8 @@ const uuid = /^[0-9a-f-]{36}$/;
 type State = { words: string; tone: Tone; action?: string; href?: string };
 
 // Where a GSTR-1 or GSTR-3B stands, as public.return_stages says, in a few words with the one
-// thing to do next. Green only when it is done.
-function returnState(work: Work | undefined, filed: boolean, client: string): State {
-  const page = `/app/clients/${client}`;
+// thing to do next, on the return's own page. Green only when it is done.
+function returnState(work: Work | undefined, filed: boolean, page: string): State {
   if (filed || work?.stage === "filed") return { words: "Filed", tone: "done" };
   switch (work?.stage) {
     case "approved": return { words: "Approved", tone: "blue", action: "Download and file", href: `${page}?tab=outputs` };
@@ -149,8 +148,8 @@ export default async function GstMonth({ searchParams }: { searchParams: Promise
                     <Cell state={papers} />
                     <Cell state={credit} />
                     <Cell state={differ ? { words: differ.why.slice(periodName(period).length + 2), tone: "warn", action: "See differences", href: differ.action.href } : { words: credit.words === "In" ? "None open" : "Waiting for GSTR-2B", tone: "" }} />
-                    <Cell state={one ? returnState(oneWork, one.status === "filed", client.id) : { words: "No GSTR-1 this month", tone: "" }} more={one && <Link className="b b-ghost" href={href({ page, rates: client.id })} scroll={false}>Rates</Link>} />
-                    <Cell state={three ? returnState(threeWork, three.status === "filed", client.id) : { words: "No GSTR-3B this month", tone: "" }} />
+                    <Cell state={one ? returnState(oneWork, one.status === "filed", `/app/clients/${client.id}/returns/${one.id}`) : { words: "No GSTR-1 this month", tone: "" }} more={one && <Link className="b b-ghost" href={href({ page, rates: client.id })} scroll={false}>Rates</Link>} />
+                    <Cell state={three ? returnState(threeWork, three.status === "filed", `/app/clients/${client.id}/returns/${three.id}`) : { words: "No GSTR-3B this month", tone: "" }} />
                     <Cell state={filedCount === client.returns.length ? { words: "Both", tone: "done" } : { words: filedCount ? `${filedCount} of ${client.returns.length}` : "Not yet", tone: "", action: "Mark filed", href: `${at}?tab=returns` }} />
                   </tr>
                 );

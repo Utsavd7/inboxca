@@ -8,6 +8,7 @@ import {grantFor} from "@/src/lib/permission-grants";
 import {keepReason} from "@/src/lib/reason";
 import {checkAllTds,enterTds,readTdsRegister,sealDeductor} from "@/src/lib/tds-draft";
 import {deductorSchema,isTdsForm,quarterOf,tdsFields,tdsMappingSchema} from "@/src/lib/tds";
+import {clientBack} from "../../return-back";
 
 // The TAN's statement details, on the client's Details: the owner, a partner or a manager, as
 // for its numbers. Row level security keeps the change to the person's own firm.
@@ -26,13 +27,14 @@ export async function saveTdsDetails(form:FormData) {
   revalidatePath("/app","layout");redirect(`/app/clients/${client}?changed=tds`);
 }
 
-// The statement page's steps (app/(app)/app/clients/[id]/tds/page.tsx), each going back to it.
+// The statement page's steps (app/(app)/app/clients/[id]/tds/tds-statement.tsx), each going back
+// to it: the return's own page at its Draft step when sent from there.
 async function writer(form:FormData) {
   const {supabase,membership,userId}=await currentWriter();
   const client=z.uuid().parse(form.get("client")),tan=z.uuid().parse(form.get("tan")),period=String(form.get("period")),code=String(form.get("form") ?? "TDS140");
   quarterOf(period);
   if(!isTdsForm(code)) throw new Error("Choose the statement.");
-  const back=`/app/clients/${client}/tds?tan=${tan}&period=${period}&form=${code}`;
+  const page=await clientBack(client),back=`${page===`/app/clients/${client}` ? `${page}/tds?` : `${page}?step=draft&`}tan=${tan}&period=${period}&form=${code}`;
   if(!membership) redirect("/app");
   const {data:number}=await supabase.from("client_registrations").select("id").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",tan).eq("kind","tan").maybeSingle();
   if(!number) redirect(back);

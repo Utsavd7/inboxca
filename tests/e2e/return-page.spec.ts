@@ -94,3 +94,31 @@ test("a GSTR-1 goes from papers in to filed on its own page",async({page,browser
     await firm.remove(managerEmail,staffEmail);
   }
 });
+
+// An ITR and a TDS statement are prepared in the Draft step of their own page: their old pages
+// open there with the form asked for, only the return's own forms are offered, and a quarter with
+// no return on the calendar keeps its statement page. Invented data only.
+test("the income tax and TDS pages open in their return's Draft step",async({page})=>{
+  test.setTimeout(120_000);loadEnvConfig(process.cwd());
+  const email=`return-draft-${randomUUID()}@invented.test`,key=appKey(),firm=await seedFirm("Return Draft Browser Firm",email,key),client=randomUUID(),pan=randomUUID(),tan=randomUUID(),crypto=serverCrypto();
+  try {
+    await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind) values($1,$2,$3,'business')",[client,firm.firmId,`Invented Draft Client ${randomUUID().slice(0,8)}`]);
+    for(const [id,kind,number] of [[pan,"pan","ZZZPZ0001Z"],[tan,"tan","ZZZZ99997Z"]]) // ggignore: invented PAN and TAN.
+      await query(local.dbUrl,"insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values($1,$2,$3,$4,$5,$6)",[id,firm.firmId,client,kind,await crypto.encrypt(firm.firmId,`clients/${client}/${kind}`,number),await crypto.blindIndex(firm.firmId,kind,number)]);
+    const [itr,tds]=await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,'ITR_NA','2026-03','2026-07-31'),($1,$2,$4,'TDS_RET','2026-09','2026-10-31') returning id",[firm.firmId,client,pan,tan]);
+    await signIn(page,email,key);
+    await page.goto(`/app/clients/${client}/itr?form=ITR2&year=2026`);
+    await expect(page).toHaveURL(new RegExp(`/app/clients/${client}/returns/${itr.id}\\?.*step=draft`));
+    await expect(page.getByRole("navigation",{name:"Steps of this return"}).locator(".is-shown")).toContainText("Draft");
+    await expect(page.getByLabel("Return",{exact:true})).toHaveValue("ITR2");await expect(page.getByRole("region",{name:"Still to fill"})).toBeVisible();
+    await expect(page.getByRole("link",{name:"Computation sheet"})).toBeVisible();
+    await page.goto(`/app/clients/${client}/tds?tan=${tan}&period=2026-09&form=TDS138`);
+    await expect(page).toHaveURL(new RegExp(`/app/clients/${client}/returns/${tds.id}\\?.*step=draft`));await expect(page.getByText(/^Form No\. 138: Statement of/)).toBeVisible();
+    await expect(page.getByRole("navigation",{name:"Statement"}).getByRole("link")).toHaveText(["Form No. 140 (26Q)","Form No. 138 (24Q)","Form No. 144 (27Q)"]);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+    await page.goto(`/app/clients/${client}/tds?tan=${tan}&period=2026-12`);
+    await expect(page).toHaveURL(/\/tds\?/);await expect(page.getByRole("heading",{name:"Form No. 140, Oct to Dec 2026"})).toBeVisible();
+  } finally {
+    await firm.remove();
+  }
+});

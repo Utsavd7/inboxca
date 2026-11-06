@@ -12,6 +12,8 @@ import {personName} from "@/src/lib/roles";
 import {currentStep,nextAction,stepNames,stepsFor,type Step} from "@/src/lib/return-steps";
 import {returnPeriod,stageLine} from "@/src/lib/return-work";
 import {DatasetReview} from "../../dataset-review";
+import {ItrReturn} from "../../itr/itr-return";
+import {TdsStatement} from "../../tds/tds-statement";
 import {PortalInput} from "../../portal-input";
 import {PurchaseMatch} from "../../purchase-match";
 import {SalesInput} from "../../sales-input";
@@ -28,13 +30,14 @@ const uuid=/^[0-9a-f-]{36}$/;
 const order=Object.keys(assignmentRoles);
 // The prepared forms a return's files are, and the forms its figures are read into.
 const formsOf=(code:string)=>/^GSTR1_/.test(code) ? {files:["GSTR1"],figures:["GSTR1"]} : /^GSTR3B_/.test(code) ? {files:["GSTR3B"],figures:["GSTR1","GSTR3B"]}
-  : /^ITR_/.test(code) ? {files:[...itrReturns],figures:["ITR"]} : code==="TDS_RET" ? {files:["TDS138","TDS140","TDS144"],figures:["TDS140"]} : code==="TCS_RET" ? {files:["TDS143"],figures:["TDS143"]} : null;
+  : /^ITR_/.test(code) ? {files:[...itrReturns],figures:["ITR"]} : code==="TDS_RET" ? {files:["TDS138","TDS140","TDS144"],figures:["TDS138","TDS140","TDS144"]} : code==="TCS_RET" ? {files:["TDS143"],figures:["TDS143"]} : null;
 
 // One page per return (runbooks/return-page-design-6nov.md): its six steps, or the ones it has,
 // from where public.return_stages says it stands, with the step's own parts of the client's
-// Figures and Return files for this return only. ?step= opens a step; ?tab=extraction (Figures)
-// and ?tab=outputs (Return files), where the forms on them come back to, open its figures and the
-// step it stands at. Who may do what is the same as on those tabs: the same actions decide.
+// Figures and Return files for this return only, and an ITR's or TDS statement's own page as its
+// Draft step. ?step= opens a step; ?tab=extraction (Figures) and ?tab=outputs (Return files), where
+// the forms on them come back to, open its figures and the step it stands at; ?purchases= (the
+// GSTR-2B match) its Check step. Who may do what is the same as on those tabs: the same actions decide.
 export default async function ReturnPage({params,searchParams}:{params:Promise<{id:string;task:string}>;searchParams:Promise<Record<string,string|undefined>>}) {
   const {supabase,membership}=await currentMember();
   if(!membership) redirect("/app");
@@ -72,13 +75,13 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
   const sets=(drafts ?? []).map(draft=>({...draft,name:draft.form_code==="GSTR3B" ? "the GSTR-2B" : draft.target ? "your team's entries" : names?.find(paper=>paper.id===draft.document)?.name ?? (itr ? "a paper" : "the sales register")}));
   const approver=!viewOnly && ["owner","partner","manager"].includes(membership.role),canPrepare=!viewOnly && membership.may("edit_figures",id),canFile=!viewOnly && membership.may("mark_filed",id);
   const steps=stepsFor(code),at=currentStep(now,code),filed=task.status==="filed";
-  const shown:Step=steps.includes(q.step as Step) ? q.step as Step : q.tab==="extraction" && steps.includes("figures") ? "figures" : at;
+  const shown:Step=steps.includes(q.step as Step) ? q.step as Step : q.purchases && steps.includes("check") ? "check" : q.tab==="extraction" && steps.includes("figures") ? "figures" : at;
   const next=making ? {step:"approve" as const,why:"Every figure is checked. InboxCA is making the checked draft now."} : nextAction(now,code,{period:returnPeriod(code,period),drafts:sets,approver});
   const base=`/app/clients/${id}`,here=`${base}/returns/${task.id}`;
 
   // The one button for the next step. Approving, downloading and marking filed are the return
   // file's own buttons, in their step: from another step the button opens that step.
-  const tds=code==="TDS_RET" || code==="TCS_RET",own=`${base}/${itr ? `itr?year=${period.slice(0,4)}` : `tds?tan=${task.registration_id}&period=${period}${code==="TCS_RET" ? "&form=TDS143" : ""}`}`;
+  const tds=code==="TDS_RET" || code==="TCS_RET",own=`${here}?step=draft`;
   const firstOpen=sets.find(set=>set.open)?.id ?? sets[0]?.id;
   let why=next?.why,action:React.ReactNode=null;
   if(next?.act && next.label) {
@@ -87,7 +90,7 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
     else if(next.act==="ask" || next.act==="upload") action=<Link className="b b-primary" href={`${base}?tab=documents&${next.act==="ask" ? "ask" : "upload"}=1`} scroll={false}>{next.label}</Link>;
     else if(next.act==="fill" && !canPrepare) why="Preparing a return needs the right to edit figures. Ask your firm's owner.";
     else if(next.act==="fill") action=<Fill task={task.id} label={name} words={next.label}/>;
-    else if(next.act==="open" && (itr || tds && task.registration_id)) action=<Link className="b b-primary" href={own}>{next.label}</Link>;
+    else if(next.act==="open" && shown!=="draft" && (itr || tds && task.registration_id)) action=<Link className="b b-primary" href={own} scroll={false}>{next.label}</Link>;
     else if(next.act==="check" && firstOpen) action=<Link className="b b-primary" href={`${here}?tab=extraction&draft=${firstOpen}`} scroll={false}>{next.label}</Link>;
   }
   const lookers=[...client.client_assignments].sort((a,b)=>order.indexOf(a.role)-order.indexOf(b.role)).map(one=>(one.team_id ? teams?.find(team=>team.id===one.team_id)?.name : personName(people?.find(person=>person.user_id===one.user_id)?.email)) ?? "").filter(Boolean);
@@ -114,15 +117,16 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
       <div className="fig-tools">
         {/^GSTR/.test(code) && <SalesInput clientId={id} at={here} period={period} source={q.source} section={q.section} header={q.header} read={q.read}/>}
         {/^GSTR3B_/.test(code) && <PortalInput clientId={id} period={period} message={q.portal}/>}
-        {(itr || tds) && <Card id="rp-own" title={itr ? "Income tax return" : "TDS statement"} Icon={FileText} kind="docs" end={<Link className="b b-secondary" href={own}>{itr ? "Open the return" : "Open the statement"}</Link>}><p className="app-card-none">{itr ? "Figures you enter for this return are on its income tax page." : "The quarter's registers and challans are read on the statement page."}</p></Card>}
+        {(itr || tds) && <Card id="rp-own" title={itr ? "Income tax return" : "TDS statement"} Icon={FileText} kind="docs" end={<Link className="b b-secondary" href={own} scroll={false}>Go to Draft</Link>}><p className="app-card-none">{itr ? "Details you enter for this return are in its Draft step." : "The quarter's registers and challans are read in its Draft step."}</p></Card>}
       </div>
     </>}
-    {shown==="draft" && only && <Card id="rp-draft" title={`${name}: figures to fill from`} Icon={ListChecks} kind="docs">
+    {shown==="draft" && only && itr && <ItrReturn id={id} q={{...q,year:period.slice(0,4),form:q.form ?? sets.find(set=>set.target)?.target ?? undefined}} at={here}/>}
+    {shown==="draft" && only && tds && <TdsStatement id={id} q={{...q,tan:only.registration,period}} at={here} only={code==="TCS_RET" ? ["TDS143"] : ["TDS140","TDS138","TDS144"]}/>}
+    {shown==="draft" && only && !itr && !tds && <Card id="rp-draft" title={`${name}: figures to fill from`} Icon={ListChecks} kind="docs">
       <ul className="app-rows">{sets.map(set=><Row key={set.id} title={set.name} meta={set.wrong ? `${set.wrong} marked wrong` : set.open ? `${set.open} not checked yet` : "Every figure checked"}
         action={<Link className="b b-ghost" href={`${here}?tab=extraction&draft=${set.id}`} scroll={false}>See figures</Link>}/>)}</ul>
       {!sets.length && <p className="app-card-none">No figures read for {periodWords} yet.</p>}
-      {itr || tds ? <p className="app-card-foot"><span className="hint grow">For now this return is prepared on its own {itr ? "income tax" : "statement"} page.</span><Link className="b b-secondary" href={own}>{itr ? "Open the return" : "Open the statement"}</Link></p>
-        : <p className="app-card-foot hint">InboxCA fills the official file from every figure it has read, checked or not. Approving and downloading wait until every figure is checked.</p>}
+      <p className="app-card-foot hint">InboxCA fills the official file from every figure it has read, checked or not. Approving and downloading wait until every figure is checked.</p>
     </Card>}
     {shown==="check" && <>
       {meta && stage.stage==="filled" ? <FillChecks client={id} sources={meta.sources} at={here}/> : (filed || steps.indexOf(at)>steps.indexOf("check")) && <p className="app-card-none">Every figure on the draft is checked.</p>}
