@@ -23,6 +23,7 @@ import { inboxTeamWorkItems } from "@/src/lib/work/inbox-team";
 import { itrCheckWorkItems, itrVerifyWorkItems } from "@/src/lib/work/itr-check";
 import { papersWorkItems } from "@/src/lib/work/papers";
 import { groupRepeats, isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
+import { returnPage } from "./return-back";
 import { returnStages } from "./return-work";
 import { firmAccounts } from "./shell-data";
 
@@ -157,23 +158,25 @@ export async function workFor(ctx: Context, late: number) {
     return [] as never[];
   };
 
-  // Prepared returns whose acknowledgement arrived, to mark filed; only the latest version of
-  // each counts. Drafts to approve and files to file come with the returns (forms.ts).
+  // Prepared returns whose acknowledgement arrived, to mark filed on the return's own page; only
+  // the latest version of each counts. Drafts to approve and files to file come with the returns
+  // (forms.ts).
   const confirmations = Promise.all([
     Promise.resolve(supabase.from("documents").select("id, client_id, period_key, status, prepared, clients(name)").eq("firm_id", firm).not("prepared", "is", null).order("prepared->version", { ascending: false }).order("received_at", { ascending: false }).limit(100).throwOnError()),
     Promise.resolve(supabase.from("requests").select("entity_id").eq("firm_id", firm).eq("kind", "form_confirmation").eq("status", "pending").limit(100).throwOnError()),
   ]).then(([forms, confirming]) => {
     const seen = new Set<string>();
     const waiting = new Set(confirming.data?.map((item) => item.entity_id));
-    return (forms.data ?? []).flatMap((file): Listed[] => {
+    return Promise.all((forms.data ?? []).map(async (file): Promise<Listed[]> => {
       const meta = preparedSchema.parse(file.prepared);
       const group = [file.client_id, file.period_key, meta.form, meta.registration].join(":");
       if (seen.has(group)) return [];
       seen.add(group);
       if (file.status === "deleted" || !waiting.has(file.id) || !membership.may("mark_filed", file.client_id)) return [];
       const name = file.clients?.name ?? "";
-      return [{ key: `confirm:${file.id}`, title: `${formName(meta.form)} for ${name}, ${periodName(file.period_key ?? "", isItr(meta.form) ? "income_tax" : null)}`, why: "The acknowledgement arrived. Check it and mark the return filed", client: { id: file.client_id, name }, action: { label: meta.status === "draft" ? "Review and approve" : "Mark filed", href: `/app/clients/${file.client_id}?tab=outputs` }, audience: "assigned", area: "returns" }];
-    });
+      const own = await returnPage(supabase, firm, { client: file.client_id, form: meta.form, period: file.period_key ?? "", registration: meta.registration });
+      return [{ key: `confirm:${file.id}`, title: `${formName(meta.form)} for ${name}, ${periodName(file.period_key ?? "", isItr(meta.form) ? "income_tax" : null)}`, why: "The acknowledgement arrived. Check it and mark the return filed", client: { id: file.client_id, name }, action: { label: meta.status === "draft" ? "Review and approve" : "Mark filed", href: own ? `${own}?step=${meta.status === "draft" ? "approve" : "file"}` : `/app/clients/${file.client_id}?tab=outputs` }, audience: "assigned", area: "returns" }];
+    })).then((lists) => lists.flat());
   }, failing("confirmations"));
 
   // Late clients, one row each with the oldest late return: the person's own unless they lead.

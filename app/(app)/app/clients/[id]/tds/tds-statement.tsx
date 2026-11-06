@@ -51,7 +51,7 @@ export async function TdsStatement({id,q,at,only}:{id:string;q:Record<string,str
   ]);
   if(!client) notFound();
   const crumb=<Link className="crumb" href={`/app/clients/${id}?tab=returns`}><ChevronLeft size={14} aria-hidden/>{client.name}</Link>;
-  if(!numbers?.length) return <><PageHead crumb={crumb} title="TDS statement"/><div className="pane client-pane"><p className="hint">Add the client&apos;s TAN under Tax numbers on its <Link href={`/app/clients/${id}?tab=numbers`}>Overview</Link> first.</p></div></>;
+  if(!numbers?.length) return <><PageHead crumb={crumb} title="TDS statement"/><div className="pane client-pane"><p className="hint">Add the client&apos;s TAN under <Link href={`/app/clients/${id}?tab=numbers`}>Tax numbers</Link> on its Details tab first.</p></div></>;
   const tans=await Promise.all(numbers.map(async row=>({id:row.id,number:await serverCrypto().decrypt(firm,`clients/${id}/tan`,row.number_enc)})));
   const tan=tans.find(row=>row.id===q.tan) ?? tans[0];
   const allowed=only ?? Object.keys(tdsForms) as TdsForm[],form:TdsForm=allowed.includes(q.form as TdsForm) ? q.form as TdsForm : allowed[0],f=tdsForms[form],named=tdsName(form);

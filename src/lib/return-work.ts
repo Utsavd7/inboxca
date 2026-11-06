@@ -20,8 +20,10 @@ const lines:Record<string,string>={none:"Papers not asked for yet",asked:"Papers
 export const steps=["Papers asked for","Papers in","Filled","Checked","Approved","Filed"];
 export const stepOf=(stage:string)=>({none:0,asked:1,in:2,figures:2,checked:2,filled:3,rejected:3,draft:4,approved:5,filed:6} as Record<string,number>)[stage] ?? 0;
 
-// One plain line of where a return stands.
-export function stageLine({stage,open,missing}:Work) {
+// One plain line of where a return stands. A return with no figures to read (DIR-3 KYC, GSTR-9,
+// as stepsFor in return-steps.ts has it) is just "Papers in" once they are.
+export function stageLine({stage,open,missing}:Work,code?:string|null) {
+  if(stage==="in" && code!==undefined && !fills(code) && !/^(TDS|TCS)_RET$/.test(code ?? "")) return "Papers in";
   if(stage==="filled") return `Filled. ${figures(open ?? 0)} not checked yet`;
   if(stage!=="figures") return lines[stage] ?? "";
   if(missing) return `Papers in, ${missingWords[missing]}`;

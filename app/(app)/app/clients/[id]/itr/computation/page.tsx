@@ -6,9 +6,11 @@ import {z} from "zod";
 import {hundredths} from "@/src/lib/datasets";
 import {grouped} from "@/src/lib/form-layout";
 import {itrWork} from "@/src/lib/itr";
+import {currentMember} from "@/src/lib/member";
 import {itrFieldName,itrFields,itrReturns,itrYear,type ItrForm} from "@/src/lib/itr-fields";
 import {formName} from "@/src/lib/prepared";
 import {ageBands,newRegime,oldRegime,type AgeBand} from "@/src/lib/tax";
+import {returnPage} from "../../../../return-back";
 import {PageHead} from "../../../../ui";
 import "../../../clients.css";
 
@@ -43,6 +45,8 @@ export default async function Computation({params,searchParams}:{params:Promise<
     return <><PageHead crumbs={[[back,"Income tax return"]]} title="Computation"/><p className="hint">InboxCA cannot open this return yet. Check that the client has a PAN and that the official form for {itrYear(period)} is in InboxCA.</p></>;
   }
   const {context,drafts}=work;
+  // Unchecked figures are checked in the year's return's Figures step, when it is on the calendar.
+  const {supabase,membership}=await currentMember(),own=membership && await returnPage(supabase,membership.firmId,{client:id,form:"ITR",period});
   // Checked figures only, by field; the first checked figure for a field counts, any other is named.
   const checked=new Map<string,Line>(),twice:string[]=[];
   let open=0;
@@ -75,7 +79,7 @@ export default async function Computation({params,searchParams}:{params:Promise<
     <PageHead crumb={<Link className="crumb" href={back}><ChevronLeft size={14} aria-hidden/>{formName(form)} {itrYear(period)}</Link>} title={`Computation, ${context.client.name}`}
       sub={<span className="head-meta"><span>Working sheet for the CA to check. Figures a person has checked, added up by InboxCA. Nothing here is a return or is filed.</span></span>}/>
     <section className="pane client-pane computation" aria-label="Computation sheet">
-      {!!open && <p className="hint">{open} {open===1 ? "figure is" : "figures are"} not checked yet and left out. <Link href={`/app/clients/${id}?tab=extraction`}>Check the figures</Link>.</p>}
+      {!!open && <p className="hint">{open} {open===1 ? "figure is" : "figures are"} not checked yet and left out. <Link href={own ? `${own}?step=figures` : `/app/clients/${id}?tab=extraction`}>Check the figures</Link>.</p>}
       {!!twice.length && <p className="alert" role="alert">Two checked papers give different values for {twice.join(", ")}. The first is used here; settle it under Check the figures.</p>}
       <section className="panel" aria-labelledby="comp-income">
         <div className="panel-head"><h2 id="comp-income">Income</h2></div>

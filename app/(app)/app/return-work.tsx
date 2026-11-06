@@ -14,7 +14,7 @@ export const returnStages=(supabase:Db,firm:string,tasks:string[])=>
 export function StageLine({code,work}:{code:string|null;work?:Work}) {
   if(!work || work.stage==="filed" || !returnOf(code) && work.stage==="none") return null;
   const at=stepOf(work.stage);
-  return <span className="sub stage-line"><span className="stage-steps" role="img" aria-label={`${at} of ${steps.length} steps done`}>{steps.map((step,n)=><i key={step} className={n<at ? "on" : undefined}/>)}</span>{stageLine(work)}</span>;
+  return <span className="sub stage-line"><span className="stage-steps" role="img" aria-label={`${at} of ${steps.length} steps done`}>{steps.map((step,n)=><i key={step} className={n<at ? "on" : undefined}/>)}</span>{stageLine(work,code)}</span>;
 }
 
 // A filled draft's figures still to check, each highlighted with a link to check it. Approving
