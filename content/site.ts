@@ -8,16 +8,16 @@ export const weekScenes = [
     "17 Oct 2026",
     "GSTR-3B week",
     [
-      ["12 GSTR-3B drafts for September, filled from GSTR-1 tables and GSTR-2B", "Ready to check", false],
+      ["12 GSTR-3B drafts for September, filled from GSTR-1 tables and GSTR-2B", "Figures to check", false],
       ["Purchase bills matched with GSTR-2B for 9 clients", "Matched", true],
-      ["5 Form No. 140 statements for Jul to Sep, made from the clients' TDS registers", "Ready to check", false],
+      ["5 Form No. 140 statements for Jul to Sep, made from the clients' TDS registers", "Waiting approval", false],
     ],
   ],
   [
     "22 Jul 2026",
     "ITR peak",
     [
-      ["18 ITR-1 and ITR-4 drafts filled from Form 16, Form 26AS and AIS", "Ready to check", false],
+      ["18 ITR-1 and ITR-4 drafts filled from Form 16, Form 26AS and AIS", "Figures to check", false],
       ["6 clients asked for Form 16 (Form No. 130 from tax year 2026-27), one email each", "Asked", false],
       ["Every figure opens the page it was read from", "Checked", true],
     ],
@@ -80,7 +80,7 @@ export const demoSteps = [
   ],
   [
     "Keeps the form ready",
-    "Figures are read into the official form. Your team checks, approves and files.",
+    "Each return has one page, from papers to filing. Your team checks, approves and files.",
   ],
 ] as const;
 
@@ -116,7 +116,7 @@ export const importsInto = [
 export const questions = [
   [
     "Does InboxCA file returns?",
-    "No. It prepares GSTR-1, GSTR-3B, ITR-1 to ITR-4 and TDS and TCS statements. Your team checks every figure, validates TDS and TCS files with Protean's free utility, and files with its own OTP or digital signature.",
+    "No. It prepares GSTR-1, GSTR-3B, ITR-1 to ITR-4 and TDS and TCS statements. Each return has its own page with one next step, from papers to filing. Your team checks every figure, validates TDS and TCS files with Protean's free utility, and files with its own OTP or digital signature.",
   ],
   [
     "How do client papers reach it?",
