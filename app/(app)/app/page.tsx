@@ -1,4 +1,4 @@
-import { BellOff, CalendarDays, KeyRound, ListChecks, Rocket, TriangleAlert } from "lucide-react";
+import { BellOff, CalendarDays, KeyRound, Layers, ListChecks, Rocket, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -17,7 +17,7 @@ import { GovLine } from "./gov-line";
 import { DroppedNotice, PortalDrop } from "./portal-drop";
 import { Count, Hold, Presence, Press } from "./motion";
 import { Pending } from "./pending";
-import { attention, weekFor, workFor } from "./work-data";
+import { attention, queueSteps, stepQueue, weekFor, workFor, type QueueStep } from "./work-data";
 import { WorkRows } from "./work-rows";
 import { Card, PageHead, SidePanel, Toast } from "./ui";
 import { PlanFit } from "./settings/billing";
@@ -50,6 +50,8 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
   const ctx = { supabase, membership, userId };
   const work = workFor(ctx, SHOWN);
   const week = weekFor(ctx, work);
+  // Front desk keeps to emails and papers, so has no returns by step.
+  const queue = membership.role === "front_desk" ? null : stepQueue(ctx).catch(() => null);
   const portal = membership.may("portal_files");
   const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric", hourCycle: "h23" }));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -102,9 +104,16 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         <Suspense fallback={<Hold shown=".today-list"><CardSkeleton title="Your list" rows={5} /></Hold>}>
           <YourList work={work} ctx={ctx} />
         </Suspense>
-        <Suspense fallback={<Hold shown=".today-week"><CardSkeleton title="This week" rows={3} /></Hold>}>
-          <ThisWeek week={week} role={membership.role} />
-        </Suspense>
+        <div className="today-side">
+          <Suspense fallback={<Hold shown=".today-week"><CardSkeleton title="This week" rows={3} /></Hold>}>
+            <ThisWeek week={week} role={membership.role} />
+          </Suspense>
+          {queue && (
+            <Suspense fallback={<Hold shown=".today-steps"><CardSkeleton title="Work by step" rows={3} /></Hold>}>
+              <ByStep queue={queue} />
+            </Suspense>
+          )}
+        </div>
       </div>
 
       <Presence>
@@ -321,6 +330,30 @@ async function ThisWeek({ week, role }: { week: ReturnType<typeof weekFor>; role
   return (
     <Card id="t-week" title="This week" Icon={CalendarDays} kind="week" className="today-week">
       <div className="week-tiles">{tiles}</div>
+    </Card>
+  );
+}
+
+// The returns late or due in 30 days by the step they wait at (work-data.ts stepQueue), each
+// count opening that step on the Calendar.
+async function ByStep({ queue }: { queue: Promise<Awaited<ReturnType<typeof stepQueue>> | null> }) {
+  const steps = await queue;
+  return (
+    <Card id="t-steps" title="Work by step" Icon={Layers} kind="docs" className="today-steps">
+      {steps ? (
+        <nav className="step-counts" aria-label="Work by step">
+          {(Object.keys(queueSteps) as QueueStep[]).map((key) => (
+            <Press key={key} href={`/app/calendar?step=${key}`} className="step-count" aria-label={`${queueSteps[key]}: ${steps.groups[key].length}`}>
+              <span className="grow">{queueSteps[key]}</span>
+              <strong>
+                <Count id={`s-${key}`} value={steps.groups[key].length} />
+              </strong>
+            </Press>
+          ))}
+        </nav>
+      ) : (
+        <NotLoaded />
+      )}
     </Card>
   );
 }

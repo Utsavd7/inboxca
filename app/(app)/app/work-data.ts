@@ -2,6 +2,7 @@ import { cache } from "react";
 import { aiCredits } from "@/src/lib/ai";
 import { addDays, dueLabel, isItr, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { periodName } from "@/src/lib/documents";
+import { pages } from "@/src/lib/paged";
 import { downloadUse } from "@/src/lib/download-use";
 import { firmChecked } from "@/src/lib/due-dates";
 import { log } from "@/src/lib/logger";
@@ -9,6 +10,8 @@ import { whenRange } from "@/src/lib/mail-view";
 import { currentMember, myQuestions } from "@/src/lib/member";
 import { memberOffice, officeApprover, type Office } from "@/src/lib/office";
 import { formName, preparedSchema } from "@/src/lib/prepared";
+import { currentStep, type Step } from "@/src/lib/return-steps";
+import type { Work } from "@/src/lib/return-work";
 import { personName } from "@/src/lib/roles";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { answersWorkItems } from "@/src/lib/work/answers";
@@ -20,6 +23,7 @@ import { inboxTeamWorkItems } from "@/src/lib/work/inbox-team";
 import { itrCheckWorkItems, itrVerifyWorkItems } from "@/src/lib/work/itr-check";
 import { papersWorkItems } from "@/src/lib/work/papers";
 import { groupRepeats, isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
+import { returnStages } from "./return-work";
 import { firmAccounts } from "./shell-data";
 
 // What Today and the full list (/app/work) read for the signed in person, as the row rules
@@ -307,4 +311,29 @@ export async function weekFor(ctx: Context, work: ReturnType<typeof workFor>) {
     stuck: items.filter((item) => item.key.startsWith("call:") || (item.area === "returns" && item.urgent && !!item.due && item.due >= today)).length,
     busiest: load?.map((row) => ({ id: row.user_id, email: people.get(row.user_id) ?? "", returns: row.returns })) ?? null,
   };
+}
+
+// The returns this person works on, late or due in the next 30 days, grouped by the step each
+// waits at (src/lib/return-steps.ts): the owner and partners see the whole firm, anyone else the
+// clients they, their team or (a manager) their team's people look after for that work, as
+// public.my_work and Today's late returns decide. One read of the tasks and one public.return_stages
+// a thousand at a time, never one a task. Today counts them; the Calendar lists one group.
+export const queueSteps = { ask: "Ask for papers", prepare: "Ready to prepare", check: "Figures to check", approve: "Waiting approval", file: "Ready to file" };
+export type QueueStep = keyof typeof queueSteps;
+const groupOf: Record<Step, QueueStep> = { papers: "ask", figures: "check", draft: "prepare", check: "check", approve: "approve", file: "file" };
+// public.work_of: the work an assignment for GST or income tax covers.
+const workOf = (code: string | null) => (/^(GSTR|CMP|PMT)/.test(code ?? "") ? "gst" : /^(ITR|ADV)/.test(code ?? "") ? "income_tax" : null);
+export async function stepQueue({ supabase, membership }: Pick<Context, "supabase" | "membership">) {
+  const firm = membership.firmId;
+  const [tasks, looked] = await Promise.all([
+    pages((from) => supabase.from("tasks").select("id, client_id, registration_id, kind, code, period_key, due_on, status, details, clients!inner(name, archived_at)").eq("firm_id", firm).eq("kind", "compliance").neq("status", "filed").is("clients.archived_at", null).lte("due_on", addDays(todayInIndia(), 30)).order("due_on").order("id").range(from, from + 999)),
+    isLead(membership.role) ? null : pages((from) => supabase.rpc("my_work", { target_firm: firm }).order("client_id").order("work").range(from, from + 999)),
+  ]);
+  const works = looked && Map.groupBy(looked, (row) => row.client_id);
+  const theirs = works ? tasks.filter((task) => works.get(task.client_id)?.some((row) => !row.work || row.work === workOf(task.code))) : tasks;
+  const stages = new Map<string, Work>();
+  await Promise.all(Array.from({ length: Math.ceil(theirs.length / 1000) }, (_, at) => returnStages(supabase, firm, theirs.slice(at * 1000, at * 1000 + 1000).map((task) => task.id)).then((part) => part.forEach((work, id) => stages.set(id, work)))));
+  const groups = Object.fromEntries(Object.keys(queueSteps).map((key) => [key, [] as typeof theirs])) as Record<QueueStep, typeof theirs>;
+  for (const task of theirs) groups[groupOf[currentStep({ ...(stages.get(task.id) ?? { stage: "none", open: null, missing: null }), form: null }, task.code)]].push(task);
+  return { groups, stages };
 }
