@@ -55,6 +55,7 @@ import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 import { sendSystemMail, systemMailReady, systemMailUse } from "@/src/lib/system-mail";
 import { REPLY_DAYS } from "@/src/lib/team-replies";
 import { keepSafetyCopy, openSafetyCopy } from "@/src/lib/workspace";
+import { clientBack } from "@/app/(app)/app/return-back";
 
 export type InviteState = { error?: string; done?: string; values?: Record<string, string> };
 
@@ -978,9 +979,11 @@ export async function manageTasks(form: FormData) {
   if (form.has("view")) redirect(calendarBack(form, ["saved", String(intent)], ["t", ids.join(".")]));
   // From the late returns of a person's full list: back to them, the same way.
   if (form.get("from") === "work") redirect(`/app/work?show=late&marked=${intent}&t=${ids.join(".")}`);
-  // From a client's Returns tab: back to it, the same way.
+  // From a client's Returns tab: back to it, the same way; from a return's own page, back to it.
   const client = String(form.get("client") ?? "");
   if (z.uuid().safeParse(client).success) {
+    const page = await clientBack(client);
+    if (page !== `/app/clients/${client}`) redirect(page);
     const back = new URLSearchParams([["tab", "returns"], ...["show", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["marked", String(intent)], ["t", ids.join(".")]].filter(([, value]) => value));
     redirect(`/app/clients/${client}?${back}`);
   }

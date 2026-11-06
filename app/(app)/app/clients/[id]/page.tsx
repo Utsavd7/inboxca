@@ -935,7 +935,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                             <strong>{day}</strong>
                           </span>
                         }
-                        title={title}
+                        title={<Link className="row-link" href={`${base}/returns/${task.id}`}>{title}</Link>}
                         meta={
                           task.status === "filed"
                             ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}{filed.udin && <>, UDIN <span className="num">{filed.udin}</span></>}{verify &&(filed.verified_on ? `. E-verified ${dueLabel(filed.verified_on)}` : `. Verify by ${dueLabel(verifyBy(filed.filed_on ?? task.due_on))}`)}</>

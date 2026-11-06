@@ -1,0 +1,141 @@
+import Link from "next/link";
+import {notFound,redirect} from "next/navigation";
+import {CircleCheck,FileText,ListChecks} from "lucide-react";
+import {manageTasks} from "@/app/(app)/actions";
+import {dueLabel,isItr,periodLabel,todayInIndia} from "@/src/lib/calendar";
+import {workOfService,type DocumentRequest} from "@/src/lib/checklists";
+import {assignmentRoles} from "@/src/lib/clients";
+import {itrReturns} from "@/src/lib/itr-fields";
+import {currentMember,viewOnlyWords} from "@/src/lib/member";
+import {preparedSchema} from "@/src/lib/prepared";
+import {personName} from "@/src/lib/roles";
+import {currentStep,nextAction,stepNames,stepsFor,type Step} from "@/src/lib/return-steps";
+import {returnPeriod,stageLine} from "@/src/lib/return-work";
+import {DatasetReview} from "../../dataset-review";
+import {PortalInput} from "../../portal-input";
+import {PurchaseMatch} from "../../purchase-match";
+import {SalesInput} from "../../sales-input";
+import {Fill} from "../../../../fill";
+import {MarkFiled} from "../../../../mark-filed";
+import {Pending} from "../../../../pending";
+import {PreparedForms} from "../../../../prepared-forms";
+import {ReturnFrame} from "../../../../return-frame";
+import {FillChecks,returnStages} from "../../../../return-work";
+import {Badge,Card,Row} from "../../../../ui";
+import "../../../clients.css";
+
+const uuid=/^[0-9a-f-]{36}$/;
+const order=Object.keys(assignmentRoles);
+// The prepared forms a return's files are, and the forms its figures are read into.
+const formsOf=(code:string)=>/^GSTR1_/.test(code) ? {files:["GSTR1"],figures:["GSTR1"]} : /^GSTR3B_/.test(code) ? {files:["GSTR3B"],figures:["GSTR1","GSTR3B"]}
+  : /^ITR_/.test(code) ? {files:[...itrReturns],figures:["ITR"]} : code==="TDS_RET" ? {files:["TDS138","TDS140","TDS144"],figures:["TDS140"]} : code==="TCS_RET" ? {files:["TDS143"],figures:["TDS143"]} : null;
+
+// One page per return (runbooks/return-page-design-6nov.md): its six steps, or the ones it has,
+// from where public.return_stages says it stands, with the step's own parts of the client's
+// Figures and Return files for this return only. ?step= opens a step; ?tab=extraction (Figures)
+// and ?tab=outputs (Return files), where the forms on them come back to, open its figures and the
+// step it stands at. Who may do what is the same as on those tabs: the same actions decide.
+export default async function ReturnPage({params,searchParams}:{params:Promise<{id:string;task:string}>;searchParams:Promise<Record<string,string|undefined>>}) {
+  const {supabase,membership}=await currentMember();
+  if(!membership) redirect("/app");
+  const [{id,task:taskId},q]=await Promise.all([params,searchParams]);
+  if(!uuid.test(id) || !uuid.test(taskId)) notFound();
+  const firm=membership.firmId,today=todayInIndia(),viewOnly=!!membership.viewOnlyUntil;
+  const [{data:task},{data:client},{data:people},{data:teams}]=await Promise.all([
+    supabase.from("tasks").select("id,code,period_key,due_on,status,details,registration_id").eq("firm_id",firm).eq("client_id",id).eq("id",taskId).eq("kind","compliance").maybeSingle(),
+    supabase.from("clients").select("id,name,client_assignments(user_id,team_id,role)").eq("firm_id",firm).eq("id",id).maybeSingle(),
+    supabase.rpc("firm_people",{target_firm:firm}),
+    supabase.from("groups").select("id,name").eq("kind","team"),
+  ]);
+  if(!task || !client) notFound();
+  const code=task.code ?? "",period=task.period_key ?? "",itr=/^ITR_/.test(code),forms=formsOf(code),work=workOfService(code);
+  const papers=supabase.from("documents").select("id,name,document_type").eq("firm_id",firm).eq("client_id",id).not("status","in","(deleted,earlier)").is("prepared",null);
+  const [{data:rule},stages,{data:drafts},{data:asks},{data:filedPapers}]=await Promise.all([
+    supabase.from("compliance_types").select("name,frequency").eq("code",code).eq("period_key","").maybeSingle(),
+    returnStages(supabase,firm,[task.id]),
+    forms ? supabase.rpc("return_drafts",{task_id:task.id}) : Promise.resolve({data:[]}),
+    supabase.from("requests").select("id,status,details").eq("firm_id",firm).eq("kind","documents").eq("client_id",id).eq("details->>period",period).in("status",["pending","done"]).order("expires_at",{ascending:false}).limit(5),
+    (itr ? papers.like("period_key",`${period.slice(0,4)}%`) : papers.eq("period_key",period)).match(work ? {work_type:work} : {}).order("received_at",{ascending:false}).limit(30),
+  ]);
+  const stage=stages.get(task.id) ?? {stage:task.status==="filed" ? "filed" : "none",open:null,missing:null,form:null};
+  const [{data:latest},{data:names}]=await Promise.all([
+    stage.form ? supabase.from("documents").select("id,prepared").eq("firm_id",firm).eq("id",stage.form).maybeSingle() : Promise.resolve({data:null}),
+    drafts?.length ? supabase.from("documents").select("id,name").eq("firm_id",firm).in("id",drafts.flatMap(draft=>draft.document ? [draft.document] : [])) : Promise.resolve({data:[]}),
+  ]);
+  const meta=latest ? preparedSchema.parse(latest.prepared) : null;
+
+  // As Fill reads it: a latest file counts only when corrected outside InboxCA. A fill whose last
+  // figure was just checked waits for the checked draft InboxCA makes from it (Return files says so).
+  const making=stage.stage==="checked" && !!meta?.filled && meta.status==="draft";
+  const now={...stage,stage:making ? "draft" : stage.stage,form:meta?.external ? stage.form : null};
+  const periodWords=periodLabel(rule?.frequency ?? null,period,code),name=`${rule?.name ?? code} ${periodWords}`;
+  const sets=(drafts ?? []).map(draft=>({...draft,name:draft.form_code==="GSTR3B" ? "the GSTR-2B" : draft.target ? "your team's entries" : names?.find(paper=>paper.id===draft.document)?.name ?? (itr ? "a paper" : "the sales register")}));
+  const approver=!viewOnly && ["owner","partner","manager"].includes(membership.role),canPrepare=!viewOnly && membership.may("edit_figures",id),canFile=!viewOnly && membership.may("mark_filed",id);
+  const steps=stepsFor(code),at=currentStep(now,code),filed=task.status==="filed";
+  const shown:Step=steps.includes(q.step as Step) ? q.step as Step : q.tab==="extraction" && steps.includes("figures") ? "figures" : at;
+  const next=making ? {step:"approve" as const,why:"Every figure is checked. InboxCA is making the checked draft now."} : nextAction(now,code,{period:returnPeriod(code,period),drafts:sets,approver});
+  const base=`/app/clients/${id}`,here=`${base}/returns/${task.id}`;
+
+  // The one button for the next step. Approving, downloading and marking filed are the return
+  // file's own buttons, in their step: from another step the button opens that step.
+  const tds=code==="TDS_RET" || code==="TCS_RET",own=`${base}/${itr ? `itr?year=${period.slice(0,4)}` : `tds?tan=${task.registration_id}&period=${period}${code==="TCS_RET" ? "&form=TDS143" : ""}`}`;
+  const firstOpen=sets.find(set=>set.open)?.id ?? sets[0]?.id;
+  let why=next?.why,action:React.ReactNode=null;
+  if(next?.act && next.label) {
+    if(["approve","download","file"].includes(next.act)) action=next.step!==shown && <Link className="b b-primary" href={`${here}?step=${next.step}`} scroll={false}>Go to {stepNames[next.step]}</Link>;
+    else if(viewOnly && ["ask","upload","fill"].includes(next.act)) why=viewOnlyWords(membership.viewOnlyUntil);
+    else if(next.act==="ask" || next.act==="upload") action=<Link className="b b-primary" href={`${base}?tab=documents&${next.act==="ask" ? "ask" : "upload"}=1`} scroll={false}>{next.label}</Link>;
+    else if(next.act==="fill" && !canPrepare) why="Preparing a return needs the right to edit figures. Ask your firm's owner.";
+    else if(next.act==="fill") action=<Fill task={task.id} label={name} words={next.label}/>;
+    else if(next.act==="open" && (itr || tds && task.registration_id)) action=<Link className="b b-primary" href={own}>{next.label}</Link>;
+    else if(next.act==="check" && firstOpen) action=<Link className="b b-primary" href={`${here}?tab=extraction&draft=${firstOpen}`} scroll={false}>{next.label}</Link>;
+  }
+  const lookers=[...client.client_assignments].sort((a,b)=>order.indexOf(a.role)-order.indexOf(b.role)).map(one=>(one.team_id ? teams?.find(team=>team.id===one.team_id)?.name : personName(people?.find(person=>person.user_id===one.user_id)?.email)) ?? "").filter(Boolean);
+  const days=Math.round((Date.parse(task.due_on)-Date.parse(today))/86_400_000),details=task.details as {filed_on?:string;by?:string;ack?:string;udin?:string};
+  const due=filed ? `Filed${details.filed_on ? ` ${dueLabel(details.filed_on)}` : ""}` : `Due ${dueLabel(task.due_on)}, ${days<0 ? `${-days} ${days===-1 ? "day" : "days"} late` : days===0 ? "today" : days===1 ? "tomorrow" : `in ${days} days`}`;
+  const only=forms && task.registration_id ? {files:forms.files,figures:forms.figures,period:itr ? period.slice(0,4) : period,registration:task.registration_id} : null;
+
+  return <ReturnFrame back={{href:`${base}?tab=returns`,name:client.name}} title={name} due={due} late={!filed && days<0} people={lookers}
+    status={filed ? "Filed" : stageLine(now) || "Not started"} shown={stepNames[shown]}
+    steps={steps.map((step,n)=>({key:stepNames[step],label:stepNames[step],href:`${here}?step=${step}`,state:filed || n<steps.indexOf(at) ? "done" : step===at ? "now" : "later"}))}
+    next={next ? {step:stepNames[next.step],why,action} : null}>
+    {steps.indexOf(shown)>steps.indexOf(at) && !filed && <p className="hint">This step waits until {stepNames[at]} is done.</p>}
+    {shown==="papers" && <Card id="rp-papers" title={`Papers for ${periodWords}`} Icon={FileText} kind="papers" className="rs-papers" end={<Link className="b b-ghost" href={`${base}?tab=documents`}>All papers</Link>}>
+      <ul className="app-rows">
+        {(asks ?? []).flatMap(ask=>((ask.details as unknown as DocumentRequest).items ?? []).map((item,n)=><Row key={`${ask.id}-${n}`} title={item.type} meta="Asked for"
+          status={<Badge tone={item.received.length ? "done" : "warn"}>{item.received.length ? "Received" : "Missing"}</Badge>}
+          action={!!item.received.length && <Link className="b b-ghost" href={`/app/files/${item.received[0]}/view`}>Open</Link>}/>))}
+        {(filedPapers ?? []).map(paper=><Row key={paper.id} title={paper.name} meta={paper.document_type ?? "Paper"} action={<Link className="b b-ghost" href={`/app/files/${paper.id}/view`}>Open</Link>}/>)}
+      </ul>
+      {!asks?.length && !filedPapers?.length && <p className="app-card-none">No papers for {periodWords} yet.</p>}
+    </Card>}
+    {shown==="figures" && only && <>
+      <DatasetReview clientId={id} draftId={q.draft} lineId={q.line} check={q.check} view={q.view} only={{forms:only.figures,period:only.period}}/>
+      <div className="fig-tools">
+        {/^GSTR/.test(code) && <SalesInput clientId={id} at={here} period={period} source={q.source} section={q.section} header={q.header} read={q.read}/>}
+        {/^GSTR3B_/.test(code) && <PortalInput clientId={id} period={period} message={q.portal}/>}
+        {(itr || tds) && <Card id="rp-own" title={itr ? "Income tax return" : "TDS statement"} Icon={FileText} kind="docs" end={<Link className="b b-secondary" href={own}>{itr ? "Open the return" : "Open the statement"}</Link>}><p className="app-card-none">{itr ? "Figures you enter for this return are on its income tax page." : "The quarter's registers and challans are read on the statement page."}</p></Card>}
+      </div>
+    </>}
+    {shown==="draft" && only && <Card id="rp-draft" title={`${name}: figures to fill from`} Icon={ListChecks} kind="docs">
+      <ul className="app-rows">{sets.map(set=><Row key={set.id} title={set.name} meta={set.wrong ? `${set.wrong} marked wrong` : set.open ? `${set.open} not checked yet` : "Every figure checked"}
+        action={<Link className="b b-ghost" href={`${here}?tab=extraction&draft=${set.id}`} scroll={false}>See figures</Link>}/>)}</ul>
+      {!sets.length && <p className="app-card-none">No figures read for {periodWords} yet.</p>}
+      {itr || tds ? <p className="app-card-foot"><span className="hint grow">For now this return is prepared on its own {itr ? "income tax" : "statement"} page.</span><Link className="b b-secondary" href={own}>{itr ? "Open the return" : "Open the statement"}</Link></p>
+        : <p className="app-card-foot hint">InboxCA fills the official file from every figure it has read, checked or not. Approving and downloading wait until every figure is checked.</p>}
+    </Card>}
+    {shown==="check" && <>
+      {meta && stage.stage==="filled" ? <FillChecks client={id} sources={meta.sources} at={here}/> : (filed || steps.indexOf(at)>steps.indexOf("check")) && <p className="app-card-none">Every figure on the draft is checked.</p>}
+      {/^GSTR3B_/.test(code) && <PurchaseMatch clientId={id} at={here} period={period} searchParams={searchParams}/>}
+    </>}
+    {(shown==="approve" || shown==="file") && only && <PreparedForms client={id} message={q.form} only={{forms:only.files,period:only.period,registration:only.registration}}/>}
+    {shown==="file" && !filed && canFile && stage.stage!=="approved" && <Card id="rp-file" title="Mark filed" Icon={CircleCheck} kind="done">
+      <MarkFiled state={<input type="hidden" name="client" value={id}/>} rows={[{id:task.id,name,sub:`Due ${dueLabel(task.due_on)}`,itr:isItr(code),udin:code==="TAX_AUDIT"}]}/>
+    </Card>}
+    {shown==="file" && filed && <Card id="rp-filed" title="Filed" Icon={CircleCheck} kind="done">
+      <ul className="app-rows"><Row title={`Filed${details.filed_on ? ` ${dueLabel(details.filed_on)}` : ""}${details.by ? ` by ${personName(people?.find(person=>person.user_id===details.by)?.email)}` : ""}`}
+        meta={[details.ack && `ARN ${details.ack}`,details.udin && `UDIN ${details.udin}`].filter(Boolean).join(", ") || undefined}
+        action={canFile && <form action={manageTasks}><input type="hidden" name="client" value={id}/><input type="hidden" name="task" value={task.id}/><Pending className="b b-ghost" name="intent" value="reopen">Not filed after all</Pending></form>}/></ul>
+    </Card>}
+  </ReturnFrame>;
+}

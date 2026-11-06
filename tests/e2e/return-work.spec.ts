@@ -80,7 +80,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     const other=await managerContext.newPage();await signIn(other,managerEmail,managerKey);
     const managerNow=other.getByRole("region",{name:"Your list"});
     await expect(managerNow.getByText("Checked and ready for your approval")).toBeVisible();
-    await managerNow.getByRole("link",{name:/Review and approve/}).click();await expect(other).toHaveURL(/tab=outputs/);
+    await managerNow.getByRole("link",{name:/Review and approve/}).click();await expect(other).toHaveURL(/\/returns\//);
     await other.getByRole("button",{name:"Give second approval"}).click();
     await expect(other.getByRole("button",{name:"Download for filing"}).and(other.locator(":enabled"))).toBeVisible();
     // Approved: pinned to the client's people to download and file; filing closes it.

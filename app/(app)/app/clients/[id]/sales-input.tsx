@@ -1,6 +1,7 @@
 import Form from "next/form";
 import Link from "next/link";
 import {redirect} from "next/navigation";
+import {clientBack} from "../../return-back";
 import {z} from "zod";
 import {currentMember,currentWriter} from "@/src/lib/member";
 import {grantFor} from "@/src/lib/permission-grants";
@@ -22,7 +23,7 @@ async function readRegister(form:FormData) {
   const {supabase,membership,userId}=await currentWriter();
   if(!membership) redirect("/app");
   const client=z.uuid().parse(form.get("client")),id=z.uuid().parse(form.get("source"));
-  const back=`/app/clients/${client}?tab=extraction&source=${id}`;
+  const page=await clientBack(client),back=`${page}?tab=extraction&source=${id}`;
   const permission=membership.may("edit_figures", client) ? null : await grantFor(membership.firmId,userId,"edit_figures",client);
   if(!membership.may("edit_figures", client) && !permission) redirect(`${back}&read=permission`);
   const {data:doc}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,work_type,status").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).eq("work_type","gst").eq("status","filed").is("prepared",null).single();
@@ -40,13 +41,16 @@ async function readRegister(form:FormData) {
     // The register's GSTIN is the paper's too, when it had none.
     if(registration) await supabaseAdmin().from("documents").update({registration_id:registration}).eq("id",doc.id).is("registration_id",null);
   } catch(error) {await keepReason(error);redirect(`${back}&read=check`);}
-  redirect(`/app/clients/${client}?tab=extraction&draft=${draft}`);
+  redirect(`${page}?tab=extraction&draft=${draft}`);
 }
 
-export async function SalesInput({clientId,source,section:asked,header:askedHeader,read}:{clientId:string;source?:string;section?:string;header?:string;read?:string}) {
+// at and period: the page its choices open on, and on a return's own page that return's month
+// (registers with no month too).
+export async function SalesInput({clientId,at=`/app/clients/${clientId}`,period,source,section:asked,header:askedHeader,read}:{clientId:string;at?:string;period?:string;source?:string;section?:string;header?:string;read?:string}) {
   const {supabase,membership,userId}=await currentMember();
   if(!membership) return null;
-  const {data:files}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,registration_id").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("work_type","gst").eq("status","filed").neq("document_type","Purchase bills").is("prepared",null).order("received_at",{ascending:false}).limit(100);
+  const query=supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,registration_id").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("work_type","gst").eq("status","filed").neq("document_type","Purchase bills").is("prepared",null);
+  const {data:files}=await (period ? query.or(`period_key.eq.${period},period_key.is.null`) : query).order("received_at",{ascending:false}).limit(100);
   const registers=files?.filter((file)=>/\.(xlsx?|ods|csv)$/i.test(file.name)) ?? [];
   if(!registers.length) return null;
   const selected=registers.find((file)=>file.id===source);
@@ -66,7 +70,7 @@ export async function SalesInput({clientId,source,section:asked,header:askedHead
     <p className="tool-hint">Choose a register, its GSTR-1 section and its columns. InboxCA remembers them for this client&apos;s next register, from Tally or any other software.</p>
     <ul className="app-rows" aria-label="Sales registers">{registers.map((file)=><li className={`app-row${selected?.id===file.id ? " is-on" : ""}`} key={file.id}><span className="grow"><strong>{file.name}</strong>{file.period_key && <span className="sub">{periodName(file.period_key)}</span>}</span><Link className="b b-secondary" href={`?tab=extraction&source=${file.id}`} aria-current={selected?.id===file.id ? "page" : undefined} aria-label={`Choose the columns of ${file.name}`}>Choose columns</Link></li>)}</ul>
     {(issue || read || selected) && <div className="tool-body">{(issue || read) && <p className="alert" role="alert">{issue || (read==="permission" ? "You need permission to read these figures. Choose Ask to edit figures." : reason ?? "InboxCA could not read the figures. Check the columns you chose, the dates and amounts, and the paper's month. If the file was changed, upload it again.")}</p>}
-    {selected && rows.length>0 && <><Form action={`/app/clients/${clientId}`} className="form-row"><input type="hidden" name="tab" value="extraction"/><input type="hidden" name="source" value={selected.id}/><label>GSTR-1 section<select name="section" defaultValue={section}>{Object.entries(salesSections).map(([key,value])=><option value={key} key={key}>{value.name}</option>)}</select></label><label>Column names are on row<input type="number" name="header" min={1} max={40} defaultValue={header}/></label><button className="b b-secondary">Show columns</button></Form>
+    {selected && rows.length>0 && <><Form action={at} className="form-row"><input type="hidden" name="tab" value="extraction"/><input type="hidden" name="source" value={selected.id}/><label>GSTR-1 section<select name="section" defaultValue={section}>{Object.entries(salesSections).map(([key,value])=><option value={key} key={key}>{value.name}</option>)}</select></label><label>Column names are on row<input type="number" name="header" min={1} max={40} defaultValue={header}/></label><button className="b b-secondary">Show columns</button></Form>
     {canEdit ? <form action={readRegister} className="fields"><input type="hidden" name="client" value={clientId}/><input type="hidden" name="source" value={selected.id}/><input type="hidden" name="section" value={section}/><input type="hidden" name="header" value={header}/>{!!gstins.length && <label>GSTIN this register is for<select name="registration" required defaultValue={selected.registration_id ?? ""}><option value="" disabled>Choose</option>{gstins.map((reg)=><option key={reg.id} value={reg.id}>{reg.number}</option>)}</select></label>}{registerColumns(section).map((name,index)=>{
       const column=suggestion?.section===section && suggestion.header===header-1 ? suggestion.columns[index] : headings.findIndex((heading)=>heading.trim().toLowerCase()===name.toLowerCase());
       return <label key={name}>{name}<select name={`column${index}`} defaultValue={column}><option value={-1}>Not in this file</option>{headings.map((heading,n)=><option key={n} value={n}>{String.fromCharCode(65+n)}: {heading.slice(0,200)}</option>)}</select></label>;

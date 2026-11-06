@@ -199,7 +199,7 @@ test("late clients lead the list, and a client's return is marked filed from its
   const due = owner.locator("section[aria-labelledby=due] li");
   const [{ soon }] = await query(local.dbUrl, "select count(*)::int soon from public.tasks where client_id=$1 and kind='compliance' and status<>'filed' and due_on<=(now() at time zone 'Asia/Kolkata')::date+30", [patel]);
   await expect(due.getByRole("link", { name: /^Mark .* filed$/ })).toHaveCount(soon);
-  await expect(due.last().getByRole("link")).toHaveCount(0);
+  await expect(due.last().getByRole("link", { name: /^Mark .* filed$/ })).toHaveCount(0);
   const late = due.filter({ has: owner.locator(".badge", { hasText: "Late" }) }).first();
   const title = (await late.locator(".grow > strong").textContent())!;
   await late.getByRole("link", { name: `Mark ${title} filed` }).click();

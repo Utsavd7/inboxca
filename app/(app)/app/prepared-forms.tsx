@@ -51,11 +51,14 @@ function Steps({done,busy}:{done:number;busy:boolean}) {
   </ol>;
 }
 
-export async function PreparedForms({client,message}:{client?:string;message?:string}) {
+// only: on a return's own page, that return's files (its forms, period and registration), without
+// the Prepare card.
+export async function PreparedForms({client,message,only}:{client?:string;message?:string;only?:{forms:string[];period:string;registration:string}}) {
   const {supabase,membership,userId}=await currentMember();
   if(!membership) return null;
   let query=supabase.from("documents").select("id,client_id,name,period_key,size,status,prepared,received_at,clients(name)").eq("firm_id",membership.firmId).not("prepared","is",null).order("prepared->version",{ascending:false}).order("received_at",{ascending:false}).limit(100);
   if(client) query=query.eq("client_id",client);
+  if(only) query=query.eq("period_key",only.period).in("prepared->>form",only.forms).eq("prepared->>registration",only.registration);
   const {data:forms,error}=await query;
   if(error) throw new Error("The forms could not be read.");
   const groups=new Set<string>(),latest=new Set((forms ?? []).filter(file=>{
@@ -224,9 +227,10 @@ export async function PreparedForms({client,message}:{client?:string;message?:st
     <MenuClose/>
     <header className="rf-head"><h2 id="prepared-title">Return files</h2></header>
     {toast ? <Toast>{toast}</Toast> : message && <p className="alert" role="status">{reason ?? (message==="edited" ? "InboxCA could not use this file. Choose the official workbook or return file you filled, with its headings unchanged. You also need permission to edit figures." : message==="ack" ? "The return was not marked filed. Choose or upload the acknowledgement, or type its number, then try again." : message==="approval" ? "The approval was not saved. Someone other than the person who checked the figures must approve. To reject, choose a reason and say what must change." : message==="differences" ? "This return differs from Form 26AS or Form 16. Look at the differences and tick the box, then approve again." : "InboxCA could not prepare this return. Check that every figure is checked and that your firm's drive is connected, then try again.")}</p>}
+    {only && !versions.size && <p className="app-card-none">No return file yet. It shows here once the draft is made.</p>}
     {!!versions.size && <ul className="rf-list">{[...versions.values()].map(([file,...older])=>card(file,older))}</ul>}
     {[...versions.values()].some(([file])=>{const {stage,open}=stageOf(file);return stage==="preparing" || stage==="making" || stage==="outdated" && !open;}) && <Refresh/>}
-    {(!!rows?.length || !!pans?.length || !!tans?.length) && <div className="app-card rf-prepare">
+    {!only && (!!rows?.length || !!pans?.length || !!tans?.length) && <div className="app-card rf-prepare">
       <header className="app-card-head"><IconTile Icon={FilePlus2} kind="docs"/><h2>Prepare a return</h2><span className="hint">InboxCA fills the official file from checked figures only.</span></header>
       {!!rows?.length && (canPrepare ? <>
         {!!unassigned.length && <div className="rf-group"><h3>Which GSTIN is each register for?</h3><p className="hint">This client has more than one GSTIN. Each register belongs to one of them.</p>{unassigned.map(row=><form action={setDraftRegistration} className="rf-row" key={`reg-${row.id}`}>
