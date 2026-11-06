@@ -52,7 +52,7 @@ test("prepares a Form No. 140 statement from a register and a challan, approved 
     await page.locator('[name="d_state"]').selectOption("24");await page.locator('[name="p_state"]').selectOption("24");
     await page.getByRole("button",{name:"Save statement details"}).click();await expect(page).toHaveURL(/changed=tds/);
     // The quarter's TDS return opens its statement in the Draft step of the return's own page.
-    await page.goto(`/app/clients/${client}?tab=returns`);await page.getByRole("link",{name:/^Prepare TDS returns/}).click();
+    await page.goto(`/app/clients/${client}`);await page.locator(".work-rows").getByRole("link",{name:/^TDS returns/}).click();await page.getByRole("navigation",{name:"Steps of this return"}).getByRole("link",{name:/^Draft/}).click();
     const here=/\/app\/clients\/[0-9a-f-]{36}\/returns\/[0-9a-f-]{36}/;
     await expect(page).toHaveURL(new RegExp(`${here.source}\\?step=draft$`));await expect(page.getByText(/^Form No\. 140: Statement of/)).toBeVisible();
     // Read the register with the columns a person chose.

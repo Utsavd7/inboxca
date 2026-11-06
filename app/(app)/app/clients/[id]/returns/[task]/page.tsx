@@ -2,7 +2,7 @@ import Link from "next/link";
 import {notFound,redirect} from "next/navigation";
 import {CircleCheck,FileText,ListChecks} from "lucide-react";
 import {manageTasks} from "@/app/(app)/actions";
-import {dueLabel,isItr,periodLabel,todayInIndia} from "@/src/lib/calendar";
+import {dueLabel,isItr,periodLabel,todayInIndia,verifyBy} from "@/src/lib/calendar";
 import {workOfService,type DocumentRequest} from "@/src/lib/checklists";
 import {assignmentRoles} from "@/src/lib/clients";
 import {itrReturns} from "@/src/lib/itr-fields";
@@ -94,7 +94,7 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
     else if(next.act==="check" && firstOpen) action=<Link className="b b-primary" href={`${here}?tab=extraction&draft=${firstOpen}`} scroll={false}>{next.label}</Link>;
   }
   const lookers=[...client.client_assignments].sort((a,b)=>order.indexOf(a.role)-order.indexOf(b.role)).map(one=>(one.team_id ? teams?.find(team=>team.id===one.team_id)?.name : personName(people?.find(person=>person.user_id===one.user_id)?.email)) ?? "").filter(Boolean);
-  const days=Math.round((Date.parse(task.due_on)-Date.parse(today))/86_400_000),details=task.details as {filed_on?:string;by?:string;ack?:string;udin?:string};
+  const days=Math.round((Date.parse(task.due_on)-Date.parse(today))/86_400_000),details=task.details as {filed_on?:string;by?:string;ack?:string;udin?:string;verified_on?:string};
   const due=filed ? `Filed${details.filed_on ? ` ${dueLabel(details.filed_on)}` : ""}` : `Due ${dueLabel(task.due_on)}, ${days<0 ? `${-days} ${days===-1 ? "day" : "days"} late` : days===0 ? "today" : days===1 ? "tomorrow" : `in ${days} days`}`;
   const only=forms && task.registration_id ? {files:forms.files,figures:forms.figures,period:itr ? period.slice(0,4) : period,registration:task.registration_id} : null;
 
@@ -138,8 +138,8 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
     </Card>}
     {shown==="file" && filed && <Card id="rp-filed" title="Filed" Icon={CircleCheck} kind="done">
       <ul className="app-rows"><Row title={`Filed${details.filed_on ? ` ${dueLabel(details.filed_on)}` : ""}${details.by ? ` by ${personName(people?.find(person=>person.user_id===details.by)?.email)}` : ""}`}
-        meta={[details.ack && `ARN ${details.ack}`,details.udin && `UDIN ${details.udin}`].filter(Boolean).join(", ") || undefined}
-        action={canFile && <form action={manageTasks}><input type="hidden" name="client" value={id}/><input type="hidden" name="task" value={task.id}/><Pending className="b b-ghost" name="intent" value="reopen">Not filed after all</Pending></form>}/></ul>
+        meta={[details.ack && `ARN ${details.ack}`,details.udin && `UDIN ${details.udin}`,isItr(code) && (details.verified_on ? `E-verified ${dueLabel(details.verified_on)}` : `Verify by ${dueLabel(verifyBy(details.filed_on ?? task.due_on))}`)].filter(Boolean).join(", ") || undefined}
+        action={canFile && <form action={manageTasks}><input type="hidden" name="client" value={id}/><input type="hidden" name="task" value={task.id}/>{isItr(code) && !details.verified_on && <Pending className="b b-secondary" name="intent" value="verified">Mark verified</Pending>}<Pending className="b b-ghost" name="intent" value="reopen">Not filed after all</Pending></form>}/></ul>
     </Card>}
   </ReturnFrame>;
 }
