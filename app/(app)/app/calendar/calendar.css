@@ -53,6 +53,8 @@
 .cal-list { flex-direction: column; }
 .cal-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); padding: var(--s2) var(--s2) var(--s2) var(--s4); border-bottom: 1px solid var(--line); }
 .cal-tools form { display: flex; }
+/* The return and step pickers sit together at the end. */
+.cal-tools > :first-child { margin-right: auto; }
 /* The return picker is as wide as the chosen return, not the longest one. */
 .cal-tools .cell-select { field-sizing: content; }
 .cal-list > .empty { flex: 1; align-content: center; margin: var(--s4); gap: var(--s2); padding: var(--s7) var(--s4); }
@@ -66,6 +68,8 @@
 .cal-table .t :is(th, td):first-child { padding-left: var(--s4); }
 .cal-table .t tbody tr.on { background: var(--accent-soft); }
 .cal-table .who .avatar { width: 24px; height: 24px; font-size: 11px; }
+/* A long client name wraps, so a row's buttons fit a laptop without scrolling sideways. */
+.cal-table .who { white-space: normal; }
 .cal-act { text-align: right; }
 .cal-act > * { vertical-align: middle; }
 .cal-act form { display: inline-flex; }

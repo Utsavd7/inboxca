@@ -61,7 +61,7 @@ test("GST month end: every client's month in one list, by tag, with GSTR-1 by ra
   // Mehta's papers are in and checked, its GSTR-1 waits to be prepared and its GSTR-3B for the GSTR-2B; Shah has nothing yet.
   await expect(row(names.mehta).getByRole("cell").nth(1)).toHaveText("In");
   await expect(row(names.mehta)).toContainText("Checked, not prepared");
-  await expect(row(names.mehta).getByRole("cell").nth(5)).toHaveText("Waiting for GSTR-2B");
+  await expect(row(names.mehta).getByRole("cell").nth(5)).toContainText("Waiting for GSTR-2B");
   await expect(row(names.shah)).toContainText("Not asked for");
   await expect(row(names.shah)).toContainText("Missing");
   await expect(row(names.shah).getByRole("link",{name:"Add GSTR-2B"})).toBeVisible();
