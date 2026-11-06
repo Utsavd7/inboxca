@@ -39,9 +39,9 @@ it("names one next action, or why the return waits",()=>{
   expect(nextAction(work("filed"),"GSTR1_M",ready)).toBeNull();
 });
 
-it("sends ITR and TDS drafts to their own pages for now, and a return InboxCA does not prepare to filing",()=>{
+it("opens ITR and TDS drafts in their Draft step, fills a ready ITR, and sends a return InboxCA does not prepare to filing",()=>{
   expect(nextAction(work("figures",0,"return"),"ITR_NA",ready)).toMatchObject({step:"draft",act:"open"});
-  expect(nextAction(work("checked"),"ITR_NA",ready)).toMatchObject({step:"draft",act:"open"});
+  expect(nextAction(work("checked"),"ITR_NA",ready)).toMatchObject({step:"draft",act:"fill"});
   expect(nextAction(work("in"),"TDS_RET",{...ready,drafts:[]})).toMatchObject({step:"draft",act:"open"});
   expect(nextAction(work("in"),"DIR3KYC",ready)).toMatchObject({step:"file",act:"file"});
   expect(nextAction(work("none"),"DIR3KYC",ready)).toMatchObject({step:"papers",act:"ask"});

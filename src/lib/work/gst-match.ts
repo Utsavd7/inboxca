@@ -22,17 +22,20 @@ const bills = (count: number, words: string) => `${count} ${count === 1 ? "bill"
 // (public.gst_match_items, read as them): a month whose bills differ from GSTR-2B or whose
 // corrected bills the books do not show yet, until its
 // GSTR-3B is filed, due on the GSTR-3B's date and red in its last 3 days or once late. The CA
-// decides what to claim; the button opens the lists on the client's Figures.
+// decides what to claim; the button opens the lists on the month's GSTR-3B page (its Check step),
+// or on the client's Figures when the client files more than one GSTR-3B for the month.
 export async function gstMatchWorkItems(ctx: { supabase: SupabaseClient<Database>; membership: { firmId: string }; userId?: string }): Promise<WorkItem[]> {
   const { data: rows } = await ctx.supabase.rpc("gst_match_items", { target_firm: ctx.membership.firmId }).throwOnError();
   const soon = new Date(Date.parse(`${todayInIndia()}T00:00:00Z`) + 3 * 86_400_000).toISOString().slice(0, 10);
+  const { data: tasks } = rows?.length ? await ctx.supabase.from("tasks").select("id, client_id, period_key").eq("firm_id", ctx.membership.firmId).eq("kind", "compliance").in("code", ["GSTR3B_M", "GSTR3B_Q"]).in("client_id", [...new Set(rows.map((row) => row.client_id))]).in("period_key", [...new Set(rows.map((row) => row.period_key))]).throwOnError() : { data: [] };
   return (rows ?? []).map((row): WorkItem => {
+    const own = tasks?.filter((task) => task.client_id === row.client_id && task.period_key === row.period_key);
     const counts = row.counts as unknown as Counts;
     const why = [counts.missing && bills(counts.missing, "not in GSTR-2B"), counts.extra && bills(counts.extra, "in GSTR-2B but not in the books"), counts.differ && bills(counts.differ, counts.differ === 1 ? "with a different amount" : "with different amounts"), counts.changed && bills(counts.changed, "corrected by the supplier")].filter(Boolean).join(", ");
     return {
       key: `gst_match:${row.register_id}`, title: `Check GSTR-2B for ${row.client_name}`, why: `${periodName(row.period_key)}: ${why}`,
       client: { id: row.client_id, name: row.client_name }, due: row.due_on, urgent: row.due_on <= soon,
-      action: { label: "See differences", href: `/app/clients/${row.client_id}?tab=extraction&purchases=${row.register_id}#gst-match` }, audience: "assigned",
+      action: { label: "See differences", href: own?.length === 1 ? `/app/clients/${row.client_id}/returns/${own[0].id}?purchases=${row.register_id}#gst-match` : `/app/clients/${row.client_id}?tab=extraction&purchases=${row.register_id}#gst-match` }, audience: "assigned",
     };
   });
 }

@@ -8,8 +8,8 @@ export type Step=keyof typeof stepNames;
 const order=Object.keys(stepNames) as Step[];
 const tds=(code:string|null)=>/^(TDS|TCS)_RET$/.test(code ?? "");
 
-// GSTR-1, GSTR-3B and income tax returns have all six; a TDS or TCS statement is prepared on its
-// own page and never filled, so it has no fill to check; any other return only papers and filing.
+// GSTR-1, GSTR-3B and income tax returns have all six; a TDS or TCS statement is prepared in its
+// Draft step and never filled, so it has no fill to check; any other return only papers and filing.
 export const stepsFor=(code:string|null):Step[]=>fills(code) ? order : tds(code) ? order.filter(step=>step!=="check") : ["papers","file"];
 
 // The step a return stands at: papers until they are in, figures until Fill could make the draft,
@@ -36,5 +36,5 @@ export function nextAction(work:Work,code:string|null,{period,drafts,approver}:{
   const why=notReady({...work,form:work.form ?? null},drafts,period);
   if(work.missing==="return") return {step:"draft",label:"Start the return",act:"open",why:why!};
   if(why) return {step:"figures",why};
-  return /^ITR_/.test(code ?? "") ? {step:"draft",label:"Open the income tax return",act:"open"} : {step:"draft",label:`Prepare ${returnOf(code)}`,act:"fill"};
+  return {step:"draft",label:`Prepare ${returnOf(code)}`,act:"fill"};
 }

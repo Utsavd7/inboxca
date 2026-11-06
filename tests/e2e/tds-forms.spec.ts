@@ -28,7 +28,7 @@ test("prepares Forms No. 143 and 144 from their registers, and files the TCS ret
     const details={name:"Invented TDS Client",type:"F",...place,phone:"9000000001",govt_state:"",ministry:"",ministry_other:"",person:{name:"Invented Partner",designation:"Partner",...place,email:"",phone:"9000000002",pan:"ZZZPZ0009Z"}};
     await query(local.dbUrl,"insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx,details_enc) values($1,$2,$3,'tan',$4,$5,$6)",[registration,firm.firmId,client,await crypto.encrypt(firm.firmId,`clients/${client}/tan`,tan),await crypto.blindIndex(firm.firmId,"tan",tan),await crypto.encrypt(firm.firmId,`clients/${client}/tan/${registration}/details`,JSON.stringify(details))]);
     await query(local.dbUrl,"insert into public.connected_accounts(id,firm_id,kind,provider,address_enc,credentials_enc) values($1,$2,'drive','local',$3,$4)",[account,firm.firmId,await crypto.encrypt(firm.firmId,`accounts/${account}/address`,"Test drive"),await crypto.encrypt(firm.firmId,`accounts/${account}/credentials`,"{}")]);
-    await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,'TCS_RET','2026-09','2026-10-31')",[firm.firmId,client,registration]);
+    await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,'TCS_RET','2026-09','2026-10-31'),($1,$2,$3,'TDS_RET','2026-09','2026-10-31')",[firm.firmId,client,registration]);
     // The client's collection and non resident registers, with their own column names; the second
     // filed as the quarter's TDS register under its TDS work, as one sent by email is.
     const register=async(name:string,lines:string[],work="income_tax",type="Document")=>{
@@ -42,6 +42,8 @@ test("prepares Forms No. 143 and 144 from their registers, and files the TCS ret
     await emailStep(page,email);await page.getByLabel("6 digit code from the app").fill(totp(key));await page.getByRole("button",{name:"Continue"}).click();await expect(page).toHaveURL(/\/app$/);
     const today=todayInIndia(),created=`${today.slice(8,10)}${today.slice(5,7)}${today.slice(0,4)}`;
     const record=(values:Record<number,string>)=>Array.from({length:45},(_,at)=>values[at+1] ?? "").join("^");
+    // Each quarter's return is prepared in the Draft step of its own page.
+    const here=/\/app\/clients\/[0-9a-f-]{36}\/returns\/[0-9a-f-]{36}/,draft=async(form:string)=>{await expect(page).toHaveURL(new RegExp(`${here.source}\\?.*step=draft`));await expect(page.getByText(new RegExp(`^Form No\\. ${form}: Statement of`))).toBeVisible();};
     // One statement: read the register with the chosen columns, type the challan, check, prepare, download.
     const statement=async(form:string,file:string,rows:string,columns:[string,string][],challan:string,tax:string)=>{
       await page.getByRole("link",{name:`Read ${file} as ${rows}`}).click();
@@ -52,7 +54,7 @@ test("prepares Forms No. 143 and 144 from their registers, and files the TCS ret
       await page.getByRole("button",{name:"Add challan"}).click();await expect(page.getByText("Saved for checking.")).toBeVisible();
       await page.getByRole("button",{name:"Yes, these figures are right"}).click();await expect(page.getByText("Every figure is checked. Prepare the statement below.")).toBeVisible();
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-      await page.getByRole("button",{name:`Prepare Form No. ${form}`}).click();await expect(page).toHaveURL(/tab=outputs/);
+      await page.getByRole("button",{name:`Prepare Form No. ${form}`}).click();await expect(page).toHaveURL(new RegExp(`${here.source}$`));
       const [made]=await query(local.dbUrl,"select * from public.documents where firm_id=$1 and prepared->>'form'=$2",[firm.firmId,`TDS${form}`]);files.push(made.drive_file_id);
       expect(made.name).toBe(`Invented TDS Client - Form No. ${form} - Jul to Sep 2026 - v1.txt`);expect(made.work_type).toBe("tds");
       const card=page.locator("li").filter({has:page.getByRole("link",{name:made.name,exact:true})});
@@ -64,7 +66,7 @@ test("prepares Forms No. 143 and 144 from their registers, and files the TCS ret
 
     // The quarter's TCS return opens its Form No. 143.
     await page.goto(`/app/clients/${client}?tab=returns`);await page.getByRole("link",{name:/^Prepare TCS return/}).click();
-    await expect(page.getByRole("heading",{name:"Form No. 143, Jul to Sep 2026"})).toBeVisible();
+    await draft("143");
     // The quarter's TDS register comes first in the list.
     await expect(page.getByRole("list",{name:"Registers"}).getByRole("listitem").first()).toContainText("Invented foreign payments.csvTDS register for this quarter, received");
     const tcs=await statement("143","Invented TCS register.csv","collections",[["Collectee PAN","A: Buyer PAN"],["Collectee name","B: Buyer"],["Collection code","C: Code"],["Date received or debited","D: Received on"],["Amount received or debited","E: Amount"],["Tax collected","F: TCS"],["Collectee code","G: Buyer type"],["Rate","H: Rate %"],["Challan serial number","I: Challan no"]],"21","2000");
@@ -76,9 +78,9 @@ test("prepares Forms No. 143 and 144 from their registers, and files the TCS ret
     await page.goto(`/app/clients/${client}/tds?tan=${registration}&period=2026-12&form=TDS143`);
     await expect(page.getByLabel("If yes, its 15 digit token number")).toHaveValue("123456789012345");
 
-    // Form No. 144 from the same TAN's statements.
+    // Form No. 144 from the same TAN's statements: the quarter with its TDS return opens on its page.
     await page.getByRole("link",{name:"Form No. 144 (27Q)"}).click();await expect(page.getByRole("heading",{name:"Form No. 144, Oct to Dec 2026"})).toBeVisible();await page.getByLabel("Quarter",{exact:true}).selectOption("2026-09");await page.getByRole("button",{name:"Open"}).click();
-    await expect(page.getByRole("heading",{name:"Form No. 144, Jul to Sep 2026"})).toBeVisible();
+    await draft("144");
     // A register read into Form No. 143 is not offered again.
     await expect(page.getByRole("link",{name:"Read Invented TCS register.csv as payments"})).toHaveCount(0);
     const abroad=await statement("144","Invented foreign payments.csv","payments",[["Deductee PAN","A: PAN"],["Deductee name","B: Party"],["Section code","C: Code"],["Date of payment or credit","D: Paid on"],["Amount paid or credited","E: Gross"],["Tax deducted","F: TDS"],["Status code","G: Status"],["Country code","H: Country"],["Rate","I: Rate %"],["Rate under the Act (A) or DTAA (B)","J: Act or DTAA"],["Nature of remittance code","K: Remittance"],["Challan serial number","L: Challan no"]],"7","10000");

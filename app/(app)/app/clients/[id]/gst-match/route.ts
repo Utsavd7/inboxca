@@ -4,6 +4,7 @@ import {currentMember} from "@/src/lib/member";
 import {openMatch} from "@/src/lib/purchase-match";
 import {changeOf,type Amounts,type Entry} from "@/src/lib/purchase-register";
 import {supabaseAdmin} from "@/src/lib/supabase";
+import {clientBack} from "../../../return-back";
 
 // Excel reads "(500.00)" as minus 500; a leading minus sign would be kept as text.
 const money=(paise?:number)=>paise===undefined ? "" : paise<0 ? `(${(-paise/100).toFixed(2)})` : (paise/100).toFixed(2);
@@ -14,8 +15,8 @@ const amounts=(value?:Amounts)=>(["taxable","igst","cgst","sgst","cess"] as cons
 export async function GET(request:Request,{params}:{params:Promise<{id:string}>}) {
   const {supabase,userId,membership}=await currentMember();
   const {id}=await params,register=new URL(request.url).searchParams.get("register") ?? "";
-  const back=`/app/clients/${id}?tab=extraction&purchases=${encodeURIComponent(register)}`;
-  if(!membership || !/^[0-9a-f-]{36}$/.test(register)) redirect(`/app/clients/${id}?tab=extraction`);
+  const page=/^[0-9a-f-]{36}$/.test(id) ? await clientBack(id) : `/app/clients/${id}`,back=`${page}?tab=extraction&purchases=${encodeURIComponent(register)}`;
+  if(!membership || !/^[0-9a-f-]{36}$/.test(register)) redirect(`${page}?tab=extraction`);
   if(!membership.may("download",id)) redirect(`${back}&match=download#gst-match`);
   const [{data:paper},{data:match}]=await Promise.all([
     supabase.from("documents").select("name").eq("firm_id",membership.firmId).eq("client_id",id).eq("id",register).maybeSingle(),

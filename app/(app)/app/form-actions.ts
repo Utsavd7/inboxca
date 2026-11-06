@@ -37,7 +37,7 @@ export async function prepareForm(form:FormData) {
   const client=z.uuid().parse(form.get("client"));
   const code=z.enum(["GSTR1","GSTR3B",...Object.keys(tdsForms) as (keyof typeof tdsForms)[],...itrReturns]).parse(form.get("form") ?? "GSTR1"),period=String(form.get("period")),drafts=form.getAll("draft").map(String);
   // A TDS or TCS statement goes back to its own page when it cannot be made, and to Return files when it is.
-  const tds=isTdsForm(code),page=await clientBack(client),back=tds ? `/app/clients/${client}/tds?tan=${z.uuid().parse(form.get("registration"))}&period=${encodeURIComponent(period)}&form=${code}&message=check` : `${page}?tab=outputs`;
+  const tds=isTdsForm(code),page=await clientBack(client),back=tds ? `${page===`/app/clients/${client}` ? `${page}/tds?` : `${page}?step=draft&`}tan=${z.uuid().parse(form.get("registration"))}&period=${encodeURIComponent(period)}&form=${code}&message=check` : `${page}?tab=outputs`;
   const failed=tds ? back : `${back}&form=check`;
   let id:string,seen:Awaited<ReturnType<typeof differencesSeen>>;
   try {seen=await differencesSeen(form,{client,period,form:code,sources:drafts});} catch {redirect(failed);}
