@@ -9,15 +9,14 @@ export type Pin=Work & {kind:string;task:string;form:string|null;client:string;c
 // page).
 export const returnOf=(code:string|null)=>/^GSTR1_/.test(code ?? "") ? "GSTR-1" : /^GSTR3B_/.test(code ?? "") ? "GSTR-3B" : /^ITR_/.test(code ?? "") ? "ITR" : null;
 export const fills=(code:string|null)=>/^(GSTR1|GSTR3B|ITR)_/.test(code ?? "");
-export const returnPeriod=(code:string,period:string)=>periodLabel(/_Q$/.test(code) ? "quarterly" : /^ITR_/.test(code) ? "yearly" : "monthly",period,code);
+export const returnPeriod=(code:string,period:string)=>periodLabel(/_(Q|RET)$/.test(code) ? "quarterly" : /^ITR_/.test(code) ? "yearly" : "monthly",period,code);
 // Fill is offered while a return has figures but no draft made from them.
 export const fillable=(work?:Work)=>!!work && ["figures","checked"].includes(work.stage) && !work.missing;
 
 const figures=(count:number)=>`${count} ${count===1 ? "figure" : "figures"}`;
 const missingWords:Record<string,string>={sales:"sales register still missing",credit:"GSTR-2B still missing",return:"return not started"};
 const lines:Record<string,string>={none:"Papers not asked for yet",asked:"Papers asked for",in:"Papers in, figures not read yet",rejected:"Draft sent back. Correct the figures",checked:"All figures checked, not filled yet",draft:"Checked, waiting for approval",approved:"Approved. Download it and file on the portal",filed:"Filed"};
-// Six steps, and how many a return has passed.
-export const steps=["Papers asked for","Papers in","Filled","Checked","Approved","Filed"];
+// How many of a return's six steps it has passed.
 export const stepOf=(stage:string)=>({none:0,asked:1,in:2,figures:2,checked:2,filled:3,rejected:3,draft:4,approved:5,filed:6} as Record<string,number>)[stage] ?? 0;
 
 // One plain line of where a return stands. A return with no figures to read (DIR-3 KYC, GSTR-9,
@@ -48,9 +47,11 @@ function dueWords(due:string,today:string) {
 }
 
 // A pinned return, as a title and a line under it: "GSTR-3B for Mehta Textiles, Sep 2026" and
-// "Due in 4 days. Filled, 3 figures not checked yet".
+// "Due in 4 days. Filled, 3 figures not checked yet". A TDS or TCS return is only pinned to
+// approve or to file.
 export function pinWords(pin:Pin,today:string) {
-  const title=`${returnOf(pin.code)} for ${pin.client_name}, ${returnPeriod(pin.code,pin.period_key)}`,due=dueWords(pin.due_on,today);
+  const title=`${returnOf(pin.code) ?? (pin.code==="TCS_RET" ? "TCS return" : "TDS return")} for ${pin.client_name}, ${returnPeriod(pin.code,pin.period_key)}`,due=dueWords(pin.due_on,today);
+  if(pin.kind==="waiting") return {title:`Waiting for someone else to approve ${title}`,meta:"You checked its figures, so another approver gives the second approval"};
   if(pin.kind==="approve") return {title,meta:"Checked and ready for your approval"};
   if(pin.kind==="approved") return {title,meta:"Approved. Download it and file on the portal"};
   const held=pin.stage==="filled" ? `filled, ${figures(pin.open ?? 0)} not checked yet` : pin.stage==="rejected" ? "draft sent back" : pin.missing ? missingWords[pin.missing] : pin.kind==="fill" ? "not filled yet" : pin.stage==="in" ? "papers in, figures not read yet" : "papers still missing";

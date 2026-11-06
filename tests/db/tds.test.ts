@@ -85,3 +85,25 @@ it("closes the TDS return once every TDS statement of the quarter is filed, and 
   // Each statement keeps its own token, for the next quarter's statement of the same form.
   expect((await db.query("select prepared->>'form' form,prepared->>'ack' ack from public.documents where id=any($1) order by 1",[[form140,form144]])).rows).toEqual([{form:"TDS140",ack:"111111111111111"},{form:"TDS144",ack:"222222222222222"}]);
 }));
+
+// With the second approval on, a TDS statement waiting for it is pinned to the firm's approvers
+// as a GST draft is, and to the owner who checked its figures as waiting for someone else; once
+// approved, it is pinned to download and file. A TDS return due soon with no statement is not.
+it("pins a TDS statement waiting for the second approval to an approver who did not check it",()=>rollback(db,async()=>{
+  const firm=randomUUID(),owner=randomUUID(),partner=randomUUID(),client=randomUUID(),tan=randomUUID(),draft=randomUUID(),task=randomUUID(),empty=randomUUID();
+  for(const person of [owner,partner]) await db.query("insert into auth.users(id,email) values ($1,$2)",[person,`${person}@invented.test`]);
+  await db.query("insert into public.firms(id,name,state_code,status,settings) values ($1,'TDS Pins Firm','24','active','{\"second_form_approval\":true}')",[firm]);
+  await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active'),($1,$3,'partner','active')",[firm,owner,partner]);
+  await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Pins Client','business')",[client,firm]);
+  await db.query("insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values ($1,$2,$3,'tan','invented encrypted TAN',$4)",[tan,firm,client,randomUUID()]);
+  await db.query("insert into public.tasks(id,firm_id,client_id,registration_id,code,period_key,due_on) values ($1,$3,$4,$5,'TDS_RET','2026-09',(now() at time zone 'Asia/Kolkata')::date+20),($2,$3,$4,$5,'TDS_RET','2026-12',(now() at time zone 'Asia/Kolkata')::date+2)",[task,empty,firm,client,tan]);
+  const pins=async(person:string)=>{await actAs(db,person);const {rows}=await db.query("select kind,task from public.return_pins($1)",[firm]);await db.query("reset role");return rows;};
+  expect(await pins(partner)).toEqual([]);
+  const line={id:randomUUID(),field:"tds.p2.amount",value_enc:"invented encrypted figure",state:"confirmed",by:owner,at:new Date().toISOString()};
+  await db.query("insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values ($1,$2,$3,'TDS140','2026-09',$4)",[draft,firm,client,{lines:[line],checks:[],registration:tan}]);
+  const saved=(await db.query("select public.reserve_form($1,$2,$3,'TDS140','2026-09','1.2',$4,$5,'Invented','txt') saved",[firm,client,tan,JSON.stringify([{id:draft,revision:1}]),owner])).rows[0].saved;
+  expect((await db.query("select public.finish_form($1,$2,$3,'invented-file',$4,100,null) saved",[saved.id,firm,owner,"a".repeat(64)])).rows[0].saved).toBe(true); // ggignore: invented checksum.
+  expect(await pins(partner)).toEqual([{kind:"approve",task}]);expect(await pins(owner)).toEqual([{kind:"waiting",task}]);
+  expect((await db.query("select public.decide_form($1,$2,'approved','{}') saved",[saved.id,partner])).rows[0].saved).toBe(true);
+  for(const person of [owner,partner]) expect(await pins(person)).toEqual([{kind:"approved",task}]);
+}));
