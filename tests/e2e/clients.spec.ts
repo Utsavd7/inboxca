@@ -67,8 +67,10 @@ test("services on a client's GSTIN give it its due dates", async () => {
   await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("dialog", { name: "Services" }).getByRole("button", { name: "Save services" }).click()]);
   await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Work/ }).click();
   const due = owner.locator("section[aria-labelledby=due] li");
-  // A due date not yet checked against the notification carries its tag, the full name in the row's tooltip.
-  await expect(due.filter({ has: owner.locator('a[title^="GSTR-3B (monthly)"]') }).first().locator(".work-tag[title]").first()).toBeVisible();
+  // The full name is in the row's tooltip. With none of the firm's due dates confirmed yet, Work
+  // sends the owner to confirm them once, rather than tagging every row.
+  await expect(due.filter({ has: owner.locator('a[title^="GSTR-3B (monthly)"]') }).first()).toBeVisible();
+  await expect(owner.locator('.work-line a[href="/app/settings?group=reminders#due-dates"]')).toBeVisible();
   const [{n,soon}]=await query(local.dbUrl,"select count(*)::int n, count(*) filter (where t.due_on<=(now() at time zone 'Asia/Kolkata')::date+30)::int soon from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed'",[firm.firmId]);
   expect(n).toBeGreaterThan(12);
   // The next 30 days first (late ones among them); every later return under Later.
@@ -740,7 +742,7 @@ test("a client's row offers Write and Ask for papers; its header copies numbers 
   const [next] = await query(local.dbUrl, "select due_on::text due from public.tasks where client_id=$1 and kind='compliance' and status<>'filed' and due_on>=(now() at time zone 'Asia/Kolkata')::date order by due_on limit 1", [id]);
   const days = Math.round((Date.parse(next.due) - Date.parse(todayInIndia())) / 86_400_000);
   await owner.goto(`/app/clients/${id}`);
-  await expect(owner.locator(".work-next")).toContainText(days === 0 ? ", today" : days === 1 ? ", tomorrow" : `, in ${days} days`);
+  await expect(owner.locator(".work-next").first()).toContainText(days === 0 ? ", today" : days === 1 ? ", tomorrow" : `, in ${days} days`);
 
   // Papers show 50 at a time, each with its type and a Copy for its drive folder, with their
   // true count however many there are.

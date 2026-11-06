@@ -161,7 +161,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   // those late or due in the next 30 days.
   const fyStart = `${Number(today.slice(0, 4)) - (today.slice(5, 7) < "04" ? 1 : 0)}-04-01`;
   const taskQuery = supabase.from("tasks").select("id, code, period_key, due_on, status, details, registration_id",{count:"exact", head: sub !== "work"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id);
-  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { data: madeFiles }, { data: figureSets }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: allTasks }, { data: licences }, { count: kycPlanned }, { data: todos }] = await Promise.all([
+  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { data: madeFiles }, { data: figureSets }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: allTasks }, { data: licences }, { count: kycPlanned }, { data: todos }, { count: firmConfirmed }] = await Promise.all([
     supabase
       .from("clients")
       .select(
@@ -201,6 +201,9 @@ export default async function Client({ params, searchParams }: { params: Promise
     sub === "work" ? supabase.from("tasks").select("id", { count: "exact", head: true }).eq("firm_id", firm).eq("client_id", id).eq("code", "DIR3KYC").neq("status", "filed") : Promise.resolve({ count: 0 }),
     // The client's to-dos: every open one, and those done whose date was in the last 30 days.
     sub === "work" ? supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "todo").or(`status.eq.upcoming,due_on.gte.${addDays(today, -30)}`).order("due_on").limit(30) : Promise.resolve({ data: [] }),
+    // Whether the firm has confirmed any due date yet (src/lib/due-dates.ts): until it has, Work
+    // says so once instead of tagging every row.
+    sub === "work" ? supabase.from("firm_due_dates").select("code", { count: "exact", head: true }).eq("firm_id", firm) : Promise.resolve({ count: 0 }),
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
@@ -409,7 +412,7 @@ export default async function Client({ params, searchParams }: { params: Promise
     const itr = task.code?.startsWith("ITR") ? itrNeeds.get(task.period_key?.slice(0, 4) ?? "") : undefined;
     const tag = filed ? "" : twoB && needs2b.has(task.period_key ?? "") ? "GSTR-2B missing" : tdsLine.includes("missing") ? "Papers missing" : itr?.missing ? "Portal files missing" : "";
     return {
-      id: task.id, href: `${base}/returns/${task.id}`, title: short(`${r?.name ?? task.code} ${period}`), unchecked: !r?.verified_on,
+      id: task.id, href: `${base}/returns/${task.id}`, title: short(`${r?.name ?? task.code} ${period}`), unchecked: !r?.verified_on && !!firmConfirmed,
       full: [`${r?.name ?? task.code} ${period}`, next?.why?.replace(/\.$/, ""), reminderNote(done), twoB, tdsLine, itr?.line.slice(2)].filter(Boolean).join(". "),
       due: task.due_on, late: !filed && task.due_on < today, filed, steps: steps.length, done: filed ? steps.length : steps.indexOf(currentStep(work, task.code)), person: person && who(person),
       next: filed
@@ -430,6 +433,8 @@ export default async function Client({ params, searchParams }: { params: Promise
   const kycNeeded = sub === "work" && manage && !kycPlanned ? numbers.filter((registration) => registration.kind === "pan" && registration.services.some((code) => fromOf(code) === "kyc")) : [];
   const datesNeeded = !!(agmNeeded.length || kycNeeded.length);
   const remindsNow = reminds && soon.some((row) => row.due <= addDays(today, 7));
+  // None of the firm's due dates confirmed yet: one line for the owner, who confirms them in Settings.
+  const confirmDates = owner && !viewOnly && !firmConfirmed && (tasks ?? []).some((task) => task.status !== "filed" && !rule.get(task.code ?? "")?.verified_on);
   const counts: Record<Main, number | undefined> = { work: sub === "work" ? soon.length : taskCount ?? 0, documents: fileCount ?? 0, emails: mailCount ?? 0, notices: noticeCount ?? 0, about: undefined };
   // The Returns tab as it is, for the filing panel and each filing form to come back to.
   const shows = show === "filed" || show === "later" ? show : "";
@@ -915,6 +920,12 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <span className="work-next">
                   <CalendarClock size={14} aria-hidden />
                   Next due: {rule.get(nextDue.code ?? "")?.name ?? nextDue.code} {periodLabel(rule.get(nextDue.code ?? "")?.frequency ?? null, nextDue.period_key, nextDue.code)}, {dueIn === 0 ? "today" : dueIn === 1 ? "tomorrow" : `in ${dueIn} days`}
+                </span>
+              )}
+              {confirmDates && (
+                <span className="work-next">
+                  Due dates are not confirmed yet.
+                  <Link href="/app/settings?group=reminders#due-dates">Confirm them</Link>
                 </span>
               )}
             </p>

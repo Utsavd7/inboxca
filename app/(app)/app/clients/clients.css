@@ -149,6 +149,8 @@
 .work-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s5); color: var(--ink-2); font-size: 13px; }
 .work-next { display: inline-flex; align-items: center; gap: var(--s1); }
 .work-next svg { color: var(--ink-3); }
+.work-line a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.work-line a:hover { text-decoration: underline; }
 .work-dates .row-end { flex-wrap: wrap; }
 /* Later and filed this year, and Add a to-do: quiet links that open their list or form in place. */
 .work-fold > summary, .work-more > summary { display: inline-flex; align-items: center; gap: var(--s1); width: fit-content; cursor: pointer; list-style: none; }
