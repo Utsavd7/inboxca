@@ -1092,7 +1092,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await asks.locator("summary").click();
   await asks.getByRole("button", { name: "Bank statement is right" }).click();
   await expect(asks.getByRole("button", { name: "Bank statement is right" })).toHaveCount(0);
-  await asks.locator("summary").click();
+  // The More menu may still be open after the first action; open it only if it closed.
+  if (!(await asks.getByRole("button", { name: "Ask again for Sales bills" }).isVisible())) await asks.locator("summary").click();
   await asks.getByRole("button", { name: "Ask again for Sales bills" }).click();
   await expect(asks).toContainText("1 of 2 received");
 
