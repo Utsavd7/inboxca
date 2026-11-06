@@ -166,7 +166,7 @@ test("a portal's acknowledgement email offers the client's approved statement wi
   // Today's card opens the quarter's TDS return at its File step.
   await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, registration_id, code, period_key, due_on) values ($1, $2, $3, 'TDS_RET', '2026-09', '2026-10-31') on conflict (firm_id, registration_id, code, period_key) do nothing", [firm.firmId, client, registration]);
   await owner.goto("/app");
-  await owner.getByRole("region", { name: "Your list" }).getByRole("listitem").filter({ hasText: "The acknowledgement arrived" }).getByRole("link", { name: /^Mark filed/ }).click();
+  await owner.getByRole("region", { name: "Your list" }).getByRole("listitem").filter({ hasText: "Acknowledgement arrived" }).getByRole("link", { name: /^Mark filed/ }).click();
   await expect(owner).toHaveURL(/\/returns\/[0-9a-f-]{36}\?step=file$/);
   await owner.goto(`/app/clients/${client}?tab=outputs`);
   const card = owner.locator("li.rf-card").filter({ hasText: "Form No. 140" });
