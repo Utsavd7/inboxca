@@ -4,6 +4,7 @@ import { paperType } from "@/src/lib/paper-type";
 import { sendSkip, type BulkSend } from "@/src/lib/records";
 import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lucide-react";
 import Form from "next/form";
+import { LiveSearch } from "../live-search";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { assignClients, setServices, tagClients } from "@/app/(app)/actions";
@@ -311,7 +312,7 @@ export default async function Clients({
         <Form action="/app/clients" className="clients-find" role="search">
           <span className="search">
             <Search size={16} aria-hidden />
-            <input id="q" name="q" type="search" defaultValue={q} placeholder="Name, email, PAN or GSTIN" aria-label="Find by name, email, PAN or GSTIN" />
+            <LiveSearch id="q" name="q" defaultValue={q} placeholder="Name, email, PAN or GSTIN" aria-label="Find by name, email, PAN or GSTIN" />
           </span>
           {!!branches.length && (
             <select id="branch" name="branch" defaultValue={params.branch ?? ""} aria-label="Branch">
@@ -335,9 +336,6 @@ export default async function Clients({
           )}
           {archived && <input type="hidden" name="archived" value="1" />}
           {show !== "all" && <input type="hidden" name="show" value={show} />}
-          <button className="b b-secondary" type="submit">
-            Find
-          </button>
         </Form>
       </div>
 

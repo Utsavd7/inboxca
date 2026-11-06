@@ -41,11 +41,11 @@
 /* A client late and missing papers shows both pills, late first, one over the other. */
 .clients-tags { display: inline-flex; flex-direction: column; align-items: flex-start; gap: var(--s1); }
 /* Copy for a number or a path waits for the pointer on its row, as quick actions do. */
-.clients-table .copy { transition: opacity var(--fast) var(--out), background var(--fast) var(--out), color var(--fast) var(--out); }
+.clients-table :is(.copy, .paper-open) { transition: opacity var(--fast) var(--out), background var(--fast) var(--out), color var(--fast) var(--out); }
 /* Write and Ask for papers take the status pills' place while a row is pointed at (ui.tsx Row). */
 .clients-table .row-more { z-index: 1; }
 @media (hover: hover) and (pointer: fine) and (min-width: 721px) {
-  .clients-table tr:not(:hover, :focus-within) .copy:not(.is-done) { opacity: 0; }
+  .clients-table tr:not(:hover, :focus-within) :is(.copy:not(.is-done), .paper-open:not(.is-due)) { opacity: 0; }
   .clients-table tr:is(:hover, :focus-within) .row-more { opacity: 1; pointer-events: auto; }
   .clients-table tr:is(:hover, :focus-within) .row-swap:has(> .row-more) > :first-child:not(.row-more) { opacity: 0; }
   .clients-table tr:has(input:checked) .row-more { background: linear-gradient(to right, transparent, var(--accent-soft) var(--s4)); }
@@ -69,21 +69,27 @@
 .clients-bulk .b-ghost:hover:not(:disabled) { background: var(--on-dark); color: var(--white); }
 .clients-bulk .bulk-ask { flex: 1 1 320px; max-width: 560px; }
 
-/* One client: a record header (avatar and name, numbers, who looks after it, what is due next,
-   quick actions), the five tabs, then the tab's content, which crossfades on a tab change. */
-.client-head { position: static; padding-bottom: var(--s2); }
-/* The name shows once, in the header. Where it and the actions would not share one line (a
-   laptop with the full sidebar), the actions take a line of their own under it, as beside an
-   open paper (doc-pane.css), rather than cut the name short. */
+/* One client: a record header on one line (avatar and name, type and numbers, quick actions),
+   the five tabs, then the tab's content, which crossfades on a tab change. The whole page
+   scrolls, the header staying in view. */
+.client-record { display: flex; flex-direction: column; gap: var(--s3); }
+.crumbs > .client-meta { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-self: center; gap: var(--s1) var(--s3); min-width: 0; margin-left: var(--s2); color: var(--ink-2); font-size: 13px; font-weight: 400; }
+.crumbs > .client-meta::after { content: none; }
+.crumbs > .client-meta svg { display: revert; }
+.crumbs > .client-meta:hover { color: var(--ink-2); }
+/* The name shows once, in the header. Where the type and numbers would not fit beside it (a
+   laptop with the full sidebar), they take a line under the name; narrower still, the actions
+   take a line of their own, as beside an open paper (doc-pane.css), rather than cut the name. */
 .client-record { container-type: inline-size; }
 @container (max-width: 1100px) {
+  .client-record .crumbs { flex-wrap: wrap; row-gap: 0; }
+  .crumbs > .client-meta { flex-basis: 100%; margin-left: 0; }
+}
+@container (max-width: 820px) {
   .client-record .topbar { flex-wrap: wrap; }
-  .client-record .page-actions { order: 3; justify-content: flex-start; width: 100%; }
+  .client-record .topbar .page-actions { order: 3; justify-content: flex-start; width: 100%; }
   .client-record .page-actions + .head-tools { margin-left: 0; padding-left: 0; border-left: 0; }
 }
-.client-who { display: flex; align-items: center; gap: var(--s4); }
-.client-who > div { display: grid; gap: var(--s2); min-width: 0; }
-.client-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); color: var(--ink-2); font-size: 13px; }
 .client-id { display: inline-flex; align-items: center; gap: var(--s1); }
 .client-id-kind { color: var(--ink-3); font-size: 12px; font-weight: 600; }
 .client-id .num { color: var(--ink); font-size: 13px; }
@@ -92,12 +98,9 @@
 .avatar-stack { display: inline-flex; }
 .avatar-stack .avatar { width: 24px; height: 24px; box-shadow: 0 0 0 2px var(--canvas); }
 .avatar-stack .avatar + .avatar { margin-left: calc(var(--s2) * -1); }
-.client-due { display: flex; flex-wrap: wrap; gap: var(--s2); }
-.client-due .badge { flex-shrink: 1; height: auto; min-height: 22px; white-space: normal; text-decoration: none; transition: box-shadow var(--fast) var(--out); }
 /* On a phone a row's words wrap instead of being cut off. */
 @media (max-width: 720px) { .client-record .app-row :is(strong, .sub) { white-space: normal; overflow-wrap: anywhere; } }
-.client-due .badge:hover { box-shadow: 0 0 0 1px currentColor; }
-.client-head .page-actions .b svg { flex: none; }
+.client-record .page-actions .b svg { flex: none; }
 .clients-page .tabs { flex: none; gap: var(--s5); border-bottom-color: var(--line-2); }
 .clients-page .tabs a { display: inline-flex; align-items: center; height: var(--row); padding: 0; color: var(--ink-3); font-weight: 600; }
 .clients-page .tabs a[aria-current="page"] { color: var(--ink); }
@@ -107,12 +110,23 @@
 ::view-transition-new(.tab-in) { animation: vt-fade var(--slow) var(--out) both; }
 .client-pane { flex: 1; }
 .client-pane > * + * { margin-top: var(--s4); }
-.client-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: var(--s4); align-items: start; }
-.client-col { display: grid; gap: var(--s4); }
-@media (max-width: 1000px) { .client-grid { grid-template-columns: minmax(0, 1fr); } }
-.client-props { padding: 0 var(--s4) var(--s3); }
-.client-props a { color: var(--accent); font-weight: 600; text-decoration: none; }
-.client-props a:hover { text-decoration: underline; }
+/* Details: one sheet in two columns of groups, each a few label and value rows, its Edit shown
+   while the group is pointed at or has the focus. */
+.client-sheet { columns: 2 360px; column-gap: var(--s7); padding: var(--s2) var(--s5) var(--s4); }
+.sheet-group { padding: var(--s3) 0; break-inside: avoid; }
+.sheet-group > header { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); min-height: var(--control); }
+.sheet-group h2 { font-size: 14px; font-weight: 600; }
+.sheet-rows > li { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--s3); align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.sheet-rows > li > :first-child { color: var(--ink-3); font-size: 13px; }
+.sheet-rows > li > :last-child { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); min-width: 0; overflow-wrap: anywhere; }
+.sheet-rows .who { gap: var(--s2); color: var(--ink); }
+.sheet-rows .avatar { width: 22px; height: 22px; font-size: 10px; }
+.sheet-rows a, .sheet-missing a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.sheet-rows a:hover, .sheet-missing a:hover { text-decoration: underline; }
+.sheet-missing { padding-top: var(--s2); border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+.sheet-group .services-usual { margin-top: var(--s2); }
+.sheet-edit { transition: opacity var(--fast) var(--out); }
+@media (hover: hover) and (pointer: fine) { .sheet-group:not(:hover, :focus-within) .sheet-edit { opacity: 0; } }
 /* An email row opens the email from anywhere on it, and a return's row its own page. */
 .client-mails .app-row, .work-rows .app-row { position: relative; }
 .client-mails .row-link, .work-rows .row-link { color: inherit; text-decoration: none; }
@@ -128,11 +142,30 @@
 .work-go { color: var(--ink-3); transition: transform var(--fast) var(--out), color var(--fast) var(--out); }
 .work-rows .app-row:hover .work-go { color: var(--accent); transform: translateX(3px); }
 .work-rows .stage-line.is-filed i.on { background: var(--done-dot); }
-.work-fold > summary { cursor: pointer; list-style: none; }
-.work-fold > summary::-webkit-details-marker { display: none; }
-.work-fold > summary:hover h2 { color: var(--accent); }
-.work-fold-arrow { margin-left: auto; color: var(--ink-3); transition: transform var(--base) var(--out); }
+.work-tag { margin-left: var(--s2); font-weight: 500; vertical-align: 1px; }
+.work-rows .sub .work-tag { height: 20px; }
+/* The quiet line over Work: who looks after the client, and what is due next. */
+.client-pane > .work-line { margin-top: 0; }
+.work-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s5); color: var(--ink-2); font-size: 13px; }
+.work-next { display: inline-flex; align-items: center; gap: var(--s1); }
+.work-next svg { color: var(--ink-3); }
+.work-dates .row-end { flex-wrap: wrap; }
+/* Later and filed this year, and Add a to-do: quiet links that open their list or form in place. */
+.work-fold > summary, .work-more > summary { display: inline-flex; align-items: center; gap: var(--s1); width: fit-content; cursor: pointer; list-style: none; }
+.work-fold > summary { color: var(--accent); font-size: 13px; font-weight: 600; }
+.work-fold > summary:hover { text-decoration: underline; }
+:is(.work-fold, .work-more) > summary::-webkit-details-marker { display: none; }
+.work-fold[open] .work-fold-show, .work-fold:not([open]) .work-fold-hide { display: none; }
+.work-fold-arrow { transition: transform var(--base) var(--out); }
 .work-fold[open] .work-fold-arrow { transform: rotate(180deg); }
+.work-fold > .app-card, .work-more > form { margin-top: var(--s2); }
+.work-more > form { padding: var(--s3) var(--s4); }
+.client-pane > :is(.work-fold, .work-more) + .work-fold { margin-top: var(--s2); }
+@media (prefers-reduced-motion: no-preference) {
+  .client-pane { interpolate-size: allow-keywords; }
+  :is(.work-fold, .work-more)::details-content { block-size: 0; overflow: clip; opacity: 0; transition: block-size var(--slow) var(--out), opacity var(--slow) var(--out), content-visibility var(--slow) allow-discrete; }
+  :is(.work-fold, .work-more)[open]::details-content { block-size: auto; opacity: 1; }
+}
 .work-other { display: inline-flex; gap: var(--s4); margin-left: auto; }
 .client-skel .skel { flex: 1; height: 36px; }
 .client-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
@@ -142,6 +175,17 @@
 .client-tools .clients-find .search { width: 360px; }
 .client-paper { display: grid; min-width: 0; }
 .client-paper .sub { display: flex; align-items: center; gap: var(--s1); font-size: 12px; }
+.client-paper-name { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+/* Where a paper came from, then its Check or Open. */
+.clients-page .t td:has(.paper-came) { min-width: 260px; white-space: normal; }
+.paper-came { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.paper-came .b { flex: none; }
+/* One paper asked for, in a request's More: its name, Mark checked and Ask again. */
+.ask-item { display: flex; align-items: center; gap: var(--s1); padding: 2px var(--s1) 2px var(--s2); font-size: 14px; }
+/* No notices: one line and Add a notice. */
+.client-none { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); padding: var(--s4); border: 1px dashed var(--line-2); border-radius: var(--r3); color: var(--ink-2); font-size: 14px; }
+.client-none > span { flex: 1; }
+.client-none a:not(.b) { color: var(--accent); font-weight: 600; text-decoration: none; }
 .client-docs .cell-form { justify-content: flex-end; }
 /* A return's date on its row: the month small over the day. */
 .today-date { display: grid; flex: none; width: 48px; padding: 2px 0; border-radius: var(--r1); text-align: center; line-height: 1.3; }

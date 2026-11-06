@@ -125,7 +125,7 @@ test("a tax portal's mail that passed SPF or DKIM is matched by its PAN, filed, 
   await panel.getByLabel("Email the client to e-verify the return within 30 days").check();
   await panel.getByRole("button", { name: "Mark filed" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "marked filed" })).toBeVisible();
-  const filedRow = () => owner.locator("li.app-row").filter({ hasText: "ITR (no business, no audit) AY 2026-27 (FY 2025-26)" });
+  const filedRow = () => owner.locator("li.app-row").filter({ hasText: "ITR AY 2026-27" });
   await owner.goto(`/app/clients/${client}?tab=returns&show=filed`);
   await expect(filedRow()).toContainText("Verify by");
   await expect.poll(async () => (await mailTexts(clientEmail)).some((text) => text.includes("e-verify"))).toBe(true);

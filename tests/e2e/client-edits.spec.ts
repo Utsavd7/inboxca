@@ -36,7 +36,7 @@ test.afterAll(() => firm.remove(staffEmail));
 
 test("a number added by mistake is removed from the client", async () => {
   await owner.goto(`/app/clients/${clients["Mehta Traders"]}?tab=about`);
-  await owner.getByRole("link", { name: "Change numbers" }).click();
+  await owner.getByRole("link", { name: "Edit tax numbers" }).click();
   const panel = owner.getByRole("dialog", { name: "Tax numbers" });
   await panel.getByLabel("Type", { exact: true }).selectOption("tan");
   await panel.getByLabel("Number", { exact: true }).fill("ahma12345c");
@@ -65,7 +65,7 @@ test("a phone number saved on the client is kept encrypted and opens a WhatsApp 
 test("a contact is taken off one client and still acts for the other", async () => {
   for (const name of ["Mehta Traders", "Mehta Exports"]) {
     await owner.goto(`/app/clients/${clients[name]}?tab=about`);
-    await owner.getByRole("link", { name: "Change contacts" }).click();
+    await owner.getByRole("link", { name: "Edit contacts" }).click();
     await owner.getByLabel("Contact's name").fill("Kiran Mehta");
     await owner.getByLabel("Contact's email").fill(contactEmail);
     await owner.getByRole("button", { name: "Add contact" }).click();
@@ -182,10 +182,12 @@ test("a to-do on a client is on its person's Today, and its person and the owner
   const ownerOnly = `Check the bank statement ${tag}`;
   await owner.goto(`/app/clients/${id}`);
   const card = owner.locator("section").filter({ has: owner.locator("h2#todos") });
+  const add = owner.locator(".todo-add");
   for (const [words, person] of [[theirs, staffId], [ownerOnly, ""]]) {
-    await card.getByLabel("To-do", { exact: true }).fill(words);
-    await card.getByRole("combobox", { name: "For", exact: true }).selectOption(person);
-    await card.getByRole("button", { name: "Add a to-do" }).click();
+    await add.locator("summary").click();
+    await add.getByLabel("To-do", { exact: true }).fill(words);
+    await add.getByRole("combobox", { name: "For", exact: true }).selectOption(person);
+    await add.getByRole("button", { name: "Save to-do" }).click();
     await expect(card.getByRole("listitem").filter({ hasText: words })).toContainText("Today, for");
   }
   expect(await logged("todo.added")).toHaveLength(2);

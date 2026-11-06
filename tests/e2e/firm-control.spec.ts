@@ -70,8 +70,7 @@ test("the owner confirms a due date against its notification, and client reminde
   await owner.goto("/app");
   await expect(owner.getByRole("region", { name: "Client reminders" })).toHaveCount(0);
   await owner.goto(`/app/clients/${business}?tab=returns`);
-  await expect(owner.locator(".app-row").filter({ hasText: `Control test return ${tag}` })).not.toContainText("*");
-  await expect(owner.getByText("InboxCA has not yet checked dates marked *")).toHaveCount(0);
+  await expect(owner.locator(".app-row").filter({ hasText: `Control test return ${tag}` }).locator(".work-tag[title]")).toHaveCount(0);
 });
 
 test("People shows who is behind, by person", async () => {

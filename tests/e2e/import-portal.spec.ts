@@ -128,17 +128,20 @@ test("a Form 26AS text file and a Form 16 added on Documents are filed under the
   await expect(held).toContainText(`${name} - Form 26AS - FY 2025-26.txt`);
   await expect(held).toContainText(`${name} - Form 16 - FY 2025-26.pdf`);
   await expect(owner.getByText("Choose a field from this official form")).toHaveCount(0);
-  // Each open ITR lists the portal files its year still needs, by that year's names; the AIS dropped on Returns closes its item.
+  // Each open ITR names the portal files its year still needs, by that year's names, in its tag's
+  // tooltip; the AIS dropped on the client's Papers closes its item.
   await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, 'ITR_NA', '2026-03', current_date + 5), ($1, $2, 'ITR_NA', '2027-03', current_date + 270)", [firm.firmId, client]);
   // The tax year 2026-27 return is due in 270 days, so it is under Later.
   await owner.goto(`/app/clients/${client}?tab=returns&show=later`);
-  const itr = owner.locator(".work-rows li");
-  await expect(itr.filter({ hasText: "AIS for AY 2026-27 (FY 2025-26): not added yet" })).toHaveCount(1);
-  await expect(itr.filter({ hasText: "Form No. 130 (was Form 16), Form No. 168 (was Form 26AS) and AIS for Tax year 2026-27: not added yet" })).toHaveCount(1);
+  const itr = owner.locator(".work-rows li a[title]");
+  await expect(itr.and(owner.locator('[title*="AIS for AY 2026-27 (FY 2025-26): not added yet"]'))).toHaveCount(1);
+  await expect(itr.and(owner.locator('[title*="Form No. 130 (was Form 16), Form No. 168 (was Form 26AS) and AIS for Tax year 2026-27: not added yet"]'))).toHaveCount(1);
+  await owner.goto(`/app/clients/${client}?tab=documents`);
   await owner.getByLabel("Add portal files").setInputFiles({ name: "ais.pdf", mimeType: "application/pdf", buffer: Buffer.from(ais()) });
   await owner.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(owner).toHaveURL(/tab=returns&dropped=1-0-0$/);
-  await expect(itr.filter({ hasText: "Form 16, Form 26AS and AIS for AY 2026-27 (FY 2025-26): added" })).toHaveCount(1);
+  await expect(owner).toHaveURL(/tab=files&dropped=1-0-0$/);
+  await owner.goto(`/app/clients/${client}?tab=returns&show=later`);
+  await expect(itr.and(owner.locator('[title*="Form 16, Form 26AS and AIS for AY 2026-27 (FY 2025-26): added"]'))).toHaveCount(1);
 });
 
 test("a locked ITR-V under a client's To check is filed as soon as a person types its password", async () => {
@@ -165,17 +168,19 @@ test("a locked ITR-V under a client's To check is filed as soon as a person type
   expect((await query(local.dbUrl, "select actor_id from public.activity_log where entity_id = $1 and action = 'document.renamed'", [id]))).toEqual([{ actor_id: firm.ownerId }]);
 });
 
-test("each open monthly GSTR-3B says whether its GSTR-2B is in, with the box beside it", async () => {
+test("each open monthly GSTR-3B says whether its GSTR-2B is in, added on the client's Papers", async () => {
   await query(local.dbUrl, "insert into public.tasks (firm_id, client_id, code, period_key, due_on) values ($1, $2, 'GSTR3B_M', '2026-09', current_date + 5), ($1, $2, 'GSTR3B_M', '2026-08', current_date + 4)", [firm.firmId, clientId]);
   await owner.goto(`/app/clients/${clientId}?tab=returns`);
-  const rows = owner.locator("section[aria-labelledby=due] li");
-  await expect(rows.filter({ hasText: "GSTR-2B for Sep 2026: added" })).toHaveCount(1);
-  await expect(rows.filter({ hasText: "GSTR-2B for Aug 2026: not added yet" })).toHaveCount(1);
+  const rows = owner.locator("section[aria-labelledby=due] .work-rows li a[title]");
+  await expect(rows.and(owner.locator('[title*="GSTR-2B for Sep 2026: added"]'))).toHaveCount(1);
+  await expect(rows.and(owner.locator('[title*="GSTR-2B for Aug 2026: not added yet"]'))).toHaveCount(1);
+  // The box for portal files is on the client's Papers.
+  await owner.goto(`/app/clients/${clientId}?tab=documents`);
   await owner.getByLabel("Add portal files").setInputFiles({ name: "august.json", mimeType: "application/json", buffer: statement("082026") });
   await owner.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(owner).toHaveURL(/tab=returns&dropped=1-0-0$/);
-  await expect(rows.filter({ hasText: "GSTR-2B for Aug 2026: added" })).toHaveCount(1);
-  await expect(owner.getByLabel("Add portal files")).toHaveCount(0);
+  await expect(owner).toHaveURL(/tab=files&dropped=1-0-0$/);
+  await owner.goto(`/app/clients/${clientId}?tab=returns`);
+  await expect(rows.and(owner.locator('[title*="GSTR-2B for Aug 2026: added"]'))).toHaveCount(1);
 });
 
 test("old files on a disk go into Incoming by checksum, and a folder's client is found by search", async ({ request }) => {

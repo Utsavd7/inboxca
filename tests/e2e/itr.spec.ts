@@ -200,8 +200,8 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     // Prepare on the return's own page: one draft from every figure, the one still to check shown
     // in its Check step.
     const returns=`/app/clients/${client}?tab=returns`,here=`/app/clients/${client}/returns/${task}`,step=page.getByRole("navigation",{name:"Steps of this return"}).locator(".is-now");
-    await page.goto(returns);const row=page.locator("li").filter({hasText:"ITR (no business, no audit) AY 2026-27 (FY 2025-26)"});
-    await row.getByRole("link",{name:"ITR (no business, no audit) AY 2026-27 (FY 2025-26)",exact:true}).click();await expect(step).toContainText("Draft");
+    await page.goto(returns);const row=page.locator("li").filter({hasText:"ITR AY 2026-27"});
+    await row.getByRole("link",{name:"ITR AY 2026-27",exact:true}).click();await expect(step).toContainText("Draft");
     await page.getByRole("region",{name:"Next step"}).getByRole("button",{name:"Prepare ITR"}).click();await expect(step).toContainText("Check",{timeout:60_000});await expect(page).toHaveURL(here);
     const checks=page.getByRole("region",{name:"Figures not checked yet"});
     await expect(checks).toContainText("1 figure not checked yet.");await expect(checks.getByRole("listitem")).toContainText("invented@invented.test");

@@ -15,8 +15,9 @@ import { initials } from "@/src/lib/utils";
 //   client's page; each is a link named "Back to Clients" for screen readers.
 // - actions: the page's main actions (one primary, one or two secondary). They sit on the right
 //   of the header and stay in view while the page scrolls; on a phone they wrap under the title.
+// - meta: a few small facts on the title's own line, after it (a client's type and numbers).
 // The header crossfades in place when the page changes.
-export function PageHead({ title, sub, crumb, crumbs = [], actions }: { title: React.ReactNode; sub?: React.ReactNode; crumb?: React.ReactNode; crumbs?: [href: string, label: string][]; actions?: React.ReactNode }) {
+export function PageHead({ title, sub, meta, crumb, crumbs = [], actions }: { title: React.ReactNode; sub?: React.ReactNode; meta?: React.ReactNode; crumb?: React.ReactNode; crumbs?: [href: string, label: string][]; actions?: React.ReactNode }) {
   return (
     <div className="page-head">
       <ViewTransition name="page-bar" share="auto" default="none">
@@ -31,6 +32,7 @@ export function PageHead({ title, sub, crumb, crumbs = [], actions }: { title: R
             ))}
             {crumb}
             <h1>{title}</h1>
+            {meta}
           </div>
           {actions && <div className="page-actions">{actions}</div>}
           <HeadTools />

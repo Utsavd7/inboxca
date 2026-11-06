@@ -2,6 +2,7 @@ import "../calendar/calendar.css";
 import "./notices.css";
 import { Building2, FileWarning, Landmark, Receipt, Scale, Search, type LucideIcon } from "lucide-react";
 import Form from "next/form";
+import { LiveSearch } from "../live-search";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { manageNotice } from "@/app/(app)/actions";
@@ -450,9 +451,8 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 <input type="hidden" name="add" value="1" />
                 <span className="search">
                   <Search size={16} aria-hidden />
-                  <input name="for" type="search" defaultValue={find} placeholder="Client name" aria-label="Client name" autoFocus />
+                  <LiveSearch name="for" reset={["at"]} defaultValue={find} placeholder="Client name" aria-label="Client name" autoFocus />
                 </span>
-                <button className="b b-secondary">Find</button>
               </Form>
               {picker?.data?.length ? (
                 <>

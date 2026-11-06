@@ -73,9 +73,10 @@ export function NewMenu({ manage, write, portal }: { manage: boolean; write: boo
   );
 }
 
-// More, beside a header's buttons: the page's less used actions, each a link or a copy (with
-// the same short note as CopyButton), so the header keeps one blue button.
-type MoreItem = { label: string; icon: React.ReactNode; href?: string; copy?: { text: string; what: string } };
+// More, beside a header's buttons: the page's less used actions, each a link, a copy (with
+// the same short note as CopyButton) or the send of a form on the page (by its id), so the
+// header keeps one blue button.
+type MoreItem = { label: string; icon: React.ReactNode; href?: string; copy?: { text: string; what: string }; form?: string };
 export function MoreMenu({ items }: { items: MoreItem[] }) {
   const [copied, setCopied] = useState<{ at: number; what: string }>();
   if (!items.length) return null;
@@ -88,14 +89,14 @@ export function MoreMenu({ items }: { items: MoreItem[] }) {
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="end" sideOffset={6} className="menu-layer">
           <Menu.Popup className="menu-pop">
-            {items.map(({ label, icon, href, copy }) =>
+            {items.map(({ label, icon, href, copy, form }) =>
               href ? (
                 <Menu.LinkItem key={label} className="menu-item" closeOnClick render={<Link href={href} scroll={false} />}>
                   {icon}
                   {label}
                 </Menu.LinkItem>
               ) : (
-                <Menu.Item key={label} className="menu-item" onClick={() => copy && navigator.clipboard.writeText(copy.text).then(() => setCopied({ at: Date.now(), what: copy.what }))}>
+                <Menu.Item key={label} className="menu-item" onClick={() => (form ? document.querySelector<HTMLFormElement>(`form#${form}`)?.requestSubmit() : copy && navigator.clipboard.writeText(copy.text).then(() => setCopied({ at: Date.now(), what: copy.what })))}>
                   {icon}
                   {label}
                 </Menu.Item>
