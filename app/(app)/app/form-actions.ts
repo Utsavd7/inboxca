@@ -14,6 +14,7 @@ import {itrReady,itrReturns} from "@/src/lib/itr-fields";
 import {itrChecks,type ItrWork} from "@/src/lib/itr-check";
 import {isTdsForm,tdsForms} from "@/src/lib/tds";
 import {supabaseAdmin} from "@/src/lib/supabase";
+import {clientBack} from "./return-back";
 
 // An ITR whose figures differ from the client's Form 26AS or Form 16 (src/lib/itr-check.ts) is
 // approved only once the person ticks that they looked at the differences, and the tick is
@@ -36,7 +37,7 @@ export async function prepareForm(form:FormData) {
   const client=z.uuid().parse(form.get("client"));
   const code=z.enum(["GSTR1","GSTR3B",...Object.keys(tdsForms) as (keyof typeof tdsForms)[],...itrReturns]).parse(form.get("form") ?? "GSTR1"),period=String(form.get("period")),drafts=form.getAll("draft").map(String);
   // A TDS or TCS statement goes back to its own page when it cannot be made, and to Return files when it is.
-  const tds=isTdsForm(code),back=tds ? `/app/clients/${client}/tds?tan=${z.uuid().parse(form.get("registration"))}&period=${encodeURIComponent(period)}&form=${code}&message=check` : `/app/clients/${client}?tab=outputs`;
+  const tds=isTdsForm(code),page=await clientBack(client),back=tds ? `/app/clients/${client}/tds?tan=${z.uuid().parse(form.get("registration"))}&period=${encodeURIComponent(period)}&form=${code}&message=check` : `${page}?tab=outputs`;
   const failed=tds ? back : `${back}&form=check`;
   let id:string,seen:Awaited<ReturnType<typeof differencesSeen>>;
   try {seen=await differencesSeen(form,{client,period,form:code,sources:drafts});} catch {redirect(failed);}
@@ -45,7 +46,7 @@ export async function prepareForm(form:FormData) {
     id=await prepareDocument({client,registration:String(form.get("registration")),form:code,period,drafts,version:String(form.get("version") ?? "") || undefined,reason:String(form.get("reason") ?? "") || undefined});
     await seen(id);
   } catch(error) {await keepReason(error);redirect(failed);}
-  revalidatePath("/app","layout");redirect(tds ? `/app/clients/${client}?tab=outputs` : `/app/files/${id}/view`);
+  revalidatePath("/app","layout");redirect(page!==`/app/clients/${client}` ? page : tds ? `${page}?tab=outputs` : `/app/files/${id}/view`);
 }
 
 // Fill, for one return from its row or its pin: InboxCA fills it from every figure it has read,
@@ -67,7 +68,8 @@ export async function fillNow(_:FillState,form:FormData):Promise<FillState> {
     id=await savePrepared(requestFor(context,work.drafts),context.userId,context.permission,undefined,true);
     await keep?.(id);
   } catch(error) {return {error:error instanceof Error && error.name==="Error" ? error.message : "The return could not be filled. Try again in a moment."};}
-  revalidatePath("/app","layout");redirect(`/app/files/${id}/view`);
+  const page=await clientBack(work.client);
+  revalidatePath("/app","layout");redirect(page!==`/app/clients/${work.client}` ? page : `/app/files/${id}/view`);
 }
 
 // Fill all, from the full list (/app/work) after its preview: InboxCA fills every GSTR-1, GSTR-3B
@@ -95,7 +97,7 @@ export async function stopFills(form:FormData) {
 }
 
 export async function decideForm(form:FormData) {
-  const id=z.uuid().parse(form.get("document")),{document}=await visibleForm(id),back=`/app/clients/${document.client_id}?tab=outputs`;
+  const id=z.uuid().parse(form.get("document")),{document}=await visibleForm(id),back=`${await clientBack(document.client_id)}?tab=outputs`;
   const decision=z.enum(["approved","rejected"]).parse(form.get("decision"));
   let seen:Awaited<ReturnType<typeof differencesSeen>>=async()=>{};
   if(decision==="approved") try {seen=await differencesSeen(form,{client:document.client_id,period:document.period_key,form:document.prepared.form,sources:document.prepared.sources.map(source=>source.id)});} catch {redirect(`${back}&form=approval`);}
@@ -106,7 +108,7 @@ export async function decideForm(form:FormData) {
 }
 
 export async function markFormFiled(form:FormData) {
-  const id=z.uuid().parse(form.get("document")),{document}=await visibleForm(id),back=`/app/clients/${document.client_id}?tab=outputs`;
+  const id=z.uuid().parse(form.get("document")),{document}=await visibleForm(id),back=`${await clientBack(document.client_id)}?tab=outputs`;
   const upload=form.get("ack_file");
   try {await fileForm(id,String(form.get("ack") ?? ""),String(form.get("paper") ?? "") || undefined,upload instanceof File ? upload : undefined);}
   catch(error) {await keepReason(error);redirect(`${back}&form=ack`);}
@@ -115,17 +117,17 @@ export async function markFormFiled(form:FormData) {
 }
 
 export async function addEditedForm(form:FormData) {
-  const id=z.uuid().parse(form.get("document")),{document}=await visibleForm(id),back=`/app/clients/${document.client_id}?tab=outputs`;
+  const id=z.uuid().parse(form.get("document")),{document}=await visibleForm(id),back=`${await clientBack(document.client_id)}?tab=outputs`;
   const file=form.get("edited_file");let draft:string;
   try {if(!(file instanceof File)) throw new Error("Choose the file.");draft=(await uploadEditedForm(id,file)).draft;}
   catch(error) {await keepReason(error);redirect(`${back}&form=edited`);}
-  revalidatePath("/app","layout");redirect(`/app/clients/${document.client_id}?tab=extraction&draft=${draft}`);
+  revalidatePath("/app","layout");redirect(`${await clientBack(document.client_id)}?tab=extraction&draft=${draft}`);
 }
 
 // A register's GST number, for a client with more than one. A change is a new revision, so an
 // approval built on the register is cleared.
 export async function setDraftRegistration(form:FormData) {
-  const client=z.uuid().parse(form.get("client")),draft=z.uuid().parse(form.get("draft")),registration=z.uuid().parse(form.get("registration")),back=`/app/clients/${client}?tab=outputs`;
+  const client=z.uuid().parse(form.get("client")),draft=z.uuid().parse(form.get("draft")),registration=z.uuid().parse(form.get("registration")),back=`${await clientBack(client)}?tab=outputs`;
   const {supabase,membership,userId}=await currentWriter();
   if(!membership) redirect("/app");
   const permission=membership.may("edit_figures",client) ? null : await grantFor(membership.firmId,userId,"edit_figures",client);

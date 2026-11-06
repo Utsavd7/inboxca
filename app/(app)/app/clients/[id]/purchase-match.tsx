@@ -1,6 +1,7 @@
 import Form from "next/form";
 import Link from "next/link";
 import {redirect} from "next/navigation";
+import {clientBack} from "../../return-back";
 import {z} from "zod";
 import {dueLabel} from "@/src/lib/calendar";
 import {serverCrypto} from "@/src/lib/crypto";
@@ -39,7 +40,7 @@ async function matchRegister(form:FormData) {
   const client=z.uuid().parse(form.get("client")),id=z.uuid().parse(form.get("register"));
   // A problem brings the columns back on the row the person chose.
   const row=z.coerce.number().int().min(1).max(40).catch(1).parse(form.get("header"));
-  const back=(code:string)=>`/app/clients/${client}?tab=extraction&purchases=${id}&match=${code}${["matched","no_statement"].includes(code) ? "" : `&heading=${row}`}#gst-match`;
+  const page=await clientBack(client),back=(code:string)=>`${page}?tab=extraction&purchases=${id}&match=${code}${["matched","no_statement"].includes(code) ? "" : `&heading=${row}`}#gst-match`;
   if(!membership.may("check_figures",client)) redirect(back("permission"));
   const {data:register}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,registration_id").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).eq("work_type","gst").eq("document_type","Purchase bills").eq("status","filed").maybeSingle();
   if(!register || !isRegister(register)) redirect(back("source"));
@@ -75,12 +76,13 @@ const todo=(entry:Entry)=>{
 // GSTR-2B against the purchase register, on the client's Figures: the lists for the chosen
 // register's month, and the columns to confirm when it is not matched yet or a person asks.
 // The page's own search: purchases (the register), heading (its column names' row) and match (what happened).
-export async function PurchaseMatch({clientId,searchParams}:{clientId:string;searchParams:Promise<Record<string,string|string[]|undefined>>}) {
+// at and period: the page its choices open on, and on a return's own page that return's month.
+export async function PurchaseMatch({clientId,at=`/app/clients/${clientId}`,period,searchParams}:{clientId:string;at?:string;period?:string;searchParams:Promise<Record<string,string|string[]|undefined>>}) {
   const search=await searchParams,one=(key:string)=>{const value=search[key];return typeof value==="string" ? value : undefined;};
   const asked=one("purchases"),heading=one("heading"),message=one("match");
   const {supabase,membership}=await currentMember();
   if(!membership) return null;
-  const {data:files}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,registration_id").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("work_type","gst").eq("document_type","Purchase bills").eq("status","filed").order("period_key",{ascending:false}).order("received_at",{ascending:false}).limit(100);
+  const {data:files}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,registration_id").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("work_type","gst").eq("document_type","Purchase bills").eq("status","filed").match(period ? {period_key:period} : {}).order("period_key",{ascending:false}).order("received_at",{ascending:false}).limit(100);
   const registers=files?.filter(isRegister) ?? [];
   if(!registers.length) return null;
   const register=registers.find((file)=>file.id===asked) ?? registers[0],month=periodName(register.period_key);
@@ -132,7 +134,7 @@ export async function PurchaseMatch({clientId,searchParams}:{clientId:string;sea
       </details>}</div>
     </> : !choosing && <p className="hint">{match ? "Matched with an earlier GSTR-2B. Match it again with the current one." : statement ? "Not matched with GSTR-2B yet." : `Add the GSTR-2B for ${month || "this month"} to match this register.`}{canCheck && <> <Link href={`${here}#gst-match`}>Choose columns</Link></>}</p>}
     {choosing && rows.length>0 && <>
-      <Form action={`/app/clients/${clientId}`} className="form-row" key={header}><input type="hidden" name="tab" value="extraction"/><input type="hidden" name="purchases" value={register.id}/><label>Column names are on row<input type="number" name="heading" min={1} max={40} defaultValue={header}/></label><button className="b b-secondary">Show columns</button></Form>
+      <Form action={at} className="form-row" key={header}><input type="hidden" name="tab" value="extraction"/><input type="hidden" name="purchases" value={register.id}/><label>Column names are on row<input type="number" name="heading" min={1} max={40} defaultValue={header}/></label><button className="b b-secondary">Show columns</button></Form>
       <form action={matchRegister} className="fields" key={header}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="register" value={register.id}/><input type="hidden" name="header" value={header}/>
         {!!choices.length && <label>GSTIN this register is for<select name="registration" required defaultValue=""><option value="" disabled>Choose</option>{choices.map((reg)=><option key={reg.id} value={reg.id}>{reg.number}</option>)}</select></label>}
         {purchaseFields.map((name,at)=><label key={name}>{name}<select name={`column${at}`} defaultValue={columns[at] ?? -1}><option value={-1}>Not in this file</option>{headings.map((value,n)=><option key={n} value={n}>{String.fromCharCode(65+n)}: {value.slice(0,200)}</option>)}</select></label>)}

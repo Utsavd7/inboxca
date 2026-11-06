@@ -28,10 +28,12 @@ const messages:Record<string,string>={stale:"Someone changed these figures. Read
 const rupees=(paise:bigint)=>grouped(`${paise<BigInt(0) ? "-" : ""}${(paise<BigInt(0) ? -paise : paise)/BigInt(100)}.${String((paise<BigInt(0) ? -paise : paise)%BigInt(100)).padStart(2,"0")}`,"number",2);
 type Line=Draft["lines"][number];
 
-export async function DatasetReview({clientId,draftId,lineId,check,view}:{clientId:string;draftId?:string;lineId?:string;check?:string;view?:string}) {
+// only: on a return's own page, the figures of its forms for its period.
+export async function DatasetReview({clientId,draftId,lineId,check,view,only}:{clientId:string;draftId?:string;lineId?:string;check?:string;view?:string;only?:{forms:string[];period:string}}) {
   const {supabase,membership,userId}=await currentMember();
   if(!membership) return null;
-  const {data:rows}=await supabase.from("datasets").select("id,form_code,period_key,target:data->target->>form").eq("firm_id",membership.firmId).eq("client_id",clientId).order("period_key",{ascending:false}).limit(100);
+  const sets=supabase.from("datasets").select("id,form_code,period_key,target:data->target->>form").eq("firm_id",membership.firmId).eq("client_id",clientId);
+  const {data:rows}=await (only ? sets.in("form_code",only.forms).eq("period_key",only.period) : sets).order("period_key",{ascending:false}).limit(100);
   const selected=rows?.find((row)=>row.id===draftId) ?? rows?.[0];
   if(!selected) return <section className="app-card fig" aria-labelledby="figures"><header className="app-card-head"><IconTile Icon={ListChecks} kind="docs"/><h2 id="figures">Check the figures</h2></header><Empty Icon={ListChecks} kind="docs" title="No figures to check yet"><p className="hint">Read a statement or a register below. Its figures show here to check against the paper.</p></Empty></section>;
   const {data:row,error}=await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("id",selected.id).single();

@@ -18,8 +18,9 @@ export function StageLine({code,work}:{code:string|null;work?:Work}) {
 }
 
 // A filled draft's figures still to check, each highlighted with a link to check it. Approving
-// and downloading wait until none is left.
-export async function FillChecks({client,sources}:{client:string;sources:{id:string}[]}) {
+// and downloading wait until none is left. at: the page the figures open on, the client's or a
+// return's own.
+export async function FillChecks({client,sources,at=`/app/clients/${client}`}:{client:string;sources:{id:string}[];at?:string}) {
   const {supabase,membership}=await currentMember();
   if(!membership) return null;
   const {data:rows}=await supabase.from("datasets").select("id,data").eq("firm_id",membership.firmId).eq("client_id",client).in("id",sources.map(source=>source.id));
@@ -35,8 +36,8 @@ export async function FillChecks({client,sources}:{client:string;sources:{id:str
     <p><strong>{left.length} {left.length===1 ? "figure" : "figures"} not checked yet.</strong> You can look at this draft. Approving and downloading wait until every figure is checked.</p>
     <ul>{left.slice(0,20).map(({draft,line,figure})=><li key={line.id} className={line.state==="rejected" ? "is-wrong" : undefined}>
       <span className="grow">{figure.label}{line.state==="rejected" && <span className="sub">Marked wrong</span>}</span><span className="num">{figure.value}</span>
-      <Link className="b b-secondary b-small" href={`/app/clients/${client}?tab=extraction&draft=${draft}&line=${line.id}`}>{line.state==="rejected" ? "Correct" : "Check"}</Link>
+      <Link className="b b-secondary b-small" href={`${at}?tab=extraction&draft=${draft}&line=${line.id}`}>{line.state==="rejected" ? "Correct" : "Check"}</Link>
     </li>)}</ul>
-    {left.length>20 && <p className="hint">{left.length-20} more in <Link href={`/app/clients/${client}?tab=extraction`}>Figures</Link>.</p>}
+    {left.length>20 && <p className="hint">{left.length-20} more in <Link href={`${at}?tab=extraction`}>Figures</Link>.</p>}
   </section>;
 }

@@ -1,4 +1,5 @@
 import {redirect} from "next/navigation";
+import {clientBack} from "../../return-back";
 import {z} from "zod";
 import {currentMember,currentWriter,viewOnlyWords} from "@/src/lib/member";
 import {readPortalDraft} from "@/src/lib/portal-draft";
@@ -13,7 +14,7 @@ async function readStatement(form:FormData) {
   const {supabase,membership}=await currentWriter();
   if(!membership) redirect("/app");
   const client=z.uuid().parse(form.get("client")),id=z.uuid().parse(form.get("source"));
-  const back=`/app/clients/${client}?tab=extraction`;
+  const back=`${await clientBack(client)}?tab=extraction`;
   const {data:document}=await supabase.from("documents").select("id,firm_id,client_id,name,sha256,period_key,document_type").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).eq("status","filed").eq("work_type","gst").in("document_type",["GSTR-2B","GSTR-2A"]).single();
   if(!document) redirect("/app/clients");
   let draft:string|null=null;
@@ -21,10 +22,11 @@ async function readStatement(form:FormData) {
   redirect(draft ? `${back}&draft=${draft}` : `${back}&portal=layout`);
 }
 
-export async function PortalInput({clientId,message}:{clientId:string;message?:string}) {
+// period: on a return's own page, that return's month.
+export async function PortalInput({clientId,period,message}:{clientId:string;period?:string;message?:string}) {
   const {supabase,membership}=await currentMember();
   if(!membership) return null;
-  const {data:files}=await supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("status","filed").in("document_type",["GSTR-2B","GSTR-2A"]).order("received_at",{ascending:false}).limit(100);
+  const {data:files}=await supabase.from("documents").select("id,name,period_key").eq("firm_id",membership.firmId).eq("client_id",clientId).eq("status","filed").in("document_type",["GSTR-2B","GSTR-2A"]).match(period ? {period_key:period} : {}).order("received_at",{ascending:false}).limit(100);
   if(!files?.length) return null;
   const reason=message==="check" ? await keptReason() : undefined;
   const statements=files.filter((file)=>/\.json$/i.test(file.name));

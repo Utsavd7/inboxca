@@ -3,6 +3,7 @@ import {supabaseAdmin} from "@/src/lib/supabase";
 import {runJobsSoon} from "@/src/jobs/run-soon";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { clientBack } from "../../return-back";
 import { z } from "zod";
 import { currentWriter } from "@/src/lib/member";
 import { serverCrypto } from "@/src/lib/crypto";
@@ -39,7 +40,7 @@ export async function reviewFigure(form:FormData) {
   const {client,draft:id,line:lineId,revision,intent}=input.data;
   // The view the person checks in, and the figure to show next (Check on the form moves on to it).
   const view=["form","list"].includes(String(form.get("view"))) ? `&view=${form.get("view")}` : "",next=z.uuid().safeParse(form.get("next")).data;
-  const back=`/app/clients/${client}?tab=extraction&draft=${id}${view}`;
+  const back=`${await clientBack(client)}?tab=extraction&draft=${id}${view}`;
   if(intent!=="edit" && !membership.may("check_figures",client)) redirect(`${back}&check=permission`);
   const {data:row}=await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).maybeSingle();
   if(!row) redirect("/app/clients");
@@ -95,7 +96,7 @@ export async function approveSection(form:FormData) {
   const input=z.object({client:z.uuid(),draft:z.uuid(),section:z.string().regex(/^[a-z0-9_]{1,20}$/),revision:z.coerce.number().int().min(1)}).safeParse(Object.fromEntries(form));
   if(!input.success) redirect("/app/clients");
   const {client,draft:id,section,revision}=input.data;
-  const view=["form","list"].includes(String(form.get("view"))) ? `&view=${form.get("view")}` : "",back=`/app/clients/${client}?tab=extraction&draft=${id}${view}`;
+  const view=["form","list"].includes(String(form.get("view"))) ? `&view=${form.get("view")}` : "",back=`${await clientBack(client)}?tab=extraction&draft=${id}${view}`;
   if(!membership.may("check_figures",client)) redirect(`${back}&check=permission`);
   const {data:row}=await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).maybeSingle();
   if(!row) redirect("/app/clients");

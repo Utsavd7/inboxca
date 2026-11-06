@@ -1,0 +1,43 @@
+/* A return's own page (return-frame.tsx): the steps on one track that fills as the return moves,
+   the next step with its one button, and the step shown sliding in. */
+.rs { flex: 1; }
+.rs > * + * { margin-top: var(--s4); }
+.rs-head { gap: var(--s2) var(--s4); color: var(--ink-2); font-size: 13px; }
+.rs-people { display: inline-flex; align-items: center; gap: var(--s2); }
+.rs-status { color: var(--ink); font-weight: 500; }
+
+.rs-steps { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); margin: 0; padding: var(--s3) 0; list-style: none; }
+.rs-steps::before, .rs-steps::after { content: ""; position: absolute; top: calc(var(--s3) + 13px); left: calc(50% / var(--n)); right: calc(50% / var(--n)); height: 2px; border-radius: var(--round); background: var(--line); }
+.rs-steps::after { background: var(--accent); transform: scaleX(var(--at)); transform-origin: left; transition: transform var(--slower) var(--out); }
+.rs-steps.is-filed::after { background: var(--done-dot); }
+.rs-steps li { position: relative; z-index: 1; display: flex; justify-content: center; min-width: 0; }
+.rs-steps a { display: grid; justify-items: center; gap: 6px; min-width: 0; padding: 0 var(--s1) var(--s1); border-radius: var(--r2); color: var(--ink-3); font-size: 13px; font-weight: 500; text-align: center; text-decoration: none; transition: color var(--fast) var(--out), transform var(--fast) var(--out); }
+.rs-steps a:hover { color: var(--ink); }
+.rs-steps a:active { transform: scale(0.97); }
+.rs-steps a:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus-glow); }
+.rs-dot { display: grid; place-items: center; width: 28px; height: 28px; border: 2px solid var(--line-2); border-radius: var(--round); background: var(--surface); color: var(--ink-3); font-size: 12px; font-weight: 650; transition: border-color var(--base) var(--out), background var(--base) var(--out), color var(--base) var(--out), box-shadow var(--base) var(--out), transform var(--base) var(--out); }
+.rs-name { display: grid; gap: 1px; }
+.rs-name small { color: var(--ink-3); font-size: 12px; font-weight: 400; }
+.rs-steps .is-done a { color: var(--ink-2); }
+.rs-steps .is-done .rs-dot { border-color: var(--accent-solid); background: var(--accent-solid); color: var(--on-accent); }
+.rs-steps .is-done .rs-dot svg { animation: tick-in var(--base) var(--out); }
+.rs-steps.is-filed .rs-dot { border-color: var(--done-dot); background: var(--done-dot); }
+.rs-steps .is-now a { color: var(--ink); font-weight: 600; }
+.rs-steps .is-now .rs-dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 4px var(--focus-glow); }
+.rs-steps .is-shown .rs-dot { transform: scale(1.08); }
+.rs-steps .is-shown .rs-name { color: var(--ink); }
+.rs-steps .is-shown .rs-name::after { content: ""; height: 2px; margin-top: 4px; border-radius: var(--round); background: var(--accent); animation: bar-grow var(--base) var(--out); }
+
+.rs-next { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--wash), var(--surface); box-shadow: var(--shadow-1); }
+.rs-next p { display: grid; gap: 2px; margin: 0; font-size: 14px; }
+.rs-next p span { color: var(--ink-2); font-size: 13px; }
+.rs-next.is-filed strong { color: var(--done-fg); }
+.rs-next .fill-now { flex: none; }
+
+.rs-body > * + * { margin-top: var(--s4); }
+.rs-papers .app-rows { margin: 0; padding: 0 var(--s2) var(--s2); }
+.rs-body .app-card-foot:has(.b) { display: flex; align-items: center; gap: var(--s3); }
+.rs-body .app-card > .mark-filed { padding: 0 var(--s4) var(--s4); }
+::view-transition-old(.step-out) { animation: vt-fade var(--fast) var(--out) both reverse; }
+::view-transition-new(.step-in) { animation: rs-in var(--slower) var(--out) both; }
+@keyframes rs-in { from { opacity: 0; transform: translateX(12px); } }
