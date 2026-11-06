@@ -48,7 +48,7 @@ it("reads the official GSTR-1 workbook as a sales register, and still refuses on
     return handle(new Request(`http://worker/sheet/${file}`, { method: "POST", body, headers: { authorization: await signView(body, process.env.FILE_WORKER_SECRET!) } }));
   };
   try {
-    const register = demoFiles("2026-09", "2026-10-28").find((file) => file.original.startsWith("sales register"))!;
+    const register = (await demoFiles("2026-09", "2026-10-28")).find((file) => file.original.startsWith("sales register"))!;
     await writeFile(join(root, "register.xlsx"), register.bytes);
     const response = await read("register.xlsx");
     expect(response.status).toBe(200);

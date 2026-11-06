@@ -14,7 +14,7 @@ const types: [RegExp, string, WorkType][] = [
   // (ITNS 281N)" FAQ).
   [/itns[\s-]?281|\btds\b.*\bchallans?\b|\bchallans?\b.*\btds\b/, "TDS challans", "tds"],
   [/salary register|payroll/, "Salary register", "tds"],
-  [/\btds\b.*\b(register|deductions?)\b|\b(deduction|payment)s? register\b/, "TDS register", "tds"],
+  [/\bt[dc]s\b.*\b(register|deductions?)\b|\b(deduction|payment|collection)s? register\b/, "TDS register", "tds"],
   [/acknowledg/, "Acknowledgement", "other"],
   [/audit report|\b3c[abd]\b/, "Audit report", "tax_audit"],
   [/computation/, "Computation", "income_tax"],
