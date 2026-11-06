@@ -49,7 +49,7 @@ await db.query("update public.connected_accounts set address_enc = $2, credentia
 ]);
 const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 const lastMonth = new Date(Date.parse(`${today.slice(0, 7)}-01`) - 86_400_000).toISOString().slice(0, 7);
-const papers = demoFiles(lastMonth, today);
+const papers = await demoFiles(lastMonth, today);
 const month = new Date(`${lastMonth}-01T00:00:00Z`).toLocaleString("en-IN", { month: "long", timeZone: "UTC" });
 const attach = (list: typeof papers) => list.map((paper) => ({ filename: paper.original, content: Buffer.from(paper.bytes) }));
 
@@ -69,8 +69,8 @@ for (const event of events) {
   const [subject, text] = letters[event.label] ?? letters.other;
   // The client's own (invented) address, so the email belongs to that client.
   const from = event.email_enc ? await crypto.decrypt(firm, `clients/${event.id}/email`, event.email_enc) : `accounts@${event.id}.example`;
-  // The papers demo:data put in the drive for this email came with it.
-  const attachments = attach(papers.filter((paper) => !paper.mail && paper.client === event.name));
+  // The papers demo:data put in the drive for this email came with it (not those sent by the upload page).
+  const attachments = attach(papers.filter((paper) => !paper.mail && !paper.upload && paper.client === event.name));
   await smtp.sendMail({ from: `${event.name} <${from}>`, to: OFFICE, subject, text, messageId: event.provider_message_id, date: event.received_at, attachments });
   if (event.label === "data_gst" && !replied) replied = { id: event.provider_message_id, to: from };
 }

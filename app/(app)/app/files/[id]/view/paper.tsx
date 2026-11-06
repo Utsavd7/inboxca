@@ -12,6 +12,7 @@ import {formName,preparedSchema} from "@/src/lib/prepared";
 import {templateSchema} from "@/src/lib/templates";
 import { FileViewer } from "./file-viewer";
 import { FillChecks } from "../../../return-work";
+import { returnPage } from "../../../return-back";
 import { ItrDifferences } from "../../../itr-check";
 import { itrChecks } from "@/src/lib/itr-check";
 import { DocPane } from "../../../doc-pane";
@@ -36,6 +37,8 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
   const canCopy=!membership.viewOnlyUntil && (membership.may("download",file.client_id) || !!await grantFor(membership.firmId,userId,"download",file.client_id,id));
   // A prepared return not yet filed, against the client's Form 26AS and Form 16.
   const differences=meta && /^ITR/.test(meta.form) && meta.status!=="filed" ? (await itrChecks(supabase,membership.firmId,[{client:file.client_id,period:file.period_key,form:meta.form,sources:meta.sources.map(source=>source.id)}]).catch(()=>[]))[0]?.differences ?? [] : [];
+  // A draft's figures to check open on its return's own page, when it is for one return on the calendar.
+  const checksAt = meta?.status==="draft" ? await returnPage(supabase,membership.firmId,{client:file.client_id,form:meta.form,period:file.period_key ?? "",registration:meta.registration}) : null;
   const viewable = ["pdf", "png", "jpg", "jpeg", "gif", "webp", "xlsx", "xls", "csv", "ods", "json", "txt", "docx", "odt"].includes(extension);
   const kind = [paperType(file.document_type), periodName(file.period_key, file.work_type)].filter(Boolean).join(", ");
   const stream = `/app/files/${id}/stream${extension==="xlsx" ? `?sheet=${sheet}` : ""}`;
@@ -55,7 +58,7 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
   );
   const body = (
     <>
-      {meta?.status==="draft" && <FillChecks client={file.client_id} sources={meta.sources} />}
+      {meta?.status==="draft" && <FillChecks client={file.client_id} sources={meta.sources} at={checksAt ?? undefined} />}
       <ItrDifferences differences={differences} tick={decides && differences.length ? `approve-${file.id}` : undefined}/>
       {formable && <nav className="pills" aria-label="Show the return"><Link href="?show=form" aria-current={onForm ? "page" : undefined} scroll={false}>Form view</Link><Link href="?show=file" aria-current={onForm ? undefined : "page"} scroll={false}>File view</Link></nav>}
       {onForm ? <>

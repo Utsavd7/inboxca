@@ -60,8 +60,8 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${paper}`);
     await expect(page.getByText("Income tax AY 2026-27 (FY 2025-26)",{exact:true})).toBeVisible();
     for(let n=0;n<fromForm16.length;n++) {await expect(page.getByText("Invented Form 16.pdf. Page 1")).toBeVisible();await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByText(`${n+1} of ${fromForm16.length} checked`)).toBeVisible();}
-    // The return: PAN and Form 16 are already filled; the rest is listed to fill.
-    await page.goto(`/app/clients/${client}/itr`);
+    // The return, in the Draft step of its own page: PAN and Form 16 are already filled; the rest is listed to fill.
+    await page.goto(`/app/clients/${client}/itr`);await expect(page).toHaveURL(new RegExp(`/app/clients/${client}/returns/[0-9a-f-]{36}\\?.*step=draft`));
     const held=page.getByRole("region",{name:"Already filled"});await expect(held).toContainText(`PAN ${pan}`);await expect(held).toContainText("Invented Form 16.pdf");await expect(held).toContainText("8 figures, 8 checked");
     const toFill=page.getByRole("region",{name:"Still to fill"});await expect(toFill.getByLabel(/details still to fill/)).toBeVisible();
     await page.screenshot({path:test.info().outputPath("itr.png"),fullPage:true});
@@ -190,17 +190,20 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     // Due in 3 days with no form chosen: Today sends the person to the return's own page.
     const now=page.getByRole("region",{name:"Your list"});
     await expect(now.getByText("Due in 3 days. Return not started")).toBeVisible();
-    await now.getByRole("link",{name:/Start the return/}).click();await expect(page).toHaveURL(/\/itr\?year=2026$/);
+    await now.getByRole("link",{name:/Start the return/}).click();await expect(page).toHaveURL(new RegExp(`/app/clients/${client}/returns/${task}\\?step=draft$`));
+    await expect(page.getByRole("region",{name:"Still to fill"})).toBeVisible();
     // The team's ITR-1 entries, every one checked but the email address. Due in 10 days, so InboxCA
     // does not fill it by itself yet.
     await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date+10 where id=$1",[task]);
     const email=request.drafts[0].figures.filter(([field])=>field==="itr.personal.email"),others=request.drafts[0].figures.filter(([field])=>field!=="itr.personal.email"),entered={entered_by:firm.ownerId,entered_at:new Date().toISOString()};
     await query(local.dbUrl,"insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values($1,$2,$3,'ITR','2026',$4)",[own,firm.firmId,client,{target:{form:"ITR1",version:request.template.version},lines:[...await lines(firm.firmId,own,others,entered,firm.ownerId),...await lines(firm.firmId,own,email,entered)],checks:[]}]);
-    // Fill by hand: one draft from every figure, the one still to check shown.
-    const returns=`/app/clients/${client}?tab=returns`;
+    // Prepare on the return's own page: one draft from every figure, the one still to check shown
+    // in its Check step.
+    const returns=`/app/clients/${client}?tab=returns`,here=`/app/clients/${client}/returns/${task}`,step=page.getByRole("navigation",{name:"Steps of this return"}).locator(".is-now");
     await page.goto(returns);const row=page.locator("li").filter({hasText:"ITR (no business, no audit) AY 2026-27 (FY 2025-26)"});
     await expect(row.getByText("Papers in, not filled yet. 1 figure not checked yet")).toBeVisible();
-    await row.getByRole("button",{name:/^Fill /}).click();await expect(page).toHaveURL(/\/files\/.*\/view/,{timeout:60_000});
+    await row.getByRole("link",{name:"ITR (no business, no audit) AY 2026-27 (FY 2025-26)",exact:true}).click();await expect(step).toContainText("Draft");
+    await page.getByRole("region",{name:"Next step"}).getByRole("button",{name:"Prepare ITR"}).click();await expect(step).toContainText("Check",{timeout:60_000});await expect(page).toHaveURL(here);
     const checks=page.getByRole("region",{name:"Figures not checked yet"});
     await expect(checks).toContainText("1 figure not checked yet.");await expect(checks.getByRole("listitem")).toContainText("invented@invented.test");
     await page.screenshot({path:test.info().outputPath("itr-fill.png"),fullPage:true});
@@ -220,6 +223,7 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     await expect.poll(async()=>(await query(local.dbUrl,prepared,[firm.firmId])).filter(form=>Number(form.size)>0).length,{timeout:60_000}).toBe(2);
     forms=await query(local.dbUrl,prepared,[firm.firmId]);
     expect(forms[1].name).toBe(`${person} - ITR-1 - AY 2026-27 - v2.json`);expect(forms[1].prepared.status).toBe("approved");expect(forms[1].prepared.filled).toBeUndefined();
+    await page.goto(here);await expect(step).toContainText("File");await expect(page.getByRole("button",{name:"Download for filing"})).toBeEnabled();
     // Form 26AS arrives with TDS the return does not claim: the next fill waits for the CA.
     const bytes=Buffer.from("Invented Form 26AS text for AY 2026-27"),sha256=createHash("sha256").update(bytes).digest("hex");
     const saved=await drive.save(await drive.ensureFolder([firm.firmId,"Income tax"]),"Invented 26AS.txt",bytes);if(saved==="taken") throw new Error("Test collision");

@@ -6,6 +6,7 @@
 // TANs made from them, follow the ZZZ pattern of the tests' invented ones. Every page and sheet
 // says it is a sample; government papers carry a light SAMPLE mark and no emblem, seal or signature.
 import { createHash } from "node:crypto";
+import { createCanvas } from "@napi-rs/canvas";
 import { readFileSync } from "node:fs";
 import { Paper, SAMPLE, inr, inWords } from "./demo-pdf.mts";
 import { writeWorkbook } from "../worker/workbook.ts";
@@ -26,6 +27,8 @@ export function gstin(state: string, pan: string) {
 }
 
 const ddmmyyyy = (date: string) => date.split("-").reverse().join("-");
+// An invented GST ARN: AA, the state, the period's month and year, a serial and a check letter.
+export const arn = (state: string, key: string, serial: number) => `AA${state}${key.slice(5, 7)}${key.slice(2, 4)}${String(serial).padStart(7, "0")}Z`;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const shortDate = (date: string) => `${date.slice(8, 10)}-${MONTHS[Number(date.slice(5, 7)) - 1]}-${date.slice(0, 4)}`;
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -50,13 +53,14 @@ function sheet(name: string, rows: (string | number)[][]) {
 }
 
 // A TDS challan receipt as the e-Pay Tax service gives it after payment: ITNS 281 under the
-// 1961 Act, ITNS 281N from tax year 2026-27, with the minor head of TDS a deductor pays.
-type Challan = { form: "281" | "281N"; tan: string; name: string; year: [string, string]; tax: number; interest: number; fee: number; bsr: string; date: string; serial: string; bank: string };
+// 1961 Act, ITNS 281N from tax year 2026-27, with the minor head of TDS a deductor pays. ITNS
+// 280 is the 1961 Act's challan for advance tax (minor head 100), paid under a PAN.
+type Challan = { form: "280" | "281" | "281N"; tan: string; name: string; year: [string, string]; tax: number; interest: number; fee: number; bsr: string; date: string; serial: string; bank: string };
 function drawChallan(paper: Paper, c: Challan) {
   const total = c.tax + c.interest + c.fee, cin = `${c.bsr}${c.date.split("-").reverse().join("")}${c.serial}`;
   paper.text(297, 50, "Challan Receipt", { size: 13, bold: true, align: "center" }).text(297, 64, `Challan No./ITNS ${c.form}`, { size: 9, bold: true, align: "center" });
   paper.box(40, 78, 515, 112);
-  [["TAN", c.tan], ["Name", c.name], [c.year[0], c.year[1]], ["Minor Head", "TDS/TCS Payable by Taxpayer (200)"], ["Amount (in Rs.)", inr(total)], ["Amount (in words)", inWords(total)], ["CIN", cin]]
+  [[c.form === "280" ? "PAN" : "TAN", c.tan], ["Name", c.name], [c.year[0], c.year[1]], ["Minor Head", c.form === "280" ? "Advance Tax (100)" : "TDS/TCS Payable by Taxpayer (200)"], ["Amount (in Rs.)", inr(total)], ["Amount (in words)", inWords(total)], ["CIN", cin]]
     .forEach(([label, value], i) => paper.text(50, 94 + i * 14, label, { size: 8, gray: 0.35 }).text(170, 94 + i * 14, value, { size: 8, bold: i !== 5 }));
   paper.box(40, 198, 515, 84);
   [["Mode of Payment", "Net Banking"], ["Bank Name", c.bank], ["Bank Reference Number", `${c.serial}${c.bsr.slice(-4)}61`], ["Date of Deposit", shortDate(c.date)], ["BSR code", c.bsr], ["Challan No", c.serial]]
@@ -67,15 +71,16 @@ function drawChallan(paper: Paper, c: Challan) {
 }
 
 export type Letter = { subject: string; text: string };
+export type Filing = { code: string; period: string; on: string; ack: string; udin?: string };
 type Party = { name: string; address: string[]; gstin: string; state: string };
 type Line = { item: string; hsn: string; qty: number; unit: string; rate: number };
-type Bill = { seller: Party; number: string; date: string; lines: Line[]; taxable: number; igst: number; cgst: number; sgst: number; total: number };
+type Bill = { seller: Party; number: string; date: string; lines: Line[]; rate: number; taxable: number; igst: number; cgst: number; sgst: number; total: number };
 
-function bill(seller: Party, buyer: Party, number: string, date: string, lines: Line[]): Bill {
+function bill(seller: Party, buyer: Party, number: string, date: string, lines: Line[], rate = 18): Bill {
   const taxable = round2(lines.reduce((sum, line) => sum + line.qty * line.rate, 0));
   const inter = seller.gstin.slice(0, 2) !== buyer.gstin.slice(0, 2);
-  const igst = inter ? round2(taxable * 0.18) : 0, cgst = inter ? 0 : round2(taxable * 0.09), sgst = cgst;
-  return { seller, number, date, lines, taxable, igst, cgst, sgst, total: Math.round(taxable + igst + cgst + sgst) };
+  const igst = inter ? round2(taxable * rate / 100) : 0, cgst = inter ? 0 : round2(taxable * rate / 200), sgst = cgst;
+  return { seller, number, date, lines, rate, taxable, igst, cgst, sgst, total: Math.round(taxable + igst + cgst + sgst) };
 }
 
 // One tax invoice per page, as a supplier's billing software prints it.
@@ -106,7 +111,7 @@ function drawBill(paper: Paper, b: Bill, buyer: Party) {
   y += 6;
   paper.line(400, y, 555, y);
   y += 12;
-  const taxes: [string, number][] = b.igst ? [["Output IGST @ 18%", b.igst]] : [["Output CGST @ 9%", b.cgst], ["Output SGST @ 9%", b.sgst]];
+  const taxes: [string, number][] = b.igst ? [[`Output IGST @ ${b.rate}%`, b.igst]] : [[`Output CGST @ ${b.rate / 2}%`, b.cgst], [`Output SGST @ ${b.rate / 2}%`, b.sgst]];
   for (const [label, value] of [["Taxable Value", b.taxable], ...taxes, ["Round Off", b.total - (b.taxable + b.igst + b.cgst + b.sgst)]] as [string, number][]) {
     paper.text(440, y, label, { size: 8, align: "right", bold: label !== "Round Off" && label !== "Taxable Value" }).text(545, y, inr(value), { size: 8, align: "right" });
     y += 13;
@@ -119,12 +124,223 @@ function drawBill(paper: Paper, b: Bill, buyer: Party) {
     .text(50, y + 24, "particulars are true and correct. Subject to local jurisdiction. Interest @18% p.a. charged on overdue bills.", { size: 7 });
   y += 50;
   paper.text(50, y, "Company's Bank Details", { size: 8, bold: true }).text(50, y + 12, "Bank Name: Aakashganga Sahakari Bank Ltd", { size: 8 })
-    .text(50, y + 23, `A/c No.: ${b.number.replace(/\D/g, "").padEnd(6, "4")}0712`, { size: 8 }).text(50, y + 34, "Branch & IFSC: Naroda, AKGB0000412", { size: 8 });
+    .text(50, y + 23, `A/c No.: ${b.number.replace(/\D/g, "").padEnd(6, "4")}0712`, { size: 8 }).text(50, y + 34, "Branch & IFSC: Naroda, ZZZB0000412", { size: 8 });
   paper.text(545, y, `for ${b.seller.name}`, { size: 8, bold: true, align: "right" }).text(545, y + 40, "Authorised Signatory", { size: 8, align: "right" });
   paper.text(297, 800, "This is a Computer Generated Invoice", { size: 7, align: "center", gray: 0.4 });
 }
+const billsPdf = (list: Bill[], buyer: Party) => {
+  const paper = new Paper();
+  list.forEach((b, i) => { if (i) paper.page(); drawBill(paper, b, buyer); });
+  return paper.bytes();
+};
 
-export function demoFiles(period: string, today: string) {
+// A GSTR-2B in GSTN's v4.5 layout listing the bills, for a month ("102026"), or for a quarterly
+// taxpayer the quarter's last month.
+function gstr2b(buyer: string, bills: Bill[], prd: string, made: string, filed: string) {
+  const sum = (key: "taxable" | "igst" | "cgst" | "sgst") => round2(bills.reduce((total, b) => total + b[key], 0));
+  const twoB = {
+    chksum: createHash("sha256").update(`${buyer}${prd}`).digest("hex"),
+    data: {
+      gstin: buyer, rtnprd: prd, version: "1.0", gendt: ddmmyyyy(made),
+      itcsumm: { itcavl: { nonrevsup: { igst: sum("igst"), cgst: sum("cgst"), sgst: sum("sgst"), cess: 0, b2b: { igst: sum("igst"), cgst: sum("cgst"), sgst: sum("sgst"), cess: 0 } } } },
+      docdata: { b2b: bills.map((b) => ({
+        ctin: b.seller.gstin, trdnm: b.seller.name.toUpperCase(), supfildt: ddmmyyyy(filed), supprd: prd,
+        inv: [{ inum: b.number, typ: "R", dt: ddmmyyyy(b.date), val: b.total, pos: buyer.slice(0, 2), rev: "N", itcavl: "Y", rsn: "", txval: b.taxable, igst: b.igst, cgst: b.cgst, sgst: b.sgst, cess: 0,
+          items: [{ num: 1, rt: b.rate, txval: b.taxable, igst: b.igst, cgst: b.cgst, sgst: b.sgst, cess: 0 }] }],
+      })) },
+    },
+  };
+  if (!portalParsers[0].read(twoB)) throw new Error("A demo GSTR-2B does not match GSTN's layout");
+  return new TextEncoder().encode(JSON.stringify(twoB));
+}
+
+// Sales for a month or quarter in the official GSTR-1 workbook, as Tally exports it: B2B invoices,
+// B2C small sales in the seller's own state, and the HSN summary of both by each item's share.
+const states: Record<string, string> = { "24": "24-Gujarat", "27": "27-Maharashtra" };
+function gstr1Workbook(home: string, sales: [string, string, string, string, number][], b2cs: number, items: [string, string, string, number, number][], rate = 18) {
+  const workbook = readFileSync(new URL("../reference/official/gstr1-v2.2/GSTR1_Excel_Workbook_Template_V2.2.xlsx", import.meta.url));
+  const serial = (date: string) => String((Date.parse(date) - Date.UTC(1899, 11, 30)) / 86400000);
+  const cell = (value: string | number) => ({ value: String(value), number: typeof value === "number" });
+  const b2b = new Map<string, { value: string; number: boolean }>(), small = new Map<string, { value: string; number: boolean }>(), hsn = new Map<string, { value: string; number: boolean }>();
+  sales.forEach(([ctin, name, number, date, taxable], i) => {
+    const row = 5 + i;
+    ["A", "B", "C", "D", "E", "F", "G", "I", "K", "L"].forEach((column, at) =>
+      b2b.set(`${column}${row}`, [cell(ctin), cell(name), cell(number), { value: serial(date), number: true }, cell(Math.round(taxable * (1 + rate / 100))), cell(states[ctin.slice(0, 2)]), cell("N"), cell("Regular B2B"), cell(rate), cell(taxable)][at]));
+  });
+  if (b2cs) [["A5", "OE"], ["B5", states[home]], ["D5", rate], ["E5", b2cs]].forEach(([ref, value]) => small.set(String(ref), cell(value)));
+  b2b.set("O1", cell(SAMPLE.replace("paper", "workbook")));
+  const inter = sales.filter(([ctin]) => ctin.slice(0, 2) !== home).reduce((total, sale) => total + sale[4], 0);
+  const intra = sales.reduce((total, sale) => total + sale[4], 0) - inter + b2cs;
+  items.forEach(([code, text, unit, qty, share], i) => {
+    const igst = round2(inter * share * rate / 100), half = round2(intra * share * rate / 200);
+    ["A", "B", "C", "D", "F", "G", "H", "I", "J"].forEach((column, at) => hsn.set(`${column}${5 + i}`, [cell(code), cell(text), cell(unit), cell(qty), cell(rate), cell(round2((intra + inter) * share)), cell(igst), cell(half), cell(half)][at]));
+  });
+  return new Uint8Array(writeWorkbook(workbook, new Map([["xl/worksheets/sheet2.xml", b2b], ["xl/worksheets/sheet6.xml", small], ["xl/worksheets/sheet19.xml", hsn]])));
+}
+
+// Tax on income under the new regime for FY 2025-26 (section 115BAC(1A) slabs, rebate under
+// section 87A up to Rs. 12 lakh), before cess.
+function newRegimeTax(income: number) {
+  if (income <= 1200000) return 0;
+  return [[400000, 0.05], [800000, 0.1], [1200000, 0.15], [1600000, 0.2], [2000000, 0.25], [2400000, 0.3]].reduce((tax, [from, rate], i, all) => tax + Math.max(0, Math.min(income, all[i + 1]?.[0] ?? Infinity) - from) * rate, 0);
+}
+
+// Form 16 from TRACES for FY 2025-26, Part A and Part B, new regime, salary paid evenly by quarter.
+type Person = { name: string; pan: string; address: string[] };
+function form16Pdf(employer: Person & { tan: string; email: string; signatory: string }, employee: Person, gross: number, certificate: string, receipts: string[], today: string) {
+  const standard = 75000, taxable = gross - standard, slabTax = Math.round(newRegimeTax(taxable)), cess = Math.round(slabTax * 0.04), tax = slabTax + cess, quarter = tax / 4;
+  const f16 = new Paper(true);
+  f16.text(297, 46, "FORM NO. 16", { size: 12, bold: true, align: "center" }).text(297, 59, "[See rule 31(1)(a)]", { size: 8, align: "center" }).text(297, 74, "PART A", { size: 10, bold: true, align: "center" });
+  f16.text(297, 88, "Certificate under Section 203 of the Income-tax Act, 1961 for tax deducted at source on salary paid to an employee under section 192", { size: 7, align: "center" });
+  f16.text(297, 98, "or pension/interest income of specified senior citizen under section 194P", { size: 7, align: "center" });
+  f16.box(40, 108, 515, 30).text(48, 121, `Certificate No.  ${certificate}`, { size: 8, bold: true }).text(300, 121, `Last updated on  ${shortDate(`${today}`)}`, { size: 8 });
+  f16.box(40, 138, 257, 70).box(297, 138, 258, 70);
+  f16.text(48, 151, "Name and address of the Employer/Specified Bank", { size: 7, gray: 0.35 }).text(48, 164, employer.name, { size: 8, bold: true });
+  [...employer.address, employer.email].forEach((row, i) => f16.text(48, 175 + i * 11, row, { size: 8 }));
+  f16.text(305, 151, "Name and address of the Employee/Specified senior citizen", { size: 7, gray: 0.35 }).text(305, 164, employee.name, { size: 8, bold: true });
+  employee.address.forEach((row, i) => f16.text(305, 175 + i * 11, row, { size: 8 }));
+  f16.box(40, 208, 515, 34);
+  [["PAN of the Deductor", employer.pan, 48], ["TAN of the Deductor", employer.tan, 190], ["PAN of the Employee", employee.pan, 330], ["Assessment Year", "2026-27", 470]].forEach(([label, value, x]) => f16.text(Number(x), 221, String(label), { size: 7, gray: 0.35 }).text(Number(x), 234, String(value), { size: 9, bold: true }));
+  f16.text(48, 260, "Summary of amount paid/credited and tax deducted at source thereon in respect of the employee", { size: 8, bold: true });
+  f16.box(40, 268, 515, 16, 0.92);
+  [[48, "Quarter"], [90, "Receipt numbers of original quarterly TDS statements u/s 200(3)"], [400, "Amount paid/credited"], [475, "Tax deducted (Rs.)"], [552, "Tax deposited/remitted (Rs.)"]].forEach(([x, label], i) => f16.text(Number(x), 279, String(label), { size: 6.5, bold: true, align: i >= 2 ? "right" : "left" }));
+  receipts.forEach((receipt, i) => f16.text(48, 298 + i * 14, `Q${i + 1}`, { size: 8 }).text(90, 298 + i * 14, receipt, { size: 8 }).text(400, 298 + i * 14, inr(gross / 4), { size: 8, align: "right" }).text(475, 298 + i * 14, inr(quarter), { size: 8, align: "right" }).text(552, 298 + i * 14, inr(quarter), { size: 8, align: "right" }));
+  f16.line(40, 350, 555, 350).text(48, 362, "Total (Rs.)", { size: 8, bold: true }).text(400, 362, inr(gross), { size: 8, bold: true, align: "right" }).text(475, 362, inr(tax), { size: 8, bold: true, align: "right" }).text(552, 362, inr(tax), { size: 8, bold: true, align: "right" });
+  f16.text(48, 400, "Verification", { size: 9, bold: true });
+  f16.text(48, 414, `I, ${employer.signatory}, do hereby certify that a sum of Rs. ${inr(tax)}`, { size: 7.5 });
+  f16.text(48, 425, `[${inWords(tax)}] has been deducted and deposited to the credit of the Central Government.`, { size: 7.5 });
+  f16.text(48, 450, `Place: ${employer.address.at(-1)!.split(" - ")[0]}`, { size: 8 }).text(48, 462, `Date: ${shortDate(today)}`, { size: 8 }).text(550, 462, "(Signature of person responsible for deduction of tax)", { size: 7, align: "right" });
+  f16.page();
+  f16.text(297, 46, "PART B (Annexure)", { size: 11, bold: true, align: "center" }).text(297, 60, "Details of Salary Paid and any other income and tax deducted", { size: 8, align: "center" });
+  f16.text(48, 82, "Whether opting out of taxation u/s 115BAC(1A)?", { size: 8 }).text(550, 82, "No", { size: 8, bold: true, align: "right" });
+  const partB: [string, string, number | null][] = [
+    ["1.", "Gross Salary", null], ["(a)", "Salary as per provisions contained in section 17(1)", gross], ["(d)", "Total", gross],
+    ["2.", "Less: Allowances to the extent exempt under section 10", 0],
+    ["4.", "Less: Deductions under section 16", null], ["(a)", "Standard deduction under section 16(ia)", standard],
+    ["6.", "Income chargeable under the head \"Salaries\" [(3+1(e)-5]", taxable],
+    ["9.", "Gross total income (6+8)", taxable],
+    ["10.", "Deductions under Chapter VI-A (not available under section 115BAC)", 0],
+    ["12.", "Total taxable income (9-11)", taxable],
+    ["13.", "Tax on total income", slabTax], ["14.", "Rebate under section 87A, if applicable", 0], ["15.", "Surcharge, wherever applicable", 0],
+    ["16.", "Health and education cess", cess], ["17.", "Tax payable (13+15+16-14)", tax], ["18.", "Less: Relief under section 89", 0], ["19.", "Net tax payable (17-18)", tax],
+  ];
+  let y = 104;
+  for (const [number, label, value] of partB) {
+    f16.text(48, y, number, { size: 8 }).text(75, y, label, { size: 8, bold: value === null }).text(550, y, value === null ? "" : inr(value), { size: 8, align: "right" });
+    y += 15;
+  }
+  return { bytes: f16.bytes(), tax };
+}
+
+// The AIS for FY 2025-26, by the parts the official FAQ names.
+function aisPdf(person: Person, rows: [string, string, string, number][]) {
+  const ais = new Paper(true);
+  ais.text(297, 50, "Annual Information Statement (AIS)", { size: 13, bold: true, align: "center" });
+  [["Financial Year", "2025-26"], ["Assessment Year", "2026-27"]].forEach(([label, value], i) => ais.text(48 + i * 260, 74, label, { size: 8, gray: 0.35 }).text(140 + i * 260, 74, value, { size: 8, bold: true }));
+  ais.text(48, 98, "PART A- General Information", { size: 9, bold: true });
+  [["Permanent Account Number (PAN)", person.pan], ["Name", person.name], ["Address", person.address.join(", ")]].forEach(([label, value], i) => ais.text(48, 114 + i * 13, label, { size: 8, gray: 0.35 }).text(200, 114 + i * 13, value, { size: 8, bold: i < 2 }));
+  ais.text(48, 168, "PART- B", { size: 9, bold: true }).text(48, 184, "TDS/TCS Information", { size: 9, bold: true }).box(40, 192, 515, 16, 0.92);
+  [[48, "Information code"], [150, "Information description"], [330, "Information source"], [552, "Information value"]].forEach(([x, label], i) => ais.text(Number(x), 203, String(label), { size: 7.5, bold: true, align: i === 3 ? "right" : "left" }));
+  rows.forEach(([code, text, source, value], i) => ais.text(48, 222 + i * 14, code, { size: 8 }).text(150, 222 + i * 14, text, { size: 8 }).text(330, 222 + i * 14, source, { size: 7.5 }).text(552, 222 + i * 14, inr(value), { size: 8, align: "right" }));
+  const below = 240 + rows.length * 14;
+  [["SFT Information", "No information available"], ["Payment of Taxes", "No information available"], ["Demand and Refund", "No information available"], ["Other Information", "No information available"]]
+    .forEach(([head, text], i) => ais.text(48, below + i * 30, head, { size: 9, bold: true }).text(48, below + 14 + i * 30, text, { size: 8, gray: 0.35 }));
+  return ais.bytes();
+}
+
+// A bank's statement of account for a period, the balance carried line by line.
+function statementPdf(bank: string, branch: string, holder: string, account: string, type: string, ifsc: string, from: string, to: string, opening: number, entries: [string, string, number, number][]) {
+  let funds = opening, y = 178;
+  const statement = new Paper();
+  statement.text(48, 50, bank, { size: 12, bold: true }).text(48, 63, branch, { size: 8 });
+  statement.text(550, 50, "STATEMENT OF ACCOUNT", { size: 10, bold: true, align: "right" }).text(550, 63, `${shortDate(from)} to ${shortDate(to)}`, { size: 8, align: "right" });
+  [["Account Holder", holder], ["Account Number", account], ["Account Type", type], ["IFSC", ifsc]].forEach(([label, value], i) => statement.text(48, 92 + i * 12, label, { size: 8, gray: 0.35 }).text(140, 92 + i * 12, value, { size: 8, bold: true }));
+  statement.box(40, 148, 515, 16, 0.92);
+  [[48, "Date", "left"], [110, "Narration", "left"], [400, "Withdrawal", "right"], [470, "Deposit", "right"], [550, "Balance", "right"]].forEach(([x, label, align]) => statement.text(Number(x), 159, String(label), { size: 8, bold: true, align: align as "left" | "right" }));
+  statement.text(110, y, "OPENING BALANCE", { size: 8, bold: true }).text(550, y, inr(funds), { size: 8, align: "right" });
+  for (const [date, narration, out, into] of entries) {
+    y += 15;
+    funds = round2(funds - out + into);
+    statement.text(48, y, shortDate(date), { size: 8 }).text(110, y, narration, { size: 8 }).text(400, y, out ? inr(out) : "", { size: 8, align: "right" }).text(470, y, into ? inr(into) : "", { size: 8, align: "right" }).text(550, y, inr(funds), { size: 8, align: "right" });
+  }
+  statement.line(40, y + 8, 555, y + 8).text(110, y + 20, "CLOSING BALANCE", { size: 8, bold: true }).text(550, y + 20, inr(funds), { size: 8, bold: true, align: "right" });
+  statement.text(297, 800, "This is a computer generated statement and does not require a signature.", { size: 7, align: "center", gray: 0.4 });
+  return statement.bytes();
+}
+
+// The ITR acknowledgement as Notification 51/2026 lays it out for AY 2026-27, filled in.
+function itrAck(name: string, pan: string, status: string, form: string, number: string, filed: string, income: number) {
+  const ack = new Paper(true), on = ddmmyyyy(filed);
+  ack.text(87, 50, "INDIAN INCOME TAX RETURN ACKNOWLEDGEMENT", { size: 11, bold: true }).text(451, 50, "Assessment Year", { size: 8 });
+  ack.text(111, 64, "[Where the data of the Return of Income in Form ITR-1 (SAHAJ), ITR-2, ITR-3,", { size: 7.5 }).text(461, 64, "2026-27", { size: 10, bold: true });
+  ack.text(158, 75, "ITR-4(SUGAM), ITR-5, ITR-6, ITR-7 filed and verified]", { size: 7.5 }).text(184, 86, "(Please see rule 12 of the Income-tax Rules, 1962)", { size: 7.5 });
+  ack.box(40, 98, 515, 70);
+  [["PAN", pan], ["Name", name], ["Status", status]].forEach(([label, value], i) => ack.text(66, 112 + i * 14, label, { size: 8, gray: 0.35 }).text(150, 112 + i * 14, value, { size: 8, bold: true }));
+  ack.text(218, 140, "Form Number", { size: 8, gray: 0.35 }).text(330, 140, form, { size: 8, bold: true });
+  ack.text(66, 154, "Filed u/s", { size: 8, gray: 0.35 }).text(150, 154, "139(1)", { size: 8, bold: true }).text(218, 154, "e-Filing Acknowledgement Number", { size: 8, gray: 0.35 }).text(400, 154, number, { size: 8, bold: true });
+  ack.text(66, 188, "Taxable Income and Tax details", { size: 9, bold: true });
+  ack.text(95, 206, "Current Year business loss, if any", { size: 8 }).text(392, 206, "1", { size: 8 }).text(540, 206, "0", { size: 8, align: "right" });
+  ack.text(95, 220, "Total Income", { size: 8 }).text(388, 220, "1A", { size: 8 }).text(540, 220, String(income), { size: 8, align: "right" });
+  ack.text(66, 250, `Income Tax Return electronically transmitted on ${on} 18:42:07 from IP address 192.0.2.24 and`, { size: 8 });
+  ack.text(66, 262, `verified by ${name} having PAN ${pan} on ${on} using Electronic Verification Code generated through Aadhaar OTP mode`, { size: 8 });
+  ack.text(297, 300, "DO NOT SEND THIS ACKNOWLEDGEMENT TO CPC, BENGALURU.", { size: 9, bold: true, align: "center" });
+  return ack.bytes();
+}
+
+// The acknowledgement a portal shows once a return or form is filed, kept as a PDF: the rows it
+// prints, no emblem or seal. Used for GST returns and the MCA's company and LLP forms.
+function ackPdf(title: string, rows: [string, string][], note: string) {
+  const ack = new Paper(true);
+  ack.text(297, 56, title, { size: 13, bold: true, align: "center" });
+  ack.box(40, 74, 515, 18 + rows.length * 16);
+  rows.forEach(([label, value], i) => ack.text(56, 92 + i * 16, label, { size: 8.5, gray: 0.35 }).text(230, 92 + i * 16, value, { size: 8.5, bold: true }));
+  ack.text(48, 112 + rows.length * 16, note, { size: 8 });
+  return ack.bytes();
+}
+
+// A client's own printed list or register: a title, columns and rows, and a total row whose
+// figures are the columns' sums.
+function tablePdf(owner: string, address: string, title: string, span: string, columns: [number, string, "left" | "right"][], rows: (string | number)[][], totals: number[]) {
+  const paper = new Paper();
+  paper.text(297, 50, owner, { size: 13, bold: true, align: "center" }).text(297, 64, address, { size: 8, align: "center" });
+  paper.text(297, 84, title, { size: 11, bold: true, align: "center" }).text(297, 97, span, { size: 8, align: "center" });
+  paper.box(40, 110, 515, 16, 0.92);
+  for (const [x, label, align] of columns) paper.text(x, 121, label, { size: 7.5, bold: true, align });
+  let y = 142;
+  for (const row of rows) {
+    row.forEach((value, i) => paper.text(columns[i][0], y, typeof value === "number" ? inr(value) : value, { size: 8, align: columns[i][2] }));
+    y += 15;
+  }
+  paper.line(40, y - 6, 555, y - 6).text(columns[0][0], y + 6, "Total", { size: 8, bold: true });
+  totals.forEach((value, i) => { if (!Number.isNaN(value)) paper.text(columns[i][0], y + 6, inr(value), { size: 8, bold: true, align: "right" }); });
+  return paper.bytes();
+}
+const sumOf = (rows: (string | number)[][], column: number) => round2(rows.reduce((total, row) => total + Number(row[column]), 0));
+
+// A phone photo of a paper: printed lines on off white, tilted a little, with the sample note.
+async function photo(lines: [string, number, boolean?][], width = 900, height = 1200) {
+  const canvas = createCanvas(width, height), g = canvas.getContext("2d");
+  g.fillStyle = "#e9e4d8";
+  g.fillRect(0, 0, width, height);
+  g.translate(width / 2, height / 2);
+  g.rotate(-0.012);
+  g.translate(-width / 2, -height / 2);
+  g.fillStyle = "#fbf8f0";
+  g.fillRect(40, 40, width - 80, height - 80);
+  g.fillStyle = "#1d1d1d";
+  let y = 120;
+  for (const [text, size, bold] of lines) {
+    g.font = `${bold ? "bold " : ""}${size}px sans-serif`;
+    g.fillText(text, 90, y);
+    y += size * 1.9;
+  }
+  g.fillStyle = "#8a8a8a";
+  g.font = "16px sans-serif";
+  g.fillText(SAMPLE, 90, height - 70);
+  return new Uint8Array(await canvas.encode("jpeg", 82));
+}
+
+export async function demoFiles(period: string, today: string) {
   const [year, month] = period.split("-").map(Number);
   const fy = month >= 4 ? `${String(year).slice(2)}-${String(year + 1).slice(2)}` : `${String(year - 1).slice(2)}-${String(year).slice(2)}`;
   const day = (n: number) => `${period}-${String(n).padStart(2, "0")}`;
@@ -134,7 +350,10 @@ export function demoFiles(period: string, today: string) {
   const notAfterToday = (date: string) => (date > today ? today : date);
   // Papers with a letter arrive as new email from the client (npm run demo:mail), for InboxCA to
   // type, name and file itself; the rest are already in the drive (npm run demo:data).
-  const files: { client: string; original: string; bytes: Uint8Array; mail?: Letter }[] = [];
+  // upload: already in the drive, sent by the client's upload page rather than by email; received:
+  // the day it came; filing: the acknowledgement of that return, filed on that day.
+  const files: { client: string; original: string; bytes: Uint8Array; mail?: Letter; upload?: boolean; received?: string; filing?: Filing }[] = [];
+  const upload = (client: string, original: string, bytes: Uint8Array, received?: string, filing?: Filing) => files.push({ client, original, bytes, upload: true, received, filing });
   const send = (client: string, subject: string, text: string, papers: [string, Uint8Array][]) => {
     const mail = { subject, text };
     for (const [original, bytes] of papers) files.push({ client, original, bytes, mail });
@@ -155,54 +374,20 @@ export function demoFiles(period: string, today: string) {
       { item: "Ceiling Fan 1200 mm, 3 Blade", hsn: "84145110", qty: 25, unit: "Nos", rate: 1850 },
     ]),
   ];
-  const bills = new Paper();
-  suppliers.forEach((b, i) => { if (i) bills.page(); drawBill(bills, b, mehta); });
-  files.push({ client: "Mehta Traders", original: `purchase bills ${monthName}.pdf`, bytes: bills.bytes() });
+  files.push({ client: "Mehta Traders", original: `purchase bills ${monthName}.pdf`, bytes: billsPdf(suppliers, mehta) });
 
-  // Its GSTR-2B for the month, in GSTN's v4.5 layout, listing the same bills.
-  const sum = (key: "taxable" | "igst" | "cgst" | "sgst") => round2(suppliers.reduce((total, b) => total + b[key], 0));
+  // Its GSTR-2B for the month, listing the same bills.
   const prd = `${String(month).padStart(2, "0")}${year}`;
-  const twoB = {
-    chksum: createHash("sha256").update(`${mehta.gstin}${prd}`).digest("hex"),
-    data: {
-      gstin: mehta.gstin, rtnprd: prd, version: "1.0", gendt: ddmmyyyy(notAfterToday(`${next}-14`)),
-      itcsumm: { itcavl: { nonrevsup: { igst: sum("igst"), cgst: sum("cgst"), sgst: sum("sgst"), cess: 0, b2b: { igst: sum("igst"), cgst: sum("cgst"), sgst: sum("sgst"), cess: 0 } } } },
-      docdata: { b2b: suppliers.map((b) => ({
-        ctin: b.seller.gstin, trdnm: b.seller.name.toUpperCase(), supfildt: ddmmyyyy(notAfterToday(`${next}-11`)), supprd: prd,
-        inv: [{ inum: b.number, typ: "R", dt: ddmmyyyy(b.date), val: b.total, pos: "24", rev: "N", itcavl: "Y", rsn: "", txval: b.taxable, igst: b.igst, cgst: b.cgst, sgst: b.sgst, cess: 0,
-          items: [{ num: 1, rt: 18, txval: b.taxable, igst: b.igst, cgst: b.cgst, sgst: b.sgst, cess: 0 }] }],
-      })) },
-    },
-  };
-  if (!portalParsers[0].read(twoB)) throw new Error("The demo GSTR-2B does not match GSTN's layout");
-  files.push({ client: "Mehta Traders", original: `GSTR-2B ${monthName}.json`, bytes: new TextEncoder().encode(JSON.stringify(twoB)) });
+  files.push({ client: "Mehta Traders", original: `GSTR-2B ${monthName}.json`, bytes: gstr2b(mehta.gstin, suppliers, prd, notAfterToday(`${next}-14`), notAfterToday(`${next}-11`)) });
 
-  // Its sales for the month in the official GSTR-1 workbook, as Tally exports it.
-  const serial = (date: string) => String((Date.parse(date) - Date.UTC(1899, 11, 30)) / 86400000);
+  // Its sales for the month in the official GSTR-1 workbook.
   const buyers: [string, string, string, string, number][] = [
     [gstin("24", "ZZZFZ0204Z"), "Om Sai Electrical Contractors", `MT/${fy}/0418`, day(4), 186400],
     [gstin("24", "ZZZCZ0205Z"), "Pragati Infra Projects Pvt Ltd", `MT/${fy}/0431`, day(12), 342750],
     [gstin("24", "ZZZFZ0206Z"), "Nilkanth Builders", `MT/${fy}/0447`, day(19), 97300],
     [gstin("27", "ZZZFZ0207Z"), "Sunrise Interiors", `MT/${fy}/0452`, day(23), 128600],
   ];
-  const workbook = readFileSync(new URL("../reference/official/gstr1-v2.2/GSTR1_Excel_Workbook_Template_V2.2.xlsx", import.meta.url));
-  const cell = (value: string | number) => ({ value: String(value), number: typeof value === "number" });
-  const b2b = new Map<string, { value: string; number: boolean }>(), b2cs = new Map<string, { value: string; number: boolean }>(), hsn = new Map<string, { value: string; number: boolean }>();
-  buyers.forEach(([ctin, name, number, date, taxable], i) => {
-    const row = 5 + i, pos = ctin.startsWith("27") ? "27-Maharashtra" : "24-Gujarat";
-    ["A", "B", "C", "D", "E", "F", "G", "I", "K", "L"].forEach((column, at) =>
-      b2b.set(`${column}${row}`, [cell(ctin), cell(name), cell(number), { value: serial(date), number: true }, cell(Math.round(taxable * 1.18)), cell(pos), cell("N"), cell("Regular B2B"), cell(18), cell(taxable)][at]));
-  });
-  [["A5", "OE"], ["B5", "24-Gujarat"], ["D5", 18], ["E5", 84500]].forEach(([ref, value]) => b2cs.set(String(ref), cell(value)));
-  b2b.set("O1", cell(SAMPLE.replace("paper", "workbook")));
-  const intra = buyers.filter(([ctin]) => ctin.startsWith("24")).reduce((total, [, , , , taxable]) => total + taxable, 0), inter = buyers[3][4];
-  [["85444999", "Insulated copper wire", "MTR-METERS", 6400, round2((intra + inter) * 0.55)], ["85365090", "Switches and MCBs", "NOS-NUMBERS", 940, round2((intra + inter) * 0.45)]].forEach(([code, text, unit, qty, taxable], i) => {
-    const t = Number(taxable), share = t / (intra + inter);
-    const igst = round2(inter * share * 0.18), half = round2(intra * share * 0.09);
-    ["A", "B", "C", "D", "F", "G", "H", "I", "J"].forEach((column, at) => hsn.set(`${column}${5 + i}`, [cell(String(code)), cell(String(text)), cell(String(unit)), cell(Number(qty)), cell(18), cell(t), cell(igst), cell(half), cell(half)][at]));
-  });
-  const register = writeWorkbook(workbook, new Map([["xl/worksheets/sheet2.xml", b2b], ["xl/worksheets/sheet6.xml", b2cs], ["xl/worksheets/sheet19.xml", hsn]]));
-  files.push({ client: "Mehta Traders", original: `sales register ${monthName}.xlsx`, bytes: new Uint8Array(register) });
+  files.push({ client: "Mehta Traders", original: `sales register ${monthName}.xlsx`, bytes: gstr1Workbook("24", buyers, 84500, [["85444999", "Insulated copper wire", "MTR-METERS", 6400, 0.55], ["85365090", "Switches and MCBs", "NOS-NUMBERS", 940, 0.45]]) });
 
   // S.K. Builders: a cement and steel bill from its supplier.
   const sk: Party = { name: "S.K. Builders", address: ["304, Shivalik Arcade, Ghod Dod Road", "Surat, Gujarat - 395007"], gstin: gstin("24", "ZZZFZ0109Z"), state: "Gujarat" };
@@ -266,53 +451,16 @@ export function demoFiles(period: string, today: string) {
   files.push({ client: "Kapoor Enterprises", original: "trial balance FY 2025-26.pdf", bytes: tb.bytes() });
 
   // Iyer Consultants' proprietor: Form 16 from his employer, new regime, FY 2025-26.
-  const gross = 1450000, standard = 75000, taxable = gross - standard;
-  const slabTax = 20000 + 40000 + Math.round((taxable - 1200000) * 0.15), cess = Math.round(slabTax * 0.04), tax = slabTax + cess, quarter = tax / 4;
-  const f16 = new Paper(true);
-  f16.text(297, 46, "FORM NO. 16", { size: 12, bold: true, align: "center" }).text(297, 59, "[See rule 31(1)(a)]", { size: 8, align: "center" }).text(297, 74, "PART A", { size: 10, bold: true, align: "center" });
-  f16.text(297, 88, "Certificate under Section 203 of the Income-tax Act, 1961 for tax deducted at source on salary paid to an employee under section 192", { size: 7, align: "center" });
-  f16.text(297, 98, "or pension/interest income of specified senior citizen under section 194P", { size: 7, align: "center" });
-  f16.box(40, 108, 515, 30).text(48, 121, "Certificate No.  KQZTRWX", { size: 8, bold: true }).text(300, 121, `Last updated on  ${shortDate(`${today}`)}`, { size: 8 });
-  f16.box(40, 138, 257, 70).box(297, 138, 258, 70);
-  f16.text(48, 151, "Name and address of the Employer/Specified Bank", { size: 7, gray: 0.35 }).text(48, 164, "ORION SOFTTECH PRIVATE LIMITED", { size: 8, bold: true }).text(48, 175, "9th Floor, Sapphire Corporate Park, S.G. Highway", { size: 8 }).text(48, 186, "Ahmedabad - 380054, Gujarat", { size: 8 }).text(48, 197, "accounts@orionsofttech.example", { size: 8 });
-  f16.text(305, 151, "Name and address of the Employee/Specified senior citizen", { size: 7, gray: 0.35 }).text(305, 164, "VENKATESH IYER", { size: 8, bold: true }).text(305, 175, "B-602, Shaligram Lakeview, Bopal", { size: 8 }).text(305, 186, "Ahmedabad - 380058, Gujarat", { size: 8 });
-  f16.box(40, 208, 515, 34);
-  [["PAN of the Deductor", "ZZZCZ0209Z", 48], ["TAN of the Deductor", "ZZZZ02091Z", 190], ["PAN of the Employee", "ZZZPZ0108Z", 330], ["Assessment Year", "2026-27", 470]].forEach(([label, value, x]) => f16.text(Number(x), 221, String(label), { size: 7, gray: 0.35 }).text(Number(x), 234, String(value), { size: 9, bold: true }));
-  f16.text(48, 260, "Summary of amount paid/credited and tax deducted at source thereon in respect of the employee", { size: 8, bold: true });
-  f16.box(40, 268, 515, 16, 0.92);
-  [[48, "Quarter"], [90, "Receipt numbers of original quarterly TDS statements u/s 200(3)"], [400, "Amount paid/credited"], [475, "Tax deducted (Rs.)"], [552, "Tax deposited/remitted (Rs.)"]].forEach(([x, label], i) => f16.text(Number(x), 279, String(label), { size: 6.5, bold: true, align: i >= 2 ? "right" : "left" }));
-  ["QVBKTRCD", "QVBMXNPA", "QVBPRLWE", "QVBSTHKY"].forEach((receipt, i) => f16.text(48, 298 + i * 14, `Q${i + 1}`, { size: 8 }).text(90, 298 + i * 14, receipt, { size: 8 }).text(400, 298 + i * 14, inr(gross / 4), { size: 8, align: "right" }).text(475, 298 + i * 14, inr(quarter), { size: 8, align: "right" }).text(552, 298 + i * 14, inr(quarter), { size: 8, align: "right" }));
-  f16.line(40, 350, 555, 350).text(48, 362, "Total (Rs.)", { size: 8, bold: true }).text(400, 362, inr(gross), { size: 8, bold: true, align: "right" }).text(475, 362, inr(tax), { size: 8, bold: true, align: "right" }).text(552, 362, inr(tax), { size: 8, bold: true, align: "right" });
-  f16.text(48, 400, "Verification", { size: 9, bold: true });
-  f16.text(48, 414, `I, ANIL MEHROTRA, son of RAKESH MEHROTRA, working in the capacity of DIRECTOR - FINANCE, do hereby certify that a sum of Rs. ${inr(tax)}`, { size: 7.5 });
-  f16.text(48, 425, `[${inWords(tax)}] has been deducted and deposited to the credit of the Central Government.`, { size: 7.5 });
-  f16.text(48, 450, "Place: Ahmedabad", { size: 8 }).text(48, 462, `Date: ${shortDate(today)}`, { size: 8 }).text(550, 462, "(Signature of person responsible for deduction of tax)", { size: 7, align: "right" });
-  f16.page();
-  f16.text(297, 46, "PART B (Annexure)", { size: 11, bold: true, align: "center" }).text(297, 60, "Details of Salary Paid and any other income and tax deducted", { size: 8, align: "center" });
-  f16.text(48, 82, "Whether opting out of taxation u/s 115BAC(1A)?", { size: 8 }).text(550, 82, "No", { size: 8, bold: true, align: "right" });
-  const partB: [string, string, number | null][] = [
-    ["1.", "Gross Salary", null], ["(a)", "Salary as per provisions contained in section 17(1)", gross], ["(d)", "Total", gross],
-    ["2.", "Less: Allowances to the extent exempt under section 10", 0],
-    ["4.", "Less: Deductions under section 16", null], ["(a)", "Standard deduction under section 16(ia)", standard],
-    ["6.", "Income chargeable under the head \"Salaries\" [(3+1(e)-5]", taxable],
-    ["9.", "Gross total income (6+8)", taxable],
-    ["10.", "Deductions under Chapter VI-A (not available under section 115BAC)", 0],
-    ["12.", "Total taxable income (9-11)", taxable],
-    ["13.", "Tax on total income", slabTax], ["14.", "Rebate under section 87A, if applicable", 0], ["15.", "Surcharge, wherever applicable", 0],
-    ["16.", "Health and education cess", cess], ["17.", "Tax payable (13+15+16-14)", tax], ["18.", "Less: Relief under section 89", 0], ["19.", "Net tax payable (17-18)", tax],
-  ];
-  y = 104;
-  for (const [number, label, value] of partB) {
-    f16.text(48, y, number, { size: 8 }).text(75, y, label, { size: 8, bold: value === null }).text(550, y, value === null ? "" : inr(value), { size: 8, align: "right" });
-    y += 15;
-  }
-  files.push({ client: "Iyer Consultants", original: "Form 16 FY 2025-26.pdf", bytes: f16.bytes() });
+  const iyer = { name: "VENKATESH IYER", pan: "ZZZPZ0108Z", address: ["B-602, Shaligram Lakeview, Bopal", "Ahmedabad - 380058, Gujarat"] };
+  const orion = { name: "ORION SOFTTECH PRIVATE LIMITED", pan: "ZZZCZ0209Z", tan: "ZZZZ02091Z", address: ["9th Floor, Sapphire Corporate Park, S.G. Highway", "Ahmedabad - 380054, Gujarat"], email: "accounts@orionsofttech.example", signatory: "ANIL MEHROTRA, son of RAKESH MEHROTRA, working in the capacity of DIRECTOR - FINANCE" };
+  const gross = 1450000, { bytes: f16, tax } = form16Pdf(orion, iyer, gross, "KQZTRWX", ["QVBKTRCD", "QVBMXNPA", "QVBPRLWE", "QVBSTHKY"], today), quarter = tax / 4;
+  files.push({ client: "Iyer Consultants", original: "Form 16 FY 2025-26.pdf", bytes: f16 });
 
   // His fixed deposit interest certificate, with tax deducted under section 194A.
   const deposits: [string, string, number][] = [["0412 6603 1180", "15-Jun-2024", 34680], ["0412 6603 2294", "02-Feb-2025", 27738]];
   const interest = deposits.reduce((t, [, , v]) => t + v, 0), tds = Math.round(interest * 0.1);
   const cert = new Paper();
-  cert.text(297, 50, "AAKASHGANGA SAHAKARI BANK LTD", { size: 13, bold: true, align: "center" }).text(297, 64, "Bopal Branch, Ground Floor, Iscon Platinum, Bopal-Ambli Road, Ahmedabad - 380058", { size: 8, align: "center" }).text(297, 75, "IFSC: AKGB0000417", { size: 8, align: "center" });
+  cert.text(297, 50, "AAKASHGANGA SAHAKARI BANK LTD", { size: 13, bold: true, align: "center" }).text(297, 64, "Bopal Branch, Ground Floor, Iscon Platinum, Bopal-Ambli Road, Ahmedabad - 380058", { size: 8, align: "center" }).text(297, 75, "IFSC: ZZZB0000417", { size: 8, align: "center" });
   cert.line(40, 84, 555, 84);
   cert.text(297, 104, "INTEREST CERTIFICATE", { size: 11, bold: true, align: "center" }).text(297, 117, "For the Financial Year 2025-26 (01-Apr-2025 to 31-Mar-2026)", { size: 8, align: "center" });
   [["Customer ID", "70044186"], ["Name", "VENKATESH IYER"], ["PAN", "ZZZPZ0108Z"], ["Address", "B-602, Shaligram Lakeview, Bopal, Ahmedabad - 380058"]].forEach(([label, value], i) => cert.text(48, 142 + i * 13, label, { size: 8, gray: 0.35 }).text(140, 142 + i * 13, value, { size: 8, bold: i < 3 }));
@@ -351,23 +499,8 @@ export function demoFiles(period: string, today: string) {
     [12, "UPI/ELECTRICITY BILL/AHMEDABAD", 2716, 0], [15, "NEFT-RENT RECEIVED-SHAH M", 0, 18000], [19, "UPI/SAHJANAND FUEL STATION/SG HWY", 3150, 0], [22, "SIP-MUTUAL FUND", 10000, 0], [28, "INT.PD. SAVINGS ACCOUNT", 0, 1186],
   ];
   entries[0][3] = 112480;
-  let funds = 46215.34;
-  const statement = new Paper();
-  statement.text(48, 50, "AAKASHGANGA SAHAKARI BANK LTD", { size: 12, bold: true }).text(48, 63, "Satellite Branch, Shivranjani Cross Roads, Ahmedabad - 380015", { size: 8 });
-  statement.text(550, 50, "STATEMENT OF ACCOUNT", { size: 10, bold: true, align: "right" }).text(550, 63, `${shortDate(day(1))} to ${shortDate(`${period}-${new Date(Date.UTC(year, month, 0)).getUTCDate()}`)}`, { size: 8, align: "right" });
-  [["Account Holder", "RAJESH DESAI"], ["Account Number", "XXXXXXXX4417"], ["Account Type", "Savings"], ["IFSC", "AKGB0000409"]].forEach(([label, value], i) => statement.text(48, 92 + i * 12, label, { size: 8, gray: 0.35 }).text(140, 92 + i * 12, value, { size: 8, bold: true }));
-  statement.box(40, 148, 515, 16, 0.92);
-  [[48, "Date", "left"], [110, "Narration", "left"], [400, "Withdrawal", "right"], [470, "Deposit", "right"], [550, "Balance", "right"]].forEach(([x, label, align]) => statement.text(Number(x), 159, String(label), { size: 8, bold: true, align: align as "left" | "right" }));
-  y = 178;
-  statement.text(110, y, "OPENING BALANCE", { size: 8, bold: true }).text(550, y, inr(funds), { size: 8, align: "right" });
-  for (const [date, narration, out, into] of entries) {
-    y += 15;
-    funds = round2(funds - out + into);
-    statement.text(48, y, shortDate(day(date)), { size: 8 }).text(110, y, narration, { size: 8 }).text(400, y, out ? inr(out) : "", { size: 8, align: "right" }).text(470, y, into ? inr(into) : "", { size: 8, align: "right" }).text(550, y, inr(funds), { size: 8, align: "right" });
-  }
-  statement.line(40, y + 8, 555, y + 8).text(110, y + 20, "CLOSING BALANCE", { size: 8, bold: true }).text(550, y + 20, inr(funds), { size: 8, bold: true, align: "right" });
-  statement.text(297, 800, "This is a computer generated statement and does not require a signature.", { size: 7, align: "center", gray: 0.4 });
-  files.push({ client: "Rajesh Desai", original: `bank statement ${monthName}.pdf`, bytes: statement.bytes() });
+  const statement = statementPdf("AAKASHGANGA SAHAKARI BANK LTD", "Satellite Branch, Shivranjani Cross Roads, Ahmedabad - 380015", "RAJESH DESAI", "XXXXXXXX4417", "Savings", "ZZZB0000409", day(1), `${period}-${new Date(Date.UTC(year, month, 0)).getUTCDate()}`, 46215.34, entries.map(([date, narration, out, into]) => [day(date), narration, out, into]));
+  files.push({ client: "Rajesh Desai", original: `bank statement ${monthName}.pdf`, bytes: statement });
 
   // Mehta Traders again, by email: its own sales bills for the month (the B2B invoices of its
   // sales register) and its purchase register, in which one bill is not yet in GSTR-2B (its
@@ -403,11 +536,10 @@ export function demoFiles(period: string, today: string) {
   // Iyer Consultants' proprietor again, by email: his Form 26AS (PDF and the TRACES text file),
   // AIS and TIS for FY 2025-26, agreeing with his Form 16 and interest certificate, and Form No.
   // 168 so far for tax year 2026-27, the first year of the Income-tax Act 2025.
-  const employer = { name: "ORION SOFTTECH PRIVATE LIMITED", tan: "ZZZZ02091Z" }, bank = { name: "AAKASHGANGA SAHAKARI BANK LTD", tan: "ZZZZ02101Z" };
-  const iyer = { name: "VENKATESH IYER", pan: "ZZZPZ0108Z", address: "B-602, Shaligram Lakeview, Bopal, Ahmedabad - 380058" };
+  const employer = { name: orion.name, tan: orion.tan }, bank = { name: "AAKASHGANGA SAHAKARI BANK LTD", tan: "ZZZZ02101Z" }, iyerAddress = iyer.address.join(", ");
   const as26 = new Paper(true);
   as26.text(297, 50, "Annual Tax Statement", { size: 13, bold: true, align: "center" }).text(550, 64, "Data updated till 25-Oct-2026", { size: 7, align: "right", gray: 0.35 });
-  [[["Permanent Account Number (PAN)", iyer.pan], ["Current Status of PAN", "Active and Operative"]], [["Financial Year", "2025-26"], ["Assessment Year", "2026-27"]], [["Name of Assessee", iyer.name]], [["Address of Assessee", iyer.address]]]
+  [[["Permanent Account Number (PAN)", iyer.pan], ["Current Status of PAN", "Active and Operative"]], [["Financial Year", "2025-26"], ["Assessment Year", "2026-27"]], [["Name of Assessee", iyer.name]], [["Address of Assessee", iyerAddress]]]
     .forEach((row, i) => row.forEach(([label, value], j) => as26.text(48 + j * 260, 88 + i * 14, label, { size: 8, gray: 0.35 }).text(180 + j * 230, 88 + i * 14, value, { size: 8, bold: true })));
   as26.text(48, 152, "Above data / Status of PAN is as per PAN details", { size: 7 }).text(48, 162, "(All amount values are in INR)", { size: 7 });
   as26.text(48, 184, "PART-I - Details of Tax Deducted at Source", { size: 9, bold: true }).box(40, 192, 515, 16, 0.92);
@@ -437,16 +569,7 @@ export function demoFiles(period: string, today: string) {
     `^${SAMPLE.replace("paper", "statement")}^`,
     "",
   ].join("\n");
-  const ais = new Paper(true);
-  ais.text(297, 50, "Annual Information Statement (AIS)", { size: 13, bold: true, align: "center" });
-  [["Financial Year", "2025-26"], ["Assessment Year", "2026-27"]].forEach(([label, value], i) => ais.text(48 + i * 260, 74, label, { size: 8, gray: 0.35 }).text(140 + i * 260, 74, value, { size: 8, bold: true }));
-  ais.text(48, 98, "PART A- General Information", { size: 9, bold: true });
-  [["Permanent Account Number (PAN)", iyer.pan], ["Name", iyer.name], ["Address", iyer.address]].forEach(([label, value], i) => ais.text(48, 114 + i * 13, label, { size: 8, gray: 0.35 }).text(200, 114 + i * 13, value, { size: 8, bold: i < 2 }));
-  ais.text(48, 168, "PART- B", { size: 9, bold: true }).text(48, 184, "TDS/TCS Information", { size: 9, bold: true }).box(40, 192, 515, 16, 0.92);
-  [[48, "Information code"], [150, "Information description"], [330, "Information source"], [552, "Information value"]].forEach(([x, label], i) => ais.text(Number(x), 203, String(label), { size: 7.5, bold: true, align: i === 3 ? "right" : "left" }));
-  deducted.forEach(([who, paid, , section], i) => ais.text(48, 222 + i * 14, `TDS-${section}`, { size: 8 }).text(150, 222 + i * 14, section === "192" ? "Salary received (Section 192)" : "Interest from deposit (Section 194A)", { size: 8 }).text(330, 222 + i * 14, `${who.name} (${who.tan})`, { size: 7.5 }).text(552, 222 + i * 14, inr(paid), { size: 8, align: "right" }));
-  [["SFT Information", "No information available"], ["Payment of Taxes", "No information available"], ["Demand and Refund", "No information available"], ["Other Information", "No information available"]]
-    .forEach(([head, text], i) => ais.text(48, 270 + i * 30, head, { size: 9, bold: true }).text(48, 284 + i * 30, text, { size: 8, gray: 0.35 }));
+  const ais = aisPdf(iyer, deducted.map(([who, paid, , section]) => [`TDS-${section}`, section === "192" ? "Salary received (Section 192)" : "Interest from deposit (Section 194A)", `${who.name} (${who.tan})`, paid]));
   const tis = new Paper(true);
   tis.text(297, 50, "Taxpayer Information Summary (TIS)", { size: 13, bold: true, align: "center" });
   [["Financial Year", "2025-26"], ["Assessment Year", "2026-27"]].forEach(([label, value], i) => tis.text(48 + i * 260, 74, label, { size: 8, gray: 0.35 }).text(140 + i * 260, 74, value, { size: 8, bold: true }));
@@ -459,13 +582,13 @@ export function demoFiles(period: string, today: string) {
   f168.text(297, 50, "FORM NO. 168", { size: 12, bold: true, align: "center" }).text(297, 63, "[See rule 245]", { size: 8, align: "center" }).text(297, 78, "Annual Information Statement", { size: 10, bold: true, align: "center" });
   f168.text(400, 96, "Tax Year:", { size: 8 }).text(450, 96, "2026-27", { size: 8, bold: true });
   f168.box(40, 106, 515, 16, 0.92).text(48, 117, "Row No.", { size: 7.5, bold: true }).text(90, 117, "Part A: Particulars of the Person", { size: 7.5, bold: true });
-  [["Name", iyer.name], ["Date of Birth / Incorporation", "14/08/1984"], ["Address", iyer.address], ["PAN", iyer.pan], ["Email id", "iyer.consult@example.in"], ["Contact Number", "Not given"]]
+  [["Name", iyer.name], ["Date of Birth / Incorporation", "14/08/1984"], ["Address", iyerAddress], ["PAN", iyer.pan], ["Email id", "iyer.consult@example.in"], ["Contact Number", "Not given"]]
     .forEach(([label, value], i) => f168.text(48, 136 + i * 13, `${i + 1}.`, { size: 8 }).text(90, 136 + i * 13, label, { size: 8 }).text(300, 136 + i * 13, value, { size: 8, bold: true }));
   f168.box(40, 222, 515, 16, 0.92).text(48, 233, "Sl. No.", { size: 7.5, bold: true }).text(90, 233, "Part B: Nature of Information", { size: 7.5, bold: true }).text(552, 233, "Amount (Rs.)", { size: 7.5, bold: true, align: "right" });
   ["Information relating to tax deducted or collected at source", "Information relating to specified financial transaction", "Information relating to payment of taxes", "Information relating to demand and refund", "Information relating to pending proceedings", "Information relating to completed proceedings", "Any other information in relation to sub-rule (2) of rule 245"]
     .forEach((label, i) => f168.text(48, 252 + i * 13, `${i + 1}.`, { size: 8 }).text(90, 252 + i * 13, label, { size: 8 }).text(552, 252 + i * 13, i ? "Nil" : inr(soFar), { size: 8, align: "right" }));
   send("Iyer Consultants", "Form 26AS, AIS and TIS for my income tax return", "Hi,\n\nI downloaded my Form 26AS, AIS and TIS for FY 2025-26 from the income tax site, and the new Form 168 for this year so far. Attached for my return.\n\nThanks,\nVenkatesh",
-    [["Form 26AS FY 2025-26.pdf", as26.bytes()], ["Form 26AS FY 2025-26.txt", new TextEncoder().encode(as26Text)], ["AIS FY 2025-26.pdf", ais.bytes()], ["TIS FY 2025-26.pdf", tis.bytes()], ["Form 168 tax year 2026-27.pdf", f168.bytes()]]);
+    [["Form 26AS FY 2025-26.pdf", as26.bytes()], ["Form 26AS FY 2025-26.txt", new TextEncoder().encode(as26Text)], ["AIS FY 2025-26.pdf", ais], ["TIS FY 2025-26.pdf", tis.bytes()], ["Form 168 tax year 2026-27.pdf", f168.bytes()]]);
 
   // Patel Textiles, by email: its TDS papers for the last quarter that has ended, for Forms No.
   // 140 and 138: a TDS register of contractor (code 1024) and professional fee (code 1027)
@@ -525,6 +648,243 @@ export function demoFiles(period: string, today: string) {
   drawChallan(kapoor, { form: "281", tan: "ZZZZ01071Z", name: "KAPOOR ENTERPRISES", year: ["Assessment Year", "2026-27"], tax: 18400, interest: 0, fee: 0, bsr: "6390340", date: "2026-04-28", serial: "00317", bank: "Aakashganga Sahakari Bank Ltd" });
   send("Kapoor Enterprises", "TDS challan for March 2026", "Hello,\n\nAttaching the TDS challan receipt for March 2026, paid on 28 April, for the Q4 TDS return.\n\nThanks",
     [["ITNS 281 challan Q4 2025-26.pdf", kapoor.bytes()]]);
+
+  // The returns of the other clients, each with the papers it needs, at a different step: what
+  // came before and what is still to come. Acknowledgement numbers are invented: GST ARNs keep
+  // the AA pattern above, MCA SRNs start ZZ, ITR acknowledgements start 99.
+  const prev = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 7), prevName = `${MONTHS[Number(prev.slice(5)) - 1]} ${prev.slice(0, 4)}`;
+  const afterQ = new Date(Date.UTC(Number(tq.last.slice(0, 4)), Number(tq.last.slice(5, 7)), 1)).toISOString().slice(0, 7);
+  const qGst = `${MONTHS[Number(tq.first.slice(5, 7)) - 1]}-${MONTHS[Number(tq.last.slice(5, 7)) - 1]} ${tq.last.slice(0, 4)}`, qPrd = `${tq.last.slice(5, 7)}${tq.last.slice(0, 4)}`, qFy = qName.split(" ")[1];
+  const gstAck = (who: Party, form: string, periodLabel: string, number: string, on: string) => ackPdf("Acknowledgement", [
+    ["GSTIN", who.gstin], ["Legal Name", who.name.toUpperCase()], ["Return Type", form], ["Tax Period", periodLabel], ["Financial Year", `20${fy}`], ["ARN", number], ["Date of ARN", ddmmyyyy(on)],
+  ], `You have successfully filed Form ${form} for the tax period ${periodLabel}.`);
+  const mcaAck = (company: string, number: [string, string], form: string, about: string, srn: string, on: string, fee: number) => ackPdf("Acknowledgement of Filing", [
+    ["SRN", srn], ["Service Request Date", ddmmyyyy(on)], ["Form", form], ["Purpose", about], [number[0], number[1]], ["Name", company.toUpperCase()], ["Normal Fee (Rs.)", inr(fee)], ["Additional Fee (Rs.)", inr(0)], ["Mode of Payment", "Net Banking"],
+  ], "The form has been taken on file. This acknowledgement is computer generated and needs no signature.");
+
+  // Mehta Traders: its current account statement for the month, its GSTR-2A (which also lists the
+  // bill whose supplier filed late), and the GSTR-3B acknowledgement for the month before.
+  const mehtaBank = statementPdf("AAKASHGANGA SAHAKARI BANK LTD", "Relief Road Branch, Ahmedabad - 380001", "MEHTA TRADERS", "XXXXXXXX0712", "Current", "ZZZB0000412", day(1), `${period}-${new Date(Date.UTC(year, month, 0)).getUTCDate()}`, 318420.5, [
+    [day(4), "NEFT-OM SAI ELECTRICAL CONTRACTORS", 0, 219952], [day(7), "RTGS-SHREE AMBIKA ELECTRICALS", suppliers[0].total, 0], [day(12), "RTGS-PRAGATI INFRA PROJECTS PVT LTD", 0, 404445],
+    [day(15), "NEFT-JALARAM CABLES AND WIRES", suppliers[1].total, 0], [day(20), `GST PMT CPIN ${prev.slice(2, 4)}${prev.slice(5)}2400007311`, 58740, 0], [day(23), "CHQ DEP-SUNRISE INTERIORS", 0, 151748], [day(28), "SALARY OCT STAFF", 64500, 0],
+  ]);
+  upload("Mehta Traders", `bank statement ${monthName}.pdf`, mehtaBank, notAfterToday(`${next}-03`));
+  const twoA = { gstin: mehta.gstin, fp: prd, b2b: [...suppliers, late].map((b, i) => ({ ctin: b.seller.gstin, cfs: "Y", inv: [{ chksum: createHash("sha256").update(b.number).digest("hex"), inum: b.number, idt: ddmmyyyy(b.date), val: b.total, pos: "24", rchrg: "N", inv_typ: "R",
+    itms: [{ num: 1, itm_det: b.igst ? { txval: b.taxable, rt: b.rate, iamt: b.igst, csamt: 0 } : { txval: b.taxable, rt: b.rate, camt: b.cgst, samt: b.sgst, csamt: 0 } }] }], ...(i === 3 && { cfs3b: "N" }) })) };
+  upload("Mehta Traders", `GSTR-2A ${monthName}.json`, new TextEncoder().encode(JSON.stringify(twoA)), notAfterToday(`${next}-05`));
+  const mehtaFiled = notAfterToday(`${period}-18`), mehtaArn = arn("24", prev, 1101 * 7);
+  upload("Mehta Traders", `GSTR-3B acknowledgement ${prevName}.pdf`, gstAck(mehta, "GSTR-3B", prevName, mehtaArn, mehtaFiled), mehtaFiled, { code: "GSTR3B_M", period: prev, on: mehtaFiled, ack: mehtaArn });
+
+  // Patel Textiles: its sales of fabric (5% GST) and purchases of dyes and chemicals (18%) for the
+  // month, with the GSTR-2B: every figure checked, the returns filled and one approved.
+  const patelParty: Party = { name: "Patel Textiles Pvt Ltd", address: ["Plot 41-42, Pandesara GIDC", "Surat, Gujarat - 394221"], gstin: patel, state: "Gujarat" };
+  const patelBills = [
+    bill({ name: "Ankleshwar Dyes and Chemicals", address: ["Plot 2217, GIDC Estate", "Ankleshwar, Gujarat - 393002"], gstin: gstin("24", "ZZZCZ0223Z"), state: "Gujarat" }, patelParty, `ADC/${fy}/0877`, day(3), [
+      { item: "Reactive Dye Red 3BS", hsn: "32041610", qty: 150, unit: "Kg", rate: 610 }, { item: "Reactive Dye Navy Blue GG", hsn: "32041610", qty: 120, unit: "Kg", rate: 655 }]),
+    bill({ name: "Udhna Textile Auxiliaries", address: ["Shed 14, Udhna Udyog Nagar", "Surat, Gujarat - 394210"], gstin: gstin("24", "ZZZFZ0222Z"), state: "Gujarat" }, patelParty, `UTA/${fy}/1290`, day(9), [
+      { item: "Wetting Agent, Non Ionic", hsn: "34021300", qty: 600, unit: "Kg", rate: 142 }]),
+    bill({ name: "Bhiwandi Sizing Chemicals", address: ["Gala 22, Kalher Industrial Area", "Bhiwandi, Maharashtra - 421302"], gstin: gstin("27", "ZZZFZ0224Z"), state: "Maharashtra" }, patelParty, `BSC/${fy}/0415`, day(17), [
+      { item: "Sizing Chemical Paste", hsn: "38099190", qty: 400, unit: "Kg", rate: 185 }]),
+  ];
+  upload("Patel Textiles Pvt Ltd", `purchase bills ${monthName}.pdf`, billsPdf(patelBills, patelParty), notAfterToday(`${next}-02`));
+  upload("Patel Textiles Pvt Ltd", `GSTR-2B ${monthName}.json`, gstr2b(patel, patelBills, prd, notAfterToday(`${next}-14`), notAfterToday(`${next}-11`)), notAfterToday(`${next}-04`));
+  upload("Patel Textiles Pvt Ltd", `sales register ${monthName}.xlsx`, gstr1Workbook("24", [
+    [gstin("24", "ZZZFZ0225Z"), "Ring Road Saree Emporium", `PTPL/${fy}/0611`, day(5), 412800],
+    [gstin("24", "ZZZCZ0226Z"), "Kamdhenu Garments Pvt Ltd", `PTPL/${fy}/0624`, day(14), 638250],
+    [gstin("27", "ZZZFZ0227Z"), "Dadar Cloth Market Traders", `PTPL/${fy}/0637`, day(21), 295400],
+  ], 36500, [["54076190", "Woven fabrics of synthetic filament yarn", "MTR-METERS", 18400, 0.7], ["55161200", "Woven fabrics of viscose, dyed", "MTR-METERS", 6200, 0.3]], 5), notAfterToday(`${next}-02`));
+
+  // Patel Textiles' TCS on scrap sold (collection code 1073) for the quarter, for Form No. 143, and
+  // its challan. A TCS register is named its own way, so InboxCA leaves it under To check.
+  const tcsRows: (string | number)[][] = [["Invoice date", "Invoice number", "Buyer PAN", "Buyer name", "Nature of collection", "Collection code", "Amount received or debited", "Rate", "Tax collected", "Date of collection", "Tax deposited", "Challan serial number"]];
+  [[0, 18, "ZZZFZ0238Z", "Sachin Waste Cotton Traders", 64200], [1, 22, "ZZZFZ0239Z", "Kadodara Plastic Scrap Co", 41800], [2, 16, "ZZZFZ0238Z", "Sachin Waste Cotton Traders", 57900]].forEach(([m, date, pan, name, amount]) => {
+    const on = `${qMonths[Number(m)]}-${date}`, cut = Math.round(Number(amount) / 100);
+    tcsRows.push([ddmmyyyy(on), `PTPL/SCR/${qFy}/${String(tcsRows.length).padStart(3, "0")}`, String(pan), String(name), "Sale of scrap", "1073", Number(amount), 1, cut, ddmmyyyy(on), cut, String(61 + Number(m)).padStart(5, "0")]);
+  });
+  tcsRows.push(["Total", "", "", "", "", "", sumOf(tcsRows.slice(1), 6), "", sumOf(tcsRows.slice(1), 8), "", sumOf(tcsRows.slice(1), 10), ""]);
+  const tcsReceipts = new Paper(true);
+  tcsRows.slice(1, -1).forEach((row, i) => { if (i) tcsReceipts.page(); drawChallan(tcsReceipts, challan(qMonths[i], String(row[11]), Number(row[8]))); });
+  send("Patel Textiles Pvt Ltd", `TCS collected on scrap for ${qName}`, `Dear Sir,\n\nAttached is our TCS register for the scrap sold in ${qName} and the challans for the TCS deposited, for the TCS statement.\n\nRegards,\nAccounts Team\nPatel Textiles Pvt Ltd`, [
+    [`TCS register ${qName}.xlsx`, sheet("TCS Register", tcsRows)], [`ITNS 281N TCS challans ${qName}.pdf`, tcsReceipts.bytes()],
+  ]);
+
+  // Patel Textiles' company filings for FY 2025-26 (AGM on 26 Sep 2026) and its MSME-1 for the half
+  // year: the forms filed, with the MCA's acknowledgements.
+  const patelCin: [string, string] = ["CIN", "U17120ZZ2009PTC000103"];
+  upload("Patel Textiles Pvt Ltd", "AOC-4 acknowledgement FY 2025-26.pdf", mcaAck(patelName, patelCin, "AOC-4", "Filing of financial statements for FY 2025-26", "ZZ0310418", "2026-10-21", 600), "2026-10-21", { code: "AOC4", period: "2026-03", on: "2026-10-21", ack: "ZZ0310418" });
+  upload("Patel Textiles Pvt Ltd", "DPT-3 acknowledgement FY 2025-26.pdf", mcaAck(patelName, patelCin, "DPT-3", "Return of deposits as on 31-03-2026", "ZZ0186204", "2026-06-24", 600), "2026-06-24", { code: "DPT3", period: "2026-03", on: "2026-06-24", ack: "ZZ0186204" });
+  upload("Patel Textiles Pvt Ltd", "MSME-1 acknowledgement Apr-Sep 2026.pdf", mcaAck(patelName, patelCin, "MSME-1", "Half yearly return of dues to micro and small enterprises, Apr-Sep 2026", "ZZ0322957", "2026-10-27", 0), "2026-10-27", { code: "MSME1", period: "2026-09", on: "2026-10-27", ack: "ZZ0322957" });
+
+  // Patel Exim LLP: Form 11 and Form 8 for FY 2025-26.
+  const exim: [string, string] = ["LLPIN", "ZZZ-0104"];
+  upload("Patel Exim LLP", "LLP Form 11 acknowledgement FY 2025-26.pdf", mcaAck("Patel Exim LLP", exim, "Form 11", "Annual return of LLP for FY 2025-26", "ZZ0158833", "2026-05-26", 50), "2026-05-26", { code: "LLP11", period: "2026-03", on: "2026-05-26", ack: "ZZ0158833" });
+  upload("Patel Exim LLP", "LLP Form 8 acknowledgement FY 2025-26.pdf", mcaAck("Patel Exim LLP", exim, "Form 8", "Statement of account and solvency for FY 2025-26", "ZZ0307126", "2026-10-24", 50), "2026-10-24", { code: "LLP8", period: "2026-03", on: "2026-10-24", ack: "ZZ0307126" });
+
+  // Anaya Designs (OPC) Pvt Ltd: its AOC-4 for FY 2025-26, filed.
+  upload("Anaya Designs (OPC) Pvt Ltd", "AOC-4 OPC acknowledgement FY 2025-26.pdf", mcaAck("Anaya Designs (OPC) Private Limited", ["CIN", "U74999ZZ2021OPC000114"], "AOC-4", "Filing of financial statements of a One Person Company for FY 2025-26", "ZZ0279580", "2026-09-22", 300), "2026-09-22", { code: "AOC4_OPC", period: "2026-03", on: "2026-09-22", ack: "ZZ0279580" });
+
+  // Mehta Traders' e-way bill for its sale to Mumbai (over Rs. 50,000, moved by road, about 540 km:
+  // valid three days, a day for each 200 km or part).
+  const ewb = new Paper(true), sent = buyers[3][3], valid = new Date(Date.parse(`${sent}T00:00:00Z`) + 3 * 86400000).toISOString().slice(0, 10);
+  ewb.text(297, 50, "E-Way Bill", { size: 13, bold: true, align: "center" });
+  [["E-Way Bill No.", "991204568890"], ["E-Way Bill Date", `${ddmmyyyy(sent)} 11:42 AM`], ["Generated By", mehta.gstin], ["Valid From", `${ddmmyyyy(sent)} 11:42 AM [540 Kms]`], ["Valid Until", `${ddmmyyyy(valid)} 11:59 PM`]]
+    .forEach(([label, value], i) => ewb.text(56, 80 + i * 14, label, { size: 8.5, gray: 0.35 }).text(200, 80 + i * 14, value, { size: 8.5, bold: true }));
+  ewb.text(48, 160, "Part - A", { size: 10, bold: true }).box(40, 168, 515, 150);
+  [["GSTIN of Supplier", `${mehta.gstin}, MEHTA TRADERS`], ["Place of Dispatch", "Ahmedabad, Gujarat - 380001"], ["GSTIN of Recipient", `${buyers[3][0]}, SUNRISE INTERIORS`], ["Place of Delivery", "Mumbai, Maharashtra - 400013"], ["Document No.", buyers[3][2]], ["Document Date", ddmmyyyy(sent)],
+    ["Transaction Type", "Regular"], ["Value of Goods", inr(Math.round(buyers[3][4] * 1.18))], ["HSN Code", "84145110 - Ceiling fans; 85362010 - MCBs"], ["Reason for Transportation", "Outward - Supply"]]
+    .forEach(([label, value], i) => ewb.text(56, 184 + i * 13, label, { size: 8, gray: 0.35 }).text(200, 184 + i * 13, value, { size: 8 }));
+  ewb.text(48, 340, "Part - B", { size: 10, bold: true }).box(40, 348, 515, 46);
+  [["Mode", "Road"], ["Vehicle / Trans Doc No. & Dt.", `GJ01ZZ4417, LR-8812 dated ${ddmmyyyy(sent)}`], ["Transporter", "Shree Ram Roadlines"]].forEach(([label, value], i) => ewb.text(56, 362 + i * 12, label, { size: 8, gray: 0.35 }).text(200, 362 + i * 12, value, { size: 8 }));
+  upload("Mehta Traders", `e-way bill ${monthName}.pdf`, ewb.bytes(), sent);
+
+  // Kapoor Enterprises: the rest of its tax audit papers, the audit report filed, and its ITR-5.
+  const kapoorHead = ["Kapoor Enterprises", "Unit 7, Rajlaxmi Industrial Estate, Andheri East, Mumbai - 400093"] as const;
+  const assets: (string | number)[][] = [["Block of assets", "Rate of depreciation (%)", "Opening WDV on 01-04-2025", "Additions used 180 days or more", "Additions used less than 180 days", "Sale or deletions", "Depreciation for the year", "Closing WDV on 31-03-2026"]];
+  for (const [name, rate, opening, more, less, sold] of [["Plant and Machinery", 15, 1486000, 240000, 180000, 0], ["Furniture and Fittings", 10, 312400, 0, 46500, 0], ["Computers and Software", 40, 96800, 58000, 0, 0], ["Motor Car", 15, 524000, 0, 0, 125000]] as [string, number, number, number, number, number][]) {
+    const depreciation = Math.round((opening + more - sold) * rate / 100 + less * rate / 200);
+    assets.push([name, rate, opening, more, less, sold, depreciation, opening + more + less - sold - depreciation]);
+  }
+  assets.push(["Total", "", ...[2, 3, 4, 5, 6, 7].map((column) => sumOf(assets.slice(1), column))]);
+  upload("Kapoor Enterprises", "fixed asset register FY 2025-26.xlsx", sheet("Fixed Assets", assets), "2026-07-14");
+  const stock: (string | number)[][] = [["MS Angle 50x50x5 mm", "4.2 MT", 58600, 246120], ["MS Plate 10 mm", "6.8 MT", 61200, 416160], ["GI Pipe 2 inch, Medium", "1,450 Mtr", 412, 597400], ["Fabricated Brackets, Type B", "2,300 Nos", 186, 427800], ["Welding Electrodes 3.15 mm", "380 Pkt", 640, 243200]];
+  upload("Kapoor Enterprises", "stock statement 31 Mar 2026.pdf", tablePdf(...kapoorHead, "Statement of Closing Stock", "As on 31-Mar-2026 (valued at cost or market price, whichever is lower)",
+    [[48, "Particulars", "left"], [300, "Quantity", "right"], [420, "Rate (Rs.)", "right"], [550, "Value (Rs.)", "right"]], stock.map(([item, qty, rate, value]) => [item, qty, Number(rate), Number(value)]), [NaN, NaN, NaN, sumOf(stock, 3)]), "2026-07-14");
+  upload("Kapoor Enterprises", "Form 3CB-3CD acknowledgement AY 2026-27.pdf", ackPdf("Acknowledgement", [
+    ["Name", "KAPOOR ENTERPRISES"], ["PAN", "ZZZFZ0107Z"], ["Assessment Year", "2026-27"], ["Form", "Form 3CB-3CD (Audit report under section 44AB)"], ["Acknowledgement Number", "990000000107300"], ["Date of filing", "27-09-2026"], ["Uploaded by", "Demo CA Firm (Chartered Accountant)"], ["UDIN", "26000000ZZZZZZ0107"],
+  ], "The audit report has been uploaded by the tax auditor and accepted by the taxpayer."), "2026-09-27", { code: "TAX_AUDIT", period: "2026-03", on: "2026-09-27", ack: "990000000107300", udin: "26000000ZZZZZZ0107" });
+  upload("Kapoor Enterprises", "ITR-5 acknowledgement AY 2026-27.pdf", itrAck("KAPOOR ENTERPRISES", "ZZZFZ0107Z", "Firm", "ITR-5", "990000000107501", "2026-10-29", 1862450), "2026-10-29", { code: "ITR_AUDIT", period: "2026-03", on: "2026-10-29", ack: "990000000107501" });
+
+  // Rao Exports: fees for technical services paid to a German company (section code 1057, 10% under
+  // the tax treaty) for Form No. 144, its challan, its transfer pricing working (an unclear file), and
+  // its GSTR-3B figures for FY 2025-26 for the annual return.
+  const raoName = "RAO EXPORTS PRIVATE LIMITED", raoTan = "ZZZZ01121Z";
+  const abroad: (string | number)[][] = [["Voucher number", "Deductee name", "Deductee PAN", "Country", "Status", "Nature of remittance", "Section code", "Date of payment or credit", "Amount paid or credited", "Rate", "Tax deducted", "Date of deduction", "Tax deposited", "Challan serial number", "Tax residency certificate"]];
+  [[0, 24, 642500], [2, 11, 718300]].forEach(([m, date, amount]) => {
+    const on = ddmmyyyy(`${qMonths[m]}-${date}`), cut = Math.round(amount / 10);
+    abroad.push([`JV/NR/${abroad.length}`, "Rheinwald Engineering GmbH", "ZZZCZ0221Z", "Germany", "Company", "Fees for technical services", "1057", on, amount, 10, cut, on, cut, String(71 + m).padStart(5, "0"), "Yes"]);
+  });
+  abroad.push(["Total", "", "", "", "", "", "", "", sumOf(abroad.slice(1), 8), "", sumOf(abroad.slice(1), 10), "", sumOf(abroad.slice(1), 12), "", ""]);
+  const raoReceipts = new Paper(true);
+  abroad.slice(1, -1).forEach((row, i) => { if (i) raoReceipts.page(); drawChallan(raoReceipts, { ...challan(qMonths[i * 2], String(row[13]), Number(row[10])), tan: raoTan, name: raoName, bsr: "0240312" }); });
+  send("Rao Exports Pvt Ltd", `TDS on payments abroad for ${qName}`, `Dear Sir,\n\nPlease find our TDS register for the payments to Rheinwald Engineering in ${qName}, with the challans. Their tax residency certificate is with us.\n\nRegards,\nAccounts\nRao Exports Pvt Ltd`, [
+    [`TDS register non resident payments ${qName}.xlsx`, sheet("TDS Register", abroad)], [`ITNS 281N challans ${qName} non resident.pdf`, raoReceipts.bytes()],
+  ]);
+  upload("Rao Exports Pvt Ltd", "transfer pricing working FY 2025-26.xlsx", sheet("Related parties", [
+    ["Associated enterprise", "Country", "Nature of transaction", "Method", "Amount (Rs.)"], ["Rao Trading FZE", "United Arab Emirates", "Sale of finished goods", "TNMM", 18640000], ["Rao Trading FZE", "United Arab Emirates", "Sales commission paid", "CUP", 932000], ["Total", "", "", "", 19572000],
+  ]), "2026-10-30");
+  const raoMonths = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"].map((name, i) => {
+    const taxable = 2400000 + ((i * 7919) % 9) * 85000, exports = 1500000 + ((i * 104729) % 7) * 120000, igst = round2(taxable * 0.06), half = round2(taxable * 0.06), credit = round2((igst + 2 * half) * 0.62);
+    return [`${name} ${i < 9 ? 2025 : 2026}`, taxable, exports, igst, half, half, credit, round2(igst + 2 * half - credit)];
+  });
+  upload("Rao Exports Pvt Ltd", "GSTR-3B summary FY 2025-26.pdf", tablePdf("Rao Exports Pvt Ltd", `GSTIN ${gstin("24", "ZZZCZ0112Z")}  |  Plot 9, Changodar Industrial Estate, Ahmedabad - 382213`, "GSTR-3B filed figures, month by month", "FY 2025-26 (for the annual return in GSTR-9)",
+    [[48, "Tax period", "left"], [150, "Taxable outward", "right"], [222, "Zero rated (LUT)", "right"], [290, "IGST", "right"], [350, "CGST", "right"], [410, "SGST", "right"], [480, "ITC availed", "right"], [552, "Paid in cash", "right"]],
+    raoMonths, [NaN, ...[1, 2, 3, 4, 5, 6, 7].map((column) => sumOf(raoMonths, column))]), "2026-10-30");
+
+  // Shah & Sons, quarterly: the last quarter's sales register, purchase bills and GSTR-2B, its
+  // GSTR-3B filed, and this quarter's first month's tax paid by PMT-06.
+  const shah: Party = { name: "Shah & Sons", address: ["17, Kalupur Hardware Market", "Ahmedabad, Gujarat - 380002"], gstin: gstin("24", "ZZZFZ0102Z"), state: "Gujarat" };
+  const shahBills = [
+    bill({ name: "Nobel Hardware Industries", address: ["Plot 118, Aji GIDC", "Rajkot, Gujarat - 360003"], gstin: gstin("24", "ZZZCZ0231Z"), state: "Gujarat" }, shah, `NHI/${qFy}/2214`, `${qMonths[0]}-08`, [
+      { item: "SS Butt Hinge 4 inch", hsn: "83021010", qty: 2000, unit: "Nos", rate: 18.5 }, { item: "Telescopic Drawer Channel 18 inch", hsn: "83024200", qty: 600, unit: "Pair", rate: 96 }]),
+    bill({ name: "Jamnagar Brass Fittings", address: ["Shankar Tekri Udyog Nagar", "Jamnagar, Gujarat - 361004"], gstin: gstin("24", "ZZZFZ0232Z"), state: "Gujarat" }, shah, `JBF/${qFy}/0961`, `${qMonths[1]}-19`, [
+      { item: "Brass Cabinet Handle 6 inch", hsn: "83024200", qty: 1500, unit: "Nos", rate: 34 }]),
+  ];
+  upload("Shah & Sons", `purchase bills ${qGst}.pdf`, billsPdf(shahBills, shah), `${afterQ}-03`);
+  upload("Shah & Sons", `GSTR-2B ${qGst}.json`, gstr2b(shah.gstin, shahBills, qPrd, notAfterToday(`${afterQ}-14`), notAfterToday(`${afterQ}-11`)), notAfterToday(`${afterQ}-15`));
+  upload("Shah & Sons", `sales register ${qGst}.xlsx`, gstr1Workbook("24", [
+    [gstin("24", "ZZZFZ0228Z"), "Shivam Furniture Works", `SS/${qFy}/0142`, `${qMonths[0]}-16`, 64800],
+    [gstin("24", "ZZZFZ0229Z"), "Royal Modular Kitchens", `SS/${qFy}/0175`, `${qMonths[1]}-09`, 118350],
+    [gstin("24", "ZZZFZ0230Z"), "Krishna Interiors", `SS/${qFy}/0203`, `${qMonths[2]}-22`, 87200],
+  ], 52600, [["83021010", "Hinges of base metal", "NOS-NUMBERS", 3600, 0.45], ["83024200", "Fittings for furniture", "NOS-NUMBERS", 2900, 0.55]]), `${afterQ}-03`);
+  const shahFiled = notAfterToday(`${afterQ}-21`), shahArn = arn("24", tq.last, 2207 * 3);
+  upload("Shah & Sons", `GSTR-3B acknowledgement ${qGst}.pdf`, gstAck(shah, "GSTR-3B", `${qGst} (Quarterly)`, shahArn, shahFiled), shahFiled, { code: "GSTR3B_Q", period: tq.last.slice(0, 7), on: shahFiled, ack: shahArn });
+  const cpin = `${period.slice(2, 4)}${period.slice(5)}24${String(70412).padStart(8, "0")}`, paidOn = notAfterToday(`${next}-04`);
+  const pmt = new Paper(true);
+  pmt.text(297, 50, "Form GST PMT-06", { size: 13, bold: true, align: "center" }).text(297, 64, "[See rule 87(2)]", { size: 8, align: "center" }).text(297, 80, "Challan for deposit of goods and services tax", { size: 9, align: "center" });
+  [["CPIN", cpin], ["Date of generation", ddmmyyyy(paidOn)], ["GSTIN", shah.gstin], ["Name (Legal)", "SHAH & SONS"], ["Address", shah.address.join(", ")], ["Reason for challan", `Monthly payment for quarterly return, ${monthName}`]]
+    .forEach(([label, value], i) => pmt.text(48, 104 + i * 13, label, { size: 8, gray: 0.35 }).text(180, 104 + i * 13, value, { size: 8, bold: i < 4 }));
+  pmt.box(40, 186, 515, 16, 0.92);
+  [[48, "Government", "left"], [150, "Major Head", "left"], [260, "Tax (Rs.)", "right"], [330, "Interest", "right"], [390, "Penalty", "right"], [440, "Fees", "right"], [490, "Other", "right"], [550, "Total", "right"]].forEach(([x, label, align]) => pmt.text(Number(x), 197, String(label), { size: 7.5, bold: true, align: align as "left" | "right" }));
+  const shahTax = 9864;
+  [["Government of India", "CGST (0005)", shahTax], ["Government of India", "IGST (0008)", 0], ["Government of India", "CESS (0009)", 0], ["State (Gujarat)", "SGST (0006)", shahTax]].forEach(([who, head, tax], i) =>
+    [[48, String(who)], [150, String(head)], [260, inr(Number(tax))], [330, inr(0)], [390, inr(0)], [440, inr(0)], [490, inr(0)], [550, inr(Number(tax))]].forEach(([x, value], j) => pmt.text(Number(x), 216 + i * 14, String(value), { size: 8, align: j > 1 ? "right" : "left" })));
+  pmt.line(40, 274, 555, 274).text(48, 286, "Total Challan Amount", { size: 8, bold: true }).text(550, 286, inr(shahTax * 2), { size: 8, bold: true, align: "right" }).text(48, 300, `Total Challan Amount (In Words): ${inWords(shahTax * 2)}`, { size: 8 });
+  [["Mode of Payment", "E-Payment"], ["Bank Name", "Aakashganga Sahakari Bank Ltd"], ["CIN", `ZZZB${cpin.slice(0, 6)}${String(70412).padStart(8, "0")}`], ["Bank Reference Number (BRN)", `ZZ${cpin.slice(-8)}`], ["Payment Date", ddmmyyyy(paidOn)]]
+    .forEach(([label, value], i) => pmt.text(48, 326 + i * 13, label, { size: 8, gray: 0.35 }).text(200, 326 + i * 13, value, { size: 8 }));
+  upload("Shah & Sons", `GST challan PMT-06 ${monthName}.pdf`, pmt.bytes(), paidOn, { code: "PMT06", period, on: paidOn, ack: cpin });
+
+  // Iyer's consultancy accounts for FY 2025-26, for his ITR-3: income and expenses, the net profit
+  // closing the two sides.
+  const iyerBooks: [string, number, number][] = [["Professional fees received", 0, 1430000], ["Office rent (co-working desk)", 216000, 0], ["Internet and telephone", 38400, 0], ["Travelling and conveyance", 64200, 0], ["Depreciation on laptop (40%)", 27400, 0], ["Books and subscriptions", 18650, 0]];
+  const iyerProfit = 1430000 - iyerBooks.reduce((total, row) => total + row[1], 0);
+  iyerBooks.push(["Net profit transferred to capital account", iyerProfit, 0]);
+  upload("Iyer Consultants", "balance sheet and profit and loss FY 2025-26.pdf", tablePdf("Iyer Consultants", "Proprietor: Venkatesh Iyer  |  B-602, Shaligram Lakeview, Bopal, Ahmedabad - 380058", "Profit and Loss Account", "For the year ended 31-Mar-2026",
+    [[48, "Particulars", "left"], [440, "Expenses (Rs.)", "right"], [550, "Income (Rs.)", "right"]], iyerBooks, [NaN, sumOf(iyerBooks, 1), sumOf(iyerBooks, 2)]), "2026-07-20");
+
+  // Iyer Consultants, quarterly, by email: last quarter's consulting invoices and GSTR-2B, for the
+  // GSTR-3B still to be filed.
+  const iyerParty: Party = { name: "Iyer Consultants", address: ["B-602, Shaligram Lakeview, Bopal", "Ahmedabad, Gujarat - 380058"], gstin: gstin("24", "ZZZPZ0108Z"), state: "Gujarat" };
+  const iyerBills = [
+    bill({ name: "Prahlad Nagar Workspaces LLP", address: ["7th Floor, Shapath Hexa, S.G. Highway", "Ahmedabad, Gujarat - 380054"], gstin: gstin("24", "ZZZFZ0235Z"), state: "Gujarat" }, iyerParty, `PNW/${qFy}/0388`, `${qMonths[0]}-01`, [
+      { item: "Dedicated desk, monthly plan", hsn: "997212", qty: 3, unit: "Month", rate: 18000 }]),
+    bill({ name: "Navrangpura Computers", address: ["G-4, Sahjanand Complex, Navrangpura", "Ahmedabad, Gujarat - 380009"], gstin: gstin("24", "ZZZFZ0236Z"), state: "Gujarat" }, iyerParty, `NC/${qFy}/1157`, `${qMonths[1]}-26`, [
+      { item: "Laptop, 14 inch, 16 GB RAM", hsn: "84713010", qty: 1, unit: "Nos", rate: 68500 }]),
+  ];
+  send("Iyer Consultants", `GST papers for ${qGst}`, `Hi,\n\nSorry for the delay. Attaching my invoices register and the GSTR-2B for ${qGst} for the GSTR-3B.\n\nThanks,\nVenkatesh`, [
+    [`sales register ${qGst}.xlsx`, gstr1Workbook("24", [[gstin("24", "ZZZCZ0233Z"), "Sabarmati Cotspin Pvt Ltd", `VI/${qFy}/031`, `${qMonths[0]}-28`, 145000], [gstin("27", "ZZZCZ0234Z"), "Konkan Agro Foods Pvt Ltd", `VI/${qFy}/034`, `${qMonths[2]}-12`, 210000]], 0, [["998311", "Management consulting services", "OTH-OTHERS", 2, 1]])],
+    [`GSTR-2B ${qGst}.json`, gstr2b(iyerParty.gstin, iyerBills, qPrd, notAfterToday(`${afterQ}-14`), notAfterToday(`${afterQ}-11`))],
+  ]);
+
+  // Trivedi Foods, composition: CMP-08 for the last quarter and GSTR-4 for FY 2025-26, filed, and
+  // this month's purchase bill.
+  const trivedi: Party = { name: "Trivedi Foods", address: ["Shop 3, Athwa Gate Market", "Surat, Gujarat - 395001"], gstin: gstin("24", "ZZZFZ0110Z"), state: "Gujarat" };
+  const cmpFiled = notAfterToday(`${afterQ}-16`), cmpArn = arn("24", tq.last, 3301);
+  upload("Trivedi Foods", `CMP-08 acknowledgement ${qGst}.pdf`, gstAck(trivedi, "GST CMP-08", `${qGst} (Quarterly)`, cmpArn, cmpFiled), cmpFiled, { code: "CMP08", period: tq.last.slice(0, 7), on: cmpFiled, ack: cmpArn });
+  const gstr4Arn = arn("24", "2026-03", 4402);
+  upload("Trivedi Foods", "GSTR-4 acknowledgement FY 2025-26.pdf", ackPdf("Acknowledgement", [["GSTIN", trivedi.gstin], ["Legal Name", "TRIVEDI FOODS"], ["Return Type", "GSTR-4"], ["Financial Year", "2025-26"], ["ARN", gstr4Arn], ["Date of ARN", "24-06-2026"]],
+    "You have successfully filed Form GSTR-4 for the financial year 2025-26."), "2026-06-24", { code: "GSTR4", period: "2026-03", on: "2026-06-24", ack: gstr4Arn });
+  upload("Trivedi Foods", `purchase bills ${monthName}.pdf`, billsPdf([bill({ name: "Kamrej Edible Oils", address: ["Survey 41, Kamrej Char Rasta", "Surat, Gujarat - 394185"], gstin: gstin("24", "ZZZFZ0237Z"), state: "Gujarat" }, trivedi, `KEO/${fy}/2650`, day(13), [
+    { item: "Refined Groundnut Oil, 15 L Tin", hsn: "15081000", qty: 24, unit: "Tin", rate: 2380 }, { item: "Besan, 30 Kg Bag", hsn: "11061000", qty: 10, unit: "Bag", rate: 2460 }], 5)], trivedi), notAfterToday(`${next}-02`));
+
+  // The Desai family and the clinic: AY 2026-27 returns (FY 2025-26, under the 1961 Act).
+  const meena = { name: "MEENA DESAI", pan: "ZZZPZ0106Z", address: ["12, Sahajanand Bungalows, Bopal", "Ahmedabad - 380058, Gujarat"] };
+  const narmada = { name: "NARMADA LIFE SCIENCES PRIVATE LIMITED", pan: "ZZZCZ0219Z", tan: "ZZZZ02191Z", address: ["Plot 88, Changodar Industrial Estate", "Ahmedabad - 382213, Gujarat"], email: "payroll@narmadalife.example", signatory: "KIRAN JOSHI, daughter of MAHESH JOSHI, working in the capacity of HEAD - FINANCE" };
+  const { bytes: meenaF16 } = form16Pdf(narmada, meena, 1675000, "MZQTPLW", ["QWZKRTMA", "QWZMPLSB", "QWZPRNTC", "QWZSTKVD"], "2026-06-12");
+  upload("Meena Desai", "Form 16 FY 2025-26.pdf", meenaF16, "2026-06-16");
+  upload("Meena Desai", "ITR-1 acknowledgement AY 2026-27.pdf", itrAck(meena.name, meena.pan, "Individual", "ITR-1", "990000000106101", "2026-07-24", 1600000), "2026-07-24", { code: "ITR_NA", period: "2026-03", on: "2026-07-24", ack: "990000000106101" });
+  const slip: [string, number, string, number][] = [["Basic", 75000, "Provident Fund", 1800], ["House Rent Allowance", 30000, "Professional Tax", 200], ["Special Allowance", 45000, "Income Tax (TDS)", 12600]];
+  const earned = slip.reduce((total, row) => total + row[1], 0), cut = slip.reduce((total, row) => total + row[3], 0);
+  upload("Meena Desai", `salary slip ${monthName}.pdf`, tablePdf(narmada.name, narmada.address.join(", "), `Pay Slip for ${monthName}`, `Employee: ${meena.name}  |  Code: NLS-0388  |  PAN: ${meena.pan}  |  Paid days: ${new Date(Date.UTC(year, month, 0)).getUTCDate()}`,
+    [[48, "Earnings", "left"], [260, "Amount (Rs.)", "right"], [300, "Deductions", "left"], [550, "Amount (Rs.)", "right"]], [...slip, ["Net pay", NaN, inWords(earned - cut).replace("Rupees ", "Rs. "), earned - cut]].map((row) => row.map((value) => (Number.isNaN(value) ? "" : value))), [NaN, earned, NaN, cut]), notAfterToday(`${next}-01`));
+  upload("Meena Desai", `rent receipt ${monthName}.jpg`, await photo([["RENT RECEIPT", 40, true], [`Receipt No. 10  Date: ${ddmmyyyy(notAfterToday(`${next}-02`))}`, 26], ["Received with thanks from Mrs. Meena Desai", 26], [`a sum of Rs. 22,000 (Rupees Twenty Two Thousand only)`, 26],
+    [`towards rent for ${monthName} for the house at`, 26], ["12, Sahajanand Bungalows, Bopal, Ahmedabad.", 26], ["Paid by bank transfer.", 26], ["Landlord: Harshad Thakkar  PAN ZZZPZ0240Z", 26], ["Signature: (signed)", 26]]), notAfterToday(`${next}-03`));
+  const rajesh = { name: "RAJESH DESAI", pan: "ZZZPZ0105Z" };
+  const trades: [string, number, string, number, string, number][] = [
+    ["Kankaria Tubes Ltd", 400, "2024-02-12", 186400, "2025-06-18", 248800], ["Vastrapur Polymers Ltd", 1200, "2025-01-09", 302400, "2025-09-04", 287520],
+    ["Saputara Agro Ltd", 250, "2022-11-23", 141250, "2025-12-15", 219500], ["Dholavira Pharma Ltd", 600, "2025-03-27", 211800, "2026-02-20", 264600],
+  ];
+  const held = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86400000);
+  const gains = trades.map(([scrip, qty, bought, cost, sold, value]) => { const days = held(bought, sold), gain = value - cost; return [scrip, String(qty), shortDate(bought), cost, shortDate(sold), value, String(days), days > 365 ? 0 : gain, days > 365 ? gain : 0]; });
+  upload("Rajesh Desai", "capital gains statement FY 2025-26.pdf", tablePdf("Sabarmati Shares and Stock Brokers Pvt Ltd", `Client: ${rajesh.name}  |  PAN: ${rajesh.pan}  |  Client code: SSB04417`, "Capital Gain Statement (Listed equity shares, STT paid)", "01-Apr-2025 to 31-Mar-2026",
+    [[48, "Scrip", "left"], [170, "Qty", "right"], [222, "Buy date", "right"], [290, "Buy value", "right"], [350, "Sell date", "right"], [412, "Sell value", "right"], [440, "Days", "right"], [494, "Short term", "right"], [552, "Long term", "right"]],
+    gains, [NaN, NaN, NaN, sumOf(gains, 3), NaN, sumOf(gains, 5), NaN, sumOf(gains, 7), sumOf(gains, 8)]), "2026-05-08");
+  upload("Rajesh Desai", "ITR-2 acknowledgement AY 2026-27.pdf", itrAck(rajesh.name, rajesh.pan, "Individual", "ITR-2", "990000000105201", "2026-07-29", 1528460), "2026-07-29", { code: "ITR_NA", period: "2026-03", on: "2026-07-29", ack: "990000000105201" });
+  const advance = new Paper(true);
+  drawChallan(advance, { form: "280", tan: rajesh.pan, name: rajesh.name, year: ["Assessment Year", "2026-27"], tax: 42000, interest: 0, fee: 0, bsr: "0510417", date: "2026-03-13", serial: "05126", bank: "Aakashganga Sahakari Bank Ltd" });
+  upload("Rajesh Desai", "ITNS 280 advance tax challan Mar 2026.pdf", advance.bytes(), "2026-03-14");
+  const bhatt = { name: "DR. NIKHIL BHATT", pan: "ZZZPZ0111Z", address: ["Bhatt Dental Clinic, 2nd Floor, Iscon Arcade, Satellite", "Ahmedabad - 380015, Gujarat"] };
+  upload("Bhatt Dental Clinic", "AIS FY 2025-26.pdf", aisPdf(bhatt, [["TDS-194J", "Fees for professional services (Section 194J)", "SHALBY TPA SERVICES PVT LTD (ZZZZ02411Z)", 612000], ["TDS-194J", "Fees for professional services (Section 194J)", "NAVJIVAN DENTAL HOSPITAL (ZZZZ02421Z)", 448500], ["TDS-194A", "Interest from deposit (Section 194A)", "AAKASHGANGA SAHAKARI BANK LTD (ZZZZ02101Z)", 52860]]), "2026-06-20");
+  upload("Bhatt Dental Clinic", "ITR-4 acknowledgement AY 2026-27.pdf", itrAck(bhatt.name, bhatt.pan, "Individual", "ITR-4", "990000000111401", "2026-08-21", 1972860), "2026-08-21", { code: "ITR_BIZ", period: "2026-03", on: "2026-08-21", ack: "990000000111401" });
+
+  // Nair Charitable Trust: its donation register, which InboxCA cannot type, so it waits under To check.
+  const donations: (string | number)[][] = [["NCT/25-26/018", "12-May-2025", "Sushila Menon", "UPI", 25000], ["NCT/25-26/041", "02-Aug-2025", "Ahmedabad Spinners Welfare Fund", "Cheque", 150000], ["NCT/25-26/066", "14-Nov-2025", "Ramesh Pillai", "NEFT", 51000], ["NCT/25-26/093", "26-Jan-2026", "Anonymous (cash box)", "Cash", 8400], ["NCT/25-26/107", "18-Mar-2026", "Leela Nair", "NEFT", 100000]];
+  upload("Nair Charitable Trust", "donations FY 2025-26.pdf", tablePdf("Nair Charitable Trust", "14, Jodhpur Gam Road, Satellite, Ahmedabad - 380015", "Register of Donations Received", "01-Apr-2025 to 31-Mar-2026",
+    [[48, "Receipt No.", "left"], [140, "Date", "left"], [220, "Donor", "left"], [420, "Mode", "left"], [550, "Amount (Rs.)", "right"]], donations, [NaN, NaN, NaN, NaN, sumOf(donations, 4)]), "2026-07-02");
+
+  // S.K. Builders, by email: a phone photo of a delivery challan, which InboxCA cannot type or date.
+  send("S.K. Builders", "photo", "Sir, photo of the delivery challan from the site. Bill will come later.\n\nSent from my phone", [["IMG_20261104_113522.jpg", await photo([
+    ["DELIVERY CHALLAN", 40, true], ["Tapi Building Materials, Sachin GIDC, Surat", 26], ["Challan No. 4471", 26], ["To: S.K. Builders, Site: Vesu, Surat", 26], ["OPC Cement 53 Grade  -  120 Bags", 26], ["Vehicle: GJ-05-ZZ-0109", 26], ["Received by: ______________", 26],
+  ])]]);
 
   return files;
 }

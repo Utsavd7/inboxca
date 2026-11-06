@@ -29,6 +29,8 @@ describe("a TDS paper and its quarter", () => {
     ["challan.pdf", "TDS challan for Jan-Mar 2027", { type: "TDS challans", work: "tds", period: "2027-03", year: "FY 2026-27", sure: true }],
     ["Salary register June 2026.xlsx", "", { type: "Salary register", work: "tds", period: "2026-06", year: "FY 2026-27", sure: true }],
     ["data.xlsx", "TDS register Q4 FY 2026-27", { type: "TDS register", work: "tds", period: "2027-03", year: "FY 2026-27", sure: true }],
+    // A TCS register is read for Form No. 143 like a TDS register, never as sales.
+    ["TCS register Q2 2026-27.xlsx", "TCS on scrap sales", { type: "TDS register", work: "tds", period: "2026-09", year: "FY 2026-27", sure: true }],
     // A TDS register with no quarter it names, or only a year, waits under To check.
     ["TDS register 2026-27.xlsx", "", { type: "TDS register", work: "tds", period: "", year: "FY 2026-27", sure: false }],
     // Not TDS papers: a GST challan, salary slips and an advance tax challan.
