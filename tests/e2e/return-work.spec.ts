@@ -76,6 +76,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     expect(forms).toHaveLength(2);expect(forms[1].name).not.toContain("to check");expect(forms[1].prepared.status).toBe("draft");expect(forms[1].prepared.filled).toBeUndefined();
     await page.goto(returns);await expect(row.getByRole("img",{name:"4 of 6 steps done"})).toBeVisible();
     await page.goto("/app");await expect(now.getByText("Checked and ready for your approval")).toHaveCount(0);
+    await expect(now.getByText(`Waiting for someone else to approve GSTR-1 for ${name}, Sep 2026`)).toBeVisible();
     // The manager approves from Today.
     const other=await managerContext.newPage();await signIn(other,managerEmail,managerKey);
     const managerNow=other.getByRole("region",{name:"Your list"});

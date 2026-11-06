@@ -150,6 +150,8 @@
 .today-date.is-late { background: var(--k-late-bg); color: var(--k-late); }
 .today-date.is-late span { color: inherit; }
 .clients-page .cell-form { gap: var(--s2); }
+/* Several papers to mark checked on one ask wrap under each other. */
+.clients-page .row-end .cell-form { flex-wrap: wrap; justify-content: flex-end; }
 .clients-page .t input:not([type="checkbox"]), .clients-page .cell-select { height: var(--control); }
 .clients-page .t input[type="date"] { width: auto; }
 /* A notice's status as a pill that is also its menu. */

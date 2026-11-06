@@ -2,20 +2,13 @@ import "./return-work.css";
 import Link from "next/link";
 import {currentMember} from "@/src/lib/member";
 import {draftSchema,openFigures} from "@/src/lib/datasets";
-import {returnOf,stageLine,stepOf,steps,type Work} from "@/src/lib/return-work";
+import type {Work} from "@/src/lib/return-work";
 
 type Db=Awaited<ReturnType<typeof currentMember>>["supabase"];
 
 // Where each return on a page stands, read as the signed in person.
 export const returnStages=(supabase:Db,firm:string,tasks:string[])=>
   tasks.length ? Promise.resolve(supabase.rpc("return_stages",{target_firm:firm,task_ids:tasks})).then(({data})=>new Map((data ?? []).map(row=>[row.task,row as Work]))) : Promise.resolve(new Map<string,Work>());
-
-// One plain line under a return: six small steps, then where it stands in words.
-export function StageLine({code,work}:{code:string|null;work?:Work}) {
-  if(!work || work.stage==="filed" || !returnOf(code) && work.stage==="none") return null;
-  const at=stepOf(work.stage);
-  return <span className="sub stage-line"><span className="stage-steps" role="img" aria-label={`${at} of ${steps.length} steps done`}>{steps.map((step,n)=><i key={step} className={n<at ? "on" : undefined}/>)}</span>{stageLine(work)}</span>;
-}
 
 // A filled draft's figures still to check, each highlighted with a link to check it. Approving
 // and downloading wait until none is left. at: the page the figures open on, the client's or a

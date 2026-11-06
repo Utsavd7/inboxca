@@ -165,6 +165,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
       <input type="hidden" name="view" value={view} />
       {day && <input type="hidden" name="day" value={day} />}
       {code && <input type="hidden" name="code" value={code} />}
+      {step && <input type="hidden" name="step" value={step} />}
       {page > 1 && <input type="hidden" name="page" value={page} />}
       {month && <input type="hidden" name="month" value={month} />}
     </>

@@ -53,11 +53,10 @@ function Steps({done,busy}:{done:number;busy:boolean}) {
 
 // only: on a return's own page, that return's files (its forms, period and registration), without
 // the Prepare card.
-export async function PreparedForms({client,message,only}:{client?:string;message?:string;only?:{forms:string[];period:string;registration:string}}) {
+export async function PreparedForms({client,message,only}:{client:string;message?:string;only?:{forms:string[];period:string;registration:string}}) {
   const {supabase,membership,userId}=await currentMember();
   if(!membership) return null;
-  let query=supabase.from("documents").select("id,client_id,name,period_key,size,status,prepared,received_at,clients(name)").eq("firm_id",membership.firmId).not("prepared","is",null).order("prepared->version",{ascending:false}).order("received_at",{ascending:false}).limit(100);
-  if(client) query=query.eq("client_id",client);
+  let query=supabase.from("documents").select("id,client_id,name,period_key,size,status,prepared,received_at").eq("firm_id",membership.firmId).eq("client_id",client).not("prepared","is",null).order("prepared->version",{ascending:false}).order("received_at",{ascending:false}).limit(100);
   if(only) query=query.eq("period_key",only.period).in("prepared->>form",only.forms).eq("prepared->>registration",only.registration);
   const {data:forms,error}=await query;
   if(error) throw new Error("The forms could not be read.");
@@ -65,11 +64,6 @@ export async function PreparedForms({client,message,only}:{client?:string;messag
     const meta=preparedSchema.parse(file.prepared),group=[file.client_id,file.period_key,meta.form,meta.registration].join(":");
     if(groups.has(group)) return false;groups.add(group);return true;
   }).map(file=>file.id));
-  if(!client) {
-    const {data:waiting}=await supabase.from("requests").select("entity_id").eq("firm_id",membership.firmId).eq("kind","form_confirmation").eq("status","pending");
-    const review=forms?.filter(file=>latest.has(file.id) && file.status!=="deleted" && (preparedSchema.parse(file.prepared).status==="draft" || waiting?.some(item=>item.entity_id===file.id)));
-    return review?.length ? <section className="panel"><h2>Forms to review</h2><ul className="rows">{review.map(file=><li key={file.id}><Link href={`/app/clients/${file.client_id}?tab=outputs`}>{file.clients?.name}: {file.name}</Link>{waiting?.some(item=>item.entity_id===file.id) && <span className="hint">An acknowledgement arrived. Mark it filed.</span>}</li>)}</ul></section> : null;
-  }
   const [{data:rows},{data:registrations},{data:acknowledgements},{data:confirmations},{data:pans},{data:itrRows},{data:signoffs},{data:people},{data:tans}]=await Promise.all([
     supabase.from("datasets").select("id,form_code,period_key,revision,data").eq("firm_id",membership.firmId).eq("client_id",client).in("form_code",["GSTR1","GSTR3B",...Object.keys(tdsForms)]).order("period_key",{ascending:false}).limit(100),
     supabase.from("client_registrations").select("id,number_enc").eq("firm_id",membership.firmId).eq("client_id",client).eq("kind","gstin"),

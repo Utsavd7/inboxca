@@ -99,7 +99,7 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
   const only=forms && task.registration_id ? {files:forms.files,figures:forms.figures,period:itr ? period.slice(0,4) : period,registration:task.registration_id} : null;
 
   return <ReturnFrame back={{href:`${base}?tab=returns`,name:client.name}} title={name} due={due} late={!filed && days<0} people={lookers}
-    status={filed ? "Filed" : stageLine(now) || "Not started"} shown={stepNames[shown]}
+    status={filed ? "Filed" : stageLine(now,code) || "Not started"} shown={stepNames[shown]}
     steps={steps.map((step,n)=>({key:stepNames[step],label:stepNames[step],href:`${here}?step=${step}`,state:filed || n<steps.indexOf(at) ? "done" : step===at ? "now" : "later"}))}
     next={next ? {step:stepNames[next.step],why,action} : null}>
     {steps.indexOf(shown)>steps.indexOf(at) && !filed && <p className="hint">This step waits until {stepNames[at]} is done.</p>}

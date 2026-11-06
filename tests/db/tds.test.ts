@@ -54,27 +54,56 @@ it("closes the TDS return once every TDS statement of the quarter is filed, and 
   await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active')",[firm,owner]);
   await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Forms Client','business')",[client,firm]);
   await db.query("insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values ($1,$2,$3,'tan','invented encrypted TAN',$4)",[tan,firm,client,randomUUID()]);
-  const prepare=async(form:string)=>{
+  const prepare=async(form:string,approve=true)=>{
     const draft=randomUUID(),line={id:randomUUID(),field:"tds.p2.amount",value_enc:"invented encrypted figure",state:"confirmed",by:owner,at:new Date().toISOString()};
     await db.query("insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values ($1,$2,$3,$4,'2026-09',$5)",[draft,firm,client,form,{lines:[line],checks:[],registration:tan}]);
     const saved=(await db.query("select public.reserve_form($1,$2,$3,$4,'2026-09','1.2',$5,$6,'Invented','txt') saved",[firm,client,tan,form,JSON.stringify([{id:draft,revision:1}]),owner])).rows[0].saved;
-    expect((await db.query("select public.finish_form($1,$2,$3,'invented-file',$4,100,null) saved",[saved.id,firm,owner,"a".repeat(64)])).rows[0].saved).toBe(true); // ggignore: invented checksum.
+    if(approve) expect((await db.query("select public.finish_form($1,$2,$3,'invented-file',$4,100,null) saved",[saved.id,firm,owner,"a".repeat(64)])).rows[0].saved).toBe(true); // ggignore: invented checksum.
     return saved.id as string;
   };
-  const [form140,form144,form143]=[await prepare("TDS140"),await prepare("TDS144"),await prepare("TDS143")];
-  expect((await db.query("select document_type from public.documents where id=any($1) order by document_type",[[form140,form144,form143]])).rows.map(row=>row.document_type)).toEqual(["Form No. 140","Form No. 143","Form No. 144"]);
   const tds=randomUUID(),tcs=randomUUID();
   await db.query("insert into public.tasks(id,firm_id,client_id,registration_id,code,period_key,due_on) values ($1,$3,$4,$5,'TDS_RET','2026-09','2026-10-31'),($2,$3,$4,$5,'TCS_RET','2026-09','2026-10-31')",[tds,tcs,firm,client,tan]);
+  const stage=async(task:string)=>(await db.query("select stage from public.return_stages($1,$2)",[firm,[task]])).rows[0].stage;
+  // The TDS return stands where the least advanced of its statements does, each against its own
+  // form's figures: one approved statement is an approved return, a second not made yet holds it.
+  const form140=await prepare("TDS140");expect(await stage(tds)).toBe("approved");
+  const form144=await prepare("TDS144",false);expect(await stage(tds)).toBe("checked");
+  expect((await db.query("select public.finish_form($1,$2,$3,'invented-file',$4,100,null) saved",[form144,firm,owner,"a".repeat(64)])).rows[0].saved).toBe(true); // ggignore: invented checksum.
+  expect(await stage(tds)).toBe("approved");
+  const form143=await prepare("TDS143");
+  expect((await db.query("select document_type from public.documents where id=any($1) order by document_type",[[form140,form144,form143]])).rows.map(row=>row.document_type)).toEqual(["Form No. 140","Form No. 143","Form No. 144"]);
   const status=async(task:string)=>(await db.query("select status from public.tasks where id=$1",[task])).rows[0].status;
   const file=async(id:string,ack:string)=>(await db.query("select public.file_prepared_form($1,$2,$3,null) saved",[id,owner,ack])).rows[0].saved;
   // Only Form No. 143's figures are the TCS return's; only the TDS statements are the TDS return's.
   expect((await db.query("select form_code from public.return_drafts($1)",[tcs])).rows).toEqual([{form_code:"TDS143"}]);
   expect((await db.query("select form_code from public.return_drafts($1)",[tds])).rows.map(row=>row.form_code)).toEqual(["TDS140","TDS144"]);
-  expect((await db.query("select stage from public.return_stages($1,$2)",[firm,[tcs]])).rows[0].stage).toBe("approved");
+  expect(await stage(tcs)).toBe("approved");
   expect(await file(form140,"111111111111111")).toBe(true);
-  expect(await status(tds)).toBe("in_progress");expect(await status(tcs)).toBe("upcoming");
-  expect(await file(form144,"222222222222222")).toBe(true);expect(await status(tds)).toBe("filed");
+  expect(await status(tds)).toBe("in_progress");expect(await status(tcs)).toBe("upcoming");expect(await stage(tds)).toBe("approved");
+  expect(await file(form144,"222222222222222")).toBe(true);expect(await status(tds)).toBe("filed");expect(await stage(tds)).toBe("filed");
   expect(await file(form143,"333333333333333")).toBe(true);expect(await status(tcs)).toBe("filed");
   // Each statement keeps its own token, for the next quarter's statement of the same form.
   expect((await db.query("select prepared->>'form' form,prepared->>'ack' ack from public.documents where id=any($1) order by 1",[[form140,form144]])).rows).toEqual([{form:"TDS140",ack:"111111111111111"},{form:"TDS144",ack:"222222222222222"}]);
+}));
+
+// With the second approval on, a TDS statement waiting for it is pinned to the firm's approvers
+// as a GST draft is, and to the owner who checked its figures as waiting for someone else; once
+// approved, it is pinned to download and file. A TDS return due soon with no statement is not.
+it("pins a TDS statement waiting for the second approval to an approver who did not check it",()=>rollback(db,async()=>{
+  const firm=randomUUID(),owner=randomUUID(),partner=randomUUID(),client=randomUUID(),tan=randomUUID(),draft=randomUUID(),task=randomUUID(),empty=randomUUID();
+  for(const person of [owner,partner]) await db.query("insert into auth.users(id,email) values ($1,$2)",[person,`${person}@invented.test`]);
+  await db.query("insert into public.firms(id,name,state_code,status,settings) values ($1,'TDS Pins Firm','24','active','{\"second_form_approval\":true}')",[firm]);
+  await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active'),($1,$3,'partner','active')",[firm,owner,partner]);
+  await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Invented Pins Client','business')",[client,firm]);
+  await db.query("insert into public.client_registrations(id,firm_id,client_id,kind,number_enc,number_bidx) values ($1,$2,$3,'tan','invented encrypted TAN',$4)",[tan,firm,client,randomUUID()]);
+  await db.query("insert into public.tasks(id,firm_id,client_id,registration_id,code,period_key,due_on) values ($1,$3,$4,$5,'TDS_RET','2026-09',(now() at time zone 'Asia/Kolkata')::date+20),($2,$3,$4,$5,'TDS_RET','2026-12',(now() at time zone 'Asia/Kolkata')::date+2)",[task,empty,firm,client,tan]);
+  const pins=async(person:string)=>{await actAs(db,person);const {rows}=await db.query("select kind,task from public.return_pins($1)",[firm]);await db.query("reset role");return rows;};
+  expect(await pins(partner)).toEqual([]);
+  const line={id:randomUUID(),field:"tds.p2.amount",value_enc:"invented encrypted figure",state:"confirmed",by:owner,at:new Date().toISOString()};
+  await db.query("insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values ($1,$2,$3,'TDS140','2026-09',$4)",[draft,firm,client,{lines:[line],checks:[],registration:tan}]);
+  const saved=(await db.query("select public.reserve_form($1,$2,$3,'TDS140','2026-09','1.2',$4,$5,'Invented','txt') saved",[firm,client,tan,JSON.stringify([{id:draft,revision:1}]),owner])).rows[0].saved;
+  expect((await db.query("select public.finish_form($1,$2,$3,'invented-file',$4,100,null) saved",[saved.id,firm,owner,"a".repeat(64)])).rows[0].saved).toBe(true); // ggignore: invented checksum.
+  expect(await pins(partner)).toEqual([{kind:"approve",task}]);expect(await pins(owner)).toEqual([{kind:"waiting",task}]);
+  expect((await db.query("select public.decide_form($1,$2,'approved','{}') saved",[saved.id,partner])).rows[0].saved).toBe(true);
+  for(const person of [owner,partner]) expect(await pins(person)).toEqual([{kind:"approved",task}]);
 }));

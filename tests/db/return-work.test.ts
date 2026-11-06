@@ -93,13 +93,15 @@ it("pins what holds a return up to its people from the firm's days before due, a
   expect(await pins(firm,staff)).toEqual([]);
   await db.query("update public.firms set settings=jsonb_build_object('pin_days',10) where id=$1",[firm]);
   expect(await pins(firm,staff)).toEqual(["check"]);
-  // Second approval on: the checked draft goes to the manager, not to the owner who checked it.
+  // Second approval on: the checked draft goes to the manager; the owner who checked it is told it
+  // waits for someone else.
   await db.query("update public.firms set settings=jsonb_build_object('second_form_approval',true) where id=$1",[firm]);
   await db.query("update public.datasets set revision=2,data=$2 where id=$1",[draft,body(["confirmed","confirmed"])]);
   const {rows:[{saved}]}=await db.query("select public.reserve_form($1,$2,$3,'GSTR1','2026-09','2.2',$4,$5,'Invented - GSTR-1 - Sep 2026','xlsx') saved",[firm,client,registration,JSON.stringify([{id:draft,revision:2}]),owner]);
   expect(await finish(saved.id)).toBe(true);
   expect(await pins(firm,manager)).toEqual(["approve"]);
-  expect(await pins(firm,owner)).toEqual([]);expect(await pins(firm,staff)).toEqual([]);
+  expect(await pins(firm,owner)).toEqual(["waiting"]);expect(await pins(firm,staff)).toEqual([]);
+  expect((await db.query("select public.decide_form($1,$2,'approved','{}') saved",[saved.id,owner])).rows[0].saved).toBe(false);
   expect((await db.query("select public.decide_form($1,$2,'approved','{}') saved",[saved.id,manager])).rows[0].saved).toBe(true);
   for(const person of [owner,manager,staff]) expect(await pins(firm,person)).toEqual(["approved"]);
   expect(await pins(firm,other)).toEqual([]);

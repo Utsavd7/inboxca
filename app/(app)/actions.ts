@@ -989,9 +989,9 @@ export async function manageTasks(form: FormData) {
   }
 }
 
-// The Calendar view a form came from (its view, day, return, page and month), with a note.
+// The Calendar view a form came from (its view, day, return, step, page and month), with a note.
 const calendarBack = (form: FormData, ...notes: [string, string][]) =>
-  `/app/calendar?${new URLSearchParams([...["view", "day", "code", "page", "month"].map((key) => [key, String(form.get(key) ?? "")]), ...notes].filter(([, value]) => value))}`;
+  `/app/calendar?${new URLSearchParams([...["view", "day", "code", "step", "page", "month"].map((key) => [key, String(form.get(key) ?? "")]), ...notes].filter(([, value]) => value))}`;
 
 // Where Send reminder now came from, to go back to: a paper item's page, the client's Returns
 // tab, or the Calendar view.
