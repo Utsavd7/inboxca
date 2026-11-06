@@ -1,9 +1,17 @@
-/* A person's list (work-rows.tsx), on Today and its full page: the client strong, why now in
-   muted words (red only when late or held up), the one button quiet until the row is pointed at
-   or reached with j and k. */
+/* A person's list (work-rows.tsx), on Today and its full page: the date (red only when late) or
+   an icon, the client strong and the return beside it, one muted status (red only when late),
+   the one button quiet until the row is pointed at or reached with j and k. */
 .work-rows .app-row { font-size: 14px; }
 .work-rows .sub { display: block; }
+.work-lead { display: grid; flex: none; place-items: center; width: 44px; }
+.work-date { display: grid; width: 44px; padding: 2px 0; border-radius: var(--r1); background: var(--accent-soft); color: var(--ink); text-align: center; line-height: 1.25; }
+.work-date span { color: var(--ink-3); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.app-row .work-date strong { overflow: visible; font-size: 15px; font-variant-numeric: tabular-nums; }
+.work-date.is-late { background: var(--k-late-bg); color: var(--k-late); }
+.work-date.is-late span { color: inherit; }
 .work-client { margin-right: var(--s2); color: var(--ink); font-weight: 600; }
+.work-what { color: var(--ink-2); font-weight: 500; }
+.work-mark { margin-right: 6px; color: var(--accent); vertical-align: -2px; }
 .work-why { color: var(--ink-3); }
 .work-why.is-red { color: var(--late-fg); }
 .work-rows .row-end > .b, .work-rows .row-end > form .b { border-color: transparent; background: transparent; box-shadow: none; color: var(--accent); transition: background var(--fast) var(--out), border-color var(--fast) var(--out), color var(--fast) var(--out); }

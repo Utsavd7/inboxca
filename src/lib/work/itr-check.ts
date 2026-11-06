@@ -1,5 +1,5 @@
 import type {currentMember} from "../member";
-import {addDays,dueLabel,todayInIndia,verifyBy} from "../calendar";
+import {addDays,todayInIndia,verifyBy} from "../calendar";
 import {checkWords,itrChecks} from "../itr-check";
 import {itrYear} from "../itr-fields";
 import type {WorkItem} from "./forms";
@@ -23,7 +23,7 @@ export async function itrCheckWorkItems({supabase,membership}:{supabase:Member["
   return returns.flatMap((work,at)=>{
     const name=clients?.find(client=>client.id===work.client)?.name,differences=checks[at]?.differences ?? [];
     if(!name || !differences.length) return [];
-    return [{key:`itr-check:${work.client}:${work.period}:${work.form}`,title:`${work.form.replace("ITR","ITR-")} for ${name}, ${itrYear(work.period)}`,why:`${checkWords(differences)}. Check before approving`,
+    return [{key:`itr-check:${work.client}:${work.period}:${work.form}`,title:`${work.form.replace("ITR","ITR-")} ${itrYear(work.period).replace(/ \(FY .*\)$/,"")}`,why:checkWords(differences),
       client:{id:work.client,name},action:{label:"See differences",href:`/app/clients/${work.client}/itr?form=${work.form}&year=${work.period}`},audience:"assigned" as const}];
   });
 }
@@ -37,8 +37,8 @@ export async function itrVerifyWorkItems({supabase,membership}:{supabase:Member[
   return (data ?? []).flatMap(task=>{
     const by=verifyBy((task.details as {filed_on?:string}).filed_on ?? task.due_on);
     if(by>soon || !task.clients) return [];
-    return [{key:`verify:${task.id}`,title:`E-verify the income tax return for ${task.clients.name}, ${itrYear(task.period_key?.slice(0,4) ?? "")}`,
-      why:by<today ? `The last day to verify, ${dueLabel(by)}, has passed. Check the portal` : `Filed, not yet verified. Last day ${dueLabel(by)}`,
+    return [{key:`verify:${task.id}`,title:`ITR ${itrYear(task.period_key?.slice(0,4) ?? "").replace(/ \(FY .*\)$/,"")}`,
+      why:by<today ? "Last day to e-verify has passed. Check the portal" : "Filed, not e-verified yet",
       client:{id:task.client_id,name:task.clients.name},due:by,urgent:by<today,action:{label:"Mark verified",href:`/app/clients/${task.client_id}/returns/${task.id}?step=file`},audience:"assigned" as const}];
   });
 }

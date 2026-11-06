@@ -15,12 +15,12 @@ export async function answersWorkItems({ supabase, membership }: Context): Promi
     const kind = answerOf(row.label);
     return kind && !taken?.some((ask) => ask.entity_id === row.id) ? [{
       key: `answer:${row.id}`,
-      title: `Send InboxCA's reply to ${row.clients?.name ?? "a client"}`,
-      why: `${answerWords[kind][0]}. Check it, then send`,
+      title: "InboxCA's reply to send",
+      why: answerWords[kind][0],
       ...(row.client_id && row.clients && { client: { id: row.client_id, name: row.clients.name } }),
       action: { label: "Check and send", href: `/app/inbox?mail=${row.id}` },
       audience: "assigned",
-      ...(row.clients && { many: { title: `replies to ${row.clients.name}`, why: "InboxCA wrote them. Check each, then send" } }),
+      ...(row.clients && { many: { title: "replies from InboxCA to send", why: "InboxCA wrote them. Check each, then send" } }),
     }] : [];
   });
 }

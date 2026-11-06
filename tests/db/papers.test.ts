@@ -162,7 +162,7 @@ it("asks a TDS client for the quarter's TDS papers before its TDS return, lists 
   // Missing 10 days before the due date: a card for a firm that pins returns 10 days ahead, none at
   // the usual 5, and none for another firm.
   const cards = (firmId: string, days?: number) => papersWorkItems({ supabase: supabaseAdmin(), membership: { firmId, settings: { pin_days: days } }, userId: people.owner }).then((list) => list.map((item) => [item.key, item.title]));
-  expect(await cards(firm, 10)).toEqual([[`tds_missing:${ask.id}`, "TDS papers for Oct to Dec 2026 are missing"]]);
+  expect(await cards(firm, 10)).toEqual([[`tds_missing:${ask.id}`, "TDS Q3"]]);
   expect(await cards(firm)).toEqual([]);
   expect(await cards(randomUUID(), 10)).toEqual([]);
   for (const type of ["TDS challans", "TDS register", "Salary register"]) await receiveAsked(supabaseAdmin(), client.tds, type, "2026-12", randomUUID());

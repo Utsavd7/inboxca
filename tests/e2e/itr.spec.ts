@@ -189,7 +189,6 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     await signIn(page,owner,secret);
     // Due in 3 days with no form chosen: Today sends the person to the return's own page.
     const now=page.getByRole("region",{name:"Your list"});
-    await expect(now.getByText("Due in 3 days. Return not started")).toBeVisible();
     await now.getByRole("link",{name:/Start the return/}).click();await expect(page).toHaveURL(new RegExp(`/app/clients/${client}/returns/${task}\\?step=draft$`));
     await expect(page.getByRole("region",{name:"Still to fill"})).toBeVisible();
     // The team's ITR-1 entries, every one checked but the email address. Due in 10 days, so InboxCA

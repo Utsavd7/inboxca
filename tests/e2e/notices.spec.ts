@@ -106,7 +106,8 @@ test("the owner moves the notice on to in progress, replied and closed; a done n
 test("a notice given to a person shows on their Today three days before its date, though the client is not theirs", async () => {
   const [{ id }] = await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, due_on, details) values ($1, $2, 'notice', (now() at time zone 'Asia/Kolkata')::date + 2, '{"authority":"gst","notice_type":"Invented owned notice","reference":"","received_on":"2026-10-28","action_date":"2026-11-04"}') returning id`, [firm.firmId, clientId]);
   await staff.goto("/app");
-  await expect(staff.getByText(`Review the notice for ${clientName}`)).toHaveCount(0);
+  const notice = staff.locator("section[aria-labelledby=t-list] li").filter({ hasText: clientName }).filter({ has: staff.locator(`a[href='/app/notices?notice=${id}']`) });
+  await expect(notice).toHaveCount(0);
   await owner.goto(`/app/notices?notice=${id}`);
   const panel = owner.getByRole("dialog", { name: "Invented owned notice" });
   await panel.getByLabel("Owner of this notice").selectOption(staffId);
@@ -115,7 +116,7 @@ test("a notice given to a person shows on their Today three days before its date
   expect((await query(local.dbUrl, "select details->>'assigned_to' as owner from public.tasks where id = $1", [id]))[0].owner).toBe(staffId);
   expect(await logged("notice.assigned")).toEqual([firm.ownerId]);
   await staff.goto("/app");
-  await expect(staff.getByText(`Reply to the notice for ${clientName}`)).toBeVisible();
+  await expect(notice).toBeVisible();
   await query(local.dbUrl, "delete from public.tasks where id = $1", [id]);
 });
 
