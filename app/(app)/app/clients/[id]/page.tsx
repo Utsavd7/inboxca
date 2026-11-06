@@ -4,14 +4,13 @@ import { SalesInput } from "./sales-input";
 import { PurchaseMatch } from "./purchase-match";
 import { DatasetReview } from "./dataset-review";
 import { TdsDetails } from "./tds-details";
-import { statementPeriod } from "@/src/lib/tds";
-import { AlarmClock, BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, TriangleAlert, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
+import { BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Fragment, Suspense, ViewTransition } from "react";
 import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
-import { addDays, dueLabel, isItr, periodLabel, taskStatuses, todayInIndia, verifyBy } from "@/src/lib/calendar";
+import { addDays, dueLabel, isItr, periodLabel, todayInIndia, verifyBy } from "@/src/lib/calendar";
 import { firmChecked } from "@/src/lib/due-dates";
 import { assignmentLabel, assignmentRoles, assignmentWork, canManageClients, clientKinds, seesClient, usualServices, whatsappLink, type ClientKind } from "@/src/lib/clients";
 import { emailTemplates } from "@/src/lib/email-templates";
@@ -37,15 +36,16 @@ import { AutoSelect } from "../../auto-select";
 import { LinkTabs } from "../../link-tabs";
 import { DroppedNotice, PortalDrop } from "../../portal-drop";
 import { MarkFiled } from "../../mark-filed";
-import { Fill } from "../../fill";
-import { returnStages, StageLine } from "../../return-work";
-import { fillable, fills } from "@/src/lib/return-work";
+import { returnStages } from "../../return-work";
+import { fills, returnPeriod } from "@/src/lib/return-work";
+import { currentStep, nextAction, stepsFor } from "@/src/lib/return-steps";
 import { Presence } from "../../motion";
 import { Pending } from "../../pending";
 import { Avatar, Badge, Card, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Kind } from "../../ui";
 import { CopyButton, MoreMenu } from "../../ui-client";
 import { CameFrom } from "../../documents/came-from";
 import { UploadForm } from "./upload-form";
+import { WorkFold, WorkRows, type WorkRow } from "./work-list";
 import { recordAgm, recordKyc, remindClient } from "@/app/(app)/actions";
 import { RemindToast } from "../../remind-toast";
 import { unsafeText } from "@/src/lib/intake";
@@ -104,10 +104,11 @@ const activityIcons: Record<string, [LucideIcon, Kind]> = {
 const DAY = 86_400_000;
 
 // The five tabs. Older addresses (and each save) still arrive with the tab they had before:
-// files, due dates, figures and forms open their tab; the rest open Overview with their panel.
-const mains = { overview: "Overview", emails: "Emails", documents: "Documents", returns: "Returns", notices: "Notices" } as const;
+// the overview, returns, due dates, figures and forms open Work; files open Papers; the rest
+// open Details with their panel.
+const mains = { work: "Work", documents: "Papers", emails: "Emails", notices: "Notices", about: "Details" } as const;
 type Main = keyof typeof mains;
-const tabOf: Record<string, Main> = { files: "documents", due: "returns", extraction: "returns", outputs: "returns", notice: "notices", numbers: "overview", services: "overview", contacts: "overview", team: "overview", details: "overview", activity: "overview", tds: "overview" };
+const tabOf: Record<string, Main> = { overview: "work", returns: "work", due: "work", extraction: "work", outputs: "work", files: "documents", notice: "notices", numbers: "about", services: "about", contacts: "about", team: "about", details: "about", activity: "about", tds: "about" };
 const panels = ["notice", "numbers", "services", "contacts", "team", "details", "activity", "tds"];
 const lookAfter = ["partner_in_charge", "manager", "staff"];
 const uuid = /^[0-9a-f-]{36}$/;
@@ -128,7 +129,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
   const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds, tan }] = await Promise.all([params, searchParams]);
-  const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "overview";
+  const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "work";
   const sub = asked === "extraction" || asked === "outputs" ? asked : tab;
   const panel = panels.includes(asked ?? "") ? asked! : "";
   const page = /^\d{1,6}$/.test(askedPage ?? "") ? Math.max(1,Number(askedPage)) : 1;
@@ -143,7 +144,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   // time on that tab and only counted on the others; the live email subjects and the activity
   // stream in below (Suspense), so the page shows without waiting for them.
   const files = tab === "documents";
-  const listsMail = tab === "overview" || tab === "emails";
+  const listsMail = tab === "emails";
   const mailRange = tab === "emails" ? start : 0;
   // Papers 50 at a time with their true count; a search keeps only the files whose words
   // include every word typed. The paper open in a panel, or just sent or changed, and the
@@ -154,9 +155,11 @@ export default async function Client({ params, searchParams }: { params: Promise
   const tokens = typed.length ? await searchTokens(firm, typed) : null;
   const owner = membership.role === "owner";
   const namedIds = [edit ?? send, shared, renamed ?? saved ?? removed ?? restored].filter((file): file is string => uuid.test(file ?? ""));
-  // Returns still to file: those late or due in the next 60 days, unless later ones are asked for.
-  const taskQuery = supabase.from("tasks").select("id, code, period_key, due_on, status, details, registration_id",{count:"exact", head: sub !== "returns"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id).filter("status",show==="filed" ? "eq" : "neq","filed");
-  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: late, count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { count: outputs }, { data: draftForms, count: drafts }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: sheets }, { data: licences }, { count: kycPlanned }, { data: todos }] = await Promise.all([
+  // Work: every return still to file and those filed this financial year; the other tabs count
+  // those late or due in the next 30 days.
+  const fyStart = `${Number(today.slice(0, 4)) - (today.slice(5, 7) < "04" ? 1 : 0)}-04-01`;
+  const taskQuery = supabase.from("tasks").select("id, code, period_key, due_on, status, details, registration_id",{count:"exact", head: sub !== "work"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id);
+  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { data: madeFiles }, { data: figureSets }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: allTasks }, { data: licences }, { count: kycPlanned }, { data: todos }] = await Promise.all([
     supabase
       .from("clients")
       .select(
@@ -168,47 +171,48 @@ export default async function Client({ params, searchParams }: { params: Promise
     supabase.rpc("firm_people", { target_firm: firm }),
     supabase.from("groups").select("id, kind, name").in("kind", ["team", "client_group", "branch"]).order("name"),
     Promise.resolve(supabase.from("compliance_types").select("code, name, frequency, due_rule, verified_on, client_kinds").eq("period_key", "").order("code")).then(async ({ data }) => ({ data: await firmChecked(supabase, firm, data) })),
-    (show === "filed" || show === "later" ? taskQuery : taskQuery.lte("due_on", addDays(today, 60))).order("due_on",{ascending:show!=="filed"}).order("id").range(start,start+49),
+    sub === "work" ? taskQuery.or(`status.neq.filed,due_on.gte.${fyStart},details->>filed_on.gte.${fyStart}`).order("due_on").order("id").limit(300) : taskQuery.neq("status", "filed").lte("due_on", addDays(today, 30)),
     files ? (tokens ? fileQuery.contains("search_tokens", tokens) : fileQuery).order("received_at", { ascending: false }).order("id", { ascending: false }).range(start, start + 49) : fileQuery,
     supabase.from("requests").select("id, status, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
-    supabase.from("tasks").select("id,due_on,status,details",{count:"exact", head: tab !== "overview" && tab !== "notices"}).eq("firm_id",firm).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
-    supabase.from("tasks").select("id, code, due_on",{count:"exact"}).eq("firm_id",firm).eq("kind","compliance").eq("client_id",id).neq("status","filed").lt("due_on",today).order("due_on").limit(3),
+    supabase.from("tasks").select("id,due_on,status,details",{count:"exact", head: tab !== "notices"}).eq("firm_id",firm).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
+    supabase.from("tasks").select("id",{count:"exact", head: true}).eq("firm_id",firm).eq("kind","compliance").eq("client_id",id).neq("status","filed").lt("due_on",today),
     supabase.from("email_events").select("id, contact_id, received_at, label, delivery, provider_message_id, contacts(name_enc)",{count:"exact", head: !listsMail}).eq("firm_id",firm).eq("client_id",id).order("received_at",{ascending:false}).order("id").range(mailRange, mailRange + (tab === "emails" ? 49 : 2)),
     tab === "documents" ? supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",firm).eq("kind","drive").maybeSingle() : Promise.resolve({ data: null }),
     // The next return still to file from today on, for the header's countdown.
     supabase.from("tasks").select("code, period_key, due_on").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(1).maybeSingle(),
-    // Whether Returns offers Figures and Prepared forms.
-    tab === "returns" ? supabase.from("documents").select("id",{count:"exact",head:true}).eq("firm_id",firm).eq("client_id",id).not("prepared","is",null).neq("status","deleted") : Promise.resolve({ count: 0 }),
-    tab === "returns" ? supabase.from("datasets").select("form_code",{count:"exact"}).eq("firm_id",firm).eq("client_id",id) : Promise.resolve({ data: [], count: 0 }),
+    // Whether Work links Other figures and Other return files: those not for any one return.
+    sub === "work" ? supabase.from("documents").select("period_key, prepared").eq("firm_id",firm).eq("client_id",id).not("prepared","is",null).neq("status","deleted") : Promise.resolve({ data: [] }),
+    sub === "work" ? supabase.from("datasets").select("form_code, period_key").eq("firm_id",firm).eq("client_id",id) : Promise.resolve({ data: [] }),
     // What this person may do here, with any grant or request of theirs still open (5.17.2).
     supabase.from("requests").select("reason_code, status, details").eq("kind", "permission").eq("client_id", id).eq("details->>by", userId).in("status", ["pending", "approved"]).gt("expires_at", new Date().toISOString()),
-    // Returns tab: the return being marked filed in the side panel, and the ones just changed.
-    tab === "returns" && canFile && uuid.test(marking ?? "") ? supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).eq("id", marking!).neq("status", "filed").maybeSingle() : Promise.resolve({ data: null }),
-    tab === "returns" && taskChanges[marked ?? ""] && doneIds.length ? supabase.from("tasks").select("id, code, period_key").eq("firm_id", firm).eq("client_id", id).in("id", doneIds) : Promise.resolve({ data: null }),
+    // Work: the return being marked filed in the side panel, and the ones just changed.
+    tab === "work" && canFile && uuid.test(marking ?? "") ? supabase.from("tasks").select("id, code, period_key, due_on").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).eq("id", marking!).neq("status", "filed").maybeSingle() : Promise.resolve({ data: null }),
+    tab === "work" && taskChanges[marked ?? ""] && doneIds.length ? supabase.from("tasks").select("id, code, period_key").eq("firm_id", firm).eq("client_id", id).in("id", doneIds) : Promise.resolve({ data: null }),
     // Asking is for the return in hand: the client's oldest return not filed (a late one first),
     // its period and its papers; else last month.
     ask ? supabase.from("tasks").select("code, period_key").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").order("due_on").limit(12) : Promise.resolve({ data: [] }),
     files && (namedIds.length || owner) ? supabase.from("documents").select(fileColumns).eq("firm_id", firm).eq("client_id", id).or([...(namedIds.length ? [`id.in.(${namedIds})`] : []), ...(owner ? ["status.eq.deleted"] : [])].join(",")).order("received_at", { ascending: false }) : Promise.resolve({ data: [] }),
-    // Whether Returns offers Figures: a GST spreadsheet or JSON file filed for this client.
-    tab === "returns" ? supabase.from("documents").select("id").eq("firm_id", firm).eq("client_id", id).eq("work_type", "gst").eq("status", "filed").filter("name", "imatch", "\\.(xlsx?|ods|csv|json)$").limit(1) : Promise.resolve({ data: [] }),
+    // Every return of the client, which those figures and files are matched to.
+    sub === "work" ? supabase.from("tasks").select("code, period_key, registration_id").eq("firm_id", firm).eq("client_id", id).eq("kind", "compliance") : Promise.resolve({ data: [] }),
     // The client's licence and registration expiry dates, as the firm entered them (Details).
     supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "licence").order("due_on").limit(20),
-    // A DIR-3 KYC still to file, which may be years ahead of the Returns tab's 60 days.
-    sub === "returns" ? supabase.from("tasks").select("id", { count: "exact", head: true }).eq("firm_id", firm).eq("client_id", id).eq("code", "DIR3KYC").neq("status", "filed") : Promise.resolve({ count: 0 }),
+    // A DIR-3 KYC still to file, which may be years ahead.
+    sub === "work" ? supabase.from("tasks").select("id", { count: "exact", head: true }).eq("firm_id", firm).eq("client_id", id).eq("code", "DIR3KYC").neq("status", "filed") : Promise.resolve({ count: 0 }),
     // The client's to-dos: every open one, and those done whose date was in the last 30 days.
-    tab === "overview" ? supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "todo").or(`status.eq.upcoming,due_on.gte.${addDays(today, -30)}`).order("due_on").limit(30) : Promise.resolve({ data: [] }),
+    sub === "work" ? supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "todo").or(`status.eq.upcoming,due_on.gte.${addDays(today, -30)}`).order("due_on").limit(30) : Promise.resolve({ data: [] }),
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
   // Where each open return stands, and who may fill it by hand.
-  const stages = await returnStages(supabase, firm, sub === "returns" ? (tasks ?? []).filter((task) => task.status !== "filed").map((task) => task.id) : []);
-  const canPrepare = !viewOnly && membership.may("edit_figures", id);
+  const stages = await returnStages(supabase, firm, sub === "work" ? (tasks ?? []).filter((task) => task.status !== "filed").map((task) => task.id) : []);
+  // And what Fill would read for a return whose figures are in, so its next step says why it waits.
+  const drafts = new Map(await Promise.all((tasks ?? []).filter((task) => task.status !== "filed" && fills(task.code) && ["figures", "checked"].includes(stages.get(task.id)?.stage ?? "")).map(async (task) => [task.id, (await supabase.rpc("return_drafts", { task_id: task.id })).data ?? []] as const)));
   // Who confirmed each dated notice, from the firm's activity.
   const dated = tab === "notices" ? (notices ?? []).filter((notice) => (notice.details as unknown as NoticeDetails).action_date).map((notice) => notice.id) : [];
   // The portal file each open monthly GSTR-3B is read from (PLAN.md 5.3.1): the month's GSTR-2B.
-  const months = sub === "returns" ? (tasks ?? []).flatMap((task) => (task.code === "GSTR3B_M" && task.status !== "filed" && task.period_key ? [task.period_key] : [])) : [];
+  const months = sub === "work" ? (tasks ?? []).flatMap((task) => (task.code === "GSTR3B_M" && task.status !== "filed" && task.period_key ? [task.period_key] : [])) : [];
   // And each open ITR's, for its year: Form 16, Form 26AS and AIS.
-  const itrYears = sub === "returns" ? (tasks ?? []).flatMap((task) => (task.code?.startsWith("ITR") && task.status !== "filed" && task.period_key ? [task.period_key.slice(0, 4)] : [])) : [];
+  const itrYears = sub === "work" ? (tasks ?? []).flatMap((task) => (task.code?.startsWith("ITR") && task.status !== "filed" && task.period_key ? [task.period_key.slice(0, 4)] : [])) : [];
   // The latest open request for papers, for the WhatsApp text below.
   const openAsk = viewOnly ? undefined : (asks ?? []).filter((request) => request.status === "pending").sort((a, b) => (b.expires_at ?? "").localeCompare(a.expires_at ?? ""))[0];
   // The second and last round: the client's own numbers and contacts opened with the firm's key,
@@ -235,8 +239,8 @@ export default async function Client({ params, searchParams }: { params: Promise
   const missingAsk = openAsk && (openAsk.details as unknown as DocumentRequest);
   const whatsapp = phone && whatsappLink(phone, missingAsk ? emailTemplates.whatsapp(client.name, membership.firmName, missingAsk.period, missingAsk.items.filter((item) => !item.received.length)) : "");
   const manage = canManageClients(membership.role);
-  // Send reminder now on the Returns tab: those who manage clients and those who look after this one.
-  const reminds = sub === "returns" && !viewOnly && !!client.email_enc && !client.reminders_paused && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
+  // Send reminder now on Work: those who manage clients and those who look after this one.
+  const reminds = sub === "work" && !viewOnly && !!client.email_enc && !client.reminders_paused && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
   const confirmedBy = new Map([...confirmers(confirms ?? [])].map(([notice, by]) => [notice, personName(people?.find((person) => person.user_id === by)?.email)]));
   // The lists for the work this client's services need are ticked when asking for files.
   // A client with a TAN has TDS work, whatever services it has.
@@ -375,12 +379,38 @@ export default async function Client({ params, searchParams }: { params: Promise
   );
   // A yearly return's period is its year ("2026-03" is the year ending March 2026, "2026").
   const askPeriod = due?.map((task) => (isItr(task.code) || task.code === "TAX_AUDIT" ? task.period_key?.slice(0, 4) : task.period_key)).find((key) => periodChoices(today).includes(key ?? "")) ?? periodChoices(today)[1];
-  const openNotices = (notices ?? []).filter((notice) => ["upcoming", "in_progress"].includes(notice.status));
-  const showExtraction = !!drafts || !!pan || !!sheets?.length;
-  const showOutputs = !!draftForms?.some(row=>["GSTR1","GSTR3B","ITR"].includes(row.form_code)) || !!outputs;
-  const counts: Record<Main, number | undefined> = { overview: undefined, emails: mailCount ?? 0, documents: fileCount ?? 0, returns: show === "filed" ? undefined : taskCount ?? 0, notices: noticeCount ?? 0 };
+  // A figure or a return file is for a return when one of the client's returns has its form,
+  // period and number, as a return's own page finds it (return-back.ts); Work links the others.
+  const forReturn = (form: string, period: string | null, registration?: string) =>
+    (allTasks ?? []).some((task) => (!registration || task.registration_id === registration) && (/^ITR/.test(form) ? /^ITR_/.test(task.code ?? "") && task.period_key === `${period}-03` : task.period_key === period && (/^GSTR(1|3B)$/.test(form) ? !!task.code?.startsWith(`${form}_`) : task.code === (form === "TDS143" ? "TCS_RET" : /^TDS1(38|40|44)$/.test(form) ? "TDS_RET" : ""))));
+  const otherFigures = (figureSets ?? []).some((set) => !forReturn(set.form_code, set.period_key));
+  const otherFiles = (madeFiles ?? []).some((file) => { const made = file.prepared as { form?: string; registration?: string }; return !forReturn(made.form ?? "", file.period_key, made.registration); });
   const base = `/app/clients/${client.id}`;
-  const here = `${base}${tab === "overview" ? "" : `?tab=${tab}`}`;
+  const here = `${base}${tab === "work" ? "" : `?tab=${tab}`}`;
+  const about = `${base}?tab=about`;
+  // Work: each return as a row with its steps and its next step in words (src/lib/return-steps.ts)
+  // and the person who does that work for the client (staff before a manager or a partner).
+  const approver = !viewOnly && ["owner", "partner", "manager"].includes(membership.role);
+  const doer = (code: string | null) => [...lookers].reverse().find((assignment) => !assignment.work || assignment.work === workOfService(code ?? ""));
+  const workRows = (sub === "work" ? tasks ?? [] : []).map((task): WorkRow => {
+    const r = rule.get(task.code ?? ""), filed = task.status === "filed", steps = stepsFor(task.code), person = doer(task.code);
+    const work = { ...(stages.get(task.id) ?? { stage: filed ? "filed" : "none", open: null, missing: null }), form: null };
+    const sets = (drafts.get(task.id) ?? []).map((set) => ({ wrong: set.wrong, name: set.form_code === "GSTR3B" ? "the GSTR-2B" : set.target ? "your team's entries" : isItr(task.code) ? "a paper" : "the sales register" }));
+    const next = filed ? null : nextAction(work, task.code, { period: returnPeriod(task.code ?? "", task.period_key ?? ""), drafts: sets, approver });
+    const done = task.details as { filed_on?: string; by?: string; ack?: string; udin?: string; verified_on?: string; reminded?: string[]; skipped?: { reason: string } };
+    return {
+      id: task.id, href: `${base}/returns/${task.id}`, title: `${r?.name ?? task.code} ${periodLabel(r?.frequency ?? null, task.period_key, task.code)}`, unchecked: !r?.verified_on,
+      due: task.due_on, late: !filed && task.due_on < today, filed, steps: steps.length, done: filed ? steps.length : steps.indexOf(currentStep(work, task.code)), person: person && who(person),
+      next: filed
+        ? `Filed${done.filed_on ? ` ${dueLabel(done.filed_on)}` : ""}${done.by ? ` by ${personName(people?.find((one) => one.user_id === done.by)?.email)}` : ""}${done.ack ? `, ARN ${done.ack}` : ""}${done.udin ? `, UDIN ${done.udin}` : ""}${isItr(task.code) ? (done.verified_on ? `. E-verified ${dueLabel(done.verified_on)}` : `. Verify by ${dueLabel(verifyBy(done.filed_on ?? task.due_on))}`) : ""}`
+        : `${[next?.label ? `Next: ${next.label}` : next?.why?.replace(/\.$/, ""), reminderNote(done)].filter(Boolean).join(". ")}${task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) ? `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}` : ""}${task.code === "TDS_RET" ? tdsPapers(task.period_key ?? "") : ""}${task.code?.startsWith("ITR") ? itrNeeds.get(task.period_key?.slice(0, 4) ?? "")?.line ?? "" : ""}`,
+    };
+  });
+  // Due soon: late or due in the next 30 days; then later; then filed this year, latest first.
+  const soon = workRows.filter((row) => !row.filed && row.due <= addDays(today, 30));
+  const later = workRows.filter((row) => !row.filed && row.due > addDays(today, 30));
+  const filedRows = workRows.filter((row) => row.filed).reverse();
+  const counts: Record<Main, number | undefined> = { work: sub === "work" ? soon.length : taskCount ?? 0, documents: fileCount ?? 0, emails: mailCount ?? 0, notices: noticeCount ?? 0, about: undefined };
   // The Returns tab as it is, for the filing panel and each filing form to come back to.
   const shows = show === "filed" || show === "later" ? show : "";
   const returnsHref = `${base}?tab=returns${shows && `&show=${shows}`}${page > 1 ? `&page=${page}` : ""}`;
@@ -431,8 +461,6 @@ export default async function Client({ params, searchParams }: { params: Promise
   );
   const lateTotal = lateCount ?? 0;
   const canWrite = (!!email || contacts.length > 0) && !client.archived_at;
-  const undated = openNotices.filter((notice) => !(notice.details as unknown as NoticeDetails).action_date);
-  const attention = Math.min(lateTotal, 3) + (lateTotal > 3 ? 1 : 0) + asking.length + undated.length;
 
   return (
     <div className="fill clients-page client-record">
@@ -484,12 +512,12 @@ export default async function Client({ params, searchParams }: { params: Promise
               {(!!lateTotal || nextDue) && !client.archived_at && (
                 <div className="client-due">
                   {!!lateTotal && (
-                    <Link className="badge late" href={`${base}?tab=returns`}>
+                    <Link className="badge late" href={base}>
                       {lateTotal} {lateTotal === 1 ? "return" : "returns"} late
                     </Link>
                   )}
                   {nextDue && (
-                    <Link className={`badge plain ${dueIn <= 3 ? "warn" : "blue"}`} href={`${base}?tab=returns`}>
+                    <Link className={`badge plain ${dueIn <= 3 ? "warn" : "blue"}`} href={base}>
                       <CalendarClock size={13} aria-hidden />
                       Next due: {rule.get(nextDue.code ?? "")?.name ?? nextDue.code} {periodLabel(rule.get(nextDue.code ?? "")?.frequency ?? null, nextDue.period_key, nextDue.code)}, {dueIn === 0 ? "today" : dueIn === 1 ? "tomorrow" : `in ${dueIn} days`}
                     </Link>
@@ -529,144 +557,14 @@ export default async function Client({ params, searchParams }: { params: Promise
         </>
         }
       />
-      <LinkTabs label="Client" items={(Object.keys(mains) as Main[]).map((key) => ({ href: `${base}${key === "overview" ? "" : `?tab=${key}`}`, label: mains[key], count: counts[key], current: tab === key }))} />
+      <LinkTabs label="Client" items={(Object.keys(mains) as Main[]).map((key) => ({ href: `${base}${key === "work" ? "" : `?tab=${key}`}`, label: mains[key], count: counts[key], current: tab === key }))} />
 
       <ViewTransition key={sub} enter="tab-in" exit="tab-out" default="none">
       <div className="pane client-pane">
         {!panel && !docPanel && alert}
 
-        {tab === "overview" && (
+        {tab === "about" && (
           <div className="client-grid">
-            <div className="client-col">
-              <Card id="attention" title="Needs attention" Icon={TriangleAlert} kind="notice" count={attention} countTone="late">
-                {attention ? (
-                  <ul className="app-rows stagger">
-                    {late?.map((task) => (
-                      <Row
-                        key={task.id}
-                        lead={<IconTile Icon={AlarmClock} kind="late" />}
-                        title={`${rule.get(task.code ?? "")?.name ?? task.code} is late`}
-                        meta={`Was due ${dueLabel(task.due_on)}`}
-                        status={<Badge tone="late">Late</Badge>}
-                        action={
-                          canFile && (
-                            <Link className="b b-secondary" href={`${base}?tab=returns&task=${task.id}`} scroll={false}>
-                              Mark filed
-                            </Link>
-                          )
-                        }
-                      />
-                    ))}
-                    {lateTotal > 3 && (
-                      <Row
-                        lead={<IconTile Icon={AlarmClock} kind="late" />}
-                        title={`${lateTotal - 3} more late returns`}
-                        action={
-                          <Link className="b b-ghost" href={`${base}?tab=returns`}>
-                            See returns
-                          </Link>
-                        }
-                      />
-                    )}
-                    {asking.map((request) => {
-                      const details = request.details as unknown as DocumentRequest;
-                      return (
-                        <Row
-                          key={request.id}
-                          lead={<IconTile Icon={FileClock} kind="papers" />}
-                          title={details.items.map((item) => item.type).join(", ")}
-                          meta={`${details.items.filter((item) => item.received.length).length} of ${details.items.length} received`}
-                          status={<Badge tone="warn">Asked</Badge>}
-                        />
-                      );
-                    })}
-                    {undated.map((notice) => (
-                      <Row
-                        key={notice.id}
-                        lead={<IconTile Icon={Scale} kind="notice" />}
-                        title={(notice.details as unknown as NoticeDetails).notice_type}
-                        meta={`Check by ${dueLabel(notice.due_on)}`}
-                        status={<Badge tone="warn">Notice</Badge>}
-                        action={
-                          <Link className="b b-ghost" href={`${base}?tab=notices`}>
-                            Open
-                          </Link>
-                        }
-                      />
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="app-card-none">Nothing needs you for this client today.</p>
-                )}
-              </Card>
-              {/* The client's to-dos (20261110800000_client_todos.sql): red once late, green once done. */}
-              <Card id="todos" title="To-dos" Icon={ListChecks} kind="approve" count={todos?.filter((todo) => todo.status === "upcoming").length}>
-                {todos?.length ? (
-                  <ul className="app-rows">
-                    {[...todos.filter((todo) => todo.status === "upcoming"), ...todos.filter((todo) => todo.status !== "upcoming")].map((todo) => {
-                      const { title, for: person } = todo.details as { title?: string; for?: string };
-                      const open = todo.status === "upcoming";
-                      const late = open && todo.due_on < today;
-                      return (
-                        <Row
-                          key={todo.id}
-                          title={title}
-                          meta={`${todo.due_on === today ? "Today" : `${late ? "Was due" : "By"} ${dueLabel(todo.due_on)}`}, for ${person ? personName(people?.find((row) => row.user_id === person)?.email) : "the owner"}`}
-                          status={open ? late && <Badge tone="late">Late</Badge> : <Badge tone="done">Done</Badge>}
-                          action={(manage || person === userId) && !viewOnly && (
-                            <form action={manageClient}>
-                              {hidden("overview")}
-                              <input type="hidden" name="todo" value={todo.id} />
-                              <Pending className="b b-secondary b-small" name="intent" value={open ? "todo-done" : "todo-undo"} aria-label={`${open ? "Done" : "Undo"}: ${title}`}>{open ? "Done" : "Undo"}</Pending>
-                            </form>
-                          )}
-                        />
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="app-card-none">No to-dos for this client.</p>
-                )}
-                {manage && !viewOnly && (
-                  <form action={manageClient} className="app-card-foot agm-form">
-                    {hidden("overview")}
-                    <label className="grow">To-do <input name="todo_title" required maxLength={120} placeholder="Call about the rent receipts" /></label>
-                    <label>By <input type="date" name="todo_on" defaultValue={today} required /></label>
-                    <label>For <select name="todo_for" defaultValue="">
-                      <option value="">The owner</option>
-                      {/* Only those who can see this client, so a to-do never goes to someone who cannot. */}
-                      {people?.filter((row) => row.status === "active" && seesClient(row, client.client_assignments, membership.settings)).map((row) => <option key={row.user_id} value={row.user_id}>{personName(row.email)}</option>)}
-                    </select></label>
-                    <Pending className="b b-secondary b-small" name="intent" value="add-todo">Add a to-do</Pending>
-                  </form>
-                )}
-              </Card>
-              <Card id="latest-mail" title="Latest emails" Icon={Mail} kind="reply" end={!!mails?.length && <Link className="b b-ghost" href={`${base}?tab=emails`}>All emails</Link>}>
-                {mailList("app-rows client-mails") ?? <p className="app-card-none">No email from this client yet. Emails from the client&apos;s address and its contacts show here.</p>}
-              </Card>
-              {numbers.some((registration) => servicesFor(registration).length) && (
-                <Card id="services-card" title="Services" Icon={ListChecks} kind="week" end={manage && <Link className="b b-ghost" href={`${base}?tab=services`} scroll={false}>Change services</Link>}>
-                  <ul className="app-rows">
-                    {numbers.filter((registration) => servicesFor(registration).length).map((registration) => (
-                      <Row key={registration.id} title={numberKinds[registration.kind as NumberKind].name} meta={usualFor.has(registration.id) ? `Suggested: ${usualFor.get(registration.id)!.map((code) => rule.get(code)?.name ?? code).join(", ")}` : registration.services.map((code) => rule.get(code)?.name ?? code).join(", ") || "None chosen yet"} />
-                    ))}
-                  </ul>
-                  {manage && !!usualFor.size && (
-                    <form action={manageClient} className="app-card-foot services-usual">
-                      {hidden("overview")}
-                      {[...usualFor].map(([registration, codes]) => (
-                        <Fragment key={registration}>
-                          <input type="hidden" name="registration" value={registration} />
-                          {codes.map((code) => <input key={code} type="hidden" name={`service-${registration}`} value={code} />)}
-                        </Fragment>
-                      ))}
-                      <span className="hint">Usual for this client type. Nothing is saved until you choose Use these.</span>
-                      <Pending className="b b-secondary b-small" name="intent" value="services">Use these</Pending>
-                    </form>
-                  )}
-                </Card>
-              )}
-            </div>
             <div className="client-col">
               <Card id="details-card" title="Details" Icon={Info} end={manage && <Link className="b b-ghost" href={`${base}?tab=details`} scroll={false}>Edit details</Link>}>
                 <dl className="props client-props">
@@ -683,6 +581,30 @@ export default async function Client({ params, searchParams }: { params: Promise
                   <div><dt>Changes</dt><dd><Link href={`${base}?tab=activity`} scroll={false}>Activity</Link></dd></div>
                 </dl>
               </Card>
+              {numbers.some((registration) => servicesFor(registration).length) && (
+                <Card id="services-card" title="Services" Icon={ListChecks} kind="week" end={manage && <Link className="b b-ghost" href={`${base}?tab=services`} scroll={false}>Change services</Link>}>
+                  <ul className="app-rows">
+                    {numbers.filter((registration) => servicesFor(registration).length).map((registration) => (
+                      <Row key={registration.id} title={numberKinds[registration.kind as NumberKind].name} meta={usualFor.has(registration.id) ? `Suggested: ${usualFor.get(registration.id)!.map((code) => rule.get(code)?.name ?? code).join(", ")}` : registration.services.map((code) => rule.get(code)?.name ?? code).join(", ") || "None chosen yet"} />
+                    ))}
+                  </ul>
+                  {manage && !!usualFor.size && (
+                    <form action={manageClient} className="app-card-foot services-usual">
+                      {hidden("about")}
+                      {[...usualFor].map(([registration, codes]) => (
+                        <Fragment key={registration}>
+                          <input type="hidden" name="registration" value={registration} />
+                          {codes.map((code) => <input key={code} type="hidden" name={`service-${registration}`} value={code} />)}
+                        </Fragment>
+                      ))}
+                      <span className="hint">Usual for this client type. Nothing is saved until you choose Use these.</span>
+                      <Pending className="b b-secondary b-small" name="intent" value="services">Use these</Pending>
+                    </form>
+                  )}
+                </Card>
+              )}
+            </div>
+            <div className="client-col">
               <Card id="numbers" title="Tax numbers" Icon={Hash} kind="docs" end={manage && <Link className="b b-ghost" href={`${base}?tab=numbers`} scroll={false}>Change numbers</Link>}>
                 {numbers.length ? (
                   <ul className="app-rows">
@@ -898,91 +820,90 @@ export default async function Client({ params, searchParams }: { params: Promise
           </>
         )}
 
-        {tab === "returns" && (showExtraction || showOutputs) && (
-          <LinkTabs kind="pills" label="Parts of the Returns tab" items={[["returns", "Returns"], ...(showExtraction ? [["extraction", "Figures"]] : []), ...(showOutputs ? [["outputs", "Return files"]] : [])].map(([key, label]) => ({ href: `${base}?tab=${key}`, label, current: sub === key }))} />
+        {tab === "work" && sub !== "work" && (
+          <LinkTabs kind="pills" label="Parts of Work" items={[["", "Returns"], ["extraction", "Other figures"], ["outputs", "Other return files"]].map(([key, label]) => ({ href: key ? `${base}?tab=${key}` : base, label, current: sub === key }))} />
         )}
-        {sub === "returns" && (
+        {sub === "work" && (
           <>
             <DroppedNotice value={dropped} />
             <Suspense fallback={null}>
               <RemindToast />
             </Suspense>
-            <Card
-              id="due"
-              title={show === "filed" ? "Filed returns" : "Returns to file"}
-              Icon={CalendarDays}
-              kind="week"
-              count={taskCount ?? 0}
-              end={<Link className="b b-ghost" href={`?tab=returns${show==="filed" ? "" : "&show=filed"}`}>{show==="filed" ? "Show returns still to file" : "Show filed returns"}</Link>}
-            >
-              {tasks?.length ? (
-                <ul className="app-rows stagger">
-                  {tasks.map((task) => {
-                    const r = rule.get(task.code ?? "");
-                    const overdue = task.status !== "filed" && task.due_on < today;
-                    const note = reminderNote(task.details as { reminded?: string[]; skipped?: { reason: string } });
-                    const filed = task.details as { filed_on?: string; by?: string; ack?: string; udin?: string; verified_on?: string };
-                    // A filed income tax return waits to be e-verified: by the portal's mail, or by a person.
-                    const verify = task.status === "filed" && isItr(task.code);
-                    const title = `${r?.name} ${periodLabel(r?.frequency ?? null, task.period_key, task.code)}`;
-                    const [day, month] = dueLabel(task.due_on).split(" ");
+            {/* The client's to-dos (20261110800000_client_todos.sql): red once late, green once done. */}
+            <Card id="todos" title="To-dos" Icon={ListChecks} kind="approve" count={todos?.filter((todo) => todo.status === "upcoming").length}>
+              {todos?.length ? (
+                <ul className="app-rows">
+                  {[...todos.filter((todo) => todo.status === "upcoming"), ...todos.filter((todo) => todo.status !== "upcoming")].map((todo) => {
+                    const { title, for: person } = todo.details as { title?: string; for?: string };
+                    const open = todo.status === "upcoming";
+                    const late = open && todo.due_on < today;
                     return (
                       <Row
-                        key={task.id}
-                        lead={
-                          <span className={`today-date${overdue ? " is-late" : ""}`} aria-hidden>
-                            <span>{month}</span>
-                            <strong>{day}</strong>
-                          </span>
-                        }
-                        title={<Link className="row-link" href={`${base}/returns/${task.id}`}>{title}</Link>}
-                        meta={
-                          task.status === "filed"
-                            ? <>Filed{filed.filed_on && ` ${dueLabel(filed.filed_on)}`}{filed.by && ` by ${personName(people?.find((person) => person.user_id === filed.by)?.email)}`}{filed.ack && <>, ARN <span className="num">{filed.ack}</span><CopyButton text={filed.ack} label="ARN" /></>}{filed.udin && <>, UDIN <span className="num">{filed.udin}</span></>}{verify &&(filed.verified_on ? `. E-verified ${dueLabel(filed.verified_on)}` : `. Verify by ${dueLabel(verifyBy(filed.filed_on ?? task.due_on))}`)}</>
-                            : <>Due {dueLabel(task.due_on)}{!r?.verified_on && "*"}{note && `. ${note}`}{task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) && `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}`}{task.code === "TDS_RET" && tdsPapers(task.period_key ?? "")}{task.code?.startsWith("ITR") && itrNeeds.get(task.period_key?.slice(0, 4) ?? "")?.line}<StageLine code={task.code} work={stages.get(task.id)} /></>
-                        }
-                        status={
-                          <Badge tone={task.status === "filed" ? "done" : overdue ? "late" : task.status === "in_progress" ? "blue" : ""}>
-                            {overdue ? "Late" : taskStatuses[task.status as keyof typeof taskStatuses]}
-                          </Badge>
-                        }
-                        more={
-                          reminds && task.status !== "filed" && task.due_on <= addDays(today, 7) && (
-                            <form action={remindClient}>
-                              {returnsState}
-                              <input type="hidden" name="from" value="client" />
-                              <Pending className="b b-ghost" busy="Sending" aria-label={`Send ${client.name} a reminder now`}>Send reminder now</Pending>
-                            </form>
-                          )
-                        }
-                        action={<>
-                          {canPrepare && fills(task.code) && fillable(stages.get(task.id)) && <Fill task={task.id} label={title} />}
-                          {(task.code === "TDS_RET" || task.code === "TCS_RET") && task.status !== "filed" && task.registration_id && statementPeriod(task.period_key ?? "") && <Link className="b b-secondary" href={`${base}/returns/${task.id}?step=draft`} aria-label={`Prepare ${title}`}>Prepare statement</Link>}
-                          {stages.get(task.id)?.stage === "filled" && <Link className="b b-secondary" href={`/app/files/${stages.get(task.id)!.form}/view`} aria-label={`Check figures of ${title}`}>Check figures</Link>}
-                          {canFile && task.status !== "filed" ? (
-                            task.due_on <= addDays(today, 30) && <Link className={`b ${(canPrepare && fills(task.code) && fillable(stages.get(task.id))) || stages.get(task.id)?.stage === "filled" ? "b-ghost" : "b-secondary"}`} href={`${returnsHref}&task=${task.id}`} scroll={false} aria-label={`Mark ${title} filed`}>Mark filed</Link>
-                          ) : (
-                            canFile && (
-                              <form action={manageTasks}>
-                                {returnsState}
-                                <input type="hidden" name="task" value={task.id} />
-                                {verify && !filed.verified_on && <Pending className="b b-secondary" name="intent" value="verified" aria-label={`Mark ${title} e-verified`}>Mark verified</Pending>}
-                                <Pending className="b b-ghost" name="intent" value="reopen" aria-label={`${title} was not filed after all`}>Not filed after all</Pending>
-                              </form>
-                            )
-                          )}
-                        </>}
+                        key={todo.id}
+                        title={title}
+                        meta={`${todo.due_on === today ? "Today" : `${late ? "Was due" : "By"} ${dueLabel(todo.due_on)}`}, for ${person ? personName(people?.find((row) => row.user_id === person)?.email) : "the owner"}`}
+                        status={open ? late && <Badge tone="late">Late</Badge> : <Badge tone="done">Done</Badge>}
+                        action={(manage || person === userId) && !viewOnly && (
+                          <form action={manageClient}>
+                            {hidden("overview")}
+                            <input type="hidden" name="todo" value={todo.id} />
+                            <Pending className="b b-secondary b-small" name="intent" value={open ? "todo-done" : "todo-undo"} aria-label={`${open ? "Done" : "Undo"}: ${title}`}>{open ? "Done" : "Undo"}</Pending>
+                          </form>
+                        )}
                       />
                     );
                   })}
                 </ul>
               ) : (
-                <p className="app-card-none">{show==="filed" ? "No filed returns on this page." : show==="later" ? "No returns due. Add a number and choose its services on Overview." : "Nothing late or due in the next 60 days."}</p>
+                <p className="app-card-none">No to-dos for this client.</p>
               )}
-              {show !== "filed" && <p className="app-card-foot"><Link className="b b-ghost" href={`?tab=returns${show === "later" ? "" : "&show=later"}`}>{show === "later" ? "Show only the next 60 days" : "Show later returns"}</Link></p>}
-              {tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && <p className="app-card-foot hint">InboxCA has not yet checked dates marked * against the government notification.</p>}
+              {manage && !viewOnly && (
+                <form action={manageClient} className="app-card-foot agm-form">
+                  {hidden("overview")}
+                  <label className="grow">To-do <input name="todo_title" required maxLength={120} placeholder="Call about the rent receipts" /></label>
+                  <label>By <input type="date" name="todo_on" defaultValue={today} required /></label>
+                  <label>For <select name="todo_for" defaultValue="">
+                    <option value="">The owner</option>
+                    {/* Only those who can see this client, so a to-do never goes to someone who cannot. */}
+                    {people?.filter((row) => row.status === "active" && seesClient(row, client.client_assignments, membership.settings)).map((row) => <option key={row.user_id} value={row.user_id}>{personName(row.email)}</option>)}
+                  </select></label>
+                  <Pending className="b b-secondary b-small" name="intent" value="add-todo">Add a to-do</Pending>
+                </form>
+              )}
+            </Card>
+            {workRows.length ? (
+              <Card
+                id="due"
+                title="Due soon"
+                Icon={CalendarClock}
+                kind="week"
+                count={soon.length}
+                countTone={soon.some((row) => row.late) ? "late" : ""}
+                end={
+                  reminds && soon.some((row) => row.due <= addDays(today, 7)) && (
+                    <form action={remindClient}>
+                      {returnsState}
+                      <input type="hidden" name="from" value="client" />
+                      <Pending className="b b-ghost" busy="Sending" aria-label={`Send ${client.name} a reminder now`}>Send reminder now</Pending>
+                    </form>
+                  )
+                }
+              >
+                {soon.length ? <WorkRows rows={soon} /> : <p className="app-card-none">Nothing late or due in the next 30 days.</p>}
+              </Card>
+            ) : (
+              <Empty Icon={CalendarDays} kind="week" title="No returns yet">
+                <span>Choose the services your firm does for this client, and InboxCA lists their returns here with each due date.</span>
+                {manage && <Link className="b b-primary" href={`${base}?tab=services`} scroll={false}>Choose services</Link>}
+              </Empty>
+            )}
+            {/* Later and filed returns stay folded under their counts, so Work opens on what is due. */}
+            {!!later.length && <WorkFold title="Later" Icon={CalendarDays} open={!soon.length || show === "later"} rows={later} />}
+            {!!filedRows.length && <WorkFold title="Filed this year" Icon={CalendarCheck} kind="done" open={show === "filed"} rows={filedRows} />}
+            {manage && numbers.some((registration) => registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === ({ cin: "agm", pan: "kyc" } as Record<string, string>)[registration.kind])) && (
+              <Card id="work-dates" title="Dates InboxCA needs" Icon={CalendarCheck} kind="papers">
               {/* A company's AOC-4, MGT-7 and ADT-1 fall due after its AGM: the date is asked, never guessed (public.record_agm). */}
-              {manage && show !== "filed" && numbers.filter((registration) => registration.kind === "cin" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "agm")).map((registration) => {
+              {numbers.filter((registration) => registration.kind === "cin" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "agm")).map((registration) => {
                 const fyEnd = Number(today.slice(0, 4)) + (today.slice(5, 7) >= "04" ? 1 : 0);
                 return (
                   <form key={registration.id} action={recordAgm} className="app-card-foot agm-form">
@@ -996,7 +917,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                 );
               })}
               {/* DIR-3 KYC Web runs on the director's own three year cycle (rule 12A): the year of the last one is asked, never guessed (public.record_kyc). */}
-              {manage && show !== "filed" && numbers.filter((registration) => registration.kind === "pan" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "kyc")).map((registration) => {
+              {numbers.filter((registration) => registration.kind === "pan" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "kyc")).map((registration) => {
                 const fyEnd = Number(today.slice(0, 4)) + (today.slice(5, 7) >= "04" ? 1 : 0);
                 const planned = !!kycPlanned;
                 return (
@@ -1009,9 +930,18 @@ export default async function Client({ params, searchParams }: { params: Promise
                   </form>
                 );
               })}
-            </Card>
+              </Card>
+            )}
+            {(tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) || otherFigures || otherFiles) && (
+              <p className="client-tools hint">
+                <span>{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && "InboxCA has not yet checked dates marked * against the government notification."}</span>
+                <span className="work-other">
+                  {otherFigures && <Link href={`${base}?tab=extraction`}>Other figures</Link>}
+                  {otherFiles && <Link href={`${base}?tab=outputs`}>Other return files</Link>}
+                </span>
+              </p>
+            )}
             {(!!needs2b.size || [...itrNeeds.values()].some((needs) => needs.missing)) && membership.may("portal_files", client.id) && <PortalDrop clientId={client.id} back="returns" />}
-            {pager(taskCount ?? 0,tasks?.length ?? 0,"Returns","returns")}
           </>
         )}
         {sub === "extraction" && <><DatasetReview clientId={id} draftId={draft} lineId={line} check={check} view={view}/><div className="fig-tools">{pan && <Card id="itr-return" className="tool" title="Income tax return" Icon={FileText} kind="docs" end={<Link className="b b-secondary" href={`${base}/itr`}>Open the return</Link>}><p className="app-card-none">ITR-1 to ITR-4, filled with the client&apos;s PAN and the figures InboxCA already holds for the year. The rest is listed for you to fill.</p></Card>}<PortalInput clientId={id} message={portal}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/><PurchaseMatch clientId={id} searchParams={searchParams}/></div></>}
@@ -1087,7 +1017,7 @@ export default async function Client({ params, searchParams }: { params: Promise
 
       <Presence>
       {panel === "numbers" && manage && (
-        <SidePanel key="numbers-panel" id="numbers-panel" title="Tax numbers" close={base}>
+        <SidePanel key="numbers-panel" id="numbers-panel" title="Tax numbers" close={about}>
           {alert}
           <ul className="client-rows">
             {numbers.map((registration) => (
@@ -1118,7 +1048,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         </SidePanel>
       )}
       {panel === "services" && manage && (
-        <SidePanel key="services" id="services" title="Services" close={base}>
+        <SidePanel key="services" id="services" title="Services" close={about}>
           {alert}
           <p className="hint">What your firm files for this client. InboxCA makes the due dates for the next 12 months.</p>
           <form key={numbers.map((registration) => registration.services.join()).join()} action={manageClient}>
@@ -1143,7 +1073,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         </SidePanel>
       )}
       {panel === "contacts" && (
-        <SidePanel key="contacts" id="contacts" title="Contacts" close={base}>
+        <SidePanel key="contacts" id="contacts" title="Contacts" close={about}>
           {alert}
           <p className="hint">People who write for this client. InboxCA knows their emails belong to this client. It sends papers only to contacts with Receives papers ticked.</p>
           <ul className="client-rows">
@@ -1181,7 +1111,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         </SidePanel>
       )}
       {panel === "team" && (
-        <SidePanel key="assigned" id="assigned" title="Looked after by" close={base}>
+        <SidePanel key="assigned" id="assigned" title="Looked after by" close={about}>
           {alert}
           <ul className="client-rows">
             {assigned.map((assignment) => (
@@ -1226,7 +1156,7 @@ export default async function Client({ params, searchParams }: { params: Promise
         </SidePanel>
       )}
       {panel === "details" && manage && (
-        <SidePanel key="details" id="details" title="Details" close={base}>
+        <SidePanel key="details" id="details" title="Details" close={about}>
           {alert}
           <form action={manageClient} className="fields">
             {hidden("details")}
@@ -1299,12 +1229,12 @@ export default async function Client({ params, searchParams }: { params: Promise
         </SidePanel>
       )}
       {panel === "tds" && manage && (
-        <SidePanel key="tds" id="tds" title="TDS statement details" close={base}>
+        <SidePanel key="tds" id="tds" title="TDS statement details" close={about}>
           <TdsDetails client={client.id} name={client.name} tans={numbers.filter((registration) => registration.kind === "tan")} tan={tan} error={error} />
         </SidePanel>
       )}
       {panel === "activity" && (
-        <SidePanel key="client-activity" id="client-activity" title="Activity" close={base}>
+        <SidePanel key="client-activity" id="client-activity" title="Activity" close={about}>
           <p className="hint">The latest 50 changes for this client.</p>
           <Suspense fallback={<SkeletonRows rows={6} />}>
             <Activity client={id} people={people ?? []} undo={manage && !viewOnly} />

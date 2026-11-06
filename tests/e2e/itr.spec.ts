@@ -55,7 +55,7 @@ test("Form 16 figures, client details and entered details become an approved ITR
     await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,'ITR_NA','2026-03','2026-07-31')",[firm.firmId,client,registration]);
     await signIn(page,owner,secret);
     // Check the Form 16 figures beside the Form 16 page.
-    await page.goto(`/app/clients/${client}?tab=returns`);await page.getByRole("link",{name:"Figures",exact:true}).click();
+    await page.goto(`/app/clients/${client}?tab=extraction`);
     await expect(page.getByRole("heading",{name:"Income tax return"})).toBeVisible();
     await page.goto(`/app/clients/${client}?tab=extraction&draft=${paper}`);
     await expect(page.getByText("Income tax AY 2026-27 (FY 2025-26)",{exact:true})).toBeVisible();
@@ -201,7 +201,6 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     // in its Check step.
     const returns=`/app/clients/${client}?tab=returns`,here=`/app/clients/${client}/returns/${task}`,step=page.getByRole("navigation",{name:"Steps of this return"}).locator(".is-now");
     await page.goto(returns);const row=page.locator("li").filter({hasText:"ITR (no business, no audit) AY 2026-27 (FY 2025-26)"});
-    await expect(row.getByText("Papers in, not filled yet. 1 figure not checked yet")).toBeVisible();
     await row.getByRole("link",{name:"ITR (no business, no audit) AY 2026-27 (FY 2025-26)",exact:true}).click();await expect(step).toContainText("Draft");
     await page.getByRole("region",{name:"Next step"}).getByRole("button",{name:"Prepare ITR"}).click();await expect(step).toContainText("Check",{timeout:60_000});await expect(page).toHaveURL(here);
     const checks=page.getByRole("region",{name:"Figures not checked yet"});

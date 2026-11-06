@@ -664,8 +664,8 @@ export async function manageClient(form: FormData) {
   const back = (error?: string) => {
     // Assign to me on the full list of a person's work goes back to its late returns.
     if (form.get("from") === "work") return redirect(error ? "/app/work?show=late&error=assign" : "/app/work?show=late&assigned=1");
-    // The details panel closes once its change is saved; other panels stay open for the next one.
-    const query = new URLSearchParams({ ...(tab && tab !== "overview" && (error || tab !== "details") && { tab }), ...(error ? { error } : { changed: String(form.get("intent") ?? "") }) }).toString();
+    // The details panel closes once its change is saved, back on Details; other panels stay open for the next one.
+    const query = new URLSearchParams({ ...(tab && tab !== "overview" && { tab: error || tab !== "details" ? tab : "about" }), ...(error ? { error } : { changed: String(form.get("intent") ?? "") }) }).toString();
     return redirect(`/app/clients/${id}${query ? `?${query}` : ""}`);
   };
   const intent = form.get("intent");

@@ -65,7 +65,7 @@ test("prepares Forms No. 143 and 144 from their registers, and files the TCS ret
     };
 
     // The quarter's TCS return opens its Form No. 143.
-    await page.goto(`/app/clients/${client}?tab=returns`);await page.getByRole("link",{name:/^Prepare TCS return/}).click();
+    await page.goto(`/app/clients/${client}?tab=returns`);await page.locator(".work-rows").getByRole("link",{name:/^TCS return/}).click();await page.getByRole("navigation",{name:"Steps of this return"}).getByRole("link",{name:/^Draft/}).click();
     await draft("143");
     // The quarter's TDS register comes first in the list.
     await expect(page.getByRole("list",{name:"Registers"}).getByRole("listitem").first()).toContainText("Invented foreign payments.csvTDS register for this quarter, received");

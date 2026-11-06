@@ -113,10 +113,27 @@
 .client-props { padding: 0 var(--s4) var(--s3); }
 .client-props a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .client-props a:hover { text-decoration: underline; }
-/* An email row opens the email from anywhere on it. */
-.client-mails .app-row { position: relative; }
-.client-mails .row-link { color: inherit; text-decoration: none; }
-.client-mails .row-link::after { content: ""; position: absolute; inset: 0; }
+/* An email row opens the email from anywhere on it, and a return's row its own page. */
+.client-mails .app-row, .work-rows .app-row { position: relative; }
+.client-mails .row-link, .work-rows .row-link { color: inherit; text-decoration: none; }
+.client-mails .row-link::after, .work-rows .row-link::after { content: ""; position: absolute; inset: 0; }
+/* Work: a return's steps and next step under its name, who looks after it, and an arrow that
+   moves on when the row is pointed at; Later and Filed this year open from their heads. */
+.work-rows .row-link:focus-visible { outline: none; }
+.work-rows .app-row:has(.row-link:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus-glow); }
+.work-rows .sub { font-size: 13px; }
+.work-rows .row-swap { gap: var(--s3); }
+.work-person { display: inline-flex; align-items: center; gap: var(--s2); color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+.work-person .avatar { width: 22px; height: 22px; font-size: 10px; }
+.work-go { color: var(--ink-3); transition: transform var(--fast) var(--out), color var(--fast) var(--out); }
+.work-rows .app-row:hover .work-go { color: var(--accent); transform: translateX(3px); }
+.work-rows .stage-line.is-filed i.on { background: var(--done-dot); }
+.work-fold > summary { cursor: pointer; list-style: none; }
+.work-fold > summary::-webkit-details-marker { display: none; }
+.work-fold > summary:hover h2 { color: var(--accent); }
+.work-fold-arrow { margin-left: auto; color: var(--ink-3); transition: transform var(--base) var(--out); }
+.work-fold[open] .work-fold-arrow { transform: rotate(180deg); }
+.work-other { display: inline-flex; gap: var(--s4); margin-left: auto; }
 .client-skel .skel { flex: 1; height: 36px; }
 .client-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .client-tools a:not(.b) { color: var(--accent); font-weight: 600; text-decoration: none; }

@@ -28,6 +28,8 @@ test.beforeAll(async ({ browser }) => {
   await expect(owner).toHaveURL(/\/app$/);
 });
 test.afterAll(() => firm.remove());
+// A client's numbers, services, contacts and people are on its Details tab.
+const details = () => owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: "Details" }).click();
 // A failure keeps a picture of this file's own page; Playwright keeps only the page it made.
 test.afterEach(async ({}, info) => {
   if (info.status !== info.expectedStatus && owner && !owner.isClosed()) await info.attach("owner page", { body: await owner.screenshot({ fullPage: true }), contentType: "image/png" });
@@ -45,6 +47,7 @@ test("a client added with only a GSTIN gets its PAN too, and opens with both", a
   await owner.getByLabel("Email", { exact: true }).fill("Accounts@Patel.example");
   await owner.getByRole("button", { name: "Add client" }).click();
   await expect(owner.locator(".page-head")).toContainText("Patel Textiles");
+  await details();
   await expect(owner.locator("section[aria-labelledby=details-card]")).toContainText("accounts@patel.example");
   await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "PAN" })).toContainText("AAPFU0939F");
   await expect(owner.locator("section[aria-labelledby=numbers]").getByRole("listitem").filter({ hasText: "GSTIN" })).toContainText("27AAPFU0939F1ZV");
@@ -62,16 +65,15 @@ test("services on a client's GSTIN give it its due dates", async () => {
   await gstin.getByLabel("GSTR-3B (monthly)").check();
   // Wait for the save: it is what adds the due dates.
   await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("dialog", { name: "Services" }).getByRole("button", { name: "Save services" }).click()]);
-  await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Returns/ }).click();
+  await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Work/ }).click();
   const due = owner.locator("section[aria-labelledby=due] li");
   await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");
   await expect(owner.locator(".client-pane")).toContainText("InboxCA has not yet checked");
-  const [{n,soon}]=await query(local.dbUrl,"select count(*)::int n, count(*) filter (where t.due_on<=(now() at time zone 'Asia/Kolkata')::date+60)::int soon from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed'",[firm.firmId]);
+  const [{n,soon}]=await query(local.dbUrl,"select count(*)::int n, count(*) filter (where t.due_on<=(now() at time zone 'Asia/Kolkata')::date+30)::int soon from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed'",[firm.firmId]);
   expect(n).toBeGreaterThan(12);
-  // The next 60 days first (late ones among them); every return a click away.
+  // The next 30 days first (late ones among them); every later return under Later.
   await expect(due).toHaveCount(soon);
-  await owner.getByRole("link", { name: "Show later returns" }).click();
-  await expect(due).toHaveCount(n);
+  await expect(owner.locator(".work-fold").filter({ hasText: "Later" }).locator("li")).toHaveCount(n - soon);
 });
 
 // The bulk buttons each carry their own intent: "in progress" must not reopen the return.
@@ -194,15 +196,13 @@ test("late clients lead the list, and a client's return is marked filed from its
   await query(local.dbUrl, "delete from public.clients where id=$1", [other]);
   await query(local.dbUrl, "delete from public.requests where client_id=$1 and kind='documents'", [patel]);
 
-  // Mark filed only for returns late or due within 30 days.
-  await owner.goto(`/app/clients/${patel}?tab=returns`);
+  // A late return is marked filed from the client's page with an undo (?task=, as older links open it).
+  await owner.goto(`/app/clients/${patel}`);
   const due = owner.locator("section[aria-labelledby=due] li");
-  const [{ soon }] = await query(local.dbUrl, "select count(*)::int soon from public.tasks where client_id=$1 and kind='compliance' and status<>'filed' and due_on<=(now() at time zone 'Asia/Kolkata')::date+30", [patel]);
-  await expect(due.getByRole("link", { name: /^Mark .* filed$/ })).toHaveCount(soon);
-  await expect(due.last().getByRole("link", { name: /^Mark .* filed$/ })).toHaveCount(0);
   const late = due.filter({ has: owner.locator(".badge", { hasText: "Late" }) }).first();
-  const title = (await late.locator(".grow > strong").textContent())!;
-  await late.getByRole("link", { name: `Mark ${title} filed` }).click();
+  const title = (await late.getByRole("link").textContent())!;
+  const task = (await late.getByRole("link").getAttribute("href"))!.split("/").at(-1);
+  await owner.goto(`/app/clients/${patel}?tab=returns&task=${task}`);
   const panel = owner.getByRole("dialog", { name: "Mark filed" });
   await expect(panel.getByLabel("Filed on")).toHaveValue(todayInIndia());
   await panel.getByLabel(/ARN for/).fill("AB0000000000001");
@@ -214,19 +214,21 @@ test("late clients lead the list, and a client's return is marked filed from its
   await expect(owner.getByRole("status").filter({ hasText: `${title} marked not filed.` })).toBeVisible();
   await expect(due.filter({ hasText: title })).toHaveCount(1);
 
-  // Filed returns say when, by whom and the ARN, and can be put back.
-  await due.filter({ hasText: title }).getByRole("link", { name: `Mark ${title} filed` }).click();
+  // Filed returns say when, by whom and the ARN, and can be put back on their own page.
+  await owner.goto(`/app/clients/${patel}?tab=returns&task=${task}`);
   const filedOn = addDays(todayInIndia(), -1);
   await panel.getByLabel("Filed on").fill(filedOn);
   await panel.getByLabel(/ARN for/).fill("AB0000000000001");
   await panel.getByRole("button", { name: "Mark filed" }).click();
   await expect(owner.getByRole("status").filter({ hasText: `${title} marked filed.` })).toBeVisible();
-  await owner.getByRole("link", { name: "Show filed returns" }).click();
-  const filed = due.filter({ hasText: title });
+  await owner.goto(`/app/clients/${patel}?tab=returns&show=filed`);
+  const filed = owner.locator(".work-fold").filter({ hasText: "Filed this year" }).locator("li").filter({ hasText: title });
   await expect(filed).toContainText(`Filed ${dueLabel(filedOn)} by Clients, ARN AB0000000000001`);
-  await filed.getByRole("button", { name: "Not filed after all" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: `${title} marked not filed.` })).toBeVisible();
-  await expect(due.filter({ hasText: title })).toHaveCount(0);
+  await filed.getByRole("link").click();
+  await owner.getByRole("button", { name: "Not filed after all" }).click();
+  await expect.poll(async () => (await query(local.dbUrl, "select status from public.tasks where id=$1", [task]))[0].status).not.toBe("filed");
+  await owner.goto(`/app/clients/${patel}`);
+  await expect(due.filter({ hasText: title })).toHaveCount(1);
 });
 
 test("search finds a client by name, email or whole PAN, and the same PAN is refused twice", async () => {
@@ -249,6 +251,7 @@ test("search finds a client by name, email or whole PAN, and the same PAN is ref
 test("a client's page adds and checks numbers, renames, archives and restores", async () => {
   await owner.goto("/app/clients");
   await owner.getByRole("link", { name: "Patel Textiles" }).click();
+  await details();
   await owner.getByRole("link", { name: "Change numbers" }).click();
   await owner.getByLabel("Type", { exact: true }).selectOption("gstin");
   await owner.getByLabel("Number", { exact: true }).fill("29AAGCB7383J1Z4"); // a valid GSTIN with another PAN
@@ -273,6 +276,7 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await expect(owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" })).toHaveCount(0);
   await owner.getByRole("link", { name: "Show archived clients" }).click();
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
+  await details();
   await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByRole("button", { name: "Restore client" }).click();
   await expect(owner.locator(".page-head")).not.toContainText("Archived");
@@ -468,6 +472,7 @@ test("each pill counts every client it shows, and late clients fill the pages be
 test("clients in one group are listed together", async () => {
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
+  await details();
   await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByLabel("Or a new group").fill("Patel family");
   await owner.getByRole("button", { name: "Save details" }).click();
@@ -475,6 +480,7 @@ test("clients in one group are listed together", async () => {
 
   await owner.goto("/app/clients?q=Client 321");
   await owner.getByRole("link", { name: "Client 321" }).click();
+  await details();
   await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.getByLabel("Group", { exact: true }).selectOption({ label: "Patel family" });
   await owner.getByRole("button", { name: "Save details" }).click();
@@ -490,6 +496,7 @@ test("a client is served from a branch, and the list filters by branch", async (
   await expect(owner.locator("section[aria-labelledby=branches]").getByRole("listitem")).toContainText("Surat");
   await owner.goto("/app/clients?q=Client 42");
   await owner.getByRole("link", { name: "Client 42", exact: true }).click();
+  await details();
   await owner.getByRole("link", { name: "Edit details" }).click();
   await owner.locator("section[aria-labelledby=details]").getByLabel("Branch").selectOption({ label: "Surat" });
   await owner.getByRole("button", { name: "Save details" }).click();
@@ -500,6 +507,7 @@ test("a client is served from a branch, and the list filters by branch", async (
 test("a contact person can act for several clients, with what they may receive", async () => {
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
+  await details();
   await owner.getByRole("link", { name: "Change contacts" }).click();
   const panel = owner.getByRole("dialog", { name: "Contacts" });
   await owner.getByLabel("Contact's name").fill("Ramesh Patel");
@@ -519,6 +527,7 @@ test("a contact person can act for several clients, with what they may receive",
   // The same email on another client links the same person.
   await owner.goto("/app/clients?q=Client 321");
   await owner.getByRole("link", { name: "Client 321" }).click();
+  await details();
   await owner.getByRole("link", { name: "Change contacts" }).click();
   await owner.getByLabel("Contact's name").fill("R Patel");
   await owner.getByLabel("Contact's email").fill("RAMESH@patel.example");
@@ -557,30 +566,47 @@ test("a GSTR-2B dropped on Home is filed under the client whose GSTIN is inside 
 
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
-  await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Documents/ }).click();
+  await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Papers/ }).click();
   await expect(owner.locator("section[aria-labelledby=files] tbody tr")).toContainText(["Patel Textiles Pvt Ltd - GSTR-2B - Sep 2026"]);
 });
 
-// M1 acceptance: the available tabs use live records and counts, without M6 placeholders.
-test("client tabs show all return pages, notices and recent activity; Today leaves out archived clients",async()=>{
+// M1 acceptance: the available tabs use live records and counts, without M6 placeholders. Work
+// groups the returns: late or due in 30 days, later (folded), filed this year (folded), each row
+// opening its own return page; older addresses open the tab that now holds what they showed.
+test("client tabs group the returns on Work, show notices and recent activity; Today leaves out archived clients",async()=>{
   const client=randomUUID();
   await query(local.dbUrl,"insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Tabs Test Client','individual')",[client,firm.firmId]);
-  await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) select $1,$2,'GSTR1_M','2026-09',current_date+n from generate_series(1,51) n",[firm.firmId,client]);
+  await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) select $1,$2,'GSTR1_M','2026-09',(now() at time zone 'Asia/Kolkata')::date+n from generate_series(1,51) n",[firm.firmId,client]);
+  const [{id:lateTask}]=await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR3B_M','2026-08',(now() at time zone 'Asia/Kolkata')::date-3) returning id",[firm.firmId,client]);
+  // Filed this financial year, and one filed in an earlier year, which Work leaves out.
+  const fyStart=`${Number(todayInIndia().slice(0,4))-(todayInIndia().slice(5,7)<"04" ? 1 : 0)}-04-01`;
+  await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on,status,details) values ($1,$2,'GSTR1_M','2026-04',$3::date+10,'filed',jsonb_build_object('filed_on',$3::date+9)),($1,$2,'GSTR1_M','2026-05',$3::date+40,'filed',jsonb_build_object('filed_on',$3::date+39)),($1,$2,'GSTR1_M','2025-01',$3::date-300,'filed',jsonb_build_object('filed_on',$3::date-301))",[firm.firmId,client,fyStart]);
   await query(local.dbUrl,`insert into public.tasks(firm_id,client_id,kind,due_on,details) values ($1,$2,'notice','2026-10-22','{"authority":"income_tax","notice_type":"Invented notice","reference":"TEST-123","received_on":"2026-10-20","suggested_date":"2026-12-24"}')`,[firm.firmId,client]);
+  const tabs=owner.getByRole("navigation",{name:"Client",exact:true});
   await owner.goto(`/app/clients/${client}?tab=due`);
-  await expect(owner.getByRole("navigation",{name:"Returns pages"})).toContainText("Showing 1 to 50 of 51 returns");
-  await owner.getByRole("navigation",{name:"Returns pages"}).getByRole("link",{name:"Next"}).click();
-  await expect(owner).toHaveURL(/tab=returns&page=2/);
-  await expect(owner.locator("section[aria-labelledby=due] li")).toHaveCount(1);
-  await owner.getByRole("navigation",{name:"Client",exact:true}).getByRole("link",{name:/^Notices/}).click();
+  await expect(tabs.getByRole("link",{name:/^Work/})).toHaveAttribute("aria-current","page");
+  await expect(owner.locator("section[aria-labelledby=due] li")).toHaveCount(31);
+  const later=owner.locator(".work-fold").filter({hasText:"Later"}),filed=owner.locator(".work-fold").filter({hasText:"Filed this year"});
+  await expect(later.locator("summary")).toContainText("21");await expect(later.locator("li").first()).toBeHidden();
+  await expect(filed.locator("summary")).toContainText("2");await expect(filed.locator("li").first()).toBeHidden();
+  await filed.locator("summary").click();await expect(filed.locator("li")).toHaveCount(2);await expect(filed.locator("li").first()).toBeVisible();
+  // The whole row opens that return's own page.
+  await owner.locator("section[aria-labelledby=due] li").filter({hasText:"Aug 2026"}).click({position:{x:400,y:10}});
+  await expect(owner).toHaveURL(new RegExp(`/app/clients/${client}/returns/${lateTask}$`));
+  for(const [old,tab] of [["overview","Work"],["returns","Work"],["documents","Papers"],["files","Papers"],["numbers","Details"],["activity","Details"]]){
+    await owner.goto(`/app/clients/${client}?tab=${old}`);
+    await expect(tabs.getByRole("link",{name:new RegExp(`^${tab}`)})).toHaveAttribute("aria-current","page");
+  }
+  await tabs.getByRole("link",{name:/^Notices/}).click();
   const notices=owner.locator("section[aria-labelledby=client-notices]");
   await expect(notices).toContainText("Invented notice");await expect(notices).toContainText("Check by 22 Oct 2026");
   await expect(notices).not.toContainText("24 Dec 2026");
-  await owner.getByRole("navigation",{name:"Client",exact:true}).getByRole("link",{name:"Overview"}).click();
+  await tabs.getByRole("link",{name:"Details"}).click();
   await owner.getByRole("link",{name:"Activity",exact:true}).click();
   await expect(owner.locator("section[aria-labelledby=client-activity]")).toContainText("Client added");
-  await expect(owner.getByRole("link",{name:"Figures",exact:true})).toHaveCount(0);
-  await expect(owner.getByRole("link",{name:"Return files",exact:true})).toHaveCount(0);
+  await owner.goto(`/app/clients/${client}`);
+  await expect(owner.getByRole("link",{name:"Other figures",exact:true})).toHaveCount(0);
+  await expect(owner.getByRole("link",{name:"Other return files",exact:true})).toHaveCount(0);
   // The client's oldest late return leads Today's list until the client is archived.
   await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR1_M','2026-01',current_date-300)",[firm.firmId,client]);
   await owner.goto("/app");
@@ -620,7 +646,7 @@ test("the people looking after a client show by name, not email", async () => {
   await panel.getByRole("button", { name: "Assign" }).click();
   await expect(panel.getByRole("listitem")).toContainText(["Clients"]);
   await expect(panel.getByRole("list")).not.toContainText("@");
-  await owner.goto(`/app/clients/${client}`);
+  await owner.goto(`/app/clients/${client}?tab=about`);
   await expect(owner.locator("section[aria-labelledby=team-card]")).toContainText("Clients");
   await expect(owner.locator("section[aria-labelledby=team-card]")).not.toContainText("@");
   await expect(owner.locator(".client-team")).toContainText("Looked after by Clients");
@@ -708,7 +734,7 @@ test("a client's row offers Write and Ask for papers; its header copies numbers 
   const [next] = await query(local.dbUrl, "select due_on::text due from public.tasks where client_id=$1 and kind='compliance' and status<>'filed' and due_on>=(now() at time zone 'Asia/Kolkata')::date order by due_on limit 1", [id]);
   const days = Math.round((Date.parse(next.due) - Date.parse(todayInIndia())) / 86_400_000);
   await expect(head.getByRole("link", { name: /^Next due: / })).toContainText(days === 0 ? ", today" : days === 1 ? ", tomorrow" : `, in ${days} days`);
-  await expect(head.getByRole("link", { name: /^Next due: / })).toHaveAttribute("href", `/app/clients/${id}?tab=returns`);
+  await expect(head.getByRole("link", { name: /^Next due: / })).toHaveAttribute("href", `/app/clients/${id}`);
 
   // Papers show 50 at a time, each with its type and a Copy for its drive folder, with their
   // true count however many there are.
@@ -717,7 +743,7 @@ test("a client's row offers Write and Ask for papers; its header copies numbers 
   await owner.goto(`/app/clients/${id}?tab=documents`);
   await expect(owner.locator("section[aria-labelledby=files] tbody tr")).toHaveCount(50);
   await expect(owner.locator("section[aria-labelledby=files] tbody tr").first().getByRole("button", { name: "Copy Drive folder" })).toHaveCount(1);
-  await expect(owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: `Documents ${papers}` })).toBeVisible();
+  await expect(owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: `Papers ${papers}` })).toBeVisible();
   const pages = owner.getByRole("navigation", { name: "Papers pages" });
   await expect(pages).toContainText(`Showing 1 to 50 of ${papers} papers`);
   await pages.getByRole("link", { name: "Next" }).click();

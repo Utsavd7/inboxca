@@ -82,11 +82,9 @@ test("the owner chooses how early InboxCA asks for papers, and the client gets t
   expect(sent).not.toMatch(/https?:\/\//);
   expect(await ask()).toMatchObject({ status: "pending", details: { period: "2026-10", returns: [code], since: day(0) } });
 
-  // Send reminder now on the client's Returns tab: never a second email the same day.
+  // Send reminder now on the client's Work tab: never a second email the same day.
   await owner.goto(`/app/clients/${client.id}?tab=returns`);
-  const row = owner.getByRole("listitem").filter({ hasText: "GSTR-1 test return" });
-  await row.hover();
-  await row.getByRole("button", { name: `Send ${client.name} a reminder now` }).click();
+  await owner.getByRole("button", { name: `Send ${client.name} a reminder now` }).click();
   await expect(owner.getByRole("status").filter({ hasText: "already emailed today" })).toBeVisible();
   expect(await mailTexts(client.email)).toHaveLength(1);
 });
