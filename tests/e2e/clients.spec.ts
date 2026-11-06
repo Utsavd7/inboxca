@@ -111,12 +111,12 @@ test("Today shows what needs the owner today and the next setup step", async () 
   await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-4 where id in (select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and code='GSTR1_M' order by due_on desc limit 2)",[firm.firmId]);
   const [{n}]=await query(local.dbUrl,"select count(*)::int n from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and due_on<(now() at time zone 'Asia/Kolkata')::date",[firm.firmId]);
   await owner.getByRole("link", { name: "Today", exact: true }).click();
-  await expect(owner.locator(".page-head")).toContainText(/\d+ things? needs? you\./);
+  await expect(owner.locator(".page-head")).toContainText(/\d+/);
   // One row for the client's late returns (the return due today has its own row).
   const late = owner.locator("section[aria-labelledby=t-list]").getByRole("listitem").filter({ hasText: "Patel Textiles" }).filter({ hasText: /\d+ days? late/ });
   await expect(late).toHaveCount(1);
-  await expect(late).toContainText(`and ${n-1} more late return`);
-  await expect(owner.getByRole("region", { name: "This week" }).getByRole("link", { name: /^Returns this month/ })).toHaveAttribute("href", "/app/calendar?view=month");
+  await expect(late).toContainText(`${n-1} more`);
+  await expect(owner.locator("section[aria-labelledby=t-week] a[href='/app/calendar?view=month']")).toBeVisible();
   await late.getByRole("link", { name: "See returns: Patel Textiles" }).click();
   await expect(owner).toHaveURL(/\/app\/clients\/[^/]+\?tab=due$/,{timeout:15_000});
   await owner.getByRole("link", { name: "Today", exact: true }).click();
@@ -141,10 +141,10 @@ test("late returns: the week's numbers, a preview before reminding, Mark filed w
   const [{ id: anand }] = await query(local.dbUrl, "insert into public.clients(firm_id,name,kind) values ($1,'Anand Late','individual') returning id", [firm.firmId]);
   await query(local.dbUrl, "insert into public.tasks(firm_id,client_id,kind,code,period_key,due_on) values ($1,$2,'compliance','ITR_NA','2026',(now() at time zone 'Asia/Kolkata')::date-2)", [firm.firmId, anand]);
   await owner.goto("/app");
-  // This week's Late opens the late returns in the full list.
-  const week = owner.getByRole("region", { name: "This week" });
-  await expect(week.getByRole("link", { name: /^Late 2 clients have a late return/ })).toHaveAttribute("href", "/app/work?show=late");
-  await week.getByRole("link", { name: /^Late / }).click();
+  // The late clients' number opens the late returns in the full list.
+  const lateClients = owner.locator("section[aria-labelledby=t-week] a[href='/app/work?show=late']");
+  await expect(lateClients).toContainText("2");
+  await lateClients.click();
   await expect(owner).toHaveURL(/\/app\/work\?show=late$/);
   // Remind all late clients shows who gets what first; with no firm email nothing can go.
   await owner.getByRole("link", { name: "Remind all late clients" }).click();
@@ -190,7 +190,7 @@ test("late clients lead the list, and a client's return is marked filed from its
   await expect(rows.nth(1)).toContainText("Anand Dairy");
   // That request has no items list: Today, its count of clients waiting for papers, and the client page still open.
   await owner.goto("/app");
-  await expect(owner.getByRole("region", { name: "This week" }).getByRole("link", { name: /^Waiting for papers [1-9]/ })).toHaveAttribute("href", "/app/clients?show=missing");
+  await expect(owner.locator("section[aria-labelledby=t-week] a[href='/app/clients?show=missing']")).toContainText(/[1-9]/);
   await owner.goto(`/app/clients/${patel}`);
   await expect(owner.locator(".page-head")).toContainText("Patel Textiles");
   await query(local.dbUrl, "delete from public.clients where id=$1", [other]);
@@ -610,8 +610,8 @@ test("client tabs group the returns on Work, show notices and recent activity; T
   // The client's oldest late return leads Today's list until the client is archived.
   await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR1_M','2026-01',current_date-300)",[firm.firmId,client]);
   await owner.goto("/app");
-  const late=owner.locator("section[aria-labelledby=t-list]").getByRole("listitem").filter({hasText:"Tabs Test Client"}).filter({hasText:/days? late/});
-  await expect(late).toContainText("File GSTR-1 (monthly) for Jan 2026");
+  const late=owner.locator("section[aria-labelledby=g-late]").getByRole("listitem").filter({hasText:"Tabs Test Client"});
+  await expect(late).toContainText("GSTR-1");
   await query(local.dbUrl,"update public.clients set archived_at=now() where id=$1",[client]);
   await owner.reload();
   await expect(late).toHaveCount(0);

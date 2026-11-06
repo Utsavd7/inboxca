@@ -212,7 +212,11 @@ export function Count({ value, id }: { value: number; id?: string }) {
       return;
     }
     const run = animate(from, value, { ...spring, onUpdate: (now) => (el.textContent = Math.round(now).toLocaleString("en-IN")) });
-    return () => run.stop();
+    // Stopped early (the page drawn again, reduced motion read late): the count still ends true.
+    return () => {
+      run.stop();
+      el.textContent = value.toLocaleString("en-IN");
+    };
   }, [value, reduce]);
   return (
     <>

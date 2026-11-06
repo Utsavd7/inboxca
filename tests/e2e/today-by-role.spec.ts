@@ -6,8 +6,9 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { addPerson, appKey, localSupabase, query, seedFirm, signIn } from "./local-supabase";
 
 // Today by role (PLAN.md "Today by role"): one screen for each person in a firm of 1,200
-// clients, their own list of at most 7 with See all for the rest, and this week's numbers for
-// their role. The owner sees the firm, the manager their team, staff their own clients.
+// clients, their own list of at most 6 in its groups with See all for the rest, and the few
+// numbers for their role. The owner sees the firm, the manager their team, staff their own
+// clients. One count everywhere: the greeting, the list, its groups and See all.
 // Invented firm, people and clients only. Skipped when local Supabase is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase");
@@ -31,7 +32,9 @@ async function open(browser: Browser, who: keyof typeof emails) {
   return (pages[who] = page);
 }
 const list = (page: Page) => page.locator("section[aria-labelledby=t-list]");
-const week = (page: Page) => page.getByRole("region", { name: "This week" });
+const group = (page: Page, name: "late" | "week" | "waits" | "other") => page.locator(`section[aria-labelledby=g-${name}]`);
+const week = (page: Page) => page.locator("section[aria-labelledby=t-week]");
+const tile = (page: Page, href: string) => week(page).locator(`a[href="${href}"]`);
 // Nothing on Today scrolls at 1440 by 900: the page's scroll area is no taller than its window.
 const oneScreen = (page: Page) => page.locator(".stage-panel").evaluate((panel) => panel.scrollHeight <= panel.clientHeight + 1);
 
@@ -87,24 +90,38 @@ async function shoot(page: Page, name: string) {
   await page.context().clearCookies({ name: "theme" });
 }
 
-test("the owner sees the whole firm: 7 rows, See all, and the firm's numbers, on one screen", async () => {
+test("the owner sees the whole firm: 6 rows in groups, See all, and the firm's numbers, on one screen", async () => {
   const owner = pages.owner!;
   await owner.goto("/app");
   const rows = list(owner).getByRole("listitem");
-  await expect(rows).toHaveCount(7);
-  // The reply waited longer than the firm allows: red with no date to wait for, so first.
-  await expect(rows.first()).toContainText(`Reply to ${mehta}`);
-  await expect(rows.nth(1)).toContainText("File GSTR-1 (monthly) for Aug 2026");
-  await expect(rows.nth(1)).toContainText("10 days late");
-  // Every late client, Mehta's return due today, the call, the reply and Shah's return to e-verify.
+  await expect(rows).toHaveCount(6);
+  // Every late client, then Shah's return to e-verify this week, Mehta's return due today and
+  // the call waiting on Mehta, and the reply: one from each group, the rest of the room late.
   const all = BULK + 6;
-  await expect(owner.locator(".page-head")).toContainText(`${all.toLocaleString("en-IN")} things need you.`);
+  await expect(group(owner, "late").getByRole("listitem")).toHaveCount(3);
+  await expect(group(owner, "late")).toContainText((BULK + 2).toLocaleString("en-IN"));
+  await expect(group(owner, "late").getByRole("listitem").first()).toContainText("Invented Bulk Client");
+  await expect(group(owner, "week")).toContainText(shah);
+  await expect(group(owner, "waits").getByRole("listitem")).toHaveCount(1);
+  await expect(group(owner, "waits")).toContainText("2");
+  await expect(group(owner, "other")).toContainText(mehta);
+  await expect(owner.locator(".page-head")).toContainText(all.toLocaleString("en-IN"));
+  await expect(list(owner).locator(".app-card-head")).toContainText(all.toLocaleString("en-IN"));
   await expect(list(owner).getByRole("link", { name: `See all ${all.toLocaleString("en-IN")}` })).toHaveAttribute("href", "/app/work");
-  await expect(week(owner).getByRole("link", { name: /^Returns this month/ })).toBeVisible();
-  await expect(week(owner).getByRole("link", { name: /^Late / })).toContainText((BULK + 2).toLocaleString("en-IN"));
-  await expect(week(owner).getByRole("link", { name: /^Waiting for papers 1 client/ })).toHaveAttribute("href", "/app/clients?show=missing");
-  await expect(week(owner).getByRole("link", { name: /\d Waiting$/ })).toBeVisible();
+  await expect(tile(owner, "/app/calendar?view=month")).toBeVisible();
+  await expect(tile(owner, "/app/work?show=late")).toContainText((BULK + 2).toLocaleString("en-IN"));
+  await expect(tile(owner, "/app/clients?show=missing")).toContainText("1");
+  await expect(week(owner).getByRole("navigation", { name: "Work by step" })).toBeVisible();
   expect(await oneScreen(owner)).toBe(true);
+  // The return to e-verify opens on its own page at the File step.
+  await expect(group(owner, "week").locator(".row-end a")).toHaveAttribute("href", /\/app\/clients\/[^/]+\/returns\/[^/]+\?step=file$/);
+  // Nothing scrolls on a 1280 by 760 laptop either.
+  await owner.setViewportSize({ width: 1280, height: 760 });
+  await owner.goto("/app");
+  await expect(rows).toHaveCount(6);
+  expect(await oneScreen(owner)).toBe(true);
+  expect(await owner.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await owner.setViewportSize({ width: 1440, height: 900 });
   await shoot(owner, "owner");
 
   // See all: the same list a page at a time, with filters.
@@ -123,7 +140,7 @@ test("the owner sees the whole firm: 7 rows, See all, and the firm's numbers, on
   await expect(owner.getByRole("navigation", { name: "List pages" })).toContainText("Showing 26 to 50");
   await filters.getByRole("link", { name: /^Emails/ }).click();
   await expect(shown).toHaveCount(1);
-  await expect(shown).toContainText(`Reply to ${mehta}`);
+  await expect(shown).toContainText(mehta);
   await expect(owner.getByText("The 500 clients late the longest are here.")).toHaveCount(0);
   await filters.getByRole("link", { name: /^Late/ }).click();
   await expect(owner.getByText("The 500 clients late the longest are here.")).toBeVisible();
@@ -137,15 +154,17 @@ test("the manager sees their team's clients and the team's numbers", async () =>
   // whoever looks after the client, so to a manager for their team's people (return_pins). The
   // reply is given to Mehta's staff; late ones go to the owner and partners only.
   await expect(rows.filter({ hasText: mehta })).toHaveCount(3);
-  await expect(rows.filter({ hasText: `GSTR-3B for ${mehta}` })).toHaveCount(1);
+  await expect(group(manager, "late").getByRole("listitem").filter({ hasText: mehta })).toHaveCount(1);
+  // The GSTR-3B and the call both wait for Mehta's papers.
+  await expect(group(manager, "waits").getByRole("listitem").filter({ hasText: mehta })).toHaveCount(2);
+  await expect(group(manager, "waits").getByRole("listitem").filter({ hasText: "GSTR-3B" })).toHaveCount(1);
+  await expect(group(manager, "waits")).toContainText("Sales bills");
   await expect(list(manager)).not.toContainText(shah);
   await expect(list(manager)).not.toContainText("Invented Bulk Client");
-  await expect(rows.filter({ hasText: `Call ${mehta}` })).toContainText("Asked twice, still missing Sales bills for Sep 2026");
-  await expect(week(manager).getByRole("link", { name: /^Team returns this week 1 of 2 filed/ })).toHaveAttribute("href", "/app/calendar?view=week");
-  await expect(week(manager).getByRole("link", { name: /^Drafts to approve 0/ })).toHaveAttribute("href", "/app/work?show=approvals");
-  // Stuck: the call, and the GSTR-3B due today still waiting for its papers.
-  await expect(week(manager).getByRole("link", { name: /^Stuck 2/ })).toBeVisible();
-  await expect(week(manager).getByRole("listitem")).toHaveText([/^Today\s*2 returns$/]);
+  await expect(manager.locator(".page-head")).toContainText("3");
+  await expect(tile(manager, "/app/calendar?view=week")).toContainText(/1\D+2/);
+  await expect(tile(manager, "/app/work?show=late")).toContainText("1");
+  await expect(tile(manager, "/app/clients?show=missing")).toContainText("1");
   expect(await oneScreen(manager)).toBe(true);
   await shoot(manager, "manager");
 });
@@ -155,26 +174,26 @@ test("staff see their own clients only, with a button for each, and their own nu
   await staff.goto("/app");
   const rows = list(staff).getByRole("listitem");
   await expect(rows).toHaveCount(4);
-  // The late reply first (red, no date), then by date.
-  await expect(rows.nth(0)).toContainText(`Reply to ${mehta}`);
-  await expect(rows.nth(1)).toContainText("File GSTR-1 (monthly) for Aug 2026");
-  await expect(rows.nth(2)).toContainText(`GSTR-3B for ${mehta}, Sep 2026`);
-  await expect(rows.nth(1)).toContainText(mehta);
-  await expect(rows.nth(1).getByRole("link", { name: `See returns: ${mehta}` })).toBeVisible();
-  await expect(rows.filter({ hasText: `Reply to ${mehta}` }).getByRole("link", { name: `Reply to ${mehta}` })).toHaveAttribute("href", /\/app\/inbox\?mail=/);
+  // The late return first, the two waiting on Mehta's papers, then the reply.
+  await expect(rows.nth(0)).toContainText(mehta);
+  await expect(group(staff, "late").getByRole("link", { name: `See returns: ${mehta}` })).toBeVisible();
+  await expect(group(staff, "waits").getByRole("listitem")).toHaveCount(2);
+  const reply = group(staff, "other").locator(".row-end a[href^='/app/inbox?mail=']");
+  await expect(reply).toBeVisible();
   await expect(list(staff)).not.toContainText(shah);
   await expect(list(staff).getByRole("link", { name: /^See all/ })).toHaveCount(0);
-  await expect(staff.locator(".page-head")).toContainText("4 things need you.");
-  await expect(week(staff).getByRole("link", { name: /^Your returns this week 1 of 2 filed/ })).toBeVisible();
-  await expect(week(staff).getByRole("link", { name: /^Waiting on clients 1 client/ })).toBeVisible();
-  await expect(week(staff).getByRole("link", { name: /^Answered by InboxCA 0/ })).toBeVisible();
+  await expect(staff.locator(".page-head")).toContainText("4");
+  await expect(list(staff).locator(".app-card-head")).toContainText("4");
+  await expect(tile(staff, "/app/calendar?view=week")).toContainText(/1\D+2/);
+  await expect(tile(staff, "/app/clients?show=missing")).toContainText("1");
   // j and k move between the rows' buttons.
+  const buttons = list(staff).locator(".row-end > a:last-child");
   await staff.keyboard.press("j");
-  await expect(rows.nth(0).getByRole("link", { name: `Reply to ${mehta}` })).toBeFocused();
+  await expect(buttons.nth(0)).toBeFocused();
   await staff.keyboard.press("j");
-  await expect(rows.nth(1).getByRole("link", { name: `See returns: ${mehta}` })).toBeFocused();
+  await expect(buttons.nth(1)).toBeFocused();
   await staff.keyboard.press("k");
-  await expect(rows.nth(0).getByRole("link", { name: `Reply to ${mehta}` })).toBeFocused();
+  await expect(buttons.nth(0)).toBeFocused();
   expect(await oneScreen(staff)).toBe(true);
   await shoot(staff, "staff");
   // Their full list holds the same, and nothing to remind in bulk.

@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { aiCredits } from "@/src/lib/ai";
-import { addDays, dueLabel, isItr, periodLabel, todayInIndia } from "@/src/lib/calendar";
+import { addDays, dueLabel, isItr, todayInIndia } from "@/src/lib/calendar";
 import { periodName } from "@/src/lib/documents";
 import { pages } from "@/src/lib/paged";
 import { downloadUse } from "@/src/lib/download-use";
@@ -18,11 +18,11 @@ import { answersWorkItems } from "@/src/lib/work/answers";
 import { formsWorkItems } from "@/src/lib/work/forms";
 import { governmentUpdates, governmentWorkItems } from "@/src/lib/work/government";
 import { gstMatchWorkItems } from "@/src/lib/work/gst-match";
-import { inboxWeek, inboxWorkItems } from "@/src/lib/work/inbox";
+import { inboxWorkItems } from "@/src/lib/work/inbox";
 import { inboxTeamWorkItems } from "@/src/lib/work/inbox-team";
 import { itrCheckWorkItems, itrVerifyWorkItems } from "@/src/lib/work/itr-check";
 import { papersWorkItems } from "@/src/lib/work/papers";
-import { groupRepeats, isLead, rankWork, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
+import { groupRepeats, isLead, rankWork, shortReturn, visibleTo, type Area, type Listed } from "@/src/lib/work/today";
 import { returnPage } from "./return-back";
 import { returnStages } from "./return-work";
 import { firmAccounts } from "./shell-data";
@@ -175,7 +175,7 @@ export async function workFor(ctx: Context, late: number) {
       if (file.status === "deleted" || !waiting.has(file.id) || !membership.may("mark_filed", file.client_id)) return [];
       const name = file.clients?.name ?? "";
       const own = await returnPage(supabase, firm, { client: file.client_id, form: meta.form, period: file.period_key ?? "", registration: meta.registration });
-      return [{ key: `confirm:${file.id}`, title: `${formName(meta.form)} for ${name}, ${periodName(file.period_key ?? "", isItr(meta.form) ? "income_tax" : null)}`, why: "The acknowledgement arrived. Check it and mark the return filed", client: { id: file.client_id, name }, action: { label: meta.status === "draft" ? "Review and approve" : "Mark filed", href: own ? `${own}?step=${meta.status === "draft" ? "approve" : "file"}` : `/app/clients/${file.client_id}?tab=outputs` }, audience: "assigned", area: "returns" }];
+      return [{ key: `confirm:${file.id}`, title: `${formName(meta.form)} ${periodName(file.period_key ?? "", isItr(meta.form) ? "income_tax" : null).replace(/ \(FY .*\)$/, "")}`, why: "Acknowledgement arrived", client: { id: file.client_id, name }, action: { label: meta.status === "draft" ? "Review and approve" : "Mark filed", href: own ? `${own}?step=${meta.status === "draft" ? "approve" : "file"}` : `/app/clients/${file.client_id}?tab=outputs` }, audience: "assigned", area: "returns" }];
     })).then((lists) => lists.flat());
   }, failing("confirmations"));
 
@@ -185,8 +185,7 @@ export async function workFor(ctx: Context, late: number) {
     count: count ?? data?.length ?? 0,
     items: (data ?? []).map((row): Listed => {
       const days = Math.round((Date.parse(today) - Date.parse(row.due_on)) / DAY);
-      const name = `${rule.get(row.code)?.name ?? row.code ?? ""} for ${periodLabel(rule.get(row.code)?.frequency ?? null, row.period_key, row.code)}`;
-      return { key: `late:${row.client_id}`, title: `File ${name}`, why: `${plural(days, "day", "days")} late${row.returns > 1 ? `, and ${plural(row.returns - 1, "more late return", "more late returns")}` : ""}`, client: { id: row.client_id, name: row.client_name }, due: row.due_on, urgent: true, action: { label: "See returns", href: `/app/clients/${row.client_id}?tab=due` }, audience: "assigned", area: "returns" };
+      return { key: `late:${row.client_id}`, title: shortReturn(row.code ?? "", row.period_key ?? "", today, rule.get(row.code ?? "")), why: `${plural(days, "day", "days")} late${row.returns > 1 ? `, and ${plural(row.returns - 1, "more late return", "more late returns")}` : ""}`, client: { id: row.client_id, name: row.client_name }, due: row.due_on, urgent: true, action: { label: "See returns", href: `/app/clients/${row.client_id}?tab=due` }, audience: "assigned", area: "returns" };
     }),
   }), (error) => ({ count: 0, items: failing("late_clients")(error) }));
 
@@ -195,8 +194,8 @@ export async function workFor(ctx: Context, late: number) {
   const licences = Promise.resolve(supabase.from("tasks").select("id, client_id, due_on, details, clients!inner(name, archived_at)").eq("firm_id", firm).eq("kind", "licence").neq("status", "filed").is("clients.archived_at", null).lte("due_on", addDays(today, 30)).order("due_on").limit(50).throwOnError()).then(({ data }) =>
     (data ?? []).map((task): Listed => {
       const label = (task.details as { label?: string }).label ?? "Licence";
-      // A DSC held by the client itself already names them: "DSC of Ramesh Shah expires".
-      return { key: `licence:${task.id}`, title: `${label.endsWith(` of ${task.clients.name}`) ? label : `${label} for ${task.clients.name}`} ${task.due_on < today ? "has expired" : "expires"}`, why: task.due_on < today ? `It ran out on ${dueLabel(task.due_on)}. Once it is renewed, mark it on the Calendar` : `Valid until ${dueLabel(task.due_on)}`, client: { id: task.client_id, name: task.clients.name }, due: task.due_on, urgent: task.due_on < today, action: { label: "See on Calendar", href: `/app/calendar?day=${task.due_on}` }, audience: "assigned", area: "returns" };
+      // A DSC held by the client itself names them, who the row names first: "DSC of Ramesh Shah".
+      return { key: `licence:${task.id}`, title: label.replace(` of ${task.clients.name}`, ""), why: task.due_on < today ? "Expired. Once renewed, mark it on the Calendar" : "Expires soon", client: { id: task.client_id, name: task.clients.name }, due: task.due_on, urgent: task.due_on < today, action: { label: "See on Calendar", href: `/app/calendar?day=${task.due_on}` }, audience: "assigned", area: "returns" };
     }), failing("licences"));
 
   // A client's to-do (20261110800000_client_todos.sql) from a week before its date: its person's,
@@ -204,7 +203,7 @@ export async function workFor(ctx: Context, late: number) {
   const todos = Promise.resolve(supabase.from("tasks").select("id, client_id, due_on, details, clients!inner(name, archived_at)").eq("firm_id", firm).eq("kind", "todo").eq("status", "upcoming").is("clients.archived_at", null).lte("due_on", addDays(today, 7)).order("due_on").limit(50).throwOnError()).then(({ data }) =>
     (data ?? []).map((task): Listed => {
       const { title, for: person } = task.details as { title?: string; for?: string };
-      return { key: `todo:${task.id}`, title: title ?? "To-do", why: task.due_on < today ? `Was due ${dueLabel(task.due_on)}` : task.due_on === today ? "Today" : `By ${dueLabel(task.due_on)}`, client: { id: task.client_id, name: task.clients.name }, due: task.due_on, urgent: task.due_on < today, mine: person ? person === userId : owner, action: { label: "Done", href: `/app/clients/${task.client_id}` }, audience: "firm", area: "firm" };
+      return { key: `todo:${task.id}`, title: title ?? "To-do", why: task.due_on < today ? "To-do, past its date" : task.due_on === today ? "To-do for today" : "To-do", client: { id: task.client_id, name: task.clients.name }, due: task.due_on, urgent: task.due_on < today, mine: person ? person === userId : owner, action: { label: "Done", href: `/app/clients/${task.client_id}` }, audience: "firm", area: "firm" };
     }), failing("todos"));
 
   // What only the owner or partners act on, and a notice's date close by. A client asked three
@@ -240,13 +239,13 @@ export async function workFor(ctx: Context, late: number) {
       ...(waitingIds.length ? [{ key: "pcs", title: `Approve ${plural(waitingIds.length, "PC", "PCs")}`, why: seenToday === waitingIds.length ? "Signed in from your office today" : "Waiting for your approval before staff can use them", action: { label: "Approve", href: "/app/settings#office" }, audience: "firm" as const }] : []),
       ...(notices.data ?? []).map((notice) => ({
         key: `notice:${notice.id}`,
-        title: `${notice.assigned_to === userId ? "Reply to" : "Review"} the notice for ${notice.client_name}`,
+        title: notice.assigned_to === userId ? "Notice to reply to" : "Notice to review",
         mine: notice.assigned_to === userId,
-        why: `Its ${notice.action_date ? "action date" : "review deadline"} ${notice.due_on < today ? "has passed" : notice.due_on === today ? "is today" : "is within 3 days"}`,
+        why: `${notice.action_date ? "Action date" : "Review deadline"} ${notice.due_on < today ? "has passed" : notice.due_on === today ? "is today" : "is near"}`,
         client: { id: notice.client_id, name: notice.client_name },
         due: notice.due_on,
         urgent: notice.due_on <= today,
-        action: { label: "Review notice", href: `/app/notices?notice=${notice.id}` },
+        action: { label: "Open notice", href: `/app/notices?notice=${notice.id}` },
         audience: "assigned" as const,
       })),
       ...(alerts?.data ?? [])
@@ -290,30 +289,17 @@ export async function workFor(ctx: Context, late: number) {
   return { items: shown, total: shown.length + Math.max(0, lateCount - lateList.length), late: lateCount, failed };
 }
 
-// This week's numbers for the person's role, each opening its list.
+// Today's few numbers, each opening its list: returns filed of those due (the firm's this month
+// for the owner and partners, this week's of their own clients for anyone else), clients late and
+// clients asked for papers not all in.
 export async function weekFor(ctx: Context, work: ReturnType<typeof workFor>) {
   const { supabase, membership } = ctx;
   const today = todayInIndia();
   const monday = whenRange("week", today).from!.slice(0, 10);
-  const lead = isLead(membership.role);
   const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).toISOString().slice(0, 10);
-  const [range, mail, load, people] = await Promise.all([
-    // null when it could not be read, so Today says so rather than "none due".
-    Promise.resolve(supabase.rpc("work_numbers", lead ? { target_firm: membership.firmId, since: `${today.slice(0, 8)}01`, until: monthEnd } : { target_firm: membership.firmId, since: monday, until: addDays(monday, 6), mine: true })).then(({ data, error }) => (error ? notRead("work_numbers", error) : (data?.[0] ?? { due: 0, filed: 0, waiting: 0 }))),
-    membership.role === "manager" ? null : inboxWeek(ctx),
-    // null when it could not be read, so Today says so rather than "no returns".
-    membership.role === "manager" ? Promise.resolve(supabase.rpc("team_load", { target_firm: membership.firmId, until: addDays(monday, 6) })).then(({ data, error }) => (error ? notRead("team_load", error) : (data ?? []))) : [],
-    membership.role === "manager" ? Promise.resolve(supabase.rpc("firm_people", { target_firm: membership.firmId })).then(({ data }) => new Map(data?.map((person) => [person.user_id, person.email]))) : new Map<string, string>(),
-  ]);
-  const { items, late } = await work;
-  return {
-    range,
-    mail,
-    late,
-    approve: items.filter((item) => item.area === "returns" && item.key.startsWith("approve:")).length,
-    stuck: items.filter((item) => item.key.startsWith("call:") || (item.area === "returns" && item.urgent && !!item.due && item.due >= today)).length,
-    busiest: load?.map((row) => ({ id: row.user_id, email: people.get(row.user_id) ?? "", returns: row.returns })) ?? null,
-  };
+  // null when it could not be read, so Today says so rather than "none due".
+  const range = await Promise.resolve(supabase.rpc("work_numbers", isLead(membership.role) ? { target_firm: membership.firmId, since: `${today.slice(0, 8)}01`, until: monthEnd } : { target_firm: membership.firmId, since: monday, until: addDays(monday, 6), mine: true })).then(({ data, error }) => (error ? notRead("work_numbers", error) : (data?.[0] ?? { due: 0, filed: 0, waiting: 0 })));
+  return { range, late: (await work).late };
 }
 
 // The returns this person works on, late or due in the next 30 days, grouped by the step each

@@ -136,28 +136,20 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   await expect(pane(owner)).toContainText("Asks something InboxCA could not answer");
 });
 
-test("Today counts the week's email, each figure opening its list in the Inbox", async () => {
-  await owner.goto("/app");
-  const week = owner.getByRole("region", { name: "This week" });
-  for (const [label, count] of [[/Answered by InboxCA$/, 1], [/By your team$/, 1], [/\d Waiting$/, 2]] as const)
-    await expect(week.getByRole("link", { name: label })).toContainText(String(count));
-  await week.getByRole("link", { name: /Answered by InboxCA$/ }).click();
-  await expect(owner).toHaveURL(/\/app\/inbox\?when=week&status=answered$/);
+test("the Inbox lists the week's email by what happened to it", async () => {
+  await owner.goto("/app/inbox?when=week&status=answered");
   await expect(list(owner).getByRole("listitem")).toHaveCount(1);
   await expect(row(owner, `ITR copy ${tag}`)).toContainText("Answered by InboxCA");
-  await owner.goto("/app");
-  await week.getByRole("link", { name: /\d Waiting$/ }).click();
-  await expect(owner).toHaveURL(/\/app\/inbox\?when=week&status=reply$/);
+  await owner.goto("/app/inbox?when=week&status=reply");
   await expect(list(owner).getByRole("listitem")).toHaveCount(2);
 });
 
 test("a person sees only the email of clients they may see, everywhere", async () => {
-  // Today: their own client's email to reply to and the week's answered email, never the hidden client's.
+  // Today: their own client's email to reply to, never the hidden client's.
   await staff.goto("/app");
   const mine = staff.locator("section[aria-labelledby=t-list]");
-  await expect(mine.getByRole("link", { name: `Reply to ${shah.name}` }).first()).toBeVisible();
+  await expect(mine.getByRole("listitem").filter({ hasText: shah.name }).filter({ has: staff.locator("a[href^='/app/inbox?mail=']") }).first()).toBeVisible();
   await expect(mine).not.toContainText(hidden.name);
-  await expect(staff.getByRole("region", { name: "This week" }).getByRole("link", { name: /^Answered by InboxCA/ })).toContainText("1");
   for (const path of ["/app/inbox", "/app/inbox?status=reply", "/app/inbox?status=none", "/app/inbox?when=week"]) {
     await staff.goto(path);
     await expect(list(staff).getByRole("listitem").first()).toBeVisible();

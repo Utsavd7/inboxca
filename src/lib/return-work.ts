@@ -46,16 +46,14 @@ function dueWords(due:string,today:string) {
   return days<=0 ? "due today" : days===1 ? "due tomorrow" : `due in ${days} days`;
 }
 
-// A pinned return, as a title and a line under it: "GSTR-3B for Mehta Textiles, Sep 2026" and
-// "Due in 4 days. Filled, 3 figures not checked yet". A TDS or TCS return is only pinned to
-// approve or to file.
-export function pinWords(pin:Pin,today:string) {
-  const title=`${returnOf(pin.code) ?? (pin.code==="TCS_RET" ? "TCS return" : "TDS return")} for ${pin.client_name}, ${returnPeriod(pin.code,pin.period_key)}`,due=dueWords(pin.due_on,today);
-  if(pin.kind==="waiting") return {title:`Waiting for someone else to approve ${title}`,meta:"You checked its figures, so another approver gives the second approval"};
-  if(pin.kind==="approve") return {title,meta:"Checked and ready for your approval"};
-  if(pin.kind==="approved") return {title,meta:"Approved. Download it and file on the portal"};
-  const held=pin.stage==="filled" ? `filled, ${figures(pin.open ?? 0)} not checked yet` : pin.stage==="rejected" ? "draft sent back" : pin.missing ? missingWords[pin.missing] : pin.kind==="fill" ? "not filled yet" : pin.stage==="in" ? "papers in, figures not read yet" : "papers still missing";
-  return {title,meta:`${due[0].toUpperCase()}${due.slice(1)}. ${held[0].toUpperCase()}${held.slice(1)}`};
+// A pinned return's one short status, its name and due date shown beside it: "44 figures to
+// check", "Sales register missing". A TDS or TCS return is only pinned to approve or to file.
+export function pinWords(pin:Pin) {
+  if(pin.kind==="waiting") return "Waiting for someone else to approve";
+  if(pin.kind==="approve") return "Checked and ready for your approval";
+  if(pin.kind==="approved") return "Approved. Download it and file";
+  const held=pin.stage==="filled" ? `${figures(pin.open ?? 0)} to check` : pin.stage==="rejected" ? "Draft sent back" : pin.missing ? missingWords[pin.missing].replace(" still","") : pin.kind==="fill" ? "Not filled yet" : pin.stage==="in" ? "Papers in, figures not read yet" : pin.stage==="none" ? "Papers not asked for yet" : "Papers still missing";
+  return `${held[0].toUpperCase()}${held.slice(1)}`;
 }
 
 // Why InboxCA's own fill left a return for a person, by the code its job keeps

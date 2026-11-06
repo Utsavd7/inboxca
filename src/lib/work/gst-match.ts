@@ -33,7 +33,7 @@ export async function gstMatchWorkItems(ctx: { supabase: SupabaseClient<Database
     const counts = row.counts as unknown as Counts;
     const why = [counts.missing && bills(counts.missing, "not in GSTR-2B"), counts.extra && bills(counts.extra, "in GSTR-2B but not in the books"), counts.differ && bills(counts.differ, counts.differ === 1 ? "with a different amount" : "with different amounts"), counts.changed && bills(counts.changed, "corrected by the supplier")].filter(Boolean).join(", ");
     return {
-      key: `gst_match:${row.register_id}`, title: `Check GSTR-2B for ${row.client_name}`, why: `${periodName(row.period_key)}: ${why}`,
+      key: `gst_match:${row.register_id}`, title: `GSTR-2B ${periodName(row.period_key)}`, why,
       client: { id: row.client_id, name: row.client_name }, due: row.due_on, urgent: row.due_on <= soon,
       action: { label: "See differences", href: own?.length === 1 ? `/app/clients/${row.client_id}/returns/${own[0].id}?purchases=${row.register_id}#gst-match` : `/app/clients/${row.client_id}?tab=extraction&purchases=${row.register_id}#gst-match` }, audience: "assigned",
     };

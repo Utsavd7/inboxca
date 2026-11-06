@@ -19,12 +19,12 @@ export async function inboxTeamWorkItems({ supabase, membership, userId }: Conte
   const emailOf = new Map(people?.map((person) => [person.user_id, person.email]));
   return (rows ?? []).filter((row) => row.assignee === userId || (firmWide && row.late)).map((row): WorkItem => ({
     key: `reply:${row.email_id}`,
-    title: `Reply to ${row.client_name ?? (row.reason_code === "new_client_enquiry" ? "a new enquiry" : "a contact")}`,
-    why: [replyReasons[row.reason_code ?? ""] ?? replyReasons.no_rule, waitingWords(row.days), row.assignee !== userId && (row.assignee ? `For ${personName(emailOf.get(row.assignee))}` : "Given to nobody")].filter(Boolean).join(". "),
+    title: row.client_name ? "Email to answer" : row.reason_code === "new_client_enquiry" ? "Email from a new enquiry" : "Email from a contact",
+    why: [waitingWords(row.days) || (replyReasons[row.reason_code ?? ""] ?? replyReasons.no_rule), row.assignee !== userId && (row.assignee ? `For ${personName(emailOf.get(row.assignee))}` : "Given to nobody")].filter(Boolean).join(". "),
     ...(row.client_id && row.client_name && { client: { id: row.client_id, name: row.client_name } }),
     urgent: row.late,
     action: { label: "Reply", href: `/app/inbox?mail=${row.email_id}` },
     audience: row.assignee === userId ? "assigned" : "firm",
-    ...(row.client_name && { many: { title: `emails from ${row.client_name} to reply to`, why: "Each waits for your reply in the Inbox, the oldest first" } }),
+    ...(row.client_name && { many: { title: "emails to answer", why: "Each waits for a reply in the Inbox, the oldest first" } }),
   }));
 }

@@ -1,6 +1,7 @@
 import type {currentMember} from "../member";
 import {pinWords,type Pin} from "../return-work";
 import {todayInIndia} from "../calendar";
+import {shortReturn} from "./today";
 
 export type WorkItem = {
   key: string;
@@ -13,6 +14,7 @@ export type WorkItem = {
   audience: "assigned" | "approver" | "firm";
   // Given to this person by name (a notice's owner): shown whoever looks after the client.
   mine?: boolean;
+  waits?: boolean;
 };
 type Member=Awaited<ReturnType<typeof currentMember>>;
 
@@ -37,8 +39,8 @@ export async function formsWorkItems({supabase,membership}:{supabase:Member["sup
   const {data}=await supabase.rpc("return_pins",{target_firm:membership.firmId}).throwOnError();
   const today=todayInIndia();
   return ((data ?? []) as Pin[]).map(pin=>{
-    const {title,meta}=pinWords(pin,today),[href,label]=action(pin);
-    return {key:`${pin.kind}:${pin.task}`,title,why:meta,client:{id:pin.client,name:pin.client_name},due:pin.due_on,urgent:!["approve","approved","waiting"].includes(pin.kind),
-      action:{label,href},audience:pin.kind==="approve" ? "approver" : "assigned"};
+    const [href,label]=action(pin);
+    return {key:`${pin.kind}:${pin.task}`,title:shortReturn(pin.code,pin.period_key,today),why:pinWords(pin),client:{id:pin.client,name:pin.client_name},due:pin.due_on,urgent:!["approve","approved","waiting"].includes(pin.kind),
+      waits:pin.kind==="missing" && pin.missing!=="return" && pin.stage!=="none",action:{label,href},audience:pin.kind==="approve" ? "approver" : "assigned"};
   });
 }
