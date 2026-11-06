@@ -120,13 +120,13 @@ test("tags, a note and a licence date on the client; the list filters by tag; th
   await panel.getByRole("button", { name: "Add expiry date" }).click();
   await expect(details).toContainText(`FSSAI licence: until ${dueLabel(until)}`);
   expect(await logged("licence.added")).toHaveLength(1);
-  // On the Calendar and Today before the date, renewed in one press.
+  // On the Calendar and the person's list before the date, renewed in one press.
   await owner.goto(`/app/calendar?day=${until}`);
   const row = owner.getByRole("row").filter({ hasText: `Mehta Traders ${tag}` });
   await expect(row).toContainText("FSSAI licence");
   await expect(row).toContainText("Expires");
-  await owner.goto("/app");
-  await expect(owner.getByRole("listitem").filter({ hasText: `FSSAI licence for Mehta Traders ${tag} expires` })).toBeVisible();
+  await owner.goto("/app/work");
+  await expect(owner.getByRole("listitem").filter({ hasText: `Mehta Traders ${tag}` }).filter({ hasText: "FSSAI licence" })).toBeVisible();
   await owner.goto(`/app/calendar?day=${until}`);
   await row.getByRole("button", { name: /Mark .* renewed/ }).click();
   await expect(owner.getByRole("row").filter({ hasText: `Mehta Traders ${tag}` })).toContainText("Renewed");

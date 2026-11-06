@@ -1,4 +1,4 @@
-import { BellOff, CalendarDays, KeyRound, Layers, ListChecks, Rocket, TriangleAlert } from "lucide-react";
+import { BellOff, CalendarDays, KeyRound, ListChecks, Rocket, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -9,8 +9,8 @@ import { canManageClients } from "@/src/lib/clients";
 import { todayInIndia } from "@/src/lib/calendar";
 import { describeHours, type Hours } from "@/src/lib/hours";
 import { currentMember } from "@/src/lib/member";
-import { personName, roleNames } from "@/src/lib/roles";
-import { isLead } from "@/src/lib/work/today";
+import { roleNames } from "@/src/lib/roles";
+import { isLead, pickShown, todayGroups } from "@/src/lib/work/today";
 import { OfficePanel } from "./office-panel";
 import { ComputerWaits, problems } from "./new-computers";
 import { GovLine } from "./gov-line";
@@ -24,8 +24,8 @@ import { PlanFit } from "./settings/billing";
 import { WarmLink } from "./ui-client";
 import "./today.css";
 
-// Today shows this many of the person's list; See all opens the rest.
-const SHOWN = 7;
+// Today shows this many of the person's list, so it fits a 1280 by 760 laptop; See all opens the rest.
+const SHOWN = 6;
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-IN")} ${n === 1 ? one : many}`;
 
 type Params = { dropped?: string; error?: string; asked?: string; panel?: string; done?: string };
@@ -33,10 +33,11 @@ type Context = Parameters<typeof workFor>[0];
 
 // Today, one screen for each person whatever the firm's size (PLAN.md "Today by role"): a
 // greeting with how many things need them, at most two lines about the firm (Attention), their
-// list (what waits for their yes first, at most 7 in all, most urgent first, See all for the
-// rest) and this week in a few numbers, each opening its list. The owner and partners see the
-// firm, a manager their team and what waits for their approval, staff and front desk their own
-// clients. Every query starts at once and each part shows as soon as its data is in.
+// list in four groups (late, due this week, waiting on clients, the rest; at most 6 rows in all,
+// See all for the rest) and one card of a few numbers with the returns by step, each opening its
+// list. The owner and partners see the firm, a manager their team and what waits for their
+// approval, staff and front desk their own clients. Every query starts at once and each part
+// shows as soon as its data is in.
 export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
   const { dropped, error, asked, panel, done } = await searchParams;
   const { supabase, userId, membership, deviceStatus, connectionWaiting, pcKey, ownerDevice } = await currentMember();
@@ -104,16 +105,9 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
         <Suspense fallback={<Hold shown=".today-list"><CardSkeleton title="Your list" rows={5} /></Hold>}>
           <YourList work={work} ctx={ctx} />
         </Suspense>
-        <div className="today-side">
-          <Suspense fallback={<Hold shown=".today-week"><CardSkeleton title="This week" rows={3} /></Hold>}>
-            <ThisWeek week={week} role={membership.role} />
-          </Suspense>
-          {queue && (
-            <Suspense fallback={<Hold shown=".today-steps"><CardSkeleton title="Work by step" rows={3} /></Hold>}>
-              <ByStep queue={queue} />
-            </Suspense>
-          )}
-        </div>
+        <Suspense fallback={<Hold shown=".today-week"><CardSkeleton title={isLead(membership.role) ? "This month" : "This week"} rows={3} /></Hold>}>
+          <Numbers week={week} role={membership.role} queue={queue} />
+        </Suspense>
       </div>
 
       <Presence>
@@ -219,7 +213,7 @@ async function Attention({ ctx }: { ctx: Context }) {
         <div className="today-line" role="region" aria-label="Client reminders">
           <BellOff size={16} aria-hidden />
           <span className="grow">
-            <strong>Client reminders are paused</strong> for due dates nobody has checked against the government notification yet. You can confirm them yourself, or wait for InboxCA. You can still ask for papers yourself.
+            <strong>Client reminders are paused</strong> for due dates not yet checked.
           </span>
           <Link className="b b-secondary b-small" href="/app/settings?group=reminders#due-dates">Confirm due dates</Link>
         </div>
@@ -231,146 +225,122 @@ async function Attention({ ctx }: { ctx: Context }) {
   );
 }
 
-// Your list: the first 7 of everything that needs this person, most urgent first.
+// Your list: what fits of everything that needs this person, in its four groups, one from each
+// group first; each group says how many it has, and they add up to the count beside the title.
 async function YourList({ work, ctx }: { work: ReturnType<typeof workFor>; ctx: Context }) {
   const { items, total, failed } = await work;
   const today = todayInIndia();
-  const shown = items.slice(0, SHOWN);
-  const red = shown.some((item) => item.urgent || (!!item.due && item.due < today));
+  const groups = pickShown(items, today, SHOWN);
+  // The late clients beyond those read are late too.
+  groups[0].count += total - items.length;
+  const shown = groups.reduce((sum, group) => sum + group.items.length, 0);
   return (
-    <Card id="t-list" title="Your list" Icon={ListChecks} kind="approve" count={total} countTone={red ? "late" : "blue"} className="today-list">
-      {failed && <NotLoaded />}
-      {shown.length ? (
-        <WorkRows name="today" items={shown} today={today} membership={ctx.membership} />
-      ) : (
-        !failed && <Calm title="You are all caught up" line="Nothing waits for you. New work for your clients shows here first." />
-      )}
-      {total > SHOWN && (
-        <div className="app-card-foot">
+    <Card
+      id="t-list"
+      title="Your list"
+      Icon={ListChecks}
+      kind="approve"
+      // The same number as the greeting at every moment, so it does not count up.
+      count={total ? total.toLocaleString("en-IN") : null}
+      countTone={groups[0].count ? "late" : "blue"}
+      className="today-list"
+      end={
+        total > shown && (
           <WarmLink className="b b-ghost b-small" href="/app/work">
             See all {total.toLocaleString("en-IN")}
           </WarmLink>
-        </div>
+        )
+      }
+    >
+      {failed && <NotLoaded />}
+      {shown ? (
+        groups.map(({ group, count, items }) =>
+          items.length ? (
+            <section key={group} className={`today-group is-${group}`} aria-labelledby={`g-${group}`}>
+              <h3 id={`g-${group}`}>
+                {todayGroups[group]} <span>{count.toLocaleString("en-IN")}</span>
+              </h3>
+              <WorkRows name={`today-${group}`} items={items} today={today} membership={ctx.membership} />
+            </section>
+          ) : null,
+        )
+      ) : (
+        !failed && <Calm title="You are all caught up" line="Nothing waits for you. New work for your clients shows here first." />
       )}
     </Card>
   );
 }
 
-// This week in three or four numbers for the person's role, each opening its list.
-async function ThisWeek({ week, role }: { week: ReturnType<typeof weekFor>; role: string }) {
-  const { range, mail, late, approve, stuck, busiest } = await week;
-  if (!range)
-    return (
-      <Card id="t-week" title="This week" Icon={CalendarDays} kind="week" className="today-week">
-        <NotLoaded />
-      </Card>
-    );
-  const tiles = isLead(role) ? (
-    <>
-      <Tile id="w-month" href="/app/calendar?view=month" label="Returns this month" value={range.filed} of={range.due} sub={range.due ? "filed" : "None due this month"} />
-      <Tile id="w-late" href="/app/work?show=late" label="Late" value={late} red={!!late} sub={late ? `${late === 1 ? "client has" : "clients have"} a late return` : "No client is late"} />
-      <div className="week-tile week-mail">
-        <span className="week-label">Emails this week</span>
-        {mail &&
-          (
-            [
-              ["status=answered", "Answered by InboxCA", mail.answered],
-              ["status=replied", "By your team", mail.replied],
-              ["status=reply", "Waiting", mail.waiting],
-            ] as const
-          ).map(([filter, label, value]) => (
-            <Link key={filter} href={`/app/inbox?when=week&${filter}`}>
-              <strong>
-                <Count id={`w-${filter}`} value={value} />
-              </strong>{" "}
-              {label}
-            </Link>
-          ))}
-      </div>
-      <Tile id="w-papers" href="/app/clients?show=missing" label="Waiting for papers" value={range.waiting} sub={`${range.waiting === 1 ? "client" : "clients"} asked, not all in`} />
-    </>
-  ) : role === "manager" ? (
-    <>
-      <Tile id="w-team" href="/app/calendar?view=week" label="Team returns this week" value={range.filed} of={range.due} sub={range.due ? "filed" : "None due this week"} />
-      <Tile id="w-approve" href="/app/work?show=approvals" label="Drafts to approve" value={approve} sub={approve ? "Checked and ready" : "None waiting"} />
-      <Tile id="w-stuck" href="/app/work" label="Stuck" value={stuck} red={!!stuck} sub="Near the due date, waiting for papers or checks" />
-      <div className="week-tile week-people">
-        <Link className="week-label" href="/app/people">
-          Busiest people
-        </Link>{" "}
-        {!busiest ? (
-          <span className="week-sub">Could not load this just now</span>
-        ) : busiest.length ? (
-          <ol>
-            {busiest.map((person) => (
-              <li key={person.id}>
-                <span className="grow">{personName(person.email)}</span>
-                <span>{plural(person.returns, "return", "returns")}</span>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <span className="week-sub">No returns open in your team this week</span>
-        )}
-      </div>
-    </>
-  ) : role === "front_desk" ? (
-    <>
-      <Tile id="w-reply" href="/app/inbox?when=week&status=reply" label="Waiting for a reply" value={mail?.waiting ?? 0} sub="Emails this week" />
-      <Tile id="w-answered" href="/app/inbox?when=week&status=answered" label="Answered by InboxCA" value={mail?.answered ?? 0} sub="Emails this week" />
-      <Tile id="w-papers" href="/app/clients?show=missing" label="Waiting on clients" value={range.waiting} sub={`${range.waiting === 1 ? "client" : "clients"} asked for papers`} />
-    </>
-  ) : (
-    <>
-      <Tile id="w-mine" href="/app/calendar?view=week" label="Your returns this week" value={range.filed} of={range.due} sub={range.due ? "filed" : "None due this week"} />
-      <Tile id="w-papers" href="/app/clients?show=missing" label="Waiting on clients" value={range.waiting} sub={`${range.waiting === 1 ? "client" : "clients"} asked for papers`} />
-      <Tile id="w-answered" href="/app/inbox?when=week&status=answered" label="Answered by InboxCA" value={mail?.answered ?? 0} sub="Emails this week" />
-    </>
-  );
+// At most three numbers for the person's role, each opening its list: returns filed of those
+// due (the firm's this month for the owner and partners, their own this week for anyone else),
+// clients late, and clients asked for papers not all in; then the returns late or due in 30 days
+// by the step they wait at (work-data.ts stepQueue), each opening that step on the Calendar.
+// Front desk keeps to emails and papers, so sees only who has papers to send.
+async function Numbers({ week, role, queue }: { week: ReturnType<typeof weekFor>; role: string; queue: Promise<Awaited<ReturnType<typeof stepQueue>> | null> | null }) {
+  const { range, late } = await week;
+  const lead = isLead(role);
   return (
-    <Card id="t-week" title="This week" Icon={CalendarDays} kind="week" className="today-week">
-      <div className="week-tiles">{tiles}</div>
-    </Card>
-  );
-}
-
-// The returns late or due in 30 days by the step they wait at (work-data.ts stepQueue), each
-// count opening that step on the Calendar.
-async function ByStep({ queue }: { queue: Promise<Awaited<ReturnType<typeof stepQueue>> | null> }) {
-  const steps = await queue;
-  return (
-    <Card id="t-steps" title="Work by step" Icon={Layers} kind="docs" className="today-steps">
-      {steps ? (
-        <nav className="step-counts" aria-label="Work by step">
-          {(Object.keys(queueSteps) as QueueStep[]).map((key) => (
-            <Press key={key} href={`/app/calendar?step=${key}`} className="step-count" aria-label={`${queueSteps[key]}: ${steps.groups[key].length}`}>
-              <span className="grow">{queueSteps[key]}</span>
-              <strong>
-                <Count id={`s-${key}`} value={steps.groups[key].length} />
-              </strong>
-            </Press>
-          ))}
-        </nav>
+    <Card id="t-week" title={lead ? "This month" : "This week"} Icon={CalendarDays} kind="week" className="today-week">
+      {range ? (
+        <div className="week-tiles">
+          {role !== "front_desk" && (
+            <>
+              <Tile id="w-filed" href={`/app/calendar?view=${lead ? "month" : "week"}`} label="Returns filed" value={range.filed} of={range.due} />
+              <Tile id="w-late" href="/app/work?show=late" label="Late clients" value={late} red={!!late} />
+            </>
+          )}
+          <Tile id="w-papers" href="/app/clients?show=missing" label="Waiting on clients" value={range.waiting} />
+        </div>
       ) : (
         <NotLoaded />
       )}
+      {queue && (
+        <Suspense fallback={<div className="card-skel"><span className="skel" /></div>}>
+          <ByStep queue={queue} />
+        </Suspense>
+      )}
     </Card>
+  );
+}
+
+// The five steps as one strip: a bar of how the returns spread over them, and each step's count.
+async function ByStep({ queue }: { queue: Promise<Awaited<ReturnType<typeof stepQueue>> | null> }) {
+  const steps = await queue;
+  if (!steps) return <NotLoaded />;
+  const keys = Object.keys(queueSteps) as QueueStep[];
+  return (
+    <nav className="step-strip" aria-label="Work by step">
+      <span className="step-bar" aria-hidden>
+        {keys.map((key) => <i key={key} className={`s-${key}`} style={{ flexGrow: steps.groups[key].length }} />)}
+      </span>
+      {keys.map((key) => (
+        <Press key={key} href={`/app/calendar?step=${key}`} className="step-count" aria-label={`${queueSteps[key]}: ${steps.groups[key].length}`}>
+          <strong>
+            <Count id={`s-${key}`} value={steps.groups[key].length} />
+          </strong>
+          <span>{queueSteps[key]}</span>
+        </Press>
+      ))}
+    </nav>
   );
 }
 
 // With nothing due, its words alone say so, not a big 0 of 0.
-function Tile({ id, href, label, value, of, sub, red = false }: { id: string; href: string; label: string; value: number; of?: number; sub: string; red?: boolean }) {
+function Tile({ id, href, label, value, of, red = false }: { id: string; href: string; label: string; value: number; of?: number; red?: boolean }) {
   const none = of === 0 && !value;
   return (
     <Press href={href} className={`week-tile${red ? " is-red" : ""}${none ? " is-none" : ""}`} lift>
-      <span className="week-label">{label}</span>{" "}
-      {!none && (
-        <span className="week-big">
-          <Count id={id} value={value} />
-          {of !== undefined && <small> of {of.toLocaleString("en-IN")}</small>}
-        </span>
-      )}{" "}
-      <span className="week-sub">{sub}</span>
+      <span className="week-big">
+        {none ? (
+          "None due"
+        ) : (
+          <>
+            <Count id={id} value={value} />
+            {of !== undefined && <small> of {of.toLocaleString("en-IN")}</small>}
+          </>
+        )}
+      </span>{" "}
+      <span className="week-label">{label}</span>
     </Press>
   );
 }

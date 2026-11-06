@@ -103,8 +103,8 @@ test("after two reminders with nothing back, the person who looks after the clie
   await db.end();
   staff = await (await browser.newContext()).newPage();
   await signIn(staff, staffEmail, staffKey);
-  const call = staff.getByRole("listitem").filter({ hasText: `Call ${client.name}` });
-  await expect(call).toContainText("Asked twice, still missing Sales bills, Purchase bills, Bank statement for Oct 2026");
+  const call = staff.locator("section[aria-labelledby=g-waits] li").filter({ hasText: client.name });
+  await expect(call).toContainText("Sales bills, Purchase bills, Bank statement");
   await staff.locator("section.today-list").screenshot({ path: test.info().outputPath("call-on-today.png") });
   await call.getByRole("link", { name: `See papers: ${client.name}` }).click();
   await expect(staff.getByRole("heading", { name: "Papers asked for", level: 1 })).toBeVisible();
@@ -154,8 +154,8 @@ test("once the client replies with every paper attached, the person is told to c
   expect((await ask()).details.items.every((item: { received: string[] }) => item.received.length === 1)).toBe(true);
 
   await staff.goto("/app");
-  const done = staff.getByRole("listitem").filter({ hasText: `All papers in for ${client.name}` });
-  await expect(done).toContainText("Check the figures for GSTR-1 test return for Oct 2026");
+  const done = staff.locator("section[aria-labelledby=t-list] li").filter({ hasText: client.name }).filter({ hasText: "GSTR-1 test return" });
+  await expect(done).toBeVisible();
   await staff.locator("section.today-list").screenshot({ path: test.info().outputPath("papers-in-on-today.png") });
   await done.getByRole("link", { name: `See papers: ${client.name}` }).click();
   await expect(staff.getByText("Every paper is in, so the reminders have stopped.")).toBeVisible();
@@ -203,8 +203,8 @@ test("a TDS client is asked for the quarter's TDS papers, its reply is filed und
   );
 
   await staff.goto("/app");
-  const ready = staff.getByRole("listitem").filter({ hasText: "TDS papers for Oct to Dec 2026 are in" });
-  await expect(ready).toContainText("Prepare the statement. 2 registers are ready to read");
+  const ready = staff.locator("section[aria-labelledby=t-list] li").filter({ has: staff.getByRole("button", { name: `Prepare statement: ${tds.name}` }) });
+  await expect(ready).toContainText("2 registers");
   await ready.getByRole("button", { name: `Prepare statement: ${tds.name}` }).click();
   await expect(staff).toHaveURL(new RegExp(`/app/clients/${tds.id}/tds\\?period=2026-12`));
   await staff.goto("/app");

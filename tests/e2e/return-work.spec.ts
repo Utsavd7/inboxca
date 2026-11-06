@@ -64,7 +64,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await runJobs(page.request,firm.firmId);
     expect(await query(local.dbUrl,prepared,[firm.firmId])).toHaveLength(1);
     // Pinned to the people who look after the client, to check; nothing can be downloaded yet.
-    await page.goto("/app");await expect(now.getByText("Due in 3 days. Filled, 1 figure not checked yet")).toBeVisible();
+    await page.goto("/app");await expect(now.getByRole("listitem").filter({hasText:name})).toContainText("1 figure");
     await page.goto(`/app/clients/${client}?tab=outputs`);
     const fill=page.locator("li").filter({has:page.getByRole("link",{name:forms[0].name,exact:true})});
     await expect(fill.getByRole("button",{name:"Download for filing"})).toBeDisabled();await expect(fill).toContainText("1 figure not checked yet.");
@@ -76,7 +76,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     expect(forms).toHaveLength(2);expect(forms[1].name).not.toContain("to check");expect(forms[1].prepared.status).toBe("draft");expect(forms[1].prepared.filled).toBeUndefined();
     await page.goto(returns);await expect(row.getByRole("img",{name:"4 of 6 steps done"})).toBeVisible();
     await page.goto("/app");await expect(now.getByText("Checked and ready for your approval")).toHaveCount(0);
-    await expect(now.getByText(`Waiting for someone else to approve GSTR-1 for ${name}, Sep 2026`)).toBeVisible();
+    await expect(now.getByRole("listitem").filter({hasText:name})).toContainText("Waiting for someone else to approve");
     // The manager approves from Today.
     const other=await managerContext.newPage();await signIn(other,managerEmail,managerKey);
     const managerNow=other.getByRole("region",{name:"Your list"});
@@ -85,7 +85,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await other.getByRole("button",{name:"Give second approval"}).click();
     await expect(other.getByRole("button",{name:"Download for filing"}).and(other.locator(":enabled"))).toBeVisible();
     // Approved: pinned to the client's people to download and file; filing closes it.
-    await page.goto("/app");await expect(now.getByText("Approved. Download it and file on the portal")).toBeVisible();
+    await page.goto("/app");await expect(now.getByRole("listitem").filter({hasText:name}).getByRole("link",{name:/Download and file/})).toBeVisible();
     await page.screenshot({path:test.info().outputPath("today.png"),fullPage:true});
     await page.goto(returns);await expect(row.getByRole("img",{name:"5 of 6 steps done"})).toBeVisible();
     await page.goto(`/app/clients/${client}?tab=outputs`);
@@ -93,7 +93,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await filing.locator("summary",{hasText:"Mark filed"}).click();await filing.getByLabel("Acknowledgement number, if known").fill("AA2409260012345");await filing.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select status from public.tasks where firm_id=$1",[firm.firmId]))[0].status,{timeout:30_000}).toBe("filed");
     await page.goto(`${returns}&show=filed`);await expect(page.locator("li").filter({hasText:"GSTR-1 Sep 2026"})).toContainText("AA2409260012345");
-    await page.goto("/app");await expect(now.getByText(`GSTR-1 for ${name}, Sep 2026`)).toHaveCount(0);
+    await page.goto("/app");await expect(now.getByRole("listitem").filter({hasText:name})).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   } finally {
     await managerContext.close().catch(()=>{});

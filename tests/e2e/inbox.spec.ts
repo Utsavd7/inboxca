@@ -221,7 +221,7 @@ test("a notice that asks something waits for a reply; Mark done clears it, with 
   await readMail();
   // Today says why it waits, in plain words, and when it came.
   await owner.goto("/app");
-  await expect(owner.locator("section[aria-labelledby=t-list] li").filter({ has: owner.getByRole("link", { name: `Reply to ${clientName}` }) })).toContainText("Sent a notice and asks what to do");
+  await expect(owner.locator("section[aria-labelledby=t-list] li").filter({ has: owner.getByRole("link", { name: `Reply: ${clientName}` }) })).toContainText("Sent a notice and asks what to do");
 
   await owner.goto("/app/inbox?show=reply");
   const row = list().getByRole("listitem").filter({ hasText: `GST notice ${tag}` });
@@ -380,7 +380,7 @@ test("a new client's enquiry about services or charges waits for the owner as Ne
   expect(await query(local.dbUrl, "select reason_code, client_id from public.requests where entity_id = $1 and kind = 'team_reply' and status = 'pending'", [mail])).toEqual([{ reason_code: "new_client_enquiry", client_id: null }]);
   expect((await query(local.dbUrl, "select count(*)::int as n from public.jobs where entity_id = $1", [mail]))[0].n).toBe(0);
   await owner.goto("/app/work?show=emails");
-  await expect(owner.getByRole("listitem").filter({ hasText: "Reply to a new enquiry" })).toContainText("asks about your services or charges");
+  await expect(owner.getByRole("listitem").filter({ has: owner.locator(`.row-end a[href='/app/inbox?mail=${mail}']`) })).toContainText("asks about your services or charges");
   await owner.goto(`/app/inbox?mail=${mail}`);
   await expect(pane().getByText(`${asker} is not a client yet and asks about your services or charges`)).toBeVisible();
   await pane().getByRole("link", { name: "Add as a client" }).click();

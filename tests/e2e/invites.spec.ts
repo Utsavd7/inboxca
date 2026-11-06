@@ -742,7 +742,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
   await owner.getByRole("button", { name: "Assign" }).click();
   await expect(owner.getByRole("dialog", { name: "Looked after by" }).getByRole("listitem").filter({ hasText: "Team: GST team" })).toContainText("Staff");
   await person.reload();
-  await expect(person.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Shared Client" }).filter({ hasText: /days? late/ }).filter({ visible: true })).toContainText("GSTR-1 (monthly) for Jan 2026");
+  await expect(person.locator("section[aria-labelledby=t-list] li").filter({ hasText: "Shared Client" }).filter({ hasText: /days? late/ }).filter({ visible: true })).toContainText("GSTR-1");
   await person.goto("/app/clients");
   await expect(person.getByRole("link", { name: "Shared Client" })).toBeVisible();
   await expect(person.locator(".page-head")).toContainText("1 client.");
@@ -1221,7 +1221,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const [support] = await query(local.dbUrl, "select document_type,work_type from public.documents where firm_id=$1 and name like '%Jan 2025.csv'", [firm.firmId]);
   expect(support).toMatchObject({ document_type: "Purchase bills", work_type: "income_tax" });
   await owner.goto("/app/work");
-  await expect(owner.locator("section[aria-labelledby=w-list] li").filter({ hasText: `Review the notice for ${mailClient}` })).toContainText("review deadline");
+  await expect(owner.locator("section[aria-labelledby=w-list] li").filter({ hasText: mailClient }).filter({ has: owner.locator("a[href^='/app/notices?notice=']") })).toBeVisible();
   await owner.goto("/app/notices");
   const notice = owner.locator("section[aria-label=Notices] tbody tr").filter({ hasText: mailClient });
   await expect(notice).toContainText("Notice u/s 148");
