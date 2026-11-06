@@ -30,7 +30,7 @@ export async function itrCheckWorkItems({supabase,membership}:{supabase:Member["
 
 // Each income tax return marked filed and not yet e-verified whose last day to verify (30 days
 // from filing, src/lib/calendar.ts) is within 7 days or past, in red once past, for the client's
-// assigned people; the portal's confirmation mail or Mark verified on the Returns tab clears it.
+// assigned people; the portal's confirmation mail or Mark verified on the return's own page clears it.
 export async function itrVerifyWorkItems({supabase,membership}:{supabase:Member["supabase"];membership:NonNullable<Member["membership"]>;userId?:string}):Promise<WorkItem[]> {
   const today=todayInIndia(),soon=addDays(today,7);
   const {data}=await supabase.from("tasks").select("id,client_id,period_key,due_on,details,clients(name)").eq("firm_id",membership.firmId).eq("kind","compliance").eq("status","filed").like("code","ITR%").is("details->>verified_on",null).lte("details->>filed_on",soon).limit(100).throwOnError();
@@ -39,6 +39,6 @@ export async function itrVerifyWorkItems({supabase,membership}:{supabase:Member[
     if(by>soon || !task.clients) return [];
     return [{key:`verify:${task.id}`,title:`E-verify the income tax return for ${task.clients.name}, ${itrYear(task.period_key?.slice(0,4) ?? "")}`,
       why:by<today ? `The last day to verify, ${dueLabel(by)}, has passed. Check the portal` : `Filed, not yet verified. Last day ${dueLabel(by)}`,
-      client:{id:task.client_id,name:task.clients.name},due:by,urgent:by<today,action:{label:"Mark verified",href:`/app/clients/${task.client_id}?tab=returns&show=filed`},audience:"assigned" as const}];
+      client:{id:task.client_id,name:task.clients.name},due:by,urgent:by<today,action:{label:"Mark verified",href:`/app/clients/${task.client_id}/returns/${task.id}?step=file`},audience:"assigned" as const}];
   });
 }

@@ -49,9 +49,9 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     // Fill by hand, pressed twice: one draft, made from the figures read so far.
     const returns=`/app/clients/${client}?tab=returns`;
     await page.goto(returns);const row=page.locator("li").filter({hasText:"GSTR-1 (monthly) Sep 2026"});
-    await expect(row.getByText("Papers in, not filled yet. 1 figure not checked yet")).toBeVisible();
     await page.screenshot({path:test.info().outputPath("returns.png")});
-    await row.getByRole("button",{name:/^Fill /}).dblclick();await expect(page).toHaveURL(/\/files\/.*\/view/,{timeout:60_000});
+    await row.getByRole("link").click();await page.getByRole("region",{name:"Next step"}).getByRole("button",{name:/^Prepare /}).dblclick();
+    await expect(page.getByRole("navigation",{name:"Steps of this return"}).locator(".is-now")).toContainText("Check",{timeout:60_000});
     const checks=page.getByRole("region",{name:"Figures not checked yet"});
     await expect(checks).toContainText("1 figure not checked yet.");await expect(checks.getByRole("listitem")).toContainText("200.00");
     await page.screenshot({path:test.info().outputPath("fill.png"),fullPage:true});
@@ -74,7 +74,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await expect.poll(async()=>(await query(local.dbUrl,prepared,[firm.firmId])).filter(form=>Number(form.size)>0).length,{timeout:60_000}).toBe(2);
     forms=await query(local.dbUrl,prepared,[firm.firmId]);files.push(...forms.map(form=>form.drive_file_id));
     expect(forms).toHaveLength(2);expect(forms[1].name).not.toContain("to check");expect(forms[1].prepared.status).toBe("draft");expect(forms[1].prepared.filled).toBeUndefined();
-    await page.goto(returns);await expect(row.getByText("Checked, waiting for approval")).toBeVisible();
+    await page.goto(returns);await expect(row.getByRole("img",{name:"4 of 6 steps done"})).toBeVisible();
     await page.goto("/app");await expect(now.getByText("Checked and ready for your approval")).toHaveCount(0);
     // The manager approves from Today.
     const other=await managerContext.newPage();await signIn(other,managerEmail,managerKey);
@@ -86,7 +86,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     // Approved: pinned to the client's people to download and file; filing closes it.
     await page.goto("/app");await expect(now.getByText("Approved. Download it and file on the portal")).toBeVisible();
     await page.screenshot({path:test.info().outputPath("today.png"),fullPage:true});
-    await page.goto(returns);await expect(row.getByText("Approved. Download it and file on the portal")).toBeVisible();
+    await page.goto(returns);await expect(row.getByRole("img",{name:"5 of 6 steps done"})).toBeVisible();
     await page.goto(`/app/clients/${client}?tab=outputs`);
     const filing=page.locator("li").filter({has:page.getByRole("link",{name:forms[1].name,exact:true})});
     await filing.locator("summary",{hasText:"Mark filed"}).click();await filing.getByLabel("Acknowledgement number, if known").fill("AA2409260012345");await filing.getByRole("button",{name:"Mark filed",exact:true}).click();
