@@ -91,7 +91,10 @@ export function Footer() {
               Screens show sample data. <Link href="/security#website">About this website</Link>
             </li>
             <li>
-              Gmail is a trademark of Google LLC. Microsoft, Excel, OneDrive, Outlook and Word are trademarks of the Microsoft group of companies. Zoho and Zoho Mail are trademarks of Zoho Corporation Private Limited and/or its affiliates. Other names belong to their owners; InboxCA is not affiliated with or endorsed by them. <a href="/licences.txt">Open source licences</a>
+              <a href="/terms#names">Trade marks</a>
+            </li>
+            <li>
+              <a href="/licences.txt">Open source licences</a>
             </li>
           </ul>
         </div>
