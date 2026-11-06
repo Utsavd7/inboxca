@@ -5,7 +5,7 @@ import {checkedForm,formContext,requestFor,workerForm} from "./prepare-form";
 import {currentWriter} from "./member";
 import {supabaseAdmin} from "./supabase";
 import {openDrive} from "./drive-account";
-import {financialYear,safeName} from "./drive";
+import {financialYear,folderPath,safeName,type FolderOrder} from "./drive";
 import {periodName} from "./documents";
 import {itrReturns} from "./itr-fields";
 import {serverCrypto} from "./crypto";
@@ -28,8 +28,10 @@ export const formName=(form:string)=>/^ITR[1-6]$/.test(form) ? form.replace("ITR
 // ("Jul to Sep 2026") and kept with the client's TDS work, as its TDS papers are.
 export const formPeriod=(period:string,form="")=>isTdsForm(form) ? periodLabel("quarterly",period) : period.length===4 ? Number(period)>=2027 ? `Tax year ${Number(period)-1}-${period.slice(2)}` : `AY ${period}-${String(Number(period)+1).slice(-2)}` : periodName(period);
 const workOf=(period:string,form="")=>isTdsForm(form) ? "tds" : period.length===4 ? "income_tax" : "gst";
-const workFolder=(period:string,form="")=>({tds:"TDS",income_tax:"Income tax",gst:"GST"})[workOf(period,form)];
 const workYear=(period:string)=>financialYear(period.length===4 ? `${period}-03` : period);
+// A prepared return sits in its client's folder for the year and work, in the firm's own folder
+// order (Settings, as papers are filed: src/lib/documents.ts folderFor), under Prepared.
+const preparedFolder=(settings:unknown,period:string,form:string,client:string)=>[...folderPath((settings as {folder_order?:FolderOrder} | null)?.folder_order ?? "year_client_work",workYear(period),client,workOf(period,form)),"Prepared"];
 
 export async function prepareDocument(input:Parameters<typeof checkedForm>[0]) {
   const {request,permission,userId}=await checkedForm(input);
@@ -43,7 +45,7 @@ export async function savePrepared(request:FormRequest,userId:string|null,permis
   const admin=supabaseAdmin();
   const [{data:client},{data:account}]=await Promise.all([
     admin.from("clients").select("name").eq("firm_id",request.firm).eq("id",request.client).single(),
-    admin.from("connected_accounts").select("id,provider,credentials_enc").eq("firm_id",request.firm).eq("kind","drive").maybeSingle(),
+    admin.from("connected_accounts").select("id,provider,credentials_enc,settings").eq("firm_id",request.firm).eq("kind","drive").maybeSingle(),
   ]);
   if(!client || !account) throw new Error("Connect your firm's drive before preparing a return.");
   // Refuse unavailable ITR exports before reserving a name in the drive.
@@ -57,7 +59,7 @@ export async function savePrepared(request:FormRequest,userId:string|null,permis
   const drive=await openDrive(request.firm,account);
   const response=itrResponse ?? await workerForm(request),bytes=new Uint8Array(await response.arrayBuffer());
   if(!bytes.length || bytes.length>25_000_000) throw new Error("This return is too large. Split its registers first.");
-  const folder=await drive.ensureFolder([workFolder(request.period,request.template.form_code),workYear(request.period),safeName(client.name),"Prepared"]);
+  const folder=await drive.ensureFolder(preparedFolder(account.settings,request.period,request.template.form_code,client.name));
   const file=await drive.save(folder,saved.name,bytes);
   if(file==="taken") {
     // A second Prepare or Fill of the same work while the first is saving opens the same file once saved.
@@ -138,7 +140,7 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
   } else {
     const [{data:client},{data:account}]=await Promise.all([
       supabase.from("clients").select("name").eq("firm_id",membership.firmId).eq("id",document.client_id).single(),
-      admin.from("connected_accounts").select("id,provider,credentials_enc").eq("firm_id",membership.firmId).eq("kind","drive").maybeSingle(),
+      admin.from("connected_accounts").select("id,provider,credentials_enc,settings").eq("firm_id",membership.firmId).eq("kind","drive").maybeSingle(),
     ]);
     if(!client || !account) throw new Error("Connect the firm's drive first.");
     const uploaded=!!file?.size,extension=uploaded ? file!.name.split(".").pop()?.toLowerCase() : "txt";
@@ -154,7 +156,7 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
     const {data:prior}=await admin.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",document.client_id).eq("sha256",checksum).eq("document_type",type).eq("period_key",document.period_key).eq("status","filed").maybeSingle();
     paper=prior?.id;
     if(!paper) {
-      const folder=await drive.ensureFolder([workFolder(document.period_key,document.prepared.form),workYear(document.period_key),safeName(client.name),"Prepared"]);
+      const folder=await drive.ensureFolder(preparedFolder(account.settings,document.period_key,document.prepared.form,client.name));
       const name=`${safeName(client.name,100)} - ${formName(document.prepared.form)} - ${formPeriod(document.period_key,document.prepared.form)} - ${type} - v${document.prepared.version}.${extension}`;
       const saved=await drive.save(folder,name,bytes);
       if(saved==="taken") throw new Error("An acknowledgement with this name is already in the drive. Choose it from Documents.");
@@ -178,7 +180,7 @@ export async function uploadEditedForm(id:string,file:File) {
   if(!(itr ? /\.json$/i : /\.xlsx$/i).test(file.name) || !file.size || file.size>25_000_000) throw new Error("Choose the filled official return, up to 25 MB.");
   const [{data:client},{data:account},{data:registration},{data:templates}]=await Promise.all([
     supabase.from("clients").select("name").eq("firm_id",membership.firmId).eq("id",document.client_id).single(),
-    admin.from("connected_accounts").select("id,provider,credentials_enc").eq("firm_id",membership.firmId).eq("kind","drive").maybeSingle(),
+    admin.from("connected_accounts").select("id,provider,credentials_enc,settings").eq("firm_id",membership.firmId).eq("kind","drive").maybeSingle(),
     supabase.from("client_registrations").select("number_enc").eq("firm_id",membership.firmId).eq("client_id",document.client_id).eq("id",meta.registration).eq("kind",kind).maybeSingle(),
     supabase.from("templates").select("*").eq("form_code",meta.form),
   ]);
@@ -189,7 +191,7 @@ export async function uploadEditedForm(id:string,file:File) {
   const drive=await openDrive(membership.firmId,account);
   const sent=await receive(membership.firmId,userId,{id:document.client_id,name:client.name},{name:file.name,bytes},drive,false);
   if("unsafe" in sent) throw new Error(unsafeText[sent.unsafe]);
-  const folder=await drive.ensureFolder([workFolder(document.period_key),workYear(document.period_key),safeName(client.name),"Prepared"]);
+  const folder=await drive.ensureFolder(preparedFolder(account.settings,document.period_key,"",client.name));
   const name=`Edited form ${target}.${extension}`,saved=await drive.save(folder,name,bytes);
   if(saved==="taken") throw new Error("Try adding the file again.");
   let attached=false;
