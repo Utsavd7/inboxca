@@ -247,7 +247,9 @@ export const termsSections = [
     points: [
       "InboxCA™ and Orelu™ are trade marks of Orelu. They are not registered yet, so they carry ™ and not ®. InboxCA, the InboxCA logo and Orelu belong to Orelu. InboxCA is licensed to your firm for its use, not sold.",
       "InboxCA does not use the name, emblem or logo of the Institute of Chartered Accountants of India.",
-      "Other companies' names and logos belong to their owners. They are shown only to say what InboxCA is built to work with, and do not mean a partnership, endorsement or certification.",
+      "Gmail is a trademark of Google LLC. Microsoft, Excel, OneDrive, Outlook and Word are trademarks of the Microsoft group of companies. Zoho and Zoho Mail are trademarks of Zoho Corporation Private Limited and/or its affiliates.",
+      "Other companies' names belong to their owners. This website shows them as plain names, without their logos, only to say what InboxCA works with or which software imports the files it writes. InboxCA is not affiliated with or endorsed by any of them, and no partnership or certification is meant.",
+      "The open source software and fonts InboxCA is built with are used under their own licences, given in full on the Open source licences page linked at the foot of every page.",
     ],
   },
   {
