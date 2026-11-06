@@ -2,6 +2,7 @@ import "./documents.css";
 import "../clients/clients.css";
 import { Download, FileSearch, FolderOpen, Search, Send, Upload } from "lucide-react";
 import Form from "next/form";
+import { LiveSearch } from "../live-search";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -225,7 +226,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
             {kind && <input type="hidden" name="kind" value={kind} />}
             <Search size={16} aria-hidden />
             {state.show && <input type="hidden" name="show" value={state.show} />}
-            <input name="q" type="search" defaultValue={q} placeholder="Find a paper by its name or words inside it" aria-label="Find papers" />
+            <LiveSearch name="q" defaultValue={q} placeholder="Find a paper by its name or words inside it" aria-label="Find papers" />
           </Form>
           {missing && (
             <p className="docs-only">

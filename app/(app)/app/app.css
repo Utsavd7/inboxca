@@ -265,7 +265,9 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
 /* A side panel drawn just after the header floats, so the line under the header keeps its place. */
 .fill > .page-head + *, .fill > .page-head + .side-backdrop + .side-panel + * { margin-top: calc(var(--s4) * -1); }
 .split { display: flex; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-1); }
-.pane { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+/* Only a pane in a full height page scrolls by itself: elsewhere the page scrolls, and a pane
+   that cannot scroll must not hold the wheel (overscroll-behavior: contain) from it. */
+.fill .pane { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
 /* The header (ui.tsx PageHead): sticky at the top of the stage, translucent with a blur, and a
    hairline under it that shows once the page scrolls. Left the breadcrumbs, ending in the
@@ -593,7 +595,7 @@ html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after { transit
   .topbar .head-menu, .topbar .head-me { display: inline-flex; }
   .foot-keys { display: none !important; }
   .split { flex-direction: column; overflow: visible; }
-  .pane { overflow: visible; }
+  .fill .pane { overflow: visible; }
 }
 /* Less motion asked for: everything is instant or a plain crossfade, never a slide. */
 @media (prefers-reduced-motion: reduce) {

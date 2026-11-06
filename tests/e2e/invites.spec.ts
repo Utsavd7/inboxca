@@ -955,7 +955,8 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
   // Each paper says how it came in; the unclear one says why it waits, and its email opens in the Inbox.
   await expect(rows.filter({ hasText: "Purchase bills" })).toContainText(`Saved by InboxCA from ${mailClient}'s email, `);
-  await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("Waiting to be checked: InboxCA could not tell its type and period.");
+  // Why it waits is on its To check tag (and in its panel), so the row stays short.
+  await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` }).locator(".badge[title]")).toHaveAttribute("title", "InboxCA could not tell its type and period");
   const docsTab = owner.url();
   await owner.goto("/app/documents?view=papers");
   await owner.getByRole("navigation", { name: "Folders" }).getByRole("link", { name: /To check/ }).click();
@@ -1087,8 +1088,12 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   const asks = owner.getByRole("list", { name: "Papers asked for" });
   await expect(asks).toContainText("2 of 2 received");
   // The team checks what arrived. Ask again clears an item, so the reminders ask for it once more.
+  // One at a time, from the request's More.
+  await asks.locator("summary").click();
   await asks.getByRole("button", { name: "Bank statement is right" }).click();
   await expect(asks.getByRole("button", { name: "Bank statement is right" })).toHaveCount(0);
+  // The More menu may still be open after the first action; open it only if it closed.
+  if (!(await asks.getByRole("button", { name: "Ask again for Sales bills" }).isVisible())) await asks.locator("summary").click();
   await asks.getByRole("button", { name: "Ask again for Sales bills" }).click();
   await expect(asks).toContainText("1 of 2 received");
 
@@ -1148,12 +1153,11 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
 
   // Each file is read once after it is filed: a word inside the PDF finds it, as does the name it came with.
   await runJobs(request, firm.firmId);
+  // The list filters as the words are typed.
   await owner.getByLabel("Find a paper").fill("99231");
-  await owner.getByRole("button", { name: "Find", exact: true }).click();
   await expect(rows).toHaveCount(1);
   await expect(rows).toContainText("Bank statement");
   await owner.getByLabel("Find a paper").fill("IMG_2041");
-  await owner.getByRole("button", { name: "Find", exact: true }).click();
   await expect(rows).toHaveCount(1);
   await expect(rows).toContainText("Form 16");
   await owner.getByRole("link", { name: "Show all" }).click();

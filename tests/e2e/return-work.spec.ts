@@ -48,7 +48,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await page.goto("/app/calendar?view=soon");await expect(page.getByRole("button",{name:`Fill ${name} GSTR-1 (monthly)`})).toBeVisible();
     // Fill by hand, pressed twice: one draft, made from the figures read so far.
     const returns=`/app/clients/${client}?tab=returns`;
-    await page.goto(returns);const row=page.locator("li").filter({hasText:"GSTR-1 (monthly) Sep 2026"});
+    await page.goto(returns);const row=page.locator("li").filter({hasText:"GSTR-1 Sep 2026"});
     await page.screenshot({path:test.info().outputPath("returns.png")});
     await row.getByRole("link").click();await page.getByRole("region",{name:"Next step"}).getByRole("button",{name:/^Prepare /}).dblclick();
     await expect(page.getByRole("navigation",{name:"Steps of this return"}).locator(".is-now")).toContainText("Check",{timeout:60_000});
@@ -92,7 +92,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     const filing=page.locator("li").filter({has:page.getByRole("link",{name:forms[1].name,exact:true})});
     await filing.locator("summary",{hasText:"Mark filed"}).click();await filing.getByLabel("Acknowledgement number, if known").fill("AA2409260012345");await filing.getByRole("button",{name:"Mark filed",exact:true}).click();
     await expect.poll(async()=>(await query(local.dbUrl,"select status from public.tasks where firm_id=$1",[firm.firmId]))[0].status,{timeout:30_000}).toBe("filed");
-    await page.goto(`${returns}&show=filed`);await expect(page.locator("li").filter({hasText:"GSTR-1 (monthly) Sep 2026"})).toContainText("AA2409260012345");
+    await page.goto(`${returns}&show=filed`);await expect(page.locator("li").filter({hasText:"GSTR-1 Sep 2026"})).toContainText("AA2409260012345");
     await page.goto("/app");await expect(now.getByRole("listitem").filter({hasText:name})).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   } finally {

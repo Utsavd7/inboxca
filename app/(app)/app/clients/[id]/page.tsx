@@ -4,7 +4,7 @@ import { SalesInput } from "./sales-input";
 import { PurchaseMatch } from "./purchase-match";
 import { DatasetReview } from "./dataset-review";
 import { TdsDetails } from "./tds-details";
-import { BellRing, CalendarCheck, CalendarClock, CalendarDays, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, Info, ListChecks, Mail, Scale, Search, Trash2, UserPlus, UserRound, UsersRound, type LucideIcon } from "lucide-react";
+import { BellRing, CalendarCheck, CalendarClock, CalendarDays, ChevronDown, Contact, FileArchive, FileClock, FileCode2, FileImage, FilePlus2, FileSpreadsheet, FileText, FileUp, Hash, ListChecks, Mail, Plus, Scale, Search, Trash2, UserPlus, UserRound, type LucideIcon } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -33,6 +33,8 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { labels, type Label } from "@/src/lib/triage";
 import { workspaceStore } from "@/src/lib/workspace";
 import { AutoSelect } from "../../auto-select";
+import { LiveSearch } from "../../live-search";
+import { MenuClose } from "../../returns-client";
 import { LinkTabs } from "../../link-tabs";
 import { DroppedNotice, PortalDrop } from "../../portal-drop";
 import { MarkFiled } from "../../mark-filed";
@@ -159,7 +161,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   // those late or due in the next 30 days.
   const fyStart = `${Number(today.slice(0, 4)) - (today.slice(5, 7) < "04" ? 1 : 0)}-04-01`;
   const taskQuery = supabase.from("tasks").select("id, code, period_key, due_on, status, details, registration_id",{count:"exact", head: sub !== "work"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id);
-  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { count: lateCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { data: madeFiles }, { data: figureSets }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: allTasks }, { data: licences }, { count: kycPlanned }, { data: todos }] = await Promise.all([
+  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { data: madeFiles }, { data: figureSets }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: allTasks }, { data: licences }, { count: kycPlanned }, { data: todos }, { count: firmConfirmed }] = await Promise.all([
     supabase
       .from("clients")
       .select(
@@ -175,14 +177,13 @@ export default async function Client({ params, searchParams }: { params: Promise
     files ? (tokens ? fileQuery.contains("search_tokens", tokens) : fileQuery).order("received_at", { ascending: false }).order("id", { ascending: false }).range(start, start + 49) : fileQuery,
     supabase.from("requests").select("id, status, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
     supabase.from("tasks").select("id,due_on,status,details",{count:"exact", head: tab !== "notices"}).eq("firm_id",firm).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
-    supabase.from("tasks").select("id",{count:"exact", head: true}).eq("firm_id",firm).eq("kind","compliance").eq("client_id",id).neq("status","filed").lt("due_on",today),
     supabase.from("email_events").select("id, contact_id, received_at, label, delivery, provider_message_id, contacts(name_enc)",{count:"exact", head: !listsMail}).eq("firm_id",firm).eq("client_id",id).order("received_at",{ascending:false}).order("id").range(mailRange, mailRange + (tab === "emails" ? 49 : 2)),
     tab === "documents" ? supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",firm).eq("kind","drive").maybeSingle() : Promise.resolve({ data: null }),
     // The next return still to file from today on, for the header's countdown.
     supabase.from("tasks").select("code, period_key, due_on").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(1).maybeSingle(),
-    // Whether Work links Other figures and Other return files: those not for any one return.
-    sub === "work" ? supabase.from("documents").select("period_key, prepared").eq("firm_id",firm).eq("client_id",id).not("prepared","is",null).neq("status","deleted") : Promise.resolve({ data: [] }),
-    sub === "work" ? supabase.from("datasets").select("form_code, period_key").eq("firm_id",firm).eq("client_id",id) : Promise.resolve({ data: [] }),
+    // Whether Papers links Other figures and Other return files: those not for any one return.
+    sub === "work" || files ? supabase.from("documents").select("period_key, prepared").eq("firm_id",firm).eq("client_id",id).not("prepared","is",null).neq("status","deleted") : Promise.resolve({ data: [] }),
+    sub === "work" || files ? supabase.from("datasets").select("form_code, period_key").eq("firm_id",firm).eq("client_id",id) : Promise.resolve({ data: [] }),
     // What this person may do here, with any grant or request of theirs still open (5.17.2).
     supabase.from("requests").select("reason_code, status, details").eq("kind", "permission").eq("client_id", id).eq("details->>by", userId).in("status", ["pending", "approved"]).gt("expires_at", new Date().toISOString()),
     // Work: the return being marked filed in the side panel, and the ones just changed.
@@ -193,13 +194,16 @@ export default async function Client({ params, searchParams }: { params: Promise
     ask ? supabase.from("tasks").select("code, period_key").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").order("due_on").limit(12) : Promise.resolve({ data: [] }),
     files && (namedIds.length || owner) ? supabase.from("documents").select(fileColumns).eq("firm_id", firm).eq("client_id", id).or([...(namedIds.length ? [`id.in.(${namedIds})`] : []), ...(owner ? ["status.eq.deleted"] : [])].join(",")).order("received_at", { ascending: false }) : Promise.resolve({ data: [] }),
     // Every return of the client, which those figures and files are matched to.
-    sub === "work" ? supabase.from("tasks").select("code, period_key, registration_id").eq("firm_id", firm).eq("client_id", id).eq("kind", "compliance") : Promise.resolve({ data: [] }),
+    sub === "work" || files ? supabase.from("tasks").select("code, period_key, registration_id").eq("firm_id", firm).eq("client_id", id).eq("kind", "compliance") : Promise.resolve({ data: [] }),
     // The client's licence and registration expiry dates, as the firm entered them (Details).
     supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "licence").order("due_on").limit(20),
     // A DIR-3 KYC still to file, which may be years ahead.
     sub === "work" ? supabase.from("tasks").select("id", { count: "exact", head: true }).eq("firm_id", firm).eq("client_id", id).eq("code", "DIR3KYC").neq("status", "filed") : Promise.resolve({ count: 0 }),
     // The client's to-dos: every open one, and those done whose date was in the last 30 days.
     sub === "work" ? supabase.from("tasks").select("id, due_on, status, details").eq("firm_id", firm).eq("client_id", id).eq("kind", "todo").or(`status.eq.upcoming,due_on.gte.${addDays(today, -30)}`).order("due_on").limit(30) : Promise.resolve({ data: [] }),
+    // Whether the firm has confirmed any due date yet (src/lib/due-dates.ts): until it has, Work
+    // says so once instead of tagging every row.
+    sub === "work" ? supabase.from("firm_due_dates").select("code", { count: "exact", head: true }).eq("firm_id", firm) : Promise.resolve({ count: 0 }),
   ]);
   if (!client) notFound();
   const crypto = serverCrypto();
@@ -392,24 +396,45 @@ export default async function Client({ params, searchParams }: { params: Promise
   // and the person who does that work for the client (staff before a manager or a partner).
   const approver = !viewOnly && ["owner", "partner", "manager"].includes(membership.role);
   const doer = (code: string | null) => [...lookers].reverse().find((assignment) => !assignment.work || assignment.work === workOfService(code ?? ""));
+  // A return's name and period in short for its row ("ITR AY 2026-27", "GSTR-3B Jul to Sep 2026").
+  const short = (words: string) => words.replace(/\s*\([^)]*\)/g, "");
   const workRows = (sub === "work" ? tasks ?? [] : []).map((task): WorkRow => {
-    const r = rule.get(task.code ?? ""), filed = task.status === "filed", steps = stepsFor(task.code), person = doer(task.code);
+    const r = rule.get(task.code ?? ""), filed = task.status === "filed", steps = stepsFor(task.code), person = doer(task.code), period = periodLabel(r?.frequency ?? null, task.period_key, task.code);
     const work = { ...(stages.get(task.id) ?? { stage: filed ? "filed" : "none", open: null, missing: null }), form: null };
     const sets = (drafts.get(task.id) ?? []).map((set) => ({ wrong: set.wrong, name: set.form_code === "GSTR3B" ? "the GSTR-2B" : set.target ? "your team's entries" : isItr(task.code) ? "a paper" : "the sales register" }));
     const next = filed ? null : nextAction(work, task.code, { period: returnPeriod(task.code ?? "", task.period_key ?? ""), drafts: sets, approver });
     const done = task.details as { filed_on?: string; by?: string; ack?: string; udin?: string; verified_on?: string; reminded?: string[]; skipped?: { reason: string } };
+    // The next step in a few words; why it waits, in notReady's order, when there is no button.
+    const waits = next?.step === "approve" ? "Waits for approval" : !sets.length || work.missing === "sales" ? "Add the sales register" : work.missing === "credit" ? "Add the GSTR-2B" : "Correct the figures";
+    // The papers a return reads from the portal or the client, as a quiet tag while some are missing.
+    const twoB = task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) ? `GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}` : "";
+    const tdsLine = task.code === "TDS_RET" ? tdsPapers(task.period_key ?? "").slice(2) : "";
+    const itr = task.code?.startsWith("ITR") ? itrNeeds.get(task.period_key?.slice(0, 4) ?? "") : undefined;
+    const tag = filed ? "" : twoB && needs2b.has(task.period_key ?? "") ? "GSTR-2B missing" : tdsLine.includes("missing") ? "Papers missing" : itr?.missing ? "Portal files missing" : "";
     return {
-      id: task.id, href: `${base}/returns/${task.id}`, title: `${r?.name ?? task.code} ${periodLabel(r?.frequency ?? null, task.period_key, task.code)}`, unchecked: !r?.verified_on,
+      id: task.id, href: `${base}/returns/${task.id}`, title: short(`${r?.name ?? task.code} ${period}`), unchecked: !r?.verified_on && !!firmConfirmed,
+      full: [`${r?.name ?? task.code} ${period}`, next?.why?.replace(/\.$/, ""), reminderNote(done), twoB, tdsLine, itr?.line.slice(2)].filter(Boolean).join(". "),
       due: task.due_on, late: !filed && task.due_on < today, filed, steps: steps.length, done: filed ? steps.length : steps.indexOf(currentStep(work, task.code)), person: person && who(person),
       next: filed
         ? `Filed${done.filed_on ? ` ${dueLabel(done.filed_on)}` : ""}${done.by ? ` by ${personName(people?.find((one) => one.user_id === done.by)?.email)}` : ""}${done.ack ? `, ARN ${done.ack}` : ""}${done.udin ? `, UDIN ${done.udin}` : ""}${isItr(task.code) ? (done.verified_on ? `. E-verified ${dueLabel(done.verified_on)}` : `. Verify by ${dueLabel(verifyBy(done.filed_on ?? task.due_on))}`) : ""}`
-        : `${[next?.label ? `Next: ${next.label}` : next?.why?.replace(/\.$/, ""), reminderNote(done)].filter(Boolean).join(". ")}${task.code === "GSTR3B_M" && task.period_key && months.includes(task.period_key) ? `. GSTR-2B for ${periodName(task.period_key)}: ${needs2b.has(task.period_key) ? "not added yet" : "added"}` : ""}${task.code === "TDS_RET" ? tdsPapers(task.period_key ?? "") : ""}${task.code?.startsWith("ITR") ? itrNeeds.get(task.period_key?.slice(0, 4) ?? "")?.line ?? "" : ""}`,
+        : next?.label ?? waits,
+      tag, tip: tag ? [twoB, tdsLine, itr?.line.slice(2)].filter(Boolean).join(". ") : undefined,
     };
   });
   // Due soon: late or due in the next 30 days; then later; then filed this year, latest first.
   const soon = workRows.filter((row) => !row.filed && row.due <= addDays(today, 30));
   const later = workRows.filter((row) => !row.filed && row.due > addDays(today, 30));
   const filedRows = workRows.filter((row) => row.filed).reverse();
+  // A date InboxCA needs, asked on Work only while none of its returns is listed: a company's
+  // AGM (AOC-4, MGT-7 and ADT-1 follow it), a director's last DIR-3 KYC.
+  const fyEnd = Number(today.slice(0, 4)) + (today.slice(5, 7) >= "04" ? 1 : 0);
+  const fromOf = (code: string | null) => (rule.get(code ?? "")?.due_rule as { from?: string } | undefined)?.from;
+  const agmNeeded = sub === "work" && manage ? numbers.filter((registration) => registration.kind === "cin" && registration.services.some((code) => fromOf(code) === "agm") && !tasks?.some((task) => task.registration_id === registration.id && fromOf(task.code) === "agm")) : [];
+  const kycNeeded = sub === "work" && manage && !kycPlanned ? numbers.filter((registration) => registration.kind === "pan" && registration.services.some((code) => fromOf(code) === "kyc")) : [];
+  const datesNeeded = !!(agmNeeded.length || kycNeeded.length);
+  const remindsNow = reminds && soon.some((row) => row.due <= addDays(today, 7));
+  // None of the firm's due dates confirmed yet: one line for the owner, who confirms them in Settings.
+  const confirmDates = owner && !viewOnly && !firmConfirmed && (tasks ?? []).some((task) => task.status !== "filed" && !rule.get(task.code ?? "")?.verified_on);
   const counts: Record<Main, number | undefined> = { work: sub === "work" ? soon.length : taskCount ?? 0, documents: fileCount ?? 0, emails: mailCount ?? 0, notices: noticeCount ?? 0, about: undefined };
   // The Returns tab as it is, for the filing panel and each filing form to come back to.
   const shows = show === "filed" || show === "later" ? show : "";
@@ -459,14 +484,28 @@ export default async function Client({ params, searchParams }: { params: Promise
       <CopyButton text={number} label={kind} />
     </span>
   );
-  const lateTotal = lateCount ?? 0;
   const canWrite = (!!email || contacts.length > 0) && !client.archived_at;
+  // Details: About's rows, each with its value or nothing, and the names of those empty.
+  const aboutRows: [string, React.ReactNode][] = [
+    ["Client type", clientKinds[client.kind as ClientKind]],
+    ["Email", email],
+    ["Phone", phone && <>{phone}{whatsapp && !client.archived_at && <>{" "}<a href={whatsapp} target="_blank" rel="noreferrer">Message on WhatsApp</a></>}</>],
+    ["Group", groupName && <Link href={`/app/clients?group=${client.group_id}`}>{groupName}</Link>],
+    ...(branches.length ? [["Branch", branchName && <Link href={`/app/clients?branch=${client.branch_id}`}>{branchName}</Link>] as [string, React.ReactNode]] : []),
+    ["Reminders", client.reminders_paused ? <Badge tone="warn">Paused</Badge> : <Badge>On</Badge>],
+    ["Tags", !!client.tags.length && client.tags.map((word) => <Badge key={word}>{word}</Badge>)],
+    ["What we do", engagement],
+    // Expiry dates the firm entered: red once past, green once marked renewed on the Calendar.
+    ["Licences", !!licences?.length && licences.map((licence) => <span key={licence.id} className="sub">{licenceLabel(licence)}: {licence.status === "filed" ? <Badge tone="done">Renewed</Badge> : <>{licence.due_on < today ? "expired" : "until"} {dueLabel(licence.due_on)}</>}</span>)],
+    ["Changes", <Link key="activity" href={`${base}?tab=activity`} scroll={false}>Activity</Link>],
+  ];
+  const aboutMissing = aboutRows.filter(([, value]) => !value).map(([label]) => label);
 
   return (
-    <div className="fill clients-page client-record">
-      {/* The header: Clients / the client's avatar and name, and the quick actions (one blue
-          button, the rarer ones under More). Under it the record: numbers, who looks after it
-          and what is due next. */}
+    <div className="clients-page client-record">
+      {/* The header, on one line: Clients / the client's avatar and name, its type and numbers,
+          then the quick actions (one blue button, the rarer ones under More). Who looks after
+          it and what is due next are on Work. */}
       <PageHead
         crumbs={[["/app/clients", "Clients"]]}
         title={
@@ -475,67 +514,27 @@ export default async function Client({ params, searchParams }: { params: Promise
             {client.name}
           </span>
         }
-        sub={
-        <div className="client-head">
-          <div className="client-who">
-            <div>
-              <div className="client-meta">
-                <Badge plain>{clientKinds[client.kind as ClientKind]}</Badge>
-                {client.archived_at && <Badge>Archived</Badge>}
-                {gstin && (
-                  <span className="client-id">
-                    <span className="client-id-kind">GSTIN</span>
-                    {idNumber("GSTIN", gstin)}
-                    {gstins.length > 1 && <span className="hint">and {gstins.length - 1} more</span>}
-                  </span>
-                )}
-                {pan && (
-                  <span className="client-id">
-                    <span className="client-id-kind">PAN</span>
-                    {idNumber("PAN", pan)}
-                  </span>
-                )}
-                <span className="client-team">
-                  {lookers.length ? (
-                    <>
-                      <span className="avatar-stack">
-                        {lookers.slice(0, 3).map((assignment) => <Avatar key={assignment.value} name={who(assignment)} square={!!assignment.team_id} />)}
-                      </span>
-                      Looked after by {who(lookers[0])}
-                      {lookers.length > 1 && ` and ${lookers.length - 1} more`}
-                    </>
-                  ) : (
-                    "Nobody looks after this client yet"
-                  )}
-                </span>
-              </div>
-              {(!!lateTotal || nextDue) && !client.archived_at && (
-                <div className="client-due">
-                  {!!lateTotal && (
-                    <Link className="badge late" href={base}>
-                      {lateTotal} {lateTotal === 1 ? "return" : "returns"} late
-                    </Link>
-                  )}
-                  {nextDue && (
-                    <Link className={`badge plain ${dueIn <= 3 ? "warn" : "blue"}`} href={base}>
-                      <CalendarClock size={13} aria-hidden />
-                      Next due: {rule.get(nextDue.code ?? "")?.name ?? nextDue.code} {periodLabel(rule.get(nextDue.code ?? "")?.frequency ?? null, nextDue.period_key, nextDue.code)}, {dueIn === 0 ? "today" : dueIn === 1 ? "tomorrow" : `in ${dueIn} days`}
-                    </Link>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        meta={
+          <span className="client-meta">
+            <Badge plain>{clientKinds[client.kind as ClientKind]}</Badge>
+            {client.archived_at && <Badge>Archived</Badge>}
+            {gstin && (
+              <span className="client-id">
+                <span className="client-id-kind">GSTIN</span>
+                {idNumber("GSTIN", gstin)}
+                {gstins.length > 1 && <span className="hint">and {gstins.length - 1} more</span>}
+              </span>
+            )}
+            {pan && (
+              <span className="client-id">
+                <span className="client-id-kind">PAN</span>
+                {idNumber("PAN", pan)}
+              </span>
+            )}
+          </span>
         }
         actions={
         <>
-          {canUpload && (
-            <Link className="b b-secondary" href={`${base}?tab=documents&upload=1`} scroll={false}>
-              <FileUp size={15} aria-hidden />
-              Upload papers
-            </Link>
-          )}
           {/* Blue when the client has no email to write to, so the header keeps one blue button. */}
           {!viewOnly && (
             <Link className={`b ${canWrite || client.archived_at ? "b-secondary" : "b-primary"}`} href={`${here}${here.includes("?") ? "&" : "?"}ask=1`} scroll={false}>
@@ -551,107 +550,138 @@ export default async function Client({ params, searchParams }: { params: Promise
           )}
           <MoreMenu
             items={[
+              ...(canUpload ? [{ label: "Upload papers", icon: <FileUp size={16} aria-hidden />, href: `${base}?tab=documents&upload=1` }] : []),
+              ...(remindsNow ? [{ label: "Send reminder now", icon: <BellRing size={16} aria-hidden />, form: "remind-now" }] : []),
               ...(viewOnly ? [] : [{ label: "Add a notice", icon: <Scale size={16} aria-hidden />, href: `${base}?tab=notice` }]),
             ]}
           />
         </>
         }
       />
-      <LinkTabs label="Client" items={(Object.keys(mains) as Main[]).map((key) => ({ href: `${base}${key === "work" ? "" : `?tab=${key}`}`, label: mains[key], count: counts[key], current: tab === key }))} />
+      <LinkTabs label="Client" items={(Object.keys(mains) as Main[]).map((key) => ({ href: `${base}${key === "work" ? "" : `?tab=${key}`}`, label: mains[key], count: counts[key] || undefined, current: tab === key }))} />
 
       <ViewTransition key={sub} enter="tab-in" exit="tab-out" default="none">
       <div className="pane client-pane">
         {!panel && !docPanel && alert}
 
+        {/* Details: one sheet of label and value rows in five groups, each with one Edit (shown
+            on the group's hover or focus). Empty details are named once, at the end of About. */}
         {tab === "about" && (
-          <div className="client-grid">
-            <div className="client-col">
-              <Card id="details-card" title="Details" Icon={Info} end={manage && <Link className="b b-ghost" href={`${base}?tab=details`} scroll={false}>Edit details</Link>}>
-                <dl className="props client-props">
-                  <div><dt>Client type</dt><dd>{clientKinds[client.kind as ClientKind]}</dd></div>
-                  <div><dt>Email</dt><dd>{email || <span className="hint">None yet</span>}</dd></div>
-                  <div><dt>Phone</dt><dd>{phone ? <>{phone}{whatsapp && !client.archived_at && <>{" "}<a href={whatsapp} target="_blank" rel="noreferrer">Message on WhatsApp</a></>}</> : <span className="hint">None yet</span>}</dd></div>
-                  <div><dt>Group</dt><dd>{groupName ? <Link href={`/app/clients?group=${client.group_id}`}>{groupName}</Link> : <span className="hint">None</span>}</dd></div>
-                  {!!branches.length && <div><dt>Branch</dt><dd>{branchName ? <Link href={`/app/clients?branch=${client.branch_id}`}>{branchName}</Link> : <span className="hint">None</span>}</dd></div>}
-                  <div><dt>Reminders</dt><dd>{client.reminders_paused ? <Badge tone="warn">Paused</Badge> : <Badge>On</Badge>}</dd></div>
-                  <div><dt>Tags</dt><dd>{client.tags.length ? client.tags.map((word) => <Badge key={word}>{word}</Badge>) : <span className="hint">None</span>}</dd></div>
-                  <div><dt>What we do</dt><dd>{engagement || <span className="hint">Not written yet</span>}</dd></div>
-                  {/* Expiry dates the firm entered: red once past, green once marked renewed on the Calendar. */}
-                  <div><dt>Licences</dt><dd>{licences?.length ? licences.map((licence) => <span key={licence.id} className="sub">{licenceLabel(licence)}: {licence.status === "filed" ? <Badge tone="done">Renewed</Badge> : <>{licence.due_on < today ? "expired" : "until"} {dueLabel(licence.due_on)}</>}</span>) : <span className="hint">None</span>}</dd></div>
-                  <div><dt>Changes</dt><dd><Link href={`${base}?tab=activity`} scroll={false}>Activity</Link></dd></div>
-                </dl>
-              </Card>
-              {numbers.some((registration) => servicesFor(registration).length) && (
-                <Card id="services-card" title="Services" Icon={ListChecks} kind="week" end={manage && <Link className="b b-ghost" href={`${base}?tab=services`} scroll={false}>Change services</Link>}>
-                  <ul className="app-rows">
-                    {numbers.filter((registration) => servicesFor(registration).length).map((registration) => (
-                      <Row key={registration.id} title={numberKinds[registration.kind as NumberKind].name} meta={usualFor.has(registration.id) ? `Suggested: ${usualFor.get(registration.id)!.map((code) => rule.get(code)?.name ?? code).join(", ")}` : registration.services.map((code) => rule.get(code)?.name ?? code).join(", ") || "None chosen yet"} />
-                    ))}
-                  </ul>
-                  {manage && !!usualFor.size && (
-                    <form action={manageClient} className="app-card-foot services-usual">
-                      {hidden("about")}
-                      {[...usualFor].map(([registration, codes]) => (
-                        <Fragment key={registration}>
-                          <input type="hidden" name="registration" value={registration} />
-                          {codes.map((code) => <input key={code} type="hidden" name={`service-${registration}`} value={code} />)}
-                        </Fragment>
-                      ))}
-                      <span className="hint">Usual for this client type. Nothing is saved until you choose Use these.</span>
-                      <Pending className="b b-secondary b-small" name="intent" value="services">Use these</Pending>
-                    </form>
-                  )}
-                </Card>
+          <div className="app-card client-sheet">
+            <section className="sheet-group" aria-labelledby="details-card">
+              <header>
+                <h2 id="details-card">About</h2>
+                {manage && <Link className="b b-ghost b-small sheet-edit" href={`${base}?tab=details`} scroll={false} aria-label="Edit details">Edit</Link>}
+              </header>
+              <ul className="sheet-rows">
+                {aboutRows.filter(([, value]) => value).map(([label, value]) => (
+                  <li key={label}><span>{label}</span><span>{value}</span></li>
+                ))}
+              </ul>
+              {!!aboutMissing.length && (
+                <p className="sheet-missing">
+                  Not added yet: {aboutMissing.join(", ")}.
+                  {manage && <> <Link href={`${base}?tab=details`} scroll={false}>Add missing details</Link></>}
+                </p>
               )}
-            </div>
-            <div className="client-col">
-              <Card id="numbers" title="Tax numbers" Icon={Hash} kind="docs" end={manage && <Link className="b b-ghost" href={`${base}?tab=numbers`} scroll={false}>Change numbers</Link>}>
-                {numbers.length ? (
-                  <ul className="app-rows">
-                    {numbers.map((registration) => {
-                      const name = numberKinds[registration.kind as NumberKind].name;
-                      return <Row key={registration.id} title={name} status={idNumber(name, registration.number)} action={registration.kind === "tan" && manage && <Link className="b b-ghost b-small" href={`${base}?tab=tds&tan=${registration.id}`} scroll={false}>TDS statement details</Link>} />;
-                    })}
-                  </ul>
-                ) : (
-                  <p className="app-card-none">No numbers yet. A PAN or GSTIN helps InboxCA recognise the client&apos;s papers.</p>
-                )}
-              </Card>
-              <Card id="contacts-card" title="Contacts" Icon={Contact} kind="approve" end={manage && <Link className="b b-ghost" href={`${base}?tab=contacts`} scroll={false}>Change contacts</Link>}>
-                {contacts.length ? (
-                  <ul className="app-rows">
-                    {contacts.map((contact) => (
-                      <Row key={contact.contact_id} lead={<Avatar name={contact.name} />} title={contact.name} meta={[contact.email, contact.relation].filter(Boolean).join(", ")} />
+            </section>
+            <section className="sheet-group" aria-labelledby="numbers">
+              <header>
+                <h2 id="numbers">Tax numbers</h2>
+                {manage && <Link className="b b-ghost b-small sheet-edit" href={`${base}?tab=numbers`} scroll={false} aria-label="Edit tax numbers">Edit</Link>}
+              </header>
+              {numbers.length ? (
+                <ul className="sheet-rows">
+                  {numbers.map((registration) => {
+                    const name = numberKinds[registration.kind as NumberKind].name;
+                    return (
+                      <li key={registration.id}>
+                        <span>{name}</span>
+                        <span>
+                          {idNumber(name, registration.number)}
+                          {registration.kind === "tan" && manage && <Link href={`${base}?tab=tds&tan=${registration.id}`} scroll={false}>TDS statement details</Link>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="sheet-missing">No numbers yet. A PAN or GSTIN helps InboxCA recognise the client&apos;s papers.</p>
+              )}
+            </section>
+            {numbers.some((registration) => servicesFor(registration).length) && (
+              <section className="sheet-group" aria-labelledby="services-card">
+                <header>
+                  <h2 id="services-card">Services</h2>
+                  {manage && <Link className="b b-ghost b-small sheet-edit" href={`${base}?tab=services`} scroll={false} aria-label="Edit services">Edit</Link>}
+                </header>
+                <ul className="sheet-rows">
+                  {numbers.filter((registration) => servicesFor(registration).length).map((registration) => (
+                    <li key={registration.id}>
+                      <span>{numberKinds[registration.kind as NumberKind].name}</span>
+                      <span>{usualFor.has(registration.id) ? `Suggested: ${usualFor.get(registration.id)!.map((code) => rule.get(code)?.name ?? code).join(", ")}` : registration.services.map((code) => rule.get(code)?.name ?? code).join(", ") || <span className="hint">None chosen yet</span>}</span>
+                    </li>
+                  ))}
+                </ul>
+                {manage && !!usualFor.size && (
+                  <form action={manageClient} className="services-usual">
+                    {hidden("about")}
+                    {[...usualFor].map(([registration, codes]) => (
+                      <Fragment key={registration}>
+                        <input type="hidden" name="registration" value={registration} />
+                        {codes.map((code) => <input key={code} type="hidden" name={`service-${registration}`} value={code} />)}
+                      </Fragment>
                     ))}
-                  </ul>
-                ) : (
-                  <p className="app-card-none">No contacts yet.</p>
+                    <span className="hint">Usual for this client type. Nothing is saved until you choose Use these.</span>
+                    <Pending className="b b-secondary b-small" name="intent" value="services">Use these</Pending>
+                  </form>
                 )}
-              </Card>
-              <Card id="team-card" title="Looked after by" Icon={UsersRound} kind="papers" end={manage && <Link className="b b-ghost" href={`${base}?tab=team`} scroll={false}>Change people</Link>}>
-                {lookers.length ? (
-                  <ul className="app-rows">
-                    {lookers.map((assignment) => (
-                      <Row key={assignment.value} lead={<Avatar name={who(assignment)} square={!!assignment.team_id} />} title={who(assignment)} meta={assignmentLabel(assignment)} />
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="app-card-none">Nobody is assigned yet.</p>
-                )}
-              </Card>
-            </div>
+              </section>
+            )}
+            <section className="sheet-group" aria-labelledby="contacts-card">
+              <header>
+                <h2 id="contacts-card">Contacts</h2>
+                {manage && <Link className="b b-ghost b-small sheet-edit" href={`${base}?tab=contacts`} scroll={false} aria-label="Edit contacts">Edit</Link>}
+              </header>
+              {contacts.length ? (
+                <ul className="sheet-rows">
+                  {contacts.map((contact) => (
+                    <li key={contact.contact_id}><span>{contact.name}</span><span>{[contact.email, contact.relation].filter(Boolean).join(", ")}</span></li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="sheet-missing">No contacts yet.</p>
+              )}
+            </section>
+            <section className="sheet-group" aria-labelledby="team-card">
+              <header>
+                <h2 id="team-card">People</h2>
+                {manage && <Link className="b b-ghost b-small sheet-edit" href={`${base}?tab=team`} scroll={false} aria-label="Edit people">Edit</Link>}
+              </header>
+              {lookers.length ? (
+                <ul className="sheet-rows">
+                  {lookers.map((assignment) => (
+                    <li key={assignment.value}><span className="who"><Avatar name={who(assignment)} square={!!assignment.team_id} />{who(assignment)}</span><span>{assignmentLabel(assignment)}</span></li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="sheet-missing">Nobody is assigned yet.</p>
+              )}
+            </section>
           </div>
         )}
 
+        {/* The emails as a plain list (the tab names them): each row opens its email. */}
         {tab === "emails" && (
-          <Card id="client-mail" title="Emails" Icon={Mail} kind="reply" count={mailCount ?? 0}>
+          <section className="app-card" aria-labelledby="client-mail">
+            <h2 id="client-mail" className="sr-only">Emails</h2>
             {mailList("app-rows client-mails stagger") ?? (
               <Empty Icon={Mail} kind="reply" title="No email from this client yet">
                 <span>Emails from the client&apos;s address and its contacts show here once the firm email is connected.</span>
               </Empty>
             )}
             {(mailCount ?? 0) > 50 && <div className="app-card-foot">{pager(mailCount ?? 0, mails?.length ?? 0, "Emails", "emails")}</div>}
-          </Card>
+          </section>
         )}
 
         {tab === "documents" && (
@@ -661,12 +691,20 @@ export default async function Client({ params, searchParams }: { params: Promise
                 <input type="hidden" name="tab" value="documents" />
                 <span className="search">
                   <Search size={16} aria-hidden />
-                  <input name="find" type="search" defaultValue={find} placeholder="Find a paper by a word in it or its name" aria-label="Find a paper" />
+                  <LiveSearch name="find" defaultValue={find} placeholder="Find a paper by a word in it or its name" aria-label="Find a paper" />
                 </span>
-                <button className="b b-secondary" type="submit">Find</button>
                 {find && <Link className="b b-ghost" href={`${base}?tab=documents`}>Show all</Link>}
               </Form>
-              {!canUpload && <span className="page-actions">{askButton("upload", "Ask to upload")}</span>}
+              <span className="page-actions">
+                {canUpload ? (
+                  <Link className="b b-secondary" href={`${base}?tab=documents&upload=1`} scroll={false}>
+                    <FileUp size={15} aria-hidden />
+                    Upload papers
+                  </Link>
+                ) : (
+                  askButton("upload", "Ask to upload")
+                )}
+              </span>
             </div>
             <DroppedNotice value={dropped} />
             {askedRight && <Toast>Permission asked. Once allowed, it works here once, within an hour.</Toast>}
@@ -690,36 +728,52 @@ export default async function Client({ params, searchParams }: { params: Promise
                 {removed ? `Removed ${noticeFile.name}. It stays in the Removed papers folder of your firm's drive for 30 days.` : restored ? `Restored ${noticeFile.name}.` : `Saved as ${noticeFile.name}.`}
               </Toast>
             )}
+            {!!asking.length && <MenuClose />}
             {!!asking.length && (
               <Card id="asks" title="Papers asked for" Icon={FileClock} kind="papers" count={asking.length} countTone="warn">
                 <ul className="app-rows" aria-label="Papers asked for">
                   {asking.map((request) => {
                     const details = request.details as unknown as DocumentRequest;
                     const got = details.items.filter((item) => item.received.length).length;
+                    // Those in and not yet checked: one button marks them all checked; each one
+                    // on its own, and Ask again, are under More.
+                    const toCheck = details.items.flatMap((item, at) => (item.received.length && !item.checked ? [{ item, at }] : []));
                     return (
                       <Row
                         key={request.id}
                         title={`Asked for ${details.items.map((item) => item.type).join(", ")}${details.period ? ` for ${periodName(details.period, ...details.items.map((item) => item.work))}` : ""}`}
                         meta={`${got} of ${details.items.length} received. Reminders go until ${dueLabel(request.expires_at!.slice(0, 10))}.`}
-                        status={<Badge tone={got === details.items.length ? "done" : "warn"}>{got} of {details.items.length}</Badge>}
                         action={
-                          !viewOnly && (
+                          !viewOnly && !!toCheck.length && (
                             <span className="cell-form">
-                              {details.items.map((item, at) =>
-                                item.received.length && !item.checked ? (
-                                  <form key={at} action={checkRequestItem} className="cell-form">
-                                    <input type="hidden" name="request" value={request.id} />
-                                    <input type="hidden" name="item" value={at} />
-                                    <span className="hint">{item.type}</span>
-                                    <Pending className="b b-secondary" name="intent" value="checked" aria-label={`${item.type} is right`}>
-                                      Mark checked
-                                    </Pending>
-                                    <Pending className="b b-ghost" name="intent" value="again" aria-label={`Ask again for ${item.type}`}>
-                                      Ask again
-                                    </Pending>
-                                  </form>
-                                ) : null,
-                              )}
+                              <form action={checkRequestItem}>
+                                <input type="hidden" name="request" value={request.id} />
+                                {toCheck.map(({ at }) => <input key={at} type="hidden" name="item" value={at} />)}
+                                <Pending className="b b-secondary" name="intent" value="checked" aria-label={`Mark ${toCheck.map(({ item }) => item.type).join(", ")} checked`}>
+                                  Mark checked
+                                </Pending>
+                              </form>
+                              <details className="rf-menu">
+                                <summary className="b b-ghost" aria-label={`More for ${details.items.map((item) => item.type).join(", ")}`}>
+                                  More
+                                  <ChevronDown size={15} aria-hidden />
+                                </summary>
+                                <div className="rf-pop is-end">
+                                  {toCheck.map(({ item, at }) => (
+                                    <form key={at} action={checkRequestItem} className="ask-item">
+                                      <input type="hidden" name="request" value={request.id} />
+                                      <input type="hidden" name="item" value={at} />
+                                      <span className="grow">{item.type}</span>
+                                      <Pending className="b b-ghost b-small" name="intent" value="checked" aria-label={`${item.type} is right`}>
+                                        Mark checked
+                                      </Pending>
+                                      <Pending className="b b-ghost b-small" name="intent" value="again" aria-label={`Ask again for ${item.type}`}>
+                                        Ask again
+                                      </Pending>
+                                    </form>
+                                  ))}
+                                </div>
+                              </details>
                             </span>
                           )
                         }
@@ -737,26 +791,28 @@ export default async function Client({ params, searchParams }: { params: Promise
                     <thead>
                       <tr>
                         <th scope="col">Paper</th>
-                        <th scope="col">Paper type</th>
-                        <th scope="col">Period</th>
+                        <th scope="col">Type and period</th>
                         <th scope="col">Came from</th>
-                        <th scope="col">Status</th>
-                        <th scope="col" className="shrink"><span className="sr-only">Actions</span></th>
                       </tr>
                     </thead>
                     <tbody className="stagger">
                       {documents.map((document) => {
                         const twin = document.status === "to_check" && sameAs(document);
                         const path = folderFor(order, client.name, { work: document.work_type as WorkType, period: document.period_key, receivedAt: document.received_at, toCheck: document.status === "to_check" }).join(" / ");
+                        const origin = origins.get(document.id)!;
                         return (
                           <tr key={document.id}>
                             <td>
                               <span className="who">
                                 <IconTile Icon={fileIcon(document.name)} kind="docs" />
                                 <span className="client-paper">
-                                  <Link className="row-link" href={`/app/files/${document.id}/view`}>
-                                    {document.name}
-                                  </Link>
+                                  <span className="client-paper-name">
+                                    <Link className="row-link" href={`/app/files/${document.id}/view`}>
+                                      {document.name}
+                                    </Link>
+                                    {/* Only what needs someone: a saved paper says nothing. */}
+                                    {document.status === "to_check" ? <span className="badge warn" title={twin || origin.why}>To check</span> : document.status === "missing" && <Badge tone="late">Missing in the drive</Badge>}
+                                  </span>
                                   <span className="sub num">
                                     {twin || (
                                       <>
@@ -768,21 +824,21 @@ export default async function Client({ params, searchParams }: { params: Promise
                                 </span>
                               </span>
                             </td>
-                            <td>{paperType(document.document_type)}</td>
-                            <td>{periodName(document.period_key, document.work_type) || <span className="hint">None</span>}</td>
-                            <td className="hint">
-                              <CameFrom origin={origins.get(document.id)!} why={!twin} />
+                            <td>
+                              {paperType(document.document_type)}
+                              <span className="sub">{periodName(document.period_key, document.work_type) || "No period"}</span>
                             </td>
                             <td>
-                              {/* Only what needs someone: a saved paper says nothing. */}
-                              {document.status === "to_check" ? <Badge tone="warn">To check</Badge> : document.status === "missing" && <Badge tone="late">Missing in the drive</Badge>}
-                            </td>
-                            <td className="shrink">
-                              {!viewOnly && (
-                                <Link className="b b-secondary" href={`${base}?tab=documents&edit=${document.id}`} scroll={false} aria-label={`${document.status === "to_check" ? "Check" : "Open"} ${document.name}`}>
-                                  {document.status === "to_check" ? "Check" : "Open"}
-                                </Link>
-                              )}
+                              {/* Where it came from in short, then Check or Open its panel (shown on the
+                                  row's hover or focus, and always for one to check). */}
+                              <span className="paper-came">
+                                <CameFrom origin={{ ...origin, from: undefined, file: undefined }} why={false} />
+                                {!viewOnly && (
+                                  <Link className={`b b-secondary b-small paper-open${document.status === "to_check" ? " is-due" : ""}`} href={`${base}?tab=documents&edit=${document.id}`} scroll={false} aria-label={`${document.status === "to_check" ? "Check" : "Open"} ${document.name}`}>
+                                    {document.status === "to_check" ? "Check" : "Open"}
+                                  </Link>
+                                )}
+                              </span>
                             </td>
                           </tr>
                         );
@@ -817,6 +873,16 @@ export default async function Client({ params, searchParams }: { params: Promise
                 </ul>
               </Card>
             )}
+            {/* Figures and return files not for any one return, and the box for portal files. */}
+            {(otherFigures || otherFiles) && (
+              <p className="client-tools hint">
+                <span className="work-other">
+                  {otherFigures && <Link href={`${base}?tab=extraction`}>Other figures</Link>}
+                  {otherFiles && <Link href={`${base}?tab=outputs`}>Other return files</Link>}
+                </span>
+              </p>
+            )}
+            {membership.may("portal_files", client.id) && !viewOnly && <PortalDrop clientId={client.id} back="files" />}
           </>
         )}
 
@@ -829,9 +895,96 @@ export default async function Client({ params, searchParams }: { params: Promise
             <Suspense fallback={null}>
               <RemindToast />
             </Suspense>
-            {/* The client's to-dos (20261110800000_client_todos.sql): red once late, green once done. */}
-            <Card id="todos" title="To-dos" Icon={ListChecks} kind="approve" count={todos?.filter((todo) => todo.status === "upcoming").length}>
-              {todos?.length ? (
+            {remindsNow && (
+              <form id="remind-now" action={remindClient} hidden>
+                {returnsState}
+                <input type="hidden" name="from" value="client" />
+              </form>
+            )}
+            {/* One quiet line: who looks after the client and what is due next. */}
+            <p className="work-line">
+              <span className="client-team">
+                {lookers.length ? (
+                  <>
+                    <span className="avatar-stack">
+                      {lookers.slice(0, 3).map((assignment) => <Avatar key={assignment.value} name={who(assignment)} square={!!assignment.team_id} />)}
+                    </span>
+                    Looked after by {who(lookers[0])}
+                    {lookers.length > 1 && ` and ${lookers.length - 1} more`}
+                  </>
+                ) : (
+                  "Nobody looks after this client yet"
+                )}
+              </span>
+              {nextDue && !client.archived_at && (
+                <span className="work-next">
+                  <CalendarClock size={14} aria-hidden />
+                  Next due: {rule.get(nextDue.code ?? "")?.name ?? nextDue.code} {periodLabel(rule.get(nextDue.code ?? "")?.frequency ?? null, nextDue.period_key, nextDue.code)}, {dueIn === 0 ? "today" : dueIn === 1 ? "tomorrow" : `in ${dueIn} days`}
+                </span>
+              )}
+              {confirmDates && (
+                <span className="work-next">
+                  Due dates are not confirmed yet.
+                  <Link href="/app/settings?group=reminders#due-dates">Confirm them</Link>
+                </span>
+              )}
+            </p>
+            {/* What needs attention: returns late or due in the next 30 days, and a date InboxCA
+                still needs to put a company's or a director's returns on the Calendar. */}
+            {workRows.length || datesNeeded ? (
+              <Card id="due" title="Due soon" Icon={CalendarClock} kind="week" count={soon.length} countTone={soon.some((row) => row.late) ? "late" : ""}>
+                {!!soon.length && <WorkRows rows={soon} />}
+                {datesNeeded && (
+                  <ul className="app-rows work-dates" aria-label="Dates InboxCA needs">
+                    {/* A company's AOC-4, MGT-7 and ADT-1 fall due after its AGM: the date is asked, never guessed (public.record_agm). */}
+                    {agmNeeded.map((registration) => (
+                      <Row
+                        key={registration.id}
+                        lead={<IconTile Icon={CalendarCheck} kind="papers" />}
+                        title="AGM date needed"
+                        meta="AOC-4, MGT-7 and ADT-1 fall due after the AGM. Give its date and InboxCA puts them on the Calendar."
+                        action={
+                          <form action={recordAgm} className="agm-form">
+                            <input type="hidden" name="client" value={client.id} />
+                            <input type="hidden" name="registration" value={registration.id} />
+                            <label>Financial year <select name="year_end" defaultValue={`${fyEnd}-03`}>{[fyEnd - 1, fyEnd].map((year) => <option key={year} value={`${year}-03`}>{periodLabel("yearly", `${year}-03`)}</option>)}</select></label>
+                            <label>AGM date <input type="date" name="agm" required /></label>
+                            <Pending className="b b-secondary b-small" busy="Saving">Save AGM date</Pending>
+                          </form>
+                        }
+                      />
+                    ))}
+                    {/* DIR-3 KYC Web runs on the director's own three year cycle (rule 12A): the year of the last one is asked, never guessed (public.record_kyc). */}
+                    {kycNeeded.map((registration) => (
+                      <Row
+                        key={registration.id}
+                        lead={<IconTile Icon={CalendarCheck} kind="papers" />}
+                        title="DIR-3 KYC year needed"
+                        meta="DIR-3 KYC Web is due once every three financial years, by 30 June after the third. Give the financial year of the last KYC and InboxCA puts the next on the Calendar. After a change of mobile, email or home address the director files it again within 30 days."
+                        action={
+                          <form action={recordKyc} className="agm-form">
+                            <input type="hidden" name="client" value={client.id} />
+                            <input type="hidden" name="registration" value={registration.id} />
+                            <label>Last KYC filed for <select name="year_end" defaultValue="" required><option value="" disabled>Choose a year</option>{[1, 2, 3, 4].map((back) => <option key={back} value={`${fyEnd - back}-03`}>{periodLabel("yearly", `${fyEnd - back}-03`)}</option>)}</select></label>
+                            <Pending className="b b-secondary b-small" busy="Saving">Save KYC year</Pending>
+                          </form>
+                        }
+                      />
+                    ))}
+                  </ul>
+                )}
+                {!soon.length && !datesNeeded && <p className="app-card-none">Nothing late or due in the next 30 days.</p>}
+              </Card>
+            ) : (
+              <Empty Icon={CalendarDays} kind="week" title="No returns yet">
+                <span>Choose the services your firm does for this client, and InboxCA lists their returns here with each due date.</span>
+                {manage && <Link className="b b-primary" href={`${base}?tab=services`} scroll={false}>Choose services</Link>}
+              </Empty>
+            )}
+            {/* The client's to-dos (20261110800000_client_todos.sql): red once late, green once done.
+                The list shows only when there are some; Add a to-do opens the form in place. */}
+            {!!todos?.length && (
+              <Card id="todos" title="To-dos" Icon={ListChecks} kind="approve" count={todos.filter((todo) => todo.status === "upcoming").length}>
                 <ul className="app-rows">
                   {[...todos.filter((todo) => todo.status === "upcoming"), ...todos.filter((todo) => todo.status !== "upcoming")].map((todo) => {
                     const { title, for: person } = todo.details as { title?: string; for?: string };
@@ -854,11 +1007,12 @@ export default async function Client({ params, searchParams }: { params: Promise
                     );
                   })}
                 </ul>
-              ) : (
-                <p className="app-card-none">No to-dos for this client.</p>
-              )}
-              {manage && !viewOnly && (
-                <form action={manageClient} className="app-card-foot agm-form">
+              </Card>
+            )}
+            {manage && !viewOnly && (
+              <details className="work-more todo-add" open={error === "todo"}>
+                <summary className="b b-ghost b-small"><Plus size={15} aria-hidden />Add a to-do</summary>
+                <form action={manageClient} className="app-card agm-form">
                   {hidden("overview")}
                   <label className="grow">To-do <input name="todo_title" required maxLength={120} placeholder="Call about the rent receipts" /></label>
                   <label>By <input type="date" name="todo_on" defaultValue={today} required /></label>
@@ -867,81 +1021,13 @@ export default async function Client({ params, searchParams }: { params: Promise
                     {/* Only those who can see this client, so a to-do never goes to someone who cannot. */}
                     {people?.filter((row) => row.status === "active" && seesClient(row, client.client_assignments, membership.settings)).map((row) => <option key={row.user_id} value={row.user_id}>{personName(row.email)}</option>)}
                   </select></label>
-                  <Pending className="b b-secondary b-small" name="intent" value="add-todo">Add a to-do</Pending>
+                  <Pending className="b b-secondary b-small" name="intent" value="add-todo">Save to-do</Pending>
                 </form>
-              )}
-            </Card>
-            {workRows.length ? (
-              <Card
-                id="due"
-                title="Due soon"
-                Icon={CalendarClock}
-                kind="week"
-                count={soon.length}
-                countTone={soon.some((row) => row.late) ? "late" : ""}
-                end={
-                  reminds && soon.some((row) => row.due <= addDays(today, 7)) && (
-                    <form action={remindClient}>
-                      {returnsState}
-                      <input type="hidden" name="from" value="client" />
-                      <Pending className="b b-ghost" busy="Sending" aria-label={`Send ${client.name} a reminder now`}>Send reminder now</Pending>
-                    </form>
-                  )
-                }
-              >
-                {soon.length ? <WorkRows rows={soon} /> : <p className="app-card-none">Nothing late or due in the next 30 days.</p>}
-              </Card>
-            ) : (
-              <Empty Icon={CalendarDays} kind="week" title="No returns yet">
-                <span>Choose the services your firm does for this client, and InboxCA lists their returns here with each due date.</span>
-                {manage && <Link className="b b-primary" href={`${base}?tab=services`} scroll={false}>Choose services</Link>}
-              </Empty>
+              </details>
             )}
-            {/* Later and filed returns stay folded under their counts, so Work opens on what is due. */}
-            {!!later.length && <WorkFold title="Later" Icon={CalendarDays} open={!soon.length || show === "later"} rows={later} />}
-            {!!filedRows.length && <WorkFold title="Filed this year" Icon={CalendarCheck} kind="done" open={show === "filed"} rows={filedRows} />}
-            {manage && numbers.some((registration) => registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === ({ cin: "agm", pan: "kyc" } as Record<string, string>)[registration.kind])) && (
-              <Card id="work-dates" title="Dates InboxCA needs" Icon={CalendarCheck} kind="papers">
-              {/* A company's AOC-4, MGT-7 and ADT-1 fall due after its AGM: the date is asked, never guessed (public.record_agm). */}
-              {numbers.filter((registration) => registration.kind === "cin" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "agm")).map((registration) => {
-                const fyEnd = Number(today.slice(0, 4)) + (today.slice(5, 7) >= "04" ? 1 : 0);
-                return (
-                  <form key={registration.id} action={recordAgm} className="app-card-foot agm-form">
-                    <input type="hidden" name="client" value={client.id} />
-                    <input type="hidden" name="registration" value={registration.id} />
-                    <span className="hint grow">AOC-4, MGT-7 and ADT-1 fall due after the AGM. Give its date and InboxCA puts them on the Calendar.</span>
-                    <label>Financial year <select name="year_end" defaultValue={`${fyEnd}-03`}>{[fyEnd - 1, fyEnd].map((year) => <option key={year} value={`${year}-03`}>{periodLabel("yearly", `${year}-03`)}</option>)}</select></label>
-                    <label>AGM date <input type="date" name="agm" required /></label>
-                    <Pending className="b b-secondary b-small" busy="Saving">Save AGM date</Pending>
-                  </form>
-                );
-              })}
-              {/* DIR-3 KYC Web runs on the director's own three year cycle (rule 12A): the year of the last one is asked, never guessed (public.record_kyc). */}
-              {numbers.filter((registration) => registration.kind === "pan" && registration.services.some((code) => (rule.get(code)?.due_rule as { from?: string } | undefined)?.from === "kyc")).map((registration) => {
-                const fyEnd = Number(today.slice(0, 4)) + (today.slice(5, 7) >= "04" ? 1 : 0);
-                const planned = !!kycPlanned;
-                return (
-                  <form key={registration.id} action={recordKyc} className="app-card-foot agm-form">
-                    <input type="hidden" name="client" value={client.id} />
-                    <input type="hidden" name="registration" value={registration.id} />
-                    <span className="hint grow">{planned ? "DIR-3 KYC Web is due once every three financial years, by 30 June after the third." : "DIR-3 KYC Web needs a date: it is due once every three financial years, by 30 June after the third. Give the financial year of the last KYC and InboxCA puts the next on the Calendar."} After a change of mobile, email or home address the director files it again within 30 days.</span>
-                    <label>Last KYC filed for <select name="year_end" defaultValue="" required><option value="" disabled>Choose a year</option>{[1, 2, 3, 4].map((back) => <option key={back} value={`${fyEnd - back}-03`}>{periodLabel("yearly", `${fyEnd - back}-03`)}</option>)}</select></label>
-                    <Pending className="b b-secondary b-small" busy="Saving">Save KYC year</Pending>
-                  </form>
-                );
-              })}
-              </Card>
-            )}
-            {(tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) || otherFigures || otherFiles) && (
-              <p className="client-tools hint">
-                <span>{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) && "InboxCA has not yet checked dates marked * against the government notification."}</span>
-                <span className="work-other">
-                  {otherFigures && <Link href={`${base}?tab=extraction`}>Other figures</Link>}
-                  {otherFiles && <Link href={`${base}?tab=outputs`}>Other return files</Link>}
-                </span>
-              </p>
-            )}
-            {(!!needs2b.size || [...itrNeeds.values()].some((needs) => needs.missing)) && membership.may("portal_files", client.id) && <PortalDrop clientId={client.id} back="returns" />}
+            {/* Later and filed returns open in place from two quiet links, so Work opens on what is due. */}
+            {!!later.length && <WorkFold title={`${later.length} later ${later.length === 1 ? "return" : "returns"}`} open={!soon.length || show === "later"} rows={later} />}
+            {!!filedRows.length && <WorkFold title={`${filedRows.length} filed this year`} open={show === "filed"} rows={filedRows} />}
           </>
         )}
         {sub === "extraction" && <><DatasetReview clientId={id} draftId={draft} lineId={line} check={check} view={view}/><div className="fig-tools">{pan && <Card id="itr-return" className="tool" title="Income tax return" Icon={FileText} kind="docs" end={<Link className="b b-secondary" href={`${base}/itr`}>Open the return</Link>}><p className="app-card-none">ITR-1 to ITR-4, filled with the client&apos;s PAN and the figures InboxCA already holds for the year. The rest is listed for you to fill.</p></Card>}<PortalInput clientId={id} message={portal}/><SalesInput clientId={id} source={source} section={section} header={header} read={read}/><PurchaseMatch clientId={id} searchParams={searchParams}/></div></>}
@@ -949,10 +1035,16 @@ export default async function Client({ params, searchParams }: { params: Promise
 
         {tab === "notices" && (
           <>
-            <p className="client-tools hint">
-              <span>Check each suggested date against the notice, then choose Mark date checked.</span>
-              <Link href="/app/notices">All notices</Link>
-            </p>
+            {/* The how-to only while a date waits to be checked; Add and All notices together. */}
+            {!!notices?.length && (
+              <p className="client-tools hint">
+                <span>{notices.some((notice) => !(notice.details as unknown as NoticeDetails).action_date) && "Check each suggested date against the notice, then choose Mark date checked."}</span>
+                <span className="page-actions">
+                  {!viewOnly && <Link className="b b-secondary" href={`${base}?tab=notice`} scroll={false}>Add a notice</Link>}
+                  <Link href="/app/notices">All notices</Link>
+                </span>
+              </p>
+            )}
             <section aria-labelledby="client-notices">
               <h2 id="client-notices" className="sr-only">Notices</h2>
               {notices?.length ? (
@@ -1003,10 +1095,11 @@ export default async function Client({ params, searchParams }: { params: Promise
                   </table>
                 </div>
               ) : (
-                <Empty Icon={Scale} kind="notice" title="No notices">
-                  <span>A notice that comes by email is saved here and shown on Today. If it came another way, add it here.</span>
-                  {!viewOnly && <Link className="b b-primary" href={`${base}?tab=notice`} scroll={false}>Add a notice</Link>}
-                </Empty>
+                <p className="client-none">
+                  <span>No notices. One that comes by email is saved here by itself.</span>
+                  {!viewOnly && <Link className="b b-secondary" href={`${base}?tab=notice`} scroll={false}>Add a notice</Link>}
+                  <Link href="/app/notices">All notices</Link>
+                </p>
               )}
             </section>
             {(noticeCount ?? 0) > 50 && pager(noticeCount ?? 0, notices?.length ?? 0, "Notices", "notices")}
@@ -1541,7 +1634,12 @@ async function MailRows({ firm, clientName, mails, className }: { firm: string; 
             </Link>
           }
           meta={`From ${senders[at]}, ${mailTime(mail.received_at)}`}
-          status={waiting.has(mail.id) ? <Badge tone="warn">Needs reply</Badge> : (mail.delivery as { ack?: string }).ack === "sent" ? <Badge tone="done">Replied</Badge> : null}
+          status={
+            <>
+              {subjects.get(mail.provider_message_id) && mail.label && mail.label !== "other" && labels[mail.label as Label] && <Badge plain>{labels[mail.label as Label]}</Badge>}
+              {waiting.has(mail.id) ? <Badge tone="warn">Needs reply</Badge> : (mail.delivery as { ack?: string }).ack === "sent" && <Badge tone="done">Replied</Badge>}
+            </>
+          }
         />
       ))}
     </ul>

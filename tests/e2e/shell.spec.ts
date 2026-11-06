@@ -151,14 +151,18 @@ test("a search moves to its results without reloading the page, shows the bar, a
     await page.goto("/app/clients");
     // A mark on the page itself: a full reload would wipe it.
     await page.evaluate(() => Object.assign(window, { kept: true }));
+    // Typing searches by itself after a pause, so more than one request may go: hold them until
+    // the bar shows, then let every one through.
     const held: (() => void)[] = [];
+    let release = false;
     await page.route(/\/app\/clients\?q=/, async (route) => {
-      if (route.request().headers().rsc) await new Promise<void>((resolve) => held.push(resolve));
+      if (route.request().headers().rsc && !release) await new Promise<void>((resolve) => held.push(resolve));
       await route.continue();
     });
     await page.getByLabel("Find by name, email, PAN or GSTIN").fill("Invented Mehta");
     await page.getByLabel("Find by name, email, PAN or GSTIN").press("Enter");
     await expect(page.locator(".nav-bar")).toHaveAttribute("data-state", "run");
+    release = true;
     held.forEach((resolve) => resolve());
     await expect(page).toHaveURL(/\/app\/clients\?q=Invented\+Mehta$/);
     await expect(page.locator(".nav-bar")).not.toHaveAttribute("data-state");

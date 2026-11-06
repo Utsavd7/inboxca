@@ -1803,12 +1803,14 @@ export async function checkRequestItem(form: FormData) {
   if (!request) redirect("/app");
   const back = `/app/clients/${request.client_id}?tab=files`;
   const details = request.details as unknown as DocumentRequest;
-  const item = details.items[Number(form.get("item"))];
-  if (!item?.received.length) redirect(back);
-  if (form.get("intent") === "again") {
-    item.received = [];
-    delete item.checked;
-  } else item.checked = true;
+  // One paper, or every one named (Mark checked for all those in).
+  const items = form.getAll("item").map((at) => details.items[Number(at)]).filter((item) => item?.received.length);
+  if (!items.length) redirect(back);
+  for (const item of items)
+    if (form.get("intent") === "again") {
+      item.received = [];
+      delete item.checked;
+    } else item.checked = true;
   const admin = supabaseAdmin();
   await admin.from("requests").update({ details: details as unknown as NonNullable<Json>, status: details.items.every((entry) => entry.received.length) ? "done" : "pending" }).eq("id", request.id);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.changed", entity_type: "request", entity_id: request.id });

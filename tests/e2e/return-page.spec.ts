@@ -51,7 +51,7 @@ test("a GSTR-1 goes from papers in to filed on its own page",async({page,browser
     // From the client's Returns row to the return's page, at Draft with Papers and Figures done.
     await signIn(page,email,key);
     await page.goto(`/app/clients/${client}?tab=returns`);
-    await page.getByRole("link",{name:"GSTR-1 (monthly) Sep 2026",exact:true}).click();
+    await page.getByRole("link",{name:"GSTR-1 Sep 2026",exact:true}).click();
     const here=new RegExp(`/app/clients/${client}/returns/${task}`);
     await expect(page).toHaveURL(here);await expect(now(page)).toContainText("Draft");
     await page.screenshot({path:test.info().outputPath("draft.png"),fullPage:true});

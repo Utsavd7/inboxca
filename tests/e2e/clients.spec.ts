@@ -54,7 +54,7 @@ test("a client added with only a GSTIN gets its PAN too, and opens with both", a
 });
 
 test("services on a client's GSTIN give it its due dates", async () => {
-  await owner.getByRole("link", { name: "Change services" }).click();
+  await owner.getByRole("link", { name: "Edit services" }).click();
   // A plain business is offered the 31 August ITR on its PAN, not the 31 July one or a tax audit.
   const pan = owner.getByRole("dialog", { name: "Services" }).getByRole("listitem").filter({ hasText: "PAN" });
   await expect(pan.getByLabel("ITR (business, no audit)")).toBeVisible();
@@ -67,8 +67,10 @@ test("services on a client's GSTIN give it its due dates", async () => {
   await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("dialog", { name: "Services" }).getByRole("button", { name: "Save services" }).click()]);
   await owner.getByRole("navigation", { name: "Client", exact: true }).getByRole("link", { name: /^Work/ }).click();
   const due = owner.locator("section[aria-labelledby=due] li");
-  await expect(due.filter({ hasText: "GSTR-3B (monthly)" }).first()).toContainText("*");
-  await expect(owner.locator(".client-pane")).toContainText("InboxCA has not yet checked");
+  // The full name is in the row's tooltip. With none of the firm's due dates confirmed yet, Work
+  // sends the owner to confirm them once, rather than tagging every row.
+  await expect(due.filter({ has: owner.locator('a[title^="GSTR-3B (monthly)"]') }).first()).toBeVisible();
+  await expect(owner.locator('.work-line a[href="/app/settings?group=reminders#due-dates"]')).toBeVisible();
   const [{n,soon}]=await query(local.dbUrl,"select count(*)::int n, count(*) filter (where t.due_on<=(now() at time zone 'Asia/Kolkata')::date+30)::int soon from public.tasks t join public.clients c on c.id=t.client_id where c.firm_id=$1 and c.name='Patel Textiles' and t.kind='compliance' and t.status<>'filed'",[firm.firmId]);
   expect(n).toBeGreaterThan(12);
   // The next 30 days first (late ones among them); every later return under Later.
@@ -200,18 +202,20 @@ test("late clients lead the list, and a client's return is marked filed from its
   await owner.goto(`/app/clients/${patel}`);
   const due = owner.locator("section[aria-labelledby=due] li");
   const late = due.filter({ has: owner.locator(".badge", { hasText: "Late" }) }).first();
+  // The row shows the return in short; the toasts name it in full, as its tooltip does.
   const title = (await late.getByRole("link").textContent())!;
+  const full = (await late.getByRole("link").getAttribute("title"))!.split(". ")[0];
   const task = (await late.getByRole("link").getAttribute("href"))!.split("/").at(-1);
   await owner.goto(`/app/clients/${patel}?tab=returns&task=${task}`);
   const panel = owner.getByRole("dialog", { name: "Mark filed" });
   await expect(panel.getByLabel("Filed on")).toHaveValue(todayInIndia());
   await panel.getByLabel(/ARN for/).fill("AB0000000000001");
   await panel.getByRole("button", { name: "Mark filed" }).click();
-  const toast = owner.getByRole("status").filter({ hasText: `${title} marked filed.` });
+  const toast = owner.getByRole("status").filter({ hasText: `${full} marked filed.` });
   await expect(toast).toBeVisible();
   await expect(due.filter({ hasText: title })).toHaveCount(0);
   await toast.getByRole("button", { name: "Undo" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: `${title} marked not filed.` })).toBeVisible();
+  await expect(owner.getByRole("status").filter({ hasText: `${full} marked not filed.` })).toBeVisible();
   await expect(due.filter({ hasText: title })).toHaveCount(1);
 
   // Filed returns say when, by whom and the ARN, and can be put back on their own page.
@@ -220,7 +224,7 @@ test("late clients lead the list, and a client's return is marked filed from its
   await panel.getByLabel("Filed on").fill(filedOn);
   await panel.getByLabel(/ARN for/).fill("AB0000000000001");
   await panel.getByRole("button", { name: "Mark filed" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: `${title} marked filed.` })).toBeVisible();
+  await expect(owner.getByRole("status").filter({ hasText: `${full} marked filed.` })).toBeVisible();
   await owner.goto(`/app/clients/${patel}?tab=returns&show=filed`);
   const filed = owner.locator(".work-fold").filter({ hasText: "Filed this year" }).locator("li").filter({ hasText: title });
   await expect(filed).toContainText(`Filed ${dueLabel(filedOn)} by Clients, ARN AB0000000000001`);
@@ -231,12 +235,16 @@ test("late clients lead the list, and a client's return is marked filed from its
   await expect(due.filter({ hasText: title })).toHaveCount(1);
 });
 
-test("search finds a client by name, email or whole PAN, and the same PAN is refused twice", async () => {
+test("search finds a client by name, email or whole PAN while typing, and the same PAN is refused twice", async () => {
   await owner.goto("/app/clients");
+  // The list filters as the words are typed, without Enter, and the box keeps the focus.
+  const box = owner.getByLabel("Find by name, email, PAN or GSTIN");
   for (const search of ["patel", "aapfu0939f", "ACCOUNTS@patel.example"]) {
-    await owner.getByLabel("Find by name, email, PAN or GSTIN").fill(search);
-    await owner.getByRole("button", { name: "Find" }).click();
+    await box.fill(search);
+    await expect.poll(() => new URL(owner.url()).searchParams.get("q")).toBe(search);
     await expect(owner.getByRole("link", { name: "Patel Textiles" })).toBeVisible();
+    if (search === "patel") await expect(owner.locator(".clients-table tbody tr").filter({ hasNotText: /patel/i })).toHaveCount(0);
+    await expect(box).toBeFocused();
   }
   await owner.getByRole("link", { name: "New client" }).click();
   await owner.getByLabel("Name", { exact: true }).fill("Copy");
@@ -252,7 +260,7 @@ test("a client's page adds and checks numbers, renames, archives and restores", 
   await owner.goto("/app/clients");
   await owner.getByRole("link", { name: "Patel Textiles" }).click();
   await details();
-  await owner.getByRole("link", { name: "Change numbers" }).click();
+  await owner.getByRole("link", { name: "Edit tax numbers" }).click();
   await owner.getByLabel("Type", { exact: true }).selectOption("gstin");
   await owner.getByLabel("Number", { exact: true }).fill("29AAGCB7383J1Z4"); // a valid GSTIN with another PAN
   await owner.getByRole("button", { name: "Add number" }).click();
@@ -508,7 +516,7 @@ test("a contact person can act for several clients, with what they may receive",
   await owner.goto("/app/clients?q=patel");
   await owner.getByRole("link", { name: "Patel Textiles Pvt Ltd" }).click();
   await details();
-  await owner.getByRole("link", { name: "Change contacts" }).click();
+  await owner.getByRole("link", { name: "Edit contacts" }).click();
   const panel = owner.getByRole("dialog", { name: "Contacts" });
   await owner.getByLabel("Contact's name").fill("Ramesh Patel");
   await owner.getByLabel("Contact's email").fill("ramesh@patel.example");
@@ -528,7 +536,7 @@ test("a contact person can act for several clients, with what they may receive",
   await owner.goto("/app/clients?q=Client 321");
   await owner.getByRole("link", { name: "Client 321" }).click();
   await details();
-  await owner.getByRole("link", { name: "Change contacts" }).click();
+  await owner.getByRole("link", { name: "Edit contacts" }).click();
   await owner.getByLabel("Contact's name").fill("R Patel");
   await owner.getByLabel("Contact's email").fill("RAMESH@patel.example");
   await owner.getByRole("button", { name: "Add contact" }).click();
@@ -604,7 +612,7 @@ test("client tabs group the returns on Work, show notices and recent activity; T
   await tabs.getByRole("link",{name:"Details"}).click();
   await owner.getByRole("link",{name:"Activity",exact:true}).click();
   await expect(owner.locator("section[aria-labelledby=client-activity]")).toContainText("Client added");
-  await owner.goto(`/app/clients/${client}`);
+  await owner.goto(`/app/clients/${client}?tab=documents`);
   await expect(owner.getByRole("link",{name:"Other figures",exact:true})).toHaveCount(0);
   await expect(owner.getByRole("link",{name:"Other return files",exact:true})).toHaveCount(0);
   // The client's oldest late return leads Today's list until the client is archived.
@@ -627,7 +635,6 @@ test("a notice is added from the Notices page by finding its client", async () =
   await pages.getByRole("link", { name: "Next" }).click();
   await expect(pages).toContainText(/^9 to 16 of \d/);
   await panel.getByLabel("Client name").fill("patel textiles");
-  await panel.getByRole("button", { name: "Find" }).click();
   await panel.getByRole("link", { name: /^Choose Patel Textiles/ }).first().click();
   await expect(panel).toContainText("Patel Textiles");
   await panel.getByLabel("Notice", { exact: true }).fill("Notice u/s 143(2)");
@@ -649,6 +656,7 @@ test("the people looking after a client show by name, not email", async () => {
   await owner.goto(`/app/clients/${client}?tab=about`);
   await expect(owner.locator("section[aria-labelledby=team-card]")).toContainText("Clients");
   await expect(owner.locator("section[aria-labelledby=team-card]")).not.toContainText("@");
+  await owner.goto(`/app/clients/${client}`);
   await expect(owner.locator(".client-team")).toContainText("Looked after by Clients");
   await owner.goto("/app/clients?q=Names%20Test");
   const row = owner.getByRole("row").filter({ hasText: "Names Test Client" });
@@ -733,8 +741,8 @@ test("a client's row offers Write and Ask for papers; its header copies numbers 
   // The next return still to file, in days from today.
   const [next] = await query(local.dbUrl, "select due_on::text due from public.tasks where client_id=$1 and kind='compliance' and status<>'filed' and due_on>=(now() at time zone 'Asia/Kolkata')::date order by due_on limit 1", [id]);
   const days = Math.round((Date.parse(next.due) - Date.parse(todayInIndia())) / 86_400_000);
-  await expect(head.getByRole("link", { name: /^Next due: / })).toContainText(days === 0 ? ", today" : days === 1 ? ", tomorrow" : `, in ${days} days`);
-  await expect(head.getByRole("link", { name: /^Next due: / })).toHaveAttribute("href", `/app/clients/${id}`);
+  await owner.goto(`/app/clients/${id}`);
+  await expect(owner.locator(".work-next").first()).toContainText(days === 0 ? ", today" : days === 1 ? ", tomorrow" : `, in ${days} days`);
 
   // Papers show 50 at a time, each with its type and a Copy for its drive folder, with their
   // true count however many there are.
