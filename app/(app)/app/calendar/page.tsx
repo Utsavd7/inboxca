@@ -12,11 +12,13 @@ import { periodName } from "@/src/lib/documents";
 import { MAX_FOLLOW_UPS } from "@/src/lib/reminders";
 import { currentMember } from "@/src/lib/member";
 import { supabaseAdmin } from "@/src/lib/supabase";
+import { isLead } from "@/src/lib/work/today";
 import { AutoSelect } from "../auto-select";
 import { LinkTabs } from "../link-tabs";
 import { MarkFiled } from "../mark-filed";
 import { Fill } from "../fill";
 import { returnStages } from "../return-work";
+import { queueSteps, stepQueue, type QueueStep } from "../work-data";
 import { fillable, fills } from "@/src/lib/return-work";
 import { statementPeriod } from "@/src/lib/tds";
 import { Item, List, Presence } from "../motion";
@@ -40,7 +42,7 @@ const shiftMonth = (month: string, by: number) => new Date(Date.UTC(Number(month
 // The firm's compliance calendar: overdue, coming up and recently filed returns, as a list or
 // a month. Anyone in the firm marks a return in progress or filed, one at a time or many
 // together (5.17.2); those who manage clients remind a client of returns due this week.
-export default async function Calendar({ searchParams }: { searchParams: Promise<{ view?: string; code?: string; day?: string; page?: string; month?: string; error?: string; task?: string | string[]; saved?: string; t?: string; remind?: string; reminding?: string; job?: string; stopped?: string }> }) {
+export default async function Calendar({ searchParams }: { searchParams: Promise<{ view?: string; code?: string; day?: string; page?: string; month?: string; error?: string; task?: string | string[]; saved?: string; t?: string; remind?: string; reminding?: string; job?: string; stopped?: string; step?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
@@ -55,6 +57,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const code = params.code ?? "";
   const viewOnly = !!membership.viewOnlyUntil;
   const reminds = !viewOnly && canManageClients(membership.role);
+  // One step's returns, late or due in 30 days, from Today's Work by step (work-data.ts).
+  const step = !day && params.step && params.step in queueSteps ? (params.step as QueueStep) : null;
+  const queue = step && stepQueue({ supabase, membership });
 
   // The returns a view shows, for the list and for each pill's true count.
   const returns = (shown: CalendarView | null, select: typeof columns, head = false) => {
@@ -88,13 +93,14 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   // With no view asked for, it opens on the late returns when there are any: their page is read
   // straight away, and the next 30 days only when nothing is late.
   const asked = params.view && params.view in calendarViews ? (params.view as CalendarView) : null;
-  const late = !asked && !day ? pageOf("overdue") : null;
+  const late = !asked && !day && !step ? pageOf("overdue") : null;
   const view: CalendarView = asked ?? (late && (await late).count ? "overdue" : "soon");
   const href = (next: { view?: CalendarView; day?: string; page?: number; task?: string; month?: string | null; remind?: string } = {}) => {
     const search = new URLSearchParams();
     const on = next.view ? null : (next.day ?? day);
     const shownMonth = next.month === undefined ? month : next.month;
     if (on) search.set("day", on);
+    else if (step && !next.view) search.set("step", step);
     else search.set("view", next.view ?? view);
     if (code) search.set("code", code);
     if (shownMonth) search.set("month", shownMonth);
@@ -105,13 +111,13 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   };
   // The strip of days ahead, with how many returns are still to file on each; or the month's
   // weeks, Monday first, with what is due on each day.
-  const strip = month ? null : day || view === "week" || view === "soon" ? Array.from({ length: (view === "week" && !day ? 7 : 30) + 1 }, (_, at) => addDays(today, at)) : null;
+  const strip = month || step ? null : day || view === "week" || view === "soon" ? Array.from({ length: (view === "week" && !day ? 7 : 30) + 1 }, (_, at) => addDays(today, at)) : null;
   const lead = month ? (new Date(`${month}-01T00:00:00Z`).getUTCDay() + 6) % 7 : 0;
   const cells = month ? Array.from({ length: Math.ceil((lead + new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate()) / 7) * 7 }, (_, at) => addDays(`${month}-01`, at - lead)) : null;
   const span = strip ?? cells;
   const inGrid = cells && supabase.from("tasks").select(columns).eq("firm_id", membership.firmId).in("kind", ["compliance", "licence"]).is("clients.archived_at", null).gte("due_on", cells[0]).lte("due_on", cells.at(-1)!);
   const [{ data: tasks, count: total }, { data: perDay }, { data: inMonth }, [{ data: rules }, { data: marking }, { data: reminding }, { data: remindTasks }, { data: mailbox }, { count: remindedToday }, counts, { data: extensions }]] = await Promise.all([
-    late && view === "overdue" ? late : pageOf(day ? null : view),
+    queue ? queue.then(({ groups }) => groups[step].filter((task) => !code || task.code === code)).then((rows) => ({ data: rows.slice(from, from + pageSize), count: rows.length })) : late && view === "overdue" ? late : pageOf(day ? null : view),
     span ? supabase.rpc("calendar_days", { target_firm: membership.firmId, first_day: span[0], last_day: span.at(-1)!, only_code: code || undefined }) : Promise.resolve({ data: null }),
     // The month's own returns, the first few named in each day.
     inGrid ? Promise.resolve((code ? inGrid.eq("code", code) : inGrid).order("due_on").order("id").limit(1000)) : Promise.resolve({ data: null }),
@@ -119,7 +125,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   ]);
   if (total && from >= total) redirect(href({ page: Math.ceil(total / pageSize) }));
   // GST returns and ITRs with figures in but not filled yet, for Fill.
-  const stages = await returnStages(supabase, membership.firmId, viewOnly ? [] : (tasks ?? []).filter((task) => task.status !== "filed" && fills(task.code)).map((task) => task.id));
+  const stages = queue && !viewOnly ? (await queue).stages : await returnStages(supabase, membership.firmId, viewOnly ? [] : (tasks ?? []).filter((task) => task.status !== "filed" && fills(task.code)).map((task) => task.id));
   const rule = new Map(rules?.map((r) => [r.code, r]));
   const extended = new Map(extensions?.map((row) => [`${row.code}:${row.period_key}`, { notice: (row.due_rule as { notice: string }).notice, link: row.source_url }]));
   const licence = (task: { kind?: string }) => task.kind === "licence";
@@ -149,7 +155,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const status = (task: { kind: string; status: string; due_on: string }): [Tone, string] =>
     task.status === "filed" ? ["done", licence(task) ? "Renewed" : "Filed"] : task.due_on < today ? ["late", licence(task) ? "Expired" : "Late"] : task.status === "in_progress" ? ["blue", "In progress"] : ["warn", licence(task) ? "Expires" : "Upcoming"];
   const filedView = !day && view === "filed";
-  const period = day ? `Due on ${dueLabel(day)}` : view === "overdue" ? "Due before today" : filedView ? `Filed since ${dueLabel(addDays(today, -30))}` : `${dueLabel(today)} to ${dueLabel(addDays(today, view === "week" ? 7 : 30))}`;
+  const period = step ? `${queueSteps[step]}, late or due by ${dueLabel(addDays(today, 30))}` : day ? `Due on ${dueLabel(day)}` : view === "overdue" ? "Due before today" : filedView ? `Filed since ${dueLabel(addDays(today, -30))}` : `${dueLabel(today)} to ${dueLabel(addDays(today, view === "week" ? 7 : 30))}`;
   const shownFrom = total ? from + 1 : 0;
   const shownTo = Math.min(from + (tasks?.length ?? 0), total ?? 0);
   const done = params.t?.split(".").filter((id) => uuid.test(id)) ?? [];
@@ -170,20 +176,43 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   // Ticks clear once any return shown changes, as after marking the chosen ones.
   const ticks = tasks?.map((task) => task.id + task.status).join();
   const thisMonth = today.slice(0, 7);
+  // A step's one action for all its returns, the same ones the full list and a return's own page
+  // have, with their own checks: remind every client still missing papers (the owner and
+  // partners), Fill all, or open the next return to check, approve or file.
+  const approver = ["owner", "partner", "manager"].includes(membership.role);
+  const stepAction = viewOnly || !step || !tasks?.length ? null
+    : step === "ask" ? isLead(membership.role) && <Link className="b b-secondary" href="/app/work?show=papers&confirm=papers">Remind clients missing papers</Link>
+    : step === "prepare" ? (approver || membership.may("edit_figures")) && <Link className="b b-secondary" href="/app/work?show=returns&confirm=fill">Fill all due in 7 days</Link>
+    : <Link className="b b-secondary" href={`/app/clients/${tasks[0].client_id}/returns/${tasks[0].id}`}>{step === "check" ? "Check the next one" : step === "approve" ? (approver ? "Approve the next one" : "Open the next one") : "File the next one"}</Link>;
 
   const list = (
     <section className="split cal-list" aria-label="Returns">
       <div className="cal-tools">
-        <span className="hint">{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "InboxCA has not yet checked dates marked * against the government notification." : "Tick returns to mark many at once."}</span>
+        {stepAction || <span className="hint">{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "InboxCA has not yet checked dates marked * against the government notification." : "Tick returns to mark many at once."}</span>}
         <Form action="/app/calendar">
           <input type="hidden" name="view" value={view} />
           {day && <input type="hidden" name="day" value={day} />}
           {month && <input type="hidden" name="month" value={month} />}
+          {step && <input type="hidden" name="step" value={step} />}
           <AutoSelect save="code" name="code" defaultValue={code} aria-label="Return">
             <option value="">All returns</option>
             {rules?.map((r) => (
               <option key={r.code} value={r.code}>
                 {r.name}
+              </option>
+            ))}
+          </AutoSelect>
+          <noscript>
+            <button className="b b-secondary">Show</button>
+          </noscript>
+        </Form>
+        <Form action="/app/calendar">
+          {code && <input type="hidden" name="code" value={code} />}
+          <AutoSelect save="step" name="step" defaultValue={step ?? ""} aria-label="Step">
+            <option value="">Every step</option>
+            {(Object.keys(queueSteps) as QueueStep[]).map((key) => (
+              <option key={key} value={key}>
+                {queueSteps[key]}
               </option>
             ))}
           </AutoSelect>
@@ -217,6 +246,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 const [form, of] = name(task);
                 const { ack, filed_on, verified_on } = task.details as { ack?: string; filed_on?: string; verified_on?: string };
                 const [tone, word] = status(task);
+                // Beside Fill, Remind client is its bell alone, so the row fits a laptop.
+                const fill = !viewOnly && membership.may("edit_figures", task.client_id) && fillable(stages.get(task.id));
                 return (
                   <Item as="tr" key={task.id}>
                     {!viewOnly && (
@@ -227,7 +258,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                     <td>
                       <span className="who">
                         <Avatar name={task.clients.name} />
-                        <Link className="row-link" href={`/app/clients/${task.client_id}`}>
+                        <Link className="row-link" href={`/app/clients/${task.client_id}${licence(task) ? "" : `/returns/${task.id}`}`}>
                           {task.clients.name}
                         </Link>
                       </span>
@@ -259,12 +290,12 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                       {/* A client is reminded of returns late or due within 7 days; a licence never. */}
                       {reminds && !licence(task) && task.status !== "filed" && task.due_on > addDays(today, 7) && <span className="sub cal-later">Remind from {dueLabel(addDays(task.due_on, -7))}</span>}
                       {reminds && !licence(task) && task.status !== "filed" && soon(task.due_on) && (
-                        <Link className={`b b-ghost${compact ? " b-icon" : ""}`} href={href({ page, remind: task.client_id })} scroll={false} aria-label={`Remind ${task.clients.name}`} title="Remind client">
+                        <Link className={`b b-ghost${compact || fill ? " b-icon" : ""}`} href={href({ page, remind: task.client_id })} scroll={false} aria-label={`Remind ${task.clients.name}`} title="Remind client">
                           <BellRing size={14} aria-hidden />
-                          {!compact && "Remind client"}
+                          {!compact && !fill && "Remind client"}
                         </Link>
                       )}
-                      {!viewOnly && membership.may("edit_figures", task.client_id) && fillable(stages.get(task.id)) && <Fill task={task.id} label={`${task.clients.name} ${form}`} />}
+                      {fill && <Fill task={task.id} label={`${task.clients.name} ${form}`} />}
                       {viewOnly ? null : task.status !== "filed" ? (
                         membership.may("mark_filed", task.client_id) && (licence(task) ? (
                           // A licence has no acknowledgement to type: renewed in one press.
@@ -298,8 +329,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
           <RowKeys />
         </div>
       ) : (
-        <Empty Icon={CalendarDays} kind={view === "overdue" && !day ? "done" : "week"} title={day ? `Nothing due on ${dueLabel(day)}` : view === "overdue" ? "Nothing is late" : "No returns here"} art={!day && !code && counts.every(({ count }) => !count) ? <SetupArt scene="calendar" /> : undefined}>
-          <span>{day ? "Choose another day, or a view above." : view === "overdue" ? "Every return that was due has been filed." : "Choose the services you file on a client's page, and their due dates appear here."}</span>
+        <Empty Icon={CalendarDays} kind={view === "overdue" && !day ? "done" : "week"} title={step ? "No returns at this step" : day ? `Nothing due on ${dueLabel(day)}` : view === "overdue" ? "Nothing is late" : "No returns here"} art={!day && !code && counts.every(({ count }) => !count) ? <SetupArt scene="calendar" /> : undefined}>
+          <span>{step ? "Returns late or due in the next 30 days show here once they reach it." : day ? "Choose another day, or a view above." : view === "overdue" ? "Every return that was due has been filed." : "Choose the services you file on a client's page, and their due dates appear here."}</span>
           {code ? (
             <Link className="b b-secondary" href={day ? `/app/calendar?day=${day}` : `/app/calendar?view=${view}`}>
               Show all returns
@@ -346,7 +377,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 { href: href({ month: month ?? thisMonth }), label: "Month", current: !!month },
               ]}
             />
-            <LinkTabs kind="pills" label="Show" items={views.map((shown, at) => ({ href: href({ view: shown }), label: calendarViews[shown].label, count: counts[at].count ?? 0, current: !day && view === shown }))} />
+            <LinkTabs kind="pills" label="Show" items={views.map((shown, at) => ({ href: href({ view: shown }), label: calendarViews[shown].label, count: counts[at].count ?? 0, current: !day && !step && view === shown }))} />
           </>
         }
       />
