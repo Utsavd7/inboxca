@@ -482,7 +482,9 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
     const kind = opened.box === "sent" ? sentKind(opened.messageId) : null;
     const openTag: Tag | null = event ? chipOf({ id: event.id, outcomes }) : kind ? { text: sentTags[kind], tone: "" } : null;
     const asked = askedPaper(opened.subject, opened.text);
-    const suggested = clientPapers ? suggestPapers(`${opened.subject}\n${opened.text}`, clientPapers, asked, [...documentTypes, ...((membership.settings.document_types ?? []) as string[])]).map((doc) => doc.id) : [];
+    // Only the client's own papers are suggested. InboxCA's prepared returns can still be attached
+    // from the list, by a person who chooses to send a draft, but are never offered on their own.
+    const suggested = clientPapers ? suggestPapers(`${opened.subject}\n${opened.text}`, clientPapers.filter((doc) => !doc.prepared), asked, [...documentTypes, ...((membership.settings.document_types ?? []) as string[])]).map((doc) => doc.id) : [];
     // Snooze and who answers, for an email that needs a reply.
     const openAsk: Ask = event ? { ...askOf(event.id), assignee: forWho(event.id) } : {};
     // What InboxCA did with the email in a line, with a link to what was sent or recorded.
@@ -673,7 +675,7 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
               })}
             </ol>
             {!replying && answerRow ? (
-              // InboxCA's own reply as a small card: Use sends it as it reads, Change edits it, Dismiss does not send it.
+              // InboxCA's own reply, prepared under the firm's rules, as a small card: Send (with Undo), Change or Don't send.
               <section className="ib-drafted" aria-label="InboxCA's reply">
                 <form action={manageAnswer} className="ib-card">
                   <input type="hidden" name="email" value={answerRow.id} />
@@ -683,9 +685,9 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
                     <strong className="grow">{held ? "Reply ready" : `Sends at ${india((answerRow.delivery as Delivery).at ?? new Date().toISOString(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}`}</strong>
                     {held ? (
                       <>
-                        <Pending className="b b-ghost" name="intent" value="stop" busy="Stopping" title="Not sent">Dismiss</Pending>
+                        <Pending className="b b-ghost" name="intent" value="stop" busy="Stopping">Don&apos;t send</Pending>
                         {drafted && "text" in drafted && <Link className="b b-secondary" href={`${href({ mail: answerRow.id, edit: "answer" })}#reply-text`} scroll={false}>Change</Link>}
-                        <Pending className="b b-primary" name="intent" value="send" busy="Sending" title="Sends it as it reads"><Send size={14} aria-hidden />Use</Pending>
+                        <Pending className="b b-primary" name="intent" value="send" busy="Sending"><Send size={14} aria-hidden />Send</Pending>
                       </>
                     ) : <Pending className="b b-secondary" name="intent" value="stop" busy="Stopping">Undo</Pending>}
                   </p>
@@ -694,7 +696,7 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
               </section>
             ) : event?.client_id && connected && (
               // An email waiting for a person gets a reply suggested by why it waits; a paper not in the drive, the client's Ask for papers too.
-              // Once it no longer waits, the box starts empty again. The suggested reply, or AI's draft, shows as a card to use, change or dismiss.
+              // Once it no longer waits, the box starts empty again. The suggested reply, or AI's draft, shows as a card to put in the reply or dismiss.
               <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}:${aiWork && "text" in aiWork ? "ai" : ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : aiWork && "text" in aiWork ? aiWork.text : undefined} aiDraft={sp.edit !== "answer" && !!aiWork && "text" in aiWork} mail={event.id} papers={attachable(clientPapers)} suggested={aiWork && "papers" in aiWork ? [...suggested, ...aiWork.papers] : suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
                 suggestion={request ? suggestedReply(request.reason_code, { name: sender || open.client?.name || "", client: open.client?.name ?? "", firm: membership.firmName, paper: asked }) : undefined}
                 askPapers={request?.reason_code === "record_not_found" && !membership.viewOnlyUntil ? `/app/clients/${event.client_id}?tab=documents&ask=1` : undefined}

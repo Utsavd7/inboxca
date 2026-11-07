@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Json } from "@/src/db/types";
 import { serverCrypto } from "@/src/lib/crypto";
+import { sameForm } from "@/src/lib/documents";
 import { paperPolicy, pickPaper, type BulkSend, type RecordsSettings } from "@/src/lib/records";
 import { sendShare } from "@/src/lib/shares";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -26,12 +27,12 @@ export const bulkSend: Handler = async (job) => {
     if (handled++ >= 25 || Date.now()-started>=30_000) return {retry:"more_clients",at:new Date(Date.now()+10*60_000)};
     const [{data: client,error: clientError},{data: papers,error: paperError},previous] = await Promise.all([
       admin.from("clients").select("name,email_enc,archived_at").eq("firm_id",firm).eq("id",entry.id).maybeSingle(),
-      admin.from("documents").select("id,name,document_type,period_key,status,share_policy,prepared").eq("firm_id",firm).eq("client_id",entry.id).eq("document_type",details.type).eq("status","filed"),
+      admin.from("documents").select("id,name,document_type,period_key,status,share_policy,prepared").eq("firm_id",firm).eq("client_id",entry.id).in("document_type",sameForm(details.type)).eq("status","filed"),
       admin.from("shares").select("id,document_id,status,delivery").eq("firm_id",firm).eq("id",entry.share).maybeSingle(),
     ]);
     let prior=previous.data;
     if (clientError || paperError || previous.error) return {retry:"papers_not_read"};
-    const picked = pickPaper(prior ? (papers ?? []).filter((paper) => paper.id === prior?.document_id) : papers ?? [], {types:[details.type],period:details.period});
+    const picked = pickPaper(prior ? (papers ?? []).filter((paper) => paper.id === prior?.document_id) : papers ?? [], {types:sameForm(details.type),period:details.period});
     const paper = "document" in picked ? picked.document : null;
     if (paper && !prior) {
       entry.share=bulkShareId(firm,paper.id,entry.id,details.day);

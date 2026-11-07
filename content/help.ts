@@ -240,7 +240,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         title: "GST month end",
         lead: "One page for every GST client in a month: what is in, what differs, and what is still to prepare or file.",
         steps: [
-          "On Today, choose Late clients to open Your list, then choose GST month end.",
+          "In the sidebar, under Workspace, choose GST month end.",
           "Choose the month, and if you like the person who looks after the clients or a tag.",
           "Each client shows its papers, GSTR-2B, differences, GSTR-1, GSTR-3B and filing, each in a few words with one next step. GSTR-1 and GSTR-3B open their return's own page.",
         ],

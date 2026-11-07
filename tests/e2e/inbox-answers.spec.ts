@@ -5,8 +5,8 @@ import { appKey, connectTestMailbox, localSupabase, mailTexts, makeMailbox, poll
 
 // Inbox, answered B and C end to end: a client asks whether a return is filed, which papers are
 // still needed and what is due, and sends papers and a notice. With Ask me first (the default)
-// each answer waits in the Inbox, built from the firm's records, for one click Use (send) or
-// Change; Dismiss stops it. With Auto each goes after its 5 minutes, and Undo stops it. Mail goes
+// each answer waits in the Inbox, built from the firm's records, for one click Send or Change;
+// Don't send stops it. With Auto each goes after its 5 minutes, and Undo stops it. Mail goes
 // through the local GreenMail server. Skipped when local Supabase is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase: npx supabase start, then npm run db:env");
@@ -85,13 +85,13 @@ test("Ask me first: each answer waits in the Inbox, built from the records, for 
   await expect(list().getByRole("listitem").first()).toContainText("Reply ready");
   expect(await mailTexts(client.email)).toEqual([]);
 
-  // The open email shows InboxCA's reply; Use sends it as it reads.
+  // The open email shows InboxCA's reply; Send sends it as it reads.
   await open(`Filed one ${tag}`);
   const reply = pane().getByRole("region", { name: "InboxCA's reply" });
   await expect(reply.locator("pre")).toHaveText(new RegExp(`^Dear ${client.name},\\n\\nThank you for your email\\. As per our records:\\n- GSTR-1 \\(monthly\\) for Sep 2026: filed on \\d+ \\w+ \\d{4}, acknowledgement number AA2409261234567\\n\\nAnswers Firm ${tag}$`));
   await expect(reply).toContainText("acknowledgement number AA2409261234567");
   await owner.screenshot({ path: test.info().outputPath("ask-me-first.png") });
-  await reply.getByRole("button", { name: "Use", exact: true }).click();
+  await reply.getByRole("button", { name: "Send", exact: true }).click();
   await expect(toast("Sending the reply now.")).toBeVisible();
   await runJobs(owner.request, firm.firmId);
   await expect.poll(async () => (await mailTexts(client.email)).join("\n---\n")).toContain("- GSTR-1 (monthly) for Sep 2026: filed on ");
@@ -105,7 +105,7 @@ test("Ask me first: each answer waits in the Inbox, built from the records, for 
   await pane().getByRole("button", { name: "Send reply" }).click();
   await expect(toast("Reply sent")).toBeVisible();
 
-  // One click Send from the list, and Dismiss for the notice's receipt.
+  // One click Send from the list, and Don't send for the notice's receipt.
   await owner.goto("/app/inbox?panel=replies");
   await row("Lists what is due").getByRole("button", { name: /^Send/ }).click();
   await expect(toast("Sending the reply now.")).toBeVisible();
@@ -115,7 +115,7 @@ test("Ask me first: each answer waits in the Inbox, built from the records, for 
   await open(`Notice one ${tag}`);
   await expect(pane().getByRole("region", { name: "InboxCA's reply" })).toContainText("We received your notice. Your CA will look at it.");
   await expect(pane()).toContainText("InboxCA recorded the notice.");
-  await pane().getByRole("button", { name: "Dismiss" }).click();
+  await pane().getByRole("button", { name: "Don't send" }).click();
   await expect(toast("Not sent.")).toBeVisible();
   await runJobs(owner.request, firm.firmId);
   await expect.poll(async () => (await mailTexts(client.email)).length).toBe(4);

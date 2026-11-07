@@ -221,18 +221,27 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
   );
 }
 
+// The reply box takes the cursor at the end of its text, and its Send row comes into view.
+const place = () => {
+  const box = document.querySelector<HTMLTextAreaElement>("#reply-text");
+  if (!box) return;
+  box.focus();
+  box.setSelectionRange(box.value.length, box.value.length);
+  box.parentElement?.querySelector(".ib-reply-foot")?.scrollIntoView({ block: "nearest" });
+};
+
 // The reply under an open conversation, in its scroll: quick replies, plain text that starts at
 // three lines and grows as it is written (inbox.css), papers and files, and an AI draft only
 // once AI is set up. A reply offered by InboxCA (suggestion, for an email waiting for a person,
-// or AI's draft, aiDraft) waits as a small card: Use sends it as it reads, Change puts it in the
-// box, Dismiss leaves the box empty. It starts open on InboxCA's own answer when a person edits
-// it (start). For a paper not in the drive, askPapers asks the client for papers. back is where a
+// or AI's draft, aiDraft) waits as a small card, never sent from it: Put in reply fills the box,
+// Dismiss leaves it empty. It starts open on InboxCA's own answer when a person edits it (start).
+// Whichever way the box opens, the cursor waits at the end of the text with Send in view. For a paper not in the drive, askPapers asks the client for papers. back is where a
 // sent reply comes back to, when not the Inbox.
 export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, start, aiDraft, suggestion, askPapers, note, back }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; start?: string; aiDraft?: boolean; suggestion?: string; askPapers?: string; note?: string; back?: string }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const offered = start ?? suggestion;
   const [view, setView] = useState<"card" | "open">(offered && (aiDraft || !start) ? "card" : "open");
-  const focus = useRef(false);
+  const focus = useRef(!!start && !aiDraft);
   const text = useRef<HTMLTextAreaElement>(null);
   const [draft, ask, drafting] = useActionState<Draft, FormData>(async (previous, form) => {
     const next = await draftReply(previous, form);
@@ -242,7 +251,7 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, s
   }, {});
   useEffect(() => {
     const write = () => {
-      if (text.current?.offsetParent) return text.current.focus();
+      if (text.current?.offsetParent) return place();
       focus.current = true;
       setView("open");
     };
@@ -252,7 +261,7 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, s
   useEffect(() => {
     if (view !== "open" || !focus.current) return;
     focus.current = false;
-    text.current?.focus();
+    place();
   }, [view]);
   const dismiss = () => {
     if (text.current) text.current.defaultValue = text.current.value = "";
@@ -271,8 +280,7 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, s
             <strong className="grow">{aiDraft ? "AI draft" : "Suggested reply"}</strong>
             {askLink}
             <button type="button" className="b b-ghost" onClick={dismiss}>Dismiss</button>
-            <button type="button" className="b b-secondary" onClick={openReply}>Change</button>
-            <Send>Use</Send>
+            <button type="button" className="b b-primary" onClick={openReply}>Put in reply</button>
           </p>
           <pre className="ib-draft-text">{offered}</pre>
         </div>

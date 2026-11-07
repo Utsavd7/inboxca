@@ -62,9 +62,9 @@ test("each email waiting for a person is for the client's person, with a reply s
   // A paper not in the drive: the reply says so in plain words, and Ask for papers is one click away.
   await row(`Old ITR ${tag}`).getByText(`Old ITR ${tag}`).click();
   await expect(pane().getByRole("heading", { name: `Old ITR ${tag}` })).toBeVisible();
-  // The suggested reply waits as a card under the email; Change puts it in the box.
+  // The suggested reply waits as a card under the email; Put in reply puts it in the box.
   await expect(pane().getByLabel("Your reply")).toBeHidden();
-  await pane().getByRole("button", { name: "Change" }).click();
+  await pane().getByRole("button", { name: "Put in reply" }).click();
   await expect(pane().getByLabel(/^For Anita/)).toBeVisible();
   await expect(owner.getByLabel("Your reply")).toHaveValue(`Dear ${client.name},\n\nThank you for your email. We could not find the ITR-V for AY 2024-25 (FY 2023-24) in our records just now. We will look for it and send it to you as soon as we have it.\n\nRegards,\n${firmName}`);
   await expect(pane().getByRole("link", { name: "Ask for papers" })).toHaveAttribute("href", `/app/clients/${client.id}?tab=documents&ask=1`);
@@ -114,7 +114,7 @@ test("the suggested reply goes with a paper from the client's folder, picked in 
   await row(`Bank loan ${tag}`).getByText(`Bank loan ${tag}`).click();
   await expect(pane().locator(".ib-head .badge.late", { hasText: "Waiting 3 days" })).toBeVisible();
   // The person adds a line to the suggested reply and picks the paper: open the list, pick it.
-  await pane().getByRole("button", { name: "Change" }).click();
+  await pane().getByRole("button", { name: "Put in reply" }).click();
   const reply = owner.getByLabel("Your reply");
   await reply.fill((await reply.inputValue()).replace("will get back to you soon.", "will get back to you soon. This year's ITR-V is attached for the bank."));
   await pane().getByLabel("Add a paper from the drive").selectOption({ label: paper });
@@ -159,8 +159,11 @@ test("AI's draft waits in the reply box, goes only when a person sends it, and i
   await row(`Diwali ${tag}`).getByText(`Diwali ${tag}`).click();
   await expect(owner.getByLabel("Your reply")).toHaveValue(draft);
   expect((await mailTexts(client.email)).some((text) => text.includes("Thank you for your wishes"))).toBe(false);
-  // The draft is a card under the email; Use sends it as it reads.
-  await pane().getByRole("button", { name: "Use" }).click();
+  // The draft is a card under the email, never sent from it: Put in reply, then Send reply.
+  await expect(pane().getByRole("button", { name: "Send reply" })).toBeHidden();
+  await pane().getByRole("button", { name: "Put in reply" }).click();
+  await expect(owner.getByLabel("Your reply")).toBeFocused();
+  await owner.getByRole("button", { name: "Send reply" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Reply sent" })).toBeVisible();
   expect((await mailTexts(client.email)).filter((text) => text.includes("Thank you for your wishes"))).toHaveLength(1);
   expect(await query(local.dbUrl, "select status, draft_enc from public.requests where id = $1", [ask.id])).toEqual([{ status: "done", draft_enc: null }]);
