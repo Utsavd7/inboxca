@@ -270,7 +270,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                     <td>
                       <span className="who">
                         <Avatar name={task.clients.name} />
-                        <Link className="row-link" href={`/app/clients/${task.client_id}${licence(task) ? "" : `/returns/${task.id}`}`}>
+                        <Link className="row-link" href={`/app/clients/${task.client_id}${licence(task) ? "" : `/returns/${task.id}`}`} title={task.clients.name}>
                           {task.clients.name}
                         </Link>
                         <DeskChip client={{ id: task.client_id, name: task.clients.name }} desks={desks.get(task.client_id) ?? []} work={workOf(task.code)} task={licence(task) || task.status === "filed" ? undefined : { id: task.id, doer: personOf(task.doer) }} viewer={viewer} />

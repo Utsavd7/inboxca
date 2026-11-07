@@ -528,10 +528,11 @@ export default async function Client({ params, searchParams }: { params: Promise
                 {idNumber("PAN", pan)}
               </span>
             )}
-            {desks.map((desk) => (
-              <span key={desk.work ?? "all"} className="client-id">
-                <span className="client-id-kind">{desk.work ? deskNames[desk.work] : "Staff"}</span>
-                <DeskChip client={{ id: client.id, name: client.name }} desks={desks} work={desk.work} viewer={client.archived_at ? { ...viewer, assign: false, take: false } : viewer} named />
+            {/* Desks that one person or team does are one chip, its desks named on hover and in its menu. */}
+            {(desks.length > 1 && desks.every((desk) => !!desk.holder && desk.holder.id === desks[0].holder?.id) ? [undefined] : desks.map((desk) => desk.work)).map((work) => (
+              <span key={work === undefined ? "same" : (work ?? "all")} className="client-id">
+                <span className="client-id-kind">{work ? deskNames[work] : "Staff"}</span>
+                <DeskChip client={{ id: client.id, name: client.name }} desks={desks} work={work} viewer={client.archived_at ? { ...viewer, assign: false, take: false } : viewer} named />
               </span>
             ))}
           </span>

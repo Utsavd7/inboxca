@@ -33,7 +33,7 @@ td .fill-now-why { max-width: 220px; }
 .cg-go kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; background: var(--kbd-on-accent); color: var(--on-accent); font: 600 11px var(--font-jakarta), sans-serif; }
 .cg-figs { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; margin: var(--s2) 0 0; padding: 0; list-style: none; }
 .cg-figs li { display: grid; min-width: 0; }
-.cg-fig { position: relative; display: grid; gap: 1px; min-width: 0; padding: 5px var(--s2); border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface-2); cursor: pointer; transition: border-color var(--fast) var(--out), background var(--fast) var(--out); }
+.cg-fig { position: relative; display: grid; align-content: start; gap: 1px; min-width: 0; padding: 5px var(--s2); border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface-2); cursor: pointer; transition: border-color var(--fast) var(--out), background var(--fast) var(--out); }
 .cg-fig:hover { border-color: var(--line-2); background: var(--hover); }
 .cg-fig input { position: absolute; top: 0; left: 0; width: 1px; height: 1px; margin: 0; opacity: 0; }
 .cg-fig:has(input:checked) { border-color: var(--late-dot); background: var(--late-bg); }
