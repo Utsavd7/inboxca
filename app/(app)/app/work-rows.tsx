@@ -4,6 +4,7 @@ import { dueLabel } from "@/src/lib/calendar";
 import { canManageClients } from "@/src/lib/clients";
 import type { currentMember } from "@/src/lib/member";
 import type { Listed } from "@/src/lib/work/today";
+import { DeskChip } from "./desk-chip";
 import { Fill } from "./fill";
 import { List } from "./motion";
 import { Pending } from "./pending";
@@ -29,13 +30,13 @@ export function WorkRows({ items, today, membership, name, more }: { items: List
           const red = late || (!!item.urgent && !item.due);
           const [Icon, kind] = red ? [TriangleAlert, "late" as const] : item.key.startsWith("call:") ? [Phone, "notice" as const] : /^(computer|office):/.test(item.key) ? [ShieldCheck, "approve" as const] : item.key.startsWith("todo:") ? [ListChecks, "approve" as const] : icons[item.area];
           const client = item.client && !item.title.includes(item.client.name) ? item.client.name : null;
+          // Who does a return, beside its client: the same chip as on Clients (desk-chip.tsx).
+          const chip = item.desk && item.client && <DeskChip client={item.client} {...item.desk} />;
+          const notice = item.key.startsWith("notice:") && <Scale className="work-mark" size={14} aria-hidden />;
           const what = (
             <>
-              {client && <span className="work-client">{client}</span>}
-              <span className={client ? "work-what" : undefined}>
-                {item.key.startsWith("notice:") && <Scale className="work-mark" size={14} aria-hidden />}
-                {item.title}
-              </span>
+              {client && <span className="work-client">{chip ? endWith(client, chip) : client}</span>}
+              <span className={client ? "work-what" : undefined}>{notice ? startWith(notice, item.title) : !client && chip ? endWith(item.title, chip) : item.title}</span>
             </>
           );
           return (
@@ -53,6 +54,16 @@ export function WorkRows({ items, today, membership, name, more }: { items: List
     </>
   );
 }
+
+// A chip or a mark stays on the line of the word beside it, never alone on a line of its own.
+const endWith = (text: string, end: React.ReactNode) => {
+  const at = text.lastIndexOf(" ") + 1;
+  return <>{text.slice(0, at)}<span className="work-nb">{text.slice(at)}{end}</span></>;
+};
+const startWith = (start: React.ReactNode, text: string) => {
+  const at = text.indexOf(" ") < 0 ? text.length : text.indexOf(" ");
+  return <><span className="work-nb">{start}{text.slice(0, at)}</span>{text.slice(at)}</>;
+};
 
 // When it is due, as the client's Work rows show it: the month over the day.
 function DueChip({ due, late }: { due: string; late: boolean }) {

@@ -114,7 +114,7 @@ isOneToOne: false
                   ]
                 },"clients": {
                   Row: {
-                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"engagement_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"phone_enc": string | null,"purchase_mapping_enc": string | null,"reminders_paused": boolean,"sales_mapping_enc": string | null,"tags": (string)[],"tds_mapping_enc": string | null
+                    "archived_at": string | null,"branch_id": string | null,"email_bidx": string | null,"email_enc": string | null,"engagement_enc": string | null,"firm_id": string,"group_id": string | null,"id": string,"kind": string,"name": string,"phone_enc": string | null,"purchase_mapping_enc": string | null,"reminders_paused": boolean,"sales_mapping_enc": string | null,"tags": (string)[],"tds_mapping_enc": string | null,"is_mine": boolean | null
                   }
                   Insert: {
                     "archived_at"?: string | null,"branch_id"?: string | null,"email_bidx"?: string | null,"email_enc"?: string | null,"engagement_enc"?: string | null,"firm_id": string,"group_id"?: string | null,"id"?: string,"kind": string,"name": string,"phone_enc"?: string | null,"purchase_mapping_enc"?: string | null,"reminders_paused"?: boolean,"sales_mapping_enc"?: string | null,"tags"?: (string)[],"tds_mapping_enc"?: string | null
@@ -687,13 +687,13 @@ isOneToOne: true
                   ]
                 },"tasks": {
                   Row: {
-                    "client_id": string,"code": string | null,"details": NonNullable<Json>,"due_on": string,"firm_id": string,"id": string,"kind": string,"period_key": string | null,"registration_id": string | null,"status": string
+                    "client_id": string,"code": string | null,"details": NonNullable<Json>,"doer": string | null,"due_on": string,"firm_id": string,"id": string,"kind": string,"period_key": string | null,"registration_id": string | null,"status": string,"is_mine": boolean | null
                   }
                   Insert: {
-                    "client_id": string,"code"?: string | null,"details"?: NonNullable<Json>,"due_on": string,"firm_id": string,"id"?: string,"kind"?: string,"period_key"?: string | null,"registration_id"?: string | null,"status"?: string
+                    "client_id": string,"code"?: string | null,"details"?: NonNullable<Json>,"doer"?: string | null,"due_on": string,"firm_id": string,"id"?: string,"kind"?: string,"period_key"?: string | null,"registration_id"?: string | null,"status"?: string
                   }
                   Update: {
-                    "client_id"?: string,"code"?: string | null,"details"?: NonNullable<Json>,"due_on"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"period_key"?: string | null,"registration_id"?: string | null,"status"?: string
+                    "client_id"?: string,"code"?: string | null,"details"?: NonNullable<Json>,"doer"?: string | null,"due_on"?: string,"firm_id"?: string,"id"?: string,"kind"?: string,"period_key"?: string | null,"registration_id"?: string | null,"status"?: string
                   }
                   Relationships: [
                     {
@@ -702,6 +702,12 @@ isOneToOne: true
 isOneToOne: false
       referencedRelation: "clients"
       referencedColumns: ["firm_id","id"]
+    },{
+      foreignKeyName: "tasks_firm_id_doer_fkey"
+      columns: ["firm_id","doer"]
+isOneToOne: false
+      referencedRelation: "firm_members"
+      referencedColumns: ["firm_id","user_id"]
     },{
       foreignKeyName: "tasks_firm_id_registration_id_fkey"
       columns: ["firm_id","registration_id"]
@@ -1000,6 +1006,9 @@ isOneToOne: false
 "connect_drive":
 { Args: { "account": string,"address": string,"credentials": string,"drive_provider": string,"drive_settings": Json,"level": string,"target_firm": string,"terms_version": string }; Returns: boolean
                            },
+"cover_return":
+{ Args: { "person"?: string,"target_firm": string,"task": string }; Returns: undefined
+                           },
 "create_automatic_dataset":
 { Args: { "body": Json,"client": string,"draft": string,"firm": string,"form": string,"period": string }; Returns: boolean
                            },
@@ -1082,12 +1091,17 @@ isOneToOne: false
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
                            },
+"is_mine":
+{ Args: { "": Database["public"]['Tables']["clients"]['Row'] }; Returns: { error: true } & "the function public.is_mine with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
+                           } |
+{ Args: { "": Database["public"]['Tables']["tasks"]['Row'] }; Returns: { error: true } & "the function public.is_mine with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
+                           },
 "is_orelu_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
 "late_clients":
 { Args: { "mine"?: boolean,"target_firm": string }; Returns: {
-              "client_id": string,"client_name": string,"code": string,"due_on": string,"period_key": string,"returns": number
+              "client_id": string,"client_name": string,"code": string,"doer": string,"due_on": string,"period_key": string,"returns": number,"task": string
             }[]
                            },
 "looked_after":
@@ -1253,6 +1267,9 @@ isOneToOne: false
                            },
 "session_live":
 { Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"set_desk":
+{ Args: { "client": string,"desk": string,"person"?: string,"target_firm": string,"team"?: string }; Returns: undefined
                            },
 "sign_up_firm":
 { Args: { "accepted": Json,"firm_name": string,"owner": string,"state": string }; Returns: string

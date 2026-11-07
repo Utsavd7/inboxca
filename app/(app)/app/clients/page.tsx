@@ -21,11 +21,12 @@ import { ImportForm } from "./import-form";
 import { LinkTabs } from "../link-tabs";
 import { Item, List, Presence } from "../motion";
 import { Avatar, Badge, Card, Empty, PageHead, SidePanel, Toast } from "../ui";
+import { DeskChip } from "../desk-chip";
+import { deskViewer, desksOf } from "@/src/lib/desks";
 import { SetupArt } from "../setup-art";
 import { RowKeys } from "../row-keys";
 import "./clients.css";
 
-const lookAfter = ["partner_in_charge", "manager", "staff"];
 const uuid = /^[0-9a-f-]{36}$/;
 
 // The client register. Search finds a name, or a whole email, PAN or GSTIN through its
@@ -75,9 +76,8 @@ export default async function Clients({
     manage && params.bulk ? supabase.from("requests").select("id,status,details").eq("firm_id", firm).eq("id", params.bulk).eq("kind", "bulk_send").maybeSingle() : Promise.resolve({ data: null }),
     supabase.rpc("firm_tags", { target_firm: firm }),
   ]);
-  const myTeam = people?.find((person) => person.user_id === userId)?.team_id ?? null;
   // The same search, group, branch and archive choice for the list and every pill's count (matching.ts).
-  const clientsIn = (pill: Pill, select: string, head = false, only: Lateness = null) => clientsMatching(supabase, firm, filter, { emailIndex, byNumber, userId, myTeam }, pill, select, head, only);
+  const clientsIn = (pill: Pill, select: string, head = false, only: Lateness = null) => clientsMatching(supabase, firm, filter, { emailIndex, byNumber }, pill, select, head, only);
   const list = (lateness: Lateness, at: number, to: number) =>
     clientsIn(show, columns, false, lateness)
       .eq("client_registrations.kind", "gstin")
@@ -120,16 +120,16 @@ export default async function Clients({
   const canSend = manage && !archived && !!clients?.some((client) => membership.may("send", client.id));
   // Ticks choose clients for Set services, and for sending a paper when the person may send.
   const canTick = manage && !archived && !membership.viewOnlyUntil;
+  const viewer = deskViewer(membership, userId);
   const rows = await Promise.all(
     (clients ?? []).map(async (client) => {
       const gstin = client.client_registrations[0];
-      const lead = [...client.client_assignments].sort((a, b) => lookAfter.indexOf(a.role) - lookAfter.indexOf(b.role))[0];
       const next = client.next[0];
       return {
         ...client,
         gstin: gstin ? await crypto.decrypt(firm, `clients/${client.id}/gstin`, gstin.number_enc) : "",
-        lead: lead ? (lead.team_id ? nameOf.get(lead.team_id) : personName(emailOf.get(lead.user_id ?? ""))) : "",
-        team: !!lead?.team_id,
+        // Who does its GST and income tax work (src/lib/desks.ts).
+        desks: desksOf(client.client_assignments, client.desk.flatMap((number) => number.services), (a) => (a.team_id ? nameOf.get(a.team_id) : personName(emailOf.get(a.user_id ?? ""))) ?? ""),
         next,
         // The firm's own tags, under the status.
         labels: client.tags,
@@ -159,7 +159,7 @@ export default async function Clients({
   // them) or for every client the list's filter matches (?all=1, the count shown first), with
   // the services each kind of number takes, or the people and teams, as on a client's page.
   const all = params.all === "1" && (panel === "services" || panel === "assign") && !archived;
-  const matching = all ? await matchingClients(supabase, firm, userId, filter) : [];
+  const matching = all ? await matchingClients(supabase, firm, filter) : [];
   const tooMany = matching.length > MOST_MATCHING;
   const ticked = all ? matching.slice(0, MOST_MATCHING) : panel === "services" || panel === "assign" || panel === "tags" ? (params.clients ?? "").split(",").filter((id) => uuid.test(id)).slice(0, 50) : [];
   const { data: named } = ticked.length ? await supabase.from("clients").select("id, name").eq("firm_id", firm).in("id", ticked.slice(0, 50)).is("archived_at", null).order("name") : { data: [] };
@@ -185,7 +185,7 @@ export default async function Clients({
         all: { Icon: UsersRound, kind: "approve" as const, title: archived ? "No archived clients" : "No clients here yet", text: archived ? "Clients you archive wait here, and can be restored." : "Add a client, or import the Excel list your firm already keeps.", button: manage && !archived && !filtered && <Link className="b b-primary" href="/app/clients?panel=add" scroll={false}>New client</Link> },
         late: { Icon: CircleCheck, kind: "done" as const, title: "No client is late", text: "Every return due so far is filed.", button: showAll },
         missing: { Icon: FileCheck2, kind: "done" as const, title: "No papers are missing", text: "Clients you ask for papers show here until they send them.", button: showAll },
-        mine: { Icon: UserRound, kind: "papers" as const, title: "Nobody is assigned to you yet", text: "A manager assigns people on each client's page.", button: showAll },
+        mine: { Icon: UserRound, kind: "papers" as const, title: "Nobody is assigned to you yet", text: "Take a client from the All list, or a manager gives you one.", button: showAll },
       }[show];
 
   return (
@@ -378,7 +378,7 @@ export default async function Clients({
                 {canTick && <th scope="col" className="shrink"><span className="sr-only">Choose</span></th>}
                 <th scope="col">Client</th>
                 <th scope="col">GSTIN</th>
-                <th scope="col">Looked after by</th>
+                <th scope="col" className="clients-desk">Looked after by</th>
                 <th scope="col">Next return</th>
                 <th scope="col">Status</th>
               </tr>
@@ -398,15 +398,8 @@ export default async function Clients({
                       </span>
                     </td>
                     <td className="num">{client.gstin || <span className="hint">None</span>}</td>
-                    <td>
-                      {client.lead ? (
-                        <span className="who">
-                          <Avatar name={client.lead} square={client.team} />
-                          {client.lead}
-                        </span>
-                      ) : (
-                        <span className="hint">Nobody yet</span>
-                      )}
+                    <td className="clients-desk">
+                      <DeskChip client={{ id: client.id, name: client.name }} desks={client.desks} viewer={archived ? { ...viewer, assign: false, take: false } : viewer} named />
                     </td>
                     <td className="clients-next">{next ? <>{next}<span className="sub">{when}</span></> : <span className="hint">None due</span>}</td>
                     <td>

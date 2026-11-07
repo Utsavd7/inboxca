@@ -5,7 +5,7 @@ export const activityNames: Record<string, string> = {
   "dataset.created": "Figures ready to check", "dataset.checked": "Figure checked", "dataset.changed": "Figure corrected",
   "gst_match.made": "Purchase register matched with GSTR-2B", "gst_match.downloaded": "GSTR-2B differences downloaded",
   "client.added": "Client added", "client.changed": "Client details changed", "clients.exported": "Client list exported to Excel",
-  "licence.added": "Licence or registration date added", "licence.removed": "Licence or registration date removed", "todo.added": "To-do added",
+  "licence.added": "Licence or registration date added", "licence.removed": "Licence or registration date removed", "todo.added": "To-do added", "task.covered": "Return given to a person for this once", "task.uncovered": "Return given back to its desk",
   "registration.added": "Tax number added", "registration.changed": "Services changed", "registration.removed": "Tax number removed",
   "assignment.added": "Person or team assigned", "assignment.removed": "Assignment removed",
   "contact_link.added": "Contact added", "contact_link.changed": "Contact permissions changed", "contact_link.removed": "Contact removed",
@@ -40,6 +40,8 @@ export const activityDetails: Record<string, readonly string[]> = {
   "assignment.added": ["kind", "person", "team", "work"], "assignment.removed": ["kind", "person", "team", "work"],
   // The client list as Excel: how many clients it held, never their numbers or emails.
   "clients.exported": ["clients"], "licence.added": [], "licence.removed": [], "todo.added": [],
+  // One return given to a person for this once, and given back (the person it was given to).
+  "task.covered": ["person"], "task.uncovered": ["person"],
   "firm.signed_up": ["accepted"], "firm.changed": ["name", "settings"], "firm.downloaded": [], "firm.closed": ["reason"], "firm.data_deleted": [],
   "member.invited": ["role"], "member.joined": [], "member.role_changed": ["role"], "member.removed": [], "member.invite_withdrawn": [], "member.restored": [],
   "session.ended_other": ["ended"], "recovery.codes_made": [], "recovery.used": ["left", "passkeys"], "hours.extended": ["until"],

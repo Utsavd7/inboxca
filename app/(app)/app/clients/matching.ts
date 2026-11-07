@@ -11,10 +11,10 @@ export const pills = { all: "All", late: "Late", missing: "Missing papers", mine
 export type Pill = keyof typeof pills;
 export type Filter = { q: string; group?: string; branch?: string; tag: string; archived: boolean; show: Pill };
 export type Lateness = "late" | "on" | null;
-export const columns = "id, name, tags, client_registrations(kind, number_enc), client_assignments(user_id, team_id, role), next:tasks(code, period_key, due_on), asks:requests(id), late:tasks(id)";
+export const columns = "id, name, tags, client_registrations(kind, number_enc), client_assignments(user_id, team_id, role, work), desk:client_registrations(services), next:tasks(code, period_key, due_on), asks:requests(id), late:tasks(id)";
 // What each pill adds: a client counts when it has at least one such row (late returns are
 // joined by every list, to count them, and by a count that asks for them).
-const pillJoin: Record<Pill, string> = { all: "", late: "", missing: ", missing:requests!inner(id)", mine: ", mine:client_assignments!inner(role)" };
+const pillJoin: Record<Pill, string> = { all: "", late: "", missing: ", missing:requests!inner(id)", mine: "" };
 // Every client matching at most this many at once; a longer list is narrowed first.
 export const MOST_MATCHING = 2000;
 export const filterKeys = ["q", "group", "branch", "tag", "archived", "show"] as const;
@@ -25,14 +25,11 @@ export function readFilter(params: Record<string, string | undefined>): Filter {
 }
 
 // A whole email, PAN or GSTIN is found by its blind index, never searched in plain text.
-export async function filterContext(supabase: Db, firm: string, userId: string, filter: Filter) {
+export async function filterContext(supabase: Db, firm: string, filter: Filter) {
   const crypto = serverCrypto(), number = cleanNumber(filter.q), kind = isGstin(number) ? "gstin" : isPan(number) ? "pan" : null;
   const [emailIndex, numberIndex] = await Promise.all([filter.q.includes("@") ? crypto.blindIndex(firm, "email", filter.q) : null, kind ? crypto.blindIndex(firm, kind, number) : null]);
-  const [{ data: byNumber }, { data: me }] = await Promise.all([
-    kind && numberIndex ? supabase.from("client_registrations").select("client_id").eq("firm_id", firm).eq("kind", kind).eq("number_bidx", numberIndex) : Promise.resolve({ data: null }),
-    supabase.from("firm_members").select("team_id").eq("firm_id", firm).eq("user_id", userId).maybeSingle(),
-  ]);
-  return { emailIndex, byNumber, userId, myTeam: me?.team_id ?? null };
+  const { data: byNumber } = kind && numberIndex ? await supabase.from("client_registrations").select("client_id").eq("firm_id", firm).eq("kind", kind).eq("number_bidx", numberIndex) : { data: null };
+  return { emailIndex, byNumber };
 }
 export type FilterContext = Awaited<ReturnType<typeof filterContext>>;
 
@@ -52,15 +49,16 @@ export function clientsIn(supabase: Db, firm: string, filter: Filter, ctx: Filte
   if (head && lateness) query = query.limit(1, { referencedTable: "late" });
   if (lateness) query = lateness === "late" ? query.not("late", "is", null) : query.is("late", null);
   if (pill === "missing") query = query.eq("missing.kind", "documents").eq("missing.status", "pending").gt("missing.expires_at", now).limit(1, { referencedTable: "missing" });
-  if (pill === "mine") query = query.or(`user_id.eq.${ctx.userId}${ctx.myTeam ? `,team_id.eq.${ctx.myTeam}` : ""}`, { referencedTable: "mine" });
+  // Given to the person or their team, for any desk, or with a return they cover (public.is_mine).
+  if (pill === "mine") query = query.eq("is_mine", true);
   return query;
 }
 
 // Every current client the filter matches, up to MOST_MATCHING plus one so the caller knows when
 // there are more; 1,000 a read.
-export async function matchingClients(supabase: Db, firm: string, userId: string, filter: Filter) {
+export async function matchingClients(supabase: Db, firm: string, filter: Filter) {
   if (filter.archived) return [];
-  const ctx = await filterContext(supabase, firm, userId, filter);
+  const ctx = await filterContext(supabase, firm, filter);
   const rows: { id: string }[] = [];
   await pages<{ id: string }>(async (from) => {
     if (from > MOST_MATCHING) return { data: [], error: null };

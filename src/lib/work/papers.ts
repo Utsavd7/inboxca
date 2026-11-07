@@ -4,6 +4,7 @@ import { tdsOnly, type DocumentRequest } from "../checklists";
 import { addDays, todayInIndia } from "../calendar";
 import { periodName, quarterEnd, tdsRegisters } from "../documents";
 import { shortReturn } from "./today";
+import type { Desk, DeskWork, Holder } from "../desks";
 
 // One thing someone has to do, for Today's single list (the work item contract, 26 Oct 2026).
 export type WorkItem = {
@@ -21,6 +22,8 @@ export type WorkItem = {
   many?: { title: string; why: string };
   // Waits for papers asked from the client: Today's "Waiting on clients".
   waits?: boolean;
+  // A return's chip beside its client: who does it (src/lib/desks.ts, app/(app)/app/desk-chip.tsx).
+  desk?: { desks: Desk[]; work: DeskWork; task: { id: string; doer: Holder | null }; viewer: { id: string; assign: boolean; take: boolean } };
 };
 
 const times = (count: number) => (count === 2 ? "twice" : `${count} times`);
