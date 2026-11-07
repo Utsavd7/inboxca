@@ -88,8 +88,9 @@ export async function reviewFigure(form:FormData) {
   redirect(`${back}${next ? `&line=${next}` : ""}&check=saved`);
 }
 
-// One Yes for a register section whose rows add up to its own totals: every row not flagged for a
-// person's own look is checked at once, with the totals seen kept (encrypted) in the firm's activity.
+// One Yes for a register section whose rows add up to its own totals, or with no total row whose
+// sum InboxCA made matches the firm's books: every row not flagged for a person's own look is
+// checked at once, with the totals or sums seen kept (encrypted) in the firm's activity.
 export async function approveSection(form:FormData) {
   const {supabase,userId,membership}=await currentWriter();
   if(!membership) redirect("/app");
@@ -107,10 +108,12 @@ export async function approveSection(form:FormData) {
   if(!sourceReady) redirect(`${back}&check=source`);
   const figures=await openFigures(membership.firmId,id,data);
   const summary=sectionSummary(data,figures).find((one)=>one.section===section);
-  if(!summary || !summary.agree || summary.checked) redirect(`${back}&check=totals`);
+  // With no total row, a person says InboxCA's sum of the rows matches the firm's books (books).
+  const books=!!summary?.sums && form.get("against")==="books";
+  if(!summary || !summary.agree && !books || summary.checked) redirect(`${back}&check=totals`);
   const at=new Date().toISOString(),ids=new Set(summary.lines);
   for(const line of data.lines) if(ids.has(line.id) && line.state!=="confirmed") {line.state="confirmed";line.by=userId;line.at=at;}
-  const totals_enc=await serverCrypto().encrypt(membership.firmId,`${place(id,section)}/totals/${revision}`,JSON.stringify({totals:summary.totals.map((total)=>[total.label,total.value]),rates:summary.byRate.map((entry)=>[entry.rate,String(entry.taxable),entry.tax===undefined ? "" : String(entry.tax)])}));
+  const totals_enc=await serverCrypto().encrypt(membership.firmId,`${place(id,section)}/totals/${revision}`,JSON.stringify({...(books ? {sums:summary.sums!.map((one)=>[one.label,String(one.sum)])} : {totals:summary.totals.map((total)=>[total.label,total.value])}),rates:summary.byRate.map((entry)=>[entry.rate,String(entry.taxable),entry.tax===undefined ? "" : String(entry.tax)])}));
   const saved=await saveDraft(row,data,userId,"dataset.checked",{section,rows:summary.rows,flagged:summary.flagged.length,totals_enc});
   if(!saved) redirect(`${back}&check=stale`);
   await whenAllChecked(membership.firmId,client,id,revision,data);
