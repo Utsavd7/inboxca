@@ -94,13 +94,15 @@ export default async function Documents({ searchParams }: { searchParams: Promis
   const admin = supabaseAdmin();
   // Earlier versions are listed only in their current paper's panel on the client's page. One
   // more than a page is read, to know whether there is a next page.
+  const clientsFound = supabase.from("clients").select("id, name", { count: "exact" }).eq("firm_id", membership.firmId).is("archived_at", null);
   const listed = scoped(supabase.from("documents").select(columns).eq("firm_id", membership.firmId).filter("status", live[0], live[1]));
   const [{ data: read, error }, { data: chosen }, { data: drive }, { data: matches, count: matchCount }, { data: uploadClient }, { data: toSend }, { data: mailbox }] = await Promise.all([
     (kind ? listed.eq("work_type", kind) : listed).order("received_at", { ascending: false }).order("id", { ascending: false }).range((page - 1) * PAGE, page * PAGE),
     // The paper shown on the right: the one chosen, else the first in the list.
     params.file && uuid.test(params.file) ? supabase.from("documents").select(columns).eq("firm_id", membership.firmId).eq("id", params.file).neq("status", "deleted").maybeSingle() : Promise.resolve({ data: null }),
     admin.from("connected_accounts").select("provider, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle(),
-    find ? supabase.from("clients").select("id, name", { count: "exact" }).eq("firm_id", membership.firmId).is("archived_at", null).ilike("name", `%${find.replace(/[\\%_]/g, "\\$&")}%`).order("name").order("id").range(at, at + 7) : Promise.resolve({ data: null, count: 0 }),
+    // Before a search, the first clients by name, so one is a click away.
+    params.upload && !askedClient ? (find ? clientsFound.ilike("name", `%${find.replace(/[\\%_]/g, "\\$&")}%`) : clientsFound).order("name").order("id").range(at, at + 7) : Promise.resolve({ data: null, count: 0 }),
     askedClient && canUpload ? supabase.from("clients").select("id, name, client_registrations(id, kind, number_enc)").eq("firm_id", membership.firmId).eq("id", askedClient).is("archived_at", null).maybeSingle() : Promise.resolve({ data: null }),
     sendPreview ? supabase.from("documents").select("id, client_id, name, status, share_policy, document_type, clients(name, email_enc)").eq("firm_id", membership.firmId).in("id", picked.slice(0, SEND)) : Promise.resolve({ data: null }),
     sendPreview ? supabase.from("connected_accounts").select("status").eq("firm_id", membership.firmId).eq("kind", "mail").maybeSingle() : Promise.resolve({ data: null }),
@@ -506,7 +508,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                     ))}
                   </ul>
                 ) : (
-                  <p className="hint">No client by that name. Try part of the name.</p>
+                  <p className="hint">{find ? "No client by that name. Try part of the name." : "No clients yet."}</p>
                 ))}
               {(matchCount ?? 0) > 8 && (
                 <nav className="pager" aria-label="Client pages">
@@ -532,7 +534,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
         </SidePanel>
       )}
       {params.portal && portal && (
-        <SidePanel key="portal" id="portal-panel" title="Files from the GST portal" close={close}>
+        <SidePanel key="portal" id="portal-panel" title="Files from the GST or income tax portal" close={close}>
           <PortalDrop back="/app/documents" />
         </SidePanel>
       )}

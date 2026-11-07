@@ -15,7 +15,7 @@ export function PortalDrop({ clientId, back }: { clientId?: string; back?: strin
         <label htmlFor="portal-files">
           <strong>Add portal files</strong>
         </label>
-        <span className="hint">GSTR-2B and GSTR-2A from the GST portal. Form 16 or Form No. 130, Form 26AS or Form No. 168, AIS, TIS and ITR-V from the income tax portal or TRACES. InboxCA finds the client and the period inside each file.</span>
+        <span className="hint">GSTR-2B, GSTR-2A, Form No. 130 or 16, Form No. 168 or 26AS, AIS, TIS or ITR-V. InboxCA finds the client and period in each.</span>
       </p>
       <span className="drop-pick">
         <input id="portal-files" name="files" type="file" multiple required accept=".json,.txt,.pdf,application/json,text/plain,application/pdf" />
