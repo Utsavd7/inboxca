@@ -2,6 +2,7 @@
 import { Activity, CalendarCheck, Building2, FileStack, IndianRupee, KeyRound, Mail, Network, RotateCcw, ScanSearch, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
 const pages = [
@@ -28,12 +29,41 @@ export function AdminNav() {
   ));
 }
 
-// A row's one button, busy while its action runs.
-export function Submit({ children }: { children: React.ReactNode }) {
+// A row's one button, busy while its action runs. With confirm, the first press (once the
+// form's fields are valid) says what will happen, and only "Yes" runs it; Cancel or Esc keeps
+// things as they were.
+export function Submit({ children, confirm, name, value }: { children: string; confirm?: string; name?: string; value?: string }) {
   const { pending } = useFormStatus();
+  const [asking, setAsking] = useState(false);
+  if (confirm && !asking) {
+    return (
+      <button className="b b-secondary" type="submit" onClick={(event) => { event.preventDefault(); if (event.currentTarget.form?.reportValidity()) setAsking(true); }}>
+        {children}
+      </button>
+    );
+  }
   return (
-    <button className="b b-secondary" type="submit" disabled={pending}>
-      {pending ? "Working" : children}
-    </button>
+    <span className="admin-confirm" onKeyDown={(event) => event.key === "Escape" && !pending && setAsking(false)}>
+      {asking && <span className="sub" role="status">{confirm}</span>}
+      <button className="b b-secondary" type="submit" name={name} value={value} disabled={pending} autoFocus={asking}>
+        {pending ? "Working" : asking ? `Yes, ${children[0].toLowerCase()}${children.slice(1)}` : children}
+      </button>
+      {asking && <button className="b b-ghost" type="button" disabled={pending} onClick={() => setAsking(false)}>Cancel</button>}
+    </span>
+  );
+}
+
+// A long list's place, a page of rows at a time (admin.ts PAGE), as the Clients list does it.
+export function Pager({ page, size, total, label }: { page: number; size: number; total: number; label: string }) {
+  const path = usePathname();
+  if (total <= size) return null;
+  return (
+    <nav className="pager admin-pager" aria-label={label}>
+      <p>Showing {((page - 1) * size + 1).toLocaleString("en-IN")} to {Math.min(page * size, total).toLocaleString("en-IN")} of {total.toLocaleString("en-IN")}</p>
+      <span>
+        {page > 1 && <Link className="b b-secondary" href={`${path}?page=${page - 1}`}>Previous</Link>}
+        {page * size < total && <Link className="b b-secondary" href={`${path}?page=${page + 1}`}>Next</Link>}
+      </span>
+    </nav>
   );
 }

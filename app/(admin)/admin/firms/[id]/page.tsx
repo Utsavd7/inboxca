@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { Badge, PageHead, storage } from "@/app/(app)/app/ui";
 import { downloadUse } from "@/src/lib/download-use";
 import { askSupport, retryJob, startPilot } from "../../actions";
-import { currentAdmin, when } from "../../admin";
+import { currentAdmin, jobName, providerName, retryWords, when } from "../../admin";
 import { Submit } from "../../parts";
 
 type Firm = {
@@ -34,7 +34,7 @@ export default async function AdminFirm({ params }: { params: Promise<{ id: stri
           <form action={startPilot} className="admin-row">
             <input type="hidden" name="firm" value={id} />
             <span className="grow sub">The firm has not paid yet. A pilot firm starts now, with no payment.</span>
-            <Submit>Start as a pilot</Submit>
+            <Submit confirm="The firm becomes active now, with no payment. There is no undo here.">Start as a pilot</Submit>
           </form>
         </section>
       )}
@@ -43,7 +43,7 @@ export default async function AdminFirm({ params }: { params: Promise<{ id: stri
         {firm.accounts.length ? firm.accounts.map((account) => (
           <div className="admin-row" key={account.kind}>
             <div className="grow">
-              <strong>{account.kind === "mail" ? "Mailbox" : "Drive"}</strong> <span className="sub-inline">{account.provider}</span>
+              <strong>{account.kind === "mail" ? "Mailbox" : "Drive"}</strong> <span className="sub-inline">{providerName(account.provider)}</span>
               <span className="sub">Last run {when(account.last_run)}, {account.failures} failed sign ins, last error {account.last_error ?? "none"}</span>
             </div>
             <Badge tone={account.status === "connected" ? "done" : "late"}>{account.status === "connected" ? "Connected" : "Connect again"}</Badge>
@@ -74,12 +74,12 @@ export default async function AdminFirm({ params }: { params: Promise<{ id: stri
         {firm.failed.length ? firm.failed.map((job) => (
           <div className="admin-row" key={job.id}>
             <div className="grow">
-              <strong className="num">{job.kind}</strong>
+              <strong>{jobName(job.kind)}</strong>
               <span className="sub">{job.error ?? "No error code"}, {job.attempts} tries, last {when(job.at)}</span>
             </div>
             <form action={retryJob}>
               <input type="hidden" name="job" value={job.id} />
-              <Submit>Try again</Submit>
+              <Submit confirm={retryWords(job.error)}>Try again</Submit>
             </form>
           </div>
         )) : <p className="admin-empty"><strong>No failed jobs</strong>Everything this firm asked for ran.</p>}

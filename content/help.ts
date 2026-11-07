@@ -123,7 +123,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "A client emails papers to your firm's address.",
           "InboxCA reads the email and finds the client.",
           "Each attachment is saved in the client's folder in your drive, by year, client and type of work, with a clear name.",
-          "The email shows in the Inbox with where it stands, such as Needs reply or Answered by InboxCA.",
+          "The email shows in the Inbox and on the client's Emails tab, with where it stands, such as Needs reply or Answered by InboxCA.",
         ],
         points: [
           "Your email provider checks attachments as its own policy says, before InboxCA reads the mailbox.",
@@ -149,6 +149,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "A paper under To check cannot be sent to a client until it is checked.",
           "Missing in the drive means the file is no longer where InboxCA saved it. Move it back to its folder in the drive, or remove the paper on the client's Papers tab.",
           "Staff may correct a paper's type or period unless the owner turns it off in Permissions.",
+          "Type in the search box above a list to narrow it as you type. Clients and a client's Papers work the same way.",
         ],
       },
       {
@@ -197,9 +198,10 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         title: "Working on a return",
         lead: "Each return has its own page that takes it from papers to filing, one step at a time.",
         steps: [
-          "Open the return from the client's Work tab, the Calendar or Today. Its page shows the return and its period, when it is due, who looks after it and where it stands.",
+          "Open the return from the client's Work tab, the Calendar or Today. Its page shows the return and its period, when it is due, who does it and where it stands.",
           "Its steps run across the top: Papers, Figures, Draft, Check, Approve and File. Done steps open again, and a later step says what it waits for.",
           "Next step says what to do now, with one button for it, such as Ask for papers, Prepare GSTR-3B or Check 3 figures, or says why the return waits.",
+          "In Check, each invoice, or each page of a paper, is one row. Choose All correct, or first pick the figures that are wrong.",
           "Once every figure is checked the return is approved. With Second approval before filing on, the firm's owner, a partner or a manager gives the second approval, someone other than the person who checked the figures.",
           "In the File step, choose Download for filing, file it on the portal with your own login, then choose Mark filed. When the portal's acknowledgement email arrives, Mark filed there takes its number. Check it first.",
         ],
@@ -209,6 +211,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "Figures shows the figures read for this return only. For GSTR-3B, add the GSTR-2B there, and the Check step lists the purchase bills that differ from it.",
           "In Draft, InboxCA fills the official file from the figures. ITR-1 to ITR-4 and Forms No. 140, 138, 144 and 143 are prepared on their own forms in this step.",
           "On Today, Work by step counts the returns late or due in 30 days at each step. Each count opens that step on the Calendar.",
+          "Done by names who does the return. Take it yourself, or give this one return to someone else; it goes back to the client's usual person once filed.",
           "Figures and return files that are not for one return are under Other figures and Other return files, on the client's Work tab.",
           "InboxCA never files on a portal. Your team files every return with its own login, OTP or digital signature.",
         ],
@@ -219,6 +222,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         lead: "InboxCA works out each client's due dates from the services you do for them.",
         points: [
           "Choose the services for each client, and InboxCA works out their due dates.",
+          "Today shows what needs you in four cards: Late, Due this week, Waiting on clients and Other. Each row has one button.",
           "Calendar shows Late, Due in 7 days, Due in 30 days and Filed in the last 30 days, as a list or as a month.",
           "Choose a step on the Calendar, such as Ready to prepare or Waiting approval, to list the returns late or due in 30 days that wait at it. Each step has one action for all of them, such as Fill all due in 7 days or Check the next one.",
           "On Today, Work by step counts those returns at each step: Ask for papers, Ready to prepare, Figures to check, Waiting approval and Ready to file. Each count opens that step on the Calendar.",
@@ -236,7 +240,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         title: "GST month end",
         lead: "One page for every GST client in a month: what is in, what differs, and what is still to prepare or file.",
         steps: [
-          "On Today, open Your list, then choose GST month end.",
+          "On Today, choose Late clients to open Your list, then choose GST month end.",
           "Choose the month, and if you like the person who looks after the clients or a tag.",
           "Each client shows its papers, GSTR-2B, differences, GSTR-1, GSTR-3B and filing, each in a few words with one next step. GSTR-1 and GSTR-3B open their return's own page.",
         ],
@@ -256,7 +260,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
         steps: [
           "Add the client's papers: Form 16 (Form No. 130 from tax year 2026-27), Form 26AS (Form No. 168), AIS and TIS.",
           "Open the client's ITR from its Work tab. In its Draft step, InboxCA reads the figures into the return. Every figure opens the page it was read from.",
-          "Check each figure. Approving and downloading wait until every figure is checked.",
+          "Check the figures one page at a time: All correct, or first pick the ones that are wrong. Approving and downloading wait until every figure is checked.",
           "Once every figure is checked the return is approved, or, with Second approval before filing on, another person approves it. Choose Download for filing, file it on the income tax portal, then mark it filed here.",
         ],
         points: [
@@ -321,6 +325,7 @@ export const helpGroups: readonly { id: string; title: string; articles: readonl
           "For anything not ticked, they ask their manager or you, and the request waits in the Inbox for a yes or no.",
           "Only the owner can remove papers.",
           "Who sees which clients: everyone sees every client, or only the people assigned to it.",
+          "Beside each client's name, a chip shows who does its GST and its income tax work. Staff choose Take for work nobody has, or Hand back their own. The owner, partners and managers choose Assign to give it to anyone. Undo puts it back.",
           "Extra permission for one person lets one person do one thing without asking, for some clients or until a date.",
           "Removing someone takes their access at once. You can restore them later.",
         ],

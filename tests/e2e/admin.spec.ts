@@ -132,6 +132,7 @@ test("an Orelu admin signs in with a passkey, sees firm health and retries a fai
     const lost = page.locator(".admin-row").filter({ hasText: otherEmail });
     await expect(lost).toContainText("1 passkey");
     await lost.getByRole("button", { name: "Remove passkeys" }).click();
+    await lost.getByRole("button", { name: "Yes, remove passkeys" }).click();
     await expect(lost).toContainText("0 passkeys");
     expect(await query(local.dbUrl, "select actor_id, firm_id from public.activity_log where action = 'admin.passkeys_removed' and entity_id = $1", [lostAdmin.ownerId])).toEqual([{ actor_id: setup.ownerId, firm_id: null }]);
 
@@ -151,11 +152,12 @@ test("an Orelu admin signs in with a passkey, sees firm health and retries a fai
     const failed = page.getByRole("row").filter({ hasText: name });
     await expect(failed).toContainText("mail_unreachable");
     await failed.getByRole("button", { name: "Try again" }).click();
+    await failed.getByRole("button", { name: "Yes, try again" }).click();
     await expect(failed).toHaveCount(0);
     expect((await query(local.dbUrl, "select state from public.jobs where id = $1", [job]))[0].state).not.toBe("failed");
 
     await page.getByRole("link", { name: "Due dates" }).click();
-    await expect(page.getByRole("row").filter({ hasText: "GSTR1_M" })).toBeVisible();
+    await expect(page.getByText("GSTR-1 (monthly)").first()).toBeVisible();
   } finally {
     await context.close().catch(() => {});
     await adminContext.close().catch(() => {});
@@ -184,6 +186,7 @@ test("anyone sees each part's status with no sign in and no firm; an admin's inc
     await admin.page.getByLabel("What is wrong, in words for firms").fill(title);
     await admin.page.getByLabel("The app").check();
     await admin.page.getByRole("button", { name: "Post" }).click();
+    await admin.page.getByRole("button", { name: "Yes, post" }).click();
     const row = admin.page.locator(".admin-incident").filter({ hasText: title });
     await expect(row).toContainText("Down");
 
@@ -193,6 +196,7 @@ test("anyone sees each part's status with no sign in and no firm; an admin's inc
     await expect(parts.filter({ hasText: "The app" })).toContainText("Down");
 
     await row.getByRole("button", { name: "Email the firms" }).click();
+    await row.getByRole("button", { name: "Yes, email the firms" }).click();
     await expect(row).toContainText("Emailed");
     await expect.poll(async () => (await lastMail(ownerEmail))?.subject, { timeout: 30_000 }).toBe(`InboxCA: ${title}`);
     const mail = await lastMail(ownerEmail);
@@ -201,6 +205,7 @@ test("anyone sees each part's status with no sign in and no firm; an admin's inc
 
     await row.getByLabel("Note").fill("Back to normal");
     await row.getByRole("button", { name: "Close as fixed" }).click();
+    await row.getByRole("button", { name: "Yes, close as fixed" }).click();
     await expect(row).toContainText("Fixed");
     await page.reload();
     await expect(page.getByRole("region", { name: "Now" })).toHaveCount(0);
@@ -239,6 +244,7 @@ test("an admin retries a firm's failed job, looks only in the hour its owner all
     await expect(admin.page.getByRole("heading", { name })).toBeVisible();
     const failed = admin.page.getByRole("region", { name: "Failed jobs" }).locator(".admin-row").filter({ hasText: "mail_unreachable" });
     await failed.getByRole("button", { name: "Try again" }).click();
+    await failed.getByRole("button", { name: "Yes, try again" }).click();
     await expect(failed).toHaveCount(0);
     expect((await query(local.dbUrl, "select state from public.jobs where id = $1", [job]))[0].state).not.toBe("failed");
 
@@ -264,6 +270,7 @@ test("an admin retries a firm's failed job, looks only in the hour its owner all
     await check.getByLabel("Notification link").fill("https://example.test/invented-notification");
     await check.getByLabel("Checked by (CA)").fill("CA Invented Person");
     await check.getByRole("button", { name: "Mark checked" }).click();
+    await check.getByRole("button", { name: "Yes, mark checked" }).click();
     await expect(check).toHaveCount(0);
     await expect(admin.page.getByRole("row").filter({ hasText: code })).toContainText("CA Invented Person");
     await owner.page.goto("/app/calendar");
@@ -301,7 +308,7 @@ test("an admin records an extension a CA then checks, saves the office threshold
     await record.getByLabel("Notification link").fill("https://example.test/invented-extension");
     await record.getByRole("button", { name: "Save for a CA to check" }).click();
     const check = admin.page.locator(`form[id="${code}-2026-10"]`);
-    await expect(check).toContainText(`Extension for 2026-10 to ${dueLabel(later(20))}: moves 1 return at 1 firm.`);
+    await expect(check).toContainText(`Extension for Oct 2026 to ${dueLabel(later(20))}: moves 1 return at 1 firm.`);
     expect(await logged("admin.extension_added")).toEqual([{ actor_id: admin.id, details: { code, period: "2026-10", on: later(20) } }]);
     // Until a CA checks it against the notification, the return keeps its date.
     await admin.page.getByRole("link", { name: "Today's changes" }).click();
@@ -311,6 +318,7 @@ test("an admin records an extension a CA then checks, saves the office threshold
     await expect(check.getByLabel("Notification link")).toHaveValue("https://example.test/invented-extension");
     await check.getByLabel("Checked by (CA)").fill("CA Invented Person");
     await check.getByRole("button", { name: "Mark checked" }).click();
+    await check.getByRole("button", { name: "Yes, mark checked" }).click();
     await expect(check).toHaveCount(0);
     expect(await dueOn()).toBe(later(20));
     expect(await logged("admin.rule_verified")).toEqual([{ actor_id: admin.id, details: { code, period: "2026-10", by: "CA Invented Person" } }]);
@@ -329,6 +337,7 @@ test("an admin records an extension a CA then checks, saves the office threshold
     const sunday = admin.page.getByRole("region", { name: "This week's official notices" }).locator(".admin-row").filter({ hasText: notice.title });
     await expect(sunday).toContainText("Moved");
     await sunday.getByRole("button", { name: "Undo" }).click();
+    await sunday.getByRole("button", { name: "Yes, undo" }).click();
     await expect(sunday).toContainText("Undone");
     await expect(sunday.getByRole("button", { name: "Undo" })).toHaveCount(0);
     expect(await nextDue()).toBe("2026-12-11");
@@ -395,6 +404,7 @@ test("an admin adds the one line firms see under a new government item, and ends
     await version.getByLabel("Last period").fill("2026-09");
     await version.getByLabel("Official link that discontinues it").fill("https://cbic-gst.gov.in/invented-notice.pdf");
     await version.getByRole("button", { name: "Set last period" }).click();
+    await version.getByRole("button", { name: "Yes, set last period" }).click();
     await expect(version).toContainText("For Apr 2026 to Sep 2026.");
     await expect(version.getByRole("link", { name: "The notice that ends it" })).toHaveAttribute("href", "https://cbic-gst.gov.in/invented-notice.pdf");
     expect(await logged("admin.template_ended")).toEqual([{ details: { form, version: "1.0", until: "2026-10-01", link: "https://cbic-gst.gov.in/invented-notice.pdf" } }]);

@@ -5,8 +5,9 @@ import { reasonWords } from "@/src/lib/billing/documents";
 import { financialYear, gstOn, indiaDay, rupees, type Tax } from "@/src/lib/billing/money";
 import { billingReady } from "@/src/lib/billing/provider";
 import { refundPayment, saveTax } from "../actions";
-import { currentAdmin, when } from "../admin";
-import { Submit } from "../parts";
+import { periodLabel } from "@/src/lib/calendar";
+import { currentAdmin, PAGE, pageRows, when } from "../admin";
+import { Pager, Submit } from "../parts";
 
 type Billing = {
   payments: { id: string; firm: string | null; kind: string; amount: number; gst: number; fee: number | null; status: string; reason: string | null; at: string; no: string | null; refundable: boolean }[];
@@ -35,9 +36,10 @@ const TURNOVER_ALERT_PAISE = 15_00_000_00;
 
 // Orelu's billing (PLAN.md 5.14.1): what needs a look, payments and refunds, refunds by month and
 // reason with the 10% alert, and the tax details every receipt and invoice is made from.
-export default async function AdminBilling({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function AdminBilling({ searchParams }: { searchParams: Promise<{ error?: string; page?: string }> }) {
   const { supabase } = await currentAdmin();
-  const [{ data, error }, { error: problem }] = await Promise.all([supabase.rpc("admin_billing"), searchParams]);
+  const [{ data, error }, { error: problem, page: asked }] = await Promise.all([supabase.rpc("admin_billing"), searchParams]);
+  const { page, from, to } = pageRows(asked);
   if (error) throw new Error(`Admin billing failed: ${error.code}`);
   const billing = data as unknown as Billing;
   const tax = billing.tax;
@@ -50,7 +52,7 @@ export default async function AdminBilling({ searchParams }: { searchParams: Pro
       {problem && <p className="alert" role="alert">{problem === "tax" ? "Check the tax details: a PAN, and for GST all of GSTIN (starting with its state code and holding the PAN), state, SAC, rate and start date." : problem === "reason" ? "Choose why the payment is given back." : "That payment cannot be given back: it is not paid, or a refund is already on its way."}</p>}
       <section className="admin-card" aria-label="Needs a look">
         <h2>Needs a look</h2>
-        {high.map((month) => <div className="admin-row" key={month.month}><Badge tone="late">Refunds above 10%</Badge><span className="grow">{month.month}: {month.money_back} money back of {month.new_firms} new firms.</span></div>)}
+        {high.map((month) => <div className="admin-row" key={month.month}><Badge tone="late">Refunds above 10%</Badge><span className="grow">{periodLabel(null, month.month)}: {month.money_back} money back of {month.new_firms} new firms.</span></div>)}
         {!tax.gstin && turnover >= TURNOVER_ALERT_PAISE && <div className="admin-row"><Badge tone="late">GST</Badge><span className="grow">Orelu&apos;s turnover for {fy} is {rupees(turnover)}. Register for GST before the threshold, with a CA.</span></div>}
         {billing.alerts.map((alert) => <div className="admin-row" key={alert.kind + alert.ref + alert.at}><Badge tone="warn">{when(alert.at)}</Badge><span className="grow">{alertWords[alert.kind] ?? alert.kind}</span>{alert.ref && <span className="sub num">{alert.ref.slice(0, 8)}</span>}</div>)}
         {!high.length && !billing.alerts.length && !(!tax.gstin && turnover >= TURNOVER_ALERT_PAISE) && <p className="admin-empty"><strong>Nothing to look at</strong>Payments, refunds and settlements all match.</p>}
@@ -63,7 +65,7 @@ export default async function AdminBilling({ searchParams }: { searchParams: Pro
             <table className="t">
               <thead><tr><th>Month</th><th>New firms</th><th>{reasonWords.money_back}</th><th>Taken twice</th><th>Taken in error</th><th>Given back</th></tr></thead>
               <tbody>{billing.months.map((month) => (
-                <tr key={month.month}><td className="num">{month.month}</td><td className="num">{month.new_firms}</td><td className="num">{month.money_back}</td><td className="num">{month.duplicate}</td><td className="num">{month.charge_error}</td><td className="num">{rupees(month.refunded)}</td></tr>
+                <tr key={month.month}><td className="num">{periodLabel(null, month.month)}</td><td className="num">{month.new_firms}</td><td className="num">{month.money_back}</td><td className="num">{month.duplicate}</td><td className="num">{month.charge_error}</td><td className="num">{rupees(month.refunded)}</td></tr>
               ))}</tbody>
             </table>
           </div>
@@ -76,12 +78,12 @@ export default async function AdminBilling({ searchParams }: { searchParams: Pro
           <div className="table-wrap">
             <table className="t">
               <thead><tr><th>When</th><th>Firm</th><th>What</th><th>Amount</th><th>Cashfree fee</th><th>Document</th><th>State</th><th /></tr></thead>
-              <tbody>{billing.payments.map((payment) => (
+              <tbody>{billing.payments.slice(from, to + 1).map((payment) => (
                 <tr key={payment.id}>
                   <td className="num">{when(payment.at)}</td>
                   <td>{payment.firm ?? "Deleted firm"}</td>
                   <td>{kinds[payment.kind] ?? payment.kind}{payment.reason ? `, ${reasonWords[payment.reason] ?? payment.reason}` : ""}</td>
-                  <td className="num">{rupees(payment.amount)}{payment.gst ? ` (GST ${rupees(payment.gst)})` : ""}</td>
+                  <td className="num">{rupees(payment.amount)}{!!payment.gst && <span className="sub">GST {rupees(payment.gst)}</span>}</td>
                   <td className="num">{payment.fee === null ? "Not settled" : rupees(payment.fee)}</td>
                   <td className="num">{payment.no ?? ""}</td>
                   <td><Badge tone={payment.status === "done" ? "done" : payment.status === "failed" ? "late" : ""}>{payment.status === "done" ? "Done" : payment.status === "failed" ? "Failed" : payment.status === "created" ? "Waiting" : "Called off"}</Badge></td>
@@ -89,7 +91,7 @@ export default async function AdminBilling({ searchParams }: { searchParams: Pro
                     <form action={refundPayment} className="admin-form">
                       <input type="hidden" name="payment" value={payment.id} />
                       <select name="reason" aria-label="Why it is given back" defaultValue="duplicate"><option value="duplicate">Taken twice</option><option value="charge_error">Taken in error</option></select>
-                      <Submit>Give back in full</Submit>
+                      <Submit confirm={`${rupees(payment.amount)} goes back to ${payment.firm ?? "the firm"} through Cashfree. There is no undo.`}>Give back in full</Submit>
                     </form>
                   )}</td>
                 </tr>
@@ -98,6 +100,7 @@ export default async function AdminBilling({ searchParams }: { searchParams: Pro
           </div>
         ) : <p className="admin-empty"><strong>No payments yet</strong>Each payment and refund shows here.</p>}
       </section>
+      <Pager page={page} size={PAGE} total={billing.payments.length} label="Payment pages" />
 
       <section className="admin-card" aria-label="Tax details">
         <h2>Orelu&apos;s tax details</h2>

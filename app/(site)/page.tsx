@@ -136,7 +136,7 @@ export default function Home() {
                 </div>
                 <p className="hero-trust">
                   {guarantee}
-                  {SHOW_PLANS && <> · From {rupees(plans[0].monthly)} a month</>}
+                  {SHOW_PLANS && <> · <span>From {rupees(plans[0].monthly)} a month</span></>}
                 </p>
               </div>
             </div>

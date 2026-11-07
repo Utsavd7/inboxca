@@ -1,7 +1,7 @@
 import { Badge, PageHead } from "@/app/(app)/app/ui";
 import type { Dates } from "@/src/jobs/date-watch";
 import { sources } from "@/src/jobs/forms-watch";
-import { dueLabel } from "@/src/lib/calendar";
+import { dueLabel, periodLabel } from "@/src/lib/calendar";
 import { type ClientKind, clientKinds } from "@/src/lib/clients";
 import { addExtension, undoExtension, verifyRule } from "../actions";
 import { currentAdmin, when } from "../admin";
@@ -20,7 +20,7 @@ function Undo({ code, period }: { code: string; period: string }) {
     <form action={undoExtension} className="admin-form">
       <input type="hidden" name="code" value={code} />
       <input type="hidden" name="period" value={period} />
-      <Submit>Undo</Submit>
+      <Submit confirm="Every firm's returns for this period go back to the rule's own date.">Undo</Submit>
     </form>
   );
 }
@@ -72,21 +72,22 @@ export default async function AdminDueDates({ searchParams }: { searchParams: Pr
       {!!waiting.length && (
         <section className="admin-card" aria-label="Waiting for a CA">
           <h2>Waiting for a CA</h2>
+          <p className="admin-note">Firms see a * beside these dates until a CA checks the rule against its notification.</p>
           {waiting.map((rule, at) => (
             <form action={verifyRule} className="admin-row admin-form" key={`${rule.code}${rule.period_key}`} id={`${rule.code}-${rule.period_key}`}>
               <input type="hidden" name="code" value={rule.code} />
               <input type="hidden" name="period" value={rule.period_key} />
               <div className="grow">
-                <strong>{names.get(rule.code)}</strong> <span className="sub-inline num">{rule.code}</span>
+                <strong>{names.get(rule.code)}</strong>
                 <span className="sub">
                   {rule.period_key
-                    ? `Extension for ${rule.period_key} to ${dueLabel((rule.due_rule as { on: string }).on)}: moves ${moved(reach[at]!)} at ${reach[at]!.length === 1 ? "1 firm" : `${reach[at]!.length} firms`}.`
-                    : "Every period. Its dates show a * until it is checked."}
+                    ? `Extension for ${periodLabel(null, rule.period_key)} to ${dueLabel((rule.due_rule as { on: string }).on)}: moves ${moved(reach[at]!)} at ${reach[at]!.length === 1 ? "1 firm" : `${reach[at]!.length} firms`}.`
+                    : "Every period"}
                 </span>
               </div>
               <label>Notification link <input name="link" type="url" pattern="https://.*" defaultValue={rule.source_url ?? ""} required /></label>
               <label>Checked by (CA) <input name="by" required minLength={2} maxLength={120} /></label>
-              <Submit>Mark checked</Submit>
+              <Submit confirm={rule.period_key ? `Moves ${moved(reach[at]!)} to ${dueLabel((rule.due_rule as { on: string }).on)} now.` : "Its dates lose the * on every firm's calendar, and reminders use them."}>Mark checked</Submit>
             </form>
           ))}
         </section>
@@ -101,26 +102,27 @@ export default async function AdminDueDates({ searchParams }: { searchParams: Pr
           <Submit>Save for a CA to check</Submit>
         </form>
       </section>
-      <section className="admin-card" aria-label="Due date rules">
+      {rules.some((rule) => rule.verified_on) && <section className="admin-card" aria-label="Checked rules">
+        <h2>Checked rules</h2>
         <div className="table-wrap">
           <table className="t">
             <thead>
-              <tr><th>Rule</th><th>Applies to</th><th>Status</th><th>Checked by</th><th>Source</th></tr>
+              <tr><th>Rule</th><th>Applies to</th><th>Checked</th><th>By</th><th>Source</th></tr>
             </thead>
             <tbody>
-              {rules.map((rule) => (
+              {rules.filter((rule) => rule.verified_on).map((rule) => (
                 <tr key={`${rule.code}${rule.period_key}`}>
-                  <td><strong>{rule.name ?? names.get(rule.code) ?? rule.code}</strong> <span className="sub-inline num">{rule.code}</span></td>
-                  <td>{rule.period_key ? <>Extension for <span className="num">{rule.period_key}</span> to {dueLabel((rule.due_rule as { on: string }).on)}</> : `Every period${rule.client_kinds ? `, for ${rule.client_kinds.map((kind) => clientKinds[kind as ClientKind]).join(", ")}` : ""}`}</td>
-                  <td>{rule.verified_on ? <Badge tone="done">Checked {dueLabel(rule.verified_on)}</Badge> : <Badge tone="warn">Not checked</Badge>}</td>
-                  <td>{rule.approved_by ?? "Nobody yet"}{automatic.has(`${rule.code}:${rule.period_key}`) && <Undo code={rule.code} period={rule.period_key} />}</td>
+                  <td><strong>{rule.name ?? names.get(rule.code) ?? rule.code}</strong></td>
+                  <td className="wrap">{rule.period_key ? <>Extension for {periodLabel(null, rule.period_key)} to {dueLabel((rule.due_rule as { on: string }).on)}</> : `Every period${rule.client_kinds ? `, for ${rule.client_kinds.map((kind) => clientKinds[kind as ClientKind]).join(", ")}` : ""}`}</td>
+                  <td className="num">{dueLabel(rule.verified_on!)}</td>
+                  <td>{rule.approved_by}{automatic.has(`${rule.code}:${rule.period_key}`) && <Undo code={rule.code} period={rule.period_key} />}</td>
                   <td>{rule.source_url ? <a href={rule.source_url} target="_blank" rel="noreferrer">{(rule.due_rule as { notice?: string }).notice ?? "Open the notification"}</a> : "None yet"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </section>
+      </section>}
     </>
   );
 }

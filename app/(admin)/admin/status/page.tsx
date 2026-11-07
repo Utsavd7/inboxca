@@ -42,7 +42,7 @@ export default async function AdminStatus({ searchParams }: { searchParams: Prom
             ))}
           </fieldset>
           <label>How bad <select name="level" defaultValue="down"><option value="down">Down</option><option value="slow">Slow</option></select></label>
-          <Submit>Post</Submit>
+          <Submit confirm="It shows on the public status page at once.">Post</Submit>
         </form>
         <p className="admin-note">
           {mail ? "Each open incident can email the owners of the firms it touches, once." : "Outage email: not set up yet. Add SYSTEM_MAIL_URL and EMAIL_FROM_DOMAIN to the server to send it. Until then nobody is emailed."}
@@ -67,12 +67,12 @@ export default async function AdminStatus({ searchParams }: { searchParams: Prom
                     <input type="hidden" name="incident" value={incident.id} />
                     <label>Note <input name="note" maxLength={1000} /></label>
                     <Submit>Add note</Submit>
-                    <button className="b b-secondary" name="finish" value="yes">Close as fixed</button>
+                    <Submit name="finish" value="yes" confirm="The status page shows it as fixed now, with any note above.">Close as fixed</Submit>
                   </form>
                   {mail && !incident.emailed && (
                     <form action={emailIncident}>
                       <input type="hidden" name="incident" value={incident.id} />
-                      <Submit>Email the firms</Submit>
+                      <Submit confirm="Each owner of a firm it touches gets one email now. It cannot be sent again.">Email the firms</Submit>
                     </form>
                   )}
                 </>
