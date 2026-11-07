@@ -5,7 +5,7 @@ import { appKey, connectTestMailbox, localSupabase, mailTexts, makeMailbox, poll
 
 // Inbox, answered B and C end to end: a client asks whether a return is filed, which papers are
 // still needed and what is due, and sends papers and a notice. With Ask me first (the default)
-// each answer waits in the Inbox, built from the firm's records, for one click Send or Edit;
+// each answer waits in the Inbox, built from the firm's records, for one click Send or Change;
 // Don't send stops it. With Auto each goes after its 5 minutes, and Undo stops it. Mail goes
 // through the local GreenMail server. Skipped when local Supabase is not running.
 const local = localSupabase();
@@ -164,7 +164,7 @@ test("Auto: each answer goes after its 5 minutes, and Undo stops it", async () =
   await expect(toast("Not sent. The email waits in Needs reply.")).toBeVisible();
   await owner.goto("/app/inbox?status=queued");
   await open(`Notice two ${tag}`);
-  await expect(pane().getByRole("region", { name: "InboxCA's reply" })).toContainText("Undo stops it.");
+  await expect(pane().getByRole("region", { name: "InboxCA's reply" }).getByRole("button", { name: "Undo" })).toBeVisible();
   await owner.screenshot({ path: test.info().outputPath("auto-undo.png") });
   await pane().getByRole("button", { name: "Undo" }).click();
   await expect(toast("Not sent.")).toBeVisible();

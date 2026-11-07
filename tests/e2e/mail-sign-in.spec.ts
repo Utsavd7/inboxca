@@ -83,7 +83,8 @@ for (const provider of ["gmail", "outlook", "zoho"] as const) {
       await incoming.getByText(`Meeting ${tag}`).click();
       const pane = page.getByRole("article", { name: "Open email" });
       await expect(pane).toContainText("Can we meet next week about the audit?");
-      await pane.getByRole("button", { name: /^Reply to / }).click();
+      // The suggested reply waits as a card; Put in reply puts it in the box.
+      await pane.getByRole("button", { name: "Put in reply" }).click();
       await page.getByLabel("Your reply").fill("Yes, Tuesday at 11 works for us.");
       await page.getByRole("button", { name: "Send reply" }).click();
       await expect(page.getByRole("status").filter({ hasText: "Reply sent" })).toBeVisible();

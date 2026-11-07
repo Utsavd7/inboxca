@@ -11,7 +11,7 @@ import { closestPreset, presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
 import { AutoSelect } from "../auto-select";
 import { AccessCheck } from "./access-check";
-import { documentTypes } from "@/src/lib/documents";
+import { lawType, listedTypes } from "@/src/lib/documents";
 import { paperType } from "@/src/lib/paper-type";
 import { switchable, defaults, type Permissions, type Standing } from "@/src/lib/rights";
 import { isRoutine, type RecordsSettings } from "@/src/lib/records";
@@ -244,6 +244,8 @@ export default async function Settings({
   const access = (settings.access ?? {}) as { hours_only?: boolean; idle_minutes?: number; session_hours?: number; india_only?: boolean };
   const hoursOnly = access.hours_only ?? false;
   const records = (settings.records ?? {}) as RecordsSettings;
+  // Form No. 130 and 168 are listed once with the forms they replaced.
+  const routine = (type: string) => isRoutine(type, { routine: records.routine }) || isRoutine(lawType(type, "2026"), { routine: records.routine });
   const namesOf=(ids?:string[])=>ids?.map(id=>scopeClients?.find(client=>client.id===id)?.name ?? "Client no longer available").join("\n") ?? "";
   const preset = presetOf(settings);
   const closest = closestPreset(settings);
@@ -843,10 +845,10 @@ export default async function Settings({
           <Card id="records" title="Papers sent on request" line="When a client asks for a paper by email, InboxCA replies with a secure link. Others wait for approval in the Inbox.">
             <div className="set-stack">
               <details className="reveal">
-                <summary>Paper types sent at once: {documentTypes.filter((type) => isRoutine(type, { routine: records.routine })).length}</summary>
-                <div className="set-grid">{documentTypes.map((type) => (
+                <summary>Paper types sent at once: {listedTypes.filter(routine).length}</summary>
+                <div className="set-grid">{listedTypes.map((type) => (
                   <label key={type} className="check">
-                    <input type="checkbox" form={GROUP} name="routine" value={type} defaultChecked={isRoutine(type, { routine: records.routine })} />
+                    <input type="checkbox" form={GROUP} name="routine" value={type} defaultChecked={routine(type)} />
                     {paperType(type)}
                   </label>
                 ))}</div>

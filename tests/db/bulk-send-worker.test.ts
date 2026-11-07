@@ -28,6 +28,13 @@ it("runs a bulk list through the database and local mailbox, skipping a missing 
     await db.query("update public.requests set status='pending',details=jsonb_set(details,'{clients,0}',(details#>'{clients,0}')-'state'-'reason') where id=$1",[request]);
     expect(await bulkSend({entity_id:request} as Job,{markSending:async()=>{}})).toEqual({done:true});
     expect((await db.query("select status,details#>>'{clients,0,state}' sent from public.requests where id=$1",[request])).rows).toEqual([{status:"done",sent:"sent"}]);
+    // Form No. 130 for tax year 2026-27 finds the paper typed Form 16 by its file name.
+    const form=randomUUID();
+    await db.query("insert into public.documents(firm_id,client_id,work_type,document_type,period_key,status,drive_file_id,name,size,sha256) values ($1,$2,'income_tax','Form 16','2027','filed','form16.pdf','Invented form16',1,'invented 16')",[firm,client]);
+    await db.query("insert into public.requests(id,firm_id,kind,entity_type,entity_id,details) values ($1,$2,'bulk_send','bulk_send',$1,$3)",[form,firm,{by:randomUUID(),type:"Form 130",period:"2027",day:"2026-10-20",clients:[{id:client,share:randomUUID()}]}]);
+    expect(await bulkSend({entity_id:form} as Job,{markSending:async()=>{}})).toEqual({done:true});
+    // Form 16 is not sent at once by default, so it waits for approval rather than being skipped as not found.
+    expect((await db.query("select status,details#>>'{clients,0,state}' sent from public.requests where id=$1",[form])).rows).toEqual([{status:"done",sent:"waiting"}]);
 
   } finally {
     await db.query("begin");await db.query("select set_config('app.log_purge','on',true)");await db.query("delete from public.firms where id=$1",[firm]);await db.query("commit");await db.end();vi.unstubAllEnvs();

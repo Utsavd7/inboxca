@@ -3,7 +3,7 @@ import type {BulkSend} from "@/src/lib/records";
 import type {Job} from "@/src/jobs/runner";
 const mock=vi.hoisted(()=>({status:"pending",details:{} as BulkSend}));
 vi.mock("@/src/lib/supabase",()=>({supabaseAdmin:()=>({from:(table:string)=>({
-  write:false,select(){return this;},eq(){return this;},
+  write:false,select(){return this;},eq(){return this;},in(){return this;},
   update(value:{status?:string;details?:BulkSend}){this.write=true;if(value.status)mock.status=value.status;return this;},
   async maybeSingle(){return {data:table==="requests" ? {id:"request",firm_id:"firm",status:mock.status,details:mock.details,firms:{name:"Invented Firm",settings:{}}} : table==="clients" ? {name:"Invented Client",email_enc:null} : null,error:null};},
   then(resolve:(value:unknown)=>void){resolve({data:this.write ? null : [],error:null});},

@@ -1044,7 +1044,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   // A manager or the owner uploads a file and types it; it is saved under its name in the client's folder.
   await owner.getByRole("link", { name: "Upload papers" }).click();
   await owner.getByLabel("Files", { exact: true }).setInputFiles({ name: "IMG_2041.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 invented form 16") });
-  await owner.getByLabel("Paper type", { exact: true }).selectOption("Form 16");
+  await owner.getByLabel("Paper type", { exact: true }).selectOption("Form 130");
   await owner.getByLabel("Type of work", { exact: true }).selectOption("income_tax");
   await owner.getByLabel("Period", { exact: true }).selectOption({ label: "FY 2025-26" });
   await owner.getByRole("button", { name: "Upload", exact: true }).click();

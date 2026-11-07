@@ -10,7 +10,7 @@ import { sendPapers } from "@/app/(app)/actions";
 import { todayInIndia } from "@/src/lib/calendar";
 import { canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { documentTypes, folderFor, periodChoices, periodName, workOfType } from "@/src/lib/documents";
+import { documentTypes, folderFor, listedTypes, periodChoices, periodName, workOfType } from "@/src/lib/documents";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { currentMember } from "@/src/lib/member";
 import { paperOrigins } from "@/src/lib/paper-origin";
@@ -457,7 +457,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
               <p className="hint">Each file is saved in the client&apos;s folder in your firm&apos;s drive, named by the type and period you choose.</p>
               <UploadForm
                 clientId={uploadClient.id}
-                types={[...documentTypes.filter((type) => type !== "Document"), ...((membership.settings.document_types ?? []) as string[])]}
+                types={[...listedTypes.filter((type) => type !== "Document"), ...((membership.settings.document_types ?? []) as string[])]}
                 typeWork={Object.fromEntries(documentTypes.map((type) => [type, workOfType(type)]).filter(([, work]) => work !== "other"))}
                 works={Object.entries(workTypes)}
                 periods={periodChoices(todayInIndia()).map((choice) => [choice, periodName(choice)])}

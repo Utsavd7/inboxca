@@ -268,7 +268,6 @@ test("a notice that asks something waits for a reply; Mark done clears it, with 
   await owner.goto(`/app/clients/${clientId}?tab=emails`);
   await list().getByText(`GST notice ${tag}`).click();
   await expect(pane().getByRole("heading", { name: `GST notice ${tag}` })).toBeVisible();
-  await pane().getByRole("button", { name: /^Reply to/ }).click();
   await owner.getByLabel("Your reply").fill("We will call you today.");
   await owner.getByRole("button", { name: "Send reply" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Reply sent" })).toBeVisible();

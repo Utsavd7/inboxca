@@ -204,10 +204,10 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     icon: Receipt,
     still: 2,
     frames: [
-      f(0, ["Today", "Today", "Your list"], <Rows rows={[["Mehta Traders", "GSTR-3B, Sep 2026", <Chip key="c" tone="late">Late</Chip>], ["Patel Textiles", "Bank statement", <Chip key="c">Asked for</Chip>]]} />, <Line><Btn press>GST month end</Btn></Line>),
-      f(1, ["Today", "GST month end"], <Line><Field label="Month" value="Sep 2026" select /><Field label="Looked after by" value="Ravi Kumar" select /></Line>, <Field label="Tag" value="Any tag" select />, <Note>Returns for a month are filed the month after, so last month opens first.</Note>),
-      f(2, ["Today", "GST month end"], <Title>Patel Textiles, Sep 2026</Title>, <Rows rows={[["Papers", null, <Chip key="c" tone="done">In</Chip>], ["GSTR-2B", null, <Chip key="c" tone="done">In</Chip>], ["Differences", "2 bills not in GSTR-2B", <Btn key="b" quiet press>See differences</Btn>]]} />),
-      f(2, ["Today", "GST month end"], <Title>Patel Textiles, Sep 2026</Title>, <Rows rows={[["GSTR-1", "Waiting for approval", <Btn key="b" quiet press>Review</Btn>], ["GSTR-3B", null, <Chip key="c">Not started</Chip>], ["Filed", null, <Chip key="c">Not yet</Chip>]]} />),
+      f(0, ["GST month end", "GST month end"], <Title>Every GST client, one month</Title>, <Note>In the sidebar, under Workspace.</Note>),
+      f(1, ["GST month end", "GST month end"], <Line><Field label="Month" value="Sep 2026" select /><Field label="Looked after by" value="Ravi Kumar" select /></Line>, <Field label="Tag" value="Any tag" select />, <Note>Returns for a month are filed the month after, so last month opens first.</Note>),
+      f(2, ["GST month end", "GST month end"], <Title>Patel Textiles, Sep 2026</Title>, <Rows rows={[["Papers", null, <Chip key="c" tone="done">In</Chip>], ["GSTR-2B", null, <Chip key="c" tone="done">In</Chip>], ["Differences", "2 bills not in GSTR-2B", <Btn key="b" quiet press>See differences</Btn>]]} />),
+      f(2, ["GST month end", "GST month end"], <Title>Patel Textiles, Sep 2026</Title>, <Rows rows={[["GSTR-1", "Waiting for approval", <Btn key="b" quiet press>Review</Btn>], ["GSTR-3B", null, <Chip key="c">Not started</Chip>], ["Filed", null, <Chip key="c">Not yet</Chip>]]} />),
     ],
   },
   itr: {

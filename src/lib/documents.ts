@@ -183,6 +183,24 @@ export async function settleVersions(
 
 // Every type a person can pick when confirming a file, in the order shown.
 export const documentTypes = [...new Set(types.map(([, type]) => type))].sort().concat("Document");
+// Form No. 130 and Form No. 168 replace Form 16 and Form 26AS from tax year 2026-27 (period
+// "2027", or a month from Apr 2026). Pickers list each pair once, by its new name (paper-type.ts);
+// a paper is still kept as its period's form, so old papers read and match as before.
+const replaced: Record<string, string> = { "Form 16": "Form 130", "Form 26AS": "Form 168" };
+export const listedTypes = documentTypes.filter((type) => !(type in replaced));
+export const listedType = (type: string) => replaced[type] ?? type;
+const oldOf = (type: string) => Object.keys(replaced).find((key) => key === type || replaced[key] === type);
+export function lawType(type: string, period: string) {
+  const old = oldOf(type);
+  if (!old || !period) return type;
+  return (period.length === 4 ? period >= "2027" : period >= "2026-04") ? replaced[old] : old;
+}
+// Both forms of a pair, as a paper sent for either may be stored as the other: a form16.pdf
+// for tax year 2026-27 is typed Form 16 by its name.
+export const sameForm = (type: string) => {
+  const old = oldOf(type);
+  return old ? [old, replaced[old]] : [type];
+};
 
 // The periods a person can pick: the last 18 months and the last four financial years.
 export function periodChoices(today: string) {

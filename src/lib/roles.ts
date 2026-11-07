@@ -20,7 +20,7 @@ export const roleAbout: Record<(typeof invitableRoles)[number], string> = {
 };
 
 // The pages each role uses. The sidebar shows the four daily places, then a small Workspace
-// group with Calendar, Notices, People and Settings. Ctrl K also finds the others, and each
+// group with Calendar, GST month end (not front desk), Notices, People and Settings. Ctrl K also finds the others, and each
 // Settings group by its words, once something is typed.
 export const pagesFor = (role: string) => [
   { href: "/app", name: "Today", place: "main" },
@@ -28,6 +28,7 @@ export const pagesFor = (role: string) => [
   { href: "/app/clients", name: "Clients", place: "main" },
   { href: "/app/documents", name: "Documents", place: "main" },
   { href: "/app/calendar", name: "Calendar", place: "workspace" },
+  ...(role !== "front_desk" ? [{ href: "/app/work/gst", name: "GST month end", place: "workspace" }] : []),
   { href: "/app/notices", name: "Notices", place: "workspace" },
   ...(["owner", "partner", "manager"].includes(role) ? [{ href: "/app/people", name: "People", place: "workspace" }] : []),
   ...(role === "owner" ? [{ href: "/app/settings", name: "Settings", place: "workspace" }] : []),

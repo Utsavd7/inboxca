@@ -1,11 +1,11 @@
 "use client";
-import { CalendarDays, FolderOpen, House, Inbox, Scale, Settings, Users, UsersRound } from "lucide-react";
+import { CalendarDays, FolderOpen, House, Inbox, ReceiptIndianRupee, Scale, Settings, Users, UsersRound } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { Suspense, use, useState } from "react";
 import { pagesFor } from "@/src/lib/roles";
 import { usePagePath } from "./shell";
 
-const icons: Record<string, typeof House> = { Today: House, Inbox, Clients: UsersRound, Documents: FolderOpen, Calendar: CalendarDays, Notices: Scale, People: Users, Settings };
+const icons: Record<string, typeof House> = { Today: House, Inbox, Clients: UsersRound, Documents: FolderOpen, Calendar: CalendarDays, "GST month end": ReceiptIndianRupee, Notices: Scale, People: Users, Settings };
 
 // The sidebar's links; the current page is marked for sight and for screen readers, and its
 // tint moves with the change of page itself (page-in.tsx): a glide of its own ran on under the

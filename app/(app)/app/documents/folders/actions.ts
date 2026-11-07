@@ -1,6 +1,6 @@
 "use server";
 import { todayInIndia } from "@/src/lib/calendar";
-import { describeFile, documentTypes, periodChoices } from "@/src/lib/documents";
+import { describeFile, documentTypes, lawType, periodChoices } from "@/src/lib/documents";
 import { KEPT_OUT_FOLDER, workTypes, type WorkType } from "@/src/lib/drive";
 import { checkFile, quarantine, receive, unsafeText } from "@/src/lib/intake";
 import { parsePath, placeOf } from "@/src/lib/drive-browse";
@@ -51,7 +51,7 @@ export async function fileDrivePaper(_previous: Result | null, form: FormData): 
       forget(ctx.account!.id);
       return { error: unsafeText[sent.unsafe] };
     }
-    const filed = await fileForClient(ctx, client, { work_type: work as WorkType, document_type: type, period_key: period, status: "filed" }, { name: file.name, bytes }, (folder, name) => ctx.drive!.move(file.id, folder, name), "document.filed");
+    const filed = await fileForClient(ctx, client, { work_type: work as WorkType, document_type: lawType(type, period), period_key: period, status: "filed" }, { name: file.name, bytes }, (folder, name) => ctx.drive!.move(file.id, folder, name), "document.filed");
     if (filed === "twin") return { error: `${client.name} already has this same file. It stays where it is.` };
     if (filed === "drive") return { error: "The drive did not take the file. Try again." };
     forget(ctx.account!.id);

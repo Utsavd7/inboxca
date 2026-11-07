@@ -2,12 +2,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { CalendarDays, ChevronRight, FolderOpen, House, Inbox, Pause, Play, Scale, Settings, Users, UsersRound } from "lucide-react";
+import { CalendarDays, ChevronRight, FolderOpen, House, Inbox, Pause, Play, ReceiptIndianRupee, Scale, Settings, Users, UsersRound } from "lucide-react";
 import { Logo } from "./logo";
 import { useReduced } from "./use-reduced";
 
 // The app's sidebar, in its own order and with its own icons (app/(app)/app/nav-links.tsx).
-const pages = { Today: House, Inbox, Clients: UsersRound, Documents: FolderOpen, Calendar: CalendarDays, Notices: Scale, People: Users, Settings } as const;
+const pages = { Today: House, Inbox, Clients: UsersRound, Documents: FolderOpen, Calendar: CalendarDays, "GST month end": ReceiptIndianRupee, Notices: Scale, People: Users, Settings } as const;
 export type Page = keyof typeof pages;
 // The sidebar page lit up (none outside the app), the screen's name and its part.
 export type Screen = readonly [page: Page | null, title: string, part?: string];
