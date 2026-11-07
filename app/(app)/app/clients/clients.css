@@ -242,12 +242,16 @@
 .ask-list { width: 100%; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r1); background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; }
 .ask-list:focus { border-color: var(--accent); }
 
-/* Ask for papers: each paper once, the usual five first. */
-.ask-papers { display: grid; gap: var(--s1); margin-top: var(--s4); border: 0; }
+/* Ask for papers: each paper once, the usual five first, in two columns so the list and its
+   button fit a laptop screen. */
+.ask-papers { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s1) var(--s3); margin-top: var(--s4); border: 0; }
 .ask-papers legend { margin-bottom: var(--s1); font-weight: 600; }
-.ask-more { display: grid; gap: var(--s1); margin-top: var(--s2); }
+.ask-papers > details { grid-column: 1 / -1; }
+.ask-more { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s1) var(--s3); margin-top: var(--s2); }
 
 /* A paper's panel: Name shows only while Type is Other; sending asks once more; More holds the rest. */
+.paper-view { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.paper-view:hover { text-decoration: underline; }
 .fields:not(:has(#file-type option[value="Other"]:checked)) > .other-name { display: none; }
 .send-ask { margin-top: var(--s4); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .send-to fieldset { display: grid; gap: var(--s2); border: 0; }

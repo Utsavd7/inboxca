@@ -68,7 +68,9 @@ const jobs = randomBytes(32).toString("hex");
 const unset = (values) => Object.fromEntries(Object.entries(values).filter(([name]) => !(name in process.env) && !(name in env)));
 const shared = { ...unset({ MAIL_ALLOW_LOCAL: "1", ...(greenmail && { SYSTEM_MAIL_URL: "smtp://127.0.0.1:3025/?ignoreTLS=true", EMAIL_FROM_DOMAIN: "invented.test" }) }), ...files };
 const children = [
-  spawn(process.execPath, ["--experimental-strip-types", "worker/server.ts"], { stdio: "inherit", env: { ...process.env, ...shared, FILE_WORKER_PORT: String(port + 1), DRIVE_LOCAL_DIR: process.env.DRIVE_LOCAL_DIR ?? env.DRIVE_LOCAL_DIR } }),
+  // The file worker reads no .env file itself (next start does), so it gets .env.local's lines
+  // here: without MAIL_ALLOW_LOCAL it refuses the test mail server and the Inbox shows no mail.
+  spawn(process.execPath, ["--experimental-strip-types", "worker/server.ts"], { stdio: "inherit", env: { ...env, ...process.env, ...shared, FILE_WORKER_PORT: String(port + 1) } }),
   // Only on this laptop's own address, so no one else on the network reaches it.
   spawn("node_modules/.bin/next", ["start", "-H", "127.0.0.1", "-p", String(port)], { stdio: "inherit", env: { ...process.env, ...shared, JOB_WORKER_SECRET: jobs, APP_BASE_URL: origin, DEV_LOGIN: "1" } }),
 ];

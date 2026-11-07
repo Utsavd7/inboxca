@@ -954,7 +954,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await expect(rows).toHaveCount(2);
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` })).toContainText("To check");
   // Each paper says how it came in; the unclear one says why it waits, and its email opens in the Inbox.
-  await expect(rows.filter({ hasText: "Purchase bills" })).toContainText(`Saved by InboxCA from ${mailClient}'s email, `);
+  await expect(rows.filter({ hasText: "Purchase bills" }).getByRole("link", { name: "Open the email" })).toBeVisible();
   // Why it waits is on its To check tag (and in its panel), so the row stays short.
   await expect(rows.filter({ hasText: `${mailClient} - Document.pdf` }).locator(".badge[title]")).toHaveAttribute("title", "InboxCA could not tell its type and period");
   const docsTab = owner.url();
@@ -1077,7 +1077,7 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.reload();
   await expect(owner.getByRole("list", { name: "Papers asked for" })).toContainText("1 of 2 received");
   await expect(rows.filter({ hasText: "Bank statement" })).not.toContainText("To check");
-  await expect(rows.filter({ hasText: "Bank statement" })).toContainText(`Saved by InboxCA from ${mailClient}'s email, `);
+  await expect(rows.filter({ hasText: "Bank statement" }).getByRole("link", { name: "Open the email" })).toBeVisible();
   // Several files in one reply all arrive; one the name does not type waits under To check.
   await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "Re: Documents needed", text: "Sales bills attached.", attachments: [
     { filename: "sales_bills_oct_2026.pdf", content: Buffer.from(pdf("Invented sales bills")) },

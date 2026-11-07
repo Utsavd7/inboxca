@@ -85,7 +85,7 @@ test("the owner moves the notice on to in progress, replied and closed; a done n
   await owner.getByRole("link", { name: /^Replied or closed/ }).click();
   await expect(row).toBeVisible();
   await row.getByRole("link", { name: `Update the notice for ${clientName}` }).click();
-  await expect(panel.getByRole("heading", { name: "Record the reply" })).toBeVisible();
+  await expect(panel.getByLabel("Reply sent on")).toBeVisible();
   await expect(panel.getByRole("button", { name: "Close notice" })).toHaveCount(0);
   const [{ id: paper }] = await query(local.dbUrl, "insert into public.documents (firm_id, client_id, work_type, document_type, name, size, sha256, drive_file_id) values ($1, $2, 'income_tax', 'Notice reply', 'invented-reply.pdf', 10, repeat('b', 64), 'invented-drive-file') returning id", [firm.firmId, clientId]);
   await owner.goto(`/app/notices?show=done&notice=${id}`);
