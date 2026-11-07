@@ -10,6 +10,14 @@ export const roleNames: Record<string, string> = {
 // The roles an owner can give; there is one owner per firm.
 export const invitableRoles = ["partner", "manager", "staff", "front_desk"] as const;
 export const roleLabel = (role: string) => roleNames[role][0].toUpperCase() + roleNames[role].slice(1);
+// One line on what each role is in a CA firm, shown where the owner gives a role. What each may
+// do exactly is the firm's own choice in Settings (src/lib/rights.ts).
+export const roleAbout: Record<(typeof invitableRoles)[number], string> = {
+  partner: "A CA partner of the firm. Approves returns, sees the whole firm's work and works from anywhere.",
+  manager: "Leads a desk or team. Approves returns and looks after the team's clients and requests.",
+  staff: "Prepares and checks returns for the clients given to them.",
+  front_desk: "Handles client emails and papers: sorts mail, asks clients for papers and scans. Prepares no returns.",
+};
 
 // The pages each role uses. The sidebar shows the four daily places, then a small Workspace
 // group with Calendar, Notices, People and Settings.
