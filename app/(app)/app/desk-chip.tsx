@@ -4,6 +4,7 @@ import { Check, Plus } from "lucide-react";
 import { useState, useSyncExternalStore, useTransition } from "react";
 import { coverReturn, deskPeople, setDesk } from "@/app/(app)/actions";
 import { deskNames, type Desk, type DeskWork, type Holder } from "@/src/lib/desks";
+import { whose } from "@/src/lib/roles";
 import { ToastMotion } from "./motion";
 import { Avatar } from "./ui";
 import "./desk-chip.css";
@@ -99,7 +100,7 @@ export function DeskChip({ client, desks, work, task, viewer, named = false }: {
         className={`desk-chip${face.length ? "" : " is-free"}${named ? " is-named" : ""}`}
         disabled={!may}
         title={title}
-        aria-label={`${face.length ? `Who does the work: ${title}` : `Nobody does ${client.name}'s work yet`}. ${may ? "Change" : ""}`.trim()}
+        aria-label={`${face.length ? `Who does the work: ${title}` : `Nobody does ${whose(client.name)} work yet`}. ${may ? "Change" : ""}`.trim()}
         onClick={(event) => event.stopPropagation()}
       >
         {face.length ? (
