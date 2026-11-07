@@ -96,7 +96,8 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
         <>
           <section className="panel" aria-labelledby="choose">
             <h2 id="choose">What to bring</h2>
-            <Form action="/app/import" className="import-choose">
+            {/* With no folders of its own in the drive there is nothing to choose yet. */}
+            {!folders.length ? <p className="hint">Your drive has no folders besides InboxCA&apos;s own.</p> : <Form action="/app/import" className="import-choose">
               <fieldset>
                 <legend>Folders in your drive</legend>
                 {folders.map((folder) => (
@@ -105,7 +106,6 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
                     {folder}
                   </label>
                 ))}
-                {!folders.length && <p className="hint">Your drive has no folders besides InboxCA&apos;s own.</p>}
               </fieldset>
               <fieldset>
                 <legend>Which files</legend>
@@ -129,7 +129,7 @@ export default async function FirstImport({ searchParams }: { searchParams: Prom
               <button className="b b-secondary" type="submit">
                 Show what would move
               </button>
-            </Form>
+            </Form>}
           </section>
           <DiskUpload incoming={folders.find((folder) => folder.endsWith(`InboxCA/${INCOMING}`))} onedrive={account?.provider === "onedrive"} />
 

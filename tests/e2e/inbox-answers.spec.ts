@@ -143,8 +143,8 @@ test("Auto: each answer goes after its 5 minutes, and Undo stops it", async () =
     await expect(card.getByLabel(label)).toHaveValue("ask");
     await card.getByLabel(label).selectOption("auto");
   }
-  await card.getByRole("button", { name: "Save replies" }).click();
-  await expect(toast("Replies saved.")).toBeVisible();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(toast("Reminders and papers saved.")).toBeVisible();
   await card.screenshot({ path: test.info().outputPath("settings-replies.png") });
   const [{ settings }] = await query(local.dbUrl, "select settings from public.firms where id = $1", [firm.firmId]);
   expect(settings.answers).toEqual({ filed: "auto", papers: "auto", due: "auto", received: "auto", notice: "auto" });

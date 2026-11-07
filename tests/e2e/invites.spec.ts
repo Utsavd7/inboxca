@@ -187,7 +187,7 @@ test("the owner changes the role, removes the person and brings them back", asyn
   await expect(row).toContainText("Removed");
   await panel.getByRole("button", { name: "Restore" }).click();
   await expect(panel.getByRole("link", { name: "Remove from the firm" })).toBeVisible();
-  await expect(row).toContainText("Active");
+  await expect(row).not.toContainText("Removed");
 });
 
 // #1, #2, #3, #24, #25, #35, #37, #39, #40, #41, #49, #55: the same approved PC, fresh browsers and changed connections.
@@ -581,7 +581,7 @@ test("a staff member asks to upload; the owner allows it once from the Inbox", a
 
   // #47: a changed role right is read on the next request, and reset removes it.
   await owner.getByLabel("Upload papers: staff").check();
-  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save permissions", exact: true }).click()]);
+  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save", exact: true }).click()]);
   await person.goto(files);
   await expect(person.getByRole("link", { name: "Upload papers" })).toBeVisible();
   // Reset asks once more before it clears the firm's choices.
@@ -711,8 +711,8 @@ test("in restricted mode a person sees only clients assigned to them or their te
 
   await owner.goto("/app/settings?group=people");
   await owner.getByLabel(/Only you, partners and the people assigned/).check();
-  await owner.getByRole("button", { name: "Save who sees clients" }).click();
-  await expect(owner.getByRole("status")).toHaveText("Who sees clients saved.");
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(owner.getByRole("status")).toHaveText("People's access saved.");
   await person.goto("/app/clients");
   await expect(person.locator(".page-head")).toContainText("0 clients.");
   // Today's late returns are those of the clients the person can see: none yet.
@@ -914,12 +914,12 @@ test("the owner connects a drive only after agreeing to the Drive access terms",
   const [consent] = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'drive.consent'", [firm.firmId]);
   expect(consent.details).toEqual({ provider: "local", level: "whole_drive", terms_version: "2026-10-17" });
   // InboxCA then sets the drive up by itself, with a tick for each thing it did.
-  const ticks = card.getByRole("list", { name: "What InboxCA set up" });
+  const ticks = card.getByRole("list", { name: "What InboxCA set up", includeHidden: true });
   await expect(async () => {
     await owner.reload();
     await expect(ticks).toContainText("Saved a test file, read it back and removed it", { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
-  await expect(ticks.getByRole("listitem")).toHaveCount(6);
+  await expect(ticks.getByRole("listitem", { includeHidden: true })).toHaveCount(6);
   await expect(ticks).toContainText("Made the InboxCA folder");
   await expect(ticks).toContainText("The InboxCA folder is shared with nobody");
   await expect(ticks).toContainText("GB free in your drive");
@@ -1249,11 +1249,10 @@ test("a client's attachments are filed into its folder in the drive; an unclear 
   await owner.goto("/app/settings?group=reminders");
   await owner.getByLabel("Email clients before their returns are due").check();
   await owner.getByLabel("1 day before", { exact: true }).uncheck();
-  await owner.getByRole("button", { name: "Save reminders" }).click();
-  await expect(owner.getByLabel("1 day before", { exact: true })).not.toBeChecked();
   await owner.getByLabel("Papers received").selectOption("auto");
-  await owner.getByRole("button", { name: "Save replies" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Replies saved." })).toBeVisible();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Reminders and papers saved." })).toBeVisible();
+  await expect(owner.getByLabel("1 day before", { exact: true })).not.toBeChecked();
   // Files that arrive now get a short reply saying what was received, once its 5 minutes for Undo pass.
   await smtp.sendMail({ from: `client-${tag}@patel.test`, to: mailboxEmail, subject: "August sales", text: "Attached.", attachments: [{ filename: "sales_bills_aug_2026.pdf", content: "%PDF-1.4 invented sales" }] });
   await pollFirmMail(request, firm.firmId);
@@ -1435,7 +1434,7 @@ test("five office PCs need one batch approval, and managers cannot forge office 
     await boss.getByRole("button", { name: "Continue" }).click();
     await expect(boss).toHaveURL(/\/app$/);
     // Notices on this computer are a choice in Settings, off until turned on.
-    await boss.goto("/app/settings?group=access#notices");
+    await boss.goto("/app/settings?group=me#notices");
     await boss.evaluate(() => Reflect.deleteProperty(window, "PushManager"));
     await boss.getByRole("button", { name: "Turn on notices on this computer" }).click();
     await expect(boss.getByText("This browser cannot show notices.", { exact: false })).toBeVisible();

@@ -78,10 +78,10 @@ export function DiskUpload({ incoming, onedrive }: { incoming?: string; onedrive
   return (
     <section className="panel" aria-labelledby="disk">
       <h2 id="disk">Files on a computer or hard disk</h2>
-      <p className="hint">Each file goes from this computer into the Incoming folder in your drive. Then tick Incoming above to move the files into client folders. For a very large amount (hundreds of GB), use your drive&apos;s own computer app instead. It keeps copying on its own for days.</p>
+      <p className="hint">Files go into your drive&apos;s Incoming folder, then tick Incoming above. For hundreds of GB, use your drive&apos;s own computer app.</p>
       <div className="disk-pick">
-        <label htmlFor="disk-folder">Choose a folder</label>
-        <input id="disk-folder" type="file" multiple disabled={!!sending && !sending.finished} onChange={(event) => read(event.target.files)} {...{ webkitdirectory: "" }} />
+        <input id="disk-folder" className="sr-only" type="file" multiple disabled={!!sending && !sending.finished} onChange={(event) => read(event.target.files)} {...{ webkitdirectory: "" }} />
+        <label className="b b-secondary" htmlFor="disk-folder">Choose a folder</label>
       </div>
       {files && (
         <fieldset className="disk-choose">

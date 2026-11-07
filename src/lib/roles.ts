@@ -20,7 +20,8 @@ export const roleAbout: Record<(typeof invitableRoles)[number], string> = {
 };
 
 // The pages each role uses. The sidebar shows the four daily places, then a small Workspace
-// group with Calendar, Notices, People and Settings.
+// group with Calendar, Notices, People and Settings. Ctrl K also finds the others, and each
+// Settings group by its words, once something is typed.
 export const pagesFor = (role: string) => [
   { href: "/app", name: "Today", place: "main" },
   { href: "/app/inbox", name: "Inbox", place: "main" },
@@ -30,6 +31,20 @@ export const pagesFor = (role: string) => [
   { href: "/app/notices", name: "Notices", place: "workspace" },
   ...(["owner", "partner", "manager"].includes(role) ? [{ href: "/app/people", name: "People", place: "workspace" }] : []),
   ...(role === "owner" ? [{ href: "/app/settings", name: "Settings", place: "workspace" }] : []),
+  { href: "/app/government", name: "From the government", place: "find" },
+  { href: "/app/settings?group=me", name: "Your sign in: passkeys", place: "find" },
+  ...(role === "owner"
+    ? [
+        ["email", "Settings: firm email, drive and folders"],
+        ["access", "Settings: office only and signing in"],
+        ["hours", "Settings: office hours and holidays"],
+        ["people", "Settings: permissions and who sees clients"],
+        ["reminders", "Settings: reminders, due dates and replies"],
+        ["data", "Settings: download your data, close the firm"],
+        ["billing", "Settings: billing and plan"],
+      ].map(([group, name]) => ({ href: `/app/settings?group=${group}`, name, place: "find" }))
+    : []),
+  ...(role === "owner" ? [{ href: "/app/import", name: "Add old files", place: "find" }] : []),
 ];
 
 // A name with its possessive: "Mehta's papers", "Patel Textiles' folders".

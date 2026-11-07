@@ -46,17 +46,19 @@ test.afterAll(async () => {
 test("the owner chooses which papers go at once, and every paper can wait for approval", async () => {
   await owner.goto("/app/settings?group=reminders");
   const card = owner.locator("section#records");
+  await card.getByText(/^Paper types sent at once/).click();
   await expect(card.getByLabel("Challan", { exact: true })).toBeChecked();
   await card.getByLabel("Challan", { exact: true }).uncheck();
   await card.getByLabel("Form 16", { exact: true }).check();
   await card.getByLabel("Wait for approval for every paper").check();
-  await card.getByRole("button", { name: "Save paper sending rules" }).click();
-  await expect(saved("Paper sending rules saved.")).toBeVisible();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(saved("Reminders and papers saved.")).toBeVisible();
   const { records } = await settings();
   expect(records.approve_all).toBe(true);
   expect(records.routine).toContain("Form 16");
   expect(records.routine).not.toContain("Challan");
   await owner.reload();
+  await card.getByText(/^Paper types sent at once/).click();
   await expect(card.getByLabel("Challan", { exact: true })).not.toBeChecked();
   await expect(card.getByLabel("Form 16", { exact: true })).toBeChecked();
   await expect(card.getByLabel("Wait for approval for every paper")).toBeChecked();
@@ -65,10 +67,11 @@ test("the owner chooses which papers go at once, and every paper can wait for ap
 test("the owner lowers the firm's email limit for its provider", async () => {
   await owner.goto("/app/settings?group=email");
   const limit = owner.locator("section#mailbox").getByLabel("Emails in 24 hours");
+  await owner.locator("section#mailbox").getByText("Sending limit").click();
   await expect(limit).toHaveValue("500");
   await limit.fill("120");
-  await owner.getByRole("button", { name: "Save email limit" }).click();
-  await expect(saved("Email limit saved.")).toBeVisible();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(saved("Email and drive saved.")).toBeVisible();
   expect((await settings()).mail_limit).toBe(120);
   await owner.reload();
   await expect(limit).toHaveValue("120");
@@ -77,9 +80,10 @@ test("the owner lowers the firm's email limit for its provider", async () => {
 test("new files are arranged and named the way the owner chose, and the change is logged", async () => {
   await owner.goto("/app/settings?group=email");
   const drive = owner.locator("section#drive");
+  await drive.getByText("Folders and file names").click();
   await drive.getByLabel("Folder order for new papers").selectOption("work_year_client");
   await drive.getByLabel("How new papers are named").selectOption("period_type_client");
-  await drive.getByRole("button", { name: "Save", exact: true }).click();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(async () => (await query(local.dbUrl, "select settings from public.connected_accounts where firm_id = $1 and kind = 'drive'", [firm.firmId]))[0].settings).toMatchObject({ folder_order: "work_year_client", naming: "period_type_client" });
   expect(await query(local.dbUrl, "select actor_id from public.activity_log where firm_id = $1 and action = 'drive.folder_order'", [firm.firmId])).toEqual([{ actor_id: firm.ownerId }]);
   await owner.reload();
@@ -124,8 +128,8 @@ test("reminders go from the firm's mailbox, except to a client whose reminders a
 
   await owner.goto("/app/settings?group=reminders");
   await owner.getByLabel("Email clients before their returns are due").check();
-  await owner.getByRole("button", { name: "Save reminders" }).click();
-  await expect(saved("Reminders saved.")).toBeVisible();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(saved("Reminders and papers saved.")).toBeVisible();
   expect((await settings()).reminders).toBe(true);
   await query(local.dbUrl, "select private.queue_reminders()");
   await runJobs(owner.request, firm.firmId);
@@ -177,8 +181,8 @@ test("Settings opens as one line a group, and a change made in the panel shows o
   await owner.getByRole("link", { name: "Change People's access" }).click();
   const panel = owner.getByRole("dialog", { name: "People's access" });
   await panel.getByLabel("Only you, partners and the people assigned to a client see it").check();
-  await panel.getByRole("button", { name: "Save who sees clients" }).click();
-  await expect(saved("Who sees clients saved.")).toBeVisible();
+  await panel.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(saved("People's access saved.")).toBeVisible();
   await owner.getByRole("dialog", { name: "People's access" }).getByRole("link", { name: "Close" }).click();
   await expect(owner.getByRole("dialog")).toHaveCount(0);
   await expect(owner.getByText(/Only the people assigned to a client see it/)).toBeVisible();
