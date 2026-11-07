@@ -11,7 +11,8 @@
 .work-date.is-late span { color: inherit; }
 .work-client { margin-right: var(--s2); color: var(--ink); font-weight: 600; }
 .work-what { color: var(--ink-2); font-weight: 500; }
-.work-mark { margin-right: 6px; color: var(--accent); vertical-align: -2px; }
+.work-mark { display: inline-block; margin-right: 6px; color: var(--accent); vertical-align: -2px; }
+.work-nb { white-space: nowrap; }
 .work-why { color: var(--ink-3); }
 .work-why.is-red { color: var(--late-fg); }
 .work-rows .row-end > .b, .work-rows .row-end > form .b { border-color: transparent; background: transparent; box-shadow: none; color: var(--accent); transition: background var(--fast) var(--out), border-color var(--fast) var(--out), color var(--fast) var(--out); }

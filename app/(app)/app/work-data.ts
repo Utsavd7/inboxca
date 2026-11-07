@@ -3,6 +3,7 @@ import { aiCredits } from "@/src/lib/ai";
 import { addDays, dueLabel, isItr, todayInIndia } from "@/src/lib/calendar";
 import { periodName } from "@/src/lib/documents";
 import { pages } from "@/src/lib/paged";
+import { deskViewer, readDesks, workOf } from "@/src/lib/desks";
 import { downloadUse } from "@/src/lib/download-use";
 import { firmChecked } from "@/src/lib/due-dates";
 import { log } from "@/src/lib/logger";
@@ -183,11 +184,13 @@ export async function workFor(ctx: Context, late: number) {
   const rules = Promise.resolve(supabase.from("compliance_types").select("code, name, frequency").eq("period_key", "")).then(({ data }) => new Map(data?.map((rule) => [rule.code, rule])));
   const lateRows = Promise.all([Promise.resolve(supabase.rpc("late_clients", { target_firm: firm, mine: !lead }, { count: "exact" }).limit(late).throwOnError()), rules]).then(([{ data, count }, rule]) => ({
     count: count ?? data?.length ?? 0,
+    // Each row's oldest late return, for the chip of who does it.
+    tasks: new Map((data ?? []).map((row) => [`late:${row.client_id}`, row.task])),
     items: (data ?? []).map((row): Listed => {
       const days = Math.round((Date.parse(today) - Date.parse(row.due_on)) / DAY);
       return { key: `late:${row.client_id}`, title: shortReturn(row.code ?? "", row.period_key ?? "", today, rule.get(row.code ?? "")), why: `${plural(days, "day", "days")} late${row.returns > 1 ? `, and ${plural(row.returns - 1, "more late return", "more late returns")}` : ""}`, client: { id: row.client_id, name: row.client_name }, due: row.due_on, urgent: true, action: { label: "See returns", href: `/app/clients/${row.client_id}?tab=due` }, audience: "assigned", area: "returns" };
     }),
-  }), (error) => ({ count: 0, items: failing("late_clients")(error) }));
+  }), (error) => ({ count: 0, tasks: new Map<string, string>(), items: failing("late_clients")(error) }));
 
   // A client's licence or registration expiring within 30 days, as the firm entered it (a task
   // of kind licence): for whoever looks after the client, marked renewed on the Calendar.
@@ -286,6 +289,21 @@ export async function workFor(ctx: Context, late: number) {
   const theirs = lead ? [] : [...new Set(unique.flatMap((item) => (item.audience === "assigned" && item.client ? [item.client.id] : [])))];
   const looked = lead ? null : new Set(theirs.length ? await Promise.resolve(supabase.rpc("looked_after", { target_firm: firm, clients: theirs }).throwOnError()).then(({ data }) => data ?? [], failing("looked_after")) : []);
   const shown = [...(await asks), ...rankWork(groupRepeats(unique.filter((item) => visibleTo(item, { role: membership.role, looked }))), today)];
+  // Who does each return, for the chip beside its client: the desk's person, or its doer this once.
+  const { tasks: lateTasks } = await lateRows;
+  const taskOf = (item: Listed) => lateTasks.get(item.key) ?? (/^(approve|approved|missing|fill|check|waiting):/.test(item.key) ? item.key.slice(item.key.indexOf(":") + 1) : undefined);
+  const returnRows = shown.filter((item) => item.client && taskOf(item));
+  if (returnRows.length) {
+    const [{ data: tasks }, { desks, personOf }] = await Promise.all([
+      supabase.from("tasks").select("id, code, doer").eq("firm_id", firm).in("id", [...new Set(returnRows.map((item) => taskOf(item)!))]),
+      readDesks(supabase, firm, returnRows.map((item) => item.client!.id)),
+    ]);
+    const viewer = deskViewer(membership, userId);
+    for (const item of returnRows) {
+      const task = tasks?.find((row) => row.id === taskOf(item));
+      if (task) item.desk = { desks: desks.get(item.client!.id) ?? [], work: workOf(task.code), task: { id: task.id, doer: personOf(task.doer) }, viewer };
+    }
+  }
   return { items: shown, total: shown.length + Math.max(0, lateCount - lateList.length), late: lateCount, failed };
 }
 
@@ -310,16 +328,16 @@ export async function weekFor(ctx: Context, work: ReturnType<typeof workFor>) {
 export const queueSteps = { ask: "Ask for papers", prepare: "Ready to prepare", check: "Figures to check", approve: "Waiting approval", file: "Ready to file" };
 export type QueueStep = keyof typeof queueSteps;
 const groupOf: Record<Step, QueueStep> = { papers: "ask", figures: "check", draft: "prepare", check: "check", approve: "approve", file: "file" };
-// public.work_of: the work an assignment for GST or income tax covers.
-const workOf = (code: string | null) => (/^(GSTR|CMP|PMT)/.test(code ?? "") ? "gst" : /^(ITR|ADV)/.test(code ?? "") ? "income_tax" : null);
 export async function stepQueue({ supabase, membership }: Pick<Context, "supabase" | "membership">) {
   const firm = membership.firmId;
   const [tasks, looked] = await Promise.all([
-    pages((from) => supabase.from("tasks").select("id, client_id, registration_id, kind, code, period_key, due_on, status, details, clients!inner(name, archived_at)").eq("firm_id", firm).eq("kind", "compliance").neq("status", "filed").is("clients.archived_at", null).lte("due_on", addDays(todayInIndia(), 30)).order("due_on").order("id").range(from, from + 999)),
+    pages((from) => supabase.from("tasks").select("id, client_id, registration_id, kind, code, period_key, due_on, status, details, doer, clients!inner(name, archived_at)").eq("firm_id", firm).eq("kind", "compliance").neq("status", "filed").is("clients.archived_at", null).lte("due_on", addDays(todayInIndia(), 30)).order("due_on").order("id").range(from, from + 999)),
     isLead(membership.role) ? null : pages((from) => supabase.rpc("my_work", { target_firm: firm }).order("client_id").order("work").range(from, from + 999)),
   ]);
   const works = looked && Map.groupBy(looked, (row) => row.client_id);
-  const theirs = works ? tasks.filter((task) => works.get(task.client_id)?.some((row) => !row.work || row.work === workOf(task.code))) : tasks;
+  // A return someone covers is theirs alone (20261113100000_take_work.sql).
+  const me = works && (await currentMember()).userId;
+  const theirs = works ? tasks.filter((task) => (task.doer ? task.doer === me : works.get(task.client_id)?.some((row) => !row.work || row.work === workOf(task.code)))) : tasks;
   const stages = new Map<string, Work>();
   await Promise.all(Array.from({ length: Math.ceil(theirs.length / 1000) }, (_, at) => returnStages(supabase, firm, theirs.slice(at * 1000, at * 1000 + 1000).map((task) => task.id)).then((part) => part.forEach((work, id) => stages.set(id, work)))));
   const groups = Object.fromEntries(Object.keys(queueSteps).map((key) => [key, [] as typeof theirs])) as Record<QueueStep, typeof theirs>;

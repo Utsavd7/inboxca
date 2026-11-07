@@ -28,6 +28,9 @@
 .clients-table .row-link::after { content: ""; position: absolute; inset: 0; }
 .clients-table :is(input[type="checkbox"], .copy, td .b) { position: relative; z-index: 1; }
 .clients-table .who { gap: var(--s3); }
+/* Looked after by keeps its width whoever is in it (desk-chip.tsx). */
+.clients-table .clients-desk { width: 176px; }
+.clients-table .clients-desk .desk-chip { max-width: 168px; }
 .clients-page.fill > .pager { margin-top: 0; }
 .clients-page .pager p:empty { display: none; }
 /* The next return over its date, wrapping rather than pushing the status out of view. */
@@ -77,6 +80,8 @@
 .crumbs > .client-meta::after { content: none; }
 .crumbs > .client-meta svg { display: revert; }
 .crumbs > .client-meta:hover { color: var(--ink-2); }
+/* The name keeps its room; the numbers and who does the work wrap beside it instead. */
+.client-record .crumbs > h1 { flex-shrink: 0; max-width: 55%; }
 /* The name shows once, in the header. Where the type and numbers would not fit beside it (a
    laptop with the full sidebar), they take a line under the name; narrower still, the actions
    take a line of their own, as beside an open paper (doc-pane.css), rather than cut the name. */
@@ -110,6 +115,10 @@
 ::view-transition-new(.tab-in) { animation: vt-fade var(--slow) var(--out) both; }
 .client-pane { flex: 1; }
 .client-pane > * + * { margin-top: var(--s4); }
+/* Emails is the Inbox for this client (.ib.fill): the tab fills the page's height and its list
+   and open email each scroll on their own, as in the Inbox. */
+.client-record:has(> .client-pane > .ib) { flex: 1; min-height: 0; }
+.client-pane:has(> .ib) { display: flex; flex-direction: column; min-height: 0; }
 /* Details: one sheet in two columns of groups, each a few label and value rows, its Edit shown
    while the group is pointed at or has the focus. */
 .client-sheet { columns: 2 360px; column-gap: var(--s7); padding: var(--s2) var(--s5) var(--s4); }
@@ -127,10 +136,10 @@
 .sheet-group .services-usual { margin-top: var(--s2); }
 .sheet-edit { transition: opacity var(--fast) var(--out); }
 @media (hover: hover) and (pointer: fine) { .sheet-group:not(:hover, :focus-within) .sheet-edit { opacity: 0; } }
-/* An email row opens the email from anywhere on it, and a return's row its own page. */
-.client-mails .app-row, .work-rows .app-row { position: relative; }
-.client-mails .row-link, .work-rows .row-link { color: inherit; text-decoration: none; }
-.client-mails .row-link::after, .work-rows .row-link::after { content: ""; position: absolute; inset: 0; }
+/* A return's row opens its own page from anywhere on it. */
+.work-rows .app-row { position: relative; }
+.work-rows .row-link { color: inherit; text-decoration: none; }
+.work-rows .row-link::after { content: ""; position: absolute; inset: 0; }
 /* Work: a return's steps and next step under its name, who looks after it, and an arrow that
    moves on when the row is pointed at; Later and Filed this year open from their heads. */
 .work-rows .row-link:focus-visible { outline: none; }

@@ -264,10 +264,15 @@ test("a notice that asks something waits for a reply; Mark done clears it, with 
   await expect(pane().getByText("Corrected")).toBeVisible();
   expect(await query(local.dbUrl, "select label, decision_source from public.email_events e join public.requests r on r.entity_id = e.id where r.id = $1", [request])).toEqual([{ label: "data_gst", decision_source: "staff" }]);
 
-  // The client's page lists its emails by subject, read live, with who sent it and when.
+  // The client's Emails tab is the Inbox for that client: a reply sent there comes back to it.
   await owner.goto(`/app/clients/${clientId}?tab=emails`);
-  const mailRow = owner.locator("section[aria-labelledby=client-mail] li").filter({ has: owner.getByRole("link", { name: new RegExp(`GST notice ${tag}`) }) });
-  await expect(mailRow).toContainText(`From ${clientName}, `);
+  await list().getByText(`GST notice ${tag}`).click();
+  await expect(pane().getByRole("heading", { name: `GST notice ${tag}` })).toBeVisible();
+  await pane().getByRole("button", { name: /^Reply to/ }).click();
+  await owner.getByLabel("Your reply").fill("We will call you today.");
+  await owner.getByRole("button", { name: "Send reply" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Reply sent" })).toBeVisible();
+  await expect(owner).toHaveURL(new RegExp(`/app/clients/${clientId}\\?tab=emails&mail=`));
 });
 
 test("an email that needs a reply is given to a teammate, snoozed to a day, marked done with the rest, and unmatched mail is filed to a client", async () => {

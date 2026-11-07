@@ -24,13 +24,12 @@ import { paperType } from "@/src/lib/paper-type";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
 import { numberKinds, type NumberKind } from "@/src/lib/identifiers";
-import { mailLive } from "@/src/lib/mail-live";
 import { currentMember } from "@/src/lib/member";
 import { paperOrigins } from "@/src/lib/paper-origin";
 import { personName } from "@/src/lib/roles";
 import { scanType, searchTokens, words } from "@/src/lib/search";
 import { supabaseAdmin } from "@/src/lib/supabase";
-import { labels, type Label } from "@/src/lib/triage";
+import { awake } from "@/src/lib/triage";
 import { workspaceStore } from "@/src/lib/workspace";
 import { AutoSelect } from "../../auto-select";
 import { LiveSearch } from "../../live-search";
@@ -51,6 +50,9 @@ import { WorkFold, WorkRows, type WorkRow } from "./work-list";
 import { recordAgm, recordKyc, remindClient } from "@/app/(app)/actions";
 import { RemindToast } from "../../remind-toast";
 import { unsafeText } from "@/src/lib/intake";
+import { DeskChip } from "../../desk-chip";
+import { deskNames, deskViewer, desksOf } from "@/src/lib/desks";
+import { InboxView } from "../../inbox/inbox-view";
 import "../clients.css";
 import "../../today.css";
 
@@ -146,8 +148,6 @@ export default async function Client({ params, searchParams }: { params: Promise
   // time on that tab and only counted on the others; the live email subjects and the activity
   // stream in below (Suspense), so the page shows without waiting for them.
   const files = tab === "documents";
-  const listsMail = tab === "emails";
-  const mailRange = tab === "emails" ? start : 0;
   // Papers 50 at a time with their true count; a search keeps only the files whose words
   // include every word typed. The paper open in a panel, or just sent or changed, and the
   // owner's removed papers are read by themselves.
@@ -161,7 +161,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   // those late or due in the next 30 days.
   const fyStart = `${Number(today.slice(0, 4)) - (today.slice(5, 7) < "04" ? 1 : 0)}-04-01`;
   const taskQuery = supabase.from("tasks").select("id, code, period_key, due_on, status, details, registration_id",{count:"exact", head: sub !== "work"}).eq("firm_id",firm).eq("kind", "compliance").eq("client_id", id);
-  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { data: mails, count: mailCount }, { data: drive }, { data: nextDue }, { data: madeFiles }, { data: figureSets }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: allTasks }, { data: licences }, { count: kycPlanned }, { data: todos }, { count: firmConfirmed }] = await Promise.all([
+  const [{ data: client }, { data: people }, { data: groups }, { data: rules }, { data: tasks, count: taskCount }, { data: pageFiles, count: fileCount }, { data: asks }, { data: notices, count: noticeCount }, { count: mailCount }, { data: drive }, { data: nextDue }, { data: madeFiles }, { data: figureSets }, { data: mine }, { data: filing }, { data: done }, { data: due }, { data: namedFiles }, { data: allTasks }, { data: licences }, { count: kycPlanned }, { data: todos }, { count: firmConfirmed }] = await Promise.all([
     supabase
       .from("clients")
       .select(
@@ -177,7 +177,8 @@ export default async function Client({ params, searchParams }: { params: Promise
     files ? (tokens ? fileQuery.contains("search_tokens", tokens) : fileQuery).order("received_at", { ascending: false }).order("id", { ascending: false }).range(start, start + 49) : fileQuery,
     supabase.from("requests").select("id, status, expires_at, details").eq("kind", "documents").eq("client_id", id).in("status", ["pending", "done"]).gt("expires_at", new Date().toISOString()),
     supabase.from("tasks").select("id,due_on,status,details",{count:"exact", head: tab !== "notices"}).eq("firm_id",firm).eq("client_id",id).eq("kind","notice").order("due_on").order("id").range(start,start+49),
-    supabase.from("email_events").select("id, contact_id, received_at, label, delivery, provider_message_id, contacts(name_enc)",{count:"exact", head: !listsMail}).eq("firm_id",firm).eq("client_id",id).order("received_at",{ascending:false}).order("id").range(mailRange, mailRange + (tab === "emails" ? 49 : 2)),
+    // Emails: the tab counts those waiting for a reply, as the Inbox's Needs reply does.
+    supabase.from("requests").select("id", { count: "exact", head: true }).eq("kind", "team_reply").eq("status", "pending").eq("client_id", id).or(awake(today)),
     tab === "documents" ? supabaseAdmin().from("connected_accounts").select("settings").eq("firm_id",firm).eq("kind","drive").maybeSingle() : Promise.resolve({ data: null }),
     // The next return still to file from today on, for the header's countdown.
     supabase.from("tasks").select("code, period_key, due_on").eq("firm_id", firm).eq("kind", "compliance").eq("client_id", id).neq("status", "filed").gte("due_on", today).order("due_on").limit(1).maybeSingle(),
@@ -351,6 +352,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   const who = (assignment: { team_id: string | null; user_id: string | null }) =>
     (assignment.team_id ? teams?.find((team) => team.id === assignment.team_id)?.name : personName(people?.find((person) => person.user_id === assignment.user_id)?.email)) ?? "";
   const lookers = [...assigned].sort((a, b) => lookAfter.indexOf(a.role) - lookAfter.indexOf(b.role));
+  // Who does its GST and income tax work, beside its numbers in the header (src/lib/desks.ts).
+  const desks = desksOf(client.client_assignments, client.client_registrations.flatMap((registration) => registration.services), who);
+  const viewer = deskViewer(membership, userId);
   const gstin = numbers.find((registration) => registration.kind === "gstin")?.number;
   const pan = numbers.find((registration) => registration.kind === "pan")?.number;
   // "Due in 5 days" for the next return, today counted as 0.
@@ -470,13 +474,6 @@ export default async function Client({ params, searchParams }: { params: Promise
       {errors[error]}
     </p>
   );
-  // The emails stream in once the mailbox has given their subjects; their outline shows first.
-  const mailList = (className: string) =>
-    mails?.length ? (
-      <Suspense fallback={<SkeletonRows rows={mails.length} />}>
-        <MailRows firm={firm} clientName={client.name} mails={mails} className={className} />
-      </Suspense>
-    ) : null;
   // A number with its own Copy button, as the header and the Registrations card show it.
   const idNumber = (kind: string, number: string) => (
     <span className="client-id">
@@ -531,6 +528,12 @@ export default async function Client({ params, searchParams }: { params: Promise
                 {idNumber("PAN", pan)}
               </span>
             )}
+            {desks.map((desk) => (
+              <span key={desk.work ?? "all"} className="client-id">
+                <span className="client-id-kind">{desk.work ? deskNames[desk.work] : "Staff"}</span>
+                <DeskChip client={{ id: client.id, name: client.name }} desks={desks} work={desk.work} viewer={client.archived_at ? { ...viewer, assign: false, take: false } : viewer} named />
+              </span>
+            ))}
           </span>
         }
         actions={
@@ -562,7 +565,7 @@ export default async function Client({ params, searchParams }: { params: Promise
 
       <ViewTransition key={sub} enter="tab-in" exit="tab-out" default="none">
       <div className="pane client-pane">
-        {!panel && !docPanel && alert}
+        {!panel && !docPanel && tab !== "emails" && alert}
 
         {/* Details: one sheet of label and value rows in five groups, each with one Edit (shown
             on the group's hover or focus). Empty details are named once, at the end of About. */}
@@ -671,18 +674,8 @@ export default async function Client({ params, searchParams }: { params: Promise
           </div>
         )}
 
-        {/* The emails as a plain list (the tab names them): each row opens its email. */}
-        {tab === "emails" && (
-          <section className="app-card" aria-labelledby="client-mail">
-            <h2 id="client-mail" className="sr-only">Emails</h2>
-            {mailList("app-rows client-mails stagger") ?? (
-              <Empty Icon={Mail} kind="reply" title="No email from this client yet">
-                <span>Emails from the client&apos;s address and its contacts show here once the firm email is connected.</span>
-              </Empty>
-            )}
-            {(mailCount ?? 0) > 50 && <div className="app-card-foot">{pager(mailCount ?? 0, mails?.length ?? 0, "Emails", "emails")}</div>}
-          </section>
-        )}
+        {/* The Inbox for this client alone: its list, reading pane and reply (inbox-view.tsx). */}
+        {tab === "emails" && <InboxView searchParams={searchParams} client={{ id: client.id, name: client.name }} />}
 
         {tab === "documents" && (
           <>
@@ -1603,44 +1596,6 @@ function SkeletonRows({ rows }: { rows: number }) {
         <li key={row} className="app-row">
           <span className="skel" />
         </li>
-      ))}
-    </ul>
-  );
-}
-
-type Mail = { id: string; contact_id: string | null; received_at: string; label: string | null; delivery: unknown; provider_message_id: string; contacts: { name_enc: string } | null };
-// A client's emails: who sent each, its subject read live in one call as the Inbox does (the
-// label stands in when the mailbox cannot be read), and whether it waits for a reply. The whole
-// row opens it. It streams in after the page, as the mailbox can be slow.
-async function MailRows({ firm, clientName, mails, className }: { firm: string; clientName: string; mails: Mail[]; className: string }) {
-  const { supabase } = await currentMember();
-  const crypto = serverCrypto();
-  const [{ data: replies }, live, senders] = await Promise.all([
-    supabase.from("requests").select("entity_id").eq("kind", "team_reply").eq("status", "pending").in("entity_id", mails.map((mail) => mail.id)),
-    mailLive(firm, "list", { inbox: mails.map((mail) => mail.provider_message_id), sent: null }),
-    Promise.all(mails.map((mail) => (mail.contacts ? crypto.decrypt(firm, `contacts/${mail.contact_id}/name`, mail.contacts.name_enc) : clientName))),
-  ]);
-  const waiting = new Set(replies?.map((request) => request.entity_id));
-  const subjects = new Map(!("error" in live) ? live.inbox.map((item) => [item.messageId, item.subject]) : []);
-  return (
-    <ul className={className}>
-      {mails.map((mail, at) => (
-        <Row
-          key={mail.id}
-          lead={<Avatar name={senders[at]} />}
-          title={
-            <Link className="row-link" href={`/app/inbox?mail=${mail.id}`}>
-              {subjects.get(mail.provider_message_id) || (labels[mail.label as Label] ?? "Email")}
-            </Link>
-          }
-          meta={`From ${senders[at]}, ${mailTime(mail.received_at)}`}
-          status={
-            <>
-              {subjects.get(mail.provider_message_id) && mail.label && mail.label !== "other" && labels[mail.label as Label] && <Badge plain>{labels[mail.label as Label]}</Badge>}
-              {waiting.has(mail.id) ? <Badge tone="warn">Needs reply</Badge> : (mail.delivery as { ack?: string }).ack === "sent" && <Badge tone="done">Replied</Badge>}
-            </>
-          }
-        />
       ))}
     </ul>
   );

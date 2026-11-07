@@ -26,7 +26,9 @@ export async function sendReply(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
   const id = String(form.get("mail") ?? "");
-  const back = `/app/inbox?mail=${encodeURIComponent(id)}`;
+  // Back to the Inbox, or to the client's Emails tab the reply was written on.
+  const asked = String(form.get("back") ?? "");
+  const back = /^\/app\/clients\/[0-9a-f-]{36}\?/.test(asked) ? asked : `/app/inbox?mail=${encodeURIComponent(id)}`;
   const text = String(form.get("text") ?? "").trim();
   const files = form.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
   const papers = [...new Set(form.getAll("paper").map(String))].slice(0, 10);
@@ -153,7 +155,7 @@ export async function draftReply(_previous: Draft, form: FormData): Promise<Draf
 export async function manageAnswer(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership) redirect("/app");
-  const back = String(form.get("back") ?? "").startsWith("/app/inbox") ? String(form.get("back")) : "/app/inbox";
+  const back = /^\/app\/(inbox|clients\/)/.test(String(form.get("back") ?? "")) ? String(form.get("back")) : "/app/inbox";
   const note = (part: string) => `${back}${back.includes("?") ? "&" : "?"}${part}`;
   const { data: event } = await supabase.from("email_events").select("id, client_id, label, delivery").eq("firm_id", membership.firmId).eq("id", String(form.get("email") ?? "")).maybeSingle();
   const kind = answerOf(event?.label ?? null);

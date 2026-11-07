@@ -4,8 +4,8 @@ import {CircleCheck,FileText,ListChecks} from "lucide-react";
 import {manageTasks} from "@/app/(app)/actions";
 import {dueLabel,isItr,periodLabel,todayInIndia,verifyBy} from "@/src/lib/calendar";
 import {workOfService,type DocumentRequest} from "@/src/lib/checklists";
-import {assignmentRoles} from "@/src/lib/clients";
 import {itrReturns} from "@/src/lib/itr-fields";
+import {deskViewer,desksOf,workOf} from "@/src/lib/desks";
 import {currentMember,viewOnlyWords} from "@/src/lib/member";
 import {preparedSchema} from "@/src/lib/prepared";
 import {personName} from "@/src/lib/roles";
@@ -23,11 +23,11 @@ import {Pending} from "../../../../pending";
 import {PreparedForms} from "../../../../prepared-forms";
 import {ReturnFrame} from "../../../../return-frame";
 import {FillChecks,returnStages} from "../../../../return-work";
+import {DeskChip} from "../../../../desk-chip";
 import {Badge,Card,Row} from "../../../../ui";
 import "../../../clients.css";
 
 const uuid=/^[0-9a-f-]{36}$/;
-const order=Object.keys(assignmentRoles);
 // The prepared forms a return's files are, and the forms its figures are read into.
 const formsOf=(code:string)=>/^GSTR1_/.test(code) ? {files:["GSTR1"],figures:["GSTR1"]} : /^GSTR3B_/.test(code) ? {files:["GSTR3B"],figures:["GSTR1","GSTR3B"]}
   : /^ITR_/.test(code) ? {files:[...itrReturns],figures:["ITR"]} : code==="TDS_RET" ? {files:["TDS138","TDS140","TDS144"],figures:["TDS138","TDS140","TDS144"]} : code==="TCS_RET" ? {files:["TDS143"],figures:["TDS143"]} : null;
@@ -39,14 +39,14 @@ const formsOf=(code:string)=>/^GSTR1_/.test(code) ? {files:["GSTR1"],figures:["G
 // the forms on them come back to, open its figures and the step it stands at; ?purchases= (the
 // GSTR-2B match) its Check step. Who may do what is the same as on those tabs: the same actions decide.
 export default async function ReturnPage({params,searchParams}:{params:Promise<{id:string;task:string}>;searchParams:Promise<Record<string,string|undefined>>}) {
-  const {supabase,membership}=await currentMember();
+  const {supabase,membership,userId}=await currentMember();
   if(!membership) redirect("/app");
   const [{id,task:taskId},q]=await Promise.all([params,searchParams]);
   if(!uuid.test(id) || !uuid.test(taskId)) notFound();
   const firm=membership.firmId,today=todayInIndia(),viewOnly=!!membership.viewOnlyUntil;
   const [{data:task},{data:client},{data:people},{data:teams}]=await Promise.all([
-    supabase.from("tasks").select("id,code,period_key,due_on,status,details,registration_id").eq("firm_id",firm).eq("client_id",id).eq("id",taskId).eq("kind","compliance").maybeSingle(),
-    supabase.from("clients").select("id,name,client_assignments(user_id,team_id,role)").eq("firm_id",firm).eq("id",id).maybeSingle(),
+    supabase.from("tasks").select("id,code,period_key,due_on,status,details,registration_id,doer").eq("firm_id",firm).eq("client_id",id).eq("id",taskId).eq("kind","compliance").maybeSingle(),
+    supabase.from("clients").select("id,name,client_assignments(user_id,team_id,role,work),client_registrations(services)").eq("firm_id",firm).eq("id",id).maybeSingle(),
     supabase.rpc("firm_people",{target_firm:firm}),
     supabase.from("groups").select("id,name").eq("kind","team"),
   ]);
@@ -93,12 +93,16 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
     else if(next.act==="open" && shown!=="draft" && (itr || tds && task.registration_id)) action=<Link className="b b-primary" href={own} scroll={false}>{next.label}</Link>;
     else if(next.act==="check" && firstOpen) action=<Link className="b b-primary" href={`${here}?tab=extraction&draft=${firstOpen}`} scroll={false}>{next.label}</Link>;
   }
-  const lookers=[...client.client_assignments].sort((a,b)=>order.indexOf(a.role)-order.indexOf(b.role)).map(one=>(one.team_id ? teams?.find(team=>team.id===one.team_id)?.name : personName(people?.find(person=>person.user_id===one.user_id)?.email)) ?? "").filter(Boolean);
+  // Who does this return: its desk's person (src/lib/desks.ts), or someone covering it this once.
+  const nameOf=(user:string|null)=>personName(people?.find(person=>person.user_id===user)?.email);
+  const desks=desksOf(client.client_assignments,client.client_registrations.flatMap(number=>number.services),one=>(one.team_id ? teams?.find(team=>team.id===one.team_id)?.name : nameOf(one.user_id)) ?? "");
+  const doer=task.doer ? {id:task.doer,team:false,name:nameOf(task.doer)} : null;
   const days=Math.round((Date.parse(task.due_on)-Date.parse(today))/86_400_000),details=task.details as {filed_on?:string;by?:string;ack?:string;udin?:string;verified_on?:string};
   const due=filed ? `Filed${details.filed_on ? ` ${dueLabel(details.filed_on)}` : ""}` : `Due ${dueLabel(task.due_on)}, ${days<0 ? `${-days} ${days===-1 ? "day" : "days"} late` : days===0 ? "today" : days===1 ? "tomorrow" : `in ${days} days`}`;
   const only=forms && task.registration_id ? {files:forms.files,figures:forms.figures,period:itr ? period.slice(0,4) : period,registration:task.registration_id} : null;
 
-  return <ReturnFrame back={{href:`${base}?tab=returns`,name:client.name}} title={name} due={due} late={!filed && days<0} people={lookers}
+  return <ReturnFrame back={{href:`${base}?tab=returns`,name:client.name}} title={name} due={due} late={!filed && days<0}
+    people={<><span className="hint">Done by</span><DeskChip client={{id,name:client.name}} desks={desks} work={workOf(code)} task={filed ? undefined : {id:task.id,doer}} viewer={deskViewer(membership,userId)} named/></>}
     status={filed ? "Filed" : stageLine(now,code) || "Not started"} shown={stepNames[shown]}
     steps={steps.map((step,n)=>({key:stepNames[step],label:stepNames[step],href:`${here}?step=${step}`,state:filed || n<steps.indexOf(at) ? "done" : step===at ? "now" : "later"}))}
     next={next ? {step:stepNames[next.step],why,action} : null}>

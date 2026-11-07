@@ -16,6 +16,7 @@ import "./app.css";
 import "./doc-pane.css";
 import { ClosingWatch } from "./closing-watch";
 import { Command } from "./command";
+import { DeskToasts } from "./desk-chip";
 import { IdleWatch } from "./idle-watch";
 import { NavLinks } from "./nav-links";
 import { NavProgress } from "./nav-progress";
@@ -144,6 +145,7 @@ export default async function AppLayout({ children, doc }: { children: React.Rea
       {doc}
       {/* Toasts (motion.tsx) and the idle warning stack here, at the bottom right. */}
       <div className="toasts" />
+      <DeskToasts />
       {!!membership?.idleMinutes && <IdleWatch minutes={membership.idleMinutes} />}
     </ShellFrame>
   );

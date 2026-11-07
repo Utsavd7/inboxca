@@ -49,7 +49,7 @@ import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings, providerFor } from "@/src/lib/mailbox";
 import { currentMember, currentWriter, FIRM_COOKIE, myQuestions } from "@/src/lib/member";
 import { activityNames } from "@/src/lib/activity";
-import { invitableRoles, personName } from "@/src/lib/roles";
+import { invitableRoles, personName, roleLabel } from "@/src/lib/roles";
 import { EXCEPTION_RULES, IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
 import { sendSystemMail, systemMailReady, systemMailUse } from "@/src/lib/system-mail";
@@ -596,8 +596,8 @@ export async function importClients(_prev: ImportState, form: FormData): Promise
 // the list's filter matches (all=1 with the filter's own fields), read again as this person
 // through the list's own query (clients/matching.ts) and capped, never a list of ids from the
 // browser. 200 ids a read, as they travel in the request.
-async function listedClients(form: FormData, supabase: Awaited<ReturnType<typeof currentWriter>>["supabase"], firm: string, userId: string) {
-  if (form.get("all") === "1") return (await matchingClients(supabase, firm, userId, readFilter(Object.fromEntries(filterKeys.map((key) => [key, String(form.get(key) ?? "")]))))).slice(0, MOST_MATCHING);
+async function listedClients(form: FormData, supabase: Awaited<ReturnType<typeof currentWriter>>["supabase"], firm: string) {
+  if (form.get("all") === "1") return (await matchingClients(supabase, firm, readFilter(Object.fromEntries(filterKeys.map((key) => [key, String(form.get(key) ?? "")]))))).slice(0, MOST_MATCHING);
   return [...new Set(form.getAll("client").map(String))].filter((id) => z.uuid().safeParse(id).success).slice(0, 50);
 }
 const listQuery = (form: FormData, panel: string, ids: string[]) => form.get("all") === "1" ? `panel=${panel}&all=1` : `panel=${panel}&clients=${ids.join(",")}`;
@@ -606,12 +606,12 @@ const listQuery = (form: FormData, panel: string, ids: string[]) => form.get("al
 // team in one role for each, as on a client's page. Row level security allows only the owner,
 // a partner or a manager; a client already assigned to them keeps that.
 export async function assignClients(form: FormData) {
-  const { supabase, membership, userId } = await currentWriter();
+  const { supabase, membership } = await currentWriter();
   const back = String(form.get("back") ?? "");
   const list = /^\/app\/clients(\?|$)/.test(back) ? back : "/app/clients";
   const to = (query: string) => `${list}${list.includes("?") ? "&" : "?"}${query}`;
   if (!membership || !canManageClients(membership.role)) redirect(list);
-  const ids = await listedClients(form, supabase, membership.firmId, userId);
+  const ids = await listedClients(form, supabase, membership.firmId);
   if (!ids.length) redirect(list);
   const role = String(form.get("role") ?? "");
   const [kind, who] = String(form.get("who") ?? "").split(":");
@@ -629,6 +629,48 @@ export async function assignClients(form: FormData) {
   }
   revalidatePath("/app/clients");
   redirect(to(`assigned=${made}&of=${ids.length}`));
+}
+
+// Taking work (20261113100000_take_work.sql), from the chip beside a client's name (desk-chip.tsx):
+// a desk taken, handed back or given (who: "person:<id>", "team:<id>", or "" for nobody), and one
+// return given to one person for this once. The database decides who may do which.
+export type DeskResult = { error?: string };
+const deskRefused = (message?: string) =>
+  ({ held: "Someone already does this. Ask a manager to change it.", already: "They already look after this client as its manager or partner in charge. Change that under People on the client's page." })[message ?? ""] ?? "You cannot change this. Ask a manager.";
+const readWho = (who: string) => {
+  const [kind, id] = who.split(":");
+  return !who ? {} : z.uuid().safeParse(id).success && (kind === "person" || kind === "team") ? { [kind]: id } : null;
+};
+export async function setDesk(client: string, work: string | null, who: string): Promise<DeskResult> {
+  const { supabase, membership } = await currentWriter();
+  const to = readWho(who);
+  if (!membership || !to || !z.uuid().safeParse(client).success) return { error: deskRefused() };
+  const { error } = await supabase.rpc("set_desk", { target_firm: membership.firmId, client, desk: readWork(work) as string, ...to });
+  if (error) return { error: deskRefused(error.message) };
+  revalidatePath("/app", "layout");
+  return {};
+}
+export async function coverReturn(task: string, who: string): Promise<DeskResult> {
+  const { supabase, membership } = await currentWriter();
+  const to = readWho(who);
+  if (!membership || !to || "team" in to || !z.uuid().safeParse(task).success) return { error: deskRefused() };
+  const { error } = await supabase.rpc("cover_return", { target_firm: membership.firmId, task, ...to });
+  if (error) return { error: error.code === "42501" ? "You cannot give this return to them. Ask a manager." : deskRefused() };
+  revalidatePath("/app", "layout");
+  return {};
+}
+// The people and teams a desk or a return can be given to, for the chip's picker.
+export async function deskPeople() {
+  const { supabase, membership, userId } = await currentMember();
+  if (!membership) return [];
+  const [{ data: people }, { data: teams }] = await Promise.all([
+    supabase.rpc("firm_people", { target_firm: membership.firmId }),
+    supabase.from("groups").select("id, name").eq("firm_id", membership.firmId).eq("kind", "team").order("name"),
+  ]);
+  return [
+    ...(people ?? []).filter((person) => person.status === "active" && person.role !== "front_desk").map((person) => ({ id: person.user_id, team: false, name: personName(person.email), role: roleLabel(person.role), me: person.user_id === userId })).sort((a, b) => Number(b.me) - Number(a.me) || a.name.localeCompare(b.name)),
+    ...(teams ?? []).map((team) => ({ id: team.id, team: true, name: team.name, role: "Team", me: false })),
+  ];
 }
 
 // Add tags to the clients ticked on the list (?clients=, at most a page of them): each keeps
@@ -1160,6 +1202,8 @@ export async function manageEmail(form: FormData) {
   const label = String(form.get("label") ?? "");
   const request = String(form.get("request") ?? "");
   const back = String(form.get("back") ?? "");
+  // The Inbox, or a client's Emails tab, comes back with what was done.
+  const inbox = /^\/app\/(inbox|clients\/)/.test(back);
   if (form.get("intent") === "label" && label in labels)
     await supabase.from("email_events").update({ label, decision_source: "staff" }).eq("id", String(form.get("email") ?? ""));
   else if (form.get("intent") === "done" || form.get("intent") === "undo") {
@@ -1167,7 +1211,7 @@ export async function manageEmail(form: FormData) {
     const undo = form.get("intent") === "undo";
     const requests = form.getAll("request").map(String).slice(0, 100);
     await supabase.from("requests").update({ status: undo ? "pending" : "done" }).in("id", requests).eq("kind", "team_reply").eq("status", undo ? "done" : "pending");
-    if (back.startsWith("/app/inbox")) {
+    if (inbox) {
       revalidatePath("/app", "layout");
       redirect(undo ? back : `${back}${back.includes("?") ? "&" : "?"}cleared=${requests.join(".")}`);
     }
@@ -1189,7 +1233,7 @@ export async function manageEmail(form: FormData) {
       else details.assignee = who || null;
       await supabaseAdmin().from("requests").update({ details }).eq("id", ask.id);
       if (intent === "assign") await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "email.assigned", entity_type: "email", entity_id: ask.entity_id, details: { person: who || null } });
-      if (back.startsWith("/app/inbox")) {
+      if (inbox) {
         revalidatePath("/app", "layout");
         redirect(intent === "wake" ? back : `${back}${back.includes("?") ? "&" : "?"}${intent === "snooze" ? "snoozed" : "assigned"}=${ask.id}`);
       }
@@ -1216,7 +1260,7 @@ export async function manageEmail(form: FormData) {
       await change.eq("kind", "team_reply").eq("entity_type", "email").eq("entity_id", event.id);
       const kinds = [event.label === "notice_received" ? "notice_from_mail" : "file_mail", ...(answers ? [event.label === "records_past" || event.label === "records_current" ? "records_reply" : "answer_mail"] : [])];
       await admin.from("jobs").upsert(kinds.map((kind) => ({ firm_id: membership.firmId, kind, entity_type: "email", entity_id: event.id, idempotency_key: `${kind}:${event.id}` })), { onConflict: "idempotency_key", ignoreDuplicates: true });
-      if (filing && back.startsWith("/app/inbox")) {
+      if (filing && inbox) {
         revalidatePath("/app", "layout");
         redirect(`${back}${back.includes("?") ? "&" : "?"}filed=1`);
       }
@@ -2530,13 +2574,13 @@ export async function sendClientPapers(form: FormData) {
 // stay, and a number whose services would then not go together is left as it was. Row level
 // security and the database's services check run as on a client's page.
 export async function setServices(form: FormData) {
-  const { supabase, membership, userId } = await currentWriter();
+  const { supabase, membership } = await currentWriter();
   const chosen = [...new Set(form.getAll("service").map(String))];
   const back = String(form.get("back") ?? "");
   const list = /^\/app\/clients(\?|$)/.test(back) ? back : "/app/clients";
   const to = (query: string) => `${list}${list.includes("?") ? "&" : "?"}${query}`;
   if (!membership || !canManageClients(membership.role)) redirect(list);
-  const ids = await listedClients(form, supabase, membership.firmId, userId);
+  const ids = await listedClients(form, supabase, membership.firmId);
   if (!ids.length) redirect(list);
   const firm = membership.firmId;
   const [{ data: rules }, numbers] = await Promise.all([
@@ -2657,7 +2701,7 @@ export async function bellItems() {
   };
   return [
     ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}${ask.clients?.name ? ` for ${ask.clients.name}` : ""}`, who: asker(ask), at: null as string | null, fresh: true })),
-    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: (line.action === "assignment.added" && given(line.details)) || (activityNames[line.action] ?? "Client changed"), who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
+    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: (line.action === "assignment.added" && given(line.details)) || (line.action === "task.covered" && (line.details as { person?: string } | null)?.person === userId && "You were given one return for this once") || (activityNames[line.action] ?? "Client changed"), who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
   ].slice(0, 20);
 }
 

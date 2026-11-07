@@ -26,8 +26,10 @@ import { Pending } from "../pending";
 import { Avatar, Badge, Empty, IconTile, PageHead, Row, SidePanel, Toast, type Tone } from "../ui";
 import { SetupArt } from "../setup-art";
 import { RowKeys } from "../row-keys";
+import { DeskChip } from "../desk-chip";
+import { deskViewer, readDesks, workOf } from "@/src/lib/desks";
 
-const columns = "id, client_id, registration_id, kind, code, period_key, due_on, status, details, clients!inner(name, archived_at)";
+const columns = "id, client_id, registration_id, kind, code, period_key, due_on, status, details, doer, clients!inner(name, archived_at)";
 const uuid = /^[0-9a-f-]{36}$/;
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const saved: Record<string, string> = { filed: "marked filed", in_progress: "marked in progress", reopen: "marked not filed" };
@@ -42,10 +44,13 @@ const shiftMonth = (month: string, by: number) => new Date(Date.UTC(Number(month
 // The firm's compliance calendar: overdue, coming up and recently filed returns, as a list or
 // a month. Anyone in the firm marks a return in progress or filed, one at a time or many
 // together (5.17.2); those who manage clients remind a client of returns due this week.
-export default async function Calendar({ searchParams }: { searchParams: Promise<{ view?: string; code?: string; day?: string; page?: string; month?: string; error?: string; task?: string | string[]; saved?: string; t?: string; remind?: string; reminding?: string; job?: string; stopped?: string; step?: string }> }) {
-  const { supabase, membership } = await currentMember();
+export default async function Calendar({ searchParams }: { searchParams: Promise<{ view?: string; code?: string; day?: string; page?: string; month?: string; error?: string; task?: string | string[]; saved?: string; t?: string; remind?: string; reminding?: string; job?: string; stopped?: string; step?: string; mine?: string }> }) {
+  const { supabase, membership, userId } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
+  // Mine: the returns of this person's desks, and those they cover (public.is_mine).
+  // A step's list (from Today) is already the person's own.
+  const mine = params.mine === "1" && !params.step;
   const today = todayInIndia();
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const pageSize = 100;
@@ -70,6 +75,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     else if (window.filedSince) query = query.eq("status", "filed").gte("details->>filed_on", window.filedSince);
     else query = query.neq("status", "filed").lte("due_on", window.to!);
     if (window.from) query = query.gte("due_on", window.from);
+    if (mine) query = query.eq("is_mine", true);
     return code ? query.eq("code", code) : query;
   };
   const counted = "id, clients!inner(archived_at)" as typeof columns;
@@ -95,7 +101,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const asked = params.view && params.view in calendarViews ? (params.view as CalendarView) : null;
   const late = !asked && !day && !step ? pageOf("overdue") : null;
   const view: CalendarView = asked ?? (late && (await late).count ? "overdue" : "soon");
-  const href = (next: { view?: CalendarView; day?: string; page?: number; task?: string; month?: string | null; remind?: string } = {}) => {
+  const href = (next: { view?: CalendarView; day?: string; page?: number; task?: string; month?: string | null; remind?: string; mine?: boolean } = {}) => {
     const search = new URLSearchParams();
     const on = next.view ? null : (next.day ?? day);
     const shownMonth = next.month === undefined ? month : next.month;
@@ -107,6 +113,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     if (next.page && next.page > 1) search.set("page", String(next.page));
     if (next.task) search.set("task", next.task);
     if (next.remind) search.set("remind", next.remind);
+    if (next.mine ?? mine) search.set("mine", "1");
     return `/app/calendar?${search}`;
   };
   // The strip of days ahead, with how many returns are still to file on each; or the month's
@@ -115,14 +122,17 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const lead = month ? (new Date(`${month}-01T00:00:00Z`).getUTCDay() + 6) % 7 : 0;
   const cells = month ? Array.from({ length: Math.ceil((lead + new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate()) / 7) * 7 }, (_, at) => addDays(`${month}-01`, at - lead)) : null;
   const span = strip ?? cells;
-  const inGrid = cells && supabase.from("tasks").select(columns).eq("firm_id", membership.firmId).in("kind", ["compliance", "licence"]).is("clients.archived_at", null).gte("due_on", cells[0]).lte("due_on", cells.at(-1)!);
+  const inGrid = cells && supabase.from("tasks").select(columns).eq("firm_id", membership.firmId).in("kind", ["compliance", "licence"]).is("clients.archived_at", null).gte("due_on", cells[0]).lte("due_on", cells.at(-1)!).match(mine ? { is_mine: true } : {});
   const [{ data: tasks, count: total }, { data: perDay }, { data: inMonth }, [{ data: rules }, { data: marking }, { data: reminding }, { data: remindTasks }, { data: mailbox }, { count: remindedToday }, counts, { data: extensions }]] = await Promise.all([
-    queue ? queue.then(({ groups }) => groups[step].filter((task) => !code || task.code === code)).then((rows) => ({ data: rows.slice(from, from + pageSize), count: rows.length })) : late && view === "overdue" ? late : pageOf(day ? null : view),
+    queue ? queue.then(({ groups }) => groups[step].filter((task) => (!code || task.code === code))).then((rows) => ({ data: rows.slice(from, from + pageSize), count: rows.length })) : late && view === "overdue" ? late : pageOf(day ? null : view),
     span ? supabase.rpc("calendar_days", { target_firm: membership.firmId, first_day: span[0], last_day: span.at(-1)!, only_code: code || undefined }) : Promise.resolve({ data: null }),
     // The month's own returns, the first few named in each day.
     inGrid ? Promise.resolve((code ? inGrid.eq("code", code) : inGrid).order("due_on").order("id").limit(1000)) : Promise.resolve({ data: null }),
     rest,
   ]);
+  // Who does each listed return, for the chip beside its client (src/lib/desks.ts).
+  const { desks, personOf } = await readDesks(supabase, membership.firmId, (tasks ?? []).map((task) => task.client_id));
+  const viewer = deskViewer(membership, userId);
   if (total && from >= total) redirect(href({ page: Math.ceil(total / pageSize) }));
   // GST returns and ITRs with figures in but not filled yet, for Fill.
   const stages = queue && !viewOnly ? (await queue).stages : await returnStages(supabase, membership.firmId, viewOnly ? [] : (tasks ?? []).filter((task) => task.status !== "filed" && fills(task.code)).map((task) => task.id));
@@ -190,8 +200,10 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     <section className="split cal-list" aria-label="Returns">
       <div className="cal-tools">
         {stepAction || <span className="hint">{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "InboxCA has not yet checked dates marked * against the government notification." : "Tick returns to mark many at once."}</span>}
+        {!step && <LinkTabs kind="pills" label="Whose" items={[{ href: href({ mine: false }), label: "Everyone", current: !mine }, { href: href({ mine: true }), label: "Mine", current: mine }]} />}
         <Form action="/app/calendar">
           <input type="hidden" name="view" value={view} />
+          {mine && <input type="hidden" name="mine" value="1" />}
           {day && <input type="hidden" name="day" value={day} />}
           {month && <input type="hidden" name="month" value={month} />}
           {step && <input type="hidden" name="step" value={step} />}
@@ -262,6 +274,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                         <Link className="row-link" href={`/app/clients/${task.client_id}${licence(task) ? "" : `/returns/${task.id}`}`}>
                           {task.clients.name}
                         </Link>
+                        <DeskChip client={{ id: task.client_id, name: task.clients.name }} desks={desks.get(task.client_id) ?? []} work={workOf(task.code)} task={licence(task) || task.status === "filed" ? undefined : { id: task.id, doer: personOf(task.doer) }} viewer={viewer} />
                       </span>
                     </td>
                     <td>
