@@ -126,6 +126,11 @@ test("the team replies in the conversation from the firm's mailbox, threaded, an
     await owner.keyboard.press("r");
     await expect(owner.getByLabel("Your reply")).toBeFocused({ timeout: 1000 });
   }).toPass();
+  // Words typed before clicking into the reply go into the reply: the "e" in "Dear" never marks it done.
+  await owner.keyboard.press("Escape");
+  await owner.keyboard.type("Dear sir");
+  await expect(owner.getByLabel("Your reply")).toHaveValue(/Dear sir/);
+  await owner.getByLabel("Your reply").fill("");
   // A quick reply writes the email in the firm's voice, ready to change.
   await pane().getByRole("group", { name: "Quick replies" }).getByRole("button", { name: "Received, thank you" }).click();
   await expect(owner.getByLabel("Your reply")).toHaveValue(new RegExp(`^Dear ${clientName},\\n\\nThank you, we have received your email[\\s\\S]*Regards,\\nInbox Firm ${tag}$`));
