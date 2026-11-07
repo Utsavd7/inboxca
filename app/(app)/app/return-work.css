@@ -16,3 +16,34 @@ td .fill-now-why { max-width: 220px; }
 .fill-checks li.is-wrong .num { color: var(--late-fg); }
 /* A return's differences with Form 26AS (itr-check.tsx) take a whole row of a form. */
 .fields > .fill-checks { grid-column: 1 / -1; margin-bottom: 0; }
+/* A return's Check step a group at a time (check-groups.tsx): one row per invoice or page, its
+   figures as small boxes, each chosen to mark it Wrong (its whole value always shown), All correct
+   on the right. */
+.cg { display: grid; gap: var(--s3); }
+.cg-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s1) var(--s4); }
+.cg-head > p:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); }
+.cg-list { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.cg-row { padding: var(--s3) var(--s4); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--surface); outline: none; transition: border-color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
+.cg-row.is-on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-glow); }
+.cg-top { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+.cg-name { display: flex; flex: 1; align-items: baseline; gap: var(--s2); min-width: 0; white-space: nowrap; }
+.cg-name strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cg-name .sub { overflow: hidden; text-overflow: ellipsis; }
+.cg-go { flex: none; gap: 6px; min-width: 112px; justify-content: center; }
+.cg-go kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; background: var(--kbd-on-accent); color: var(--on-accent); font: 600 11px var(--font-jakarta), sans-serif; }
+.cg-figs { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; margin: var(--s2) 0 0; padding: 0; list-style: none; }
+.cg-figs li { display: grid; min-width: 0; }
+.cg-fig { position: relative; display: grid; gap: 1px; min-width: 0; padding: 5px var(--s2); border: 1px solid var(--line); border-radius: var(--r2); background: var(--surface-2); cursor: pointer; transition: border-color var(--fast) var(--out), background var(--fast) var(--out); }
+.cg-fig:hover { border-color: var(--line-2); background: var(--hover); }
+.cg-fig input { position: absolute; top: 0; left: 0; width: 1px; height: 1px; margin: 0; opacity: 0; }
+.cg-fig:has(input:checked) { border-color: var(--late-dot); background: var(--late-bg); }
+.cg-fig:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--focus-glow); }
+.cg-label { overflow: hidden; padding-right: 40px; color: var(--ink-3); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.cg-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cg-flag { position: absolute; top: 5px; right: 6px; padding: 0 5px; border: 1px solid var(--line-2); border-radius: 4px; color: var(--ink-3); font-size: 11px; font-weight: 600; line-height: 16px; opacity: 0; transition: opacity var(--fast) var(--out); }
+.cg-fig:is(:hover, :has(input:focus-visible)):not(:has(input:disabled)) .cg-flag { opacity: 1; }
+.cg-fig:has(input:disabled) { cursor: default; }
+.cg-fig:has(input:checked) .cg-flag { border-color: var(--late-dot); background: var(--late-dot); color: var(--white); opacity: 1; }
+.cg-fig:has(input:checked) .cg-value { color: var(--late-fg); }
+.cg-fix { justify-self: start; margin-top: 2px; color: var(--late-fg); font-size: 12px; font-weight: 600; }
+.cg .fig-why { margin-top: var(--s2); }

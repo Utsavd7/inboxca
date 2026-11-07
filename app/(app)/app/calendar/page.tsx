@@ -181,8 +181,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     </>
   );
   const close = href({ page });
-  // Beside the month the list is narrower: the period goes under the return, and a chosen
-  // day's returns need no due date.
+  // The period goes under the return, so a row fits a laptop; beside the month a chosen day's
+  // returns need no due date either.
   const compact = !!month;
   // Ticks clear once any return shown changes, as after marking the chosen ones.
   const ticks = tasks?.map((task) => task.id + task.status).join();
@@ -199,7 +199,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
   const list = (
     <section className="split cal-list" aria-label="Returns">
       <div className="cal-tools">
-        {stepAction || <span className="hint">{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "InboxCA has not yet checked dates marked * against the government notification." : "Tick returns to mark many at once."}</span>}
+        {stepAction || <span className="hint">{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "* Date not yet checked against the notification." : "Tick returns to mark many at once."}</span>}
         {!step && <LinkTabs kind="pills" label="Whose" items={[{ href: href({ mine: false }), label: "Everyone", current: !mine }, { href: href({ mine: true }), label: "Mine", current: mine }]} />}
         <Form action="/app/calendar">
           <input type="hidden" name="view" value={view} />
@@ -246,7 +246,6 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 )}
                 <th scope="col">Client</th>
                 <th scope="col">Return</th>
-                {!compact && <th scope="col">Period</th>}
                 {!(compact && day) && <th scope="col">Due</th>}
                 <th scope="col">Status</th>
                 <th scope="col">
@@ -259,7 +258,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 const [form, of] = name(task);
                 const { ack, filed_on, verified_on } = task.details as { ack?: string; filed_on?: string; verified_on?: string };
                 const [tone, word] = status(task);
-                // Beside Fill, Remind client is its bell alone, so the row fits a laptop.
+                // Remind client is its bell alone (named on hover), so the row fits a laptop.
                 const fill = !viewOnly && membership.may("edit_figures", task.client_id) && fillable(stages.get(task.id));
                 return (
                   <Item as="tr" key={task.id}>
@@ -277,13 +276,14 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                         <DeskChip client={{ id: task.client_id, name: task.clients.name }} desks={desks.get(task.client_id) ?? []} work={workOf(task.code)} task={licence(task) || task.status === "filed" ? undefined : { id: task.id, doer: personOf(task.doer) }} viewer={viewer} />
                       </span>
                     </td>
-                    <td>
+                    <td className="cal-return" title={`${form}, ${of}`}>
                       {form}
-                      {compact && <span className="sub">{of}</span>}
-                      {/* The quarter's TDS return opens its statements (Form No. 140 first), the TCS return its Form No. 143. */}
-                      {!viewOnly && (task.code === "TDS_RET" || task.code === "TCS_RET") && task.status !== "filed" && task.registration_id && statementPeriod(task.period_key ?? "") && <Link className="sub" href={`/app/clients/${task.client_id}/returns/${task.id}?step=draft`} aria-label={`Prepare ${task.clients.name} ${form}`}>Prepare statement</Link>}
+                      <span className="sub">
+                        {of}
+                        {/* The quarter's TDS return opens its statements (Form No. 140 first), the TCS return its Form No. 143. */}
+                        {!viewOnly && (task.code === "TDS_RET" || task.code === "TCS_RET") && task.status !== "filed" && task.registration_id && statementPeriod(task.period_key ?? "") && <Link className="cal-prepare" href={`/app/clients/${task.client_id}/returns/${task.id}?step=draft`} aria-label={`Prepare ${task.clients.name} ${form}`}>Prepare statement</Link>}
+                      </span>
                     </td>
-                    {!compact && <td>{of}</td>}
                     {!(compact && day) && (
                       <td>
                         {dueLabel(task.due_on)}
@@ -304,9 +304,8 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                       {/* A client is reminded of returns late or due within 7 days; a licence never. */}
                       {reminds && !licence(task) && task.status !== "filed" && task.due_on > addDays(today, 7) && <span className="sub cal-later">Remind from {dueLabel(addDays(task.due_on, -7))}</span>}
                       {reminds && !licence(task) && task.status !== "filed" && soon(task.due_on) && (
-                        <Link className={`b b-ghost${compact || fill ? " b-icon" : ""}`} href={href({ page, remind: task.client_id })} scroll={false} aria-label={`Remind ${task.clients.name}`} title="Remind client">
+                        <Link className="b b-ghost b-icon" href={href({ page, remind: task.client_id })} scroll={false} aria-label={`Remind ${task.clients.name}`} title="Remind client">
                           <BellRing size={14} aria-hidden />
-                          {!compact && !fill && "Remind client"}
                         </Link>
                       )}
                       {fill && <Fill task={task.id} label={`${task.clients.name} ${form}`} />}

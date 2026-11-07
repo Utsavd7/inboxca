@@ -87,8 +87,9 @@ export const activityDetails: Record<string, readonly string[]> = {
   // a company's AGM date and how many returns took their date from it.
   "due_date.confirmed": ["code", "source_url"], "agm.recorded": ["year_end", "agm", "returns"], "kyc.recorded": ["year_end", "returns"],
   "reminders.asked": ["what"], "reminder.sent": ["template", "tasks", "requests", "works"], "notice.added": [], "notice.date_confirmed": ["date"], "notice.assigned": ["person"], "notice.replied": ["on", "document"], "notice.closed": [],
-  // A register section said yes to at once: its name, row counts and the totals seen, encrypted.
-  "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state", "section", "rows", "flagged", "totals_enc"], "dataset.edit_saved": ["dataset", "line"],
+  // A register section said yes to at once: its name, row counts and the totals seen, encrypted;
+  // a group of figures on a return's Check step: the ids said yes to (lines) and marked wrong.
+  "dataset.created": ["dataset", "revision", "entered", "zeroed"], "dataset.checked": ["dataset", "revision", "line", "state", "section", "rows", "flagged", "totals_enc", "lines", "wrong"], "dataset.edit_saved": ["dataset", "line"],
   "dataset.changed": ["dataset", "revision", "line", "state", "before", "after", "reason_enc", "registration", "entered", "zeroed"], // before, after and reason encrypted
   "form.started": ["version", "template", "reason_code", "filled"], "form.prepared": [], "form.edited_outside": ["version", "template"], "form.approved": [],
   "form.rejected": ["code", "text_enc"], // the reason's code, and its words encrypted

@@ -59,8 +59,8 @@ test("a GSTR-1 goes from papers in to filed on its own page",async({page,browser
     await next(page).getByRole("button",{name:"Prepare GSTR-1"}).click();
     await expect(now(page)).toContainText("Check",{timeout:60_000});await expect(page).toHaveURL(here);
     expect(await query(local.dbUrl,prepared,[firm.firmId])).toHaveLength(1);
-    await next(page).getByRole("link",{name:"Check 1 figure"}).click();
-    await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
+    // Its figures are checked a group at a time right there: one All correct for the invoice.
+    await page.getByRole("region",{name:"Figures not checked yet"}).getByRole("button",{name:"All correct"}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
     await expect(page).toHaveURL(here);
     // The last check makes the checked draft by itself; it waits for the second approval.
     await expect.poll(async()=>(await query(local.dbUrl,prepared,[firm.firmId])).filter(form=>Number(form.size)>0).length,{timeout:60_000}).toBe(2);

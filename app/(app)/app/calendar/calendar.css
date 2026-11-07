@@ -68,8 +68,12 @@
 .cal-table .t :is(th, td):first-child { padding-left: var(--s4); }
 .cal-table .t tbody tr.on { background: var(--accent-soft); }
 .cal-table .who .avatar { width: 24px; height: 24px; font-size: 11px; }
-/* A long client name wraps, so a row's buttons fit a laptop without scrolling sideways. */
-.cal-table .who { white-space: normal; }
+/* A long client name or return is cut short (the whole of it on hover), so every row is one
+   height and a row's buttons fit a laptop without scrolling sideways. */
+.cal-table .who .row-link { overflow: hidden; max-width: 180px; text-overflow: ellipsis; }
+.cal-return { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+.cal-table .cal-return .sub { overflow: hidden; text-overflow: ellipsis; }
+.cal-prepare { margin-left: var(--s2); }
 .cal-act { text-align: right; }
 .cal-act > * { vertical-align: middle; }
 .cal-act form { display: inline-flex; }

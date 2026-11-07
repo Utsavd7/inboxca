@@ -33,3 +33,7 @@
 .gst-month .sub { display: block; margin-top: 2px; }
 .gst-month .sub .b-ghost { height: auto; padding: 0; margin-left: var(--s2); font-size: 12px; }
 .gst-month .who { display: inline-flex; align-items: center; gap: var(--s2); }
+/* One line a cell, so every client is one row high at 1280; a long name is cut short. */
+.gst-month td { white-space: nowrap; }
+.gst-month :is(td, th) { padding-inline: 10px; }
+.gst-month .who .row-link { overflow: hidden; max-width: 160px; text-overflow: ellipsis; }

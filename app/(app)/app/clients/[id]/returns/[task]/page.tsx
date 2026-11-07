@@ -11,7 +11,7 @@ import {preparedSchema} from "@/src/lib/prepared";
 import {personName} from "@/src/lib/roles";
 import {currentStep,nextAction,stepNames,stepsFor,type Step} from "@/src/lib/return-steps";
 import {returnPeriod,stageLine} from "@/src/lib/return-work";
-import {DatasetReview} from "../../dataset-review";
+import {DatasetReview,messages} from "../../dataset-review";
 import {ItrReturn} from "../../itr/itr-return";
 import {TdsStatement} from "../../tds/tds-statement";
 import {PortalInput} from "../../portal-input";
@@ -22,9 +22,9 @@ import {MarkFiled} from "../../../../mark-filed";
 import {Pending} from "../../../../pending";
 import {PreparedForms} from "../../../../prepared-forms";
 import {ReturnFrame} from "../../../../return-frame";
-import {FillChecks,returnStages} from "../../../../return-work";
+import {GroupChecks,returnStages} from "../../../../return-work";
 import {DeskChip} from "../../../../desk-chip";
-import {Badge,Card,Row} from "../../../../ui";
+import {Badge,Card,Row,Toast} from "../../../../ui";
 import "../../../clients.css";
 
 const uuid=/^[0-9a-f-]{36}$/;
@@ -90,8 +90,10 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
     else if(next.act==="ask" || next.act==="upload") action=<Link className="b b-primary" href={`${base}?tab=documents&${next.act==="ask" ? "ask" : "upload"}=1`} scroll={false}>{next.label}</Link>;
     else if(next.act==="fill" && !canPrepare) why="Preparing a return needs the right to edit figures. Ask your firm's owner.";
     else if(next.act==="fill") action=<Fill task={task.id} label={name} words={next.label}/>;
+    // On its own Draft step an ITR not started yet says where: the form picker just below.
+    else if(next.act==="open" && shown==="draft" && itr) why="Choose its form below and press Open.";
     else if(next.act==="open" && shown!=="draft" && (itr || tds && task.registration_id)) action=<Link className="b b-primary" href={own} scroll={false}>{next.label}</Link>;
-    else if(next.act==="check" && firstOpen) action=<Link className="b b-primary" href={`${here}?tab=extraction&draft=${firstOpen}`} scroll={false}>{next.label}</Link>;
+    else if(next.act==="check" && firstOpen && !(shown==="check" && meta && stage.stage==="filled")) action=<Link className="b b-primary" href={`${here}?tab=extraction&draft=${firstOpen}`} scroll={false}>{next.label}</Link>;
   }
   // Who does this return: its desk's person (src/lib/desks.ts), or someone covering it this once.
   const nameOf=(user:string|null)=>personName(people?.find(person=>person.user_id===user)?.email);
@@ -133,7 +135,9 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
       <p className="app-card-foot hint">InboxCA fills the official file from every figure it has read, checked or not. Approving and downloading wait until every figure is checked.</p>
     </Card>}
     {shown==="check" && <>
-      {meta && stage.stage==="filled" ? <FillChecks client={id} sources={meta.sources} at={here}/> : (filed || steps.indexOf(at)>steps.indexOf("check")) && <p className="app-card-none">Every figure on the draft is checked.</p>}
+      {/* What the last group's All correct or Wrong did (checkGroup), also when it was the last figure. */}
+      {q.check==="saved" || q.check==="marked" ? <Toast>{messages[q.check]}</Toast> : q.check && messages[q.check] && <p className="alert" role="status">{messages[q.check]}</p>}
+      {meta && stage.stage==="filled" ? <GroupChecks client={id} sources={meta.sources} at={here} check={q.check}/> : (filed || steps.indexOf(at)>steps.indexOf("check")) && <p className="app-card-none">Every figure on the draft is checked.</p>}
       {/^GSTR3B_/.test(code) && <PurchaseMatch clientId={id} at={here} period={period} searchParams={searchParams}/>}
     </>}
     {(shown==="approve" || shown==="file") && only && <PreparedForms client={id} message={q.form} only={{forms:only.files,period:only.period,registration:only.registration}}/>}

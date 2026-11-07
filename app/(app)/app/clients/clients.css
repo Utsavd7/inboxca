@@ -33,8 +33,10 @@
 .clients-table .clients-desk .desk-chip { max-width: 168px; }
 .clients-page.fill > .pager { margin-top: 0; }
 .clients-page .pager p:empty { display: none; }
-/* The next return over its date, wrapping rather than pushing the status out of view. */
-.clients-page .t td.clients-next { min-width: 200px; white-space: normal; line-height: 1.35; }
+/* The next return over its date, each one line cut short (the whole of it on hover), so every
+   row is one height and the status stays in view. */
+.clients-page .t td.clients-next { max-width: 240px; overflow: hidden; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.clients-page .t td.clients-next .sub { overflow: hidden; text-overflow: ellipsis; }
 /* An import's check wraps a row's services under its name, and each problem, as the next
    return does. */
 .clients-page .t td.import-wrap { min-width: 240px; white-space: normal; line-height: 1.35; }
@@ -89,6 +91,7 @@
 @container (max-width: 1100px) {
   .client-record .crumbs { flex-wrap: wrap; row-gap: 0; }
   .crumbs > .client-meta { flex-basis: 100%; margin-left: 0; }
+  .client-record .crumbs > h1 { max-width: 100%; }
 }
 @container (max-width: 820px) {
   .client-record .topbar { flex-wrap: wrap; }
