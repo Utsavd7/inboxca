@@ -45,7 +45,7 @@ export default async function AdminForms({ searchParams }: { searchParams: Promi
                 <>
                   <label>Last period {/^ITR/.test(template.form_code) ? <input name="last" inputMode="numeric" pattern="20[0-9]{2}" placeholder="2026 for AY 2026-27, 2027 for tax year 2026-27" required /> : <input name="last" type="month" required />}</label>
                   <label>Official link that discontinues it <input name="link" type="url" pattern="https://.*" required /></label>
-                  <Submit>Set last period</Submit>
+                  <Submit confirm="Returns after this period stop using this version. Only a database change undoes it.">Set last period</Submit>
                 </>
               )}
             </form>

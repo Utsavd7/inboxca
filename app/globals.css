@@ -226,6 +226,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .hero .lead { max-width: 50ch; font-size: 20px; }
 .hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s3); }
 .hero-trust { margin-top: calc(-1 * var(--s2)); font-size: var(--fs-small); font-weight: 600; color: var(--slate); }
+.hero-trust span { white-space: nowrap; }
 
 /* Demo: the one loud thing on the page */
 .demo-anchor { position: relative; margin-top: 56px; perspective: 2400px; }
@@ -290,9 +291,9 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
   content: ""; position: absolute; inset: 0 auto 0 -40%; width: 40%;
   background: linear-gradient(90deg, transparent, rgba(26, 75, 176, 0.14), transparent); animation: scan 1.5s 0.5s var(--ease-out) both;
 }
-.mail-from { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: var(--s3); }
+.mail-from { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: var(--s3); }
 .mail-from strong { display: block; line-height: var(--lh-snug); }
-.mail-from small { display: block; margin-top: 2px; font-size: var(--fs-caption); color: var(--slate); overflow-wrap: anywhere; }
+.mail-from small { display: block; margin-top: 2px; overflow: hidden; font-size: var(--fs-caption); color: var(--slate); text-overflow: ellipsis; white-space: nowrap; }
 .mail-time { font-size: var(--fs-caption); color: var(--slate); }
 .mail-subject { margin-top: var(--s3); font-size: var(--fs-body); font-weight: 700; letter-spacing: var(--ls-heading); }
 .mail-body { margin-top: var(--s1); color: var(--slate); }
@@ -761,6 +762,7 @@ h3 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--ls-heading
 .hs-card { display: grid; gap: 8px; }
 .hs-card .card-title + .hs-small { margin-top: -4px; }
 .hs-mail .mail-from { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }
+.hs-mail .mail-from small { white-space: normal; overflow-wrap: anywhere; }
 .hs .avatar { width: 30px; height: 30px; font-size: 11px; }
 .hs .mail-subject { margin-top: 8px; font-size: 13.5px; }
 .hs .mail-body { font-size: 12.5px; }

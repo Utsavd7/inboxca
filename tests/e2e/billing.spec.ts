@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { chosenPlan, formulaSchema, indiaDay, rupees, setupFee, taxSchema, withGst, type Cycle } from "@/src/lib/billing/money";
+import { periodLabel } from "@/src/lib/calendar";
 import { CASHFREE_KEYS, CASHFREE_TEST_URL } from "../../playwright.config";
 import { fakeCashfree } from "../fake-cashfree";
 import { addPerson, appKey, emailStep, latestEmail, localSupabase, query, seedFirm, systemMail, totp } from "./local-supabase";
@@ -254,7 +255,7 @@ test("the admin console shows the refund by month and reason, and the tax detail
   try {
     await admin.page.goto("/admin/billing");
     await expect(admin.page.getByRole("heading", { name: "Billing" })).toBeVisible();
-    const month = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7);
+    const month = periodLabel(null, new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7));
     const row = admin.page.locator("section[aria-label='Refunds by month'] tr").filter({ hasText: month });
     await expect(row).toBeVisible();
     const payments = admin.page.locator("section[aria-label='Payments'] tr").filter({ hasText: firmName });

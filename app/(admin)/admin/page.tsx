@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHead } from "@/app/(app)/app/ui";
 import { sources } from "@/src/jobs/forms-watch";
-import { addDays, dueLabel, todayInIndia } from "@/src/lib/calendar";
+import { addDays, dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { addVersion, noteUpdate, reviewChange } from "./actions";
 import { currentAdmin, when } from "./admin";
 import { Submit } from "./parts";
@@ -58,9 +58,10 @@ function Touches({ reach }: { reach: { firm: string; returns: number }[] }) {
 // unreadable two days running is an alert; a due date change waits for a CA's check.
 export default async function AdminToday({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { supabase } = await currentAdmin();
-  const [{ data, error }, { data: extensions }, { data: templates }, { error: problem }] = await Promise.all([
+  const [{ data, error }, { data: extensions }, { data: rules }, { data: templates }, { error: problem }] = await Promise.all([
     supabase.rpc("admin_watch"),
     supabase.from("compliance_types").select("code, period_key, due_rule, source_url").neq("period_key", "").is("verified_on", null).order("code"),
+    supabase.from("compliance_types").select("code, name").eq("period_key", ""),
     supabase.from("templates").select("form_code, version, valid_from"),
     searchParams,
   ]);
@@ -71,6 +72,7 @@ export default async function AdminToday({ searchParams }: { searchParams: Promi
   const alerts = (watch.alerts ?? []).filter((alert) => alert.at >= weekAgo).reverse();
   const updates = (watch.items ?? []).filter((item) => item.seen > addDays(todayInIndia(), -14)).reverse();
   const names = new Map(sources.map((source) => [source.key, source.name]));
+  const returns = new Map(rules?.map((rule) => [rule.code, rule.name ?? rule.code]));
   const checked = Object.values(watch.sources ?? {}).map((source) => source.checked ?? "").sort().at(-1) ?? null;
   const codes = new Map(sources.map((source) => [source.key, source.codes ?? []]));
   const reach = (list: string[], period?: string, movedTo?: string) => supabase.rpc("admin_reach", { codes: list, period, moved_to: movedTo }).then(({ data: rows }) => rows ?? []);
@@ -110,34 +112,13 @@ export default async function AdminToday({ searchParams }: { searchParams: Promi
           <p className="admin-empty"><strong>Nothing to review</strong>The next check runs at 08:30 India time.</p>
         )}
       </section>
-      <section className="admin-card" aria-label="New from the government">
-        <h2>New from the government</h2>
-        <p className="admin-note">Firms see each item on Today for 14 days, in the government&apos;s own words, when their clients have that work. Your one line shows with it.</p>
-        {updates.length ? (
-          updates.map((item) => (
-            <form action={noteUpdate} className="admin-row admin-form" key={item.id}>
-              <input type="hidden" name="item" value={item.id} />
-              <div className="grow">
-                <strong>{item.title}</strong>
-                <span className="sub">{areas[item.area]}. {names.get(item.source)}, {item.date ? dueLabel(item.date) : `seen on ${dueLabel(item.seen)}`}.{item.note?.uses && ` InboxCA uses this from ${dueLabel(item.note.uses)}.`}{item.note?.keeps && ` InboxCA keeps the earlier version for ${item.note.keeps}.`}</span>
-                <a href={item.link} target="_blank" rel="noreferrer">Open the source</a>
-              </div>
-              <label>InboxCA uses this from <input name="uses" type="date" /></label>
-              <label>Or keeps the earlier version for <input name="keeps" maxLength={80} placeholder="returns up to Mar 2026" /></label>
-              <Submit>Save the line</Submit>
-            </form>
-          ))
-        ) : (
-          <p className="admin-empty"><strong>Nothing new in 14 days</strong>New items from the official pages show here.</p>
-        )}
-      </section>
       {!!extensions?.length && (
         <section className="admin-card" aria-label="Due date changes">
           <h2>Due date changes waiting for a CA</h2>
           {extensions.map((rule, at) => (
             <div className="admin-row" key={`${rule.code}${rule.period_key}`}>
               <div className="grow">
-                <strong>{rule.code} for {rule.period_key}, to {dueLabel((rule.due_rule as { on: string }).on)}</strong>
+                <strong>{returns.get(rule.code) ?? rule.code} for {periodLabel(null, rule.period_key)}, to {dueLabel((rule.due_rule as { on: string }).on)}</strong>
                 <Touches reach={dateReach[at]} />
               </div>
               {rule.source_url && <a href={rule.source_url} target="_blank" rel="noreferrer">Open the notification</a>}
@@ -160,13 +141,35 @@ export default async function AdminToday({ searchParams }: { searchParams: Promi
           ))}
         </section>
       )}
+      <section className="admin-card" aria-label="New from the government">
+        <h2>New from the government</h2>
+        <p className="admin-note">Firms see each item on Today for 14 days, in the government&apos;s own words, when their clients have that work. Your one line shows with it.</p>
+        {updates.length ? (
+          updates.map((item) => (
+            <form action={noteUpdate} className="admin-row admin-form" key={item.id}>
+              <input type="hidden" name="item" value={item.id} />
+              <div className="grow">
+                <strong className="clamp" title={item.title}>{item.title}</strong>
+                <span className="sub">{areas[item.area]}. {names.get(item.source)}, {item.date ? dueLabel(item.date) : `seen on ${dueLabel(item.seen)}`}.{item.note?.uses && ` InboxCA uses this from ${dueLabel(item.note.uses)}.`}{item.note?.keeps && ` InboxCA keeps the earlier version for ${item.note.keeps}.`}</span>
+                <a href={item.link} target="_blank" rel="noreferrer">Open the source</a>
+              </div>
+              <label>InboxCA uses this from <input name="uses" type="date" /></label>
+              <label>Or keeps the earlier version for <input name="keeps" maxLength={80} placeholder="returns up to Mar 2026" /></label>
+              <Submit>Save the line</Submit>
+            </form>
+          ))
+        ) : (
+          <p className="admin-empty"><strong>Nothing new in 14 days</strong>New items from the official pages show here.</p>
+        )}
+      </section>
       <section className="admin-card" aria-label="Pages InboxCA cannot read">
         <h2>Pages InboxCA cannot read</h2>
+        <p className="admin-note">These sites block InboxCA or show nothing without their own app. Look at them yourself.</p>
         {sources.filter((source) => source.kind === "manual").map((source) => (
           <div className="admin-row" key={source.key}>
             <div className="grow">
               <strong>{source.name}</strong>
-              <span className="sub">{areas[source.area]}. Could not check this page: the site blocks InboxCA or shows nothing without its own app. Look at it yourself.</span>
+              <span className="sub">{areas[source.area]}</span>
             </div>
             <a href={source.url} target="_blank" rel="noreferrer">Open the page</a>
           </div>

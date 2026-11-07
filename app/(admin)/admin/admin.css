@@ -22,10 +22,21 @@
 .admin-row strong { font-weight: 600; }
 .admin-row a { color: var(--ink-2); font-size: 13px; }
 .admin-row a:hover { color: var(--ink); }
-.admin-empty { padding: var(--s7) var(--s4); border-top: 1px solid var(--line); color: var(--ink-3); text-align: center; }
+.admin-empty { padding: var(--s5) var(--s4); border-top: 1px solid var(--line); color: var(--ink-3); text-align: center; }
 .admin-empty strong { display: block; color: var(--ink); font-size: 14px; font-weight: 600; }
 .admin-note { padding: var(--s3) var(--s4); border-top: 1px solid var(--line); color: var(--ink-2); font-size: 13px; }
 .admin .alert { margin: var(--s4) 0 0; }
+/* The console's pages sit side by side in the menu, so no Back (it would lead into the app). */
+.admin .head-back { display: none; }
+.admin-row .clamp { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.admin .t td.wrap { min-width: 200px; white-space: normal; }
+.admin .t td .sub { white-space: normal; }
+.admin-pager { margin-top: var(--s3); }
+.admin-pager p { margin: 0; }
+
+/* A risky button's second step: what will happen, then Yes and Cancel. */
+.admin-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s2); }
+.admin-confirm > .sub { max-width: 320px; color: var(--ink-2); white-space: normal; }
 
 /* A row's few fields and its one button, on one line where they fit. */
 .admin-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s2) var(--s3); }

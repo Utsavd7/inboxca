@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Badge, PageHead } from "@/app/(app)/app/ui";
 import { checkSplit } from "../actions";
-import { currentAdmin, when } from "../admin";
-import { Submit } from "../parts";
+import { currentAdmin, PAGE, pageRows, when } from "../admin";
+import { Pager, Submit } from "../parts";
 
 const yesNo = (on: boolean) => <Badge tone={on ? "done" : "warn"}>{on ? "Connected" : "Not connected"}</Badge>;
 // Two firms that may be one (D38 (6)), from the nightly check: what matched, never the values.
@@ -11,13 +12,15 @@ const matched: Record<string, string> = { pan: "Same firm PAN", owner: "Same own
 const evidence = (split: Split) => [...split.evidence.filter((kind) => kind !== "clients").map((kind) => matched[kind] ?? kind), split.clients && `${split.clients} client PANs in common, ${split.share}% of the smaller firm's`].filter(Boolean).join(", ");
 
 // Every firm's health, with no client data at all.
-export default async function AdminFirms() {
+export default async function AdminFirms({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const { supabase } = await currentAdmin();
-  const [{ data: firms, error }, { data: splits }] = await Promise.all([supabase.rpc("admin_firms"), supabase.rpc("admin_split_firms")]);
+  const { page, from, to } = pageRows((await searchParams).page);
+  const [{ data: firms, count, error }, { data: splits }] = await Promise.all([supabase.rpc("admin_firms", undefined, { count: "exact" }).range(from, to), supabase.rpc("admin_split_firms")]);
+  if (error?.code === "PGRST103") redirect("/admin/firms");
   if (error) throw new Error(`Admin firms failed: ${error.code}`);
   return (
     <>
-      <PageHead title="Firms" sub={`${firms.length} firms. Health only: client names, emails, papers and figures stay with each firm.`} />
+      <PageHead title="Firms" sub={`${count ?? firms.length} firms. Health only: client names, emails, papers and figures stay with each firm.`} />
       {!!(splits as Split[] | null)?.length && (
         <section className="admin-card" aria-label="May be one firm">
           <h2>May be one firm</h2>
@@ -63,6 +66,7 @@ export default async function AdminFirms() {
           </table>
         </div>
       </section>
+      <Pager page={page} size={PAGE} total={count ?? 0} label="Firm pages" />
     </>
   );
 }

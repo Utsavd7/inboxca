@@ -26,7 +26,7 @@ export default async function AdminAdmins() {
               !!admin.passkeys && (
                 <form action={removePasskeys}>
                   <input type="hidden" name="person" value={admin.user_id} />
-                  <Submit>Remove passkeys</Submit>
+                  <Submit confirm={`${admin.email} is signed out and sets up a new passkey at the next sign in.`}>Remove passkeys</Submit>
                 </form>
               )
             )}

@@ -193,10 +193,11 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     still: 2,
     frames: [
       f(0, ["Clients", "Patel Textiles", "Work"], <Title>Due soon</Title>, <Rows rows={[["GSTR-3B (monthly) Sep 2026", "Due 20 Oct 2026. Next: Check 3 figures"], ["GSTR-1 (monthly) Oct 2026", "Due 11 Nov 2026. Next: Ask for papers"]]} />),
-      f(1, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Line><Chip>Due 20 Oct 2026, in 4 days</Chip><Note>Looked after by Ravi Kumar</Note></Line>, <Track items={steps} done={3} />),
+      f(1, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Line><Chip>Due 20 Oct 2026, in 4 days</Chip><Note>Done by Ravi Kumar</Note></Line>, <Track items={steps} done={3} />),
       f(2, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Track items={steps} done={3} />, <Card title="Next step: Check" line="Filled. 3 figures not checked yet"><Line><Btn press>Check 3 figures</Btn></Line></Card>),
-      f(3, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Track items={steps} done={4} />, <Card title="Next step: Approve"><Line><Btn press>Give second approval</Btn></Line></Card>, <Note>Only the firm&apos;s owner, a partner or a manager can give the second approval.</Note>),
-      f(4, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Track items={steps} done={5} />, <Card title="Next step: File" line="An acknowledgement arrived. Check it, then mark the return filed."><Line><Btn press>Mark filed</Btn></Line></Card>, <Line><Chip tone="done" cue>Filed</Chip></Line>),
+      f(3, ["Clients", "Patel Textiles", "GSTR-1 (monthly) Oct 2026"], <Title>Invoice PTPL/26-27/0611</Title>, <Figures checked rows={[["Invoice value", "Sales register, row 5", "₹4,33,440"], ["Place of supply", "Sales register, row 5", "24-Gujarat"], ["Rate", "Sales register, row 5", "5%"]]} />, <Line><Btn press>All correct</Btn></Line>),
+      f(4, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Track items={steps} done={4} />, <Card title="Next step: Approve"><Line><Btn press>Give second approval</Btn></Line></Card>, <Note>Only the firm&apos;s owner, a partner or a manager can give the second approval.</Note>),
+      f(5, ["Clients", "Patel Textiles", "GSTR-3B (monthly) Sep 2026"], <Track items={steps} done={5} />, <Card title="Next step: File" line="An acknowledgement arrived. Check it, then mark the return filed."><Line><Btn press>Mark filed</Btn></Line></Card>, <Line><Chip tone="done" cue>Filed</Chip></Line>),
     ],
   },
   "gst-month-end": {
@@ -215,7 +216,7 @@ export const helpScenes: Record<string, { icon: LucideIcon; still?: number; fram
     frames: [
       f(0, ["Clients", "Anita Rao", "Papers"], <Rows rows={[[num("Form 16.pdf"), "Email from Anita Rao", <Chip key="c" tone="done">Saved</Chip>], [num("Form 26AS.pdf"), "Portal file, added by Ravi Kumar", <Chip key="c" tone="done">Saved</Chip>], [num("AIS.pdf"), "Portal file, added by Ravi Kumar", <Chip key="c" tone="done">Saved</Chip>], [num("TIS.pdf"), "Portal file, added by Ravi Kumar", <Chip key="c" tone="done">Saved</Chip>]]} />),
       f(1, ["Clients", "Anita Rao", "ITR-1"], <Figures rows={[["Salary", "Form 16, page 2", "₹12,40,000"], ["Tax deducted", "Form 26AS, page 1", "₹1,02,500"], ["Savings interest", "AIS, page 3", "₹8,420"]]} />, <Note>Every figure opens the page it was read from.</Note>),
-      f(2, ["Clients", "Anita Rao", "ITR-1"], <Figures checked rows={[["Salary", "Form 16, page 2", "₹12,40,000"], ["Tax deducted", "Form 26AS, page 1", "₹1,02,500"], ["Savings interest", "AIS, page 3", "₹8,420"]]} />, <Track items={steps} done={4} />),
+      f(2, ["Clients", "Anita Rao", "ITR-1"], <Title>Form 16, page 2</Title>, <Figures checked rows={[["Salary", "Form 16, page 2", "₹12,40,000"], ["Tax deducted", "Form 16, page 2", "₹1,02,500"]]} />, <Line><Btn press>All correct</Btn></Line>),
       f(3, ["Clients", "Anita Rao", "ITR-1"], <Track items={steps} done={5} />, <Line><Btn press>Download for filing</Btn></Line>, <Note>Your team files it on the income tax portal, then marks it filed here.</Note>),
     ],
   },
