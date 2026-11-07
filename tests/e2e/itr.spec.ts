@@ -203,7 +203,7 @@ test("Fill makes an ITR draft to check, the last check fills the checked return,
     await row.getByRole("link",{name:"ITR AY 2026-27",exact:true}).click();await expect(step).toContainText("Draft");
     await page.getByRole("region",{name:"Next step"}).getByRole("button",{name:"Prepare ITR"}).click();await expect(step).toContainText("Check",{timeout:60_000});await expect(page).toHaveURL(here);
     const checks=page.getByRole("region",{name:"Figures not checked yet"});
-    await expect(checks).toContainText("1 figure not checked yet.");await expect(checks.getByRole("listitem")).toContainText("invented@invented.test");
+    await expect(checks).toContainText("1 figure not checked yet.");await expect(checks.getByRole("checkbox",{name:/invented@invented\.test/})).toBeVisible();
     await page.screenshot({path:test.info().outputPath("itr-fill.png"),fullPage:true});
     let forms=await query(local.dbUrl,prepared,[firm.firmId]);
     expect(forms).toHaveLength(1);expect(forms[0].name).toBe(`${person} - ITR-1 - AY 2026-27 - v1 (to check).json`);expect(forms[0].prepared).toMatchObject({status:"draft",filled:true});expect(Number(forms[0].size)).toBeGreaterThan(0);

@@ -401,7 +401,7 @@ export default async function Clients({
                     <td className="clients-desk">
                       <DeskChip client={{ id: client.id, name: client.name }} desks={client.desks} viewer={archived ? { ...viewer, assign: false, take: false } : viewer} named />
                     </td>
-                    <td className="clients-next">{next ? <>{next}<span className="sub">{when}</span></> : <span className="hint">None due</span>}</td>
+                    <td className="clients-next" title={next ? `${next}, ${when}` : undefined}>{next ? <>{next}<span className="sub">{when}</span></> : <span className="hint">None due</span>}</td>
                     <td>
                       <span className="row-swap">
                         <span className="clients-tags">

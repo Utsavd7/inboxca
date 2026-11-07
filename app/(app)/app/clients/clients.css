@@ -33,8 +33,10 @@
 .clients-table .clients-desk .desk-chip { max-width: 168px; }
 .clients-page.fill > .pager { margin-top: 0; }
 .clients-page .pager p:empty { display: none; }
-/* The next return over its date, wrapping rather than pushing the status out of view. */
-.clients-page .t td.clients-next { min-width: 200px; white-space: normal; line-height: 1.35; }
+/* The next return over its date, each one line cut short (the whole of it on hover), so every
+   row is one height and the status stays in view. */
+.clients-page .t td.clients-next { max-width: 240px; overflow: hidden; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.clients-page .t td.clients-next .sub { overflow: hidden; text-overflow: ellipsis; }
 /* An import's check wraps a row's services under its name, and each problem, as the next
    return does. */
 .clients-page .t td.import-wrap { min-width: 240px; white-space: normal; line-height: 1.35; }
@@ -80,16 +82,16 @@
 .crumbs > .client-meta::after { content: none; }
 .crumbs > .client-meta svg { display: revert; }
 .crumbs > .client-meta:hover { color: var(--ink-2); }
-/* The name keeps its room; the numbers and who does the work wrap beside it instead. */
-.client-record .crumbs > h1 { flex-shrink: 0; max-width: 55%; }
-/* The name shows once, in the header. Where the type and numbers would not fit beside it (a
-   laptop with the full sidebar), they take a line under the name; narrower still, the actions
-   take a line of their own, as beside an open paper (doc-pane.css), rather than cut the name. */
+/* The name shows once, in the header, whole, with the actions on its line; the type, numbers and
+   who does the work take one line under it, never wrapping (the crumbs' parts sit in the top bar
+   itself, so that line is as wide as the page). Narrower still, the actions take a line of their
+   own, as beside an open paper (doc-pane.css), rather than cut the name. */
 .client-record { container-type: inline-size; }
-@container (max-width: 1100px) {
-  .client-record .crumbs { flex-wrap: wrap; row-gap: 0; }
-  .crumbs > .client-meta { flex-basis: 100%; margin-left: 0; }
-}
+.client-record .topbar { flex-wrap: wrap; row-gap: 2px; }
+.client-record .crumbs { display: contents; }
+.client-record .crumbs > h1 { flex-shrink: 0; max-width: 100%; }
+.client-record .page-actions { margin-left: auto; }
+.client-record .crumbs > .client-meta { order: 5; flex-basis: 100%; flex-wrap: nowrap; margin-left: 0; white-space: nowrap; }
 @container (max-width: 820px) {
   .client-record .topbar { flex-wrap: wrap; }
   .client-record .topbar .page-actions { order: 3; justify-content: flex-start; width: 100%; }
