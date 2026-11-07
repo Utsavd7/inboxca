@@ -126,7 +126,7 @@ test("Documents lists the firm's papers by work, shows one, and opens its client
     await expect(sales.getByLabel("Type of work")).toHaveValue("gst");
     await expect(sales.getByLabel("Period")).toHaveValue("2026-09");
     const form16 = panel.getByRole("group", { name: "Form16 FY 2025-26.pdf" });
-    await expect(form16.getByLabel("Paper type")).toHaveValue("Form 16");
+    await expect(form16.getByLabel("Paper type")).toHaveValue("Form 130");
     await expect(form16.getByLabel("Period")).toHaveValue("2026");
     // A name that says nothing is left for the person to choose, never Other.
     const scan = panel.getByRole("group", { name: "IMG_0042.pdf" });

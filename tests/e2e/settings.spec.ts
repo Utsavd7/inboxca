@@ -49,7 +49,7 @@ test("the owner chooses which papers go at once, and every paper can wait for ap
   await card.getByText(/^Paper types sent at once/).click();
   await expect(card.getByLabel("Challan", { exact: true })).toBeChecked();
   await card.getByLabel("Challan", { exact: true }).uncheck();
-  await card.getByLabel("Form 16", { exact: true }).check();
+  await card.getByLabel("Form No. 130 (was Form 16)", { exact: true }).check();
   await card.getByLabel("Wait for approval for every paper").check();
   await owner.getByRole("button", { name: "Save", exact: true }).click();
   await expect(saved("Reminders and papers saved.")).toBeVisible();
@@ -60,7 +60,7 @@ test("the owner chooses which papers go at once, and every paper can wait for ap
   await owner.reload();
   await card.getByText(/^Paper types sent at once/).click();
   await expect(card.getByLabel("Challan", { exact: true })).not.toBeChecked();
-  await expect(card.getByLabel("Form 16", { exact: true })).toBeChecked();
+  await expect(card.getByLabel("Form No. 130 (was Form 16)", { exact: true })).toBeChecked();
   await expect(card.getByLabel("Wait for approval for every paper")).toBeChecked();
 });
 

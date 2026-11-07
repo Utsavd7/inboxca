@@ -54,7 +54,7 @@ test("GST month end: every client's month in one list, by tag, with GSTR-1 by ra
   await query(local.dbUrl,"insert into public.client_assignments(firm_id,client_id,user_id,role) values($1,$2,$3,'staff')",[firm.firmId,clients.shah,staff]);
 
   await owner.goto("/app/work");
-  await owner.getByRole("link",{name:"GST month end"}).click();
+  await owner.getByRole("main").getByRole("link",{name:"GST month end"}).click();
   await owner.getByLabel("Month",{exact:true}).selectOption("2026-09");
   await owner.getByRole("button",{name:"Show"}).click();
   const row=(name:string)=>owner.getByRole("row").filter({hasText:name});
