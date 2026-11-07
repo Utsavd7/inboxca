@@ -121,7 +121,7 @@ test("the owner invites a new person, who appears as invited", async () => {
   await expect(owner.getByText(ownerEmail)).toBeVisible();
   await owner.getByRole("link", { name: "Invite person" }).click();
   await owner.getByLabel("Their work email").fill(newEmail.toUpperCase());
-  await owner.getByLabel("Role").selectOption("manager");
+  await owner.getByRole("radio", { name: /^Manager/ }).check();
   await owner.getByRole("button", { name: "Send invite" }).click();
   await expect(owner.getByRole("status")).toContainText(`Invited ${newEmail}`);
   const row = owner.getByRole("row").filter({ hasText: newEmail });
@@ -174,12 +174,12 @@ test("the owner changes the role, removes the person and brings them back", asyn
   // Changes open in a panel beside the list.
   await row.getByRole("link", { name: `Change ${newEmail}` }).click();
   const panel = owner.getByRole("dialog", { name: personName(newEmail) });
-  await panel.getByLabel("Role").selectOption("staff");
+  await panel.getByRole("radio", { name: /^Staff/ }).check();
   await panel.getByRole("button", { name: "Save changes" }).click();
   await expect(row).toContainText("Staff");
   await expect(owner.getByRole("status").filter({ hasText: "Changes saved." })).toBeVisible();
   await owner.reload();
-  await expect(panel.getByLabel("Role")).toHaveValue("staff");
+  await expect(panel.getByRole("radio", { name: /^Staff/ })).toBeChecked();
 
   // Removing asks once more before it takes access away.
   await panel.getByRole("link", { name: "Remove from the firm" }).click();
@@ -732,7 +732,7 @@ test("in restricted mode a person sees only clients assigned to them or their te
   const row = owner.getByRole("row").filter({ hasText: newEmail });
   await expect(row.getByRole("link", { name: `Change ${newEmail}` })).toHaveCount(1);
   await row.getByRole("link", { name: `Change ${newEmail}` }).click();
-  await owner.getByRole("dialog", { name: personName(newEmail) }).getByLabel("Team").selectOption({ label: "GST team" });
+  await owner.getByRole("dialog", { name: personName(newEmail) }).getByLabel("Team", { exact: true }).selectOption({ label: "GST team" });
   await owner.getByRole("button", { name: "Save changes" }).click();
   await expect(row).toContainText("GST team");
   await owner.goto("/app/people?panel=groups");

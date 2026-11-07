@@ -215,8 +215,8 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
 // has the room; it starts open on InboxCA's own answer when a person edits it. AI's draft
 // (aiDraft) shows as a card to send as it is or edit. An email waiting for a person opens with
 // a suggested reply written in (note says which), and, for a paper not in the drive, a way to
-// ask the client for papers.
-export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, start, aiDraft, suggestion, askPapers, note }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; start?: string; aiDraft?: boolean; suggestion?: string; askPapers?: string; note?: string }) {
+// ask the client for papers. back is where a sent reply comes back to, when not the Inbox.
+export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, start, aiDraft, suggestion, askPapers, note, back }: { mail: string; papers: Paper[]; suggested: string[]; ai: boolean; mayAttach: boolean; name: string; firm: string; start?: string; aiDraft?: boolean; suggestion?: string; askPapers?: string; note?: string; back?: string }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const [view, setView] = useState<"bar" | "card" | "open">(aiDraft ? "card" : start ? "open" : "bar");
   const focus = useRef(false);
@@ -243,6 +243,7 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, s
   return (
     <form action={sendReply} className="ib-reply" data-view={view} aria-label="Reply">
       <input type="hidden" name="mail" value={mail} />
+      {back && <input type="hidden" name="back" value={back} />}
       {view === "bar" && (
         <button type="button" className="ib-reply-bar" onClick={openReply}>
           <Reply size={16} aria-hidden />

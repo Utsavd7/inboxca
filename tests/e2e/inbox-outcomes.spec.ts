@@ -115,6 +115,16 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   await owner.goto(`/app/inbox?client=${shah.id}&status=reply`);
   await expect(list(owner).getByRole("listitem")).toHaveCount(1);
   await expect(row(owner, `Meeting ${tag}`)).toBeVisible();
+  // A client's Emails tab is the Inbox for that client alone, counting what needs a reply.
+  await owner.goto(`/app/clients/${shah.id}?tab=emails`);
+  await expect(owner.getByRole("navigation", { name: "Client" }).getByRole("link", { name: /^Emails/ })).toContainText("1");
+  await owner.getByRole("navigation", { name: "Show" }).getByRole("link", { name: "From client" }).click();
+  await expect(owner).toHaveURL(/show=in$/);
+  await expect(list(owner).getByRole("listitem")).toHaveCount(7);
+  await expect(list(owner)).not.toContainText(`Hidden ${tag}`);
+  await row(owner, `Meeting ${tag}`).getByText(`Meeting ${tag}`).click();
+  await expect(owner).toHaveURL(new RegExp(`/app/clients/${shah.id}\\?tab=emails&show=in&mail=`));
+  await expect(pane(owner).getByRole("heading", { name: `Meeting ${tag}` })).toBeVisible();
 
   // The open email says the same, with a link to what was sent or recorded.
   await owner.goto("/app/inbox?status=answered");

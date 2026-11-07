@@ -506,7 +506,7 @@ test("a client is served from a branch, and the list filters by branch", async (
   await owner.getByRole("link", { name: "Client 42", exact: true }).click();
   await details();
   await owner.getByRole("link", { name: "Edit details" }).click();
-  await owner.locator("section[aria-labelledby=details]").getByLabel("Branch").selectOption({ label: "Surat" });
+  await owner.locator("section[aria-labelledby=details]").getByLabel("Branch", { exact: true }).selectOption({ label: "Surat" });
   await owner.getByRole("button", { name: "Save details" }).click();
   await owner.locator("section[aria-labelledby=details-card]").getByRole("link", { name: "Surat" }).click();
   await expect(owner.locator(".page-head")).toContainText("Surat: 1 client.");
