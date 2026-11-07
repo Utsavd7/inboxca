@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeFile, filePeriod, gstinFor, periodName, tdsChallanText, typeByContent } from "@/src/lib/documents";
+import { describeFile, filePeriod, gstinFor, lawType, listedTypes, periodName, tdsChallanText, typeByContent } from "@/src/lib/documents";
 import { receiveItem, type DocumentRequest } from "@/src/lib/checklists";
 
 // Attachment names as clients send them, and where InboxCA files each one.
@@ -86,5 +86,14 @@ describe("a tax paper's type from its content", () => {
     expect(typeByContent({ type: "Form 130", sure: true }, null, "form130.pdf")).toEqual({ type: "Form 130", sure: false });
     expect(typeByContent(named, null, "statement.pdf")).toEqual({ type: "Document", sure: false });
     expect(typeByContent({ type: "Bank statement", sure: true }, null)).toEqual({ type: "Bank statement", sure: true });
+  });
+});
+
+// Pickers list Form No. 130 and 168 once; a paper picked is kept as the form of its period's law.
+describe("a picked Form 16 or Form 26AS", () => {
+  it("is kept as the old form before tax year 2026-27 and the new one from it", () => {
+    expect(listedTypes.filter((type) => /^Form (16|26AS|130|168)$/.test(type))).toEqual(["Form 130", "Form 168"]);
+    expect([lawType("Form 130", "2026"), lawType("Form 130", "2027"), lawType("Form 16", "2027"), lawType("Form 168", "2026-03"), lawType("Form 168", "2026-04")]).toEqual(["Form 16", "Form 130", "Form 130", "Form 26AS", "Form 168"]);
+    expect([lawType("Form 130", ""), lawType("AIS", "2026")]).toEqual(["Form 130", "AIS"]);
   });
 });

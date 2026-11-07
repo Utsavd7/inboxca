@@ -36,8 +36,9 @@ type Context = Parameters<typeof workFor>[0];
 // about the firm (Attention), then cards filling the window: their list in four group cards (late,
 // due this week, waiting on clients, the rest), each scrolling by itself, and one slim card of a
 // few numbers with the returns by step, each opening its list. The owner and partners see the firm, a manager their team and what waits for their
-// approval, staff and front desk their own clients. Every query starts at once and each part
-// shows as soon as its data is in.
+// approval, staff and front desk their own clients. A firm with no returns yet sees no empty
+// cards and no zeros: setup's line leads. Every query starts at once and each part shows as
+// soon as its data is in.
 export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
   const { dropped, error, asked, panel, done } = await searchParams;
   const { supabase, userId, membership, deviceStatus, connectionWaiting, pcKey, ownerDevice } = await currentMember();
@@ -53,6 +54,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
   const week = weekFor(ctx, work);
   // Front desk keeps to emails and papers, so has no returns by step.
   const queue = membership.role === "front_desk" ? null : stepQueue(ctx).catch(() => null);
+  const fresh = Promise.resolve(supabase.from("tasks").select("id").eq("firm_id", membership.firmId).eq("kind", "compliance").limit(1)).then(({ data, error }) => !error && !data?.length);
   const portal = membership.may("portal_files");
   const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric", hourCycle: "h23" }));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -104,10 +106,10 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       <div className="today-grid">
         <div className="today-board">
           <Suspense fallback={<Hold shown=".today-list"><CardSkeleton title="Your list" rows={5} /></Hold>}>
-            <YourList work={work} ctx={ctx} />
+            <YourList work={work} ctx={ctx} fresh={fresh} />
           </Suspense>
           <Suspense fallback={<Hold shown=".today-week"><CardSkeleton title={isLead(membership.role) ? "This month" : "This week"} rows={3} /></Hold>}>
-            <Numbers week={week} role={membership.role} queue={queue} />
+            <Numbers week={week} role={membership.role} queue={queue} fresh={fresh} />
           </Suspense>
         </div>
       </div>
@@ -241,8 +243,9 @@ async function Attention({ ctx }: { ctx: Context }) {
 
 // Your list: everything that needs this person, a card for each of its four groups that has any,
 // each saying how many and scrolling by itself; they add up to the greeting's count.
-async function YourList({ work, ctx }: { work: ReturnType<typeof workFor>; ctx: Context }) {
-  const { items, total, failed } = await work;
+// A firm with no returns yet leaves out the all caught up card when setup's line shows instead.
+async function YourList({ work, ctx, fresh }: { work: ReturnType<typeof workFor>; ctx: Context; fresh: Promise<boolean> }) {
+  const [{ items, total, failed }, setup] = await Promise.all([work, Promise.all([fresh, attention(ctx)]).then(([none, { lines }]) => none && lines.includes("setup"))]);
   const today = todayInIndia();
   const groups = pickShown(items, today, items.length);
   // The late clients beyond those read are late too.
@@ -269,7 +272,7 @@ async function YourList({ work, ctx }: { work: ReturnType<typeof workFor>; ctx: 
             ) : null,
           )
         ) : (
-          !failed && (
+          !failed && !setup && (
             <div className="app-card">
               <Calm title="You are all caught up" line="Nothing waits for you. New work for your clients shows here first." />
             </div>
@@ -284,9 +287,11 @@ async function YourList({ work, ctx }: { work: ReturnType<typeof workFor>; ctx: 
 // due (the firm's this month for the owner and partners, their own this week for anyone else),
 // clients late, and clients asked for papers not all in; then the returns late or due in 30 days
 // by the step they wait at (work-data.ts stepQueue), each opening that step on the Calendar.
-// Front desk keeps to emails and papers, so sees only who has papers to send.
-async function Numbers({ week, role, queue }: { week: ReturnType<typeof weekFor>; role: string; queue: Promise<Awaited<ReturnType<typeof stepQueue>> | null> | null }) {
-  const { range, late } = await week;
+// Front desk keeps to emails and papers, so sees only who has papers to send. A firm with no
+// returns yet has no numbers to show.
+async function Numbers({ week, role, queue, fresh }: { week: ReturnType<typeof weekFor>; role: string; queue: Promise<Awaited<ReturnType<typeof stepQueue>> | null> | null; fresh: Promise<boolean> }) {
+  const [{ range, late }, none] = await Promise.all([week, fresh]);
+  if (none) return null;
   const lead = isLead(role);
   return (
     <Card id="t-week" title={lead ? "This month" : "This week"} Icon={CalendarDays} kind="week" className="today-week">

@@ -1,5 +1,5 @@
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
-import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
+import { listedTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { paperType } from "@/src/lib/paper-type";
 import { sendSkip, type BulkSend } from "@/src/lib/records";
 import { CircleCheck, FileCheck2, Search, Send, UserRound, UsersRound } from "lucide-react";
@@ -462,7 +462,7 @@ export default async function Clients({
           send={canSend}
           list={pageHref(page)}
           total={countOf[show]}
-          types={documentTypes}
+          types={listedTypes}
           years={periodChoices(todayInIndia())
             .filter((key) => key.length === 4)
             .map((key) => [key, periodName(key, "income_tax")])}

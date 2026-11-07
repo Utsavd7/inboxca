@@ -83,7 +83,7 @@ test("each email shows what InboxCA did, and each outcome is a filter of its own
   await owner.goto("/app/inbox");
   await row(owner, `Question ${tag}`).getByText(`Question ${tag}`).click();
   await expect(pane(owner).getByRole("heading", { name: `Question ${tag}` })).toBeVisible();
-  await pane(owner).getByRole("button", { name: /^Reply to/ }).click();
+  await pane(owner).getByRole("button", { name: "Change" }).click();
   await owner.getByLabel("Your reply").fill("Next Tuesday at 11.");
   await owner.getByRole("button", { name: "Send reply" }).click();
   await expect(owner.getByRole("status").filter({ hasText: "Reply sent" })).toBeVisible();

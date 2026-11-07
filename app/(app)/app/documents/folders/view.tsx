@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { todayInIndia } from "@/src/lib/calendar";
-import { documentTypes, periodChoices, periodName } from "@/src/lib/documents";
+import { listedTypes, periodChoices, periodName } from "@/src/lib/documents";
 import { workTypes } from "@/src/lib/drive";
 import { parsePath } from "@/src/lib/drive-browse";
 import { Empty, PageHead } from "../../ui";
@@ -89,7 +89,7 @@ async function Loaded({ parts }: { parts: string[] }) {
       asked={parts.join("/")}
       drive={{ name: ctx.account?.provider === "dropbox" ? "Dropbox" : ctx.account?.provider === "onedrive" ? "OneDrive" : "Test drive", web: ctx.owner && ctx.account?.provider === "dropbox" }}
       choices={{
-        types: [...documentTypes, ...((ctx.membership.settings.document_types ?? []) as string[])],
+        types: [...listedTypes, ...((ctx.membership.settings.document_types ?? []) as string[])],
         works: Object.entries(workTypes),
         periods: periodChoices(today).map((key) => [key, periodName(key)]),
       }}

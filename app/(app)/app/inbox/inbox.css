@@ -116,7 +116,7 @@
 .ib-more { list-style: none; }
 .ib-more a { display: flex; align-items: center; justify-content: center; height: var(--row); color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: none; }
 
-/* The open email: its head stays, the conversation scrolls under it, the reply sits at the foot. */
+/* The open email: its head stays, the conversation scrolls under it with the reply after it. */
 .ib-open { display: flex; flex: 1; flex-direction: column; min-width: 0; overflow: hidden; }
 .ib-pick { margin: auto; padding: var(--s7) var(--s5); color: var(--ink-3); text-align: center; }
 .ib-keys { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s2) var(--s4); max-width: 360px; margin-top: var(--s2); font-size: 12px; }
@@ -191,22 +191,22 @@
 .ib-ext { display: flex; flex: none; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: var(--r1); background: var(--k-docs-bg); color: var(--k-docs); font-size: 11px; font-weight: 700; }
 .ib-path { overflow: hidden; color: var(--ink-3); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The reply at the foot: one bar until opened, never over the conversation. */
-:is(.ib-reply, .ib-drafted) { flex: none; max-height: 62%; overflow-y: auto; padding: var(--s3) var(--s4) var(--s3) var(--s5); border-top: 1px solid var(--line); background: var(--surface); }
-.ib-reply-bar { display: flex; align-items: center; gap: var(--s2); width: 100%; height: 40px; padding: 0 var(--s2) 0 var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--surface); box-shadow: var(--shadow-button); color: var(--ink-3); font: inherit; font-size: 14px; text-align: left; cursor: text; transition: border-color var(--fast) var(--out), color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
-.ib-reply-bar:hover { border-color: var(--line-3); color: var(--ink-2); }
-.ib-reply-bar .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ib-reply-bar .ib-note { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 12px; font-weight: 600; }
-.ib-reply-bar .ib-note::before { content: ""; width: 6px; height: 6px; border-radius: var(--round); background: var(--wait-dot); }
+/* The reply after the conversation, in the same scroll, so the email always reads first. */
+:is(.ib-reply, .ib-drafted) { flex: none; padding-top: var(--s4); border-top: 1px solid var(--line); }
 .ib-write-reply { display: grid; gap: var(--s2); animation: ib-open var(--base) var(--out); }
 .ib-write-reply[hidden] { display: none; }
-/* An AI draft, or InboxCA's own reply from the firm's records, as a card to send or edit. */
+/* A suggested reply, an AI draft or InboxCA's own reply, as a small card: its name and buttons
+   on one line, then a few lines of the text. */
 .ib-card { display: grid; gap: var(--s2); padding: var(--s3); border: 1px solid var(--select); border-radius: var(--r3); background: var(--surface); box-shadow: var(--shadow-1); animation: rise var(--slow) var(--out); }
 .ib-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); color: var(--ink-3); font-size: 13px; }
 .ib-card-head > svg { color: var(--accent); }
 .ib-card-head strong { color: var(--accent); font-weight: 600; }
+.ib-card-head .grow { flex: 1; }
 .ib-draft-text { max-height: min(24vh, 8em); margin: 0; overflow: auto; padding: var(--s3); border-radius: var(--r2); background: var(--accent-soft); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-.ib :is(.ib-reply, .ib-compose) textarea { width: 100%; min-height: 96px; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.5; resize: vertical; transition: border-color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
+/* The reply starts at three lines and grows with what is written, up to half the window. */
+.ib .ib-reply textarea { field-sizing: content; min-height: calc(3lh + var(--s2) * 2 + 2px); max-height: 50vh; }
+.ib .ib-compose textarea { min-height: 96px; }
+.ib :is(.ib-reply, .ib-compose) textarea { width: 100%; padding: var(--s2) var(--s3); border: 1px solid var(--line-2); border-radius: var(--r2); font: inherit; font-size: 14px; font-weight: 400; line-height: 1.5; resize: vertical; transition: border-color var(--fast) var(--out), box-shadow var(--fast) var(--out); }
 .ib :is(.ib-reply, .ib-compose) textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-glow); outline: none; }
 .ib-templates { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .ib-templates .ib-chip { height: 28px; border-radius: var(--round); }
@@ -268,9 +268,8 @@
   .ib-search { flex: 1 1 100%; max-width: none; margin-left: 0; }
   .ib .split { flex: none; flex-direction: column; }
   .ib .pane, .ib-open, .ib-scroll { overflow: visible; }
-  :is(.ib-reply, .ib-drafted) { max-height: none; }
   .ib-list { flex: none; min-width: 0; border-right: 0; border-bottom: 1px solid var(--line); }
-  .ib-head, .ib-scroll, :is(.ib-reply, .ib-drafted) { padding-inline: var(--s4); }
+  .ib-head, .ib-scroll { padding-inline: var(--s4); }
   .ib-thread > li > :not(.ib-who) { margin-left: 0; }
   .ib-pop { width: min(280px, calc(100vw - 48px)); }
   .ib-filters > .ib-pop { grid-template-columns: minmax(0, 1fr); width: calc(100vw - 48px); }

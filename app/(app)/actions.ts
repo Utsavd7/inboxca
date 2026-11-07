@@ -17,7 +17,7 @@ import { assignmentRoles, canManageClients, checkClient, exampleClient, importSe
 import { chunks, filterKeys, matchingClients, MOST_MATCHING, readFilter } from "@/app/(app)/app/clients/matching";
 import { unsafeCell } from "@/src/lib/client-sheet";
 import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
-import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, periodChoices, placeUnderFreeName, quarterEnd, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
+import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, lawType, listedType, periodChoices, placeUnderFreeName, quarterEnd, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, renewDrive, saveDrive, unwatchDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
@@ -897,7 +897,8 @@ export async function saveReminders(form: FormData) {
     return [often, askChoices.includes(days) ? days : usual];
   }));
   const answers = Object.fromEntries(Object.keys(answerKinds).map((kind) => [kind, Object.hasOwn(answerModes, String(form.get(kind))) ? String(form.get(kind)) : "ask"]));
-  const routine = form.getAll("routine").map(String).filter((type) => documentTypes.includes(type));
+  // Form No. 130 or 168 ticked covers the form it replaced too (tax year 2025-26 is "2026").
+  const routine = [...new Set(form.getAll("routine").map(String).filter((type) => documentTypes.includes(type)).flatMap((type) => [type, lawType(type, "2026")]))];
   await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", reminder_stages: STAGES.filter((day) => form.getAll("stage").includes(String(day))), ask_days, answers, records: { routine, approve_all: form.get("approve_all") === "on" } } }).eq("id", membership.firmId);
   redirect("/app/settings?group=reminders&saved=reminders");
 }
@@ -1379,14 +1380,15 @@ export async function findDocuments(text: string) {
 }
 
 // The type, work and period a person chose for a file, or null when they do not fit. An
-// upload of several files sends one set a file, in the files' order. A TDS paper is kept by its quarter.
+// upload of several files sends one set a file, in the files' order. A TDS paper is kept by its quarter,
+// and Form No. 130 or 168 as its period's form.
 function documentValues(form: FormData, at = 0) {
   const field = (name: string) => String(form.getAll(name)[at] ?? "");
   const type = field("type") === "Other" ? field("custom").trim() : field("type");
   const work = field("work");
   const period = field("period") === "none" ? "" : field("period");
   if (!type || type.length > 80 || !(work in workTypes) || (period && !periodChoices(todayInIndia()).includes(period))) return null;
-  return { work_type: work as WorkType, document_type: type, period_key: work === "tds" ? quarterEnd(period) : period };
+  return { work_type: work as WorkType, document_type: lawType(type, period), period_key: work === "tds" ? quarterEnd(period) : period };
 }
 
 // Other names the owner, a partner or a manager adds to the firm's own types, which everyone
@@ -1584,7 +1586,7 @@ export async function guessPapers(names: string[]) {
   const today = todayInIndia();
   return names.slice(0, 20).map((name) => {
     const { type, work, period } = describeFile(String(name).slice(0, 255), "", null, today);
-    return { type: type === "Document" ? "" : type, work: work === "other" ? "" : work, period: periodChoices(today).includes(period) ? period : "" };
+    return { type: type === "Document" ? "" : listedType(type), work: work === "other" ? "" : work, period: periodChoices(today).includes(period) ? period : "" };
   });
 }
 
@@ -2544,7 +2546,7 @@ export async function sendClientPapers(form: FormData) {
   if (!membership || !canManageClients(membership.role)) redirect("/app/clients");
   const ids=[...new Set(form.getAll("client").map(String))];
   if(ids.some(id=>!membership.may("send",id))) redirect("/app/clients?error=send_permission");
-  const type=String(form.get("type") ?? ""), period=String(form.get("period") ?? "");
+  const period=String(form.get("period") ?? ""), type=lawType(String(form.get("type") ?? ""), period);
   if (!ids.length || ids.length>50 || ids.some((id)=>!z.uuid().safeParse(id).success) || !documentTypes.includes(type) || !/^20\d{2}$/.test(period)) redirect("/app/clients?error=send");
   const {data:clients,error}=await supabase.from("clients").select("id").eq("firm_id",membership.firmId).in("id",ids).is("archived_at",null);
   if (error || clients?.length!==ids.length) redirect("/app/clients?error=send");

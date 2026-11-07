@@ -19,7 +19,7 @@ import { skipReasons, type Skip } from "@/src/lib/reminders";
 import { activityNames } from "@/src/lib/activity";
 import { type Right } from "@/src/lib/rights";
 import { serverCrypto } from "@/src/lib/crypto";
-import { documentTypes, folderFor, periodChoices, periodName, quarterEnd, receivedLabel, workOfType } from "@/src/lib/documents";
+import { documentTypes, folderFor, listedType, listedTypes, periodChoices, periodName, quarterEnd, receivedLabel, workOfType } from "@/src/lib/documents";
 import { paperType } from "@/src/lib/paper-type";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
@@ -1403,7 +1403,7 @@ export default async function Client({ params, searchParams }: { params: Promise
           <p className="hint">Each file is saved in the client&apos;s folder in your firm&apos;s drive, named by the type and period you choose.</p>
           <UploadForm
             clientId={client.id}
-            types={[...documentTypes.filter((type) => type !== "Document"), ...firmTypes]}
+            types={[...listedTypes.filter((type) => type !== "Document"), ...firmTypes]}
             typeWork={Object.fromEntries(documentTypes.map((type) => [type, workOfType(type)]).filter(([, work]) => work !== "other"))}
             works={Object.entries(workTypes)}
             periods={periodChoices(today).map((choice) => [choice, periodName(choice)])}
@@ -1547,8 +1547,8 @@ function DocumentFields({ type = "", work = "other", period = "", firmTypes = []
     <>
       <div>
         <label htmlFor="file-type">Paper type</label>
-        <select id="file-type" name="type" defaultValue={known ? type || "Document" : "Other"}>
-          {[...documentTypes, ...firmTypes].map((choice) => (
+        <select id="file-type" name="type" defaultValue={known ? listedType(type) || "Document" : "Other"}>
+          {[...listedTypes, ...firmTypes].map((choice) => (
             <option key={choice} value={choice}>{paperType(choice)}</option>
           ))}
           <option value="Other">Other, named below</option>

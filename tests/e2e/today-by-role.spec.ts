@@ -206,3 +206,28 @@ test("staff see their own clients only, with a button for each, and their own nu
   await expect(staff.locator("section[aria-labelledby=w-list]").getByRole("listitem")).toHaveCount(1);
   await expect(staff.getByRole("link", { name: "Remind all late clients" })).toHaveCount(0);
 });
+
+test("a firm with no returns yet sees setup's line and its next step, and no empty cards or zeros", async ({ browser }) => {
+  const email = `today-new-${tag}@invented.test`;
+  const key = appKey();
+  const fresh = await seedFirm(`Invented New Firm ${tag}`, email, key);
+  try {
+    const owner = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+    await signIn(owner, email, key);
+    const setup = owner.getByRole("region", { name: "Setup" });
+    await expect(setup).toContainText(/0 of 5/);
+    await expect(setup.getByRole("link")).toHaveAttribute("href", "/app/settings#mailbox");
+    await expect(week(owner)).toHaveCount(0);
+    await expect(owner.getByRole("navigation", { name: "Work by step" })).toHaveCount(0);
+    await expect(list(owner).locator(".app-card")).toHaveCount(0);
+    // Its first return brings Today back as it is for every firm.
+    const [{ id: client }] = await query(local.dbUrl, "insert into public.clients (firm_id, name, kind) values ($1, $2, 'business') returning id", [fresh.firmId, `Invented First Client ${tag}`]);
+    await query(local.dbUrl, `insert into public.tasks (firm_id, client_id, kind, code, period_key, due_on) values ($1, $2, 'compliance', 'GSTR1_M', '2026-08', ${day(-8)})`, [fresh.firmId, client]);
+    await owner.reload();
+    await expect(week(owner)).toBeVisible();
+    await expect(group(owner, "late")).toContainText(`Invented First Client ${tag}`);
+    await owner.context().close();
+  } finally {
+    await fresh.remove();
+  }
+});

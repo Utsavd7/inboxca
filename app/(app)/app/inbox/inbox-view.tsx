@@ -505,8 +505,8 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
     return (
       <ViewTransition enter="ib-in" exit="ib-out" default="none">
         <div className="ib-convo">
-          {/* Who and what, then the actions as icons; the conversation scrolls under it and the
-              reply sits at the foot, so neither ever hides the other. */}
+          {/* Who and what, then the actions as icons; the conversation scrolls under it, the
+              reply after it in the same scroll, so the reply never hides the email. */}
           <header className="ib-head">
             <div className="ib-head-top">
               <Avatar name={open.client?.name ?? (event ? sender : membership.firmName)} />
@@ -672,33 +672,35 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
                 );
               })}
             </ol>
-          </div>
-          {!replying && answerRow ? (
-            <section className="ib-drafted" aria-label="InboxCA's reply">
-              <div className="ib-card">
-                <p className="ib-card-head">{held ? <Reply size={14} aria-hidden /> : <Clock size={14} aria-hidden />}<strong>{held ? "Reply ready" : "Sending soon"}</strong><span>{held ? "InboxCA wrote this reply from your records. Check it, then send it or change it." : `InboxCA sends this reply at ${india((answerRow.delivery as Delivery).at ?? new Date().toISOString(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}. Undo stops it.`}</span></p>
-                {drafted && ("text" in drafted ? <pre className="ib-draft-text">{drafted.text}</pre> : "team" in drafted && <p>{replyReasons[drafted.team]}. It goes to Needs reply instead.</p>)}
-                <form action={manageAnswer} className="ib-reply-foot">
+            {!replying && answerRow ? (
+              // InboxCA's own reply as a small card: Use sends it as it reads, Change edits it, Dismiss does not send it.
+              <section className="ib-drafted" aria-label="InboxCA's reply">
+                <form action={manageAnswer} className="ib-card">
                   <input type="hidden" name="email" value={answerRow.id} />
                   <input type="hidden" name="back" value={here} />
-                  {held ? (
-                    <>
-                      <Pending className="b b-ghost" name="intent" value="stop" busy="Stopping">Don&apos;t send</Pending>
-                      {drafted && "text" in drafted && <Link className="b b-secondary" href={`${href({ mail: answerRow.id, edit: "answer" })}#reply-text`} scroll={false}>Edit</Link>}
-                      <Pending className="b b-primary" name="intent" value="send" busy="Sending"><Send size={14} aria-hidden />Send</Pending>
-                    </>
-                  ) : <Pending className="b b-secondary" name="intent" value="stop" busy="Stopping">Undo</Pending>}
+                  <p className="ib-card-head" title={held ? "InboxCA wrote this reply from your records." : undefined}>
+                    {held ? <Reply size={14} aria-hidden /> : <Clock size={14} aria-hidden />}
+                    <strong className="grow">{held ? "Reply ready" : `Sends at ${india((answerRow.delivery as Delivery).at ?? new Date().toISOString(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}`}</strong>
+                    {held ? (
+                      <>
+                        <Pending className="b b-ghost" name="intent" value="stop" busy="Stopping" title="Not sent">Dismiss</Pending>
+                        {drafted && "text" in drafted && <Link className="b b-secondary" href={`${href({ mail: answerRow.id, edit: "answer" })}#reply-text`} scroll={false}>Change</Link>}
+                        <Pending className="b b-primary" name="intent" value="send" busy="Sending" title="Sends it as it reads"><Send size={14} aria-hidden />Use</Pending>
+                      </>
+                    ) : <Pending className="b b-secondary" name="intent" value="stop" busy="Stopping">Undo</Pending>}
+                  </p>
+                  {drafted && ("text" in drafted ? <pre className="ib-draft-text">{drafted.text}</pre> : "team" in drafted && <p>{replyReasons[drafted.team]}. It goes to Needs reply instead.</p>)}
                 </form>
-              </div>
-            </section>
-          ) : event?.client_id && connected && (
-            // An email waiting for a person gets a reply suggested by why it waits; a paper not in the drive, the client's Ask for papers too.
-            // Once it no longer waits, the box starts empty again. AI's draft shows as a card to send or edit.
-            <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}:${aiWork && "text" in aiWork ? "ai" : ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : aiWork && "text" in aiWork ? aiWork.text : undefined} aiDraft={sp.edit !== "answer" && !!aiWork && "text" in aiWork} mail={event.id} papers={attachable(clientPapers)} suggested={aiWork && "papers" in aiWork ? [...suggested, ...aiWork.papers] : suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
-              suggestion={request ? suggestedReply(request.reason_code, { name: sender || open.client?.name || "", client: open.client?.name ?? "", firm: membership.firmName, paper: asked }) : undefined}
-              askPapers={request?.reason_code === "record_not_found" && !membership.viewOnlyUntil ? `/app/clients/${event.client_id}?tab=documents&ask=1` : undefined}
-              note={aiWork && "text" in aiWork ? "AI wrote this from your records. Check it, then send it." : aiWork ? `No AI draft. ${aiWork.reason}` : undefined} back={lock && here} />
-          )}
+              </section>
+            ) : event?.client_id && connected && (
+              // An email waiting for a person gets a reply suggested by why it waits; a paper not in the drive, the client's Ask for papers too.
+              // Once it no longer waits, the box starts empty again. The suggested reply, or AI's draft, shows as a card to use, change or dismiss.
+              <ReplyBox key={`${request?.id ?? "reply"}:${sp.edit ?? ""}:${aiWork && "text" in aiWork ? "ai" : ""}`} start={sp.edit === "answer" && held && drafted && "text" in drafted ? drafted.text : aiWork && "text" in aiWork ? aiWork.text : undefined} aiDraft={sp.edit !== "answer" && !!aiWork && "text" in aiWork} mail={event.id} papers={attachable(clientPapers)} suggested={aiWork && "papers" in aiWork ? [...suggested, ...aiWork.papers] : suggested} ai={aiReady()} mayAttach={membership.may("send", event.client_id)} name={sender || open.client?.name || ""} firm={membership.firmName}
+                suggestion={request ? suggestedReply(request.reason_code, { name: sender || open.client?.name || "", client: open.client?.name ?? "", firm: membership.firmName, paper: asked }) : undefined}
+                askPapers={request?.reason_code === "record_not_found" && !membership.viewOnlyUntil ? `/app/clients/${event.client_id}?tab=documents&ask=1` : undefined}
+                note={aiWork && "text" in aiWork ? "AI wrote this from your records. Check it, then send it." : aiWork ? `No AI draft. ${aiWork.reason}` : undefined} back={lock && here} />
+            )}
+          </div>
           {sp.filed && open.client && <Toast>Saved to {open.client.name}. InboxCA is now saving any papers in it to the client&apos;s folder.</Toast>}
         </div>
       </ViewTransition>
