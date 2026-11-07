@@ -884,8 +884,10 @@ export async function manageClient(form: FormData) {
 }
 
 // Settings → Who sees which clients: everyone (open) or only those assigned (restricted).
-// Settings → Reminders: whether InboxCA emails clients before their returns are due. Off
-// until the owner turns it on, since it writes to the firm's clients.
+// Settings → Reminders and papers, one Save: whether InboxCA emails clients before their returns
+// are due (off until the owner turns it on, since it writes to the firm's clients), Auto, Ask me
+// first or Off for each kind of reply by InboxCA, and which paper types go at once when a client
+// asks or that every paper waits for approval.
 export async function saveReminders(form: FormData) {
   const { supabase, membership } = await currentWriter();
   if (membership?.role !== "owner") redirect("/app");
@@ -894,8 +896,10 @@ export async function saveReminders(form: FormData) {
     const days = Number(form.get(`ask_${often}`) ?? usual);
     return [often, askChoices.includes(days) ? days : usual];
   }));
-  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", reminder_stages: STAGES.filter((day) => form.getAll("stage").includes(String(day))), ask_days } }).eq("id", membership.firmId);
-  redirect("/app/settings?group=reminders&saved=reminders#reminders");
+  const answers = Object.fromEntries(Object.keys(answerKinds).map((kind) => [kind, Object.hasOwn(answerModes, String(form.get(kind))) ? String(form.get(kind)) : "ask"]));
+  const routine = form.getAll("routine").map(String).filter((type) => documentTypes.includes(type));
+  await supabase.from("firms").update({ settings: { ...membership.settings, reminders: form.get("on") === "on", reminder_stages: STAGES.filter((day) => form.getAll("stage").includes(String(day))), ask_days, answers, records: { routine, approve_all: form.get("approve_all") === "on" } } }).eq("id", membership.firmId);
+  redirect("/app/settings?group=reminders&saved=reminders");
 }
 
 // Settings → Reminders → Due dates: the owner confirms a rule's date against its official
@@ -934,15 +938,6 @@ export async function recordKyc(form: FormData) {
   redirect(`/app/clients/${asked.data.client}?tab=returns&${data ? "changed=kyc" : "error=kyc"}`);
 }
 
-// Settings → Replies by InboxCA: Auto, Ask me first or Off for each kind of answer.
-export async function saveAnswers(form: FormData) {
-  const { supabase, membership } = await currentWriter();
-  if (membership?.role !== "owner") redirect("/app");
-  const answers = Object.fromEntries(Object.keys(answerKinds).map((kind) => [kind, Object.hasOwn(answerModes, String(form.get(kind))) ? String(form.get(kind)) : "ask"]));
-  await supabase.from("firms").update({ settings: { ...membership.settings, answers } }).eq("id", membership.firmId);
-  redirect("/app/settings?group=reminders&saved=answers#answers");
-}
-
 // A client's page → Details: pause or resume reminders for this client.
 export async function pauseReminders(form: FormData) {
   const { supabase } = await currentWriter();
@@ -950,14 +945,6 @@ export async function pauseReminders(form: FormData) {
   await supabase.from("clients").update({ reminders_paused: form.get("paused") === "on" }).eq("id", client);
   revalidatePath(`/app/clients/${client}`);
   redirect(`/app/clients/${client}?tab=details&changed=reminders`);
-}
-
-export async function saveVisibility(form: FormData) {
-  const { supabase, membership } = await currentWriter();
-  if (membership?.role !== "owner") redirect("/app");
-  const client_visibility = form.get("visibility") === "restricted" ? "restricted" : "open";
-  await supabase.from("firms").update({ settings: { ...membership.settings, client_visibility } }).eq("id", membership.firmId);
-  redirect("/app/settings?group=people&saved=visibility");
 }
 
 // Calendar: mark the chosen returns in progress, filed (with each one's acknowledgement
@@ -1926,21 +1913,30 @@ export async function sendPapers(form: FormData) {
   redirect(`${back}${back.includes("?") ? "&" : "?"}sent=${sent}-${ids.length - sent}`);
 }
 
-// Settings → Firm drive: the order of the folders new files go into (§5.5.0). Files already
-// filed stay where they are. The owner's choice.
-export async function setFolderOrder(form: FormData) {
-  const { userId, membership } = await currentWriter();
+// Settings → Email and drive, one Save: the firm email's limit of emails in 24 hours, after how
+// many working days a waiting email is late and whether the owner gets the 09:00 list of emails
+// waiting more than a day, and the order of the folders new files go into (§5.5.0) and their
+// names. Files already filed stay where they are. The owner's choice.
+export async function saveEmailSettings(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (membership?.role !== "owner") redirect("/app");
+  const limit = form.has("limit") ? z.coerce.number().int().min(1).max(2000).safeParse(form.get("limit")) : null;
+  if (limit && !limit.success) redirect("/app/settings?group=email&error=mail_limit#mailbox");
+  const days = z.coerce.number().int().min(1).max(5).catch(REPLY_DAYS).parse(form.get("days"));
+  await supabase.from("firms").update({ settings: { ...membership.settings, ...(limit && { mail_limit: limit.data }), reply_days: days, reply_list: form.get("list") === "on" } }).eq("id", membership.firmId);
   const order = String(form.get("order") ?? "");
   const naming = String(form.get("naming") ?? "client_type_period");
-  if (membership?.role !== "owner" || !(folderOrders as readonly string[]).includes(order) || !(naming in namings)) redirect("/app/settings?group=email");
-  const admin = supabaseAdmin();
-  const { data: account } = await admin.from("connected_accounts").select("id").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
-  if (account) {
-    await admin.rpc("merge_account_settings", { account_id: account.id, patch: { folder_order: order, naming } });
-    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "drive.folder_order", entity_type: "account", entity_id: account.id, details: { order, naming } });
+  if ((folderOrders as readonly string[]).includes(order) && naming in namings) {
+    const admin = supabaseAdmin();
+    const { data: account } = await admin.from("connected_accounts").select("id, settings").eq("firm_id", membership.firmId).eq("kind", "drive").maybeSingle();
+    const now = (account?.settings ?? {}) as { folder_order?: string; naming?: string };
+    if (account && (order !== (now.folder_order ?? "year_client_work") || naming !== (now.naming ?? "client_type_period"))) {
+      await admin.rpc("merge_account_settings", { account_id: account.id, patch: { folder_order: order, naming } });
+      await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "drive.folder_order", entity_type: "account", entity_id: account.id, details: { order, naming } });
+    }
   }
   revalidatePath("/app/settings");
-  redirect("/app/settings?group=email&saved=folders#drive");
+  redirect("/app/settings?group=email&saved=email");
 }
 
 // The first import (PLAN.md 5.16): the owner approves moving past files already in the
@@ -2077,16 +2073,6 @@ export async function decideShare(form: FormData) {
   if (sent) await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "share.approved", entity_type: "document", entity_id: share.document_id });
   revalidatePath("/app", "layout");
   redirect(sent ? "/app/inbox?approved=1" : "/app/inbox?error=mailbox");
-}
-
-// Settings → Papers sent on request: which document types go at once when a client asks,
-// or that every paper waits for approval. The owner's choice.
-export async function saveRecords(form: FormData) {
-  const { supabase, membership } = await currentWriter();
-  if (membership?.role !== "owner") redirect("/app");
-  const routine = form.getAll("routine").map(String).filter((type) => documentTypes.includes(type));
-  await supabase.from("firms").update({ settings: { ...membership.settings, records: { routine, approve_all: form.get("approve_all") === "on" } } }).eq("id", membership.firmId);
-  redirect("/app/settings?group=reminders&saved=records#records");
 }
 
 // The notice tracker (PLAN.md 5.6): a person records a notice by hand, confirms its action
@@ -2284,14 +2270,14 @@ export async function removeComputer(form: FormData) {
   const [{ data: user, error: unread }, mine, { data: { session } }] = await Promise.all([admin.auth.admin.getUserById(userId), thisComputer(userId), supabase.auth.getSession()]);
   if (unread) throw new Error(`Owner computers not read: ${unread.code}`);
   const computers = computersOf(user.user?.app_metadata.devices);
-  if (!id || id === mine || !computers.some((computer) => computer.id === id) || !computers.some((computer) => computer.id === mine) || !session) redirect("/app/settings?group=access#computers");
+  if (!id || id === mine || !computers.some((computer) => computer.id === id) || !computers.some((computer) => computer.id === mine) || !session) redirect("/app/settings?group=me#computers");
   const { error } = await admin.auth.admin.updateUserById(userId, { app_metadata: { devices: computers.filter((computer) => computer.id !== id) } });
   if (error) throw new Error(`Owner computer not removed: ${error.code}`);
   const { error: still } = await admin.auth.admin.signOut(session.access_token, "others");
   if (still) throw new Error(`Other sessions not ended: ${still.code}`);
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "device.removed", entity_type: "user", entity_id: userId });
   revalidatePath("/app/settings");
-  redirect("/app/settings?group=access&saved=computer_removed#computers");
+  redirect("/app/settings?group=me&saved=computer_removed#computers");
 }
 
 // Permission requests (PLAN.md 5.17.2): asked by an employee or manager who may not do it
@@ -2401,8 +2387,9 @@ export async function undoPermission(form: FormData) {
   redirect("/app/inbox");
 }
 
-// Settings → Permissions (owner only): the rights the owner switches on for employees and
-// for managers (partners follow managers), or back to the defaults.
+// Settings → People's access, one Save: the rights the owner or second admin switches on for
+// employees and for managers (partners follow managers), or back to the defaults, and, for the
+// owner only, whether everyone sees every client (open) or only those assigned (restricted).
 export async function savePermissions(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
@@ -2412,9 +2399,10 @@ export async function savePermissions(form: FormData) {
   const hideInactive = form.get("intent") !== "reset" && form.get("hide_inactive") === "on";
   // How many days before a due date a return still waiting for papers or checks turns red (5).
   const pinDays = form.get("intent") === "reset" ? 5 : Math.min(30, Math.max(1, Math.round(Number(form.get("pin_days"))) || 5));
-  await supabase.from("firms").update({ settings: { ...membership.settings, permissions, second_form_approval:form.get("intent")!=="reset" && form.get("second_form_approval")==="on", viewer_hide_inactive: hideInactive, pin_days: pinDays } }).eq("id", membership.firmId);
+  const visibility = membership.role === "owner" && form.has("visibility") ? { client_visibility: form.get("visibility") === "restricted" ? "restricted" : "open" } : {};
+  await supabase.from("firms").update({ settings: { ...membership.settings, permissions, second_form_approval:form.get("intent")!=="reset" && form.get("second_form_approval")==="on", viewer_hide_inactive: hideInactive, pin_days: pinDays, ...visibility } }).eq("id", membership.firmId);
   await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "permissions.changed", entity_type: "firm", entity_id: membership.firmId, details: { permissions, pin_days: pinDays } });
-  redirect(`/app/settings?group=people&saved=${form.get("intent") === "reset" ? "reset" : "permissions"}#permissions`);
+  redirect(`/app/settings?group=people&saved=${form.get("intent") === "reset" ? "reset" : "permissions"}`);
 }
 
 async function permissionScope(form:FormData,prefix:string,firm:string) {
@@ -2626,26 +2614,6 @@ export async function setPaperSharing(form:FormData) {
   redirect(`/app/clients/${document.client_id}?tab=files&edit=${document.id}&changed=sharing`);
 }
 
-export async function saveMailLimit(form:FormData) {
-  const {supabase,membership}=await currentWriter();
-  if (membership?.role!=="owner") redirect("/app");
-  const limit=z.coerce.number().int().min(1).max(2000).safeParse(form.get("limit"));
-  if (!limit.success) redirect("/app/settings?group=email&error=mail_limit#mailbox");
-  await supabase.from("firms").update({settings:{...membership.settings,mail_limit:limit.data}}).eq("id",membership.firmId);
-  revalidatePath("/app/settings");
-  redirect("/app/settings?group=email&saved=mail_limit#mailbox");
-}
-
-// Settings → Replies from your team: after how many working days a waiting email is late, and
-// whether the owner gets the 09:00 list of emails waiting more than a day.
-export async function saveReplies(form:FormData) {
-  const {supabase,membership}=await currentWriter();
-  if (membership?.role!=="owner") redirect("/app");
-  const days=z.coerce.number().int().min(1).max(5).catch(REPLY_DAYS).parse(form.get("days"));
-  await supabase.from("firms").update({settings:{...membership.settings,reply_days:days,reply_list:form.get("list")==="on"}}).eq("id",membership.firmId);
-  redirect("/app/settings?group=email&saved=replies#replies");
-}
-
 // The full list (/app/work): "Remind all late clients" or "Remind about missing papers", after
 // their preview. The daily reminder job sends them, from the firm's mailbox, at most one email a
 // client a day; it waits 20 seconds so Undo can stop it. Owners and partners only, as they see
@@ -2702,7 +2670,10 @@ export async function bellItems() {
   return [
     ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}${ask.clients?.name ? ` for ${ask.clients.name}` : ""}`, who: asker(ask), at: null as string | null, fresh: true })),
     ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: (line.action === "assignment.added" && given(line.details)) || (line.action === "task.covered" && (line.details as { person?: string } | null)?.person === userId && "You were given one return for this once") || (activityNames[line.action] ?? "Client changed"), who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
-  ].slice(0, 20);
+  ]
+    // The same change to the same client in the same minute shows once.
+    .filter((item, at, all) => !at || !item.at || item.what !== all[at - 1].what || item.who !== all[at - 1].who || item.at.slice(0, 16) !== all[at - 1].at?.slice(0, 16))
+    .slice(0, 20);
 }
 
 // Mark all read: the count starts again from now.

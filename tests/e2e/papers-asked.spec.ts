@@ -66,8 +66,8 @@ test("the owner chooses how early InboxCA asks for papers, and the client gets t
   await owner.getByLabel("Email clients before their returns are due").check();
   await expect(owner.getByLabel("Monthly returns")).toHaveValue("10");
   await owner.getByLabel("Yearly returns").selectOption("0");
-  await owner.getByRole("button", { name: "Save reminders" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Reminders saved." })).toBeVisible();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Reminders and papers saved." })).toBeVisible();
   await owner.locator("section#reminders").screenshot({ path: test.info().outputPath("ask-settings.png") });
   const [{ settings }] = await query(local.dbUrl, "select settings from public.firms where id = $1", [firm.firmId]);
   expect([settings.reminders, settings.ask_days]).toEqual([true, { monthly: 10, quarterly: 15, yearly: 0 }]);

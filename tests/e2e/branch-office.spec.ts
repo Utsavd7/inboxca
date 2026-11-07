@@ -180,6 +180,7 @@ test("Remote friendly lets staff in only on approved devices, with the 2 step co
 test("the owner checks whether someone can use InboxCA now, from here, on this PC", async () => {
   await owner.goto("/app/settings?group=access");
   const tester = owner.locator("section#tester");
+  await tester.getByText("Check a person").click();
   await tester.getByLabel("Person").selectOption({ label: staffEmail });
   await tester.getByRole("button", { name: "Check" }).click();
   await expect(owner).toHaveURL(new RegExp(`check=${staffId}`));

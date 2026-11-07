@@ -88,8 +88,8 @@ test("how long an email has waited shows on it, red after the firm's reply time,
     await owner.goto("/app/settings?group=email");
     const card = owner.locator("section#replies");
     await card.getByLabel("Late after").selectOption({ label: days });
-    await card.getByRole("button", { name: "Save reply time" }).click();
-    await expect(owner.getByRole("status").filter({ hasText: "Reply time saved." })).toBeVisible();
+    await owner.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(owner.getByRole("status").filter({ hasText: "Email and drive saved." })).toBeVisible();
     await owner.goto("/app/inbox?show=reply");
     await expect(waiting()).toBeVisible();
     await expect(waiting()).toHaveClass(late ? /\blate\b/ : /^(?!.*\blate\b)/);

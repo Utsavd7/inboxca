@@ -2,6 +2,9 @@
 .import-choose .check .hint, .disk-choose .check .hint { font-size: 13px; white-space: nowrap; }
 .import-find { margin-block: 12px; }
 .import-more { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 13px; }
+/* The folder picker is drawn as a button; the browser's own file field stays for the keyboard. */
+.disk-pick input:focus-visible + .b { box-shadow: var(--ring); }
+.disk-pick input:disabled + .b { opacity: 0.5; pointer-events: none; }
 .disk-pick, .disk-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
 .disk-choose { display: grid; gap: 8px; max-width: 640px; margin-top: 16px; border: 0; }
 .disk-choose legend { margin-bottom: 4px; font-weight: 600; }
