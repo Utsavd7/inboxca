@@ -1,18 +1,52 @@
-/* Today: one screen on a laptop whatever the firm's size. A greeting line, at most two lines
-   about the firm, then the person's list on the wider left and one card of numbers on the right. */
-.today { display: flex; flex-direction: column; gap: var(--s3); line-height: 1.5; }
+/* Today: one screen on a laptop whatever the firm's size, a full height page (.fill) that never
+   scrolls itself. A greeting line, at most two lines about the firm, then cards filling the rest
+   of the window, each group of the person's list scrolling inside its own card. */
+.today.fill { gap: var(--s3); line-height: 1.5; }
 .today > * { margin: 0; }
 .today h2 { margin: 0; }
-.today > .page-head + * { margin-top: 0; }
+.today.fill > .page-head + * { margin-top: 0; }
+/* A dashboard, so wider than other pages on a big screen, for four group cards in a row. */
+.stage-body:has(.today) { max-width: 2400px; }
 .today .page-sub { margin-bottom: var(--s1); }
 
 /* The greeting: the person's name, then the day and how many things need them. */
 .greet { color: var(--ink-2); font-size: 14px; }
 .greet strong { margin-right: var(--s1); color: var(--ink); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
 .greet-wait { color: var(--ink-3); }
+.greet-all { color: var(--accent); font-weight: 600; text-decoration: none; }
+.greet-all:hover { text-decoration: underline; text-underline-offset: 3px; }
 
-/* The list and the numbers side by side; each section's head compact, its title on the app's scale. */
-.today-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(300px, 1fr); gap: var(--s4); align-items: start; }
+/* The cards follow the window (the width of .today-grid): the group cards two by two with the
+   numbers as a slim band under them; from 1260px the numbers stand beside them in a narrow
+   column; from 1840px (each card then wide enough for its rows) the four group cards stand in a
+   row over the band. The rows of cards share the height, a short card taking only what it needs,
+   and an empty group has no card, so the others take its room. Positioned, so the counts' words
+   for screen readers (sr-only) stay inside it, not below the page. */
+.today-grid { position: relative; display: grid; flex: 1; grid-template-rows: minmax(0, 1fr); min-height: 0; container: today / inline-size; }
+.today-board { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--s4); min-height: 0; }
+.today-list { display: flex; flex-direction: column; gap: var(--s3); min-height: 0; }
+.today-groups { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, auto); gap: var(--s4); min-height: 0; }
+.today-groups > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+.today-week { align-self: start; }
+/* All caught up: the numbers come straight under the one calm card. */
+.today-board:has(.today-calm) { grid-template-rows: auto; align-content: start; }
+@container today (min-width: 1260px) {
+  .today-board { grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: minmax(0, 1fr); }
+}
+@container today (min-width: 1840px) {
+  .today-board { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .today-groups { grid-template-columns: none; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; }
+  .today-groups > :last-child:nth-child(odd) { grid-column: auto; }
+}
+/* The numbers as a band: the head, the numbers and the steps side by side, wrapping when narrow. */
+@container today (width < 1260px) or (width >= 1840px) {
+  .today-week { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--s2); }
+  .today-week .week-tiles { flex: 0 1 auto; grid-auto-columns: auto; padding: var(--s1) 0; }
+  .today-week .step-strip { flex: 1 1 420px; margin: 0; padding: var(--s1) var(--s2); border-top: 0; border-left: 1px solid var(--line); }
+}
+@container today (max-width: 640px) {
+  .today-groups { grid-template-columns: minmax(0, 1fr); }
+}
 .today .app-card { overflow: hidden; }
 .today .app-card-head { min-height: 44px; padding-block: var(--s2); }
 .today-calm { display: flex; align-items: center; gap: var(--s4); padding: var(--s2) var(--s4) var(--s5); }
@@ -27,19 +61,27 @@
 .skel-tile { width: 28px; height: 28px; }
 .skel-title { color: var(--ink-3); }
 
-/* Your list in its groups: a small head with how many, then its rows; each group rises in turn. */
-.today-group h3 { display: flex; align-items: baseline; gap: var(--s2); margin: 0; padding: 4px var(--s4) 0; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 12px; font-weight: 600; line-height: 1.4; }
-.today-group:first-of-type h3 { border-top: 0; padding-top: 0; }
-.today-group h3 span { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+/* A group's card: its title and how many stay in the head over a hairline, its rows scroll under
+   it (.fill .pane). Each card rises in turn. */
+.today-group { display: flex; flex-direction: column; min-height: 0; }
+.today-group .app-card-head { flex: none; flex-wrap: nowrap; }
+.today-group h3 { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
 .today-group.is-late h3 { color: var(--late-fg); }
-.today-group.is-late h3 span { color: inherit; opacity: 0.75; }
+.today-group .count-pill { font-variant-numeric: tabular-nums; }
+.today-rows { flex: 1; scrollbar-width: thin; scrollbar-color: var(--line-3) transparent; }
+/* Rows below the card's foot fade out there, so it shows there is more to scroll to. */
+@supports (animation-timeline: scroll()) {
+  .today-rows { animation: more-below linear both; animation-timeline: scroll(self); }
+  @keyframes more-below { from, 96% { mask-image: linear-gradient(black calc(100% - 28px), transparent); } to { mask-image: none; } }
+}
 .today-group .app-row { min-height: 48px; padding-block: 4px; }
-.today-list > .today-group:last-child .app-row:last-child { padding-bottom: 6px; }
-.today-group .app-row:first-child { border-top: 0; }
-.today-list > .today-group { animation: rise var(--slow) var(--out) both; }
-.today-list > .today-group:nth-of-type(2) { animation-delay: 60ms; }
-.today-list > .today-group:nth-of-type(3) { animation-delay: 120ms; }
-.today-list > .today-group:nth-of-type(4) { animation-delay: 180ms; }
+.today-group .app-row:first-child { border-top-color: var(--line); }
+.today-group .app-row:last-child { padding-bottom: 6px; }
+.today-groups > .today-group { animation: rise var(--slow) var(--out) both; }
+.today-groups > .today-group:nth-of-type(2) { animation-delay: 60ms; }
+.today-groups > .today-group:nth-of-type(3) { animation-delay: 120ms; }
+.today-groups > .today-group:nth-of-type(4) { animation-delay: 180ms; }
+.today-groups > .app-card:not(.today-group) { align-self: start; }
 
 /* The numbers: at most three in a row, each a link that rises a little under the pointer. */
 .week-tiles { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: var(--s1); padding: 0 var(--s2) var(--s2); }
@@ -82,6 +124,13 @@ a.week-tile:hover, a.week-tile:focus-visible { background: var(--hover); }
 .today-setup-bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transform-origin: left; animation: bar-grow 600ms var(--out) 120ms both; }
 .side-panel .drop { margin-top: 0; }
 
-@media (max-width: 1000px) {
-  .today-grid { grid-template-columns: minmax(0, 1fr); }
+/* A small or short window: the page scrolls as others do, and each group card stops at a
+   height of its own, its rows still scrolling inside and handing the wheel on at their end. */
+@media (max-width: 900px), (max-height: 620px) {
+  .ui .stage-panel:has(.today) { overflow: hidden auto; }
+  .ui .stage-body:has(.today) { height: auto; }
+  .today-grid, .today-groups { flex: none; }
+  .today-board, .today-groups { grid-template-rows: none; grid-auto-rows: auto; }
+  .today-group { max-height: 420px; }
+  .today .pane.today-rows { overflow-y: auto; overscroll-behavior: auto; }
 }

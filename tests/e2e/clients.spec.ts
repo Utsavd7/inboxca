@@ -619,7 +619,7 @@ test("client tabs group the returns on Work, show notices and recent activity; T
   await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,code,period_key,due_on) values ($1,$2,'GSTR1_M','2026-01',current_date-300)",[firm.firmId,client]);
   await owner.goto("/app");
   const late=owner.locator("section[aria-labelledby=g-late]").getByRole("listitem").filter({hasText:"Tabs Test Client"});
-  await expect(late).toContainText("GSTR-1");
+  await expect(late.first()).toContainText("GSTR-1");
   await query(local.dbUrl,"update public.clients set archived_at=now() where id=$1",[client]);
   await owner.reload();
   await expect(late).toHaveCount(0);
