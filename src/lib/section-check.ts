@@ -5,10 +5,12 @@ import {isGstin} from "./identifiers";
 // A GST register checked by its totals, not cell by cell: a section is right when its rows add up
 // to the register's own total row and, where the register names the tax, each row's tax is its rate
 // times its taxable value. Rows that are unusual by rule stay for a person to check one by one.
+// A register with no total row gets InboxCA's own sum of each amount column (sums) instead, for a
+// person to compare with the firm's books.
 type Line=Draft["lines"][number];
 const cell=/^([a-z0-9_]+)\.([rt])(\d+)\.c(\d+)$/;
 export const registerLine=(field:string)=>{const hit=cell.exec(field);return hit && Object.hasOwn(salesSections,hit[1]) ? {section:hit[1] as SalesSection,total:hit[2]==="t",row:`${hit[2]}${hit[3]}`,column:Number(hit[4])} : null;};
-export type Section={section:SalesSection;name:string;rows:number;flagged:{row:string;line:string;why:string}[];totals:{label:string;value:string;ok:boolean}[];byRate:{rate:string;taxable:bigint;tax?:bigint}[];agree:boolean;lines:string[];checked:boolean;by?:string;at?:string};
+export type Section={section:SalesSection;name:string;rows:number;flagged:{row:string;line:string;why:string}[];totals:{label:string;value:string;ok:boolean}[];byRate:{rate:string;taxable:bigint;tax?:bigint}[];sums?:{label:string;sum:bigint}[];agree:boolean;lines:string[];checked:boolean;by?:string;at?:string};
 const taxOn=(taxable:bigint,rate:bigint)=>{const product=taxable*rate,sign=product<BigInt(0) ? BigInt(-1) : BigInt(1);return sign*((product*sign+BigInt(5000))/BigInt(10000));};
 
 export function sectionSummary(draft:Draft,figures:Map<string,Figure>):Section[] {
@@ -66,10 +68,16 @@ export function sectionSummary(draft:Draft,figures:Map<string,Figure>):Section[]
       const check=draft.checks.find((one)=>one.kind==="sum" && one.total===line.id);
       return check ? [{label:figures.get(line.id)!.label.replace(/, row \d+$/,""),value:figures.get(line.id)!.value,ok:checkFigures({...draft,checks:[check]},figures).length===0}] : [];
     }));
+    // With no total row: the sum of every row of each amount column the total row would have
+    // (sales-draft.ts), none when a figure in it is marked wrong or cannot be read.
+    let sums:Section["sums"];
+    if(!totalRows.length) try {
+      sums=headings.flatMap((heading,column)=>/Value|Amount/.test(heading) && data.some(([,row])=>row.has(column)) ? [{label:heading,sum:data.reduce((sum,[,row])=>{const line=row.get(column);if(line?.state==="rejected") throw new Error("Marked wrong");return sum+(line ? hundredths(figures.get(line.id)!.value) : BigInt(0));},BigInt(0))}] : []);
+    } catch {sums=undefined;}
     const skip=new Set(flagged.map((one)=>one.row));
     const lines=[...rows].filter(([key])=>!skip.has(key)).flatMap(([,row])=>[...row.values()]);
     const latest=lines.filter((line)=>line.state==="confirmed").sort((a,b)=>(a.at! < b.at! ? 1 : -1))[0];
-    return {section,name:salesSections[section].name,rows:data.length,flagged,totals,byRate:[...byRate].map(([rate,entry])=>({rate,...entry})).sort((a,b)=>Number(a.rate)-Number(b.rate)),
+    return {section,name:salesSections[section].name,rows:data.length,flagged,totals,byRate:[...byRate].map(([rate,entry])=>({rate,...entry})).sort((a,b)=>Number(a.rate)-Number(b.rate)),...(sums?.length ? {sums} : {}),
       agree:totals.length>0 && totals.every((total)=>total.ok),lines:lines.map((line)=>line.id),checked:lines.length>0 && lines.every((line)=>line.state==="confirmed"),...(latest && {by:latest.by,at:latest.at})};
   });
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {Suspense} from "react";
 import {notFound,redirect} from "next/navigation";
 import {CircleCheck,FileText,ListChecks} from "lucide-react";
 import {manageTasks} from "@/app/(app)/actions";
@@ -11,6 +12,7 @@ import {preparedSchema} from "@/src/lib/prepared";
 import {personName} from "@/src/lib/roles";
 import {currentStep,nextAction,stepNames,stepsFor,type Step} from "@/src/lib/return-steps";
 import {returnPeriod,stageLine} from "@/src/lib/return-work";
+import {shortReturn} from "@/src/lib/work/today";
 import {DatasetReview,messages} from "../../dataset-review";
 import {ItrReturn} from "../../itr/itr-return";
 import {TdsStatement} from "../../tds/tds-statement";
@@ -24,6 +26,7 @@ import {PreparedForms} from "../../../../prepared-forms";
 import {ReturnFrame} from "../../../../return-frame";
 import {GroupChecks,returnStages} from "../../../../return-work";
 import {DeskChip} from "../../../../desk-chip";
+import {stepQueue} from "../../../../work-data";
 import {Badge,Card,Row,Toast} from "../../../../ui";
 import "../../../clients.css";
 
@@ -95,6 +98,7 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
     else if(next.act==="open" && shown!=="draft" && (itr || tds && task.registration_id)) action=<Link className="b b-primary" href={own} scroll={false}>{next.label}</Link>;
     else if(next.act==="check" && firstOpen && !(shown==="check" && meta && stage.stage==="filled")) action=<Link className="b b-primary" href={`${here}?tab=extraction&draft=${firstOpen}`} scroll={false}>{next.label}</Link>;
   }
+  const queued=shown==="figures" || shown==="check" ? "check" as const : approver && (shown==="approve" || shown==="file" && at==="file" && !filed) ? "approve" as const : null;
   // Who does this return: its desk's person (src/lib/desks.ts), or someone covering it this once.
   const nameOf=(user:string|null)=>personName(people?.find(person=>person.user_id===user)?.email);
   const desks=desksOf(client.client_assignments,client.client_registrations.flatMap(number=>number.services),one=>(one.team_id ? teams?.find(team=>team.id===one.team_id)?.name : nameOf(one.user_id)) ?? "");
@@ -107,7 +111,12 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
     people={<><span className="hint">Done by</span><DeskChip client={{id,name:client.name}} desks={desks} work={workOf(code)} task={filed ? undefined : {id:task.id,doer}} viewer={deskViewer(membership,userId)} named/></>}
     status={filed ? "Filed" : stageLine(now,code) || "Not started"} shown={stepNames[shown]}
     steps={steps.map((step,n)=>({key:stepNames[step],label:stepNames[step],href:`${here}?step=${step}`,state:filed || n<steps.indexOf(at) ? "done" : step===at ? "now" : "later"}))}
-    next={next ? {step:stepNames[next.step],why,action} : null}>
+    next={next ? {step:stepNames[next.step],why,action} : null}
+    // The next return waiting for this person at Figures or Check, or (an approver) at Approve, also
+    // on File just after approving; never on a step this return has not reached yet.
+    after={membership.role!=="front_desk" && queued && (filed || steps.indexOf(shown)<=steps.indexOf(at)) && <Suspense fallback={null}>
+      <NextReturn task={task.id} step={queued} primary={(shown==="check" || shown==="approve") && !action}/>
+    </Suspense>}>
     {steps.indexOf(shown)>steps.indexOf(at) && !filed && <p className="hint">This step waits until {stepNames[at]} is done.</p>}
     {shown==="papers" && <Card id="rp-papers" title={`Papers for ${periodWords}`} Icon={FileText} kind="papers" className="rs-papers" end={<Link className="b b-ghost" href={`${base}?tab=documents`}>All papers</Link>}>
       <ul className="app-rows">
@@ -150,4 +159,18 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
         action={canFile && <form action={manageTasks}><input type="hidden" name="client" value={id}/><input type="hidden" name="task" value={task.id}/>{isItr(code) && !details.verified_on && <Pending className="b b-secondary" name="intent" value="verified">Mark verified</Pending>}<Pending className="b b-ghost" name="intent" value="reopen">Not filed after all</Pending></form>}/></ul>
     </Card>}
   </ReturnFrame>;
+}
+
+// The next return waiting at a step for this person, in the Calendar's order and visibility for
+// that step (work-data.ts stepQueue): the one after this return, else the first. It is the page's
+// one primary button once this return has left that step's list, when nothing else is (primary).
+async function NextReturn({task,step,primary}:{task:string;step:"check"|"approve";primary:boolean}) {
+  const {supabase,membership}=await currentMember();
+  const queue=membership && await stepQueue({supabase,membership}).then(({groups})=>groups[step]).catch(()=>null);
+  if(!queue) return null;
+  const at=queue.findIndex(one=>one.id===task),next=[...queue.slice(at+1),...queue.slice(0,Math.max(at,0))][0];
+  return <nav className="rs-after" aria-label={step==="check" ? "Next return to check" : "Next return to approve"}>
+    {next ? <Link className={`b ${primary && at<0 ? "b-primary" : "b-secondary"}`} href={`/app/clients/${next.client_id}/returns/${next.id}`}>Next: {next.clients.name} {shortReturn(next.code ?? "",next.period_key ?? "",todayInIndia())}</Link>
+      : <span className="hint">Nothing else to {step}</span>}
+  </nav>;
 }

@@ -8,9 +8,9 @@ export type FrameStep={key:string;label:string;href:string;state:"done"|"now"|"l
 
 // A return's own page (clients/[id]/returns/[task]): its name and period, when it is due (red
 // only when late), who looks after it and where it stands in words; then its steps as links, done
-// ones open again; the next step with its one button, or why it waits; and the step shown, which
-// slides in when the step changes. Props only.
-export function ReturnFrame({back,title,due,late,people,status,steps,shown,next,children}:{back:{href:string;name:string};title:string;due:string;late:boolean;people:React.ReactNode;status:string;steps:FrameStep[];shown:string;next:{step:string;why?:string;action?:React.ReactNode}|null;children:React.ReactNode}) {
+// ones open again; the next step with its one button, or why it waits, and after it the next
+// return to go to (after); and the step shown, which slides in when the step changes. Props only.
+export function ReturnFrame({back,title,due,late,people,status,steps,shown,next,after,children}:{back:{href:string;name:string};title:string;due:string;late:boolean;people:React.ReactNode;status:string;steps:FrameStep[];shown:string;next:{step:string;why?:string;action?:React.ReactNode}|null;after?:React.ReactNode;children:React.ReactNode}) {
   const at=Math.max(0,steps.findIndex(step=>step.state!=="done")),filed=steps.every(step=>step.state==="done");
   return <>
     <PageHead crumb={<Link className="crumb" href={back.href}><ChevronLeft size={14} aria-hidden/>{back.name}</Link>} title={title}
@@ -32,7 +32,7 @@ export function ReturnFrame({back,title,due,late,people,status,steps,shown,next,
       </nav>
       <section className={`rs-next${next ? "" : " is-filed"}`} aria-label="Next step">
         <p className="grow"><strong>{next ? `Next step: ${next.step}` : "Filed"}</strong>{next ? next.why && <span>{next.why}</span> : <span>Nothing left to do on this return.</span>}</p>
-        {next?.action}
+        {next?.action}{after}
       </section>
       <ViewTransition key={shown} enter="step-in" exit="step-out" default="none">
         <div className="rs-body">{children}</div>

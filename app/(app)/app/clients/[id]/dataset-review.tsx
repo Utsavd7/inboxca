@@ -85,15 +85,20 @@ export async function DatasetReview({clientId,draftId,lineId,check,view,only}:{c
     {!!sections.length && <div className="fig-sections">
       {sections.map((part)=><section key={part.section} className={`fig-section${part.checked ? " is-done" : ""}`} aria-label={`${part.name} section`}>
         <header><strong>{part.name}</strong><span className="sub">{part.rows} {part.rows===1 ? "row" : "rows"}{part.flagged.length ? `, ${part.flagged.length} to check one by one` : ""}</span>
-          {part.checked ? <Badge tone="done">Checked</Badge> : part.agree ? <Badge tone="warn">To check</Badge> : <Badge tone="late">{part.totals.length ? "Does not add up" : "No total row"}</Badge>}</header>
+          {part.checked ? <Badge tone="done">Checked</Badge> : part.agree || part.sums ? <Badge tone="warn">To check</Badge> : <Badge tone="late">{part.totals.length ? "Does not add up" : "No total row"}</Badge>}</header>
+        {part.sums && <p className="hint">No total row. InboxCA&apos;s sum of the {part.rows} {part.rows===1 ? "row" : "rows"}:</p>}
         <dl className="fig-section-totals">
+          {part.sums?.map((one)=><div key={one.label}><dt>{one.label}</dt><dd className="num">{rupees(one.sum)}</dd></div>)}
           {part.totals.map((total)=><div key={total.label}><dt>{total.label}</dt><dd className="num">{grouped(total.value,"number",2)}<span className={total.ok ? "is-ok" : "is-off"}>{total.ok ? "adds up" : "does not add up"}</span></dd></div>)}
           {part.byRate.map((entry)=><div key={entry.rate}><dt>At {entry.rate || "0"}%</dt><dd className="num">{rupees(entry.taxable)}{entry.tax!==undefined && <span className="sub">tax {rupees(entry.tax)}</span>}</dd></div>)}
         </dl>
         {part.checked ? <p className="fig-done"><Check size={15} strokeWidth={2.6} aria-hidden/>Checked by {who(part.by)}, {when(part.at!)}</p>
           : <form action={approveSection}><input type="hidden" name="client" value={clientId}/><input type="hidden" name="draft" value={row.id}/><input type="hidden" name="section" value={part.section}/><input type="hidden" name="revision" value={row.revision}/><input type="hidden" name="view" value={onForm ? "form" : "list"}/>
-            <Pending className="b b-primary" disabled={!canCheck || !part.agree || !part.lines.length}>Yes, these totals are right</Pending>
-            <span className="hint">{!part.agree ? part.totals.length ? "Correct the rows or the total first." : "Add a total row to the register, or check each row." : `Checks ${part.rows-part.flagged.length} rows and the totals at once.`}</span></form>}
+            {/* No total row: the person compares InboxCA's sum with the firm's books, or opens the rows. */}
+            {part.sums ? <><Pending className="b b-primary" name="against" value="books" disabled={!canCheck || !part.lines.length}>Matches my books</Pending>
+              <Link className="b b-ghost" href={`?tab=extraction&draft=${row.id}&line=${part.lines[0] ?? part.flagged[0].line}&view=list`} scroll={false}>Doesn&apos;t match</Link></>
+              : <Pending className="b b-primary" disabled={!canCheck || !part.agree || !part.lines.length}>Yes, these totals are right</Pending>}
+            <span className="hint">{part.sums ? `Checks ${part.rows-part.flagged.length} ${part.rows-part.flagged.length===1 ? "row" : "rows"} at once.` : !part.agree ? part.totals.length ? "Correct the rows or the total first." : "Add a total row to the register, or check each row." : `Checks ${part.rows-part.flagged.length} rows and the totals at once.`}</span></form>}
         {!!part.flagged.length && <ul className="fig-section-flags">{part.flagged.map((flag)=><li key={flag.row}><Link href={href(flag.line)} scroll={false}>Row {flag.row.slice(1)}</Link>: {flag.why}</li>)}</ul>}
       </section>)}
     </div>}

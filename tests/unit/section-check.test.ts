@@ -69,3 +69,15 @@ it("a section whose rows do not add up to its total, or has no total row, cannot
   rejected.draft.lines.find((line)=>line.field==="b2b.r2.c11")!.state="rejected";
   expect(sectionSummary(rejected.draft,rejected.figures)[0]).toMatchObject({agree:false,flagged:[{row:"r2",why:"Marked wrong"}]});
 });
+
+it("with no total row, InboxCA's sum of each amount column is offered, and none while a figure in it is marked wrong",()=>{
+  const none=register([...good,invoice(inventedGstin("ZZZPZ0004Z"),"INV/3","59.50","50.42")],{});
+  const [section]=sectionSummary(none.draft,none.figures);
+  expect(section).toMatchObject({agree:false,totals:[]});
+  expect(section.sums).toEqual([{label:"Invoice Value",sum:BigInt(41350)},{label:"Taxable Value",sum:BigInt(35042)},{label:"Cess Amount",sum:BigInt(0)}]);
+  // A register with its own total row is checked against that row, never InboxCA's sum.
+  const totalled=register(good,{4:"354",11:"300",12:"0"});
+  expect(sectionSummary(totalled.draft,totalled.figures)[0].sums).toBeUndefined();
+  none.draft.lines.find((line)=>line.field==="b2b.r3.c4")!.state="rejected";
+  expect(sectionSummary(none.draft,none.figures)[0].sums).toBeUndefined();
+});
