@@ -528,10 +528,11 @@ export default async function Client({ params, searchParams }: { params: Promise
                 {idNumber("PAN", pan)}
               </span>
             )}
-            {desks.map((desk) => (
-              <span key={desk.work ?? "all"} className="client-id">
-                <span className="client-id-kind">{desk.work ? deskNames[desk.work] : "Staff"}</span>
-                <DeskChip client={{ id: client.id, name: client.name }} desks={desks} work={desk.work} viewer={client.archived_at ? { ...viewer, assign: false, take: false } : viewer} named />
+            {/* Desks that one person or team does are one chip, its desks named on hover and in its menu. */}
+            {(desks.length > 1 && desks.every((desk) => !!desk.holder && desk.holder.id === desks[0].holder?.id) ? [undefined] : desks.map((desk) => desk.work)).map((work) => (
+              <span key={work === undefined ? "same" : (work ?? "all")} className="client-id">
+                <span className="client-id-kind">{work ? deskNames[work] : "Staff"}</span>
+                <DeskChip client={{ id: client.id, name: client.name }} desks={desks} work={work} viewer={client.archived_at ? { ...viewer, assign: false, take: false } : viewer} named />
               </span>
             ))}
           </span>
@@ -825,7 +826,8 @@ export default async function Client({ params, searchParams }: { params: Promise
                               {/* Where it came from in short, then Check or Open its panel (shown on the
                                   row's hover or focus, and always for one to check). */}
                               <span className="paper-came">
-                                <CameFrom origin={{ ...origin, from: undefined, file: undefined }} why={false} />
+                                {/* On the client's own page an email of theirs needs no name. */}
+                                <CameFrom origin={{ ...origin, how: document.email_event_id ? origin.short.replace(` from ${client.name}`, "") : origin.how, from: undefined, file: undefined }} why={false} />
                                 {!viewOnly && (
                                   <Link className={`b b-secondary b-small paper-open${document.status === "to_check" ? " is-due" : ""}`} href={`${base}?tab=documents&edit=${document.id}`} scroll={false} aria-label={`${document.status === "to_check" ? "Check" : "Open"} ${document.name}`}>
                                     {document.status === "to_check" ? "Check" : "Open"}
@@ -1419,7 +1421,7 @@ export default async function Client({ params, searchParams }: { params: Promise
       {paper && !viewOnly && !ask && !confirmSend && (
         <SidePanel key="edit-file" id="edit-file" title={paper.name} close={`${base}?tab=documents`}>
           {alert}
-          {paper.status === "to_check" && <p className="hint">{sameAs(paper) || `Waiting to be checked: ${origins.get(paper.id)?.why}`}.</p>}
+          {paper.status === "to_check" && <p className="hint">{sameAs(paper) || `Waiting to be checked: ${origins.get(paper.id)?.why}`}. <Link className="paper-view" href={`/app/files/${paper.id}/view`}>View the paper</Link></p>}
           {canRename && !paper.prepared && (
             <>
               <p className="hint">{paper.status === "to_check" ? `${suggested ? "InboxCA read this scan and filled in what it looks like. " : ""}Check its paper type and period, then choose Save.` : "When you save, InboxCA moves and renames the file in your firm's drive to match."}</p>

@@ -34,16 +34,16 @@ test("a GSTR-1 goes from papers in to filed on its own page",async({page,browser
     // Due in 10 days: before the firm's 5 days, so InboxCA does not fill it by itself.
     const [{id:task}]=await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,registration_id,code,period_key,due_on) values($1,$2,$3,'GSTR1_M','2026-09',(now() at time zone 'Asia/Kolkata')::date+10) returning id",[firm.firmId,client,registration]);
     // The client's sales register is in, read into the official GSTR-1 B2B headings with one
-    // invented sale; its taxable value is not checked yet.
+    // invented sale; its rate and taxable value are not checked yet.
     const values=[inventedGstin("ZZZPZ0002Z"),"Invented Recipient","INV/7","2026-09-12","236.00","24-Gujarat","N","","Regular B2B","","18.00","200.00","0.00"];
     const bytes=Buffer.from(`${salesSections.b2b.headings.join(",")}\n${values.join(",")}`),sha256=createHash("sha256").update(bytes).digest("hex");
     const saved=await drive.save(await drive.ensureFolder([firm.firmId]),"Invented return page register.csv",bytes);
     if(saved==="taken") throw new Error("Test collision");files.push(saved.id);
     await query(local.dbUrl,"insert into public.documents(id,firm_id,client_id,work_type,document_type,period_key,name,size,sha256,drive_file_id) values($1,$2,$3,'gst','Sales register','2026-09','Invented return page register.csv',$4,$5,$6)",[source,firm.firmId,client,bytes.length,sha256,saved.id]);
-    const lines:Draft["lines"]=[];
+    const lines:Draft["lines"]=[],open:Record<number,string>={};
     for(let column=0;column<values.length;column++) if(values[column]) {
-      const id=randomUUID(),open=column===11;
-      lines.push({id,field:`b2b.r2.c${column}`,value_enc:await crypto.encrypt(firm.firmId,place(draft,id),JSON.stringify({label:salesSections.b2b.headings[column],value:values[column],kind:column===3 ? "date" : [4,10,11,12].includes(column) ? "number" : "text"})),source:{document:source,sha256,sheet:1,cell:`${String.fromCharCode(65+column)}2`,page:1},...(open ? {state:"pending" as const} : {state:"confirmed" as const,by:firm.ownerId,at:new Date().toISOString()})});
+      const id=randomUUID();if(column===10 || column===11) open[column]=id;
+      lines.push({id,field:`b2b.r2.c${column}`,value_enc:await crypto.encrypt(firm.firmId,place(draft,id),JSON.stringify({label:salesSections.b2b.headings[column],value:values[column],kind:column===3 ? "date" : [4,10,11,12].includes(column) ? "number" : "text"})),source:{document:source,sha256,sheet:1,cell:`${String.fromCharCode(65+column)}2`,page:1},...(open[column] ? {state:"pending" as const} : {state:"confirmed" as const,by:firm.ownerId,at:new Date().toISOString()})});
     }
     await query(local.dbUrl,"insert into public.datasets(id,firm_id,client_id,form_code,period_key,data) values($1,$2,$3,'GSTR1','2026-09',$4)",[draft,firm.firmId,client,{lines,checks:[]}]);
     const prepared="select id,size,drive_file_id,prepared from public.documents where firm_id=$1 and prepared is not null order by (prepared->>'version')::int";
@@ -59,8 +59,16 @@ test("a GSTR-1 goes from papers in to filed on its own page",async({page,browser
     await next(page).getByRole("button",{name:"Prepare GSTR-1"}).click();
     await expect(now(page)).toContainText("Check",{timeout:60_000});await expect(page).toHaveURL(here);
     expect(await query(local.dbUrl,prepared,[firm.firmId])).toHaveLength(1);
-    await next(page).getByRole("link",{name:"Check 1 figure"}).click();
-    await page.getByRole("button",{name:"Yes, this is right"}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
+    // Its figures are checked a row at a time right there. The rate marked wrong is rejected, as one
+    // figure's No would be, and the rest of the row is checked with it.
+    const checks=page.getByRole("region",{name:"Figures not checked yet"}),rate=checks.getByRole("checkbox",{name:/^Rate/});
+    const states=async()=>Object.fromEntries((await query(local.dbUrl,"select line->>'id' as id,line->>'state' as state from public.datasets,jsonb_array_elements(data->'lines') line where id=$1",[draft])).map(row=>[row.id,row.state]));
+    await rate.check();await checks.getByRole("button",{name:"Save, 1 wrong"}).click();await expect(page.getByRole("status")).toContainText("Correct the figures marked wrong");
+    expect(await states()).toMatchObject({[open[10]]:"rejected",[open[11]]:"confirmed"});
+    // Looked at again it is right after all: All correct for what is left of the row.
+    await expect(rate).toBeChecked();await rate.uncheck();
+    await checks.getByRole("button",{name:"All correct"}).click();await expect(page.getByRole("status")).toContainText("Your check was saved");
+    expect(await states()).toMatchObject({[open[10]]:"confirmed",[open[11]]:"confirmed"});
     await expect(page).toHaveURL(here);
     // The last check makes the checked draft by itself; it waits for the second approval.
     await expect.poll(async()=>(await query(local.dbUrl,prepared,[firm.firmId])).filter(form=>Number(form.size)>0).length,{timeout:60_000}).toBe(2);

@@ -53,7 +53,7 @@ test("Fill makes one draft, the last check makes the file to approve, and filing
     await row.getByRole("link").click();await page.getByRole("region",{name:"Next step"}).getByRole("button",{name:/^Prepare /}).dblclick();
     await expect(page.getByRole("navigation",{name:"Steps of this return"}).locator(".is-now")).toContainText("Check",{timeout:60_000});
     const checks=page.getByRole("region",{name:"Figures not checked yet"});
-    await expect(checks).toContainText("1 figure not checked yet.");await expect(checks.getByRole("listitem")).toContainText("200.00");
+    await expect(checks).toContainText("1 figure not checked yet.");await expect(checks.getByRole("checkbox",{name:/200/})).toBeVisible();
     await page.screenshot({path:test.info().outputPath("fill.png"),fullPage:true});
     const prepared="select id,name,size,drive_file_id,prepared from public.documents where firm_id=$1 and prepared is not null order by (prepared->>'version')::int";
     let forms=await query(local.dbUrl,prepared,[firm.firmId]);

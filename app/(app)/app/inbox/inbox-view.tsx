@@ -309,10 +309,12 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
   const panelHref = (panel: string) => `${here}${here.includes("?") ? "&" : "?"}panel=${panel}`;
   const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   const queued = answers.filter((row) => row.delivery.ack !== "held").length;
+  // InboxCA's replies in the same words on the line and as their panel's title.
+  const going = queued === answers.length ? "going out" : queued ? "by InboxCA" : "ready to send";
   const waits = [
     { panel: "asks", Icon: KeyRound, n: toAnswer.length, text: count(toAnswer.length, "permission request") },
     { panel: "papers", Icon: ShieldCheck, n: papers?.length ?? 0, text: `${count(papers?.length ?? 0, "paper")} to approve` },
-    { panel: "replies", Icon: Send, n: answers.length, text: `${count(answers.length, "reply", "replies")} ${queued === answers.length ? "going out" : queued ? "by InboxCA" : "ready to send"}` },
+    { panel: "replies", Icon: Send, n: answers.length, text: `${count(answers.length, "reply", "replies")} ${going}` },
     { panel: "check", Icon: FileSearch, n: toCheck?.length ?? 0, text: `${count(toCheck?.length ?? 0, "paper")} to check` },
   ].filter((wait) => wait.n);
   // The filters beyond the three views, each in use as a chip that removes it.
@@ -375,13 +377,14 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
       {list.map((row) => (
         <Item key={row.key} className="ib-row" aria-current={row.key === openKey ? "true" : undefined} data-waits={row.waits || undefined}>
           <Link href={row.href} scroll={false}>
-            <Avatar name={row.client} />
+            {/* On a client's Emails tab every row is that client's, so the row leads with its subject. */}
+            {!lock && <Avatar name={row.client} />}
             <span className="ib-row-main">
               <span className="ib-row-top">
-                <strong>{row.dir === "out" && <span className="ib-sent-to">To </span>}{row.client}</strong>
+                {lock ? (live ? <strong>{row.subject}</strong> : <span className="skel ib-skel-line" aria-hidden />) : <strong>{row.dir === "out" && <span className="ib-sent-to">To </span>}{row.client}</strong>}
                 <time dateTime={row.at}>{shortTime(row.at, today)}</time>
               </span>
-              {live ? <span className="ib-subject">{row.subject}</span> : <span className="skel ib-skel-line" aria-hidden />}
+              {!lock && (live ? <span className="ib-subject">{row.subject}</span> : <span className="skel ib-skel-line" aria-hidden />)}
               <span className="ib-row-foot">
                 {live ? <span className="ib-snippet">{row.snippet}</span> : <span className="skel ib-skel-line short" aria-hidden />}
                 <Badge tone={row.tag.tone} plain={!row.tag.tone}>{row.tag.text}</Badge>
@@ -894,7 +897,7 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
         </SidePanel>
       )}
       {sp.panel === "replies" && !!answers.length && (
-        <SidePanel key="replies" id="answers" title="Replies by InboxCA" close={here}>
+        <SidePanel key="replies" id="answers" title={`Replies ${going}`} close={here}>
           <p className="hint">{queued ? "Replies set to Auto go by themselves at the time shown. Undo stops one." : "InboxCA wrote these from your records. Check each, then send it."}</p>
           <section aria-labelledby="answers">
             <ul className="app-rows ib-preview">
@@ -925,7 +928,7 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
       )}
       {sp.panel === "check" && !!toCheck?.length && (
         <SidePanel key="check" id="to-check" title="Papers to check" close={here}>
-          <p className="hint">Saved in the client&apos;s To check folder. Check their type and period, or correct them.</p>
+          <p className="hint">Check each paper&apos;s type and period.</p>
           <section aria-labelledby="to-check">
             <ul className="app-rows ib-preview">
               {toCheck.map((file) => (

@@ -118,6 +118,44 @@ export async function approveSection(form:FormData) {
   redirect(`${back}&check=saved`);
 }
 
+// One group of figures on a return's Check step (an invoice's row of a register, or what one page
+// of a paper gave), decided at once: the ones ticked are marked wrong, every other one is said yes
+// to, under the same rules as one figure's Yes and No above.
+export async function checkGroup(form:FormData) {
+  const {supabase,userId,membership}=await currentWriter();
+  if(!membership) redirect("/app");
+  const input=z.object({client:z.uuid(),draft:z.uuid(),revision:z.coerce.number().int().min(1)}).safeParse(Object.fromEntries(form));
+  const lines=z.array(z.uuid()).min(1).max(100).safeParse(form.getAll("line")),wrong=z.array(z.uuid()).max(100).safeParse(form.getAll("wrong"));
+  if(!input.success || !lines.success || !wrong.success) redirect("/app/clients");
+  const {client,draft:id,revision}=input.data,back=`${await clientBack(client)}?step=check`;
+  if(!membership.may("check_figures",client)) redirect(`${back}&check=permission`);
+  const {data:row}=await supabase.from("datasets").select("*").eq("firm_id",membership.firmId).eq("client_id",client).eq("id",id).maybeSingle();
+  if(!row) redirect("/app/clients");
+  if(row.revision!==revision) redirect(`${back}&check=stale`);
+  const data=draftSchema.parse(row.data),picked=data.lines.filter((line)=>lines.data.includes(line.id));
+  if(picked.length!==new Set(lines.data).size || wrong.data.some((line)=>!lines.data.includes(line))) redirect(back);
+  const papers=[...new Set(picked.flatMap((line)=>line.source.document ? [line.source.document] : []))];
+  if(papers.length) {
+    const {data:found}=await supabase.from("documents").select("id").eq("firm_id",membership.firmId).eq("client_id",client).in("id",papers).neq("status","deleted");
+    if(found?.length!==papers.length) redirect(`${back}&check=source`);
+  }
+  const at=new Date().toISOString();
+  for(const line of picked) {
+    const state=wrong.data.includes(line.id) ? "rejected" : "confirmed";
+    if(line.state!==state) {line.state=state;line.by=userId;line.at=at;}
+  }
+  if(picked.some((line)=>line.state==="confirmed")) {
+    const figures=await openFigures(membership.firmId,id,data);
+    if(checkFigures(data,figures).length) redirect(`${back}&check=totals`);
+    if(data.target && (await checkItr(client,row.period_key,id,revision,data,figures).catch(()=>["The figures could not be checked."])).length) redirect(`${back}&check=itr`);
+  }
+  const saved=await saveDraft(row,data,userId,"dataset.checked",{lines:picked.filter((line)=>line.state==="confirmed").map((line)=>line.id),wrong:wrong.data});
+  if(!saved) redirect(`${back}&check=stale`);
+  await whenAllChecked(membership.firmId,client,id,revision,data);
+  revalidatePath("/app","layout");
+  redirect(`${back}&check=${wrong.data.length ? "marked" : "saved"}`);
+}
+
 async function whenAllChecked(firm:string,client:string,id:string,revision:number,data:Draft) {
   if(!data.lines.every(line=>line.state==="confirmed")) return;
   const admin=supabaseAdmin();

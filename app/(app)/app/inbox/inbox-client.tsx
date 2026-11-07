@@ -279,7 +279,8 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, s
       )}
       <div className="ib-write-reply" hidden={view !== "open"}>
         <Templates name={name} firm={firm} />
-        {((note && !aiDraft) || (suggestion && !start)) && (
+        {/* The suggested reply shows in the box itself, so a line about it shows only beside Ask for papers. */}
+        {((note && !aiDraft) || (suggestion && !start && askPapers)) && (
           <p className="ib-note ib-suggest">
             <span className="grow">{(!aiDraft && note) || "A suggested reply is written in. Change what you need, then send it."}</span>
             {askPapers && <Link className="ib-chip" href={askPapers}>Ask for papers</Link>}

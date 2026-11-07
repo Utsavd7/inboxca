@@ -234,6 +234,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
             </span>
             <Badge tone={tag(opened)[0]}>{tag(opened)[1]}</Badge>
           </div>
+          {/* The head above says the authority and the day it came. */}
           <dl className="props">
             <div>
               <dt>Client</dt>
@@ -244,20 +245,12 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 </Link>
               </dd>
             </div>
-            <div>
-              <dt>Authority</dt>
-              <dd>{authorities[openDetails.authority] ?? openDetails.authority}</dd>
-            </div>
             {openDetails.reference && (
               <div>
                 <dt>Reference</dt>
                 <dd className="num">{openDetails.reference}</dd>
               </div>
             )}
-            <div>
-              <dt>Received</dt>
-              <dd>{dueLabel(openDetails.received_on)}</dd>
-            </div>
             <div>
               <dt>Action date</dt>
               <dd>{actionDate(opened)}</dd>
@@ -312,11 +305,29 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
               Give the date the reply was sent and what was sent. If no reply is needed, say so here. A notice closes only with this recorded.
             </p>
           )}
-          {decides && !openDetails.reply && (
+          {decides && !openDetails.action_date && (
             <form action={manageNotice} className="fields notices-confirm">
               {state}
               <input type="hidden" name="notice" value={opened.id} />
-              <h3>Record the reply</h3>
+              <h3>Check the action date</h3>
+              <p className="hint">Until it is checked, InboxCA shows your firm&apos;s own deadline, not the notice&apos;s date.</p>
+              <div>
+                <label htmlFor="notice-confirm">Action date, as the notice states it</label>
+                <input id="notice-confirm" name="date" type="date" defaultValue={openDetails.suggested_date} required />
+                <span className="hint need-date">Pick the date from the notice first</span>
+              </div>
+              <Pending className="b b-primary" name="intent" value="confirm">
+                Mark date checked
+              </Pending>
+            </form>
+          )}
+          {/* A date still to check comes first; until then the reply waits behind its link. */}
+          {decides && !openDetails.reply && (
+            <details className="reveal notices-reply" open={!!openDetails.action_date || params.error === "reply"}>
+            <summary>Record the reply</summary>
+            <form action={manageNotice} className="fields notices-confirm">
+              {state}
+              <input type="hidden" name="notice" value={opened.id} />
               <p className="hint">What your firm sent in answer to this notice. InboxCA never writes or sends a notice reply.</p>
               <div>
                 <label htmlFor="reply-on">Reply sent on</label>
@@ -350,21 +361,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 </Pending>
               </div>
             </form>
-          )}
-          {decides && !openDetails.action_date && (
-            <form action={manageNotice} className="fields notices-confirm">
-              {state}
-              <input type="hidden" name="notice" value={opened.id} />
-              <p className="hint">Until someone checks this date, InboxCA shows your firm&apos;s own deadline to read the notice, not the date on the notice. Look at the date on the notice, then choose Mark date checked.</p>
-              <div>
-                <label htmlFor="notice-confirm">Action date, as the notice states it</label>
-                <input id="notice-confirm" name="date" type="date" defaultValue={openDetails.suggested_date} required />
-                <span className="hint need-date">Pick the date from the notice first</span>
-              </div>
-              <Pending className="b b-primary" name="intent" value="confirm">
-                Mark date checked
-              </Pending>
-            </form>
+            </details>
           )}
           {!viewOnly && !decides && <p className="hint">The owner, a partner or a manager checks the date and changes the notice&apos;s status.</p>}
           {decides && (

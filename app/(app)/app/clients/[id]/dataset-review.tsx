@@ -24,7 +24,7 @@ import {checkItr} from "@/src/lib/itr";
 import {formLayout,grouped} from "@/src/lib/form-layout";
 import {FormCheck} from "./form-check";
 import {formCheckData} from "./form-check-data";
-const messages:Record<string,string>={stale:"Someone changed these figures. Read the latest values and try again.",source:"The paper these figures came from is not available. Ask the owner to restore it.",permission:"Ask for permission before changing a figure.",value:"Check the value. Figures need no more than two decimal places; dates need a valid day.",reason:"Say why the figure needs to change.",totals:"The totals do not add up. Correct the figures before you mark any as right.",itr:"Fix the problems listed for this return before you mark a figure as right.",saved:"Your check was saved."};
+export const messages:Record<string,string>={stale:"Someone changed these figures. Read the latest values and try again.",source:"The paper these figures came from is not available. Ask the owner to restore it.",permission:"Ask for permission before changing a figure.",value:"Check the value. Figures need no more than two decimal places; dates need a valid day.",reason:"Say why the figure needs to change.",totals:"The totals do not add up. Correct the figures before you mark any as right.",itr:"Fix the problems listed for this return before you mark a figure as right.",saved:"Your check was saved.",marked:"Saved. Correct the figures marked wrong."};
 const rupees=(paise:bigint)=>grouped(`${paise<BigInt(0) ? "-" : ""}${(paise<BigInt(0) ? -paise : paise)/BigInt(100)}.${String((paise<BigInt(0) ? -paise : paise)%BigInt(100)).padStart(2,"0")}`,"number",2);
 type Line=Draft["lines"][number];
 
@@ -84,7 +84,7 @@ export async function DatasetReview({clientId,draftId,lineId,check,view,only}:{c
     {!!issues.length && <p className="alert" role="alert">{issues.join(" ")} Correct the figures before you mark them as right.</p>}
     {!!sections.length && <div className="fig-sections">
       {sections.map((part)=><section key={part.section} className={`fig-section${part.checked ? " is-done" : ""}`} aria-label={`${part.name} section`}>
-        <header><strong>{part.name}</strong><span className="sub">{part.rows} rows{part.flagged.length ? `, ${part.flagged.length} to check one by one` : ""}</span>
+        <header><strong>{part.name}</strong><span className="sub">{part.rows} {part.rows===1 ? "row" : "rows"}{part.flagged.length ? `, ${part.flagged.length} to check one by one` : ""}</span>
           {part.checked ? <Badge tone="done">Checked</Badge> : part.agree ? <Badge tone="warn">To check</Badge> : <Badge tone="late">{part.totals.length ? "Does not add up" : "No total row"}</Badge>}</header>
         <dl className="fig-section-totals">
           {part.totals.map((total)=><div key={total.label}><dt>{total.label}</dt><dd className="num">{grouped(total.value,"number",2)}<span className={total.ok ? "is-ok" : "is-off"}>{total.ok ? "adds up" : "does not add up"}</span></dd></div>)}
