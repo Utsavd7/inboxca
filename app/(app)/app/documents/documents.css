@@ -26,9 +26,9 @@
 .ui .docs-find input[type="search"] { padding-left: var(--s6); font-size: 14px; }
 .docs-table { flex: 1; overflow-x: auto; }
 .docs-table table { width: 100%; min-width: 520px; table-layout: fixed; border-collapse: collapse; }
-/* The paper's name gets most of the width, on up to two lines; how it came in sits below it. */
+/* The paper's name gets most of the width, on one line; how it came in sits below it. */
 .docs-table th:nth-child(2 of :not(.docs-pick)) { width: 30%; }
-.docs-table th:nth-child(3 of :not(.docs-pick)) { width: 108px; }
+.docs-table th:nth-child(3 of :not(.docs-pick)) { width: 144px; }
 .docs-table .docs-pick { width: 44px; padding-right: 0; }
 .docs-table th { position: sticky; top: 0; z-index: 2; height: 40px; padding: 0 var(--s3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(8px); color: var(--ink-3); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; }
 .docs-table td { height: 56px; padding: var(--s2) var(--s3); overflow: hidden; border-bottom: 1px solid var(--line); font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
@@ -43,7 +43,7 @@
 .docs-table .who .avatar { width: 24px; height: 24px; font-size: 11px; }
 .docs-paper { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
 .docs-paper .grow { display: grid; gap: 2px; min-width: 0; }
-.docs-name { display: -webkit-box; overflow: hidden; color: var(--ink); font-weight: 600; line-height: 1.35; text-decoration: none; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.docs-name { overflow: hidden; color: var(--ink); font-weight: 600; line-height: 1.35; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .docs-tag { display: flex; align-items: center; gap: var(--s2); color: var(--ink-3); font-size: 12px; font-weight: 500; }
 .docs-tag > span:last-child { min-width: 0; line-height: 1.35; white-space: normal; }
 /* The whole row chooses the paper; its tick box sits above. */
@@ -74,7 +74,7 @@
 .docs-facts .avatar { width: 22px; height: 22px; font-size: 10px; }
 .docs-facts .docs-path { align-items: flex-start; color: var(--ink-2); font: 500 12px/1.5 var(--font-plex), ui-monospace, monospace; overflow-wrap: anywhere; }
 .docs-facts .docs-path .copy { flex: none; margin-top: -3px; }
-.docs-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: auto; padding-top: var(--s3); border-top: 1px solid var(--line); }
+.docs-actions { position: sticky; bottom: calc(var(--s4) * -1); display: flex; flex-wrap: wrap; gap: var(--s2); margin: auto calc(var(--s4) * -1) calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
 
 /* Upload papers: the client search, a page of matches, then their upload form. */
 .side-panel .docs-find { margin: var(--s3) 0; padding: 0; border: 0; }
