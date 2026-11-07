@@ -1,4 +1,4 @@
-import { BellOff, CalendarDays, KeyRound, ListChecks, Rocket, TriangleAlert } from "lucide-react";
+import { BellOff, CalendarDays, KeyRound, Rocket, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -19,23 +19,23 @@ import { Count, Hold, Presence, Press } from "./motion";
 import { Pending } from "./pending";
 import { attention, queueSteps, stepQueue, weekFor, workFor, type QueueStep } from "./work-data";
 import { WorkRows } from "./work-rows";
-import { Card, PageHead, SidePanel, Toast } from "./ui";
+import { Card, CountPill, PageHead, SidePanel, Toast } from "./ui";
 import { PlanFit } from "./settings/billing";
 import { WarmLink } from "./ui-client";
 import "./today.css";
 
-// Today shows this many of the person's list, so it fits a 1280 by 760 laptop; See all opens the rest.
-const SHOWN = 6;
+// Today reads up to this many late clients (each group card scrolls by itself); See all opens the rest.
+const LATE = 100;
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-IN")} ${n === 1 ? one : many}`;
 
 type Params = { dropped?: string; error?: string; asked?: string; panel?: string; done?: string };
 type Context = Parameters<typeof workFor>[0];
 
 // Today, one screen for each person whatever the firm's size (PLAN.md "Today by role"): a
-// greeting with how many things need them, at most two lines about the firm (Attention), their
-// list in four groups (late, due this week, waiting on clients, the rest; at most 6 rows in all,
-// See all for the rest) and one card of a few numbers with the returns by step, each opening its
-// list. The owner and partners see the firm, a manager their team and what waits for their
+// greeting with how many things need them (See all when some are not read), at most two lines
+// about the firm (Attention), then cards filling the window: their list in four group cards (late,
+// due this week, waiting on clients, the rest), each scrolling by itself, and one slim card of a
+// few numbers with the returns by step, each opening its list. The owner and partners see the firm, a manager their team and what waits for their
 // approval, staff and front desk their own clients. Every query starts at once and each part
 // shows as soon as its data is in.
 export default async function AppHome({ searchParams }: { searchParams: Promise<Params> }) {
@@ -49,7 +49,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
     return <NoFirm closed={closed} invites={invites ?? []} deviceStatus={deviceStatus} connectionWaiting={connectionWaiting} pcKey={pcKey} />;
   }
   const ctx = { supabase, membership, userId };
-  const work = workFor(ctx, SHOWN);
+  const work = workFor(ctx, LATE);
   const week = weekFor(ctx, work);
   // Front desk keeps to emails and papers, so has no returns by step.
   const queue = membership.role === "front_desk" ? null : stepQueue(ctx).catch(() => null);
@@ -58,7 +58,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="today">
+    <div className="today fill">
       <PageHead
         title="Today"
         sub={
@@ -102,12 +102,14 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
       </Suspense>
 
       <div className="today-grid">
-        <Suspense fallback={<Hold shown=".today-list"><CardSkeleton title="Your list" rows={5} /></Hold>}>
-          <YourList work={work} ctx={ctx} />
-        </Suspense>
-        <Suspense fallback={<Hold shown=".today-week"><CardSkeleton title={isLead(membership.role) ? "This month" : "This week"} rows={3} /></Hold>}>
-          <Numbers week={week} role={membership.role} queue={queue} />
-        </Suspense>
+        <div className="today-board">
+          <Suspense fallback={<Hold shown=".today-list"><CardSkeleton title="Your list" rows={5} /></Hold>}>
+            <YourList work={work} ctx={ctx} />
+          </Suspense>
+          <Suspense fallback={<Hold shown=".today-week"><CardSkeleton title={isLead(membership.role) ? "This month" : "This week"} rows={3} /></Hold>}>
+            <Numbers week={week} role={membership.role} queue={queue} />
+          </Suspense>
+        </div>
       </div>
 
       <Presence>
@@ -147,10 +149,22 @@ async function TodoDone({ id, ctx }: { id: string; ctx: Context }) {
   );
 }
 
-// The greeting's end: how many things need this person.
+// The greeting's end: how many things need this person, and See all when more are late than Today reads.
 async function Things({ work }: { work: ReturnType<typeof workFor> }) {
-  const { total, failed } = await work;
-  return <span>{total ? `${plural(total, "thing needs", "things need")} you.` : failed ? "Some of your list could not load." : "Nothing needs you today."}</span>;
+  const { items, total, failed } = await work;
+  return (
+    <>
+      <span>{total ? `${plural(total, "thing needs", "things need")} you.` : failed ? "Some of your list could not load." : "Nothing needs you today."}</span>
+      {total > items.length && (
+        <>
+          {" "}
+          <WarmLink className="greet-all" href="/app/work">
+            See all {total.toLocaleString("en-IN")}
+          </WarmLink>
+        </>
+      )}
+    </>
+  );
 }
 
 // At most two lines above the list (work-data.ts attention): the firm's email or drive not
@@ -225,49 +239,44 @@ async function Attention({ ctx }: { ctx: Context }) {
   );
 }
 
-// Your list: what fits of everything that needs this person, in its four groups, one from each
-// group first; each group says how many it has, and they add up to the count beside the title.
+// Your list: everything that needs this person, a card for each of its four groups that has any,
+// each saying how many and scrolling by itself; they add up to the greeting's count.
 async function YourList({ work, ctx }: { work: ReturnType<typeof workFor>; ctx: Context }) {
   const { items, total, failed } = await work;
   const today = todayInIndia();
-  const groups = pickShown(items, today, SHOWN);
+  const groups = pickShown(items, today, items.length);
   // The late clients beyond those read are late too.
   groups[0].count += total - items.length;
-  const shown = groups.reduce((sum, group) => sum + group.items.length, 0);
   return (
-    <Card
-      id="t-list"
-      title="Your list"
-      Icon={ListChecks}
-      kind="approve"
-      // The same number as the greeting at every moment, so it does not count up.
-      count={total ? total.toLocaleString("en-IN") : null}
-      countTone={groups[0].count ? "late" : "blue"}
-      className="today-list"
-      end={
-        total > shown && (
-          <WarmLink className="b b-ghost b-small" href="/app/work">
-            See all {total.toLocaleString("en-IN")}
-          </WarmLink>
-        )
-      }
-    >
+    <section className="today-list" aria-labelledby="t-list">
+      <h2 id="t-list" className="sr-only">
+        Your list
+      </h2>
       {failed && <NotLoaded />}
-      {shown ? (
-        groups.map(({ group, count, items }) =>
-          items.length ? (
-            <section key={group} className={`today-group is-${group}`} aria-labelledby={`g-${group}`}>
-              <h3 id={`g-${group}`}>
-                {todayGroups[group]} <span>{count.toLocaleString("en-IN")}</span>
-              </h3>
-              <WorkRows name={`today-${group}`} items={items} today={today} membership={ctx.membership} />
-            </section>
-          ) : null,
-        )
-      ) : (
-        !failed && <Calm title="You are all caught up" line="Nothing waits for you. New work for your clients shows here first." />
-      )}
-    </Card>
+      <div className="today-groups">
+        {items.length ? (
+          groups.map(({ group, count, items }) =>
+            items.length ? (
+              <section key={group} className={`app-card today-group is-${group}`} aria-labelledby={`g-${group}`}>
+                <header className="app-card-head">
+                  <h3 id={`g-${group}`}>{todayGroups[group]}</h3>
+                  <CountPill tone={group === "late" ? "late" : ""}>{count.toLocaleString("en-IN")}</CountPill>
+                </header>
+                <div className="pane today-rows">
+                  <WorkRows name={`today-${group}`} items={items} today={today} membership={ctx.membership} />
+                </div>
+              </section>
+            ) : null,
+          )
+        ) : (
+          !failed && (
+            <div className="app-card">
+              <Calm title="You are all caught up" line="Nothing waits for you. New work for your clients shows here first." />
+            </div>
+          )
+        )}
+      </div>
+    </section>
   );
 }
 

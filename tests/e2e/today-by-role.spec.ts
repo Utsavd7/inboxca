@@ -6,9 +6,10 @@ import { serverCrypto } from "@/src/lib/crypto";
 import { addPerson, appKey, localSupabase, query, seedFirm, signIn } from "./local-supabase";
 
 // Today by role (PLAN.md "Today by role"): one screen for each person in a firm of 1,200
-// clients, their own list of at most 6 in its groups with See all for the rest, and the few
-// numbers for their role. The owner sees the firm, the manager their team, staff their own
-// clients. One count everywhere: the greeting, the list, its groups and See all.
+// clients, their own list in a card for each group, each scrolling inside, with See all when more
+// are late than Today reads, and the few numbers for their role. The owner sees the firm, the
+// manager their team, staff their own clients. One count everywhere: the greeting, the groups
+// and See all.
 // Invented firm, people and clients only. Skipped when local Supabase is not running.
 const local = localSupabase();
 test.skip(!local.url || !local.mailUrl, "Needs local Supabase");
@@ -35,8 +36,9 @@ const list = (page: Page) => page.locator("section[aria-labelledby=t-list]");
 const group = (page: Page, name: "late" | "week" | "waits" | "other") => page.locator(`section[aria-labelledby=g-${name}]`);
 const week = (page: Page) => page.locator("section[aria-labelledby=t-week]");
 const tile = (page: Page, href: string) => week(page).locator(`a[href="${href}"]`);
-// Nothing on Today scrolls at 1440 by 900: the page's scroll area is no taller than its window.
-const oneScreen = (page: Page) => page.locator(".stage-panel").evaluate((panel) => panel.scrollHeight <= panel.clientHeight + 1);
+// The page itself never scrolls on a laptop: neither the document nor the page's scroll area is
+// taller than the window (the group cards scroll inside).
+const oneScreen = (page: Page) => page.locator(".stage-panel").evaluate((panel) => panel.scrollHeight <= panel.clientHeight + 1 && document.scrollingElement!.scrollHeight <= window.innerHeight);
 
 test.beforeAll(async ({ browser }) => {
   // Every date below counts from today in India, as Today does: a run that would cross midnight
@@ -90,24 +92,21 @@ async function shoot(page: Page, name: string) {
   await page.context().clearCookies({ name: "theme" });
 }
 
-test("the owner sees the whole firm: 6 rows in groups, See all, and the firm's numbers, on one screen", async () => {
+test("the owner sees the whole firm: every group in its own card, See all, and the firm's numbers, on one screen", async () => {
   const owner = pages.owner!;
   await owner.goto("/app");
-  const rows = list(owner).getByRole("listitem");
-  await expect(rows).toHaveCount(6);
-  // Every late client, then Shah's return to e-verify this week, Mehta's return due today and
-  // the call waiting on Mehta, and the reply: one from each group, the rest of the room late.
+  // Every late client Today reads, then Shah's return to e-verify this week, Mehta's return due
+  // today and the call waiting on Mehta, and the reply: each group whole in its own card.
   const all = BULK + 6;
-  await expect(group(owner, "late").getByRole("listitem")).toHaveCount(3);
   await expect(group(owner, "late")).toContainText((BULK + 2).toLocaleString("en-IN"));
   await expect(group(owner, "late").getByRole("listitem").first()).toContainText("Invented Bulk Client");
+  expect(await group(owner, "late").getByRole("listitem").count()).toBeGreaterThan(6);
   await expect(group(owner, "week")).toContainText(shah);
-  await expect(group(owner, "waits").getByRole("listitem")).toHaveCount(1);
-  await expect(group(owner, "waits")).toContainText("2");
+  await expect(group(owner, "waits").getByRole("listitem")).toHaveCount(2);
   await expect(group(owner, "other")).toContainText(mehta);
   await expect(owner.locator(".page-head")).toContainText(all.toLocaleString("en-IN"));
-  await expect(list(owner).locator(".app-card-head")).toContainText(all.toLocaleString("en-IN"));
-  await expect(list(owner).getByRole("link", { name: `See all ${all.toLocaleString("en-IN")}` })).toHaveAttribute("href", "/app/work");
+  const seeAll = owner.getByRole("link", { name: `See all ${all.toLocaleString("en-IN")}` });
+  await expect(seeAll).toHaveAttribute("href", "/app/work");
   await expect(tile(owner, "/app/calendar?view=month")).toBeVisible();
   await expect(tile(owner, "/app/work?show=late")).toContainText((BULK + 2).toLocaleString("en-IN"));
   await expect(tile(owner, "/app/clients?show=missing")).toContainText("1");
@@ -115,18 +114,25 @@ test("the owner sees the whole firm: 6 rows in groups, See all, and the firm's n
   expect(await oneScreen(owner)).toBe(true);
   // The return to e-verify opens on its own page at the File step.
   await expect(group(owner, "week").locator(".row-end a")).toHaveAttribute("href", /\/app\/clients\/[^/]+\/returns\/[^/]+\?step=file$/);
-  // Nothing scrolls on a 1280 by 760 laptop either.
-  await owner.setViewportSize({ width: 1280, height: 760 });
+  // On a 1280 by 720 laptop the page still does not scroll, and the wheel over the long late
+  // card scrolls its rows and nothing else.
+  await owner.setViewportSize({ width: 1280, height: 720 });
   await owner.goto("/app");
-  await expect(rows).toHaveCount(6);
+  const lateRows = group(owner, "late").locator(".today-rows");
+  await expect(lateRows).toBeVisible();
   expect(await oneScreen(owner)).toBe(true);
   expect(await owner.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(await lateRows.evaluate((rows) => rows.scrollHeight > rows.clientHeight)).toBe(true);
+  await lateRows.hover();
+  await owner.mouse.wheel(0, 400);
+  await expect.poll(() => lateRows.evaluate((rows) => rows.scrollTop)).toBeGreaterThan(0);
+  expect(await owner.evaluate(() => [document.scrollingElement!.scrollTop, document.querySelector(".stage-panel")!.scrollTop])).toEqual([0, 0]);
   await owner.setViewportSize({ width: 1440, height: 900 });
   await shoot(owner, "owner");
 
   // See all: the same list a page at a time, with filters.
   await owner.goto("/app");
-  await list(owner).getByRole("link", { name: `See all ${all.toLocaleString("en-IN")}` }).click();
+  await seeAll.click();
   await expect(owner).toHaveURL(/\/app\/work$/);
   const shown = owner.locator("section[aria-labelledby=w-list]").getByRole("listitem");
   await expect(shown).toHaveCount(25);
@@ -181,9 +187,8 @@ test("staff see their own clients only, with a button for each, and their own nu
   const reply = group(staff, "other").locator(".row-end a[href^='/app/inbox?mail=']");
   await expect(reply).toBeVisible();
   await expect(list(staff)).not.toContainText(shah);
-  await expect(list(staff).getByRole("link", { name: /^See all/ })).toHaveCount(0);
+  await expect(staff.getByRole("link", { name: /^See all/ })).toHaveCount(0);
   await expect(staff.locator(".page-head")).toContainText("4");
-  await expect(list(staff).locator(".app-card-head")).toContainText("4");
   await expect(tile(staff, "/app/calendar?view=week")).toContainText(/1\D+2/);
   await expect(tile(staff, "/app/clients?show=missing")).toContainText("1");
   // j and k move between the rows' buttons.

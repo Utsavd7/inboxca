@@ -1,9 +1,15 @@
-import { createCanvas, loadImage, type Canvas } from "@napi-rs/canvas";
+import { createCanvas, GlobalFonts, loadImage, type Canvas } from "@napi-rs/canvas";
 import { join } from "node:path";
 import { readSheet } from "../src/lib/sheet.ts";
 import { viewLimits, type ViewFind, type ViewHeader, type ViewMark } from "../src/lib/file-worker.ts";
 import { jsonSource } from "./json-source.ts";
 import { wordSource } from "./word-source.ts";
+
+// The page images and the viewer's name drawn on them use InboxCA's own fonts, never the
+// server's: a server without system fonts would otherwise draw the name as nothing at all.
+GlobalFonts.registerFromPath(join(import.meta.dirname, "../app/fonts/plus-jakarta-sans-latin-variable.woff2"), "InboxCA Sans");
+GlobalFonts.registerFromPath(join(import.meta.dirname, "../app/fonts/ibm-plex-mono-latin-500-normal.woff2"), "InboxCA Mono");
+const sans = '"InboxCA Sans", sans-serif', mono = '"InboxCA Mono", monospace';
 
 // A picture's size from its header, read before anything is decoded, so a small file that
 // claims to be enormous never reaches the decoder. Null for anything not a known picture.
@@ -116,7 +122,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
     // A JSON figure's line by its path, a text file's by its number (/line/12); the value itself is
     // boxed when it can be found on that line, else the whole line.
     if(!word && find.length) {
-      const measure=createCanvas(1,1).getContext("2d"),positions="positions" in source ? source.positions as Map<string,number> : null;measure.font="18px monospace";
+      const measure=createCanvas(1,1).getContext("2d"),positions="positions" in source ? source.positions as Map<string,number> : null;measure.font=`18px ${mono}`;
       for(const one of find) {
         const at=positions ? positions.get(one.path ?? "") : Number(/^\/line\/(\d+)$/.exec(one.path ?? "")?.[1]);
         if(!at || at>count*40 || Math.ceil(at/40)!==one.page) continue;
@@ -128,7 +134,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
     }
     draw=async(number)=>{
       canvas ??= createCanvas(1200,1320);const context=canvas.getContext("2d");
-      context.fillStyle="white";context.fillRect(0,0,1200,1320);context.fillStyle="#17202f";context.font=word ? "20px sans-serif" : "18px monospace";
+      context.fillStyle="white";context.fillRect(0,0,1200,1320);context.fillStyle="#17202f";context.font=word ? `20px ${sans}` : `18px ${mono}`;
       lines.slice((number-1)*40,number*40).forEach((line,index)=>context.fillText(word ? line : `${(number-1)*40+index+1} ${line}`,20,40+index*30));
       return canvas;
     };
@@ -157,7 +163,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
       context.fillStyle = "white";
       context.fillRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = "#17202f";
-      context.font = "20px sans-serif";
+      context.font = `20px ${sans}`;
       context.fillText(`Sheet ${sheet ?? 1}, page ${number} of ${count}`, 24, 34);
       const cellWidth = (canvas.width - 84) / columns;
       for(let column=0;column<columns;column++) context.fillText(String.fromCharCode(65+column),60+column*cellWidth,54);
@@ -202,7 +208,7 @@ export async function openView(bytes: Buffer, name: string, label: string, limit
       const context = page.getContext("2d");
       const size = Math.max(15, Math.round(page.width / 48));
       context.save();
-      context.font = `600 ${size}px sans-serif`;
+      context.font = `600 ${size}px ${sans}`;
       context.fillStyle = "rgba(24,32,47,0.18)";
       const positions = tiles(page.width, page.height, context.measureText(label).width, size);
       context.translate(page.width / 2, page.height / 2);

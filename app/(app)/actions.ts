@@ -1202,6 +1202,8 @@ export async function manageEmail(form: FormData) {
   const label = String(form.get("label") ?? "");
   const request = String(form.get("request") ?? "");
   const back = String(form.get("back") ?? "");
+  // The Inbox, or a client's Emails tab, comes back with what was done.
+  const inbox = /^\/app\/(inbox|clients\/)/.test(back);
   if (form.get("intent") === "label" && label in labels)
     await supabase.from("email_events").update({ label, decision_source: "staff" }).eq("id", String(form.get("email") ?? ""));
   else if (form.get("intent") === "done" || form.get("intent") === "undo") {
@@ -1209,7 +1211,7 @@ export async function manageEmail(form: FormData) {
     const undo = form.get("intent") === "undo";
     const requests = form.getAll("request").map(String).slice(0, 100);
     await supabase.from("requests").update({ status: undo ? "pending" : "done" }).in("id", requests).eq("kind", "team_reply").eq("status", undo ? "done" : "pending");
-    if (back.startsWith("/app/inbox")) {
+    if (inbox) {
       revalidatePath("/app", "layout");
       redirect(undo ? back : `${back}${back.includes("?") ? "&" : "?"}cleared=${requests.join(".")}`);
     }
@@ -1231,7 +1233,7 @@ export async function manageEmail(form: FormData) {
       else details.assignee = who || null;
       await supabaseAdmin().from("requests").update({ details }).eq("id", ask.id);
       if (intent === "assign") await supabaseAdmin().from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "email.assigned", entity_type: "email", entity_id: ask.entity_id, details: { person: who || null } });
-      if (back.startsWith("/app/inbox")) {
+      if (inbox) {
         revalidatePath("/app", "layout");
         redirect(intent === "wake" ? back : `${back}${back.includes("?") ? "&" : "?"}${intent === "snooze" ? "snoozed" : "assigned"}=${ask.id}`);
       }
@@ -1258,7 +1260,7 @@ export async function manageEmail(form: FormData) {
       await change.eq("kind", "team_reply").eq("entity_type", "email").eq("entity_id", event.id);
       const kinds = [event.label === "notice_received" ? "notice_from_mail" : "file_mail", ...(answers ? [event.label === "records_past" || event.label === "records_current" ? "records_reply" : "answer_mail"] : [])];
       await admin.from("jobs").upsert(kinds.map((kind) => ({ firm_id: membership.firmId, kind, entity_type: "email", entity_id: event.id, idempotency_key: `${kind}:${event.id}` })), { onConflict: "idempotency_key", ignoreDuplicates: true });
-      if (filing && back.startsWith("/app/inbox")) {
+      if (filing && inbox) {
         revalidatePath("/app", "layout");
         redirect(`${back}${back.includes("?") ? "&" : "?"}filed=1`);
       }

@@ -7,7 +7,8 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { Avatar, Badge, Empty, IconTile, NotForYou, PageHead, SidePanel, Toast, type Tone } from "../ui";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
-import { invitableRoles, personName, roleLabel } from "@/src/lib/roles";
+import { personName, roleLabel } from "@/src/lib/roles";
+import { RoleChoice } from "./role-choice";
 import { InviteForm } from "./invite-form";
 import "./people.css";
 
@@ -185,16 +186,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
               <p className="hint">Removed from the firm. Restore them to let them sign in again.</p>
             ) : (
               <>
-                <div>
-                  <label htmlFor="person-role">Role</label>
-                  <select id="person-role" name="role" defaultValue={person.role}>
-                    {invitableRoles.map((role) => (
-                      <option key={role} value={role}>
-                        {roleLabel(role)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <RoleChoice value={person.role} />
                 {kinds.map(({ kind, column, one }) =>
                   groupsOf(kind).length ? (
                     <div key={kind}>
