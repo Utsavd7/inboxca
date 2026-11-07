@@ -50,6 +50,8 @@ import { WorkFold, WorkRows, type WorkRow } from "./work-list";
 import { recordAgm, recordKyc, remindClient } from "@/app/(app)/actions";
 import { RemindToast } from "../../remind-toast";
 import { unsafeText } from "@/src/lib/intake";
+import { DeskChip } from "../../desk-chip";
+import { deskNames, deskViewer, desksOf } from "@/src/lib/desks";
 import { InboxView } from "../../inbox/inbox-view";
 import "../clients.css";
 import "../../today.css";
@@ -350,6 +352,9 @@ export default async function Client({ params, searchParams }: { params: Promise
   const who = (assignment: { team_id: string | null; user_id: string | null }) =>
     (assignment.team_id ? teams?.find((team) => team.id === assignment.team_id)?.name : personName(people?.find((person) => person.user_id === assignment.user_id)?.email)) ?? "";
   const lookers = [...assigned].sort((a, b) => lookAfter.indexOf(a.role) - lookAfter.indexOf(b.role));
+  // Who does its GST and income tax work, beside its numbers in the header (src/lib/desks.ts).
+  const desks = desksOf(client.client_assignments, client.client_registrations.flatMap((registration) => registration.services), who);
+  const viewer = deskViewer(membership, userId);
   const gstin = numbers.find((registration) => registration.kind === "gstin")?.number;
   const pan = numbers.find((registration) => registration.kind === "pan")?.number;
   // "Due in 5 days" for the next return, today counted as 0.
@@ -523,6 +528,12 @@ export default async function Client({ params, searchParams }: { params: Promise
                 {idNumber("PAN", pan)}
               </span>
             )}
+            {desks.map((desk) => (
+              <span key={desk.work ?? "all"} className="client-id">
+                <span className="client-id-kind">{desk.work ? deskNames[desk.work] : "Staff"}</span>
+                <DeskChip client={{ id: client.id, name: client.name }} desks={desks} work={desk.work} viewer={client.archived_at ? { ...viewer, assign: false, take: false } : viewer} named />
+              </span>
+            ))}
           </span>
         }
         actions={

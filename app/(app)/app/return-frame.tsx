@@ -2,7 +2,7 @@ import "./return-frame.css";
 import Link from "next/link";
 import {ViewTransition} from "react";
 import {Check,ChevronLeft} from "lucide-react";
-import {Avatar,Badge,PageHead} from "./ui";
+import {Badge,PageHead} from "./ui";
 
 export type FrameStep={key:string;label:string;href:string;state:"done"|"now"|"later"};
 
@@ -10,13 +10,13 @@ export type FrameStep={key:string;label:string;href:string;state:"done"|"now"|"l
 // only when late), who looks after it and where it stands in words; then its steps as links, done
 // ones open again; the next step with its one button, or why it waits; and the step shown, which
 // slides in when the step changes. Props only.
-export function ReturnFrame({back,title,due,late,people,status,steps,shown,next,children}:{back:{href:string;name:string};title:string;due:string;late:boolean;people:string[];status:string;steps:FrameStep[];shown:string;next:{step:string;why?:string;action?:React.ReactNode}|null;children:React.ReactNode}) {
+export function ReturnFrame({back,title,due,late,people,status,steps,shown,next,children}:{back:{href:string;name:string};title:string;due:string;late:boolean;people:React.ReactNode;status:string;steps:FrameStep[];shown:string;next:{step:string;why?:string;action?:React.ReactNode}|null;children:React.ReactNode}) {
   const at=Math.max(0,steps.findIndex(step=>step.state!=="done")),filed=steps.every(step=>step.state==="done");
   return <>
     <PageHead crumb={<Link className="crumb" href={back.href}><ChevronLeft size={14} aria-hidden/>{back.name}</Link>} title={title}
       sub={<span className="head-meta rs-head">
         <Badge tone={late ? "late" : filed ? "done" : "blue"}>{due}</Badge>
-        <span className="rs-people">{people.length ? <><span className="avatar-stack">{people.slice(0,3).map(name=><Avatar key={name} name={name}/>)}</span>Looked after by {people[0]}{people.length>1 && ` and ${people.length-1} more`}</> : "Nobody looks after this client yet"}</span>
+        <span className="rs-people">{people}</span>
         <span className="rs-status">{status}</span>
       </span>}/>
     <div className="pane rs">
