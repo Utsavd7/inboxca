@@ -2,8 +2,8 @@
 import { MailPlus } from "lucide-react";
 import { useActionState } from "react";
 import { inviteMember, type InviteState } from "@/app/(app)/actions";
-import { invitableRoles, roleLabel } from "@/src/lib/roles";
 import { IconTile, SidePanel, Toast } from "../ui";
+import { RoleChoice } from "./role-choice";
 
 export function InviteForm() {
   const [state, invite, inviting] = useActionState(inviteMember, {} as InviteState);
@@ -27,16 +27,7 @@ export function InviteForm() {
             aria-describedby={state.error ? "invite-error" : undefined}
           />
         </div>
-        <div>
-          <label htmlFor="invite-role">Role</label>
-          <select id="invite-role" name="role" defaultValue={state.values?.role ?? "staff"}>
-            {invitableRoles.map((role) => (
-              <option key={role} value={role}>
-                {roleLabel(role)}
-              </option>
-            ))}
-          </select>
-        </div>
+        <RoleChoice value={state.values?.role ?? "staff"} />
         <button className="b b-primary" type="submit" disabled={inviting} aria-busy={inviting || undefined}>
           {inviting ? "Sending invite" : "Send invite"}
         </button>
