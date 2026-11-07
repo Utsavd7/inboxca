@@ -118,14 +118,15 @@ test("the owner sees every exception to the firm's rules in one place and remove
   }
 });
 
-test("staff are told People and Settings are not theirs, and only see a notice's date", async () => {
+test("staff get only their own sign in from Settings, are told People is not theirs, and only see a notice's date", async () => {
   // Office only, left on by the co-admin's preset, would keep staff out of this test PC.
   await query(local.dbUrl, "update public.firms set settings = jsonb_set(settings, '{office,on}', 'false') where id = $1", [firm.firmId]);
   await query(local.dbUrl, "update public.firm_members set role = 'staff' where firm_id = $1 and user_id = $2", [firm.firmId, partnerId]);
   try {
     await partner.goto("/app/settings");
     await expect(partner).toHaveURL(/\/app\/settings$/);
-    await expect(partner.getByText("This page is for the owner", { exact: true })).toBeVisible();
+    await expect(partner.getByRole("heading", { name: "Your sign in" })).toBeVisible();
+    await expect(partner.getByRole("link", { name: "Change Email and drive" })).toHaveCount(0);
     await partner.goto("/app/people");
     await expect(partner.getByText("This page is for the owner, partners and managers")).toBeVisible();
     await expect(partner.getByText(ownerEmail)).toHaveCount(0);

@@ -11,14 +11,17 @@ export const SUGGESTED_HOURS: Hours = Object.fromEntries(
   [1, 2, 3, 4, 5, 6].map((day) => [String(day), ["09:00", "18:00"]]),
 );
 
-// "Monday, Tuesday: 09:00 to 18:00; Saturday: 09:00 to 13:00"
+// "Monday to Friday: 09:00 to 18:00; Saturday: 09:00 to 13:00": three or more days in a row
+// say their first and last.
 export function describeHours(hours: Hours | null | undefined) {
-  const groups = new Map<string, string[]>();
-  for (const [day, name] of DAYS.entries()) {
+  const groups = new Map<string, number[]>();
+  for (const day of DAYS.keys()) {
     const times = hours?.[String(day)];
-    if (times) groups.set(`${times[0]} to ${times[1]}`, [...(groups.get(`${times[0]} to ${times[1]}`) ?? []), name]);
+    if (times) groups.set(`${times[0]} to ${times[1]}`, [...(groups.get(`${times[0]} to ${times[1]}`) ?? []), day]);
   }
-  return [...groups].map(([times, days]) => `${days.join(", ")}: ${times}`).join("; ");
+  const names = (days: number[]) => days.reduce<number[][]>((runs, day) => (runs.at(-1)?.at(-1) === day - 1 ? runs.at(-1)!.push(day) : runs.push([day]), runs), [])
+    .flatMap((run) => (run.length > 2 ? [`${DAYS[run[0]]} to ${DAYS[run.at(-1)!]}`] : run.map((day) => DAYS[day])));
+  return [...groups].map(([times, days]) => `${names(days).join(", ")}: ${times}`).join("; ");
 }
 
 // "1 July 2026" for a "2026-07-01" date.

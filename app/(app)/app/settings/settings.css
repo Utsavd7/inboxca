@@ -1,5 +1,6 @@
 /* Settings: one line a group saying what is set now, with Change; the chosen group's cards
-   open in the side panel. Each card a tile, a title, one line, its controls and one Save. */
+   open in the side panel. Each card a tile, a title, one line and its controls; the group has
+   one Save at the panel's foot. */
 .set-summary { max-width: 860px; margin-top: var(--s5); padding: 0; overflow: hidden; }
 .set-summary .app-row:first-child { border-top: 0; }
 .set-summary .app-row .sub { white-space: normal; }
@@ -18,6 +19,11 @@
 .set-page .check:has(> .toggle) { gap: var(--s3); }
 .set-page .panel > form, .set-page .panel > .connection, .set-page .panel > .reveal > form { margin-top: 16px; }
 .set-page .panel > .reveal > summary, .set-page .panel > .set-foot { margin-top: 16px; }
+.set-page .panel > .set-stack, .set-page .panel > .reveal > .set-fields, .set-page .panel > .reveal > .set-rows { margin-top: 16px; }
+.set-page .set-stack > .reveal > summary { margin-top: 0; }
+.set-page .set-stack > .reveal > :is(.set-grid, .set-stack) { margin-top: 12px; }
+/* The group's one Save, kept in view at the panel's foot over the cards that scroll under it. */
+.set-save { position: sticky; bottom: calc(-1 * var(--s4)); z-index: 1; display: flex; margin: 0 calc(-1 * var(--s4)) calc(-1 * var(--s4)); padding: 12px var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
 .set-page .alert, .set-page .notice, .set-page .note { margin: 0; }
 .set-page .set-body > .panel > :is(.alert, .notice, .note) { margin-top: 12px; }
 .set-page .connection { padding: 8px 8px 8px 16px; }

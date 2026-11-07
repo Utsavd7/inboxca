@@ -88,7 +88,7 @@ export async function AccessCheck({ person }: { person?: string }) {
             {active.map((row) => <option key={row.user_id} value={row.user_id}>{row.email}</option>)}
           </select>
         </div>
-        <div className="set-foot"><button className="b b-primary" type="submit">Check</button></div>
+        <div className="set-foot"><button className="b b-secondary" type="submit">Check</button></div>
       </Form>
       {chosen && answer && (
         <div className="set-access">

@@ -8,7 +8,7 @@ import { clientKinds, type ClientKind } from "@/src/lib/clients";
 import { going } from "./nav-progress";
 import { ASK_EVENT, quickActions, REPORT_EVENT, type QuickAction } from "./ui-client";
 
-type Page = { href: string; name: string };
+type Page = { href: string; name: string; place?: string };
 type Hit = { href: string; name: string; note: string; action?: QuickAction };
 
 // True in the browser when a field has the keyboard, so a typed letter is not a shortcut.
@@ -73,7 +73,7 @@ export function Command({ pages, manage = false, write = false }: { pages: Page[
     ? found.filter((hit) => hit.href.startsWith("/app/clients/")).map((hit) => ({ ...hit, href: `${hit.href}?tab=documents&ask=1`, note: "Ask for papers" }))
     : [
         ...quickActions({ manage, write }).filter((action) => action.label.toLowerCase().includes(typed)).map((action) => ({ href: action.href ?? `#${action.key}`, name: action.label, note: "Start", action })),
-        ...pages.filter((page) => page.name.toLowerCase().includes(typed)).map((page) => ({ ...page, note: "Page" })),
+        ...pages.filter((page) => (typed || page.place !== "find") && page.name.toLowerCase().includes(typed)).map(({ href, name }) => ({ href, name, note: "Page" })),
         ...(report.includes(typed) ? [{ href: "#report", name: "Report a problem or idea", note: "Help" }] : []),
         ...found,
       ];

@@ -308,7 +308,8 @@ export function HeadTools() {
   );
 }
 
-// The workspace switcher at the top of the sidebar: the firm, and the firm's own places.
+// The workspace switcher at the top of the sidebar: the firm, and the firm's own places. Help
+// and Sign out are in the sidebar's foot and the account menu.
 export function WorkspaceMenu() {
   const shell = useShell()!;
   const { me } = shell;
@@ -342,7 +343,7 @@ export function WorkspaceMenu() {
                 ))}
               </Menu.Group>
             )}
-            <div className="menu-sep" />
+            {(me.owner || me.people) && <div className="menu-sep" />}
             {me.owner && (
               <Menu.LinkItem className="menu-item" closeOnClick render={<Link href="/app/settings" />}>
                 <Settings size={16} aria-hidden />
@@ -355,12 +356,6 @@ export function WorkspaceMenu() {
                 People
               </Menu.LinkItem>
             )}
-            <Menu.Item className="menu-item" onClick={() => shell.open("help")}>
-              <CircleHelp size={16} aria-hidden />
-              Help and support
-            </Menu.Item>
-            <div className="menu-sep" />
-            <SignOutItem />
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>

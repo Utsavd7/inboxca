@@ -74,7 +74,7 @@ test("anyone in the firm adds a passkey, signs in with it in place of the 6 digi
     await expect(staff.getByRole("heading", { name: "Your sign in", level: 1 })).toBeVisible();
     await expect(staff.locator("section#passkeys").getByRole("button", { name: "Add a passkey" })).toBeVisible();
     await staff.goto("/app/settings");
-    await expect(staff.getByText("This page is for the owner", { exact: true })).toBeVisible();
+    await expect(staff.getByRole("heading", { name: "Your sign in", level: 1 })).toBeVisible();
 
     // The owner removes them from the firm and their passkey with them, which ends its sign ins.
     const [{ id: factor }] = await query(local.dbUrl, "insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, secret, created_at, updated_at) values (gen_random_uuid(), $1, 'Passkey invented', 'totp', 'verified', 'INVENTED', now(), now()) returning id", [staffId]);

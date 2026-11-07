@@ -6,7 +6,7 @@ import {grantFor} from "@/src/lib/permission-grants";
 import { periodName } from "@/src/lib/documents";
 import { paperType } from "@/src/lib/paper-type";
 import { currentMember } from "@/src/lib/member";
-import { Badge, PageHead } from "../../../ui";
+import { PageHead } from "../../../ui";
 import { Pending } from "../../../pending";
 import {formName,preparedSchema} from "@/src/lib/prepared";
 import {templateSchema} from "@/src/lib/templates";
@@ -56,6 +56,8 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
       <span className="hint">View only, with your email on every page.</span>
     </>
   );
+  // A paper waiting to be checked: its badge opens Check on the client's Papers tab.
+  const check = <Link className="badge warn" href={`/app/clients/${file.client_id}?tab=documents&edit=${id}`} title="Check its type and period">To check</Link>;
   const body = (
     <>
       {meta?.status==="draft" && <FillChecks client={file.client_id} sources={meta.sources} at={checksAt ?? undefined} />}
@@ -94,7 +96,7 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
         chips={<>
           <Link className="badge" href={`/app/clients/${file.client_id}?tab=documents`}>{file.clients?.name}</Link>
           {kind && <span className="badge">{kind}</span>}
-          {file.status === "to_check" && <Badge tone="warn">To check</Badge>}
+          {file.status === "to_check" && check}
         </>}
         actions={drive ? <a className="b b-secondary b-small doc-get" href={`/app/files/${id}`}>Download</a> : copies ? canCopy ? <form className="doc-get" method="post" action={stream}><button className="b b-secondary b-small" title="A PDF with your email and the time on each page, up to 30 pages">Download</button></form> : <form className="doc-get" action={askPermission}><input type="hidden" name="client" value={file.client_id}/><input type="hidden" name="document" value={id}/><input type="hidden" name="right" value="download"/><Pending className="b b-ghost b-small">Ask to download</Pending></form> : null}
       >
@@ -116,7 +118,7 @@ export async function Paper({ id, asked, show, from, pane = false }: { id: strin
         sub={
           <span className="head-meta">
             <span>{kind}</span>
-            {file.status === "to_check" && <Badge tone="warn">To check</Badge>}
+            {file.status === "to_check" && check}
             {hints}
           </span>
         }

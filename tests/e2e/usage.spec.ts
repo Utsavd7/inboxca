@@ -36,7 +36,7 @@ test("the owner sees returns, InboxCA storage and AI credits used, staff do not"
     await expect(page.getByRole("link", { name: /^Add AI credits/ })).toHaveAttribute("href", "/app/settings?group=billing#addons");
     await page.getByRole("link", { name: /^Returns this year: 2, [12] due so far$/ }).click();
     const use = page.getByRole("region", { name: "InboxCA use" });
-    await expect(use.getByText("Returns this year")).toBeVisible();
+    await expect(use.getByText("Returns this year", { exact: true })).toBeVisible();
     await expect(use.getByText(/due so far$/)).toBeVisible();
     await expect(use.getByText("About 2 by March, from your calendar")).toBeVisible();
     await expect(use.getByText("InboxCA storage used")).toBeVisible();
@@ -47,7 +47,7 @@ test("the owner sees returns, InboxCA storage and AI credits used, staff do not"
     await expect(person.getByRole("link", { name: /^Returns this year/ })).toHaveCount(0);
     await expect(person.getByRole("link", { name: /^Add AI credits/ })).toHaveCount(0);
     await person.goto("/app/settings?group=data#use");
-    await expect(person.getByText("This page is for the owner", { exact: true })).toBeVisible();
+    await expect(person.getByRole("heading", { name: "Your sign in", level: 1 })).toBeVisible();
     await expect(person.getByRole("region", { name: "InboxCA use" })).toHaveCount(0);
   } finally {
     await person.context().close();

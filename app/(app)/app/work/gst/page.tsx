@@ -30,10 +30,10 @@ function returnState(work: Work | undefined, filed: boolean, page: string): Stat
   switch (work?.stage) {
     case "approved": return { words: "Approved", tone: "blue", action: "Download and file", href: page };
     case "draft": return { words: "Waiting for approval", tone: "blue", action: "Review", href: page };
-    case "filled": return { words: `Filled, ${work.open ?? 0} to check`, tone: "warn", action: "Check figures", href: page };
+    case "filled": return { words: `${work.open ?? 0} to check`, tone: "warn", action: "Check figures", href: page };
     case "rejected": return { words: "Sent back", tone: "late", action: "Correct figures", href: page };
     case "checked": return { words: "Checked, not prepared", tone: "warn", action: "Prepare", href: page };
-    case "figures": return work.missing ? { words: work.missing === "credit" ? "Waiting for GSTR-2B" : "Waiting for the sales register", tone: "", action: "Open", href: page } : { words: `Not prepared${work.open ? `, ${work.open} to check` : ""}`, tone: "warn", action: "See the return", href: page };
+    case "figures": return work.missing ? { words: work.missing === "credit" ? "Waiting for GSTR-2B" : "Waiting for the sales register", tone: "", action: "Open", href: page } : { words: work.open ? `${work.open} to check` : "Not prepared", tone: "warn", action: "See the return", href: page };
     default: return { words: "Not started", tone: "", action: "Open", href: page };
   }
 }
@@ -147,7 +147,7 @@ export default async function GstMonth({ searchParams }: { searchParams: Promise
                     </td>
                     <Cell state={papers} />
                     <Cell state={credit} />
-                    <Cell state={differ ? { words: differ.why.slice(periodName(period).length + 2), tone: "warn", action: "See differences", href: differ.action.href } : { words: credit.words === "In" ? "None open" : "Waiting for GSTR-2B", tone: "" }} />
+                    <Cell state={differ ? { words: differ.why.slice(periodName(period).length + 2), tone: "warn", action: "See differences", href: differ.action.href } : { words: credit.words === "In" ? "None open" : "Needs GSTR-2B", tone: "" }} />
                     <Cell state={one ? returnState(oneWork, one.status === "filed", `${at}/returns/${one.id}`) : { words: "No GSTR-1 this month", tone: "" }} more={one && <Link className="b b-ghost" href={href({ page, rates: client.id })} scroll={false}>Rates</Link>} />
                     <Cell state={three ? returnState(threeWork, three.status === "filed", `${at}/returns/${three.id}`) : { words: "No GSTR-3B this month", tone: "" }} />
                     <Cell state={filedCount === client.returns.length ? { words: "Both", tone: "done" } : { words: filedCount ? `${filedCount} of ${client.returns.length}` : "Not yet", tone: "", action: "Mark filed", href: `${at}?tab=returns` }} />

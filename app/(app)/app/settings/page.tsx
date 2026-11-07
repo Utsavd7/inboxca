@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import Form from "next/form";
 import Link from "next/link";
 import { Passkey } from "@/app/(admin)/admin/passkey";
-import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveAnswers, saveLimits, savePermissions, saveRecords, saveReminders, saveMailLimit, saveVisibility, setFolderOrder, withdrawAlways, allowStanding, removeException, removePasskey } from "@/app/(app)/actions";
+import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveReminders, saveEmailSettings, withdrawAlways, allowStanding, removeException, removePasskey } from "@/app/(app)/actions";
 import { roleLabel, roleNames } from "@/src/lib/roles";
 import { firmAdmin, HOURS_KEYS, memberHours, officeApprover, type Office } from "@/src/lib/office";
 import { closestPreset, presetOf, presets } from "@/src/lib/presets";
@@ -24,7 +24,7 @@ import { DAYS, describeHours, longDate, SUGGESTED_HOURS, type Hours, type Specia
 import { addDays } from "@/src/lib/billing/money";
 import { currentMember } from "@/src/lib/member";
 import { exceptionsOf, IDLE_CHOICES, SESSION_CHOICES } from "@/src/lib/session";
-import { Badge, IconTile, NotForYou, PageHead, Row, SidePanel, storage, Toast, type Kind } from "../ui";
+import { Badge, IconTile, PageHead, Row, SidePanel, storage, Toast, type Kind } from "../ui";
 import { SetupArt } from "../setup-art";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
@@ -34,7 +34,7 @@ import { mailApis, type MailApi } from "@/src/lib/mail-view";
 import { onedriveReady } from "@/src/lib/onedrive";
 import { MailboxForm } from "./mailbox-form";
 import { GroupAnchor } from "./group-anchor";
-import { confirmDueDate, saveReplies } from "@/app/(app)/actions";
+import { confirmDueDate } from "@/app/(app)/actions";
 import { dueDatesForOwner } from "@/src/lib/due-dates";
 import { dueLabel, periodLabel, todayInIndia } from "@/src/lib/calendar";
 import { personName } from "@/src/lib/roles";
@@ -66,17 +66,18 @@ const problems: Record<string, [string, string]> = {
   special: ["special", "The To date must be the same as or after the From date, and Closes must be later than Opens."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { due_date: "Date confirmed. Client reminders now go for it.", checkout: "Thank you. The payment shows here as soon as your bank confirms it.", autopay_off: "AutoPay is off. Nothing more will be taken.", down: "Your plan moves down at the next renewal.", down_undone: "Your plan stays as it is.", topup: "Auto top-up saved.", money_back: "Your plan is cancelled and your money is on its way back.",preset: "Saved. Your team now works this way.", visibility: "Who sees clients saved.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders saved.", records: "Paper sending rules saved.", permissions: "Permissions saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", folders: "Folder order and file names saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail_limit: "Email limit saved.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", answers: "Replies saved.", replies: "Reply time saved.", exception: "Exception removed. The firm's rule applies again.", computer_removed: "Computer removed. Your other computers are signed out and can sign in again as usual." };
+const savedNames: Record<string, string> = { due_date: "Date confirmed. Client reminders now go for it.", checkout: "Thank you. The payment shows here as soon as your bank confirms it.", autopay_off: "AutoPay is off. Nothing more will be taken.", down: "Your plan moves down at the next renewal.", down_undone: "Your plan stays as it is.", topup: "Auto top-up saved.", money_back: "Your plan is cancelled and your money is on its way back.",preset: "Saved. Your team now works this way.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders and papers saved.", permissions: "People's access saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", email: "Email and drive saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", exception: "Exception removed. The firm's rule applies again.", computer_removed: "Computer removed. Your other computers are signed out and can sign in again as usual." };
 // The page is one line per group, saying what is set now; ?group= opens that group's cards in
-// the side panel. Each section keeps its old anchor.
+// the side panel, with one Save for the group where it has choices to save (saveBar): the
+// fields join its form by their form attribute. Each section keeps its old anchor.
 const groups = [
   ["email", "Email and drive", ["mailbox", "replies", "drive"]],
-  ["access", "Office and sign in", ["preset", "office", "limits", "tester", "notices", "recovery", "computers"]],
+  ["access", "Office and sign in", ["preset", "office", "limits", "tester"]],
   ["hours", "Hours and holidays", ["hours", "special", "holidays"]],
-  ["people", "People's access", ["permissions", "always", "visibility"]],
+  ["people", "People's access", ["permissions", "visibility", "always", "exceptions"]],
   ["reminders", "Reminders and papers", ["reminders", "due_dates", "answers", "records"]],
   ["data", "Your data", ["use", "data", "support", "close"]],
-  ["me", "Your sign in", ["passkeys"]],
+  ["me", "Your sign in", ["passkeys", "recovery", "computers", "notices"]],
   ["billing", "Billing", ["plan", "change", "addons", "receipts", "money_back"]],
 ] as const;
 const groupIcons: Record<string, LucideIcon> = { email: Mail, access: ShieldCheck, hours: Clock, people: Users, reminders: BellRing, data: Database, me: Fingerprint, billing: CreditCard };
@@ -92,6 +93,13 @@ const cardIcons: Record<string, [LucideIcon, Kind]> = {
 };
 const ownerOnly = ["mailbox", "replies", "drive", "recovery", "computers", "visibility", "exceptions", "reminders", "due_dates", "answers", "records", "use", "data", "support", "close", "plan", "change", "addons", "receipts", "money_back"];
 const download = <form action="/app/settings/download" method="post"><button className="b b-secondary" type="submit">Download your data</button></form>;
+// The group's one Save, kept in view at the panel's foot; the group's fields name its form.
+const GROUP = "set-group-form";
+const saveBar = (action: (form: FormData) => Promise<void>) => (
+  <form id={GROUP} action={action} className="set-save">
+    <Pending busy="Saving" className="b b-primary" name="intent" value="save">Save</Pending>
+  </form>
+);
 
 function Card({ id, title, line, danger, children }: { id: string; title: string; line?: React.ReactNode; danger?: boolean; children: React.ReactNode }) {
   const [Icon, kind] = cardIcons[id] ?? [Database, "docs"];
@@ -117,7 +125,7 @@ async function YourSignIn({ supabase, userId }: { supabase: Awaited<ReturnType<t
     supabase.auth.getClaims(),
   ]);
   return (
-    <Card id="passkeys" title="Passkeys" line="Sign in with this laptop's fingerprint or PIN, your phone or a security key, in place of the 6 digit code. You still enter the code from your email.">
+    <Card id="passkeys" title="Passkeys" line="Your fingerprint, PIN, phone or security key in place of the 6 digit code.">
       {!!keys?.length && (
         <List className="set-rows" rise={false}>
           {keys.map((key) => (
@@ -134,7 +142,7 @@ async function YourSignIn({ supabase, userId }: { supabase: Awaited<ReturnType<t
       {claims?.claims.aal === "aal2" ? (
         <div className="set-fields set-key"><Passkey mode="add" kind="person" button="b b-primary" note="hint" /></div>
       ) : <p className="hint set-key">To add a passkey, sign in with your 6 digit code.</p>}
-      <p className="hint set-key">Lost a device? Remove its passkey here: any computer that signed in with it is signed out. The 6 digit code still works.</p>
+      {!!keys?.length && <p className="hint set-key">Lost a device? Remove its passkey. Computers that used it are signed out.</p>}
     </Card>
   );
 }
@@ -150,8 +158,7 @@ export default async function Settings({
   if (!membership) redirect("/app");
   // Your sign in is everyone's own (5.17, 8.5); the owner and deputies are asked once, in one line.
   const admins = firmAdmin(membership.role, userId, membership.settings);
-  if ((await searchParams).group === "me" && !admins) return <div className="set-page"><PageHead title="Your sign in" sub="How you sign in to InboxCA. Only you see this." /><div className="set-body set-alone page-in"><YourSignIn supabase={supabase} userId={userId} /></div></div>;
-  if (!officeApprover(membership.role, userId, membership.settings)) return <NotForYou title="Settings" who="the owner" />;
+  if (!admins && ((await searchParams).group === "me" || !officeApprover(membership.role, userId, membership.settings))) return <div className="set-page"><PageHead title="Your sign in" sub="How you sign in to InboxCA. Only you see this." /><div className="set-body set-alone page-in"><YourSignIn supabase={supabase} userId={userId} /></div></div>;
   const { count: passkeys } = await supabaseAdmin().from("passkeys").select("id", { count: "exact", head: true }).eq("user_id", userId);
   const nudge = !passkeys && <> <Link className="set-nudge" href="/app/settings?group=me">Add a passkey</Link> to sign in without the 6 digit code.</>;
   if (!admins) return <><PageHead title="Office approvals" sub={<>Approve your office internet connection and the PCs your staff use.{nudge}</>} /><OfficePanel branch={(await searchParams).branch} error={(await searchParams).error} /></>;
@@ -254,7 +261,7 @@ export default async function Settings({
     people: `${count(headcount ?? 0, "person", "people")}. ${settings.client_visibility === "restricted" ? "Only the people assigned to a client see it" : "Everyone sees every client"}${settings.second_form_approval === true ? ". A second person approves before filing" : ""}.`,
     reminders: `${settings.reminders === true ? `Clients are emailed ${stages.length === STAGES.length ? "at every stage" : stages.map((day) => stageNames[day].toLowerCase()).join(", ") || "at no stage"}` : "Clients are not emailed before due dates"}. ${records.approve_all === true ? "Every paper asked for waits for approval" : "Routine papers asked for are sent at once"}.`,
     data: "Your client list, returns, notices and activity log, yours to download any time.",
-    me: `${passkeys ? count(passkeys, "passkey", "passkeys") : "No passkey yet"}. You sign in with the email code${passkeys ? " and a passkey" : " and the 6 digit code"}.`,
+    me: `${passkeys ? count(passkeys, "passkey", "passkeys") : "No passkey yet"}. You sign in with the email code${passkeys ? " and a passkey" : " and the 6 digit code"}${owner ? ", with recovery codes if you lose your phone" : ""}.`,
     billing: sub?.paid_until ? `${sub.status === "active" ? "Paid" : sub.status === "grace" ? "Payment due" : sub.status} until ${longDate(addDays(sub.paid_until, -1))}.` : "Your firm is on a pilot. Orelu takes no payment for now.",
   };
   // Connect with Google, Microsoft or Zoho, each shown only once its app's keys are set.
@@ -287,7 +294,7 @@ export default async function Settings({
         {group && <SidePanel key={group} id="set-group" title={shown.find(([id]) => id === group)![1]} close="/app/settings">
         <div className="set-body">
           {group === "email" && <>
-          <Card id="mailbox" title="Firm email" line="The address your clients write to. InboxCA reads only your clients' emails, keeps no copy of them, and replies from this address.">
+          <Card id="mailbox" title="Firm email" line="The address your clients write to and InboxCA replies from.">
             {mailbox ? (
               <div className="connection">
                 <Mail size={16} aria-hidden />
@@ -318,34 +325,34 @@ export default async function Settings({
               <p className="alert" role="alert">Connect the firm email again. Replies will wait until it is connected.</p>
               {isMailApi(mailbox.provider) && mailSignInReady(mailbox.provider) ? signIn(mailbox.provider) : <MailboxForm reconnecting initial={{address:mailAddress ?? "",...Object.fromEntries(Object.entries((mailServers?.settings ?? {}) as Record<string,unknown>).filter(([key])=>["imap","smtp"].includes(key)).flatMap(([key,value])=>Object.entries(value as Record<string,string|number>).map(([part,value])=>[`${key}_${part}`,String(value)])))}} />}
             </>}
-            {mailbox && <form action={saveMailLimit} className="set-fields">
-              <div><label htmlFor="mail-limit">Emails in 24 hours</label><input id="mail-limit" name="limit" type="number" min="1" max="2000" step="1" className="num" defaultValue={Number(settings.mail_limit) || 500} /></div>
-              <p className="hint set-wide">Every reply and bulk send shares this limit. Lower it if your email provider allows fewer.</p>
-              {problem("mailbox")}
-              <div className="set-foot"><Pending busy="Saving" className={`b ${mailbox.status === "connected" ? "b-primary" : "b-secondary"}`}>Save email limit</Pending></div>
-            </form>}
+            {mailbox && <details className="reveal" open={error === "mail_limit"}>
+              <summary>Sending limit</summary>
+              <div className="set-fields">
+                <div><label htmlFor="mail-limit">Emails in 24 hours</label><input id="mail-limit" form={GROUP} name="limit" type="number" min="1" max="2000" step="1" className="num" defaultValue={Number(settings.mail_limit) || 500} /></div>
+                <p className="hint set-wide">Lower it if your email provider allows fewer.</p>
+                {problem("mailbox")}
+              </div>
+            </details>}
           </Card>
 
-          <Card id="replies" title="Replies from your team" line="Emails InboxCA cannot answer go to the person who looks after the client. They turn red once they wait longer than this.">
-            <form action={saveReplies} className="set-stack">
+          <Card id="replies" title="Replies from your team" line="When an email waiting for your team turns red. Sundays and holidays do not count.">
+            <div className="set-stack">
               <div className="set-fields">
                 <div>
                   <label htmlFor="reply-days">Late after</label>
-                  <select id="reply-days" name="days" defaultValue={Number(settings.reply_days) || REPLY_DAYS}>
+                  <select id="reply-days" form={GROUP} name="days" defaultValue={Number(settings.reply_days) || REPLY_DAYS}>
                     {[1, 2, 3, 4, 5].map((days) => <option key={days} value={days}>{days === 1 ? "1 working day" : `${days} working days`}</option>)}
                   </select>
                 </div>
               </div>
-              <p className="hint">Sundays and your holidays do not count.</p>
               <label className="check">
-                <input className="toggle" type="checkbox" name="list" defaultChecked={settings.reply_list !== false} />
+                <input className="toggle" form={GROUP} type="checkbox" name="list" defaultChecked={settings.reply_list !== false} />
                 Email me at 9:00 each morning when replies have waited more than a day
               </label>
-              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save reply time</Pending></div>
-            </form>
+            </div>
           </Card>
 
-          <Card id="drive" title="Firm drive" line="Client papers are saved in your firm's own drive, in folders by year, client and type of work. InboxCA keeps a locked safety copy, for 30 days, of a paper it removes or changes.">
+          <Card id="drive" title="Firm drive" line="Client papers are saved in your firm's own drive, by year, client and type of work.">
             {drive && (
               <form action={reconnectDrive} className="connection">
                 <HardDrive size={16} aria-hidden />
@@ -374,6 +381,8 @@ export default async function Settings({
             )}
             {drive && problem("drive")}
             {drive && (
+              <details className="reveal" open={!ticks || ticks.some(([ok]) => !ok)}>
+              <summary>{!ticks ? "Setting up" : ticks.every(([ok]) => ok) ? "Set up and checked" : "Needs a look"}</summary>
               <List className="set-rows set-ticks" label="What InboxCA set up">
                 {ticks ? (
                   ticks.map(([ok, text]) => (
@@ -388,15 +397,15 @@ export default async function Settings({
                   </Item>
                 )}
               </List>
+              </details>
             )}
             {drive && (
-              <form action={setFolderOrder} className="set-fields">
-                <p className="hint set-wide">
-                  Old papers already in your drive? <Link href="/app/import">Add old files</Link> moves them into their client folders.
-                </p>
+              <details className="reveal">
+              <summary>Folders and file names</summary>
+              <div className="set-fields">
                 <div>
                   <label htmlFor="folder-order">Folder order for new papers</label>
-                  <select id="folder-order" name="order" defaultValue={folderOrder}>
+                  <select id="folder-order" form={GROUP} name="order" defaultValue={folderOrder}>
                     {Object.entries(folderOrderNames).map(([value, label]) => (
                       <option key={value} value={value}>
                         {label}
@@ -406,7 +415,7 @@ export default async function Settings({
                 </div>
                 <div>
                   <label htmlFor="naming">How new papers are named</label>
-                  <select id="naming" name="naming" defaultValue={naming}>
+                  <select id="naming" form={GROUP} name="naming" defaultValue={naming}>
                     {Object.entries(namings).map(([value, example]) => (
                       <option key={value} value={value}>
                         {example}
@@ -414,8 +423,11 @@ export default async function Settings({
                     ))}
                   </select>
                 </div>
-                <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save</Pending></div>
-              </form>
+                <p className="hint set-wide">
+                  Old papers already in your drive? <Link href="/app/import">Add old files</Link> moves them into their client folders.
+                </p>
+              </div>
+              </details>
             )}
             {!drive && (
               <form action={connectDrive} className="set-stack">
@@ -453,6 +465,7 @@ export default async function Settings({
               </form>
             )}
           </Card>
+          {saveBar(saveEmailSettings)}
           </>}
 
           {group === "access" && <>
@@ -514,30 +527,37 @@ export default async function Settings({
               <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save signing in limits</Pending></div>
             </form>
           </Card>
-          <Card id="tester" title="Check someone's access" line="Where and when a person can use InboxCA under your rules, and whether they can now, from here, on this PC. InboxCA answers with the same checks it makes on every page.">
-            <AccessCheck person={check} />
+          <Card id="tester" title="Check someone's access" line="Where and when a person can use InboxCA under your rules.">
+            <details className="reveal" open={!!check}>
+              <summary>Check a person</summary>
+              <AccessCheck person={check} />
+            </details>
           </Card>
-          <Card id="notices" title="Notices on this computer" line="Show a notice on this computer when someone needs your approval. Off until you turn it on here.">
-            {process.env.VAPID_PUBLIC_KEY ? <PushSwitch publicKey={process.env.VAPID_PUBLIC_KEY} /> : <p className="hint">Not set up yet.</p>}
-          </Card>
-          {owner && <Card id="recovery" title="Recovery codes" line="If you lose the phone that gives your 2 step code, sign in with the email code, then type one of these codes to set up a new phone. Each code works once. Keep them somewhere other than your phone.">
+          </>}
+
+          {group === "me" && <>
+          <YourSignIn supabase={supabase} userId={userId} />
+          {owner && <Card id="recovery" title="Recovery codes" line="Lost the phone with your 2 step code? Sign in with the email code, then one of these. Each works once.">
             {confirm === "codes" ? (
               <form action="/app/settings/recovery-codes" method="post" className="set-foot">
                 <p className="hint grow">Your old codes stop working as soon as you download new ones.</p>
                 <button className="b b-primary" type="submit">Yes, download 10 new codes</button>
-                <Link className="b b-secondary" href="/app/settings?group=access#recovery" scroll={false}>Cancel</Link>
+                <Link className="b b-secondary" href="/app/settings?group=me#recovery" scroll={false}>Cancel</Link>
               </form>
             ) : (
-              <div className="set-foot"><Link className="b b-secondary" href="/app/settings?group=access&confirm=codes#recovery" scroll={false}>Download 10 new codes</Link></div>
+              <div className="set-foot"><Link className="b b-secondary" href="/app/settings?group=me&confirm=codes#recovery" scroll={false}>Download 10 new codes</Link></div>
             )}
           </Card>}
-          {owner && <Card id="computers" title="Your computers" line="The computers that can use your login. Remove a lost or old one. Every other computer is signed out too, and the ones still here sign in again as usual.">
+          {owner && <Card id="computers" title="Your computers" line="Remove a lost or old one. Your other computers then sign in again as usual.">
             <YourComputers />
           </Card>}
+          <Card id="notices" title="Notices on this computer" line="A notice here when someone needs your approval.">
+            {process.env.VAPID_PUBLIC_KEY ? <PushSwitch publicKey={process.env.VAPID_PUBLIC_KEY} /> : <p className="hint">Not set up yet.</p>}
+          </Card>
           </>}
 
           {group === "hours" && <>
-          <Card id="hours" title={picked ? `Office hours for ${picked.name}` : "Office hours"} line={picked ? "India time. The switch that limits people to office hours is under Main office." : "India time. You can always sign in. If the switch below is on, everyone else can use InboxCA only in these hours."}>
+          <Card id="hours" title={picked ? `Office hours for ${picked.name}` : "Office hours"} line={picked ? "India time. The switch that limits people to office hours is under Main office." : "India time. You can always sign in."}>
             {!!branches?.length && <Form action="/app/settings#hours">
               <input type="hidden" name="group" value="hours" />
               <div className="form-row"><div>
@@ -581,7 +601,7 @@ export default async function Settings({
             </form>}
           </Card>
 
-          <Card id="special" title={picked ? `Special hours for ${picked.name}` : "Special hours"} line="A tax season or a late evening: these times replace the office hours on every day in the dates. Holidays stay closed.">
+          <Card id="special" title={picked ? `Special hours for ${picked.name}` : "Special hours"} line="Times that replace office hours on these dates, such as late evenings in tax season.">
             {!!special.length && <List className="set-rows" rise={false}>
               {special.map((range) => (
                 <Item key={range.from + range.to}>
@@ -642,8 +662,8 @@ export default async function Settings({
           </>}
 
           {group === "people" && <>
-          <Card id="permissions" title="Permissions" line="Everyone can view every client's papers. The ticks below are what staff and managers may do without asking. For anything not ticked, they ask their manager or you for permission.">
-            <form action={savePermissions} className="set-stack">
+          <Card id="permissions" title="Permissions" line="What staff and managers may do without asking. For the rest they ask you or their manager.">
+            <div className="set-stack">
               <div className="set-table">
                 <table className="t">
                   <thead>
@@ -659,7 +679,7 @@ export default async function Settings({
                         <td>{label}</td>
                         {(["employee", "manager"] as const).map((column) => (
                           <td key={column} className="shrink">
-                            <input type="checkbox" name={`${column}:${right}`} disabled={right==="approve_requests" && column==="employee"} defaultChecked={permissions[column]?.[right as keyof typeof switchable] ?? (right in defaults || right==="approve_requests" && column==="manager")} aria-label={`${label}: ${column === "employee" ? "staff" : "managers"}`} />
+                            <input type="checkbox" form={GROUP} name={`${column}:${right}`} disabled={right==="approve_requests" && column==="employee"} defaultChecked={permissions[column]?.[right as keyof typeof switchable] ?? (right in defaults || right==="approve_requests" && column==="manager")} aria-label={`${label}: ${column === "employee" ? "staff" : "managers"}`} />
                           </td>
                         ))}
                       </tr>
@@ -668,23 +688,22 @@ export default async function Settings({
                 </table>
               </div>
               <p className="hint">Partners may do the same as managers. Only you can remove papers.</p>
-              <details className="reveal"><summary>Limit these to some clients or a last day</summary><p className="hint">Leave blank for every client with no end date. View only access stays the same.</p><div className="set-fields">{(["employee","manager"] as const).map(column=><fieldset key={column} className="set-stack"><legend>{column==="employee" ? "Staff" : "Managers"}</legend><div><label htmlFor={`${column}-clients`}>Client names, one per line</label><textarea id={`${column}-clients`} name={`${column}:clients`} rows={3} defaultValue={namesOf(permissions[column]?.scope?.clients)}/></div><div><label htmlFor={`${column}-until`}>Last day, if needed</label><input id={`${column}-until`} type="date" name={`${column}:until`} defaultValue={permissions[column]?.scope?.until}/></div></fieldset>)}</div></details>
+              <details className="reveal"><summary>Limit these to some clients or a last day</summary><p className="hint">Leave blank for every client with no end date. View only access stays the same.</p><div className="set-fields">{(["employee","manager"] as const).map(column=><fieldset key={column} className="set-stack"><legend>{column==="employee" ? "Staff" : "Managers"}</legend><div><label htmlFor={`${column}-clients`}>Client names, one per line</label><textarea id={`${column}-clients`} form={GROUP} name={`${column}:clients`} rows={3} defaultValue={namesOf(permissions[column]?.scope?.clients)}/></div><div><label htmlFor={`${column}-until`}>Last day, if needed</label><input id={`${column}-until`} form={GROUP} type="date" name={`${column}:until`} defaultValue={permissions[column]?.scope?.until}/></div></fieldset>)}</div></details>
+              <label className="check"><input className="toggle" form={GROUP} type="checkbox" name="second_form_approval" defaultChecked={settings.second_form_approval===true}/>Second approval before filing, after the figures are checked</label>
+              <details className="reveal"><summary>More rules</summary><div className="set-stack">
               <label className="check">
-                <input className="toggle" type="checkbox" name="hide_inactive" defaultChecked={settings.viewer_hide_inactive === true} />
+                <input className="toggle" form={GROUP} type="checkbox" name="hide_inactive" defaultChecked={settings.viewer_hide_inactive === true} />
                 Hide papers when someone switches to another window. Leave this off if staff read a paper while typing into the tax portal beside it.
               </label>
-              <label className="check"><input className="toggle" type="checkbox" name="second_form_approval" defaultChecked={settings.second_form_approval===true}/>Second approval before filing. Another person must approve after the figures are checked.</label>
-              <div className="set-days"><label htmlFor="pin-days">Days before the due date to fill each GST return, and show it in red if it still needs papers or checks</label><input id="pin-days" name="pin_days" type="number" min="1" max="30" step="1" className="num" defaultValue={Number(settings.pin_days) || 5} /></div>
+              <div className="set-days"><label htmlFor="pin-days">Days before the due date to fill each GST return, and show it in red if it still needs papers or checks</label><input id="pin-days" form={GROUP} name="pin_days" type="number" min="1" max="30" step="1" className="num" defaultValue={Number(settings.pin_days) || 5} /></div>
+              </div></details>
               {problem("permissions")}
-              <div className="set-foot">
-                <Pending busy="Saving" className="b b-primary" name="intent" value="save">
-                  Save permissions
-                </Pending>
+              {confirm !== "reset" && <div className="set-foot">
                 <Link className="b b-ghost" href="/app/settings?group=people&confirm=reset#permissions" scroll={false}>
                   Reset to defaults
                 </Link>
-              </div>
-            </form>
+              </div>}
+            </div>
             {confirm === "reset" && (
               <form action={savePermissions} className="set-foot">
                 <p className="hint grow">Reset every permission to the defaults? This also clears the client and last day limits, Hide papers and the second approval, and sets the GST fill days back to 5.</p>
@@ -694,8 +713,25 @@ export default async function Settings({
             )}
           </Card>
 
-          {(!!others.length || !!always.length) && <Card id="always" title="Extra permission for one person" line="Let one person do one thing without asking, for some clients or until a date, on top of their role.">
-            {!!others.length && <form action={allowStanding} className="set-fields"><div><label htmlFor="standing-person">Person</label><select id="standing-person" name="person" required>{others.map(person=><option key={person.user_id} value={person.user_id}>{person.email}</option>)}</select></div><div><label htmlFor="standing-right">What they may do</label><select id="standing-right" name="right">{Object.entries(switchable).map(([right,label])=><option key={right} value={right}>{label}</option>)}</select></div><div><label htmlFor="standing-clients">Client names, one per line. Blank means every client.</label><textarea id="standing-clients" name="clients" rows={3}/></div><div><label htmlFor="standing-until">Last day, if needed</label><input id="standing-until" name="until" type="date"/></div><div className="set-foot"><Pending busy="Saving" className="b b-primary">Allow this person</Pending></div></form>}
+          {owner && <Card id="visibility" title="Who sees which clients">
+            <div className="set-stack">
+              <fieldset className="set-options">
+                <legend className="sr-only">Who sees clients</legend>
+                {[
+                  ["open", "Everyone in the firm sees every client"],
+                  ["restricted", "Only you, partners and the people assigned to a client see it"],
+                ].map(([value, label]) => (
+                  <label key={value} className="check">
+                    <input type="radio" form={GROUP} name="visibility" value={value} defaultChecked={(settings.client_visibility ?? "open") === value} />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+          </Card>}
+
+          {(!!others.length || !!always.length) && <Card id="always" title="Extra permission for one person" line="One thing a person may do without asking, on top of their role.">
+            {!!others.length && <details className="reveal" open={error === "permission_scope" && !always.length}><summary>Give one person a permission</summary><form action={allowStanding} className="set-fields"><div><label htmlFor="standing-person">Person</label><select id="standing-person" name="person" required>{others.map(person=><option key={person.user_id} value={person.user_id}>{person.email}</option>)}</select></div><div><label htmlFor="standing-right">What they may do</label><select id="standing-right" name="right">{Object.entries(switchable).map(([right,label])=><option key={right} value={right}>{label}</option>)}</select></div><div><label htmlFor="standing-clients">Client names, one per line. Blank means every client.</label><textarea id="standing-clients" name="clients" rows={3}/></div><div><label htmlFor="standing-until">Last day, if needed</label><input id="standing-until" name="until" type="date"/></div><div className="set-foot"><Pending busy="Saving" className="b b-secondary">Allow this person</Pending></div></form></details>}
             {!!always.length && (
               <>
                 <h3 className="set-sub">Always allowed</h3>
@@ -716,26 +752,8 @@ export default async function Settings({
             )}
           </Card>}
 
-          {owner && <Card id="visibility" title="Who sees which clients" line="Choose whether everyone sees every client, or only the people assigned to it.">
-            <form action={saveVisibility} className="set-stack">
-              <fieldset className="set-options">
-                <legend className="sr-only">Who sees clients</legend>
-                {[
-                  ["open", "Everyone in the firm sees every client"],
-                  ["restricted", "Only you, partners and the people assigned to a client see it"],
-                ].map(([value, label]) => (
-                  <label key={value} className="check">
-                    <input type="radio" name="visibility" value={value} defaultChecked={(settings.client_visibility ?? "open") === value} />
-                    {label}
-                  </label>
-                ))}
-              </fieldset>
-              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save who sees clients</Pending></div>
-            </form>
-          </Card>}
-
-          {owner && <Card id="exceptions" title="Exceptions to the rules" line="Roles and people that follow their own office hours or signing in rule, not the firm's. Remove one to put them back on the firm's rule.">
-            {exceptions.length ? (
+          {owner && !!exceptions.length && <Card id="exceptions" title="Exceptions to the rules" line="Roles and people on their own office hours or signing in rule. Remove one to put them back on the firm's.">
+            {(
               <List className="set-rows" rise={false}>
                 {exceptions.map((one) => (
                   <Item key={`${one.role ?? one.person}-${one.rule}`}>
@@ -748,43 +766,40 @@ export default async function Settings({
                   </Item>
                 ))}
               </List>
-            ) : <p className="hint">None. Everyone follows the firm&apos;s rules.</p>}
+            )}
           </Card>}
+          {saveBar(savePermissions)}
           </>}
 
-          {group === "me" && <YourSignIn supabase={supabase} userId={userId} />}
-
           {group === "reminders" && <>
-          <Card id="reminders" title="Reminders" line="InboxCA emails each client at most once a day, from your firm email, at the stages you choose. It reminds only for due dates it has checked against the government notification.">
-            <form action={saveReminders} className="set-stack">
+          <Card id="reminders" title="Reminders" line="At most one email a client a day, only for checked due dates, and none once the return is filed or the papers are in.">
+            <div className="set-stack">
               <label className="check">
-                <input className="toggle" type="checkbox" name="on" defaultChecked={settings.reminders === true} />
+                <input className="toggle" form={GROUP} type="checkbox" name="on" defaultChecked={settings.reminders === true} />
                 Email clients before their returns are due
               </label>
               <fieldset>
                 <legend>When to remind</legend>
-                <div className="set-grid">{STAGES.map((day) => <label className="check" key={day}><input type="checkbox" name="stage" value={day} defaultChecked={reminderStages(settings).includes(day)} />{stageNames[day]}</label>)}</div>
+                <div className="set-grid">{STAGES.map((day) => <label className="check" key={day}><input type="checkbox" form={GROUP} name="stage" value={day} defaultChecked={reminderStages(settings).includes(day)} />{stageNames[day]}</label>)}</div>
               </fieldset>
               <fieldset>
                 <legend>Ask for papers before the due date</legend>
-                <p className="hint">InboxCA emails the client a list of the papers each return needs, from your firm&apos;s email, and they reply with the papers attached. It leaves out papers you already have. If nothing comes back, it emails again every 3 days. After two of these, the person who looks after the client is asked to call.</p>
+                <p className="hint">The list of papers each return needs, again every 3 days. After two emails, the person who looks after the client is asked to call.</p>
                 <div className="set-fields">{Object.entries({ monthly: "Monthly returns", quarterly: "Quarterly returns", yearly: "Yearly returns" }).map(([often, label]) => (
                   <div key={often}>
                     <label htmlFor={`ask-${often}`}>{label}</label>
-                    <select id={`ask-${often}`} name={`ask_${often}`} defaultValue={askDays(settings)[often]}>
+                    <select id={`ask-${often}`} form={GROUP} name={`ask_${often}`} defaultValue={askDays(settings)[often]}>
                       {askChoices.map((days) => <option key={days} value={days}>{days ? `${days} days before` : "Off"}</option>)}
                     </select>
                   </div>
                 ))}</div>
               </fieldset>
-              <p className="hint">A reminder is skipped when the return is filed, the client already sent papers for it, or your team is replying to them.</p>
-              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save reminders</Pending></div>
-            </form>
+            </div>
           </Card>
 
           {/* The owner confirms a due date for their firm until InboxCA's own check comes (src/lib/due-dates.ts). */}
-          {dueDates && <Card id="due_dates" title="Due dates to confirm" line="InboxCA checks every due date against the government notification before it reminds clients. Until then you, as the firm's chartered accountant, can confirm a date yourself from the notification linked beside it. Client reminders then go for it. InboxCA's own check comes later and replaces yours.">
-            {dueDates.length ? (
+          {!!dueDates?.length && <Card id="due_dates" title="Due dates to confirm" line="Reminders wait until a date is checked. Confirm one yourself from its notification; InboxCA's own check replaces yours later.">
+            {(
               <ul className="set-rows" id="due-dates">
                 {dueDates.map((rule) => (
                   <li key={rule.code}>
@@ -805,57 +820,55 @@ export default async function Settings({
                   </li>
                 ))}
               </ul>
-            ) : <p className="hint">Every due date your clients&apos; services use is checked.</p>}
+            )}
           </Card>}
 
-          <Card id="answers" title="Replies by InboxCA" line="InboxCA answers these emails from your records only, in English, to the client's own address or a contact allowed to receive papers. Questions about advice, fees or what a notice means always wait for your team.">
-            <form action={saveAnswers} className="set-stack">
+          <Card id="answers" title="Replies by InboxCA" line="From your records only, in English. Advice, fees and what a notice means always wait for your team.">
+            <div className="set-stack">
               <ul className="set-rows set-answers">{(Object.entries(answerKinds) as [AnswerKind, readonly [string, string]][]).map(([kind, [label, hint]]) => (
                 <li key={kind}>
                   <span className="grow">
                     <label htmlFor={`answer-${kind}`}>{label}</label>
                     <span className="hint" id={`answer-${kind}-hint`}>{hint}</span>
                   </span>
-                  <select id={`answer-${kind}`} name={kind} defaultValue={answerMode(settings, kind)} aria-describedby={`answer-${kind}-hint`}>
+                  <select id={`answer-${kind}`} form={GROUP} name={kind} defaultValue={answerMode(settings, kind)} aria-describedby={`answer-${kind}-hint`}>
                     {Object.entries(answerModes).map(([mode, name]) => <option key={mode} value={mode}>{name}</option>)}
                   </select>
                 </li>
               ))}</ul>
-              <p className="hint">Auto sends {UNDO_MINUTES} minutes after the email arrives. Until then, Undo in the Inbox stops it. Ask me first keeps the reply in the Inbox for you to send or change. Off sends nothing, and a question waits in Needs reply.</p>
-              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save replies</Pending></div>
-            </form>
+              <p className="hint">Auto sends {UNDO_MINUTES} minutes after the email arrives, with Undo in the Inbox. Ask me first waits for you.</p>
+            </div>
           </Card>
 
-          <Card id="records" title="Papers sent on request" line="When a client, or a contact with Receives papers ticked, asks for a paper by email, InboxCA finds it and replies with a secure link. Ticked paper types go at once. The others wait until someone approves them in the Inbox.">
-            <form action={saveRecords} className="set-stack">
-              <fieldset>
-                <legend>Send at once</legend>
+          <Card id="records" title="Papers sent on request" line="When a client asks for a paper by email, InboxCA replies with a secure link. Others wait for approval in the Inbox.">
+            <div className="set-stack">
+              <details className="reveal">
+                <summary>Paper types sent at once: {documentTypes.filter((type) => isRoutine(type, { routine: records.routine })).length}</summary>
                 <div className="set-grid">{documentTypes.map((type) => (
                   <label key={type} className="check">
-                    <input type="checkbox" name="routine" value={type} defaultChecked={isRoutine(type, { routine: records.routine })} />
+                    <input type="checkbox" form={GROUP} name="routine" value={type} defaultChecked={isRoutine(type, { routine: records.routine })} />
                     {paperType(type)}
                   </label>
                 ))}</div>
-              </fieldset>
+              </details>
               <label className="check">
-                <input className="toggle" type="checkbox" name="approve_all" defaultChecked={records.approve_all === true} />
+                <input className="toggle" form={GROUP} type="checkbox" name="approve_all" defaultChecked={records.approve_all === true} />
                 Wait for approval for every paper
               </label>
-              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save paper sending rules</Pending></div>
-            </form>
+            </div>
           </Card>
+          {saveBar(saveReminders)}
           </>}
 
           {group === "data" && <>
-          <Card id="use" title="InboxCA use" line="How much your firm uses InboxCA, which will later decide your plan. Your papers stay in your own drive. InboxCA stores your client list, returns, notices, the activity log and what it reads from papers.">
+          <Card id="use" title="InboxCA use" line="Returns this year and what InboxCA stores. Your papers stay in your own drive.">
             {usage && (
               <Suspense fallback={<div className="set-meters" aria-busy="true"><span className="skel" /><span className="skel" /></div>}>
                 <Meters usage={usage} />
               </Suspense>
             )}
-            <p className="hint set-after">Shown for your information. Plans and their limits come later; nothing is limited or charged by these figures yet.</p>
           </Card>
-          <Card id="caps" title="Downloads and emails" line="Papers downloaded through InboxCA and InboxCA's own emails, up to a fair amount for your plan. Papers and emails your clients send always arrive.">
+          <Card id="caps" title="Downloads and emails" line="Downloads through InboxCA and its own emails. What clients send always arrives.">
             <Suspense fallback={<div className="set-meters" aria-busy="true"><span className="skel" /><span className="skel" /></div>}>
               <FairUse firmId={membership.firmId} />
             </Suspense>
@@ -865,10 +878,10 @@ export default async function Settings({
               <AiUse firmId={membership.firmId} />
             </Suspense>
           </Card>}
-          <Card id="data" title="Your data" line="Your client list, returns and notices, the list of papers and the activity log, as spreadsheet files in one ZIP. The papers themselves are already in your firm's drive.">
+          <Card id="data" title="Your data" line="Your client list, returns, notices, papers list and activity log as spreadsheets in one ZIP.">
             <div className="set-foot">{download}</div>
           </Card>
-          <Card id="support" title="Orelu support" line="InboxCA is a product of Orelu, a partnership firm. Orelu cannot see your clients or papers. To fix a problem, Orelu support may ask here to see your people and client names for one hour.">
+          <Card id="support" title="Orelu support" line="Orelu cannot see your clients or papers. If support asks for a one hour look at names, you answer here.">
             <Support supabase={supabase} firmId={membership.firmId} />
           </Card>
           <Card id="close" title="Close the firm" danger line="Everyone is signed out, your team can no longer sign in, and the firm email and drive are disconnected. For 30 days you can still sign in and download your data. Then InboxCA deletes your firm's data; the activity log is kept one more year, as Indian rules require. Papers in your drive are not touched.">

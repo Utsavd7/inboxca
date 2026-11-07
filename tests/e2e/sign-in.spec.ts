@@ -89,7 +89,7 @@ test("a new computer waits, reaching nothing of the firm, until a computer alrea
   await expect(page).toHaveURL(/\/app\/clients$/);
 
   // Removed from the first computer, it is signed out at once and waits for approval again.
-  await first.goto("/app/settings?group=access#computers");
+  await first.goto("/app/settings?group=me#computers");
   const computers = first.locator("section#computers");
   await expect(computers.getByText("This computer")).toBeVisible();
   await computers.getByRole("button", { name: "Remove and sign out other computers" }).click();

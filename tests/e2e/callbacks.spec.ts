@@ -123,7 +123,7 @@ test("OneDrive connects on Microsoft's own page, saves a paper in the client's f
   // InboxCA sets it up by itself, with a test file saved, read back and removed.
   await runJobs(request, firm.firmId);
   await owner.reload();
-  await expect(card.getByRole("list", { name: "What InboxCA set up" })).toContainText("Saved a test file, read it back and removed it");
+  await expect(card.getByRole("list", { name: "What InboxCA set up", includeHidden: true })).toContainText("Saved a test file, read it back and removed it");
 
   // A paper uploaded on the client's page goes into their folder in the drive, under InboxCA's name.
   const client = `OneDrive Client ${tag}`;

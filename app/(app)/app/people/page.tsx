@@ -13,7 +13,7 @@ import { InviteForm } from "./invite-form";
 import "./people.css";
 
 const statusNames: Record<string, string> = { active: "Active", invited: "Invited", deactivated: "Removed" };
-// Active is the usual state, so it stays quiet; green means done only.
+// Active is the usual state, so it says nothing; the others show beside the name. Green means done only.
 const statusTones: Record<string, Tone> = { invited: "warn" };
 // Each role keeps one colour on its pill; the colour names the role, the word says it.
 const roleTones: Record<string, Tone> = { owner: "strong", partner: "blue", manager: "blue" };
@@ -91,7 +91,6 @@ export default async function People({ searchParams }: { searchParams: Promise<{
                 </th>
               ))}
               {!!load?.length && <th scope="col">Work waiting</th>}
-              <th scope="col">Status</th>
               {isOwner && (
                 <th scope="col" className="shrink">
                   <span className="sr-only">Actions</span>
@@ -109,6 +108,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
                       <strong>
                         {personName(one.email)}
                         {one.user_id === userId && <span className="sub-inline">You</span>}
+                        {statusTones[one.status] || one.status === "deactivated" ? <> <Badge tone={statusTones[one.status]}>{statusNames[one.status]}</Badge></> : null}
                       </strong>
                       <span className="sub">{one.email}</span>
                     </span>
@@ -123,22 +123,20 @@ export default async function People({ searchParams }: { searchParams: Promise<{
                   <td key={kind}>{groupName.get(one[column] ?? "") ?? <span className="hint">No {label.toLowerCase()}</span>}</td>
                 ))}
                 {!!load?.length && (
-                  <td className="people-load">
+                  <td>
                     {(() => {
                       const work = loadOf(one.user_id);
-                      if (!work) return <span className="hint">Not shown</span>;
+                      if (!work) return null;
+                      if (!work.open && !work.asks && !work.replies) return <span className="hint">Nothing waiting</span>;
                       return (
-                        <>
+                        <span className="people-load">
                           <span>{work.open} {work.open === 1 ? "return" : "returns"} open{!!work.late && <> <Badge tone="late">{work.late} late</Badge></>}</span>
                           <span className="sub">{work.asks} {work.asks === 1 ? "client" : "clients"} asked for papers, {work.replies} {work.replies === 1 ? "reply" : "replies"} waiting</span>
-                        </>
+                        </span>
                       );
                     })()}
                   </td>
                 )}
-                <td>
-                  <Badge tone={statusTones[one.status]}>{statusNames[one.status]}</Badge>
-                </td>
                 {isOwner && (
                   <td className="shrink">
                     {one.user_id !== userId && (
