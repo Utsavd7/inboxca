@@ -110,6 +110,10 @@
 ::view-transition-new(.tab-in) { animation: vt-fade var(--slow) var(--out) both; }
 .client-pane { flex: 1; }
 .client-pane > * + * { margin-top: var(--s4); }
+/* Emails is the Inbox for this client (.ib.fill): the tab fills the page's height and its list
+   and open email each scroll on their own, as in the Inbox. */
+.client-record:has(> .client-pane > .ib) { flex: 1; min-height: 0; }
+.client-pane:has(> .ib) { display: flex; flex-direction: column; min-height: 0; }
 /* Details: one sheet in two columns of groups, each a few label and value rows, its Edit shown
    while the group is pointed at or has the focus. */
 .client-sheet { columns: 2 360px; column-gap: var(--s7); padding: var(--s2) var(--s5) var(--s4); }
@@ -127,10 +131,10 @@
 .sheet-group .services-usual { margin-top: var(--s2); }
 .sheet-edit { transition: opacity var(--fast) var(--out); }
 @media (hover: hover) and (pointer: fine) { .sheet-group:not(:hover, :focus-within) .sheet-edit { opacity: 0; } }
-/* An email row opens the email from anywhere on it, and a return's row its own page. */
-.client-mails .app-row, .work-rows .app-row { position: relative; }
-.client-mails .row-link, .work-rows .row-link { color: inherit; text-decoration: none; }
-.client-mails .row-link::after, .work-rows .row-link::after { content: ""; position: absolute; inset: 0; }
+/* A return's row opens its own page from anywhere on it. */
+.work-rows .app-row { position: relative; }
+.work-rows .row-link { color: inherit; text-decoration: none; }
+.work-rows .row-link::after { content: ""; position: absolute; inset: 0; }
 /* Work: a return's steps and next step under its name, who looks after it, and an arrow that
    moves on when the row is pointed at; Later and Filed this year open from their heads. */
 .work-rows .row-link:focus-visible { outline: none; }
