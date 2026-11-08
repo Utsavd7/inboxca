@@ -141,7 +141,7 @@ button.fb-chev:hover { background: var(--line); color: var(--ink); }
 .fb-pick { display: grid; gap: var(--s2); margin: 0; padding: 0; border: 0; }
 .fb-pick legend { margin-bottom: var(--s1); color: var(--ink-2); font-size: 13px; }
 
-@media (max-width: 1200px) {
+@media (max-width: 1366px) {
   .fb-split { grid-template-columns: 216px minmax(0, 1fr) 272px; }
   .fb-table th:nth-child(2) { width: 112px; }
 }
