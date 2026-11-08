@@ -211,3 +211,52 @@ test("a TDS client is asked for the quarter's TDS papers, its reply is filed und
   await expect(staff.locator("section[aria-labelledby=t-list]")).toBeVisible();
   await expect(ready).toHaveCount(0);
 });
+
+test("a request with nothing in: Stop asking ends its reminders, Undo brings them back, and Ask again emails the client now", async () => {
+  const quiet = { name: `Quiet Traders ${tag}`, email: `quiet-${tag}@patel.test`, id: "" };
+  await makeMailbox(quiet.email);
+  await owner.goto("/app/clients?panel=add");
+  await owner.getByLabel("Name", { exact: true }).fill(quiet.name);
+  await owner.getByLabel("Email", { exact: true }).fill(quiet.email);
+  await owner.getByRole("button", { name: "Add client" }).click();
+  await expect(owner.locator(".page-head")).toContainText(quiet.name);
+  quiet.id = owner.url().split("/").at(-1)!;
+  const id = randomUUID();
+  await query(local.dbUrl, "insert into public.requests (id, firm_id, kind, client_id, entity_type, entity_id, expires_at, details) values ($1, $2, 'documents', $3, 'checklist', $1, now() + interval '20 days', $4)", [id, firm.firmId, quiet.id, {
+    period: "2026-10", since: day(-4), items: [{ type: "Sales bills", work: "gst", received: [] }, { type: "Purchase bills", work: "gst", received: [] }],
+  }]);
+  const live = async () => (await query(local.dbUrl, "select expires_at > now() as live from public.requests where id = $1", [id]))[0].live;
+  const toast = (text: string) => owner.getByRole("status").filter({ hasText: text });
+  // Today's follow up of every request still missing papers, whatever its stage.
+  const followUp = async () => {
+    await query(local.dbUrl, "insert into public.jobs (firm_id, kind, entity_type, entity_id, idempotency_key) values ($1, 'reminders', 'papers', $1, $2)", [firm.firmId, `reminders:test:${randomUUID()}`]);
+    await runJobs(owner.request, firm.firmId);
+  };
+  await owner.goto(`/app/clients/${quiet.id}?tab=files`);
+  const row = owner.getByRole("list", { name: "Papers asked for" }).getByRole("listitem");
+  await expect(row).toContainText("0 of 2 received");
+  await owner.screenshot({ path: test.info().outputPath("nothing-in.png") });
+
+  // Stop asking, under More: no reminder goes, and it is logged.
+  await row.locator("summary").click();
+  await row.getByRole("button", { name: "Stop asking for Sales bills, Purchase bills" }).click();
+  await expect(toast("Stopped asking")).toBeVisible();
+  expect(await live()).toBe(false);
+  await followUp();
+  expect(await mailTexts(quiet.email)).toEqual([]);
+  expect(await query(local.dbUrl, "select 1 from public.activity_log where entity_id = $1 and action = 'request.stopped'", [id])).toHaveLength(1);
+
+  // Undo puts the request back as it was.
+  await toast("Stopped asking").getByRole("button", { name: "Undo" }).click();
+  await expect(toast("Asking again")).toBeVisible();
+  expect(await live()).toBe(true);
+
+  // Ask again emails the client now, after its 20 seconds for Undo, and is logged.
+  await owner.goto(`/app/clients/${quiet.id}?tab=files`);
+  await row.getByRole("button", { name: "Ask again for Sales bills, Purchase bills" }).click();
+  await expect(toast("about 20 seconds").getByRole("button", { name: "Undo" })).toBeVisible();
+  await goNow(owner);
+  const [sent] = await mailTexts(quiet.email);
+  expect(sent).toContain("Sales bills, Purchase bills");
+  expect(await query(local.dbUrl, "select 1 from public.activity_log where entity_id = $1 and action = 'reminder.sent'", [quiet.id])).toHaveLength(1);
+});

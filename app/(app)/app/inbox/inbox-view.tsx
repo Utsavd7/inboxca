@@ -20,7 +20,7 @@ import { currentMember, myQuestions } from "@/src/lib/member";
 import { opensInMailbox } from "@/src/lib/mailbox";
 import { askedPaper } from "@/src/lib/records";
 import { answerEvent, draftAnswer, statusKind, type Delivery } from "@/src/jobs/answer-mail";
-import { answerOf, answerWords } from "@/src/lib/answers";
+import { answerOf, answerWords, UNDO_MINUTES } from "@/src/lib/answers";
 import { awake, labels, replyReasons } from "@/src/lib/triage";
 import { suggestedReply, waitingWords } from "@/src/lib/team-replies";
 import { LinkTabs } from "../link-tabs";
@@ -30,7 +30,7 @@ import { Avatar, Badge, Empty, PageHead, Row as ListRow, SidePanel, Toast, stora
 import { SetupArt } from "../setup-art";
 import { clientsOf, contactName, conversation } from "./conversation";
 import { manageAnswer } from "./actions";
-import { ComposeBox, InboxKeys, LinkBusy, Reading, ReplyBox, ReplyButton } from "./inbox-client";
+import { ComposeBox, InboxKeys, LinkBusy, Reading, ReplyBox, ReplyButton, SendTicked } from "./inbox-client";
 import "./inbox.css";
 
 const PAGE = 30;
@@ -76,7 +76,7 @@ const newSender = (reason: string | null) => reason === "not_a_client" || reason
 const attachable = (papers: { id: string; name: string; prepared: unknown }[] | null) =>
   (papers ?? []).map(({ id, name, prepared }) => ({ id, name: prepared ? `${name} (Prepared by InboxCA, not the filed copy)` : name }));
 
-export type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "compose" | "approved" | "error" | "replied" | "written" | "unsent" | "answer" | "decided" | "cleared" | "confirm" | "file" | "snoozed" | "assigned" | "filed" | "edit" | "went" | "stopped" | "panel", string | undefined>;
+export type Search = Record<"mail" | "sent" | "client" | "show" | "status" | "when" | "q" | "before" | "cq" | "cpage" | "compose" | "approved" | "error" | "replied" | "written" | "unsent" | "answer" | "decided" | "cleared" | "confirm" | "file" | "snoozed" | "assigned" | "filed" | "edit" | "went" | "stopped" | "going" | "halted" | "waits" | "panel", string | undefined>;
 
 // What a slow part gives, once it has it, so the page around it shows at once (Suspense).
 async function Later({ children }: { children: Promise<React.ReactNode> }) {
@@ -311,6 +311,13 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
   const queued = answers.filter((row) => row.delivery.ack !== "held").length;
   // InboxCA's replies in the same words on the line and as their panel's title.
   const going = queued === answers.length ? "going out" : queued ? "by InboxCA" : "ready to send";
+  // Send all: the replies InboxCA holds for a person (never a suggestion or an AI draft), each
+  // read again from the records for its preview, as the open email shows it.
+  const ready = answers.filter((row) => row.delivery.ack === "held");
+  const { data: readyRows } = sp.confirm === "send" && ready.length > 1 ? await admin.from("email_events").select(answerEvent).in("id", ready.map((row) => row.id)) : { data: [] };
+  const toSend = (await Promise.all((readyRows ?? []).map(async (row) => ({ row, draft: await draftAnswer(admin, row).catch(() => null) }))))
+    .flatMap(({ row, draft }) => (draft && "text" in draft ? [{ id: row.id, name: row.clients?.name ?? "", subject: draft.subject, lines: draft.text.split("\n").slice(2).filter(Boolean).join(" ") }] : []));
+  const sending = (sp.going ?? "").split(".").filter((id) => uuid.test(id)).slice(0, 20);
   const waits = [
     { panel: "asks", Icon: KeyRound, n: toAnswer.length, text: count(toAnswer.length, "permission request") },
     { panel: "papers", Icon: ShieldCheck, n: papers?.length ?? 0, text: `${count(papers?.length ?? 0, "paper")} to approve` },
@@ -900,9 +907,10 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
           </section>
         </SidePanel>
       )}
-      {sp.panel === "replies" && !!answers.length && (
+      {sp.panel === "replies" && sp.confirm !== "send" && !!answers.length && (
         <SidePanel key="replies" id="answers" title={`Replies ${going}`} close={here}>
           <p className="hint">{queued ? "Replies set to Auto go by themselves at the time shown. Undo stops one." : "InboxCA wrote these from your records. Check each, then send it."}</p>
+          {ready.length > 1 && !membership.viewOnlyUntil && <Link className="b b-secondary" href={`${panelHref("replies")}&confirm=send`} scroll={false}><Send size={14} aria-hidden />Send all</Link>}
           <section aria-labelledby="answers">
             <ul className="app-rows ib-preview">
               {answers.map((row) => {
@@ -928,6 +936,21 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
               })}
             </ul>
           </section>
+        </SidePanel>
+      )}
+      {sp.panel === "replies" && sp.confirm === "send" && !!toSend.length && (
+        <SidePanel key="send" id="send-title" title={`Send ${count(toSend.length, "reply", "replies")}?`} close={panelHref("replies")}>
+          <p className="hint">Each goes to its client in {UNDO_MINUTES} minutes. Untick one to keep it here.</p>
+          <form action={manageAnswer}>
+            <ul className="app-rows ib-preview">
+              {toSend.map((reply) => (
+                <ListRow key={reply.id} lead={<input type="checkbox" name="email" value={reply.id} defaultChecked aria-label={`Send the reply to ${reply.name}`} />} title={reply.name} meta={`${reply.subject}. ${reply.lines}`} />
+              ))}
+            </ul>
+            <input type="hidden" name="back" value={here} />
+            <input type="hidden" name="all" value="1" />
+            <div className="ib-send"><SendTicked total={toSend.length} /></div>
+          </form>
         </SidePanel>
       )}
       {sp.panel === "check" && !!toCheck?.length && (
@@ -1044,6 +1067,21 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
       )}
       {sp.assigned && touched && <Toast>{(touched.details as Ask).assignee ? `Assigned to ${whoWords((touched.details as Ask).assignee!)}.` : "Nobody is assigned now."}</Toast>}
       {sp.went && <Toast>Sending the reply now.</Toast>}
+      {!!sending.length && (
+        <Toast
+          undo={
+            <form action={manageAnswer}>
+              {sending.map((id) => <input key={id} type="hidden" name="email" value={id} />)}
+              <input type="hidden" name="back" value={here} />
+              <input type="hidden" name="all" value="1" />
+              <Pending className="b" name="intent" value="stop" busy="Undoing">Undo</Pending>
+            </form>
+          }
+        >
+          {count(sending.length, "reply", "replies")} go in {UNDO_MINUTES} minutes.
+        </Toast>
+      )}
+      {sp.halted && <Toast>{count(Number(sp.halted) || 0, "reply", "replies")} not sent.{sp.waits ? " The questions wait in Needs reply." : ""}</Toast>}
       {sp.stopped && <Toast>{statusKind(sp.stopped) ? "Not sent. The email waits in Needs reply." : "Not sent."}</Toast>}
       {sp.replied && <Toast>Reply sent{sp.unsent ? `. ${sp.unsent === "1" ? "1 paper was" : `${sp.unsent} papers were`} not sent. Send ${sp.unsent === "1" ? "it" : "them"} from the client's Documents tab.` : "."}</Toast>}
       {sp.written && <Toast>Email sent{sp.unsent ? `. ${sp.unsent === "1" ? "1 paper was" : `${sp.unsent} papers were`} not sent. Send ${sp.unsent === "1" ? "it" : "them"} from the client's Documents tab.` : "."}</Toast>}

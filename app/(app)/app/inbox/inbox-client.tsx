@@ -1,10 +1,11 @@
 "use client";
-import { Reply, Sparkles } from "lucide-react";
+import { Reply, Send as SendIcon, Sparkles } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { going } from "../nav-progress";
+import { Pending } from "../pending";
 import { usePageParams } from "../shell";
 import { draftEmail, draftReply, sendEmail, sendReply, type Draft } from "./actions";
 
@@ -24,6 +25,26 @@ export function ReplyButton() {
 // Inside a link: a small spinner from the click until the page it opens is ready.
 export function LinkBusy() {
   return useLinkStatus().pending ? <span className="ib-busy" aria-hidden /> : null;
+}
+
+// Send all's button: how many replies are ticked in its form, off when none is.
+export function SendTicked({ total }: { total: number }) {
+  const spot = useRef<HTMLSpanElement>(null);
+  const [ticked, setTicked] = useState(total);
+  useEffect(() => {
+    const form = spot.current?.closest("form");
+    const count = () => setTicked(form?.querySelectorAll("input[name=email]:checked").length ?? 0);
+    form?.addEventListener("change", count);
+    return () => form?.removeEventListener("change", count);
+  }, []);
+  return (
+    <span ref={spot}>
+      <Pending className="b b-primary" name="intent" value="send" busy="Sending" disabled={!ticked}>
+        <SendIcon size={14} aria-hidden />
+        Send {ticked === 1 ? "1 reply" : `${ticked} replies`}
+      </Pending>
+    </span>
+  );
 }
 
 // The Inbox's keys, never required: j and k move through the list, Enter opens, r goes to the

@@ -9,7 +9,7 @@ import Form from "next/form";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Fragment, Suspense, ViewTransition } from "react";
-import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
+import { setPaperSharing, askForDocuments, askPermission, checkRequestItem, stopAsking, manageClient, manageNotice, manageTasks, pauseReminders, manageDocument, removeDocument, saveChecklist, sendDocument } from "@/app/(app)/actions";
 import { addDays, dueLabel, isItr, periodLabel, todayInIndia, verifyBy } from "@/src/lib/calendar";
 import { firmChecked } from "@/src/lib/due-dates";
 import { assignmentLabel, assignmentRoles, assignmentWork, canManageClients, clientKinds, seesClient, usualServices, whatsappLink, type ClientKind } from "@/src/lib/clients";
@@ -129,10 +129,10 @@ const changes: Record<string, string> = {
 };
 
 // One client. Its numbers are opened with the firm's key on the server, for this page only.
-export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; request?: string; task?: string; marked?: string; t?: string; tan?: string }> }) {
+export default async function Client({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; closed?: string; reopened?: string; tab?: string; form?:string; page?: string; show?: string; draft?: string; line?: string; check?: string; view?: string; source?: string; section?: string; header?: string; read?: string; portal?: string; edit?: string; renamed?: string; saved?: string; removed?: string; restored?: string; changed?: string; upload?: string; dropped?: string; ask?: string; asked?: string; send?: string; shared?: string; find?: string; asked_right?: string; request?: string; task?: string; marked?: string; t?: string; tan?: string }> }) {
   const { supabase, userId, membership } = await currentMember();
   if (!membership) redirect("/app");
-  const [{ id }, { error, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds, tan }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, closed, reopened, form:formMessage, tab: asked, page: askedPage, show, draft, line, check, view, source, section, header, read, portal, edit, renamed, saved, removed, restored, changed, upload, dropped, ask, asked: askedFor, send, shared, find, asked_right: askedRight, task: marking, marked, t: markedIds, tan }] = await Promise.all([params, searchParams]);
   const tab: Main = asked && asked in mains ? (asked as Main) : tabOf[asked ?? ""] ?? "work";
   const sub = asked === "extraction" || asked === "outputs" ? asked : tab;
   const panel = panels.includes(asked ?? "") ? asked! : "";
@@ -244,8 +244,11 @@ export default async function Client({ params, searchParams }: { params: Promise
   const missingAsk = openAsk && (openAsk.details as unknown as DocumentRequest);
   const whatsapp = phone && whatsappLink(phone, missingAsk ? emailTemplates.whatsapp(client.name, membership.firmName, missingAsk.period, missingAsk.items.filter((item) => !item.received.length)) : "");
   const manage = canManageClients(membership.role);
-  // Send reminder now on Work: those who manage clients and those who look after this one.
-  const reminds = sub === "work" && !viewOnly && !!client.email_enc && !client.reminders_paused && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
+  // Send reminder now on Work, and Ask again or Stop asking for papers: those who manage clients
+  // and those who look after this one.
+  const looksAfter = (sub === "work" || files) && !viewOnly && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
+  const mailable = !!client.email_enc && !client.reminders_paused;
+  const reminds = sub === "work" && mailable && looksAfter;
   const confirmedBy = new Map([...confirmers(confirms ?? [])].map(([notice, by]) => [notice, personName(people?.find((person) => person.user_id === by)?.email)]));
   // The lists for the work this client's services need are ticked when asking for files.
   // A client with a TAN has TDS work, whatever services it has.
@@ -704,6 +707,22 @@ export default async function Client({ params, searchParams }: { params: Promise
             {askedRight && <Toast>Permission asked. Once allowed, it works here once, within an hour.</Toast>}
             {sharedFile && <Toast>Sent {sharedFile.name}. The link works for 7 days and 5 downloads.</Toast>}
             {askedFor === "sent" && <Toast>The client was emailed the list of papers. What they reply with is saved here.</Toast>}
+            <Suspense fallback={null}>
+              <RemindToast from="files" />
+            </Suspense>
+            {uuid.test(closed ?? "") && (
+              <Toast
+                undo={
+                  <form action={stopAsking}>
+                    <input type="hidden" name="request" value={closed} />
+                    <Pending className="b" name="intent" value="undo" busy="Undoing">Undo</Pending>
+                  </form>
+                }
+              >
+                Stopped asking. No more reminders go for these papers.
+              </Toast>
+            )}
+            {reopened && <Toast>Asking again. Reminders go as before.</Toast>}
             {askedFor === "nomail" && <p className="note" role="status"><span>The papers are noted, but no email went: connect the firm email in Settings and add the client&apos;s email address, then the reminders go by themselves.</span></p>}
             {noticeFile && (
               <Toast
@@ -730,16 +749,26 @@ export default async function Client({ params, searchParams }: { params: Promise
                     const details = request.details as unknown as DocumentRequest;
                     const got = details.items.filter((item) => item.received.length).length;
                     // Those in and not yet checked: one button marks them all checked; each one
-                    // on its own, and Ask again, are under More.
+                    // on its own, and Ask again, are under More. With nothing in, Ask again emails
+                    // the client now; Stop asking is under More.
                     const toCheck = details.items.flatMap((item, at) => (item.received.length && !item.checked ? [{ item, at }] : []));
+                    const stoppable = looksAfter && request.status === "pending";
+                    const papersWord = details.items.map((item) => item.type).join(", ");
                     return (
                       <Row
                         key={request.id}
                         title={`Asked for ${details.items.map((item) => item.type).join(", ")}${details.period ? ` for ${periodName(details.period, ...details.items.map((item) => item.work))}` : ""}`}
                         meta={`${got} of ${details.items.length} received. Reminders go until ${dueLabel(request.expires_at!.slice(0, 10))}.`}
                         action={
-                          !viewOnly && !!toCheck.length && (
+                          !viewOnly && (!!toCheck.length || stoppable) && (
                             <span className="cell-form">
+                              {!toCheck.length ? !got && mailable && (
+                                <form action={remindClient}>
+                                  <input type="hidden" name="client" value={client.id} />
+                                  <input type="hidden" name="from" value="files" />
+                                  <Pending className="b b-secondary" busy="Sending" aria-label={`Ask again for ${papersWord}`}>Ask again</Pending>
+                                </form>
+                              ) : (
                               <form action={checkRequestItem}>
                                 <input type="hidden" name="request" value={request.id} />
                                 {toCheck.map(({ at }) => <input key={at} type="hidden" name="item" value={at} />)}
@@ -747,6 +776,7 @@ export default async function Client({ params, searchParams }: { params: Promise
                                   Mark checked
                                 </Pending>
                               </form>
+                              )}
                               <details className="rf-menu">
                                 <summary className="b b-ghost" aria-label={`More for ${details.items.map((item) => item.type).join(", ")}`}>
                                   More
@@ -766,6 +796,15 @@ export default async function Client({ params, searchParams }: { params: Promise
                                       </Pending>
                                     </form>
                                   ))}
+                                  {stoppable && (
+                                    <form action={stopAsking} className="ask-item">
+                                      <input type="hidden" name="request" value={request.id} />
+                                      <span className="grow">Reminders</span>
+                                      <Pending className="b b-ghost b-small" name="intent" value="stop" busy="Stopping" aria-label={`Stop asking for ${papersWord}`}>
+                                        Stop asking
+                                      </Pending>
+                                    </form>
+                                  )}
                                 </div>
                               </details>
                             </span>
