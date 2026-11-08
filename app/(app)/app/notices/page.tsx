@@ -160,6 +160,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                 {rows.map((notice) => {
                   const details = notice.details as unknown as NoticeDetails;
                   const [tone, word] = tag(notice);
+                  const from = [authorities[details.authority] ?? details.authority, details.reference].filter(Boolean).join(", ");
                   return (
                     <Item as="tr" key={notice.id} className={notice.id === openId ? "on" : undefined}>
                       <td>
@@ -175,7 +176,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                           <IconTile Icon={authorityIcons[details.authority] ?? Scale} kind="notice" />
                           <span>
                             {details.notice_type}
-                            <span className="sub">{[authorities[details.authority] ?? details.authority, details.reference].filter(Boolean).join(", ")}</span>
+                            <span className="sub" title={from}>{from}</span>
                           </span>
                         </span>
                       </td>
