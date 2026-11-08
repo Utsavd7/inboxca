@@ -8,10 +8,10 @@ import {itrChecks} from "./itr-rules.ts";
 type Schema={type?:string;$ref?:string;allOf?:Schema[];properties?:Record<string,Schema>;items?:Schema;required?:string[];enum?:unknown[];default?:unknown;format?:string;description?:string;pattern?:string};
 type Values=Record<string,unknown>;
 // The schema's own words for a detail, when they name it: a format note ("in YYYY-MM-DD format")
-// is cut off, and a list of codes ("Y: Yes, N : No") is no name.
+// is cut off, and a list of codes ("Y: Yes, N : No", "1. Spouse; 2. Son") is no name.
 const described=(text?:string)=>{
   const name=(text ?? "").replace(/\s+/g," ").split(/;|\s(?:in\s)?(?:format\b|YYYY)/i)[0].replace(/^(Please furnish|Enter)\s+(the\s+)?/i,"").trim().replace(/[ .,:]+$/,"");
-  return name.length<4 || name.length>100 || /^\S+\s?[:-]\s?\S/.test(name) || /^date$/i.test(name) ? "" : name[0].toUpperCase()+name.slice(1);
+  return name.length<4 || name.length>100 || /^\S+\s?[:-]\s?\S/.test(name) || /^\d{1,3}\.\s/.test(name) || /^date$/i.test(name) ? "" : name[0].toUpperCase()+name.slice(1);
 };
 const entries=new Map<string,ItrEntry[]>();
 const sourceFor=(template:Template)=>{
