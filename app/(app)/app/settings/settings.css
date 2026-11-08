@@ -17,7 +17,7 @@
 .set-page .set-body > .panel > :not(.set-head) { margin-left: 40px; }
 .set-page .set-body > .panel > p.hint { margin-top: 12px; }
 .set-page .check:has(> .toggle) { gap: var(--s3); }
-.set-page .panel > form, .set-page .panel > .connection, .set-page .panel > .reveal > form { margin-top: 16px; }
+.set-page .panel > form, .set-page .panel > .set-fields, .set-page .panel > .connection, .set-page .panel > .reveal > form { margin-top: 16px; }
 .set-page .panel > .reveal > summary, .set-page .panel > .set-foot { margin-top: 16px; }
 .set-page .panel > .set-stack, .set-page .panel > .reveal > .set-fields, .set-page .panel > .reveal > .set-rows { margin-top: 16px; }
 .set-page .set-stack > .reveal > summary { margin-top: 0; }
@@ -47,11 +47,11 @@
 .set-after { margin-top: 12px; }
 
 /* Office only, drawn by the shared office panel: its forms stacked with a line between. */
-.set-page #office > form:not(.form-row, .fixed-suggestion) { display: grid; gap: 12px; justify-items: start; }
-.set-page #office > form + form { padding-top: 16px; border-top: 1px solid var(--line); }
+.set-page #office > :is(form, .office-deputies):not(.form-row, .fixed-suggestion) { display: grid; gap: 12px; justify-items: start; }
+.set-page #office > :is(form, .office-deputies) + :is(form, .office-deputies) { padding-top: 16px; border-top: 1px solid var(--line); }
 .set-page #office .fieldset { display: grid; gap: 8px; justify-items: start; margin: 0; }
 .set-page #office .fieldset legend { margin-bottom: 8px; }
-.set-page #office > form > .form-row { margin: 0; }
+.set-page #office > :is(form, .office-deputies) > .form-row { margin: 0; }
 /* Inside the Access preset card: below the preset, with the Office only switch under Change details. */
 .set-page .office-in-preset { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .set-page .office-in-preset > :first-child { margin-top: 0; }

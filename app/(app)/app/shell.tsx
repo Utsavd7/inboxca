@@ -529,10 +529,8 @@ function Bell() {
                     <Avatar name={item.who} />
                     <span className="grow">
                       <strong>{item.what}</strong>
-                      <small>
-                        {item.who}
-                        {item.at && `, ${when(item.at)}`}
-                      </small>
+                      {/* A change names its client already: only when. A question: who asks. */}
+                      <small>{item.at ? when(item.at) : item.who}</small>
                     </span>
                   </Link>
                 ))}

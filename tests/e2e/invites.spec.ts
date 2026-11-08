@@ -325,7 +325,7 @@ test("deputies approve PCs, office PCs confirm changes, and laptops wait for tod
   await expect(owner.getByLabel(deputyEmail, { exact: true })).toBeVisible();
   await owner.getByLabel(deputyEmail, { exact: true }).check();
   // Wait for the save, so the page it redraws is the one the switch opens on.
-  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save deputies" }).click()]);
+  await Promise.all([owner.waitForResponse((response) => response.request().method() === "POST"), owner.getByRole("button", { name: "Save", exact: true }).click()]);
   await expect(owner.getByLabel(deputyEmail, { exact: true })).toBeChecked();
   await officeSwitch(owner);
   await turnOn(owner);
@@ -756,8 +756,8 @@ test("after the firm's idle limit, an unattended screen signs out", async () => 
   await expect(owner.getByRole("status")).toHaveText("Office hours saved.");
   await owner.getByRole("link", { name: "Office and sign in" }).click();
   await owner.getByLabel("Sign out after no activity for").selectOption("15");
-  await owner.getByRole("button", { name: "Save signing in limits" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Signing in limits saved." })).toBeVisible();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Office and sign in saved." })).toBeVisible();
 
   await person.clock.install();
   await person.goto("/app");

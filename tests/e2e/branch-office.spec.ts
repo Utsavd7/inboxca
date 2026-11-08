@@ -62,7 +62,7 @@ test("the owner turns Office only on for one branch, and its staff are checked a
     await route.continue();
   });
   await owner.getByRole("button", { name: "Turn on", exact: true }).click();
-  await expect(owner.locator('button[form="preset-form"]')).toHaveAttribute("aria-busy", "true");
+  await expect(owner.locator('button[form="set-group-form"]')).toHaveAttribute("aria-busy", "true");
   await expect(owner.getByRole("status").filter({ hasText: "On." })).toContainText("You are on your office internet connection now.");
   await owner.unroute(/\/app\/settings/);
   expect((await settingsOf("groups", branchId)).office).toMatchObject({ on: true, lines: [{ ipv4: BRANCH_IP }] });
@@ -140,7 +140,7 @@ test("Remote friendly lets staff in only on approved devices, with the 2 step co
   await owner.goto("/app/settings#preset");
   const preset = owner.locator("section#preset");
   await preset.getByRole("radio", { name: /^Remote friendly:/ }).check();
-  await preset.getByRole("button", { name: "Use this choice" }).click();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(async () => (await settingsOf("firms", firm.firmId)).access?.india_only).toBe(true);
   expect((await settingsOf("firms", firm.firmId)).office).toMatchObject({ on: true, anywhere: true, away: false });
   await expect(preset.getByRole("radio", { name: /^Remote friendly:/ })).toBeChecked();
