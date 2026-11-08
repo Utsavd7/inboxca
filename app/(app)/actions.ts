@@ -1029,6 +1029,7 @@ const remindBack = (form: FormData, ...notes: [string, string][]) => {
   const [from, client, request] = ["from", "client", "request"].map((key) => String(form.get(key) ?? ""));
   if (from === "papers" && z.uuid().safeParse(request).success) return `/app/papers/${request}?${new URLSearchParams(notes)}`;
   if (from === "client" && z.uuid().safeParse(client).success) return `/app/clients/${client}?${new URLSearchParams([["tab", "returns"], ...notes])}`;
+  if (from === "files" && z.uuid().safeParse(client).success) return `/app/clients/${client}?${new URLSearchParams([["tab", "files"], ...notes])}`;
   return calendarBack(form, ...notes);
 };
 
@@ -1063,6 +1064,33 @@ export async function askedByPhone(form: FormData) {
   await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.phoned", entity_type: "request", entity_id: request.id });
   revalidatePath("/app", "layout");
   redirect(`/app/papers/${request.id}?phoned=1`);
+}
+
+// Stop asking (a paper request's More, its own page): the request ends now, so no reminder
+// goes and no one is asked to call the client. Undo puts back the end date it had, read from
+// its log line. For those who manage clients and those who look after this one.
+export async function stopAsking(form: FormData) {
+  const { supabase, userId, membership } = await currentWriter();
+  if (!membership) redirect("/app");
+  const { data: request } = await supabase.from("requests").select("id, client_id, expires_at").eq("firm_id", membership.firmId).eq("kind", "documents").eq("status", "pending").eq("id", String(form.get("request") ?? "")).maybeSingle();
+  if (!request?.client_id || !(canManageClients(membership.role) || (await supabase.rpc("looks_after", { target_firm: membership.firmId, client: request.client_id })).data)) redirect("/app");
+  const back = form.get("from") === "papers" ? `/app/papers/${request.id}?` : `/app/clients/${request.client_id}?tab=files&`;
+  const admin = supabaseAdmin();
+  const open = Date.parse(request.expires_at ?? "") > Date.now();
+  revalidatePath("/app", "layout");
+  if (form.get("intent") === "undo") {
+    const { data: last } = await admin.from("activity_log").select("details").eq("firm_id", membership.firmId).eq("entity_type", "request").eq("entity_id", request.id).eq("action", "request.stopped").order("at", { ascending: false }).limit(1).maybeSingle();
+    const until = String((last?.details as { until?: string } | null)?.until ?? "");
+    if (open || !(Date.parse(until) > Date.now())) redirect(back);
+    await admin.from("requests").update({ expires_at: until }).eq("id", request.id);
+    await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.resumed", entity_type: "request", entity_id: request.id });
+    redirect(`${back}reopened=1`);
+  }
+  if (!open) redirect(back);
+  await admin.from("requests").update({ expires_at: new Date().toISOString() }).eq("id", request.id);
+  await admin.from("requests").update({ status: "done" }).eq("firm_id", membership.firmId).eq("kind", "alert").eq("entity_type", "request_stalled").eq("entity_id", request.id).eq("status", "pending");
+  await admin.from("activity_log").insert({ firm_id: membership.firmId, actor_id: userId, action: "request.stopped", entity_type: "request", entity_id: request.id, details: { until: request.expires_at } });
+  redirect(`${back}closed=${request.id}`);
 }
 
 // A paper item: every paper is in; opening the figures to check them takes it off the list. For

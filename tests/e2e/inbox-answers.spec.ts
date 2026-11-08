@@ -186,3 +186,44 @@ test("Auto: each answer goes after its 5 minutes, and Undo stops it", async () =
   const stopped = await query(local.dbUrl, "select details ->> 'kind' as kind from public.activity_log where firm_id = $1 and action = 'email.answer_stopped' order by 1", [firm.firmId]);
   expect(stopped).toEqual([{ kind: "filed" }, { kind: "notice" }, { kind: "notice" }]);
 });
+
+test("Send all: a preview of the replies ready, then they go together after 5 minutes, and one Undo stops them all", async () => {
+  await query(local.dbUrl, "update public.firms set settings = settings || '{\"answers\": {\"filed\": \"ask\", \"papers\": \"ask\", \"due\": \"ask\", \"received\": \"ask\", \"notice\": \"ask\"}}' where id = $1", [firm.firmId]);
+  const queued = () => query(local.dbUrl, "select count(*)::int as n from public.jobs where firm_id = $1 and kind = 'answer_mail' and state = 'pending' and run_at > now() + interval '4 minutes'", [firm.firmId]);
+  const preview = () => owner.getByRole("dialog", { name: "Send 2 replies?" });
+  const sendAll = async (round: string) => {
+    await Promise.all([
+      smtp.sendMail({ from: client.email, to: office, subject: `Filed ${round}`, text: "Sir, is my GST return filed?" }),
+      smtp.sendMail({ from: client.email, to: office, subject: `Due ${round}`, text: "What is due this month?" }),
+    ]);
+    await pollFirmMail(owner.request, firm.firmId);
+    await runJobs(owner.request, firm.firmId);
+    await owner.goto("/app/inbox?panel=replies");
+    await expect(replies().getByRole("listitem")).toHaveCount(2);
+    await owner.getByRole("dialog").getByRole("link", { name: "Send all" }).click();
+    // The preview lists each reply, ticked, with its first lines; only InboxCA's own replies.
+    const ticks = preview().getByRole("checkbox");
+    await expect(ticks).toHaveCount(2);
+    for (const tick of await ticks.all()) await expect(tick).toBeChecked();
+    await expect(preview()).toContainText("As per our records");
+    await owner.screenshot({ path: test.info().outputPath(`send-all-${round.split(" ")[0]}.png`) });
+    await preview().getByRole("button", { name: "Send 2 replies" }).click();
+    await expect(owner.getByRole("status").filter({ has: owner.getByRole("button", { name: "Undo" }) })).toBeVisible();
+    expect(await queued()).toEqual([{ n: 2 }]);
+  };
+  const before = (await mailTexts(client.email)).length;
+
+  // Undo stops both while they wait: nothing goes, and each stop is logged.
+  await sendAll(`three ${tag}`);
+  await owner.getByRole("status").getByRole("button", { name: "Undo" }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "not sent" })).toBeVisible();
+  expect(await queued()).toEqual([{ n: 0 }]);
+  expect(await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and action = 'email.answer_stopped'", [firm.firmId])).toEqual([{ n: 5 }]);
+
+  // Left alone, both go in one go once the 5 minutes pass, each logged with who sent it.
+  await sendAll(`four ${tag}`);
+  await query(local.dbUrl, "update public.jobs set run_at = now() where firm_id = $1 and kind = 'answer_mail' and state = 'pending'", [firm.firmId]);
+  await runJobs(owner.request, firm.firmId);
+  await expect.poll(async () => (await mailTexts(client.email)).length).toBe(before + 2);
+  expect(await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and action = 'email.answered' and actor_id is not null", [firm.firmId])).toEqual([{ n: 5 }]);
+});
