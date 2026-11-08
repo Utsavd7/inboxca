@@ -910,7 +910,7 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
       {sp.panel === "replies" && sp.confirm !== "send" && !!answers.length && (
         <SidePanel key="replies" id="answers" title={`Replies ${going}`} close={here}>
           <p className="hint">{queued ? "Replies set to Auto go by themselves at the time shown. Undo stops one." : "InboxCA wrote these from your records. Check each, then send it."}</p>
-          {ready.length > 1 && !membership.viewOnlyUntil && <Link className="b b-secondary" href={`${panelHref("replies")}&confirm=send`} scroll={false}><Send size={14} aria-hidden />Send all</Link>}
+          {ready.length > 1 && !membership.viewOnlyUntil && <Link className="b b-secondary" href={`${panelHref("replies")}&confirm=send`} scroll={false}><Send size={14} aria-hidden />Send all<LinkBusy /></Link>}
           <section aria-labelledby="answers">
             <ul className="app-rows ib-preview">
               {answers.map((row) => {
