@@ -1,5 +1,5 @@
 import {officialSchema} from "./schema.ts";
-import {itrFieldName,itrFields,itrGroup as group,itrGroups as groups,itrKeyWords as keyWords,itrPlainNames as plain,itrReady,itrSources,itrWords as words,type ItrForm} from "../src/lib/itr-fields.ts";
+import {itrChoiceNames,itrFieldName,itrFields,itrGroup as group,itrGroups as groups,itrKeyWords as keyWords,itrPlainNames as plain,itrReady,itrSources,itrWords as words,type ItrForm} from "../src/lib/itr-fields.ts";
 import type {Template} from "../src/lib/templates.ts";
 import type {FormRequest,ItrEntry,ItrReview} from "../src/lib/form-worker.ts";
 import {jsonSource} from "./json-source.ts";
@@ -75,9 +75,11 @@ export function itrEntries(template:Template) {
     const label=named?.label ?? plain[leaf] ?? (described(node.description) || path.slice(split ? 2 : 1).filter(key=>key!=="*").map(key=>plain[key] ?? keyWords[key] ?? words(key)).filter(Boolean).join(", ").slice(0,120) || (parent && plain[parent] ? `${plain[parent]}, ${words(leaf)}` : words(leaf)));
     // A value the schema fixes, such as the due date ITR-1 allows, is offered as its only choice.
     const choices=node.enum?.map(String) ?? (node.pattern && /^[A-Za-z0-9 .-]+$/.test(node.pattern) ? [node.pattern] : undefined);
+    // Their meanings, where the schema's description lists them (src/lib/itr-fields.ts itrChoiceNames).
+    const names=node.enum && itrChoiceNames(node.description,choices!);
     // Rules the schema states in words: the latest or earliest date it allows.
     const latest=node.description?.match(/maximum date allowed (\d{4}-\d{2}-\d{2})/)?.[1],earliest=node.description?.match(/on or after (\d{4}-\d{2}-\d{2})/)?.[1];
-    return {field,path:target,group:part,label,kind,primitive:primitive as ItrEntry["primitive"],rows,required,...(choices && {choices}),...(node.default!==undefined && {defaultValue:String(node.default)}),...(latest && {latest}),...(earliest && {earliest})};
+    return {field,path:target,group:part,label,kind,primitive:primitive as ItrEntry["primitive"],rows,required,...(choices && {choices}),...(names && {names}),...(node.default!==undefined && {defaultValue:String(node.default)}),...(latest && {latest}),...(earliest && {earliest})};
   });
   if(new Set(result.map(entry=>entry.field)).size!==result.length) throw new Error("Repeated ITR entry");
   entries.set(template.source.sha256,result);return result;
