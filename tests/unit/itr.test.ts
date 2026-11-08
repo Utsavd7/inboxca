@@ -56,6 +56,14 @@ it.each(itrReturns)("refuses %s dates the schema rules out and amounts out of ra
 it("pins the field choices, resolves official repeating entries and keeps assessment years separate from months",()=>{
   const request=itrRequest(),entries=itrEntries(request.template);
   expect(entries.some(entry=>entry.field==="itr.salary.gross")).toBe(true);
+  // A list keeps the official codes as its values; their meanings only go alongside.
+  const section=entries.find(entry=>entry.path.endsWith(".ReturnFileSec"))!;
+  expect(section.choices).toContain("11");
+  expect(section.names?.[section.choices!.indexOf("11")]).toMatch(/^139\(1\)/);
+  // A code list written "1. Spouse; 2. Son" is the choices' meanings, never the field's name.
+  const dependant=entries.find(entry=>entry.path.endsWith(".DependentType"))!;
+  expect(dependant.label).not.toMatch(/^\d+\./);
+  expect(dependant.names?.[dependant.choices!.indexOf("1")]).toMatch(/Spouse/);
   expect(itrEntry(request.template,"itr.tds.other.3.claimed").path).toBe("TDSonOthThanSals.TDSonOthThanSal.3.ClaimOutOfTotTDSOnAmtPaid");
   for(const field of ["itr.unknown","itr.tds.other.claimed","itr.tds.other.1000.claimed"]) expect(()=>itrEntry(request.template,field)).toThrow();
   expect(()=>itrEntries({...request.template,version:"9.9"})).toThrow("does not have this official ITR form");
