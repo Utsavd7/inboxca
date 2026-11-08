@@ -61,7 +61,7 @@
 /* Firms: the search box beside the title, as the app's lists have it. */
 .admin-find { position: relative; width: 320px; max-width: 100%; }
 .admin-find svg { position: absolute; top: 50%; left: var(--s3); translate: 0 -50%; color: var(--ink-3); pointer-events: none; }
-.admin-find input { width: 100%; padding-left: var(--s6); }
+.admin .admin-find input[name] { width: 100%; padding-left: var(--s6); }
 
 /* Failed jobs: one row a firm with its count, opening to its jobs. */
 .admin-group > summary { cursor: pointer; list-style: none; }
