@@ -9,9 +9,9 @@ const notes: Record<string, string> = {
   started: "The reminder had already started, so it could not be stopped.",
 };
 
-// After Send reminder now on a client's Returns tab: the toast with its Undo, which stops the
+// After Send reminder now on a client's Returns tab, or Ask again on its Papers tab (from): the toast with its Undo, which stops the
 // email in the 20 seconds before it goes, or why nothing was sent. Read from the address.
-export function RemindToast() {
+export function RemindToast({ from = "client" }: { from?: "client" | "files" }) {
   const params = useSearchParams();
   const [client, job, error] = ["reminding", "job", "error"].map((key) => params.get(key) ?? "");
   if (client && job)
@@ -21,7 +21,7 @@ export function RemindToast() {
         <form action={stopSend}>
           <input type="hidden" name="client" value={client} />
           <input type="hidden" name="job" value={job} />
-          <input type="hidden" name="from" value="client" />
+          <input type="hidden" name="from" value={from} />
           <Pending className="b" busy="Stopping">Undo</Pending>
         </form>
       </ToastMotion>

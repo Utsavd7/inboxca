@@ -1,7 +1,7 @@
 import { FileCheck2, FileClock } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { askedByPhone, checkFigures, remindClient, stopSend } from "@/app/(app)/actions";
+import { askedByPhone, checkFigures, remindClient, stopAsking, stopSend } from "@/app/(app)/actions";
 import { dueLabel, todayInIndia } from "@/src/lib/calendar";
 import { tdsOnly, type DocumentRequest } from "@/src/lib/checklists";
 import { canManageClients, whatsappLink } from "@/src/lib/clients";
@@ -22,7 +22,8 @@ const times = (count: number) => (count === 1 ? "once" : count === 2 ? "twice" :
 
 // One request for papers (user, 26 Oct 2026), opened from a paper item on Today: what the client
 // was asked for, what is in, and how often they were asked, with the next step. While papers are
-// missing: Send reminder now (Undo stops it in time), or Mark as asked by phone after a call.
+// missing: Send reminder now (Undo stops it in time), or Mark as asked by phone after a call, or
+// Stop asking (with Undo).
 // Once every paper is in: Check the figures. For those who manage clients and those who look
 // after this one; everyone else who sees the client only reads it.
 export default async function Papers({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
@@ -118,6 +119,12 @@ export default async function Papers({ params, searchParams }: { params: Promise
           {live ? `The client replies to the email with the papers attached. Reminders go until ${dueLabel(request.expires_at!.slice(0, 10))}.` : request.status === "done" ? "Every paper is in, so the reminders have stopped." : "The asking has ended. Ask for papers again from the client's page."}{" "}
           <Link href={`/app/clients/${request.client_id}?tab=documents`}>Open {client.name}</Link>
         </p>
+        {acts && live && missing.length > 0 && (
+          <form action={stopAsking} className="app-card-foot">
+            {hidden}
+            <Pending className="b b-ghost" name="intent" value="stop" busy="Stopping">Stop asking</Pending>
+          </form>
+        )}
       </Card>
       {query.reminding && query.job && (
         <Toast
@@ -132,6 +139,19 @@ export default async function Papers({ params, searchParams }: { params: Promise
           The reminder goes out from your firm email in about 20 seconds. Undo stops it.
         </Toast>
       )}
+      {query.closed && (
+        <Toast
+          undo={
+            <form action={stopAsking}>
+              {hidden}
+              <Pending className="b" name="intent" value="undo" busy="Undoing">Undo</Pending>
+            </form>
+          }
+        >
+          Stopped asking. No more reminders go for these papers.
+        </Toast>
+      )}
+      {query.reopened && <Toast>Asking again. Reminders go as before.</Toast>}
       {query.phoned && <Toast>Marked as asked by phone. The next reminder email waits 3 days.</Toast>}
       {query.stopped && <Toast>Stopped. Nothing was sent.</Toast>}
     </div>
