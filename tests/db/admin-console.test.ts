@@ -290,7 +290,7 @@ it("applies a notice's extension to its period at every firm at once, never earl
     expect((await db.query("select public.admin_undo_extension('ZZ_NOTICE', '2026-09') ok")).rows[0].ok).toBe(false);
     await asOwner(db);
     expect(await dates()).toEqual(["A 2026-07 2026-08-11", "A 2026-08 2026-09-11", "A 2026-09 2026-10-11", "B 2026-09 2026-10-11"]);
-    expect((await db.query("select action from public.activity_log where entity_type = 'rule' and details ->> 'code' = 'ZZ_NOTICE' order by at")).rows.map((row) => row.action)).toEqual(["watch.extension_applied", "admin.extension_undone"]);
+    expect((await db.query("select action from public.activity_log where entity_type = 'rule' and details ->> 'code' = 'ZZ_NOTICE' order by at")).rows.map((row) => row.action).sort()).toEqual(["admin.extension_undone", "watch.extension_applied"]); // one transaction: both rows share a time
     // A CA's own extension is never written over by the check.
     await asAdmin(admin);
     expect((await db.query("select public.admin_add_extension('ZZ_NOTICE', '2026-09', '2026-10-20', 'https://example.test/by-hand') ok")).rows[0].ok).toBe(true);
