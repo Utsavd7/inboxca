@@ -6,7 +6,7 @@ import {revalidatePath} from "next/cache";
 import {z} from "zod";
 import {enterItr,itrField,itrWork} from "@/src/lib/itr";
 import {itrChecks} from "@/src/lib/itr-check";
-import {itrReady,itrReturns,itrYear} from "@/src/lib/itr-fields";
+import {itrChoice,itrReady,itrReturns,itrYear} from "@/src/lib/itr-fields";
 import {formName} from "@/src/lib/prepared";
 import {todayInIndia} from "@/src/lib/calendar";
 import {serverCrypto} from "@/src/lib/crypto";
@@ -109,13 +109,13 @@ export async function ItrReturn({id,q,at}:{id:string;q:Record<string,string|unde
         {shown.map(entry=>{
           const field=itrField(entry,rows),from=held.get(field),label=<>{entry.label}{entry.rows>0 && `, row ${rows[0]+1}`} {missing.has(field) && <Badge tone="warn">To fill</Badge>}</>;
           if(field==="itr.personal.pan") return <div key={field}><span className="sub">{label}</span><p><span className="num">{context.number}</span>, from the client&apos;s details</p></div>;
-          if(saved.has(field) || from) return <div key={field}><span className="sub">{label}</span><p className="hint">{from ? `${from.value}, from ${from.from}.` : "Already saved."} To change it, use Check the figures.</p></div>;
+          if(saved.has(field) || from) return <div key={field}><span className="sub">{label}</span><p className="hint">{from ? `${itrChoice(entry,from.value).text}, from ${from.from}.` : "Already saved."} To change it, use Check the figures.</p></div>;
           const suggested=fromClient[entry.path.replace(/^(PartA_GEN1\.)?PersonalInfo\./,"")] ?? "";
           return <div key={field}><label htmlFor={field}>{label}</label>
-            {entry.choices || entry.primitive==="boolean" ? <select id={field} name={field} defaultValue=""><option value="">Leave empty</option>{(entry.choices ?? ["true","false"]).map(choice=><option key={choice} value={choice}>{entry.choices ? choice : choice==="true" ? "Yes" : "No"}</option>)}</select>
+            {entry.choices || entry.primitive==="boolean" ? <select id={field} name={field} defaultValue=""><option value="">Leave empty</option>{(entry.choices ?? ["true","false"]).map(choice=>{const shown=itrChoice(entry,choice);return <option key={choice} value={choice} title={shown.title}>{entry.choices ? shown.text : choice==="true" ? "Yes" : "No"}</option>;})}</select>
               : <input id={field} name={field} maxLength={2000} type={entry.kind==="date" ? "date" : "text"} inputMode={entry.kind==="number" ? "decimal" : undefined} defaultValue={suggested}/>}
             {suggested && <p className="hint">From the client&apos;s details in InboxCA. Check it before saving.</p>}
-            {entry.defaultValue!==undefined && entry.defaultValue!=="0" && <p className="hint">The official form&apos;s usual value is {entry.defaultValue}.</p>}
+            {entry.defaultValue!==undefined && entry.defaultValue!=="0" && <p className="hint">The official form&apos;s usual value is {itrChoice(entry,entry.defaultValue).text}.</p>}
           </div>;
         })}
         <div className="form-row"><Pending className="b b-primary">Save for checking</Pending>{!!empty.length && <Pending className="b b-secondary" name="zero" value="1">Save, putting 0 in the {empty.length} empty amounts</Pending>}</div>

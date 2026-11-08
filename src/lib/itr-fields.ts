@@ -33,6 +33,32 @@ export const itrFieldName=(form:ItrForm,path:string)=>Object.entries(itrFields).
 // The software ID the Income Tax Department gives a registered software, and its city. Off until both are set.
 export const itrReady=()=>/^SW\d{8}$/.test(process.env.ITR_SOFTWARE_ID ?? "") && /^.{1,25}$/.test(process.env.ITR_SOFTWARE_CITY?.trim() ?? "");
 
+// What each official code means, read only from the schema's description of its list
+// ("CGOV:Central Government, ...", "11 : 139(1)-On or before due date; ...", "Y - Yes; N - No").
+// None unless it names most of the codes; "" for a code it leaves out or only repeats ("54 - Sec 54").
+const escaped=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+export function itrChoiceNames(description:string|undefined,values:string[]) {
+  const text=(description ?? "").replace(/\s+/g," ");
+  const found=values.map(value=>{const match=new RegExp(`(^|[\\s;,])${escaped(value)}\\s*[:.-]\\s*`).exec(text);return match && {value,start:match.index+match[1].length,end:match.index+match[0].length};});
+  const starts=found.flatMap(item=>item ? [item.start] : []).sort((a,b)=>a-b);
+  if(starts.length*2<=values.length) return undefined;
+  const names=found.map(item=>{
+    if(!item) return "";
+    const {value,start,end}=item,next=starts.find(at=>at>start) ?? text.length;
+    return text.slice(end,next).replace(/^[\s;,.:-]+/,"").split(";")[0].trim().replace(new RegExp(`^(Sec(tion)?\\.? ?)?${escaped(value)}(\\s*[:.-]\\s*|\\s+|$)(?!\\d\\d(\\D|$))`),"").replace(/^[\s,.:-]+/,"")
+      .replace(/\s+-\s*|\s*-\s+|(?<=\))-|(?<=\d[A-Za-z]*)-(?=[A-Z])/g,", ").replace(/\s+,/g,",").replace(/[\s,.:-]+$/,"");
+  });
+  return names.some(Boolean) ? names : undefined;
+}
+// A code as staff pick it: its official meaning, the first clause of a long one with the whole as
+// its title, and the code itself where it has a digit, as the portal shows section and state codes.
+export function itrChoice(entry:{choices?:string[];names?:string[]},value:string) {
+  const name=entry.names?.[entry.choices?.indexOf(value) ?? -1];
+  if(!name) return {text:value};
+  const short=name.length<=70 ? name : (name.slice(0,70).match(/^(.{25,})[;,]/)?.[1] ?? `${name.slice(0,66).replace(/\s+\S*$/,"")}…`);
+  return {text:/\d/.test(value) && value.length>1 && !new RegExp(`(^|\\D)${escaped(value)}(\\D|$)`).test(name) ? `${short} (${value})` : short,title:name};
+}
+
 // The official schema's top level parts by the names CA staff know, shared by the worker's form
 // entries and the figures laid out as the return.
 export const itrWords=(value:string)=>value.replace(/([a-z])([A-Z])/g,"$1 $2").replace(/([a-z])(\d)/g,"$1 $2").replace(/_/g," ");

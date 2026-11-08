@@ -1,5 +1,6 @@
 import {registerColumns,salesSections,type SalesSection} from "./gstr1-fields";
 import {itrFields,itrGroup,type ItrForm} from "./itr-fields";
+import {states} from "@/app/(auth)/sign-up/states";
 
 // A return laid out the way its official form is: tables of rows, each row's boxes holding the
 // figures that fill them (ids), or words for a box InboxCA fills from other figures or leaves for
@@ -148,7 +149,9 @@ export function gstr3bFile(file:unknown):FormLayout {
     const heads=table.heads.map(([head])=>head),values=new Map<string,{value:string;kind?:string}>();
     const cells=(key:string,entry:Record<string,unknown>,own?:string[]):FormCell[]=>heads.map((head)=>{
       if(own && !own.includes(head) || entry[head]===undefined) return null;
-      values.set(`${key}.${head}`,{value:words(entry[head]),kind:head==="pos" ? "text" : "number"});
+      // A place of supply is its state code, shown with the state's name ("27 Maharashtra").
+      const value=words(entry[head]),state=head==="pos" ? states.find(([code])=>code===value)?.[1] : undefined;
+      values.set(`${key}.${head}`,{value:state ? `${value} ${state}` : value,kind:head==="pos" ? "text" : "number"});
       return {ids:[`${key}.${head}`]};
     });
     const rows=table.rows.flatMap((row):FormRow[]=>{

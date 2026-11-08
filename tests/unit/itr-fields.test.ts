@@ -1,7 +1,7 @@
 import {expect,it} from "vitest";
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
-import {itrFields,itrForms,itrSources,itrYear} from "@/src/lib/itr-fields";
+import {itrChoice,itrChoiceNames,itrFields,itrForms,itrSources,itrYear} from "@/src/lib/itr-fields";
 
 type Node={properties?:Record<string,Node>;items?:Node;$ref?:string;type?:string;definitions?:Record<string,Node>};
 it("every ITR figure points to a field in the unchanged official AY schema",()=>{
@@ -35,4 +35,38 @@ it("names a return's year as the law of that year does",()=>{
   // Income-tax Act 2025 names a tax year.
   expect(itrYear("2026")).toBe("AY 2026-27 (FY 2025-26)");
   expect(itrYear("2027")).toBe("Tax year 2026-27");
+});
+
+// A wrong pick goes into the return, so a code's meaning is only ever the official schema's own.
+it("names every official code from its schema's description, else shows the bare code",()=>{
+  type Enum={description?:string;enum?:unknown[]};
+  const lists:Record<string,{description?:string;values:string[]}[]>={};
+  for(const form of itrForms) {
+    const walk=(node:unknown,key:string)=>{
+      if(!node || typeof node!=="object") return;
+      if(Array.isArray(node)) {node.forEach(item=>walk(item,key));return;}
+      const {enum:values,description}=node as Enum;
+      if(values) (lists[`${form}.${key}`] ??= []).push({description,values:values.map(String)});
+      for(const [child,value] of Object.entries(node)) if(child!=="enum") walk(value,child);
+    };
+    walk(JSON.parse(readFileSync(new URL(`../../reference/official/itr/${itrSources[form].file}`,import.meta.url),"utf8")),"");
+  }
+  for(const [where,all] of Object.entries(lists)) for(const {description,values} of all) {
+    const names=itrChoiceNames(description,values);
+    if(names) expect(names,where).toHaveLength(values.length);
+    for(const [index,value] of values.entries()) {
+      const {text}=itrChoice({choices:values,names},value);
+      if(!names?.[index]) expect(text,where).toBe(value);
+      else expect(text,where).not.toMatch(/\s-|-\s/);
+    }
+  }
+  const named=(where:string,value:string)=>{const {description,values}=lists[where][0];return itrChoice({choices:values,names:itrChoiceNames(description,values)},value).text;};
+  expect(named("ITR1.EmployerCategory","CGOV")).toBe("Central Government");
+  expect(named("ITR1.ReturnFileSec","11")).toBe("139(1), On or before due date (11)");
+  expect(named("ITR1.PropertyOwner","SE")).toBe("Self");
+  expect(named("ITR1.StateCode","11")).toBe("Gujarat (11)");
+  expect(named("ITR1.CountryCode","91")).toBe("INDIA (91)");
+  expect(named("ITR2.SecondaryAdd","Y")).toBe("Yes");
+  // Codes the description writes another way ("80GGA(2)(a)" for 80GGA2a) are never matched up by guess.
+  expect(named("ITR1.RelevantClauseUndrDedClaimed","80GGA2a")).toBe("80GGA2a");
 });

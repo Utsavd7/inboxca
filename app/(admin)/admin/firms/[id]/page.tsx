@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Badge, PageHead, storage } from "@/app/(app)/app/ui";
 import { downloadUse } from "@/src/lib/download-use";
+import { roleLabel } from "@/src/lib/roles";
 import { askSupport, retryJob, startPilot } from "../../actions";
 import { currentAdmin, jobName, providerName, retryWords, when } from "../../admin";
 import { Submit } from "../../parts";
@@ -92,7 +93,7 @@ export default async function AdminFirm({ params }: { params: Promise<{ id: stri
             {look.people.map((person) => (
               <div className="admin-row" key={person.email}>
                 <strong className="grow">{person.email}</strong>
-                <span className="sub">{person.role.replace("_", " ")}, {person.status}</span>
+                <span className="sub">{roleLabel(person.role)}, {person.status}</span>
               </div>
             ))}
             <div className="admin-row"><span className="sub">{look.clients} clients: {look.names.join(", ")}{look.clients > look.names.length && ", and more"}</span></div>

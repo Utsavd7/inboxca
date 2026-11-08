@@ -3,7 +3,7 @@ import {formContext,requestFor,workerForm} from "./prepare-form";
 import {itrEntrySchema,itrReviewSchema,type ItrEntry} from "./form-worker";
 import {checkValue,draftSchema,openFigures,place,saveDraft,type Draft} from "./datasets";
 import {serverCrypto} from "./crypto";
-import {itrReturns} from "./itr-fields";
+import {itrChoice,itrReturns} from "./itr-fields";
 
 // The official fields depend only on the pinned schema, so each version is asked for once.
 const known=new Map<string,ItrEntry[]>();
@@ -67,5 +67,10 @@ export async function enterItr(client:string,form:string,period:string,input:For
   data.target={form:z.enum(itrReturns).parse(form),version:context.template.version};
   if(!await saveDraft({id,firm_id:membership.firmId,client_id:client,form_code:"ITR",period_key:period,revision:row?.revision ?? 0},data,userId,row ? "dataset.changed" : "dataset.created",{entered:added,...(zeroed ? {zeroed} : {})},permission)) throw new Error("The figures changed. Try again.");
   return id;
+}
+// A detail picked from an official list reads with its meaning wherever staff see it again.
+export async function itrChoices(client:string,form:string,period:string) {
+  const {entries}=await itrDetails(client,form,period,false);
+  return (field:string,value:string)=>{const pattern=field.replace(/\.(0|[1-9]\d{0,2})(?=\.|$)/g,".*"),entry=entries.find(entry=>entry.field===pattern);return entry?.names ? itrChoice(entry,value).text : undefined;};
 }
 export function itrField(entry:ItrEntry,rows:number[]) {let at=0;return entry.field.replaceAll("*",()=>String(rows[at++] ?? 0));}
