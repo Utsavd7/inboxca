@@ -19,7 +19,7 @@ type Row={id:string;client_id:string;form_code:string;period_key:string};
 // Check on the form: the figures laid out as their return, with what InboxCA already knows about
 // each (how it was read, the client's books, the last checked period, totals) and each paper's
 // own GSTIN or PAN and period. Nothing here is stored; it is read again with the page.
-export async function formCheckData({supabase,firm,userId,row,draft,figures,papers,who,issues,sourceReady,lineId}:{supabase:Awaited<ReturnType<typeof supabaseServer>>;firm:string;userId:string;row:Row;draft:Draft;figures:Map<string,Figure>;papers:Paper[];who:(id?:string)=>string;issues:string[];sourceReady:boolean;lineId?:string}) {
+export async function formCheckData({supabase,firm,userId,row,draft,figures,papers,who,issues,sourceReady,lineId,choice}:{supabase:Awaited<ReturnType<typeof supabaseServer>>;firm:string;userId:string;row:Row;draft:Draft;figures:Map<string,Figure>;papers:Paper[];who:(id?:string)=>string;issues:string[];sourceReady:boolean;lineId?:string;choice?:(field:string,value:string)=>string|undefined}) {
   const crypto=serverCrypto(),admin=supabaseAdmin();
   const [{data:client},{data:registrations},{data:changes},{data:earlier},{data:matches}]=await Promise.all([
     supabase.from("clients").select("name").eq("firm_id",firm).eq("id",row.client_id).single(),
@@ -98,7 +98,7 @@ export async function formCheckData({supabase,firm,userId,row,draft,figures,pape
     if(line.state==="rejected") looks.push("Marked wrong");
     if(line.source.document && !paper) looks.push("Its paper is not available");
     const blocked=!sourceReady ? "A paper these figures came from was changed or removed. Ask the owner to restore it, or read the paper again." : !paper && !line.source.entered_by ? "The paper these figures came from is not available. Ask the owner to restore it." : issues.length ? "Correct the figures listed above before you mark any as right." : undefined;
-    return [{id:line.id,place:place.get(line.id) ?? figure.label,shown:grouped(figure.value,figure.kind,decimals.get(line.id)),value:figure.value,...(figure.kind && {kind:figure.kind}),state:line.state,corrected:corrected.has(line.id),
+    return [{id:line.id,place:place.get(line.id) ?? figure.label,shown:choice?.(line.field,figure.value) ?? grouped(figure.value,figure.kind,decimals.get(line.id)),value:figure.value,...(figure.kind && {kind:figure.kind}),state:line.state,corrected:corrected.has(line.id),
       ...(line.state==="confirmed" && line.by && {checked:`${who(line.by)}, ${when(line.at!)}`,short:`${who(line.by)}, ${when(line.at!)}`}),
       ...(line.source.entered_by && {entered:`Entered by ${who(line.source.entered_by)}, ${when(line.source.entered_at!)}`}),
       ...(paper && {paper:paper.id,page:line.source.page,sheet:line.source.sheet}),where:line.source.cell ? `Sheet ${line.source.sheet}, cell ${line.source.cell}` : line.source.page ? `Page ${line.source.page}` : "",
