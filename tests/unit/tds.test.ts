@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {checkStatement,extractTds,readStatement,statementFile,type Deductor,type Payment,type TdsForm} from "@/src/lib/tds";
+import {checkStatement,extractTds,readStatement,statementFile,tdsCodeMeaning,type Deductor,type Payment,type TdsForm} from "@/src/lib/tds";
 
 // An invented deductor with two challans and three payments. Every TAN, PAN and name is
 // invented and clearly fake (ggignore: invented test identifiers, not secrets).
@@ -305,4 +305,14 @@ it("estimates interest under section 398(3)(a)(ii) and the fee under section 427
   // 93 days, the fee stops at the ₹13,000 of tax deducted.
   expect(warned({...s,today:"2026-11-05"})).toMatch(/₹1,000\.00 \(section 427\)/);
   expect(warned({...s,today:"2027-02-01"})).toMatch(/₹13,000\.00 \(section 427\)/);
+});
+
+it("names a figure's code from its own form's annexure, and nothing for codes the formats give no words",()=>{
+  expect(tdsCodeMeaning("TDS140","tds.p2.section","1024")).toBe("Section 393(1) Table Sl. No. 6(i).D(b)");
+  expect(tdsCodeMeaning("TDS143","tds.p2.section","1073")).toBe("Section 394(1) Table Sl. No. 4 (scrap)");
+  expect(tdsCodeMeaning("TDS140","tds.p2.section","1057")).toBe("");
+  expect(tdsCodeMeaning("TDS140","tds.c2.minor","400")).toBe("TDS regular assessment (raised by the Income Tax Department)");
+  expect(tdsCodeMeaning("TDS144","tds.p2.status","2")).toBe("Individual");
+  expect(tdsCodeMeaning("TDS140","tds.p2.status","2")).toBe("");
+  for(const [field,value] of [["tds.p2.remark","A"],["tds.p2.country","265"],["tds.p2.remittance","27"],["tds.p2.section","constructor"]]) expect(tdsCodeMeaning("TDS144",field,value)).toBe("");
 });
