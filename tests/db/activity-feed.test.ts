@@ -26,3 +26,20 @@ it("shows InboxCA's own work and others' work on a person's clients, never hidde
   await actAs(db, null);
   await expect(db.query("select public.activity_feed($1, now(), false)", [FIRM])).rejects.toThrow();
 }));
+
+// The bell names the return a line is about and opens its page: the line's own task, or the one
+// return a prepared form is for.
+it("gives each line its return, and a prepared form the return it is for", () => rollback(db, async () => {
+  await asOwner(db);
+  await db.query("insert into auth.users(id,email) values ($1,'owner@feed.test'),($2,'staff@feed.test')", [OWNER, STAFF]);
+  await db.query("insert into public.firms(id,name,state_code,status) values ($1,'Feed Test Firm','24','active')", [FIRM]);
+  await db.query("insert into public.firm_members(firm_id,user_id,role,status) values ($1,$2,'owner','active'),($1,$3,'staff','active')", [FIRM, OWNER, STAFF]);
+  await db.query("insert into public.clients(id,firm_id,name,kind) values ($1,$2,'Mine Traders','business')", [MINE, FIRM]);
+  const [{ id: task }] = (await db.query("insert into public.tasks(firm_id,client_id,kind,code,period_key,due_on,status,details) values ($1,$2,'compliance','GSTR1_M','2026-10','2026-11-11','filed','{\"filed_on\":\"2026-11-07\"}') returning id", [FIRM, MINE])).rows;
+  const [{ id: form }] = (await db.query("insert into public.documents(firm_id,client_id,work_type,document_type,drive_file_id,name,size,sha256,period_key,prepared) values ($1,$2,'gst','GSTR1','feed-form','GSTR1.json',1,repeat('0',64),'2026-10','{\"form\":\"GSTR1\",\"status\":\"filed\"}') returning id", [FIRM, MINE])).rows;
+  await db.query("insert into public.activity_log(firm_id,actor_id,action,entity_type,entity_id,details) values ($1,$2,'form.filed','document',$3,'{}'),($1,$2,'task.changed','task',$4,'{\"changed\":[\"status\"]}')", [FIRM, OWNER, form, task]);
+  await actAs(db, STAFF);
+  const lines = (await db.query("select action, actor_id, task from public.activity_feed($1, now() - interval '1 day', true)", [FIRM])).rows;
+  expect(lines).toHaveLength(2);
+  for (const line of lines) expect(line).toMatchObject({ actor_id: OWNER, task: { id: task, kind: "compliance", code: "GSTR1_M", period: "2026-10", status: "filed" } });
+}));

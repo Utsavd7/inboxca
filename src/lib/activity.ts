@@ -1,3 +1,6 @@
+import { workTypes, type WorkType } from "./drive";
+import { shortReturn } from "./work/today";
+
 // What each line of the firm's activity log says, in plain words: a client's Activity panel,
 // Today's "What InboxCA did today" and the bell all read this one list.
 export const activityNames: Record<string, string> = {
@@ -27,6 +30,56 @@ export const activityNames: Record<string, string> = {
   "fills.asked": "Fill asked for returns late or due in the next 7 days", "fills.stopped": "Fill stopped before it started",
   "due_date.confirmed": "Due date confirmed by the owner against the notification", "agm.recorded": "AGM date recorded", "kyc.recorded": "Last DIR-3 KYC year recorded",
 };
+
+// One line of the bell (public.activity_feed) in words: what changed, on which return, notice or
+// to-do of which client, and the page it is on. A task's status is the one it has now, so only the
+// newest line about a task's status says it (said keeps the tasks said, newest first); older ones
+// say it was updated.
+type FeedTask = { id: string; kind: string; code: string | null; period: string | null; status: string; name: string | null; frequency: string | null };
+export type FeedLine = { action: string; client_id: string; client_name: string; details: unknown; actor_id: string | null; task: unknown };
+const statusWords: Record<string, Record<string, string>> = {
+  compliance: { filed: "marked filed", in_progress: "started", upcoming: "opened again" },
+  licence: { filed: "renewed", in_progress: "started", upcoming: "opened again" },
+  notice: { replied: "replied", closed: "closed", in_progress: "started", upcoming: "opened again" },
+  todo: { closed: "done", upcoming: "opened again" },
+};
+// A prepared form's words, and the return page's step it opens.
+const formWords: Record<string, [string, string]> = { "form.prepared": ["prepared", "approve"], "form.approved": ["approved", "file"], "form.rejected": ["sent back", "check"], "form.filed": ["marked filed", "file"] };
+const mailWords: Record<string, (client: string) => string> = {
+  "reminder.sent": (client) => `Reminder sent to ${client}`, "email.acknowledged": (client) => `Reply sent to ${client}: papers received`,
+  "email.answered": (client) => `InboxCA replied to ${client}`, "email.replied": (client) => `Reply sent to ${client}`, "email.written": (client) => `Email sent to ${client}`,
+};
+export function feedWords(line: FeedLine, { me, today, said, person, team }: { me: string; today: string; said: Set<string>; person: (id: string) => string; team: (id: string) => string | undefined }) {
+  const client = line.client_name, base = `/app/clients/${line.client_id}`, task = line.task as FeedTask | null;
+  const details = (line.details ?? {}) as { person?: string; team?: string; work?: string; changed?: string[] };
+  const thing = task?.kind === "notice" ? "Notice" : task?.kind === "todo" ? "To-do" : task?.kind === "licence" ? "Licence"
+    : task?.code ? shortReturn(task.code, task.period ?? "", today, task) : "Return";
+  const page = task?.kind === "notice" ? `/app/notices?notice=${task.id}` : task?.kind === "todo" ? `${base}#todos` : task?.kind === "compliance" ? `${base}/returns/${task.id}` : base;
+  const step = (name: string) => (task?.kind === "compliance" ? `${page}?step=${name}` : page);
+  // GST stays GST; Income tax reads income tax mid-sentence.
+  const work = details.work && details.work in workTypes ? workTypes[details.work as WorkType].replace(/^[A-Z](?=[a-z])/, (first) => first.toLowerCase()) : "";
+  const what = work ? `${work} for ${client}` : client;
+  switch (line.action) {
+    case "task.changed": {
+      const now = task && details.changed?.includes("status") && !said.has(task.id) ? statusWords[task.kind]?.[task.status] : undefined;
+      if (task && details.changed?.includes("status")) said.add(task.id);
+      return { what: `${thing} for ${client} ${now ?? (details.changed?.includes("due_on") ? "due date changed" : "updated")}`, href: now === "marked filed" ? step("file") : page };
+    }
+    case "form.prepared": case "form.approved": case "form.rejected": case "form.filed":
+      return { what: `${thing} for ${client} ${formWords[line.action][0]}`, href: task ? step(formWords[line.action][1]) : `${base}?tab=outputs` };
+    case "task.covered":
+      return { what: `${thing} for ${client} given to ${details.person === me ? "you" : person(details.person ?? "")} for this once`, href: page };
+    case "assignment.added": {
+      const group = details.team && team(details.team);
+      return { what: details.person && details.person === line.actor_id ? `${person(details.person)} took ${what}` : details.person === me ? `You were given ${what}`
+        : details.person ? `${person(details.person)} was given ${what}` : group ? `${group} was given ${what}` : `Person or team assigned to ${client}`, href: base };
+    }
+    case "document.uploaded": return { what: `Papers in for ${client}`, href: `${base}?tab=documents` };
+    case "request.created": return { what: `Papers asked from ${client}`, href: `${base}?tab=documents` };
+    case "notice.added": return { what: `Notice added for ${client}`, href: page };
+  }
+  return line.action in mailWords ? { what: mailWords[line.action](client), href: `${base}?tab=emails` } : { what: `${activityNames[line.action] ?? "Client changed"} for ${client}`, href: base };
+}
 
 // Every action written to activity_log and the details it may carry (PLAN.md 8.0, 8.9): ids,
 // counts, codes and setting names, never a client's email, PAN, GSTIN, phone, file contents or a

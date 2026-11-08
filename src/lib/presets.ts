@@ -28,10 +28,3 @@ export function presetOf(settings: Record<string, unknown>) {
       && rules.hours_only === preset.hours_only && rules.idle_minutes === preset.idle_minutes && rules.india_only === preset.india_only;
   });
 }
-
-// For rules that match none: the preset they differ from least, the first such in the list.
-export function closestPreset(settings: Record<string, unknown>) {
-  const rules = rulesOf(settings);
-  const same = (key: Preset) => (Object.keys(rules) as (keyof typeof rules)[]).filter((rule) => presets[key][rule] === rules[rule]).length;
-  return (Object.keys(presets) as Preset[]).reduce((best, key) => (same(key) > same(best) ? key : best));
-}

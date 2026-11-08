@@ -126,10 +126,10 @@ test("a slow page shows the loading bar, and a slow save keeps its button busy",
     });
     await page.locator("#office details.office-switch > summary").click();
     await page.getByRole("button", { name: "Turn on", exact: true }).click();
-    const turnOn = page.locator('button[form="preset-form"]');
+    const turnOn = page.locator('button[form="set-group-form"]');
     await expect(turnOn).toHaveAttribute("aria-busy", "true");
     await expect(turnOn).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Use this choice" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
     await expect(page.getByRole("alert").filter({ hasText: "could not read this internet connection" })).toBeVisible();
     await expect(turnOn).not.toHaveAttribute("aria-busy");
     await expect(turnOn).not.toHaveAttribute("disabled");

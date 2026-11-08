@@ -40,34 +40,36 @@ test.beforeAll(async ({ browser }) => {
 });
 test.afterAll(() => firm.remove(partnerEmail));
 
-test("the owner chooses a preset in one step, and it sets the office rules", async () => {
+test("the owner changes the preset, a limit and a deputy, and one Save keeps all three", async () => {
   await signIn(owner, ownerEmail, ownerKey);
   await owner.goto("/app/settings#preset");
   const preset = owner.locator("section#preset");
   await expect(preset.getByRole("radio", { name: /^Standard:/ })).toBeChecked();
+  // The preset fills in its limits, to change before saving.
   await preset.getByRole("radio", { name: /^Office only:/ }).check();
+  await expect(owner.getByLabel("Sign out after no activity for")).toHaveValue("15");
+  await owner.getByLabel("Ask for the 2 step code again after").selectOption("8");
   await preset.getByLabel("Yes, I am in the office now").check();
-  await preset.getByRole("button", { name: "Use this choice" }).click();
-  await expect(owner.getByRole("status").filter({ hasText: "Saved. Your team now works this way." })).toBeVisible();
+  await owner.getByLabel("Second admin").selectOption({ label: partnerEmail });
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(owner.getByRole("status").filter({ hasText: "Office and sign in saved." })).toBeVisible();
   await expect(preset.getByRole("radio", { name: /^Office only:/ })).toBeChecked();
+  await expect(owner.getByLabel(partnerEmail, { exact: true })).toBeChecked();
   const chosen = await settings();
-  expect(chosen.office).toMatchObject({ on: true, away: false, lines: [{ ipv4: "203.0.113.30" }] });
-  expect(chosen.access).toEqual({ hours_only: true, idle_minutes: 15 });
+  expect(chosen.office).toMatchObject({ on: true, away: false, lines: [{ ipv4: "203.0.113.30" }], deputies: [partnerId], co_admin: partnerId });
+  expect(chosen.access).toEqual({ hours_only: true, idle_minutes: 15, session_hours: 8 });
   expect(Object.keys(chosen.hours).length).toBeGreaterThan(0);
+  const logged = await query(local.dbUrl, "select action from public.activity_log where firm_id = $1 and action in ('office.on', 'office.deputies') order by at", [firm.firmId]);
+  expect(logged.map((row) => row.action).sort()).toEqual(["office.deputies", "office.on"]);
 
+  // Back to Standard: its limits, and the deputies stay as they are.
   await preset.getByRole("radio", { name: /^Standard:/ }).check();
-  await preset.getByRole("button", { name: "Use this choice" }).click();
-  // The office switch and the access rules are two writes; wait for the second.
-  await expect.poll(async () => { const { office, access } = await settings(); return { on: office.on, access }; }).toEqual({ on: false, access: { hours_only: false } });
+  await owner.getByLabel("Ask for the 2 step code again after").selectOption("0");
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(async () => { const { office, access } = await settings(); return { on: office.on, access, co_admin: office.co_admin }; }).toEqual({ on: false, access: { hours_only: false }, co_admin: partnerId });
 });
 
-test("the owner names a co-admin, who changes the access settings but not the owner's", async () => {
-  await owner.goto("/app/settings#office");
-  await owner.getByLabel("Second admin").selectOption({ label: partnerEmail });
-  await owner.getByRole("button", { name: "Save deputies and second admin" }).click();
-  await expect(owner.getByLabel(partnerEmail, { exact: true })).toBeChecked();
-  expect((await settings()).office).toMatchObject({ deputies: [partnerId], co_admin: partnerId });
-
+test("the owner's co-admin changes the access settings but not the owner's", async () => {
   await signIn(partner, partnerEmail, partnerKey);
   await partner.goto("/app/settings?group=access");
   await expect(partner.getByRole("heading", { name: "How your team works" })).toBeVisible();
@@ -75,7 +77,7 @@ test("the owner names a co-admin, who changes the access settings but not the ow
   await expect(partner.getByLabel("Second admin")).toHaveCount(0);
   const preset = partner.locator("section#preset");
   await preset.getByRole("radio", { name: /^Solo CA:/ }).check();
-  await preset.getByRole("button", { name: "Use this choice" }).click();
+  await partner.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(settings).toMatchObject({ office: { on: true, away: false, co_admin: partnerId }, access: { hours_only: false, idle_minutes: 15 } });
   expect((await query(local.dbUrl, "select count(*)::int as n from public.activity_log where firm_id = $1 and actor_id = $2 and action = 'office.on'", [firm.firmId, partnerId]))[0].n).toBe(1);
 

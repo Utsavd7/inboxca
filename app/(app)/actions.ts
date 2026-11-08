@@ -28,7 +28,7 @@ import { authorities, noticeStatuses, reviewBy, type Authority, type NoticeDetai
 import { onedriveReady, onedriveSignIn } from "@/src/lib/onedrive";
 import { askAway, firmAdmin, memberHours, officeApprover, officePc, requestLine, type Office } from "@/src/lib/office";
 import { computersOf, thisComputer } from "@/src/lib/owner-device";
-import { presets, type Preset } from "@/src/lib/presets";
+import { presetOf, presets, type Preset } from "@/src/lib/presets";
 import { CHALLENGE_COOKIE, PC_LATER_COOKIE, checkAdminKey, checkKeyUse, checkNewKey, newChallenge, totp } from "@/src/lib/pc-key";
 import { PASSKEY_FACTOR, sealFactor } from "@/src/lib/sign-in";
 import { recognisePortalFile } from "@/src/lib/portal-files";
@@ -48,7 +48,7 @@ import { paperPolicy, type BulkSend, type RecordsSettings } from "@/src/lib/reco
 import { sendShare } from "@/src/lib/shares";
 import { checkMailbox, detectSettings, providerFor } from "@/src/lib/mailbox";
 import { currentMember, currentWriter, FIRM_COOKIE, myQuestions } from "@/src/lib/member";
-import { activityNames } from "@/src/lib/activity";
+import { feedWords } from "@/src/lib/activity";
 import { invitableRoles, personName, roleLabel } from "@/src/lib/roles";
 import { EXCEPTION_RULES, IDLE_CHOICES, SESSION_CHOICES, SEEN_COOKIE, seenCookie, tellOwnerOnRepeat } from "@/src/lib/session";
 import { supabaseAdmin, supabaseAnonymous } from "@/src/lib/supabase";
@@ -231,36 +231,32 @@ export async function changeHoliday(form: FormData) {
   revalidatePath("/app/settings");
 }
 
-// Settings → Signing in: the idle and session limits (0 is off).
-export async function saveLimits(form: FormData) {
-  const { supabase, userId, membership } = await currentWriter();
-  if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
-  const whole = (name: string, allowed: number[]) => {
-    const value = Number(form.get(name));
-    return allowed.includes(value) && value ? value : undefined;
-  };
-  const access = {
-    ...(membership.settings.access as object),
-    idle_minutes: whole("idle_minutes", IDLE_CHOICES),
-    session_hours: whole("session_hours", SESSION_CHOICES),
-    india_only: form.get("india_only") === "on" || undefined,
-  };
-  await supabase.from("firms").update({ settings: { ...membership.settings, access } }).eq("id", membership.firmId);
-  redirect("/app/settings?group=access&saved=limits");
-}
-
-// Settings → Access preset (5.17): turns Office only on or off through the office checks,
-// then sets asking to work away, office hours only and the idle limit.
-export async function choosePreset(form: FormData) {
+// Settings → Office and sign in, under one Save (5.17): the preset chosen, when it is a new one
+// (Office only turned on or off through the office checks, then asking to work away and office
+// hours only), the signing in limits (0 is off), and the owner's deputies and second admin. The
+// preset fills the limits on the page as a starting point; the limits as sent are what is saved.
+export async function saveOffice(form: FormData) {
   const { supabase, userId, membership } = await currentWriter();
   if (!membership || !firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
   const key = String(form.get("preset") ?? "");
-  if (!Object.hasOwn(presets, key)) redirect("/app/settings?group=access#preset");
-  const preset = presets[key as Preset];
+  if (key && !Object.hasOwn(presets, key)) redirect("/app/settings?group=access#preset");
+  const preset = key && key !== presetOf(membership.settings) ? presets[key as Preset] : null;
   const office = (membership.settings.office ?? {}) as Office;
+  // Deputies are the owner's alone (office_control checks it too); only a change is saved and logged.
+  if (membership.role === "owner" && form.has("co_admin")) {
+    // The co-admin is always one of the deputies.
+    const coAdmin = String(form.get("co_admin") ?? "");
+    const deputies = [...new Set([...form.getAll("deputy").map(String), ...(coAdmin ? [coAdmin] : [])])];
+    if (deputies.length > 2) redirect("/app/settings?group=access&error=deputies#office");
+    if (deputies.some((id) => !z.uuid().safeParse(id).success)) redirect("/app");
+    if (String([...deputies].sort()) !== String([...(office.deputies ?? [])].sort()) || coAdmin !== (office.co_admin ?? "")) {
+      const { error } = await supabaseAdmin().rpc("office_control", { target_firm: membership.firmId, actor: userId, decision: "deputies", deputies, ...(coAdmin && { co_admin: coAdmin }) });
+      if (error) redirect(`/app/settings?group=access&error=${Object.entries(officeRefusals).find(([text]) => error.message.includes(text))?.[1] ?? "office"}#office`);
+    }
+  }
   // From approved devices anywhere to an office preset, the office connection is asked again.
-  const toOffice = preset.office && !preset.anywhere && (!office.on || !!office.anywhere);
-  if (!!office.on !== preset.office || toOffice && form.get("here") === "yes") {
+  const toOffice = !!preset && preset.office && !preset.anywhere && (!office.on || !!office.anywhere);
+  if (preset && (!!office.on !== preset.office || toOffice && form.get("here") === "yes")) {
     const line = requestLine(await headers(), todayInIndia());
     const { error } = await supabaseAdmin().rpc("office_control", {
       target_firm: membership.firmId, actor: userId, decision: preset.office ? "on" : "off",
@@ -268,17 +264,26 @@ export async function choosePreset(form: FormData) {
     });
     if (error) throw new Error(`Office change failed: ${error.code}`);
   }
+  const whole = (name: string, allowed: number[]) => {
+    const value = Number(form.get(name));
+    return allowed.includes(value) && value ? value : undefined;
+  };
   const { data: firm } = await supabase.from("firms").select("settings").eq("id", membership.firmId).single();
   const settings = (firm?.settings ?? {}) as Record<string, unknown>;
   await supabase.from("firms").update({ settings: {
     ...settings,
     // Office hours only needs hours: the suggested ones until the owner sets them.
-    hours: (settings.hours ?? SUGGESTED_HOURS) as Hours,
-    office: { ...(settings.office as object), away: preset.away, anywhere: preset.anywhere || undefined },
-    access: { ...(settings.access as object), hours_only: preset.hours_only, idle_minutes: preset.idle_minutes || undefined, india_only: preset.india_only || undefined },
+    ...(preset && { hours: (settings.hours ?? SUGGESTED_HOURS) as Hours, office: { ...(settings.office as object), away: preset.away, anywhere: preset.anywhere || undefined } }),
+    access: {
+      ...(settings.access as object),
+      ...(preset && { hours_only: preset.hours_only }),
+      idle_minutes: whole("idle_minutes", IDLE_CHOICES),
+      session_hours: whole("session_hours", SESSION_CHOICES),
+      india_only: form.get("india_only") === "on" || undefined,
+    },
   } }).eq("id", membership.firmId);
   revalidatePath("/app", "layout");
-  redirect("/app/settings?group=access&saved=preset#preset");
+  redirect("/app/settings?group=access&saved=access");
 }
 
 // Settings → Your sign in (PLAN.md 5.17, 8.5): a passkey for the next sign in, in place of the 6
@@ -2187,11 +2192,7 @@ export async function setOfficeOnly(form: FormData) {
   if (!officeApprover(membership.role, userId, membership.settings)) await denyApproval(membership.firmId, userId, "office");
   const decision = String(form.get("intent") ?? "");
   const line = requestLine(await headers(), todayInIndia());
-  // The co-admin is always one of the deputies.
-  const coAdmin = String(form.get("co_admin") ?? "");
-  const deputies = [...new Set([...form.getAll("deputy").map(String), ...(coAdmin ? [coAdmin] : [])])];
   const request = String(form.get("request") ?? "");
-  if (decision === "deputies" && deputies.length > 2) redirect("/app/settings?group=access&error=deputies#office");
   // The owner's provider gives no fixed connection: stop suggesting it (5.8).
   if (decision === "no_fixed") {
     if (!firmAdmin(membership.role, userId, membership.settings)) redirect("/app");
@@ -2202,13 +2203,12 @@ export async function setOfficeOnly(form: FormData) {
   }
   // A branch's own office, when the firm has branches (5.17.4 #13).
   const branch = String(form.get("branch") ?? "");
-  if (request && !z.uuid().safeParse(request).success || branch && !z.uuid().safeParse(branch).success || deputies.some((id) => !z.uuid().safeParse(id).success)) redirect("/app");
+  if (request && !z.uuid().safeParse(request).success || branch && !z.uuid().safeParse(branch).success) redirect("/app");
   const { error } = await supabaseAdmin().rpc("office_control", {
     target_firm: membership.firmId, actor: userId, decision,
     ...(request && { request_id: request }),
     ...(branch && { branch }),
     ...((decision === "here" || decision === "fixed" || decision === "on" && form.get("here") === "yes") && line && { connection: line }),
-    ...(decision === "deputies" && { deputies, ...(coAdmin && { co_admin: coAdmin }) }),
   });
   // A choice the database refuses (no address seen, the office already closed, a deputy who
   // is not an active partner) comes back as a note on the panel, not a broken page.
@@ -2216,7 +2216,7 @@ export async function setOfficeOnly(form: FormData) {
   if (!refused) revalidatePath("/app", "layout");
   // A yes from Today's list stays on Today; a refusal opens the panel that says why.
   if (!refused && form.get("back") === "today") redirect("/app");
-  redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}${refused ? `&error=${refused}` : decision === "deputies" ? "&saved=deputies" : ""}#office`);
+  redirect(`/app/settings?group=access${branch ? `&branch=${branch}` : ""}${refused ? `&error=${refused}` : ""}#office`);
 }
 
 // The owner decides whether a waiting PC stays in the office, travels, or is refused.
@@ -2661,17 +2661,12 @@ export async function bellItems() {
     supabase.from("groups").select("id, name").eq("firm_id", membership.firmId).eq("kind", "team"),
   ]);
   // A permission request names the person who asks, and the client it is for.
-  const asker = (ask: { details: unknown }) => personName(people?.find((person) => person.user_id === (ask.details as { by?: string }).by)?.email);
-  // An assignment names who was given the client, and for which work.
-  const given = (details: unknown) => {
-    const { person, team, work } = (details ?? {}) as { person?: string; team?: string; work?: string };
-    const group = teams?.find((one) => one.id === team)?.name;
-    const who = person === userId ? "You were" : person ? `${personName(people?.find((one) => one.user_id === person)?.email)} was` : group ? `${group} was` : "";
-    return who && `${who} given this client${work && work in workTypes ? ` for ${workTypes[work as WorkType]}` : ""}`;
-  };
+  const name = (id: string) => personName(people?.find((person) => person.user_id === id)?.email);
+  const asker = (ask: { details: unknown }) => name((ask.details as { by?: string }).by ?? "");
+  const today = todayInIndia(), said = new Set<string>();
   return [
     ...questions.map((ask) => ({ key: ask.id, href: `/app/inbox?answer=${ask.id}`, what: `Asks to ${ask.reason_code === "time" ? "work later today" : (rightWords[ask.reason_code as Right] ?? "do something")}${ask.clients?.name ? ` for ${ask.clients.name}` : ""}`, who: asker(ask), at: null as string | null, fresh: true })),
-    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, href: `/app/clients/${line.client_id}`, what: (line.action === "assignment.added" && given(line.details)) || (line.action === "task.covered" && (line.details as { person?: string } | null)?.person === userId && "You were given one return for this once") || (activityNames[line.action] ?? "Client changed"), who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
+    ...(lines ?? []).map((line, at) => ({ key: `${line.at}-${at}`, ...feedWords(line, { me: userId, today, said, person: name, team: (id) => teams?.find((one) => one.id === id)?.name }), who: line.client_name, at: line.at as string | null, fresh: Date.parse(line.at) > seen })),
   ]
     // The same change to the same client in the same minute shows once.
     .filter((item, at, all) => !at || !item.at || item.what !== all[at - 1].what || item.who !== all[at - 1].who || item.at.slice(0, 16) !== all[at - 1].at?.slice(0, 16))

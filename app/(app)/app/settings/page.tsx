@@ -4,10 +4,10 @@ import { Suspense } from "react";
 import Form from "next/form";
 import Link from "next/link";
 import { Passkey } from "@/app/(admin)/admin/passkey";
-import { answerSupport, changeHoliday, changeSpecialHours, choosePreset, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveLimits, savePermissions, saveReminders, saveEmailSettings, withdrawAlways, allowStanding, removeException, removePasskey } from "@/app/(app)/actions";
+import { answerSupport, changeHoliday, changeSpecialHours, closeFirm, connectDrive, connectMailSignIn, disconnectDrive, reconnectDrive, disconnectMailbox, saveHours, saveOffice, savePermissions, saveReminders, saveEmailSettings, withdrawAlways, allowStanding, removeException, removePasskey } from "@/app/(app)/actions";
 import { roleLabel, roleNames } from "@/src/lib/roles";
 import { firmAdmin, HOURS_KEYS, memberHours, officeApprover, type Office } from "@/src/lib/office";
-import { closestPreset, presetOf, presets } from "@/src/lib/presets";
+import { presetOf, presets } from "@/src/lib/presets";
 import { OfficePanel } from "../office-panel";
 import { AutoSelect } from "../auto-select";
 import { AccessCheck } from "./access-check";
@@ -43,6 +43,7 @@ import { NewComputers, YourComputers } from "../new-computers";
 import { PushSwitch } from "../push-switch";
 import { BillingCards } from "./billing";
 import { AiUse, FairUse } from "./fair-use";
+import { PresetRadio } from "./preset-radio";
 import { aiReady } from "@/src/lib/ai";
 import "./settings.css";
 
@@ -66,7 +67,7 @@ const problems: Record<string, [string, string]> = {
   special: ["special", "The To date must be the same as or after the From date, and Closes must be later than Opens."],
   ...Object.fromEntries(DAYS.map((day) => [day, ["hours", `${day}: the closing time must be after the opening time.`]])),
 };
-const savedNames: Record<string, string> = { due_date: "Date confirmed. Client reminders now go for it.", checkout: "Thank you. The payment shows here as soon as your bank confirms it.", autopay_off: "AutoPay is off. Nothing more will be taken.", down: "Your plan moves down at the next renewal.", down_undone: "Your plan stays as it is.", topup: "Auto top-up saved.", money_back: "Your plan is cancelled and your money is on its way back.",preset: "Saved. Your team now works this way.", hours: "Office hours saved.", limits: "Signing in limits saved.", reminders: "Reminders and papers saved.", permissions: "People's access saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", email: "Email and drive saved.", mail_off: "Firm email disconnected.", deputies: "Deputies and second admin saved.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", exception: "Exception removed. The firm's rule applies again.", computer_removed: "Computer removed. Your other computers are signed out and can sign in again as usual." };
+const savedNames: Record<string, string> = { due_date: "Date confirmed. Client reminders now go for it.", checkout: "Thank you. The payment shows here as soon as your bank confirms it.", autopay_off: "AutoPay is off. Nothing more will be taken.", down: "Your plan moves down at the next renewal.", down_undone: "Your plan stays as it is.", topup: "Auto top-up saved.", money_back: "Your plan is cancelled and your money is on its way back.",access: "Office and sign in saved.", hours: "Office hours saved.", reminders: "Reminders and papers saved.", permissions: "People's access saved.", reset: "Permissions reset to the defaults.", allowed: "Permission given.", withdrawn: "Permission withdrawn.", email: "Email and drive saved.", mail_off: "Firm email disconnected.", drive_off: "Drive disconnected. Your papers stay in your drive.", mail: "Firm email connected.", mail_admin: "Your admin allowed InboxCA. Now connect with Microsoft.", drive: "Drive connected again. InboxCA is checking it now.", exception: "Exception removed. The firm's rule applies again.", computer_removed: "Computer removed. Your other computers are signed out and can sign in again as usual." };
 // The page is one line per group, saying what is set now; ?group= opens that group's cards in
 // the side panel, with one Save for the group where it has choices to save (saveBar): the
 // fields join its form by their form attribute. Each section keeps its old anchor.
@@ -248,7 +249,6 @@ export default async function Settings({
   const routine = (type: string) => isRoutine(type, { routine: records.routine }) || isRoutine(lawType(type, "2026"), { routine: records.routine });
   const namesOf=(ids?:string[])=>ids?.map(id=>scopeClients?.find(client=>client.id===id)?.name ?? "Client no longer available").join("\n") ?? "";
   const preset = presetOf(settings);
-  const closest = closestPreset(settings);
   const others = people?.filter((person) => person.role !== "owner" && person.status === "active") ?? [];
   const exceptions = exceptionsOf(settings, (standing ?? []).filter((member) => people?.some((person) => person.user_id === member.user_id && person.status === "active")));
   const whoIs = (one: { role?: string; person?: string }) => one.role ? `${one.role in roleNames ? roleLabel(one.role) : one.role} role` : people?.find((person) => person.user_id === one.person)?.email ?? "Someone";
@@ -472,39 +472,35 @@ export default async function Settings({
 
           {group === "access" && <>
           {owner && <NewComputers error={error} back="settings" />}
-          <Card id="preset" title="How your team works" line="One choice sets Office only, office hours and signing out. You can change each of them after.">
-            <form id="preset-form" action={choosePreset} className="set-stack">
+          <Card id="preset" title="How your team works" line="A starting point: it fills in the signing in limits below. Save keeps them all.">
+            <div className="set-stack">
               <fieldset className="set-choices">
                 <legend className="sr-only">How your team works</legend>
-                {/* Rules changed one by one since: shown as their own choice, with the way back. */}
+                {/* Rules changed one by one since: shown as their own choice. */}
                 {!preset && (
                   <div className="set-custom">
                     <span><strong>Custom rules</strong> <span className="hint">Your own mix of the rules below. Choose one of these to start again from it.</span></span>
-                    <Pending busy="Saving" className="b b-secondary b-small" type="submit" name="preset" value={closest} formNoValidate>Back to {presets[closest].name}</Pending>
                   </div>
                 )}
-                {Object.entries(presets).map(([key, { name, line }]) => (
+                {Object.entries(presets).map(([key, { name, line, idle_minutes, india_only }]) => (
                   <label key={key}>
-                    <input type="radio" name="preset" value={key} required defaultChecked={preset === key} aria-label={`${name}: ${line}`} />
+                    <PresetRadio form={GROUP} name="preset" value={key} idle={idle_minutes} india={india_only} defaultChecked={preset === key} aria-label={`${name}: ${line}`} />
                     <span><strong>{name}</strong> <span className="hint">{line}</span></span>
                   </label>
                 ))}
               </fieldset>
               {(!(settings.office as Office | undefined)?.on || (settings.office as Office).anywhere) && <fieldset className="set-options"><legend>If you choose anything but Standard: are you in the office now?</legend>
-                <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, I am in the office now</label>
-                <label className="check"><input type="radio" name="here" value="no" />No, I will approve the office internet connection later, from the office</label>
+                <label className="check"><input form={GROUP} type="radio" name="here" value="yes" defaultChecked />Yes, I am in the office now</label>
+                <label className="check"><input form={GROUP} type="radio" name="here" value="no" />No, I will approve the office internet connection later, from the office</label>
               </fieldset>}
-              <div className="set-foot">
-                <Pending busy="Saving" className="b b-primary" type="submit">Use this choice</Pending>
-              </div>
-            </form>
+            </div>
             <OfficePanel error={error} inPreset branch={branch} />
           </Card>
           <Card id="limits" title="Signing in" line="For everyone in the firm, you included.">
-            <form action={saveLimits} className="set-fields">
+            <div className="set-fields">
               <div>
                 <label htmlFor="idle_minutes">Sign out after no activity for</label>
-                <select id="idle_minutes" name="idle_minutes" defaultValue={access.idle_minutes ?? 0}>
+                <select form={GROUP} id="idle_minutes" name="idle_minutes" defaultValue={access.idle_minutes ?? 0}>
                   {IDLE_CHOICES.map((minutes) => (
                     <option key={minutes} value={minutes}>
                       {minutes ? `${minutes} minutes` : "Never"}
@@ -514,7 +510,7 @@ export default async function Settings({
               </div>
               <div>
                 <label htmlFor="session_hours">Ask for the 2 step code again after</label>
-                <select id="session_hours" name="session_hours" defaultValue={access.session_hours ?? 0}>
+                <select form={GROUP} id="session_hours" name="session_hours" defaultValue={access.session_hours ?? 0}>
                   {SESSION_CHOICES.map((hours) => (
                     <option key={hours} value={hours}>
                       {hours ? `${hours} hours` : "Only at sign in"}
@@ -523,11 +519,10 @@ export default async function Settings({
                 </select>
               </div>
               <label className="check">
-                <input className="toggle" type="checkbox" name="india_only" defaultChecked={!!access.india_only} />
+                <input form={GROUP} className="toggle" type="checkbox" name="india_only" defaultChecked={!!access.india_only} />
                 Everyone except you can use InboxCA only from India
               </label>
-              <div className="set-foot"><Pending busy="Saving" className="b b-primary" type="submit">Save signing in limits</Pending></div>
-            </form>
+            </div>
           </Card>
           <Card id="tester" title="Check someone's access" line="Where and when a person can use InboxCA under your rules.">
             <details className="reveal" open={!!check}>
@@ -535,6 +530,7 @@ export default async function Settings({
               <AccessCheck person={check} />
             </details>
           </Card>
+          {saveBar(saveOffice)}
           </>}
 
           {group === "me" && <>

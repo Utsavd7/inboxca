@@ -14,8 +14,10 @@ import { Pending } from "./pending";
 
 // inPreset draws it inside Settings' Access preset card, the one office control there: the
 // Office only switch waits under Change details, the rest shows as usual. Its Turn on sends
-// the preset form, so the preset's "are you in the office now?" answer is the one used (a
-// button with its own action sends no name and value, so intent rides in a hidden field).
+// the group's form, so the preset's "are you in the office now?" answer is the one used (a
+// button with its own action sends no name and value, so intent rides in a hidden field). The
+// deputies join that form too, saved by its one Save (saveOffice).
+const GROUP = "set-group-form";
 // Why the last office change was refused, from setOfficeOnly's redirect.
 const refusedNotes: Record<string, string> = {
   deputies: "Choose no more than 2 partners as deputies. The second admin must be one of them.",
@@ -94,7 +96,7 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
   const line = <p className="hint">{anywhere ? "Staff, managers and front desk use only the PCs and laptops you approve, from anywhere." : "Staff, managers and front desk use approved PCs on your office internet connection."} You and partners can use InboxCA anywhere.</p>;
   const toggle = office.on ? isAdmin && <form action={setOfficeOnly} className="form-row">{where}
     {!anywhere && <Pending className="b b-ghost" name="intent" value="forget">Remove saved office connections</Pending>}<Pending className="b b-secondary" name="intent" value="off">Turn off</Pending>
-  </form> : isAdmin && inPreset ? <><input type="hidden" form="preset-form" name="intent" value="on" />{picked && <input type="hidden" form="preset-form" name="branch" value={picked.id} />}<Pending className="b b-primary" form="preset-form" formAction={setOfficeOnly} formNoValidate>Turn on</Pending></>
+  </form> : isAdmin && inPreset ? <><input type="hidden" form={GROUP} name="intent" value="on" />{picked && <input type="hidden" form={GROUP} name="branch" value={picked.id} />}<Pending className="b b-primary" form={GROUP} formAction={setOfficeOnly} formNoValidate>Turn on</Pending></>
     : isAdmin && <form action={setOfficeOnly}>{where}
     <fieldset className="fieldset"><legend>Are you in your office right now?</legend>
       <label className="check"><input type="radio" name="here" value="yes" defaultChecked />Yes, this is my office</label>
@@ -198,23 +200,22 @@ export async function OfficePanel({ compact = false, error = "", inPreset = fals
           <p className="hint">If your internet provider gave your office a fixed internet address, choose Done here from a PC in the office.</p>
           <Pending className="b b-secondary" name="intent" value="fixed">Done</Pending>
         </form>}
-        {owner && <form action={setOfficeOnly}>
+        {owner && inPreset && <div className="office-deputies">
           <fieldset className="fieldset"><legend>Name up to 2 deputies</legend>
             <p className="hint">Partners who can approve PCs and office internet connections when you are away. They keep using their 2 step code.</p>
             {people?.filter((person) => person.role === "partner" && person.status === "active").map((person) => <label className="check" key={person.user_id}>
-              <input type="checkbox" name="deputy" value={person.user_id} defaultChecked={office.deputies?.includes(person.user_id)} />{person.email}
+              <input form={GROUP} type="checkbox" name="deputy" value={person.user_id} defaultChecked={office.deputies?.includes(person.user_id)} />{person.email}
             </label>)}
           </fieldset>
           <div className="form-row"><div>
             <label htmlFor="co-admin">Second admin</label>
-            <select id="co-admin" name="co_admin" defaultValue={office.co_admin ?? ""}>
+            <select form={GROUP} id="co-admin" name="co_admin" defaultValue={office.co_admin ?? ""}>
               <option value="">No second admin</option>
               {people?.filter((person) => person.role === "partner" && person.status === "active").map((person) => <option key={person.user_id} value={person.user_id}>{person.email}</option>)}
             </select>
           </div></div>
           <p className="hint">The second admin is a deputy who can also change how your team works, Office only, office hours, sign in rules and permissions. Only you can change the firm email, the drive, people and recovery codes, or close the firm.</p>
-          <Pending className="b b-secondary" name="intent" value="deputies">Save deputies and second admin</Pending>
-        </form>}
+        </div>}
         {isAdmin && office.on && <div className="side-doors"><h3 className="sub-head">Risks InboxCA cannot stop for you</h3><ul>
           <li>Do not give staff the firm email password. InboxCA does the email work.</li>
           <li>Uninstall remote desktop tools such as AnyDesk and TeamViewer from office PCs.</li>
