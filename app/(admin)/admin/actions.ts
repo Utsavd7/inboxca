@@ -19,8 +19,7 @@ export async function retryJob(form: FormData) {
   const { supabase } = await currentAdmin();
   const { data } = await supabase.rpc("admin_retry_job", { job_id: Number(form.get("job")) });
   if (data) runJobsSoon();
-  revalidatePath("/admin/jobs");
-  revalidatePath("/admin/firms/[id]", "page");
+  revalidatePath("/admin", "layout");
 }
 
 const fail = (path: string, error: string) => redirect(`${path}?error=${error}`);
@@ -110,7 +109,7 @@ export async function askSupport(form: FormData) {
 export async function reviewChange(form: FormData) {
   const { supabase } = await currentAdmin();
   await supabase.rpc("admin_review_change", { change_source: String(form.get("source")), change_at: String(form.get("at")) });
-  revalidatePath("/admin");
+  revalidatePath("/admin", "layout");
 }
 
 // The one line firms see under a new government item: InboxCA uses it from a date, or keeps the
@@ -252,7 +251,7 @@ export async function checkSplit(form: FormData) {
   const asked = z.object({ first: z.uuid(), second: z.uuid(), verdict: z.enum(["separate", "one"]) }).parse(Object.fromEntries(form));
   const { error } = await supabase.rpc("admin_check_split", asked);
   if (error) throw new Error(`Saving the verdict failed: ${error.code}`);
-  revalidatePath("/admin/firms");
+  revalidatePath("/admin", "layout");
 }
 
 // Recovery: removes another admin's passkeys and signs them out (the database logs it).

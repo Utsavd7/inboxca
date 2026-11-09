@@ -833,14 +833,14 @@ isOneToOne: false
                            },
 "admin_failed_jobs":
 { Args: Record<PropertyKey, never>; Returns: {
-              "at": string,"attempts": number,"error": string,"firm": string,"id": number,"kind": string
+              "at": string,"attempts": number,"error": string,"firm": string,"firm_id": string,"id": number,"kind": string
             }[]
                            },
 "admin_firm":
 { Args: { "target": string }; Returns: Json
                            },
 "admin_firms":
-{ Args: Record<PropertyKey, never>; Returns: {
+{ Args: { "find"?: string }; Returns: {
               "created_at": string,"drive": boolean,"id": string,"last_active": string,"mailbox": boolean,"members": number,"name": string,"status": string
             }[]
                            },
