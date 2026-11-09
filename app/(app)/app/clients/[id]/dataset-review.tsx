@@ -22,6 +22,7 @@ import {itrYear} from "@/src/lib/itr-fields";
 import {formName} from "@/src/lib/prepared";
 import {checkItr,itrChoices} from "@/src/lib/itr";
 import {formLayout,grouped} from "@/src/lib/form-layout";
+import {tdsCodeMeaning} from "@/src/lib/tds";
 import {FormCheck} from "./form-check";
 import {formCheckData} from "./form-check-data";
 export const messages:Record<string,string>={stale:"Someone changed these figures. Read the latest values and try again.",source:"The paper these figures came from is not available. Ask the owner to restore it.",permission:"Ask for permission before changing a figure.",value:"Check the value. Figures need no more than two decimal places; dates need a valid day.",reason:"Say why the figure needs to change.",totals:"The totals do not add up. Correct the figures before you mark any as right.",itr:"Fix the problems listed for this return before you mark a figure as right.",saved:"Your check was saved.",marked:"Saved. Correct the figures marked wrong."};
@@ -115,8 +116,9 @@ export async function DatasetReview({clientId,draftId,lineId,check,view,only}:{c
         <tbody>{shown.map((line)=>{
           const figure=figures.get(line.id)!,open=line.id===active.id;
           const fields=<><input type="hidden" name="client" value={clientId}/><input type="hidden" name="draft" value={row.id}/><input type="hidden" name="line" value={active.id}/><input type="hidden" name="revision" value={row.revision}/><input type="hidden" name="view" value="list"/></>;
+          const meaning=tdsCodeMeaning(row.form_code,line.field,figure.value);
           return [<tr key={line.id} className={open ? "is-open" : undefined}>
-            <td><Link className="fig-name" href={href(line.id)} scroll={false} aria-current={open ? "true" : undefined}>{figure.label}</Link></td>
+            <td><Link className="fig-name" href={href(line.id)} scroll={false} aria-current={open ? "true" : undefined}>{figure.label}</Link>{meaning && <span className="sub">{meaning}</span>}</td>
             <td className={`num${!figure.kind || figure.kind==="number" ? " is-num" : ""}`}>{choice?.(line.field,figure.value) ?? grouped(figure.value,figure.kind,decimals)}</td>
             <td>{from(line)}</td>
             <td>{state(line)}</td>

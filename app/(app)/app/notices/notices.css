@@ -4,6 +4,9 @@
 .notices .cal-table .who .avatar { width: 24px; height: 24px; font-size: 11px; }
 .notices-what { display: flex; align-items: center; gap: var(--s3); }
 .notices-what .icon-tile { width: 28px; height: 28px; border-radius: var(--r1); }
+/* A long reference (ITBA/AST/F/148/...) ends in "..." so the row fits at 1280; the whole text is its title. */
+.notices-what > span:last-child { display: grid; min-width: 0; }
+.notices-what .sub { max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .notices-late { color: var(--late-fg); font-weight: 600; }
 
 /* The open notice: who sent it and where it stands, its facts, then what to do next. */

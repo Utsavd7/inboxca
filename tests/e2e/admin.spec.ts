@@ -141,6 +141,15 @@ test("an Orelu admin signs in with a passkey, sees firm health and retries a fai
     await expect(row).toContainText("Active");
     await expect(row).toContainText("Not connected");
     await expect(page.getByText("Invented Admin Secret Client")).toHaveCount(0);
+    // Found as you type by a word of its name, its id's first 8 letters or its owner's email; nothing else matches.
+    const find = page.getByRole("searchbox", { name: "Find a firm by name, id or email" });
+    for (const word of [name.slice(-8), firm.firmId.slice(0, 8), ownerEmail.toUpperCase()]) {
+      await find.fill(word);
+      await expect(page.getByRole("row")).toHaveCount(2);
+      await expect(page.getByRole("row").filter({ hasText: name })).toBeVisible();
+    }
+    await find.fill(randomUUID());
+    await expect(page.getByRole("row")).toHaveCount(0);
 
     // D29: AI use in counts only. Two replies sent the same email, then the cache answered it.
     await query(local.dbUrl, "insert into public.ai_ledger (firm_id, reason, credits, hash) values ($1, 'reply_draft', 6, 'same'), ($1, 'reply_draft', 5, 'same'), ($1, 'reply_draft', 0, 'same')", [firm.firmId]);
@@ -148,12 +157,16 @@ test("an Orelu admin signs in with a passkey, sees firm health and retries a fai
     await expect(page.getByRole("region", { name: "Avoidable calls" }).getByText(name)).toBeVisible();
     await expect(page.getByRole("region", { name: "By firm" }).getByRole("row").filter({ hasText: name }).getByRole("cell")).toHaveText([name, "2", "1", "33%", "1", "11", ""]);
 
+    // Failed jobs wait beside the menu item, grouped by firm with a count, each firm opening to its jobs.
+    await expect(page.getByRole("link", { name: "Failed jobs" }).getByLabel(/^\d+ waiting$/)).toBeVisible();
     await page.getByRole("link", { name: "Failed jobs" }).click();
-    const failed = page.getByRole("row").filter({ hasText: name });
-    await expect(failed).toContainText("mail_unreachable");
+    const group = page.getByRole("group").filter({ hasText: name });
+    await expect(group.getByLabel("1 failed")).toBeVisible();
+    await group.getByText(name).click();
+    const failed = group.getByRole("row").filter({ hasText: "mail_unreachable" });
     await failed.getByRole("button", { name: "Try again" }).click();
     await failed.getByRole("button", { name: "Yes, try again" }).click();
-    await expect(failed).toHaveCount(0);
+    await expect(group).toHaveCount(0);
     expect((await query(local.dbUrl, "select state from public.jobs where id = $1", [job]))[0].state).not.toBe("failed");
 
     await page.getByRole("link", { name: "Due dates" }).click();

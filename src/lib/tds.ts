@@ -70,6 +70,18 @@ export const statusCodes:Record<string,string>={"1":"Company","2":"Individual","
 export const remittances:Record<string,string>={"1040":"27","1041":"27","1042":"27","1043":"27","1044":"27","1045":"27","1046":"16 73","1048":"27 16 73 66 67 68 69 70","1049":"27 16 73 66 67 68 69 70","1050":"27 16 73 66 67 68 69 70","1051":"27 16 73","1052":"71","1053":"27 16 73","1054":"72","1055":"27 16 73 66 67 68 69 70","1056":"27 16 73 66 67 68 69 70","1057":"27 73 16 28 66 67 68 69 70 21 74 49 75 99"};
 // Form No. 144, Annexure 10 (rows 562 to 848): country codes 01 to 286, with no 99.
 export const countryCodes=Array.from({length:286},(_,at)=>String(at+1).padStart(2,"0")).filter(code=>code!=="99");
+// What a code in a statement's figure stands for, from the annexures above, shown beside it when
+// staff check the figures: a section code's section, a minor head's name, a status code's
+// status. Reason, country and remittance codes have no words in the formats, so none.
+const sectionsOf:Record<TdsForm,Record<string,string>>={TDS140:sectionCodes,TDS138:salarySections,TDS144:nonResidentSections,TDS143:collectionCodes};
+export function tdsCodeMeaning(form:string,field:string,value:string) {
+  const key=/^tds\.[pc]\d+\.([a-z_]+)$/.exec(field)?.[1],from=(table:Record<string,string>)=>Object.hasOwn(table,value) ? table[value] : "";
+  if(!isTdsForm(form)) return "";
+  if(key==="section") return from(sectionsOf[form]) && `Section ${from(sectionsOf[form])}`;
+  if(key==="minor") return from(minorHeads);
+  if(key==="status" && (form==="TDS144" || form==="TDS143")) return from(statusCodes);
+  return "";
+}
 const pairs=(table:Record<string,string>)=>Object.entries(table).flatMap(([flag,codes])=>codes.split(" ").map(code=>`${flag} ${code}`));
 // The layout this file is written to: each record's fields as "number type size mandatory"
 // (rows 22 to 198) and the annexures' codes, as src/lib/official-layout.ts tdsFormatLayout reads
