@@ -56,8 +56,9 @@ export const fileMail: Handler = async (job, { markSending }) => {
     return { retry: "drive_unreachable", patient: true };
   }
   // The receipt saying what arrived is a job of its own, by the firm's setting (Inbox, answered C).
-  // A tax portal's mail gets none: the client did not send it.
-  if (filed.length && !event.reason_code?.startsWith("government_")) {
+  // A tax portal's mail gets none: the client did not send it. Nor does mail its mailbox found
+  // forged: the real client would be told InboxCA received papers they never sent.
+  if (filed.length && !filing.unverified && !event.reason_code?.startsWith("government_")) {
     const { error } = await admin.from("jobs").upsert({ firm_id: firm, kind: "answer_mail", entity_type: "email", entity_id: event.id, idempotency_key: `answer_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
     if (error) return { retry: "receipt_not_queued" };
   }
@@ -65,7 +66,8 @@ export const fileMail: Handler = async (job, { markSending }) => {
   // for a person's Save; any other link gets one reply asking for the file attached or the link
   // opened, and the email waits for the team with that line.
   const links = sharedLinks(read.text);
-  if (!links.length || !event.firms) return { done: true };
+  // Links in forged mail are not opened, and the client is not written to about them.
+  if (!links.length || !event.firms || filing.unverified) return { done: true };
   const delivery = (event.delivery ?? {}) as Record<string, Json | undefined>;
   if (delivery.links === "read" || delivery.links === "asked") return { done: true };
   let unread = false;

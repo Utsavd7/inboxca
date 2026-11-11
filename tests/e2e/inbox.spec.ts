@@ -191,6 +191,8 @@ test("a paper in mail the firm's mailbox found forged waits To check, never file
   await smtp.sendMail({ envelope: { from: `forger-${tag}@invented.test`, to: office }, raw });
   for (let sweep = 0; sweep < 2; sweep++) await readMail();
   expect(await query(local.dbUrl, "select d.status from public.documents d join public.email_events e on e.id = d.email_event_id where e.firm_id = $1 and e.provider_message_id = $2", [firm.firmId, `<forged-${tag}@invented.test>`])).toEqual([{ status: "to_check" }]);
+  // And the real client is not told that InboxCA received papers they never sent.
+  expect(await query(local.dbUrl, "select j.kind from public.jobs j join public.email_events e on e.id = j.entity_id where e.firm_id = $1 and e.provider_message_id = $2 and j.kind = 'answer_mail'", [firm.firmId, `<forged-${tag}@invented.test>`])).toEqual([]);
 });
 
 test("the team writes a new email to a client, only to the client's known addresses, with a paper and a file", async () => {
