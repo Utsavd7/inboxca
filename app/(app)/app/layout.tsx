@@ -55,6 +55,8 @@ export default async function AppLayout({ children, doc }: { children: React.Rea
   const write = !!membership && !membership.viewOnlyUntil;
   const manage = write && canManageClients(role);
   const owner = role === "owner";
+  // A closed firm's data goes 30 days after it closed, the day Settings names too.
+  const closedAt = membership.viewOnlyUntil === "closed" ? (await supabase.from("activity_log").select("at").eq("firm_id", membership.firmId).eq("entity_id", membership.firmId).eq("action", "firm.closed").maybeSingle()).data?.at : null;
   // The Inbox's count: emails waiting for a reply and the questions this person answers.
   const waiting = membership
     ? Promise.all([
@@ -124,6 +126,10 @@ export default async function AppLayout({ children, doc }: { children: React.Rea
               <span className="grow">{membership.billing === "grace" ? "The last payment for InboxCA did not go through. Everything works for now." : "Your firm can only view for now: its InboxCA plan is not paid, or was cancelled."}{!owner && " The owner can pay in Settings, Billing."}</span>
               {owner && <Link className="b b-secondary" href="/app/settings?group=billing">Open Billing</Link>}
             </div>
+          ) : membership.viewOnlyUntil === "closed" ? (
+            <p className="note" role="status">
+              <span>This firm is closed.{closedAt && ` Its data is deleted on ${longDate(new Date(Date.parse(closedAt) + 30 * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }))}.`} <Link href="/app/settings">Download it in Settings</Link>.</span>
+            </p>
           ) : membership?.viewOnlyUntil && membership.viewOnlyUntil !== "billing" && (
             <p className="note" role="status">
               This laptop is away from the office, so it can only view papers until {longDate(membership.viewOnlyUntil)}.

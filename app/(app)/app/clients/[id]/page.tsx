@@ -32,6 +32,7 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { awake } from "@/src/lib/triage";
 import { workspaceStore } from "@/src/lib/workspace";
 import { AutoSelect } from "../../auto-select";
+import { PanKindHint } from "../pan-kind-hint";
 import { LiveSearch } from "../../live-search";
 import { MenuClose } from "../../returns-client";
 import { LinkTabs } from "../../link-tabs";
@@ -243,7 +244,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   // while papers are asked for (product gaps S6), pointing to the email. InboxCA sends nothing.
   const missingAsk = openAsk && (openAsk.details as unknown as DocumentRequest);
   const whatsapp = phone && whatsappLink(phone, missingAsk ? emailTemplates.whatsapp(client.name, membership.firmName, missingAsk.period, missingAsk.items.filter((item) => !item.received.length)) : "");
-  const manage = canManageClients(membership.role);
+  const manage = canManageClients(membership.role) && !viewOnly;
   // Send reminder now on Work, and Ask again or Stop asking for papers: those who manage clients
   // and those who look after this one.
   const looksAfter = (sub === "work" || files) && !viewOnly && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
@@ -487,7 +488,7 @@ export default async function Client({ params, searchParams }: { params: Promise
       <CopyButton text={number} label={kind} />
     </span>
   );
-  const canWrite = (!!email || contacts.length > 0) && !client.archived_at;
+  const canWrite = (!!email || contacts.length > 0) && !client.archived_at && !viewOnly;
   // Details: About's rows, each with its value or nothing, and the names of those empty.
   const aboutRows: [string, React.ReactNode][] = [
     ["Client type", clientKinds[client.kind as ClientKind]],
@@ -1298,6 +1299,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               <select id="client-kind" name="kind" defaultValue={client.kind}>
                 {Object.entries(clientKinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
+              <PanKindHint pan={pan} />
             </div>
             <div>
               <label htmlFor="client-group">Group</label>

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { ASKED_COOKIE, askedPath } from "@/src/lib/asked-path";
 import { DEVICE_COOKIE, newDeviceToken } from "@/src/lib/device";
 
 // Keeps the sign in session fresh on the product's pages. It decides nothing: each page
@@ -41,6 +42,12 @@ export async function proxy(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
     });
   }
+  // Signed out, the app page opened (asked-path.ts) waits through sign in. Only a page the
+  // browser opens counts: Next takes its own rsc headers off before this runs, so a prefetch
+  // is told apart by the browser's Sec-Fetch-Dest (empty) or Sec-Purpose (prefetch).
+  const opened = request.headers.get("sec-fetch-dest") === "document" && !request.headers.has("sec-purpose");
+  const asked = !data?.claims && request.method === "GET" && opened && askedPath(request.nextUrl.pathname + request.nextUrl.search);
+  if (asked) response.cookies.set(ASKED_COOKIE, asked, { httpOnly: true, maxAge: 15 * 60, path: "/", sameSite: "lax", secure: process.env.NODE_ENV === "production" });
   return response;
 }
 

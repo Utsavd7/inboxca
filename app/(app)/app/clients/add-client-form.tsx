@@ -3,6 +3,7 @@ import { useActionState } from "react";
 import { addClient, type ClientState } from "@/app/(app)/actions";
 import { clientKinds } from "@/src/lib/clients";
 import { SidePanel } from "../ui";
+import { PanKindHint } from "./pan-kind-hint";
 
 // The field an error is about, so it shows under that field; the rest show under the button.
 const fieldOf = (error = "") =>
@@ -37,6 +38,7 @@ export function AddClientForm({ email }: { email?: string }) {
               </option>
             ))}
           </select>
+          <PanKindHint />
         </div>
         <div>
           <label htmlFor="client-email">Email</label>

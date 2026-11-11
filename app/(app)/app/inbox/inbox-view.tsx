@@ -818,7 +818,7 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
           {!connected ? (
             <Empty Icon={Mail} title="Connect the firm's email" art={<SetupArt scene="inbox" />}>
               <span>{lock ? `Emails with ${lock.name} show here once the firm email is connected.` : "New client email shows here once the firm email is connected."}</span>
-              {owner && <Link className="b b-primary" href="/app/settings#mailbox">Connect email</Link>}
+              {owner && !membership.viewOnlyUntil && <Link className="b b-primary" href="/app/settings#mailbox">Connect email</Link>}
             </Empty>
           ) : (
             <Suspense key={`${href()}|${before}`} fallback={firstRows.length ? listView(firstRows, false) : <div className="ib-list-wait" aria-busy="true" aria-label="Loading emails">{[0, 1, 2, 3].map((row) => <span key={row} className="skel" />)}</div>}>

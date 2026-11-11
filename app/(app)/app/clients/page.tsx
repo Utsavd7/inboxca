@@ -119,7 +119,8 @@ export default async function Clients({
   const groupName = filtered ? (nameOf.get(filtered) ?? (tag ? `Tagged ${tag}` : null)) : null;
   const canSend = manage && !archived && !!clients?.some((client) => membership.may("send", client.id));
   // Ticks choose clients for Set services, and for sending a paper when the person may send.
-  const canTick = manage && !archived && !membership.viewOnlyUntil;
+  const write = manage && !membership.viewOnlyUntil;
+  const canTick = write && !archived;
   const viewer = deskViewer(membership, userId);
   // A removed person's clients show nobody looking after them, so someone else can be given them.
   const gone = new Set(people?.filter((person) => person.status === "deactivated").map((person) => person.user_id));
@@ -147,7 +148,7 @@ export default async function Clients({
     }),
   );
   // Adding and importing open beside the list; a firm with no clients yet starts with Add open.
-  const panel = manage ? (params.panel ?? (!countOf.all && !q && !filtered && !archived ? "add" : "")) : "";
+  const panel = write ? (params.panel ?? (!countOf.all && !q && !filtered && !archived ? "add" : "")) : "";
   const progress = batch?.details as unknown as BulkSend | undefined;
   const [{ data: chosen }, { data: sends }] = progress
     ? await Promise.all([
@@ -184,7 +185,7 @@ export default async function Clients({
   const empty = q
     ? { Icon: Search, kind: "" as const, title: "No client matches", text: "Check the spelling, or search by a whole PAN or GSTIN.", button: <Link className="b b-secondary" href={`/app/clients${show === "all" ? "" : `?show=${show}`}`}>Clear the search</Link> }
     : {
-        all: { Icon: UsersRound, kind: "approve" as const, title: archived ? "No archived clients" : "No clients here yet", text: archived ? "Clients you archive wait here, and can be restored." : "Add a client, or import the Excel list your firm already keeps.", button: manage && !archived && !filtered && <Link className="b b-primary" href="/app/clients?panel=add" scroll={false}>New client</Link> },
+        all: { Icon: UsersRound, kind: "approve" as const, title: archived ? "No archived clients" : "No clients here yet", text: archived ? "Clients you archive wait here, and can be restored." : "Add a client, or import the Excel list your firm already keeps.", button: write && !archived && !filtered && <Link className="b b-primary" href="/app/clients?panel=add" scroll={false}>New client</Link> },
         late: { Icon: CircleCheck, kind: "done" as const, title: "No client is late", text: "Every return due so far is filed.", button: showAll },
         missing: { Icon: FileCheck2, kind: "done" as const, title: "No papers are missing", text: "Clients you ask for papers show here until they send them.", button: showAll },
         mine: { Icon: UserRound, kind: "papers" as const, title: "Nobody is assigned to you yet", text: "Take a client from the All list, or a manager gives you one.", button: showAll },
@@ -203,12 +204,16 @@ export default async function Clients({
                   Export to Excel
                 </a>
               )}
-              <Link className="b b-secondary" href="/app/clients?panel=import" scroll={false}>
-                Import from Excel
-              </Link>
-              <Link className="b b-primary" href="/app/clients?panel=add" scroll={false}>
-                New client
-              </Link>
+              {write && (
+                <>
+                  <Link className="b b-secondary" href="/app/clients?panel=import" scroll={false}>
+                    Import from Excel
+                  </Link>
+                  <Link className="b b-primary" href="/app/clients?panel=add" scroll={false}>
+                    New client
+                  </Link>
+                </>
+              )}
             </>
           )
         }
@@ -411,7 +416,7 @@ export default async function Clients({
                           {client.tags.map(([word, tone]) => (
                             <Badge key={word} tone={tone}>{word}</Badge>
                           ))}
-                          {client.labels.length > 0 && <span className="sub">{client.labels.join(", ")}</span>}
+                          {client.labels.length > 0 && <span className="sub" title={client.labels.join(", ")}>{client.labels.join(", ")}</span>}
                         </span>
                         {/* The quick things to do for a client, shown while its row is pointed at.
                             Words only: an icon on every row would double the page's size. */}

@@ -83,6 +83,7 @@ test("a new firm signs up, pays before anything opens, and the webhook opens the
   await fits(page);
   await page.getByLabel("6 digit code from the app").fill(await code());
   await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("link", { name: "Continue to Today" }).click();
 
   // Nothing opens before the first payment: every page of the app sends to plan and payment.
   await expect(page).toHaveURL(/\/start$/);

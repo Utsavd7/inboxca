@@ -4,7 +4,7 @@ import {loadEnvConfig} from "@next/env";
 import {test,expect} from "@playwright/test";
 import {serverCrypto} from "@/src/lib/crypto";
 import {readCsv,xlsxEntries} from "@/src/lib/sheet";
-import {emailStep,localSupabase,query,seedFirm,systemMail,totp} from "./local-supabase";
+import {actionFields,emailStep,localSupabase,query,seedFirm,systemMail,totp} from "./local-supabase";
 const local=localSupabase();
 test.skip(!local.url || !local.mailUrl,"Needs local Supabase");
 
@@ -33,6 +33,7 @@ test("the owner downloads the firm's data and closes the firm, and staff are ref
     expect(readCsv(files.get("clients.csv")!().toString())[1]).toEqual(["Invented Close Client","Business","accounts@invented-close.test","",""]);
     expect(files.get("activity-log.csv")!().toString()).toContain("firm.downloaded");
 
+    const add=await actionFields(page,"/app/clients?panel=add",{kind:"individual"});
     await page.getByText("Close the firm",{exact:true}).last().click();
     await page.getByLabel(`Type ${name} to confirm`).fill("Another firm");await page.getByRole("button",{name:"Close the firm for good"}).click();
     await expect(page.getByText("Type the firm name exactly as it is shown.")).toBeVisible();
@@ -43,6 +44,14 @@ test("the owner downloads the firm's data and closes the firm, and staff are ref
     // The notice before deletion comes by Orelu's system email, with the day.
     await expect.poll(()=>systemMail(ownerEmail),{timeout:15_000}).toMatch(new RegExp(`You closed ${name} on InboxCA[\\s\\S]*On \\d{1,2} \\w{3} \\d{4} InboxCA deletes your firm's data`));
     await person.goto("/app/clients");await expect(person.getByText("Invented Close Client")).toHaveCount(0);
+    // Closed, the firm only views until its data goes: no New client, a forged add is refused, the download still works.
+    await page.goto("/app/clients");await expect(page.getByText("Invented Close Client")).toBeVisible();
+    await expect(page.getByRole("link",{name:"New client"})).toHaveCount(0);
+    await page.request.post("/app/clients?panel=add",{multipart:{...add,name:"Invented After Close"},headers:{Origin:new URL(page.url()).origin}});
+    expect((await query(local.dbUrl,"select count(*)::int n from public.clients where firm_id=$1",[firm.firmId]))[0].n).toBe(1);
+    await page.getByRole("link",{name:"Download it in Settings"}).click();
+    const [after]=await Promise.all([page.waitForEvent("download"),page.getByRole("button",{name:"Download your data"}).click()]);
+    expect(xlsxEntries(await readFile((await after.path())!)).has("clients.csv")).toBe(true);
   } finally {
     await context.close().catch(()=>{});
     await query(local.dbUrl,"delete from public.jobs where kind='delete_firm' and entity_id=$1",[firm.firmId]);

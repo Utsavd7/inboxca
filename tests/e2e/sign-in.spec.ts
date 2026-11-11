@@ -49,6 +49,7 @@ test("first sign in: email code, then setting up the 2 step code", async () => {
   await expect(page.getByRole("alert").filter({ hasText: "did not work" })).toBeVisible();
   await page.getByLabel("6 digit code from the app").fill(await nextTotp());
   await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("link", { name: "Continue to Today" }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.locator(".rail-firm")).toContainText("Test Firm");
   await expect(page.locator(".rail-me")).toContainText("Owner");
@@ -59,15 +60,19 @@ test("first sign in: email code, then setting up the 2 step code", async () => {
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test("next sign in asks for the app's code, and firm data waits for it", async () => {
+test("next sign in asks for the app's code, and firm data waits for it, then opens the link asked for once", async () => {
   const page = first;
+  await page.goto("/app/calendar?view=overdue");
+  await expect(page).toHaveURL(/\/sign-in$/);
   await emailStep(page, email);
   await expect(page.getByRole("heading", { name: "Enter your 2 step code" })).toBeVisible();
   await page.goto("/app");
   await expect(page).toHaveURL(/\/sign-in\/two-step$/);
   await page.getByLabel("6 digit code from the app").fill(await nextTotp());
   await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page).toHaveURL(/\/app\/calendar\?view=overdue$/);
   await expect(page.locator(".rail-me")).toContainText("Owner");
+  expect((await page.context().cookies()).map((cookie) => cookie.name)).not.toContain("asked_path");
 });
 
 test("a new computer waits, reaching nothing of the firm, until a computer already signed in approves it", async ({ page }) => {
