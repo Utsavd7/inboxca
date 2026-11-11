@@ -2,7 +2,7 @@ import Link from "next/link";
 import {Suspense} from "react";
 import {notFound,redirect} from "next/navigation";
 import {CircleCheck,FileText,ListChecks} from "lucide-react";
-import {manageTasks} from "@/app/(app)/actions";
+import {askPermission,manageTasks} from "@/app/(app)/actions";
 import {dueLabel,isItr,periodLabel,todayInIndia,verifyBy} from "@/src/lib/calendar";
 import {workOfService,type DocumentRequest} from "@/src/lib/checklists";
 import {itrReturns} from "@/src/lib/itr-fields";
@@ -90,14 +90,18 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
   if(next?.act && next.label) {
     if(["approve","download","file"].includes(next.act)) action=next.step!==shown && <Link className="b b-primary" href={`${here}?step=${next.step}`} scroll={false}>Go to {stepNames[next.step]}</Link>;
     else if(viewOnly && ["ask","upload","fill"].includes(next.act)) why=viewOnlyWords(membership.viewOnlyUntil);
+    // Papers for it already in without an ask: a TDS statement or an ITR goes on in its Draft step.
+    else if(next.act==="ask" && (tds || itr) && filedPapers?.length) action=<Link className="b b-primary" href={own} scroll={false}>{tds ? "Prepare the statement" : "Start the return"}</Link>;
     else if(next.act==="ask" || next.act==="upload") action=<Link className="b b-primary" href={`${base}?tab=documents&${next.act==="ask" ? "ask" : "upload"}=1`} scroll={false}>{next.label}</Link>;
-    else if(next.act==="fill" && !canPrepare) why="Preparing a return needs the right to edit figures. Ask your firm's owner.";
+    else if(next.act==="fill" && !canPrepare) {why="Preparing a return needs the right to edit figures.";action=<form action={askPermission}><input type="hidden" name="client" value={id}/><input type="hidden" name="right" value="edit_figures"/><Pending className="b b-primary">Ask to prepare returns</Pending></form>;}
     else if(next.act==="fill") action=<Fill task={task.id} label={name} words={next.label}/>;
     // On its own Draft step an ITR not started yet says where: the form picker just below.
     else if(next.act==="open" && shown==="draft" && itr) why="Choose its form below and press Open.";
     else if(next.act==="open" && shown!=="draft" && (itr || tds && task.registration_id)) action=<Link className="b b-primary" href={own} scroll={false}>{next.label}</Link>;
     else if(next.act==="check" && firstOpen && !(shown==="check" && meta && stage.stage==="filled")) action=<Link className="b b-primary" href={`${here}?tab=extraction&draft=${firstOpen}`} scroll={false}>{next.label}</Link>;
   }
+  // A GSTR-3B waiting for its GSTR-2B: the client's papers take the portal file.
+  else if(next?.step==="figures" && stage.missing==="credit" && !viewOnly) action=<Link className="b b-primary" href={`${base}?tab=documents`}>Add the GSTR-2B</Link>;
   const queued=shown==="figures" || shown==="check" ? "check" as const : approver && (shown==="approve" || shown==="file" && at==="file" && !filed) ? "approve" as const : null;
   // Who does this return: its desk's person (src/lib/desks.ts), or someone covering it this once.
   const nameOf=(user:string|null)=>personName(people?.find(person=>person.user_id===user)?.email);

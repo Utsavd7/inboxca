@@ -3,7 +3,7 @@ import { Reply, Send as SendIcon, Sparkles } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useId, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { flushSync, useFormStatus } from "react-dom";
 import { going } from "../nav-progress";
 import { Pending } from "../pending";
 import { usePageParams } from "../shell";
@@ -66,12 +66,14 @@ export function InboxKeys() {
         return open[0].querySelector("summary")?.focus();
       }
       if (event.key === "Escape" && target.id === "reply-text") return target.blur();
-      if (event.metaKey || event.ctrlKey || event.altKey || target.closest("input, textarea, select, [contenteditable]")) return;
+      // Nothing while a field has the keyboard, or a menu or dialog is open over the email.
+      if (event.metaKey || event.ctrlKey || event.altKey || target.closest("input, textarea, select, [contenteditable]") || open.length || document.querySelector("[role=dialog], [role=menu], dialog[open]")) return;
       // With a reply box showing, any other letter typed before clicking into it starts the reply:
       // the box takes it and the rest of the word, so an "e" inside a word never marks the email
-      // done. The shortcut keys pressed on their own still work.
+      // done. The shortcut keys pressed on their own still work, unless the box holds words not
+      // sent yet: then every letter goes back into it, so they are never marked done away.
       const box = document.querySelector<HTMLTextAreaElement>("#reply-text");
-      if (box && box.offsetParent && event.key.length === 1 && /\S/.test(event.key) && !"jkreh/".includes(event.key)) {
+      if (box && box.offsetParent && event.key.length === 1 && /\S/.test(event.key) && (!"jkreh/".includes(event.key) || box.value !== box.defaultValue)) {
         event.preventDefault();
         box.focus();
         box.setRangeText(event.key, box.selectionStart, box.selectionEnd, "end");
@@ -242,12 +244,15 @@ function Attach({ papers, chosen, setChosen, offered = [] }: { papers: Paper[]; 
   );
 }
 
-// The reply box takes the cursor at the end of its text, and its Send row comes into view.
+// The reply box takes the cursor at the end of its text, before a sign off when it has one, and
+// its Send row comes into view.
 const place = () => {
   const box = document.querySelector<HTMLTextAreaElement>("#reply-text");
   if (!box) return;
   box.focus();
-  box.setSelectionRange(box.value.length, box.value.length);
+  const signOff = box.value.lastIndexOf("\n\nRegards,");
+  const end = signOff < 0 ? box.value.length : signOff;
+  box.setSelectionRange(end, end);
   box.parentElement?.querySelector(".ib-reply-foot")?.scrollIntoView({ block: "nearest" });
 };
 
@@ -271,10 +276,10 @@ export function ReplyBox({ mail, papers, suggested, ai, mayAttach, name, firm, s
     return next;
   }, {});
   useEffect(() => {
+    // The box opens and takes the cursor at once, so a key typed straight after r goes into it.
     const write = () => {
-      if (text.current?.offsetParent) return place();
-      focus.current = true;
-      setView("open");
+      if (!text.current?.offsetParent) flushSync(() => setView("open"));
+      place();
     };
     window.addEventListener(REPLY_EVENT, write);
     return () => window.removeEventListener(REPLY_EVENT, write);

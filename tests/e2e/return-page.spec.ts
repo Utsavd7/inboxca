@@ -95,6 +95,11 @@ test("a GSTR-1 goes from papers in to filed on its own page",async({page,browser
     await expect(page.getByRole("navigation",{name:"Steps of this return"}).locator(".is-done")).toHaveCount(6);
     await page.screenshot({path:test.info().outputPath("filed.png"),fullPage:true});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+    // Not filed after all: the approved file waits at File again, and its filing note never goes to the client.
+    await page.getByRole("button",{name:"Not filed after all"}).click();
+    await expect(now(page)).toContainText("File");await expect(page.getByRole("button",{name:"Download for filing"})).toBeVisible();
+    expect(await query(local.dbUrl,"select prepared->>'status' as status from public.documents where firm_id=$1 and prepared->>'status' in ('approved','filed')",[firm.firmId])).toEqual([{status:"approved"}]);
+    expect(await query(local.dbUrl,"select status from public.shares where firm_id=$1 and status='waiting'",[firm.firmId])).toEqual([]);
   } finally {
     await Promise.all(others.map(context=>context.close().catch(()=>{})));
     for(const file of (await query(local.dbUrl,"select drive_file_id from public.documents where firm_id=$1",[firm.firmId]))) if(file.drive_file_id) files.push(file.drive_file_id);

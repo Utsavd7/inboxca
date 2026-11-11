@@ -130,6 +130,10 @@ test("the team replies in the conversation from the firm's mailbox, threaded, an
   await owner.keyboard.press("Escape");
   await owner.keyboard.type("Dear sir");
   await expect(owner.getByLabel("Your reply")).toHaveValue(/Dear sir/);
+  // Left with words not sent yet, an "e" goes back into them too: it never marks the email done.
+  await owner.keyboard.press("Escape");
+  await owner.keyboard.press("e");
+  await expect(owner.getByLabel("Your reply")).toHaveValue(/Dear sire/);
   await owner.getByLabel("Your reply").fill("");
   // A quick reply writes the email in the firm's voice, ready to change.
   await pane().getByRole("group", { name: "Quick replies" }).getByRole("button", { name: "Received, thank you" }).click();
