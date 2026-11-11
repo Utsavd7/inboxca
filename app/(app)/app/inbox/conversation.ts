@@ -32,7 +32,7 @@ export async function clientsOf(firm: string, addresses: string[]) {
 // of the conversation with anyone else are left out.
 export async function conversation(supabase: Db, firm: string, open: { mail?: string; sent?: string }) {
   const { data: event } = open.mail
-    ? await supabase.from("email_events").select("id, client_id, contact_id, sender_bidx, provider_message_id, label, decision_source, reason_code, received_at, clients(name), contacts(name_enc)").eq("firm_id", firm).eq("id", open.mail).maybeSingle()
+    ? await supabase.from("email_events").select("id, client_id, contact_id, sender_bidx, provider_message_id, label, decision_source, reason_code, received_at, delivery, clients(name), contacts(name_enc)").eq("firm_id", firm).eq("id", open.mail).maybeSingle()
     : { data: null };
   if (open.mail && !event) return null;
   const messageId = event?.provider_message_id ?? open.sent ?? "";

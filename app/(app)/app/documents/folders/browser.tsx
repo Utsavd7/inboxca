@@ -15,7 +15,7 @@ import { paperType } from "@/src/lib/paper-type";
 import type { Entry, Listing } from "./data";
 
 type Slot = Listing | "gone" | "error";
-type Choices = { types: string[]; works: [string, string][]; periods: [string, string][] };
+type Choices = { types: string[]; works: [string, string][]; periods: [string, string][]; quarters: [string, string][] };
 const icons: Record<string, LucideIcon> = { folder: Folder, pdf: FileText, sheet: FileSpreadsheet, image: FileImage, json: FileJson, other: FileIcon };
 const statuses: Record<string, [string, Tone]> = { to_check: ["To check", "warn"], missing: ["Missing in the drive", "late"], earlier: ["Earlier version", ""], deleted: ["Removed", ""] };
 const sorts = { name: "Name, A to Z", "-name": "Name, Z to A", "-modified": "Newest first", modified: "Oldest first", "-size": "Largest first", size: "Smallest first" };
@@ -121,6 +121,7 @@ function FileForm({ entry, here, choices, done }: { entry: Entry; here: Listing;
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   const guess = entry.guess ?? { type: "", work: "", period: "" };
+  const [work, setWork] = useState(guess.work || "other");
   return (
     <form
       className="fb-file"
@@ -159,7 +160,7 @@ function FileForm({ entry, here, choices, done }: { entry: Entry; here: Listing;
       </label>
       <label>
         Type of work
-        <select name="work" defaultValue={guess.work || "other"}>
+        <select name="work" value={work} onChange={(event) => setWork(event.target.value)}>
           {choices.works.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
         </select>
       </label>
@@ -167,7 +168,7 @@ function FileForm({ entry, here, choices, done }: { entry: Entry; here: Listing;
         Period
         <select name="period" defaultValue={guess.period || "none"}>
           <option value="none">No period</option>
-          {choices.periods.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+          {(work === "tds" ? choices.quarters : choices.periods).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
         </select>
       </label>
       {error && (

@@ -255,6 +255,7 @@
 .paper-view { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .paper-view:hover { text-decoration: underline; }
 .fields:not(:has(#file-type option[value="Other"]:checked)) > .other-name { display: none; }
+.fields:has(#file-work option[value="tds"]:checked) > .period-month, .fields:not(:has(#file-work option[value="tds"]:checked)) > .period-quarter { display: none; }
 .send-ask { margin-top: var(--s4); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .send-to fieldset { display: grid; gap: var(--s2); border: 0; }
 .send-to > .hint { margin-top: var(--s2); }

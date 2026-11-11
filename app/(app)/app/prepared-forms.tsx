@@ -21,7 +21,7 @@ import {signoffLines} from "@/src/lib/signoffs";
 import {formatChanged} from "@/src/lib/tds-draft";
 import {isTdsForm,tdsForms,tdsName} from "@/src/lib/tds";
 import {Badge,IconTile,Toast,type Tone} from "./ui";
-import {MenuClose,Refresh} from "./returns-client";
+import {FilingDownload,MenuClose,Refresh} from "./returns-client";
 import {addEditedForm,decideForm,markFormFiled,prepareForm,setDraftRegistration} from "./form-actions";
 
 // A return file's four steps, and where each state of a version stands on them.
@@ -137,7 +137,7 @@ export async function PreparedForms({client,message,only}:{client:string;message
     const meta=preparedSchema.parse(file.prepared),head=latest.has(file.id),active=head && !membership.viewOnlyUntil && file.size>0,{open,stage}=stageOf(file);
     const {done,word,tone}=stages[stage],decides=head && stage==="waiting";
     const period=meta.form.startsWith("ITR") ? itrYear(file.period_key) : isTdsForm(meta.form) ? periodLabel("quarterly",file.period_key) : periodName(file.period_key),number=gstins.length>1 ? gstins.find(reg=>reg.id===meta.registration)?.number : undefined;
-    const download=(primary:boolean)=><form action={`/app/files/${file.id}/filing`} method="post"><button className={`b ${primary ? "b-primary" : "b-secondary"}`} disabled={!active}>Download for filing</button></form>;
+    const download=(primary:boolean)=><FilingDownload id={file.id} primary={primary} disabled={!active}/>;
     // An acknowledgement that arrived (a paper filed from mail, or the portal's email with its
     // number read): one click marks the return filed with it, after a person checks it.
     const arrival=confirmations?.find(item=>item.entity_id===file.id),arrived=!!arrival,{ack,paper}=(arrival?.details ?? {}) as {ack?:string;paper?:string};
@@ -169,13 +169,15 @@ export async function PreparedForms({client,message,only}:{client:string;message
     else if(stage==="rejected") {primary=head && <Link className="b b-primary" href={`?tab=extraction&draft=${meta.sources[0].id}`}>Correct the figures</Link>;note="Draft sent back. Correct the figures, then prepare it again.";}
     if(!head) {primary=second=null;note="An earlier version.";}
     const reject=active && decides && approver,upload=active && canPrepare && !isTdsForm(meta.form);
+    // Marked filed, then Not filed after all: the old filing is no longer this file's.
+    const signed=signoffLines(signoffs,file.id,emailOf).filter(step=>step.action!=="form.filed" || stage==="filed");
     return <li key={file.id} className={`rf-card is-${stage}`}>
       <div className="rf-top">
         <IconTile Icon={FileText} kind={stage==="filed" ? "done" : "docs"}/>
         <div className="rf-name">
           <div className="rf-title"><h3>{formName(meta.form)} {period}{number && <span className="sub-inline">{number}</span>}</h3><Badge tone={tone}>{stage==="preparing" && <LoaderCircle className="rf-spin" size={12} aria-hidden/>}{word}</Badge></div>
           <p className="sub"><Link href={`/app/files/${file.id}/view`}>{file.name}</Link><span>Official version {meta.template}.{meta.external && " Corrected outside InboxCA."}</span></p>
-          {!!signoffLines(signoffs,file.id,emailOf).length && <p className="sub">{signoffLines(signoffs,file.id,emailOf).map(step=>step.line).join(". ")}.</p>}
+          {!!signed.length && <p className="sub">{signed.map(step=>step.line).join(". ")}.</p>}
         </div>
         <div className="rf-acts">
           {(meta.sources.length || reject || upload) && <details className="rf-menu"><summary className="b b-ghost" aria-label="More for this file">More<Ellipsis size={15} aria-hidden/></summary><div className="rf-pop is-end">

@@ -88,7 +88,9 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
   const firstOpen=sets.find(set=>set.open)?.id ?? sets[0]?.id;
   let why=next?.why,action:React.ReactNode=null;
   if(next?.act && next.label) {
-    if(["approve","download","file"].includes(next.act)) action=next.step!==shown && <Link className="b b-primary" href={`${here}?step=${next.step}`} scroll={false}>Go to {stepNames[next.step]}</Link>;
+    if(["approve","download","file"].includes(next.act) && next.step!==shown) action=<Link className="b b-primary" href={`${here}?step=${next.step}`} scroll={false}>Go to {stepNames[next.step]}</Link>;
+    // On its own step its buttons are the return file's, or the Mark filed card's, just below.
+    else if(["approve","download","file"].includes(next.act)) why??=canFile || next.act==="approve" ? "Use the buttons just below." : viewOnly ? viewOnlyWords(membership.viewOnlyUntil) : "Ask your firm's owner for permission to mark returns filed.";
     else if(viewOnly && ["ask","upload","fill"].includes(next.act)) why=viewOnlyWords(membership.viewOnlyUntil);
     // Papers for it already in without an ask: a TDS statement or an ITR goes on in its Draft step.
     else if(next.act==="ask" && (tds || itr) && filedPapers?.length) action=<Link className="b b-primary" href={own} scroll={false}>{tds ? "Prepare the statement" : "Start the return"}</Link>;

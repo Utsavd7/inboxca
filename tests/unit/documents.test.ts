@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeFile, filePeriod, gstinFor, lawType, listedTypes, periodName, sameForm, tdsChallanText, typeByContent } from "@/src/lib/documents";
+import { describeFile, filePeriod, gstinFor, lawType, listedTypes, namedMonth, periodName, sameForm, tdsChallanText, typeByContent } from "@/src/lib/documents";
 import { receiveItem, type DocumentRequest } from "@/src/lib/checklists";
 
 // Attachment names as clients send them, and where InboxCA files each one.
@@ -50,6 +50,30 @@ describe("a TDS paper and its quarter", () => {
     expect(receiveItem(ask(), "TDS challans", "2026-09", "doc1")).toBe(true);
     expect(receiveItem(ask(), "TDS challans", "2026-12", "doc1")).toBe(false);
     expect(periodName("2026-09", "tds")).toBe("Jul to Sep 2026");
+  });
+});
+
+// The month Check starts on for a paper filed with no period: never a guess between two.
+describe("the month a name or subject names", () => {
+  const received = "2026-11-03T05:00:00Z";
+  it.each([
+    ["Invented Oct sales register.csv", "2026-10"],
+    ["October sales and purchase registers", "2026-10"],
+    ["purchases_Oct-26.xlsx", "2026-10"],
+    ["Sales Oct'26 and October register", "2026-10"],
+    ["December purchases", "2025-12"],
+    ["November bills", "2026-11"],
+    ["Sept and Oct registers", ""],
+    ["Oct 2025 and Oct 2026", ""],
+    ["Registers for 2026", ""],
+    ["Market rates and summary", ""],
+    ["You may find the register attached", ""],
+    ["May 2026 salary", "2026-05"],
+  ])("%s", (text, month) => {
+    expect(namedMonth(text, received)).toBe(month);
+  });
+  it("counts the day in India", () => {
+    expect(namedMonth("October register", "2026-09-30T20:00:00Z")).toBe("2026-10");
   });
 });
 
