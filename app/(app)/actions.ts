@@ -2193,8 +2193,9 @@ export async function manageNotice(form: FormData) {
     else if (intent in noticeStatuses) await supabase.from("tasks").update({ status: intent }).eq("id", notice.id);
   }
   revalidatePath("/app", "layout");
-  // On the Notices page: back to the same list, with a note of what changed.
-  if (back === "/app/notices") back += `?${new URLSearchParams([...["show", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["saved", intent]].filter(([, value]) => value))}`;
+  // On the Notices page: back to the same list, with a note of what changed; a checked date keeps
+  // the notice open, its reply next.
+  if (back === "/app/notices") back += `?${new URLSearchParams([...["show", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["notice", intent === "confirm" ? String(form.get("notice") ?? "") : ""], ["saved", intent]].filter(([, value]) => value))}`;
   redirect(back);
 }
 

@@ -29,7 +29,7 @@ const listen = (on: () => void) => (heard.add(on), () => heard.delete(on));
 export function DeskToasts() {
   const toast = useSyncExternalStore(listen, () => said, () => null);
   return toast ? (
-    <ToastMotion key={toast.at}>
+    <ToastMotion key={toast.at} undo={!!toast.undo}>
       <span>{toast.text}</span>
       {toast.undo && <button type="button" className="b b-ghost" onClick={toast.undo}>Undo</button>}
     </ToastMotion>

@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { cookies } from "next/headers";
 import { CODE_MINUTES, openCookie, opens } from "@/src/lib/share-codes";
 import { storage } from "@/app/(app)/app/ui";
+import { Pending } from "@/app/(app)/app/pending";
 import { FirmFoot, LinkEnded, PublicPage } from "@/app/public-link";
 import { enterShareCode, requestShareCode } from "./actions";
 import { masked, shareRecipient } from "./recipient";
@@ -91,25 +92,26 @@ export default async function SharedDocument({ params, searchParams }: { params:
                     <input type="hidden" name="token" value={token} />
                     <label htmlFor="share-code">Code from the email</label>
                     <input id="share-code" name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required className="num" autoFocus />
-                    <button className="b b-primary" type="submit">
+                    <Pending className="b b-primary" type="submit">
                       Open
-                    </button>
+                    </Pending>
                   </form>
                   <form action={requestShareCode} className="public-again">
                     <input type="hidden" name="token" value={token} />
                     <span className="hint">No email after a few minutes? Check spam, or</span>
-                    <button className="b b-ghost" type="submit">
+                    <Pending className="b b-ghost" type="submit">
                       Send a new code
-                    </button>
+                    </Pending>
                   </form>
                 </>
               ) : (
                 <form action={requestShareCode}>
                   <input type="hidden" name="token" value={token} />
-                  <button className="b b-primary public-download" type="submit">
+                  {/* Pending: a double press would send two codes, the first then wrong. */}
+                  <Pending className="b b-primary public-download" type="submit">
                     <Mail size={18} aria-hidden />
                     Email me a code
-                  </button>
+                  </Pending>
                 </form>
               )}
             </div>

@@ -59,7 +59,8 @@ export function checkClient(input: ClientInput): { client: ClientInput } | { err
   const gstin = cleanNumber(input.gstin);
   const pan = cleanNumber(input.pan) || (gstin && panOfGstin(gstin));
   const email = (input.email ?? "").trim().toLowerCase();
-  if (!name || name.length > 200) return { error: "Enter the client's name." };
+  if (!name) return { error: "Enter the client's name." };
+  if (name.length > 200) return { error: "A name can have at most 200 characters." };
   if (!(input.kind in clientKinds)) return { error: "Choose the client type." };
   if (gstin && !isGstin(gstin)) return { error: "That GSTIN is not valid. Check it for a typing mistake." };
   if (pan && !isPan(pan)) return { error: "That PAN is not valid. A PAN is 5 letters, 4 digits and a letter." };
