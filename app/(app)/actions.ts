@@ -975,9 +975,10 @@ export async function manageTasks(form: FormData) {
   // The day it was filed, if typed: never ahead of today.
   const typed = String(form.get("filed_on") ?? "");
   const filedOn = /^\d{4}-\d{2}-\d{2}$/.test(typed) && !Number.isNaN(Date.parse(typed)) && typed <= todayInIndia() ? typed : todayInIndia();
-  if(!ids.length || ids.length>100 || ids.some(id=>!z.uuid().safeParse(id).success)) redirect("/app/calendar");
-  const {data:tasks}=intent==="filed" || intent==="verified" || intent==="reopen" ? await supabase.from("tasks").select("id,client_id,kind,code,period_key,details,clients(name,email_enc)").eq("firm_id",membership.firmId).in("id",ids) : {data:null};
-  if(tasks && intent!=="reopen" && (tasks.length!==ids.length || tasks.some(task=>!membership.may("mark_filed",task.client_id)))) redirect("/app/calendar?error=filing");
+  if(!["filed","verified","reopen","in_progress"].includes(String(intent)) || !ids.length || ids.length>100 || ids.some(id=>!z.uuid().safeParse(id).success)) redirect("/app/calendar");
+  // Only returns and licences, each one found; marking filed, and changing a filed one, needs the right.
+  const {data:tasks}=await supabase.from("tasks").select("id,client_id,kind,code,period_key,status,details,clients(name,email_enc)").eq("firm_id",membership.firmId).in("kind",["compliance","licence"]).in("id",ids);
+  if(!tasks || tasks.length!==ids.length || tasks.some(task=>(intent==="filed" || intent==="verified" || task.status==="filed") && !membership.may("mark_filed",task.client_id))) redirect("/app/calendar?error=filing");
   await Promise.all(
     ids.map((id) => {
       const ack = String(form.get(`ack-${id}`) ?? "").trim().slice(0, 40);
@@ -994,10 +995,26 @@ export async function manageTasks(form: FormData) {
             : intent === "in_progress"
               ? { status: "in_progress" }
               // Not filed after all: only what marking it filed added goes; a licence keeps its label.
-              : { status: "upcoming", details: Object.fromEntries(Object.entries((task?.details ?? {}) as Record<string, Json>).filter(([key]) => !["filed_on", "by", "ack", "udin", "verified_on", "verified_by"].includes(key))) };
+              : { status: "upcoming", details: Object.fromEntries(Object.entries((task?.details ?? {}) as Record<string, Json>).filter(([key]) => !["filed_on", "by", "ack", "udin", "verified_on", "verified_by", "ack_document", "prepared_form"].includes(key))) };
       return supabase.from("tasks").update(change).eq("id", id);
     }),
   );
+  // Not filed after all, for a return file marked filed: the file is approved again, so the return
+  // stands at File with it instead of falling back to Draft, and its filing note waiting for
+  // approval never goes to the client.
+  const filing = intent === "reopen" ? (tasks ?? []).filter((task) => membership.may("mark_filed", task.client_id)).map((task) => task.details as { prepared_form?: string; ack_document?: string }) : [];
+  const filedForms = filing.flatMap((one) => one.prepared_form ?? []), notes = filing.flatMap((one) => one.ack_document ?? []);
+  if (notes.length) await supabaseAdmin().from("shares").update({ status: "refused" }).eq("firm_id", membership.firmId).in("document_id", notes).eq("status", "waiting");
+  if (filedForms.length) {
+    const admin = supabaseAdmin();
+    const { data: forms } = await admin.from("documents").select("id, prepared").eq("firm_id", membership.firmId).in("id", filedForms).eq("prepared->>status", "filed");
+    await Promise.all((forms ?? []).map(({ id, prepared }) => {
+      const kept: Record<string, Json> = { ...(prepared as Record<string, Json>), status: "approved" };
+      delete kept.acknowledgement;
+      delete kept.ack;
+      return admin.from("documents").update({ prepared: kept }).eq("id", id);
+    }));
+  }
   // If asked, each client whose income tax return was just filed gets one email to e-verify it
   // by its last day, from the firm's mailbox. A client with no email is skipped.
   if (intent === "filed" && form.get("remind_verify")) {
@@ -2192,8 +2209,9 @@ export async function manageNotice(form: FormData) {
     else if (intent in noticeStatuses) await supabase.from("tasks").update({ status: intent }).eq("id", notice.id);
   }
   revalidatePath("/app", "layout");
-  // On the Notices page: back to the same list, with a note of what changed.
-  if (back === "/app/notices") back += `?${new URLSearchParams([...["show", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["saved", intent]].filter(([, value]) => value))}`;
+  // On the Notices page: back to the same list, with a note of what changed; a checked date keeps
+  // the notice open, its reply next.
+  if (back === "/app/notices") back += `?${new URLSearchParams([...["show", "page"].map((key) => [key, String(form.get(key) ?? "")]), ["notice", intent === "confirm" ? String(form.get("notice") ?? "") : ""], ["saved", intent]].filter(([, value]) => value))}`;
   redirect(back);
 }
 

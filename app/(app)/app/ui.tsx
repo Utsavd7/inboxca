@@ -147,7 +147,7 @@ export function Empty({ Icon, title, kind = "", art, children }: { Icon: LucideI
 // form or button that reverses the action, when one exists.
 export function Toast({ children, undo }: { children: React.ReactNode; undo?: React.ReactNode }) {
   return (
-    <ToastMotion>
+    <ToastMotion undo={!!undo}>
       <span>{children}</span>
       {undo}
     </ToastMotion>

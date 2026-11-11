@@ -74,7 +74,7 @@
 .docs-facts .avatar { width: 22px; height: 22px; font-size: 10px; }
 .docs-facts .docs-path { align-items: flex-start; color: var(--ink-2); font: 500 12px/1.5 var(--font-plex), ui-monospace, monospace; overflow-wrap: anywhere; }
 .docs-facts .docs-path .copy { flex: none; margin-top: -3px; }
-.docs-actions { position: sticky; bottom: calc(var(--s4) * -1); display: flex; flex-wrap: wrap; gap: var(--s2); margin: auto calc(var(--s4) * -1) calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
+.docs-actions { position: sticky; bottom: calc(var(--s4) * -1); z-index: 2; display: flex; flex-wrap: wrap; gap: var(--s2); margin: auto calc(var(--s4) * -1) calc(var(--s4) * -1); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); background: var(--surface); }
 
 /* Upload papers: the client search, a page of matches, then their upload form. */
 .side-panel .docs-find { margin: var(--s3) 0; padding: 0; border: 0; }

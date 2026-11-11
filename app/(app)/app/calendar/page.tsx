@@ -197,7 +197,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
     : <Link className="b b-secondary" href={`/app/clients/${tasks[0].client_id}/returns/${tasks[0].id}`}>{step === "check" ? "Check the next one" : step === "approve" ? (approver ? "Approve the next one" : "Open the next one") : "File the next one"}</Link>;
 
   const list = (
-    <section className="split cal-list" aria-label="Returns">
+    <section id="cal-returns" className="split cal-list" aria-label="Returns">
       <div className="cal-tools">
         {stepAction || <span className="hint">{tasks?.some((task) => !rule.get(task.code ?? "")?.verified_on) ? "* Date not yet checked against the notification." : "Tick returns to mark many at once."}</span>}
         {!step && <LinkTabs kind="pills" label="Whose" items={[{ href: href({ mine: false }), label: "Everyone", current: !mine }, { href: href({ mine: true }), label: "Mine", current: mine }]} />}
@@ -324,7 +324,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                             Mark filed
                           </Link>
                         ))
-                      ) : (
+                      ) : membership.may("mark_filed", task.client_id) && (
                         <form action={manageTasks}>
                           {state}
                           <input type="hidden" name="task" value={task.id} />
@@ -460,8 +460,9 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                 return (
                   <Link
                     key={date}
-                    href={day === date ? href({ view }) : href({ day: date })}
-                    scroll={false}
+                    // A chosen day's returns list below the month, so it comes into view.
+                    href={day === date ? href({ view }) : `${href({ day: date })}#cal-returns`}
+                    scroll={day !== date}
                     className={`cal-cell${date.startsWith(month) ? "" : " is-out"}${date === today ? " is-today" : ""}`}
                     aria-current={day === date ? "date" : undefined}
                     aria-label={`${dueLabel(date)}: ${words}`}

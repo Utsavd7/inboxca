@@ -52,8 +52,9 @@ export function SignInForm({ email, providers = [] }: { email?: string; provider
   return (
     <form action={check} className="auth-form" noValidate>
       <p className="auth-lead">
-        If <strong>{asked.email}</strong> has an InboxCA account, a 6 digit code is on its way.
-        It works for 10 minutes.
+        {/* Sign up always sends one, so only the sign in page keeps the "if". */}
+        {email ? "A 6 digit code is on its way to " : "If "}<strong>{asked.email}</strong>{email ? "." : " has an InboxCA account, a 6 digit code is on its way."}
+        {" "}It works for 10 minutes.
       </p>
       <input type="hidden" name="email" value={asked.email} />
       <label htmlFor="code">Code from the email</label>

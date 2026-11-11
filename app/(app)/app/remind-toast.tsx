@@ -16,7 +16,7 @@ export function RemindToast({ from = "client" }: { from?: "client" | "files" }) 
   const [client, job, error] = ["reminding", "job", "error"].map((key) => params.get(key) ?? "");
   if (client && job)
     return (
-      <ToastMotion>
+      <ToastMotion undo>
         <span>The reminder goes out from your firm email in about 20 seconds. Undo stops it.</span>
         <form action={stopSend}>
           <input type="hidden" name="client" value={client} />

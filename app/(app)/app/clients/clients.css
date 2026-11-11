@@ -28,6 +28,8 @@
 .clients-table .row-link::after { content: ""; position: absolute; inset: 0; }
 .clients-table :is(input[type="checkbox"], .copy, td .b) { position: relative; z-index: 1; }
 .clients-table .who { gap: var(--s3); }
+/* A very long name is cut short (the whole of it on hover), so it never pushes the other columns out of view. */
+.clients-page:not(.client-record) .clients-table .who .row-link { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
 /* Looked after by keeps its width whoever is in it (desk-chip.tsx). */
 .clients-table .clients-desk { width: 176px; }
 .clients-table .clients-desk .desk-chip { max-width: 168px; }

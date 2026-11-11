@@ -24,6 +24,12 @@ export function MailboxForm({initial={},reconnecting=false}:{initial?:Record<str
         </button>
       </div>
       <p className="hint" aria-live="polite">{found || "Gmail, Google Workspace and Zoho need an app password, made in the account's security settings."}{connecting && " Connecting..."}</p>
+      {/* Under the button, so it is in view when the server settings open below. */}
+      {state.error && (
+        <p className="alert" role="alert">
+          {state.error}
+        </p>
+      )}
       <details className="reveal" open={!!state.error && !!values.imap_host}>
         <summary>Change server settings</summary>
         <div className="fields">
@@ -40,11 +46,6 @@ export function MailboxForm({initial={},reconnecting=false}:{initial?:Record<str
           ))}
         </div>
       </details>
-      {state.error && (
-        <p className="alert" role="alert">
-          {state.error}
-        </p>
-      )}
     </form>
   );
 }

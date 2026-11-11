@@ -94,13 +94,14 @@ const noStack = () => null;
 // A toast (ui.tsx Toast): springs up from the bottom, then leaves downwards after five seconds.
 // In the app it joins the stack at the bottom right (layout.tsx .toasts), one over another,
 // clear of the page's controls; elsewhere it shows on its own in the same place.
-export function ToastMotion({ children }: { children: React.ReactNode }) {
+// undo: one with an Undo stays 15 seconds, time to reach it (a reminder waits 20 before it goes).
+export function ToastMotion({ children, undo = false }: { children: React.ReactNode; undo?: boolean }) {
   const [shown, setShown] = useState(true);
   const stack = useSyncExternalStore(noChange, toastStack, noStack);
   useEffect(() => {
-    const timer = setTimeout(() => setShown(false), 5000);
+    const timer = setTimeout(() => setShown(false), undo ? 15_000 : 5000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [undo]);
   const toast = (
     <AnimatePresence>
       {shown && (

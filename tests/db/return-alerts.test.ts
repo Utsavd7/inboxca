@@ -16,9 +16,12 @@ async function seed() {
 }
 it("alerts the assigned partner, falling back to the owner, once even after cleanup and stale edits", () => rollback(db,async () => {
   const {id,client}=await seed();
+  // A return already long late when it reached the calendar (an import) emails nobody.
+  const old=(await db.query("insert into public.tasks(firm_id,client_id,kind,due_on) values ($1,$2,'compliance',(now() at time zone 'Asia/Kolkata')::date-40) returning id",[FIRM,client])).rows[0].id;
   await db.query("select private.queue_return_alerts()");
   await db.query("select private.queue_return_alerts()");
   expect((await db.query("select count(*)::int n from public.jobs where entity_id=$1 and kind='return_alert'",[id])).rows[0].n).toBe(1);
+  expect((await db.query("select count(*)::int n from public.jobs where entity_id=$1",[old])).rows[0].n).toBe(0);
   await actAs(db,OWNER);
   expect((await attempt(db,"select public.claim_return_alert($1)",[id])).ok).toBe(false);
   await asOwner(db);

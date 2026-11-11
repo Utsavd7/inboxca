@@ -50,7 +50,7 @@ it("lets only the owner confirm a linked, unchecked rule, once, for their firm a
     expect((await db.query("select code from public.firm_due_dates")).rows).toEqual([]);
     expect(await confirm(firmB, linked)).toBe(true);
     await asOwner(db);
-    expect((await db.query("select firm_id, confirmed_by from public.firm_due_dates order by firm_id")).rows).toEqual([{ firm_id: firmA, confirmed_by: ownerA }, { firm_id: firmB, confirmed_by: ownerB }]);
+    expect((await db.query("select firm_id, confirmed_by from public.firm_due_dates where firm_id = any($1) order by firm_id", [[firmA, firmB]])).rows).toEqual([{ firm_id: firmA, confirmed_by: ownerA }, { firm_id: firmB, confirmed_by: ownerB }]);
     expect((await db.query("select actor_id, details from public.activity_log where action = 'due_date.confirmed' and firm_id = $1", [firmA])).rows).toEqual([{ actor_id: ownerA, details: { code: linked, source_url: "https://example.test/notification" } }]);
     // Orelu's own check wins: the rule table is untouched by a firm's confirmation.
     expect((await db.query("select verified_on from public.compliance_types where code = $1", [linked])).rows[0].verified_on).toBeNull();
