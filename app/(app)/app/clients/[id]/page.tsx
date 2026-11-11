@@ -381,15 +381,17 @@ export default async function Client({ params, searchParams }: { params: Promise
   // for every work the client's services need; More papers opens when one of its own is.
   const inHand = due?.[0]?.code ? workOfService(due[0].code) : null;
   const askWork = inHand ? new Set([inHand]) : usualWork;
-  const usual = ([type, value]: [string, string]) => askWork.has(value.startsWith("kind:") ? workOfType(type) : (value.split(":")[0] as WorkType));
+  // A yearly return's period is its year ("2026-03" is the year ending March 2026, "2026").
+  const askPeriod = due?.map((task) => (isItr(task.code) || task.code === "TAX_AUDIT" ? task.period_key?.slice(0, 4) : task.period_key)).find((key) => periodChoices(today).includes(key ?? "")) ?? periodChoices(today)[1];
+  // Papers already in for that period start unticked, so the client is not asked for them again.
+  const { data: inAlready } = ask ? await supabase.from("documents").select("document_type").eq("firm_id", firm).eq("client_id", id).eq("period_key", askPeriod).not("status", "in", "(deleted,earlier)") : { data: null };
+  const usual = ([type, value]: [string, string]) => !inAlready?.some((paper) => paper.document_type === type) && askWork.has(value.startsWith("kind:") ? workOfType(type) : (value.split(":")[0] as WorkType));
   const askBox = (item: [string, string]) => (
     <label key={item[0]} className="check">
       <input type="checkbox" name="item" value={item[1]} defaultChecked={usual(item)} />
       {item[0]}
     </label>
   );
-  // A yearly return's period is its year ("2026-03" is the year ending March 2026, "2026").
-  const askPeriod = due?.map((task) => (isItr(task.code) || task.code === "TAX_AUDIT" ? task.period_key?.slice(0, 4) : task.period_key)).find((key) => periodChoices(today).includes(key ?? "")) ?? periodChoices(today)[1];
   // A figure or a return file is for a return when one of the client's returns has its form,
   // period and number, as a return's own page finds it (return-back.ts); Work links the others.
   const forReturn = (form: string, period: string | null, registration?: string) =>

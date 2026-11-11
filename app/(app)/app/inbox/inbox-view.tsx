@@ -163,7 +163,7 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
     pick,
     supabase.from("requests").select("id, entity_id, reason_code, details").eq("kind", "team_reply").eq("status", "pending").limit(1000),
     lock ? Promise.resolve({ data: null }) : supabase.from("documents").select("id, client_id, name, clients(name)").eq("status", "to_check").limit(50),
-    lock ? Promise.resolve({ data: null }) : supabase.from("shares").select("id, contact_id, documents(name, clients(name))").eq("status", "waiting").limit(50),
+    lock ? Promise.resolve({ data: null }) : supabase.from("shares").select("id, contact_id, email_event_id, documents(name, clients(name))").eq("status", "waiting").limit(50),
     // Questions this person may answer (5.17.2), the same ones Today counts.
     myQuestions(),
     supabase.rpc("firm_people", { target_firm: firm }),
@@ -890,11 +890,11 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
       )}
       {sp.panel === "papers" && !!papers?.length && (
         <SidePanel key="papers" id="papers" title="Papers waiting for approval" close={here}>
-          <p className="hint">A client asked for a private paper. It goes as a secure link only once someone approves it.</p>
+          <p className="hint">A private paper goes to the client as a secure link only once someone approves it.</p>
           <section aria-labelledby="papers">
             <ul className="app-rows ib-preview">
               {papers.map((share) => (
-                <ListRow key={share.id} lead={<Avatar name={share.documents?.clients?.name ?? ""} />} title={share.documents?.name} meta={`Asked for by ${share.contact_id ? "a contact of " : ""}${share.documents?.clients?.name}`}
+                <ListRow key={share.id} lead={<Avatar name={share.documents?.clients?.name ?? ""} />} title={share.documents?.name} meta={share.email_event_id ? `Asked for by ${share.contact_id ? "a contact of " : ""}${share.documents?.clients?.name}` : `For ${share.documents?.clients?.name}`}
                   action={approver && (
                     <form action={decideShare} className="ib-inline">
                       <input type="hidden" name="share" value={share.id} />

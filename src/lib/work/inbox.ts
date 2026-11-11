@@ -31,7 +31,10 @@ export async function inboxWorkItems({ supabase, membership }: Context): Promise
   const { data: mails } = asks?.length ? await supabase.from("email_events").select("id, received_at").in("id", asks.map((ask) => ask.entity_id)) : { data: [] };
   const at = new Map(mails?.map((mail) => [mail.id, mail.received_at]));
   const days = (iso?: string) => (iso ? Math.floor((Date.now() - Date.parse(iso)) / DAY) : 0);
+  // These go to front desk only (work-data.ts), who cannot add a client: someone not a client yet
+  // asking about the firm's services waits for the person it is given to instead.
   const replies = (asks ?? [])
+    .filter((ask) => ask.reason_code !== "new_client_enquiry")
     .sort((a, b) => (at.get(a.entity_id) ?? "").localeCompare(at.get(b.entity_id) ?? ""))
     .map((ask): WorkItem => {
       const waited = days(at.get(ask.entity_id));
@@ -47,7 +50,7 @@ export async function inboxWorkItems({ supabase, membership }: Context): Promise
   const approvals = (papers ?? []).map((share): WorkItem => ({
     key: `approve:${share.id}`,
     title: share.documents?.name ?? "A paper",
-    why: "The client asked for it. It goes as a secure link once approved",
+    why: "It goes to the client as a secure link once approved",
     ...(share.documents?.clients && { client: { id: share.documents.client_id, name: share.documents.clients.name } }),
     action: { label: "Approve", href: "/app/inbox#papers" },
     audience: "approver",
