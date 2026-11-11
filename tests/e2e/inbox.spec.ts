@@ -181,6 +181,14 @@ test("an attachment shows where it was saved in the drive, and opens in the view
   await expect(pane()).toContainText(`InboxCA saved its paper in ${clientName}'s folders.`);
 });
 
+test("a paper in mail the firm's mailbox found forged waits To check, never filed as the client's", async () => {
+  // The client's From address, but the mailbox's own result says it failed SPF and DMARC.
+  const raw = [`Authentication-Results: mx.firm.test; spf=fail smtp.mailfrom=patel.test; dkim=none; dmarc=fail header.from=patel.test`, `From: ${clientEmail}`, `To: ${office}`, `Subject: October purchase bills`, `Message-ID: <forged-${tag}@invented.test>`, `MIME-Version: 1.0`, `Content-Type: multipart/mixed; boundary="b"`, ``, `--b`, `Content-Type: text/plain`, ``, `Sir, attaching all purchase bills for October.`, `--b`, `Content-Type: application/pdf; name="purchase_bills_oct_2026.pdf"`, `Content-Disposition: attachment; filename="purchase_bills_oct_2026.pdf"`, `Content-Transfer-Encoding: base64`, ``, Buffer.from("%PDF-1.4 invented forged bills").toString("base64"), `--b--`, ``].join("\r\n");
+  await smtp.sendMail({ envelope: { from: `forger-${tag}@invented.test`, to: office }, raw });
+  for (let sweep = 0; sweep < 2; sweep++) await readMail();
+  expect(await query(local.dbUrl, "select d.status from public.documents d join public.email_events e on e.id = d.email_event_id where e.firm_id = $1 and e.provider_message_id = $2", [firm.firmId, `<forged-${tag}@invented.test>`])).toEqual([{ status: "to_check" }]);
+});
+
 test("the team writes a new email to a client, only to the client's known addresses, with a paper and a file", async () => {
   // The Inbox's button opens the writing panel; the client is picked like the filter's.
   await owner.goto("/app/inbox");

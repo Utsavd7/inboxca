@@ -975,9 +975,10 @@ export async function manageTasks(form: FormData) {
   // The day it was filed, if typed: never ahead of today.
   const typed = String(form.get("filed_on") ?? "");
   const filedOn = /^\d{4}-\d{2}-\d{2}$/.test(typed) && !Number.isNaN(Date.parse(typed)) && typed <= todayInIndia() ? typed : todayInIndia();
-  if(!ids.length || ids.length>100 || ids.some(id=>!z.uuid().safeParse(id).success)) redirect("/app/calendar");
-  const {data:tasks}=intent==="filed" || intent==="verified" || intent==="reopen" ? await supabase.from("tasks").select("id,client_id,kind,code,period_key,details,clients(name,email_enc)").eq("firm_id",membership.firmId).in("id",ids) : {data:null};
-  if(tasks && intent!=="reopen" && (tasks.length!==ids.length || tasks.some(task=>!membership.may("mark_filed",task.client_id)))) redirect("/app/calendar?error=filing");
+  if(!["filed","verified","reopen","in_progress"].includes(String(intent)) || !ids.length || ids.length>100 || ids.some(id=>!z.uuid().safeParse(id).success)) redirect("/app/calendar");
+  // Only returns and licences, each one found; marking filed, and changing a filed one, needs the right.
+  const {data:tasks}=await supabase.from("tasks").select("id,client_id,kind,code,period_key,status,details,clients(name,email_enc)").eq("firm_id",membership.firmId).in("kind",["compliance","licence"]).in("id",ids);
+  if(!tasks || tasks.length!==ids.length || tasks.some(task=>(intent==="filed" || intent==="verified" || task.status==="filed") && !membership.may("mark_filed",task.client_id))) redirect("/app/calendar?error=filing");
   await Promise.all(
     ids.map((id) => {
       const ack = String(form.get(`ack-${id}`) ?? "").trim().slice(0, 40);

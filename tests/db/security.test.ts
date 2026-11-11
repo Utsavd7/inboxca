@@ -61,6 +61,25 @@ describe("the database's own guards", () => {
     expect(await names("select p.proname name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('public', 'private') and p.prosecdef and not coalesce(p.proconfig::text like '%search_path=%', false)")).toEqual([]);
   });
 
+  it("shows nothing of the firm to a sign in session that has ended, in any role, before its token runs out", () =>
+    rollback(db, async () => {
+      const firm = "00000000-0000-4000-8000-0000000000f1", session = "00000000-0000-4000-8000-0000000000e1";
+      await db.query("insert into auth.users (id, email) values ($1, 'ended-session@example.test')", [OWNER]);
+      await db.query("insert into public.firms (id, name, state_code, status) values ($1, 'Invented Session Firm', '27', 'active')", [firm]);
+      await db.query("insert into public.clients (firm_id, name, kind) values ($1, 'Invented Session Client', 'business')", [firm]);
+      await db.query("insert into auth.sessions (id, user_id) values ($1, $2)", [session, OWNER]);
+      const sees = async (role: string) => {
+        await asOwner(db);
+        await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $2, $3, 'active') on conflict (firm_id, user_id) do update set role = excluded.role", [firm, OWNER, role]);
+        await actAs(db, OWNER, "aal2", session);
+        return (await db.query("select count(*)::int n from public.clients")).rows[0].n;
+      };
+      for (const role of ["owner", "partner", "manager", "staff", "front_desk"]) expect(await sees(role)).toBe(1);
+      await asOwner(db);
+      await db.query("delete from auth.sessions where id = $1", [session]);
+      for (const role of ["owner", "partner", "manager", "staff", "front_desk"]) expect(await sees(role)).toBe(0);
+    }));
+
   it("counts sign in tries per key in a window, for the server only", () =>
     rollback(db, async () => {
       const key = `test-${Date.now()}`;

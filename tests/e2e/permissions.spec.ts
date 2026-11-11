@@ -6,7 +6,7 @@ import {TEST_DRIVE} from "../../playwright.config";
 import {serverCrypto} from "@/src/lib/crypto";
 import {localDrive} from "@/src/lib/drive";
 import {pdf} from "../fixtures/pdf";
-import {emailStep,localSupabase,query,seedFirm,totp} from "./local-supabase";
+import {actionFields,addPerson,appKey,emailStep,localSupabase,query,seedFirm,signIn,totp} from "./local-supabase";
 const local=localSupabase();
 test.skip(!local.url || !local.mailUrl,"Needs local Supabase");
 
@@ -50,4 +50,30 @@ test("the owner's scoped permission gives a personal copy only for that client",
     expect((await person.request.post(`/app/files/${doc}/stream`,{headers:{Origin:origin}})).status()).toBe(403);
     await page.reload();await page.getByRole("button",{name:"Withdraw",exact:true}).click();await expect(page.getByRole("button",{name:"Withdraw",exact:true})).toHaveCount(0);
   } finally {await context.close().catch(()=>{});try {if(stored) await drive.trash(stored);} finally {await firm.remove();await staff.remove();}}
+});
+
+// Without the Mark returns filed right, the filing form sent by hand with any other choice
+// leaves a filed return filed, its acknowledgement kept, and a notice's details as they were.
+test("someone without the right cannot set a filed return back or empty a notice through the filing form",async({browser})=>{
+  test.setTimeout(90_000);
+  const key=appKey(),tag=randomUUID().slice(0,8),ownerEmail=`filing-owner-${tag}@invented.test`,staffEmail=`filing-staff-${tag}@invented.test`;
+  const firm=await seedFirm(`Invented Filing Firm ${tag}`,ownerEmail,key);
+  try {
+    await addPerson(firm.firmId,staffEmail,"staff",key);
+    await query(local.dbUrl,"update public.firms set settings=settings||'{\"permissions\":{\"employee\":{\"mark_filed\":false}}}' where id=$1",[firm.firmId]);
+    const [{id:client}]=await query(local.dbUrl,"insert into public.clients(firm_id,name,kind) values($1,'Invented Filing Client','business') returning id",[firm.firmId]);
+    const [{id:task}]=await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,kind,code,period_key,due_on,status,details) values($1,$2,'compliance','GSTR3B','2026-10',current_date,'filed',$3) returning id",[firm.firmId,client,{filed_on:"2026-11-10",ack:"invented-ack"}]);
+    const [{id:notice}]=await query(local.dbUrl,"insert into public.tasks(firm_id,client_id,kind,due_on,status,details) values($1,$2,'notice',current_date+30,'upcoming',$3) returning id",[firm.firmId,client,{authority:"income_tax",reference:"Invented reference",action_date:"2026-12-31"}]);
+    const before=await query(local.dbUrl,"select id,status,details from public.tasks where firm_id=$1 order by kind",[firm.firmId]);
+    const [owner,staff]=await Promise.all([browser.newPage(),browser.newPage()]);
+    await signIn(owner,ownerEmail,key);await signIn(staff,staffEmail,key);
+    const fields=await actionFields(owner,"/app/calendar?view=filed",{task});
+    for(const [intent,ids] of [["x",[task,notice]],["reopen",[task]],["in_progress",[task]]] as const) {
+      const form=new FormData();
+      for(const [name,value] of Object.entries(fields)) if(name!=="task" && name!=="intent") form.append(name,value);
+      form.append("intent",intent);for(const id of ids) form.append("task",id);
+      await staff.request.post("/app/calendar",{multipart:form,headers:{Origin:new URL(staff.url()).origin},maxRedirects:0});
+    }
+    expect(await query(local.dbUrl,"select id,status,details from public.tasks where firm_id=$1 order by kind",[firm.firmId])).toEqual(before);
+  } finally {await firm.remove(staffEmail);}
 });

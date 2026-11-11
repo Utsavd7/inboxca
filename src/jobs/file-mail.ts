@@ -48,6 +48,8 @@ export const fileMail: Handler = async (job, { markSending }) => {
   let filing: Filing, filed: Filed[];
   try {
     filing = await openFiling(admin, { ...event, client_id: event.client_id, clients: event.clients }, driveAccount);
+    // Mail its mailbox found forged (src/jobs/mail-poll.ts): every file waits To check.
+    filing.unverified = (event.delivery as { sender?: string } | null)?.sender === "unverified";
     filed = await fileAttachments(filing, read);
   } catch {
     // The drive is away or refused: the files wait, and are tried every hour for 7 days.
@@ -143,7 +145,7 @@ type Filing = {
   admin: ReturnType<typeof supabaseAdmin>;
   event: { id: string; firm_id: string; client_id: string; received_at: string; label: string | null };
   client: string; drive: Awaited<ReturnType<typeof openDrive>>; order: FolderOrder; naming?: Naming;
-  notice?: NoticeDetails; known: Known[]; gstins: string[];
+  notice?: NoticeDetails; known: Known[]; gstins: string[]; unverified?: boolean;
 };
 // What filing a client's email needs: the drive, how it is laid out, the notice the email
 // recorded, the client's papers so far and its GSTINs.
@@ -181,7 +183,7 @@ async function filePaper(filing: Filing, file: Paper, hint: string): Promise<Fil
   const about = await describe(filing, file, hint);
   const again = known.some((document) => document.sha256 === sha256);
   const registration = gstinFor(about.work, filing.gstins);
-  const toCheck = !about.sure || again;
+  const toCheck = !about.sure || again || !!filing.unverified;
   const folder = await drive.ensureFolder(folderFor(filing.order, client, { ...about, receivedAt: event.received_at, toCheck }));
   const parts = { client, type: about.type, period: filePeriod(about.period), extension: path.extname(file.name) };
   const saved = await placeUnderFreeName(parts, receivedLabel(event.received_at), (name) => drive.save(folder, name, file.bytes), filing.naming);
