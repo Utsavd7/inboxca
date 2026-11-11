@@ -367,6 +367,7 @@ const CALLS: [name: string, sql: string, params: string[], about: boolean][] = [
   ["review_owner_device", "select public.review_owner_device($1, 'approve') r", ["request"], true],
   ["service_status", "select public.service_status() r", [], false],
   ["session_live", "select public.session_live() r", [], false],
+  ["view_only_request", "select public.view_only_request() r", [], false],
 ];
 
 describe("every table and function, from the catalog", () => {

@@ -49,6 +49,12 @@ test("the owner downloads the firm's data and closes the firm, and staff are ref
     await expect(page.getByRole("link",{name:"New client"})).toHaveCount(0);
     await page.request.post("/app/clients?panel=add",{multipart:{...add,name:"Invented After Close"},headers:{Origin:new URL(page.url()).origin}});
     expect((await query(local.dbUrl,"select count(*)::int n from public.clients where firm_id=$1",[firm.firmId]))[0].n).toBe(1);
+    // Nor does the database take a change sent straight to it with the owner's own sign in.
+    const cookie=(await page.context().cookies()).filter(one=>/-auth-token(\.\d+)?$/.test(one.name)).sort((a,b)=>a.name.localeCompare(b.name)).map(one=>one.value).join("");
+    const {access_token:token}=JSON.parse(cookie.startsWith("base64-") ? Buffer.from(cookie.slice(7),"base64url").toString() : decodeURIComponent(cookie));
+    const direct=await fetch(`${local.url}/rest/v1/clients?firm_id=eq.${firm.firmId}`,{method:"PATCH",headers:{apikey:process.env.SUPABASE_PUBLISHABLE_KEY!,Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({name:"Invented Direct Change"})});
+    expect(await direct.text()).toContain("25006");
+    expect(await query(local.dbUrl,"select name from public.clients where firm_id=$1",[firm.firmId])).toEqual([{name:"Invented Close Client"}]);
     await page.getByRole("link",{name:"Download it in Settings"}).click();
     const [after]=await Promise.all([page.waitForEvent("download"),page.getByRole("button",{name:"Download your data"}).click()]);
     expect(xlsxEntries(await readFile((await after.path())!)).has("clients.csv")).toBe(true);

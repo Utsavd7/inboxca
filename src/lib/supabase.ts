@@ -13,6 +13,21 @@ function connection(key: "SUPABASE_PUBLISHABLE_KEY" | "SUPABASE_SECRET_KEY") {
   return { url, value };
 }
 
+// Every database request made as a signed in person carries the server's proof for that person
+// and session (public.guard_request): a closed or view only firm is changed by nothing that did
+// not come through here. The token is only read for whose proof to make; the database checks
+// the proof against the token it verified itself.
+const fromServer: typeof fetch = async (input, init) => {
+  const headers = new Headers(init?.headers);
+  try {
+    const { sub, session_id } = JSON.parse(Buffer.from((headers.get("authorization") ?? "").split(".")[1] ?? "", "base64url").toString());
+    if (sub && session_id && String(input instanceof Request ? input.url : input).includes("/rest/v1/")) headers.set("x-inboxca-app", await (await import("./office")).officeProof(`app:${sub}`, session_id));
+  } catch {
+    // No person's token (the sign in steps): nothing to prove.
+  }
+  return fetch(input, { ...init, headers });
+};
+
 // Acts as the signed in person: row level security applies to everything it reads.
 // The signed in person's own connection; `headers` go with every request it makes (the
 // office proof, for one).
@@ -20,7 +35,7 @@ export async function supabaseServer(headers?: Record<string, string>) {
   const store = await cookies();
   const { url, value } = connection("SUPABASE_PUBLISHABLE_KEY");
   return createServerClient<Database>(url, value, {
-    ...(headers && { global: { headers } }),
+    global: { ...(headers && { headers }), fetch: fromServer },
     cookies: {
       getAll: () => store.getAll(),
       setAll: (list) => {
