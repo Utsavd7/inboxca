@@ -219,7 +219,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
                 </>
               ) : confirm === "remove" ? (
                 <>
-                  <p className="hint">Remove {personName(person.email)} from the firm? They lose access at once. You can restore them later.</p>
+                  <p className="hint">Remove {personName(person.email)} from the firm? They lose access at once. You can restore them later.{!!loadOf(person.user_id)?.open && " Their clients then show nobody looking after them: give them to someone else on Clients."}</p>
                   {!!passkeys && (
                     <label className="check">
                       <input type="checkbox" name="passkeys" defaultChecked />

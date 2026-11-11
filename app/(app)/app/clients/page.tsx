@@ -121,6 +121,8 @@ export default async function Clients({
   // Ticks choose clients for Set services, and for sending a paper when the person may send.
   const canTick = manage && !archived && !membership.viewOnlyUntil;
   const viewer = deskViewer(membership, userId);
+  // A removed person's clients show nobody looking after them, so someone else can be given them.
+  const gone = new Set(people?.filter((person) => person.status === "deactivated").map((person) => person.user_id));
   const rows = await Promise.all(
     (clients ?? []).map(async (client) => {
       const gstin = client.client_registrations[0];
@@ -129,7 +131,7 @@ export default async function Clients({
         ...client,
         gstin: gstin ? await crypto.decrypt(firm, `clients/${client.id}/gstin`, gstin.number_enc) : "",
         // Who does its GST and income tax work (src/lib/desks.ts).
-        desks: desksOf(client.client_assignments, client.desk.flatMap((number) => number.services), (a) => (a.team_id ? nameOf.get(a.team_id) : personName(emailOf.get(a.user_id ?? ""))) ?? ""),
+        desks: desksOf(client.client_assignments.filter((a) => !gone.has(a.user_id ?? "")), client.desk.flatMap((number) => number.services), (a) => (a.team_id ? nameOf.get(a.team_id) : personName(emailOf.get(a.user_id ?? ""))) ?? ""),
         next,
         // The firm's own tags, under the status.
         labels: client.tags,
@@ -254,7 +256,8 @@ export default async function Clients({
                 <label htmlFor="assign-who">Who</label>
                 <select id="assign-who" name="who" required defaultValue="">
                   <option value="">Choose</option>
-                  {activePeople.map((person) => <option key={person.user_id} value={`person:${person.user_id}`}>{personName(person.email)}{person.user_id === userId && " (you)"}</option>)}
+                  {/* Two people with one first name are told apart by their email. */}
+                  {activePeople.map((person) => <option key={person.user_id} value={`person:${person.user_id}`}>{personName(person.email)}{person.user_id === userId ? " (you)" : activePeople.some((other) => other !== person && personName(other.email) === personName(person.email)) && ` (${person.email})`}</option>)}
                   {teams.map((team) => <option key={team.id} value={`team:${team.id}`}>{team.name} (team)</option>)}
                 </select>
               </div>
@@ -344,7 +347,7 @@ export default async function Clients({
       {progress && (
         <Card
           id="send-progress"
-          title={`Sending ${paperType(progress.type)}, ${periodName(progress.period)}`}
+          title={`Sending ${paperType(progress.type)}, ${periodName(progress.period, "income_tax")}`}
           Icon={Send}
           kind="approve"
           end={
@@ -392,7 +395,7 @@ export default async function Clients({
                     <td>
                       <span className="who">
                         <Avatar name={client.name} />
-                        <Link className="row-link" id={`c-${client.id}`} href={`/app/clients/${client.id}`}>
+                        <Link className="row-link" id={`c-${client.id}`} href={`/app/clients/${client.id}`} title={client.name}>
                           {client.name}
                         </Link>
                       </span>

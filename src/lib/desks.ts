@@ -41,7 +41,9 @@ export async function readDesks(supabase: SupabaseClient<Database>, firm: string
     supabase.from("groups").select("id, name").eq("firm_id", firm).eq("kind", "team"),
   ]);
   const name = (a: Assignment) => (a.team_id ? teams?.find((team) => team.id === a.team_id)?.name : personName(people?.find((person) => person.user_id === a.user_id)?.email)) ?? "";
-  const desks = new Map(ids.map((id) => [id, desksOf((rows ?? []).filter((row) => row.client_id === id), (numbers ?? []).filter((row) => row.client_id === id).flatMap((row) => row.services), name)]));
+  // A removed person no longer holds a desk (their assignments stay, for Restore).
+  const gone = new Set(people?.filter((person) => person.status === "deactivated").map((person) => person.user_id));
+  const desks = new Map(ids.map((id) => [id, desksOf((rows ?? []).filter((row) => row.client_id === id && !gone.has(row.user_id ?? "")), (numbers ?? []).filter((row) => row.client_id === id).flatMap((row) => row.services), name)]));
   const personOf = (id: string | null): Holder | null => (id ? { id, team: false, name: personName(people?.find((person) => person.user_id === id)?.email) } : null);
   return { desks, personOf };
 }

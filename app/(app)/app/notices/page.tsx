@@ -271,9 +271,10 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
                     <input type="hidden" name="notice" value={opened.id} />
                     <select name="person" defaultValue={openDetails.assigned_to ?? ""} aria-label="Owner of this notice">
                       <option value="">Nobody yet</option>
-                      {people?.filter((person) => person.status === "active").map((person) => (
+                      {people?.filter((person) => person.status === "active").map((person, _, active) => (
                         <option key={person.user_id} value={person.user_id}>
                           {personName(person.email)}
+                          {active.some((other) => other !== person && personName(other.email) === personName(person.email)) && ` (${person.email})`}
                         </option>
                       ))}
                     </select>
