@@ -356,7 +356,8 @@ export default async function Client({ params, searchParams }: { params: Promise
     (assignment.team_id ? teams?.find((team) => team.id === assignment.team_id)?.name : personName(people?.find((person) => person.user_id === assignment.user_id)?.email)) ?? "";
   const lookers = [...assigned].sort((a, b) => lookAfter.indexOf(a.role) - lookAfter.indexOf(b.role));
   // Who does its GST and income tax work, beside its numbers in the header (src/lib/desks.ts).
-  const desks = desksOf(client.client_assignments, client.client_registrations.flatMap((registration) => registration.services), who);
+  // A removed person no longer holds a desk (their assignments stay, for Restore).
+  const desks = desksOf(client.client_assignments.filter((a) => people?.find((person) => person.user_id === a.user_id)?.status !== "deactivated"), client.client_registrations.flatMap((registration) => registration.services), who);
   const viewer = deskViewer(membership, userId);
   const gstin = numbers.find((registration) => registration.kind === "gstin")?.number;
   const pan = numbers.find((registration) => registration.kind === "pan")?.number;

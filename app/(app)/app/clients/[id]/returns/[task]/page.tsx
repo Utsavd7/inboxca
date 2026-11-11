@@ -105,7 +105,7 @@ export default async function ReturnPage({params,searchParams}:{params:Promise<{
   const queued=shown==="figures" || shown==="check" ? "check" as const : approver && (shown==="approve" || shown==="file" && at==="file" && !filed) ? "approve" as const : null;
   // Who does this return: its desk's person (src/lib/desks.ts), or someone covering it this once.
   const nameOf=(user:string|null)=>personName(people?.find(person=>person.user_id===user)?.email);
-  const desks=desksOf(client.client_assignments,client.client_registrations.flatMap(number=>number.services),one=>(one.team_id ? teams?.find(team=>team.id===one.team_id)?.name : nameOf(one.user_id)) ?? "");
+  const desks=desksOf(client.client_assignments.filter(one=>people?.find(person=>person.user_id===one.user_id)?.status!=="deactivated"),client.client_registrations.flatMap(number=>number.services),one=>(one.team_id ? teams?.find(team=>team.id===one.team_id)?.name : nameOf(one.user_id)) ?? "");
   const doer=task.doer ? {id:task.doer,team:false,name:nameOf(task.doer)} : null;
   const days=Math.round((Date.parse(task.due_on)-Date.parse(today))/86_400_000),details=task.details as {filed_on?:string;by?:string;ack?:string;udin?:string;verified_on?:string};
   const due=filed ? `Filed${details.filed_on ? ` ${dueLabel(details.filed_on)}` : ""}` : `Due ${dueLabel(task.due_on)}, ${days<0 ? `${-days} ${days===-1 ? "day" : "days"} late` : days===0 ? "today" : days===1 ? "tomorrow" : `in ${days} days`}`;

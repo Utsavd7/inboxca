@@ -19,6 +19,11 @@ const nextConfig: NextConfig = {
       headers: [
         { key: "X-Frame-Options", value: "SAMEORIGIN" },
         { key: "X-Content-Type-Options", value: "nosniff" },
+        // Browsers that reached InboxCA over HTTPS keep to it for two years (ignored over plain
+        // HTTP, so the laptop preview is unchanged), and no page may use the camera, microphone
+        // or location: InboxCA never asks for them.
+        { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
       ],
     }];
   },
