@@ -12,6 +12,22 @@ export const clientKinds = {
 
 export type ClientKind = keyof typeof clientKinds;
 
+// A PAN's 4th letter is its holder's status, in the Income Tax Department's own words at
+// https://www.incometaxindia.gov.in/w/how-pan-is-formed-and-how-it-gets-its-unique-identity-
+// (read 11 Nov 2026). Only its letters that match a client type here: P Individual, F
+// Firm/Limited Liability Partnership, C Company, T Trust. A business may be one person's or a
+// firm's. A quiet hint when the type chosen is none of the letter's; never a block.
+const panHolders: Record<string, [string, ClientKind[]]> = {
+  P: ["an individual", ["individual", "business", "tax_audit"]],
+  F: ["a firm or LLP", ["business", "tax_audit", "llp"]],
+  C: ["a company", ["company"]],
+  T: ["a trust", ["trust"]],
+};
+export function panKindHint(pan: string, kind: string) {
+  const holder = /^[A-Z]{5}\d{4}[A-Z]$/.test(pan.trim().toUpperCase()) ? panHolders[pan.trim().toUpperCase()[3]] : undefined;
+  return holder && !holder[1].includes(kind as ClientKind) ? `This PAN's 4th letter is for ${holder[0]}. Check the client type.` : "";
+}
+
 // The example row on the client list template's How to fill sheet. An import leaves it out
 // when someone copies it into their list.
 export const exampleClient = { name: "Sharma Traders (example)", kind: clientKinds.business, pan: "ABCDE1234F", gstin: "27ABCDE1234F1Z0", email: "accounts@example.com", phone: "98765 43210" };

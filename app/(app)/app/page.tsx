@@ -82,7 +82,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
                 Upload papers
               </Link>
             )}
-            {canManageClients(membership.role) && (
+            {canManageClients(membership.role) && !membership.viewOnlyUntil && (
               <Link className="b b-primary" href="/app/clients?panel=add">
                 New client
               </Link>
@@ -128,6 +128,7 @@ export default async function AppHome({ searchParams }: { searchParams: Promise<
 const todayErrors: Record<string, string> = {
   view_only: "This device can only view. Make changes from the office.",
   billing: "Your firm can only view until its plan is paid. The owner can pay in Settings, Billing.",
+  closed: "This firm is closed, so it can only view. Its data can be downloaded in Settings.",
   drive: "Connect the firm's drive in Settings first; portal files are saved there.",
 };
 
@@ -211,7 +212,7 @@ async function Attention({ ctx }: { ctx: Context }) {
           <PcKey mode="setup" />
         </div>
       )}
-      {lines.includes("setup") && setup && (
+      {lines.includes("setup") && setup && !membership.viewOnlyUntil && (
         <div className="today-line" role="region" aria-label="Setup">
           <Rocket size={16} aria-hidden />
           <span className="grow">

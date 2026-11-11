@@ -82,7 +82,7 @@ export function ImportForm({ names }: { names: Record<string, string> }) {
                   {problems.map((row) => (
                     <tr key={row.line}>
                       <td className="num">{row.line}</td>
-                      <td>{row.name || "(no name)"}</td>
+                      <td className="import-name" title={row.name}>{row.name || "(no name)"}</td>
                       <td className="import-wrap">{row.error}</td>
                     </tr>
                   ))}

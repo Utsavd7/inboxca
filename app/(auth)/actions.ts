@@ -10,7 +10,7 @@ import { withThisComputer } from "@/src/lib/owner-device";
 import { CHALLENGE_COOKIE, checkAdminKeyUse, newChallenge } from "@/src/lib/pc-key";
 import { withinLimit } from "@/src/lib/rate-limit";
 import { recoveryDigests, SEEN_COOKIE } from "@/src/lib/session";
-import { afterFirstStep, factorCode, isProvider, oneSession, providers, readyProviders } from "@/src/lib/sign-in";
+import { afterFirstStep, factorCode, isProvider, landing, oneSession, providers, readyProviders } from "@/src/lib/sign-in";
 import { supabaseAdmin, supabaseServer } from "@/src/lib/supabase";
 import { finishSignUp } from "./sign-up/finish";
 
@@ -120,17 +120,21 @@ export async function verifyTwoStep(_prev: StepState, form: FormData): Promise<S
   const supabase = await supabaseServer();
   const { data: signedIn } = await supabase.auth.getClaims();
   if (signedIn && !(await withinLimit("twoStep", signedIn.claims.sub))) return { error: "Too many tries. Wait an hour, then try again." };
+  const { data: factors } = await supabase.auth.mfa.listFactors();
+  const first = factors?.all.find((factor) => factor.id === factorId)?.status === "unverified";
   const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
   if (error) return { error: "That code did not work. Codes change every 30 seconds; try the new one." };
-  return afterTwoStep(supabase);
+  return afterTwoStep(supabase, first);
 }
 
-async function afterTwoStep(supabase: Awaited<ReturnType<typeof supabaseServer>>): Promise<never> {
+async function afterTwoStep(supabase: Awaited<ReturnType<typeof supabaseServer>>, first = false): Promise<never> {
   const { data: claims } = await supabase.auth.getClaims();
   if (claims) await oneSession(supabase, claims.claims.sub, String(claims.claims.email ?? ""));
   // An Orelu admin checks a passkey next (PLAN.md 8.1).
   const { data: admin } = claims ? await supabaseAdmin().from("orelu_admins").select("user_id").eq("user_id", claims.claims.sub).maybeSingle() : { data: null };
-  redirect(admin ? "/sign-in/passkey" : "/app");
+  // An owner who has just set up the 2 step code is offered recovery codes once (5.17.4 #23).
+  const { count: owner } = first && claims ? await supabaseAdmin().from("firm_members").select("firm_id", { count: "exact", head: true }).eq("user_id", claims.claims.sub).eq("role", "owner").eq("status", "active") : { count: 0 };
+  redirect(admin ? "/sign-in/passkey" : owner ? "/sign-in/recovery-codes" : await landing());
 }
 
 // A passkey in place of the 6 digit code (PLAN.md 5.17, 8.5), after the email code as before; or
@@ -208,12 +212,13 @@ export async function recoverTwoStep(_prev: StepState, form: FormData): Promise<
 // other device is lost.
 async function spendRecoveryCode(userId: string, code: string) {
   const admin = supabaseAdmin();
+  // One database step, so two requests at the same moment cannot both use the code.
+  const { data: left, error } = await admin.rpc("spend_recovery_code", { person: userId, digests: recoveryDigests(userId, code) });
+  if (error) return "That recovery code could not be used just now. Try again in a minute.";
+  if (left === null) return "That recovery code did not work. Check it, or use another one.";
   const { data } = await admin.auth.admin.getUserById(userId);
-  const saved = (data.user?.app_metadata.recovery ?? []) as string[];
-  const digest = recoveryDigests(userId, code).find((made) => saved.includes(made));
-  if (!digest) return "That recovery code did not work. Check it, or use another one.";
-  const { error } = await admin.auth.admin.updateUserById(userId, { app_metadata: { recovery: saved.filter((kept) => kept !== digest), devices: await withThisComputer(userId, data.user?.app_metadata.devices) } });
-  return error ? "That recovery code could not be used just now. Try again in a minute." : saved.length - 1;
+  const { error: unsaved } = await admin.auth.admin.updateUserById(userId, { app_metadata: { devices: await withThisComputer(userId, data.user?.app_metadata.devices) } });
+  return unsaved ? "That recovery code could not be used just now. Try again in a minute." : left;
 }
 
 // A new computer on the owner's login with no other computer to approve it (D38): after the

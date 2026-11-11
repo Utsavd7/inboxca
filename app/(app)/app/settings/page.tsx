@@ -28,6 +28,7 @@ import { Badge, IconTile, PageHead, Row, SidePanel, storage, Toast, type Kind } 
 import { SetupArt } from "../setup-art";
 import { Item, List, Presence } from "../motion";
 import { Pending } from "../pending";
+import { emailTemplates } from "@/src/lib/email-templates";
 import { STAGES, askChoices, askDays, stageNames, reminderStages } from "@/src/lib/reminders";
 import { isMailApi, mailSignInReady, signInNames, signInNotReady } from "@/src/lib/mail-oauth";
 import { mailApis, type MailApi } from "@/src/lib/mail-view";
@@ -199,6 +200,14 @@ export default async function Settings({
   const mailbox = accounts?.find((account) => account.kind === "mail");
   const drive = accounts?.find((account) => account.kind === "drive");
   const dueDates = group === "reminders" && owner ? await dueDatesForOwner(supabase, membership.firmId, todayInIndia()) : null;
+  // The email a client gets, for the firm's next return with an invented client's name; and the
+  // returns reminders pass by until their date is checked.
+  const unchecked = dueDates?.filter((rule) => !rule.confirmed).map((rule) => rule.code) ?? [];
+  const open = () => supabase.from("tasks").select("code, period_key, due_on", { count: "exact" }).eq("firm_id", membership.firmId).eq("kind", "compliance").neq("status", "filed").not("code", "is", null);
+  const [soonest, latest, undated] = dueDates ? await Promise.all([open().gte("due_on", todayInIndia()).order("due_on").limit(1), open().order("due_on", { ascending: false }).limit(1), unchecked.length ? open().in("code", unchecked).limit(1) : null]) : [];
+  const next = soonest?.data?.[0] ?? latest?.data?.[0];
+  const { data: nextRule } = next ? await supabase.from("compliance_types").select("name, frequency").eq("code", next.code!).eq("period_key", "").maybeSingle() : { data: null };
+  const sampleMail = next && emailTemplates.reminder("Sample Client", membership.firmName, [{ id: "", client_id: "", code: next.code!, period_key: next.period_key ?? "", due_on: next.due_on, rule: { name: nextRule?.name ?? next.code!, frequency: nextRule?.frequency ?? null, verified: true }, client: { paused: false, hasEmail: true } }], todayInIndia());
   const crypto = serverCrypto();
   const permissions = (membership.settings.permissions ?? {}) as Permissions;
   const always = (standing ?? []).flatMap((member) => {
@@ -776,6 +785,13 @@ export default async function Settings({
                 <input className="toggle" form={GROUP} type="checkbox" name="on" defaultChecked={settings.reminders === true} />
                 Email clients before their returns are due
               </label>
+              {sampleMail && (
+                <details className="reveal">
+                  <summary>See the email</summary>
+                  <pre className="set-mail">{`Subject: ${sampleMail.subject}\n\n${sampleMail.text}`}</pre>
+                </details>
+              )}
+              {!!undated?.count && <p className="hint">{undated.count === 1 ? "1 return waits for its date to be checked: no reminder goes for it yet." : `${undated.count.toLocaleString("en-IN")} returns wait for their date to be checked: no reminder goes for them yet.`}</p>}
               <fieldset>
                 <legend>When to remind</legend>
                 <div className="set-grid">{STAGES.map((day) => <label className="check" key={day}><input type="checkbox" form={GROUP} name="stage" value={day} defaultChecked={reminderStages(settings).includes(day)} />{stageNames[day]}</label>)}</div>

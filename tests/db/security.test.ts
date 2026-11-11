@@ -99,6 +99,33 @@ describe("the database's own guards", () => {
       }
     }));
 
+  // S7: two requests at the same moment with one recovery code; the second waits for the first.
+  it("spends a recovery code once, for the server only, even when two tries come at the same moment", async () => {
+    const other = await connect();
+    const person = "00000000-0000-4000-8000-0000000000a7";
+    const spend = (client: Client) => client.query("select public.spend_recovery_code($1, $2) n", [person, ["code-a"]]);
+    try {
+      await db.query("insert into auth.users(id, email, raw_app_meta_data) values ($1, 'recovery@security.test', $2)", [person, { recovery: ["code-a", "code-b"] }]);
+      await db.query("begin");
+      await db.query("set local role service_role");
+      const first = await spend(db);
+      await other.query("set role service_role");
+      const second = spend(other);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await db.query("commit");
+      expect([first.rows[0].n, (await second).rows[0].n]).toEqual([1, null]);
+      for (const role of [OWNER, person, null])
+        await rollback(db, async () => {
+          await actAs(db, role);
+          expect((await attempt(db, "select public.spend_recovery_code($1, $2)", [person, ["code-b"]])).ok).toBe(false);
+        });
+    } finally {
+      await asOwner(db);
+      await db.query("delete from auth.users where id = $1", [person]);
+      await other.end();
+    }
+  });
+
   it("refuses a raw IP address in the activity log; only a keyed digest is kept", () =>
     rollback(db, async () => {
       const firm = "00000000-0000-4000-8000-0000000009a0";

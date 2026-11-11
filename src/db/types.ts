@@ -1274,6 +1274,9 @@ isOneToOne: false
 "sign_up_firm":
 { Args: { "accepted": Json,"firm_name": string,"owner": string,"state": string }; Returns: string
                            },
+"spend_recovery_code":
+{ Args: { "digests": (string)[],"person": string }; Returns: number
+                           },
 "split_firm_pairs":
 { Args: { "least_clients": number,"least_share": number }; Returns: Json
                            },
