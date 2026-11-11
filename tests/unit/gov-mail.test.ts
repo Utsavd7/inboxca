@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { filedReturn, officialKind, officialSender, taxNumbersIn } from "@/src/lib/gov-mail";
+import { filedReturn, officialKind, officialSender, taxNumbersIn, unverifiedSender } from "@/src/lib/gov-mail";
 
 // Mail from the tax portals is trusted only when the mailbox's own Authentication-Results
 // say SPF or DKIM passed for the official domain: a forged From alone is ordinary mail.
@@ -21,6 +21,14 @@ describe("official sender check", () => {
     expect(officialSender("donotreply@incometax.gov.in.evil.test", gmail)).toBeNull();
     expect(officialSender("donotreply@incometaxgov.in", "spf=pass smtp.mailfrom=incometaxgov.in")).toBeNull();
     expect(officialSender("accounts@shah.in", "spf=pass smtp.mailfrom=shah.in")).toBeNull();
+  });
+  // A client's mail its mailbox found not to come from the From domain waits for a person.
+  it("marks a client's mail unverified only when the mailbox's result shows no pass for its domain", () => {
+    expect(unverifiedSender("meera@patel.test", "mx.firm.test; spf=fail smtp.mailfrom=patel.test; dkim=none; dmarc=fail header.from=patel.test")).toBe(true);
+    expect(unverifiedSender("meera@patel.test", "mx.firm.test; dkim=pass header.d=evil.test; spf=pass smtp.mailfrom=evil.test; dmarc=fail header.from=patel.test")).toBe(true);
+    expect(unverifiedSender("meera@patel.test", "mx.firm.test; spf=softfail smtp.mailfrom=patel.test; dkim=pass header.d=patel.test; dmarc=pass header.from=patel.test")).toBe(false);
+    expect(unverifiedSender("meera@gmail.com", "mx.google.com; dkim=pass header.i=@gmail.com; spf=pass smtp.mailfrom=meera@gmail.com; dmarc=pass (p=NONE) header.from=gmail.com")).toBe(false);
+    expect(unverifiedSender("meera@patel.test", "")).toBe(false);
   });
   it("finds the checked PANs and GSTINs an official mail names, and sorts the mail by its words", () => {
     expect(taxNumbersIn("PAN: AAPFU0939F. GSTIN 27AAPFU0939F1ZV. TAN MUMA12345B. Not a PAN: ABCDE12345")).toEqual({ gstins: ["27AAPFU0939F1ZV"], pans: ["AAPFU0939F"], tans: ["MUMA12345B"] });

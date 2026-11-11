@@ -28,13 +28,22 @@ export function officialSender(from: string, auth: string): OfficialWork | null 
   const domain = domainOf(from);
   const root = (Object.keys(officialDomains) as (keyof typeof officialDomains)[]).find((known) => under(domain, known));
   if (!root) return null;
-  const passed = (method: "spf" | "dkim") => {
-    const key = method === "spf" ? "smtp.mailfrom" : "header.(?:d|i)";
-    const matches = auth.toLowerCase().matchAll(new RegExp(`${method}=pass\\b[^;]*?${key}=(?:[^@\\s;]*@)?([a-z0-9.-]+)`, "g"));
-    return [...matches].some((match) => under(match[1], root));
-  };
-  return passed("dkim") || passed("spf") ? officialDomains[root] : null;
+  return passed(auth, root, "dkim") || passed(auth, root, "spf") ? officialDomains[root] : null;
 }
+
+// Whether the receiving mailbox's result says the mail passed this check for this domain.
+function passed(auth: string, root: string, method: "spf" | "dkim" | "dmarc") {
+  const key = method === "spf" ? "smtp.mailfrom" : method === "dkim" ? "header.(?:d|i)" : "header.from";
+  const matches = auth.toLowerCase().matchAll(new RegExp(`${method}=pass\\b[^;]*?${key}=(?:[^@\\s;]*@)?([a-z0-9.-]+)`, "g"));
+  return [...matches].some((match) => under(match[1], root));
+}
+
+// A client's or contact's mail that the firm's own mailbox checked and found not to come from
+// the From address's domain (no DMARC, DKIM or SPF pass for it): a forged From proves nothing,
+// so its files wait for a person. With no result at all (a mailbox that writes none) it is not
+// marked, as nothing can be told.
+export const unverifiedSender = (from: string, auth: string) =>
+  !!auth.trim() && !(["dmarc", "dkim", "spf"] as const).some((method) => passed(auth, domainOf(from), method));
 
 // The PANs and GSTINs written in an official mail, each checked, so the client can be found by
 // its blind index. A GSTIN's own PAN is not counted again: the GSTIN is the surer match.

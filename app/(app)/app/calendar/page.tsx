@@ -324,7 +324,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
                             Mark filed
                           </Link>
                         ))
-                      ) : (
+                      ) : membership.may("mark_filed", task.client_id) && (
                         <form action={manageTasks}>
                           {state}
                           <input type="hidden" name="task" value={task.id} />

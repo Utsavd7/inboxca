@@ -2,7 +2,8 @@ import {randomUUID} from "node:crypto";
 import {expect,it} from "vitest";
 import {actAs,asOwner,attempt,connect,rollback} from "./db";
 
-// #47: a standing right covers its own clients and last day only, including direct writes.
+// #47: a standing right covers its own clients and last day only, including direct writes, and
+// changing a filed return as much as marking it filed.
 it("checks role and person scopes in a set before a return can be marked filed",async()=>{
   const db=await connect();
   try {await rollback(db,async()=>{
@@ -12,14 +13,19 @@ it("checks role and person scopes in a set before a return can be marked filed",
     await db.query("insert into public.firm_members(firm_id,user_id,role,status) values($1,$2,'staff','active')",[firm,person]);
     await db.query("insert into public.clients(id,firm_id,name,kind) values($1,$4,'Invented Alpha','business'),($2,$4,'Invented Beta','business'),($3,$5,'Invented Other','business')",[a,b,c,firm,other]);
     const task=(await db.query("insert into public.tasks(firm_id,client_id,kind,due_on) values($1,$2,'compliance',current_date) returning id",[firm,a])).rows[0].id;
+    const filed=(await db.query("insert into public.tasks(firm_id,client_id,kind,due_on,status,details) values($1,$2,'compliance',current_date,'filed',jsonb_build_object('filed_on',current_date,'ack','invented')) returning id",[firm,a])).rows[0].id;
     await actAs(db,person);
     expect((await db.query("select * from public.clients_with_right('mark_filed')")).rowCount).toBe(0);
     expect((await attempt(db,"update public.tasks set status='filed',details=jsonb_build_object('filed_on',current_date) where id=$1",[task])).ok).toBe(false);
+    // Nor un-file a filed one, or change what marking it filed recorded.
+    expect(await attempt(db,"update public.tasks set status='upcoming',details='{}' where id=$1",[filed])).toMatchObject({ok:true,count:0});
+    expect(await attempt(db,"update public.tasks set details='{}' where id=$1",[filed])).toMatchObject({ok:true,count:0});
     await asOwner(db);
     await db.query("update public.firm_members set access=jsonb_build_object('always',jsonb_build_array(jsonb_build_object('right','mark_filed','clients',jsonb_build_array($3::text),'until',(now() at time zone 'Asia/Kolkata')::date::text))) where firm_id=$1 and user_id=$2",[firm,person,a]);
     await actAs(db,person);
     expect((await db.query("select public.clients_with_right('mark_filed') id")).rows).toEqual([{id:a}]);
     expect(await attempt(db,"update public.tasks set status='filed',details=jsonb_build_object('filed_on',current_date) where id=$1",[task])).toMatchObject({ok:true});
+    expect(await attempt(db,"update public.tasks set status='upcoming' where id=$1",[filed])).toMatchObject({ok:true,count:1});
     await asOwner(db);
     await db.query("update public.firm_members set access=jsonb_set(access,'{always,0,until}',to_jsonb(((now() at time zone 'Asia/Kolkata')::date-1)::text)) where firm_id=$1 and user_id=$2",[firm,person]);
     await actAs(db,person);expect((await db.query("select * from public.clients_with_right('mark_filed')")).rowCount).toBe(0);

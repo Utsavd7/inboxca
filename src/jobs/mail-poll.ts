@@ -4,7 +4,7 @@ import type { NewMail } from "@/src/lib/mailbox";
 import { supabaseAdmin } from "@/src/lib/supabase";
 import { askedAbout } from "@/src/lib/answers";
 import { classify, enquiry, statusLabels, type Label } from "@/src/lib/triage";
-import { filedReturn, officialKind, officialSender, taxNumbersIn, type OfficialWork } from "@/src/lib/gov-mail";
+import { filedReturn, officialKind, officialSender, taxNumbersIn, unverifiedSender, type OfficialWork } from "@/src/lib/gov-mail";
 import { todayInIndia } from "@/src/lib/calendar";
 import { sharedLinks } from "@/src/lib/share-link";
 import type { Handler } from "./runner";
@@ -105,8 +105,9 @@ export const mailPoll: Handler = async (job) => {
       label,
       decision_source: "rule",
       reason_code: reason,
-      // Which return and period a status question names, for its answer; never its words.
-      delivery: statusLabels.includes(label) ? { asked: askedAbout(mail.content.subject, mail.content.text) } : {},
+      // Which return and period a status question names, for its answer; never its words. A
+      // client's mail its mailbox found forged waits for a person before anything is filed.
+      delivery: { ...(statusLabels.includes(label) && { asked: askedAbout(mail.content.subject, mail.content.text) }), ...(!work && !sender.stranger && unverifiedSender(mail.from, mail.auth) && { sender: "unverified" }) },
     };
   }));
   if (events.length) {
