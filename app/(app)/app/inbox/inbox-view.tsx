@@ -1,4 +1,4 @@
-import { AlarmClock, CheckCheck, ChevronDown, Clock, Ellipsis, ExternalLink, FileSearch, FolderInput, Inbox as InboxIcon, Info, KeyRound, Mail, MailOpen, PenLine, Reply, Search, Send, ShieldCheck, SlidersHorizontal, Tag as TagIcon, UserPlus, UserRound, X } from "lucide-react";
+import { AlarmClock, CheckCheck, ChevronDown, Clock, Ellipsis, ExternalLink, FileSearch, FolderInput, Inbox as InboxIcon, Info, KeyRound, Mail, MailOpen, PenLine, Reply, Search, Send, ShieldAlert, ShieldCheck, SlidersHorizontal, Tag as TagIcon, UserPlus, UserRound, X } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -497,7 +497,8 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
     // What InboxCA did with the email in a line, with a link to what was sent or recorded.
     const filedHere = saved?.filter((doc) => doc.email_event_id === event?.id && doc.status !== "to_check").length ?? 0;
     const paperLink: [string, string] | undefined = shared ? [`/app/files/${shared.document_id}/view`, "View the paper"] : undefined;
-    const did = event && ({
+    // Someone not a client yet: the box below says so, with who it is given to, so the line says nothing more.
+    const did = event && !(outcome === "reply" && !event.client_id && newSender(event.reason_code)) && ({
       snoozed: { text: `Snoozed. It comes back to Needs reply on ${dayName(snoozedTill(event.id) ?? today)}.` },
       reply: { text: `${replyReasons[request?.reason_code ?? ""] ?? "Waits for your team"}${openAsk.assignee ? `. Given to ${whoWords(openAsk.assignee)}` : ""}.` },
       approval: { text: `InboxCA found ${shared?.documents?.name ?? "the paper"}. It goes to the client once someone approves it.`, link: paperLink },
@@ -606,7 +607,7 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
             {event && !event.client_id && newSender(event.reason_code) && (
               <div className="ib-confirm">
                 <UserPlus size={16} aria-hidden />
-                <span className="grow">{opened?.from ?? "This sender"} is not a client yet{event.reason_code === "new_client_enquiry" && " and asks about your services or charges"}. InboxCA answers and files nothing for them until they are.</span>
+                <span className="grow">{opened?.from ?? "This sender"} is not a client yet{event.reason_code === "new_client_enquiry" && " and asks about your services or charges"}. InboxCA answers and files nothing for them until they are.{openAsk.assignee && ` Given to ${whoWords(openAsk.assignee)}.`}</span>
                 {approver && !membership.viewOnlyUntil && opened?.from && <Link className="b b-secondary" href={`/app/clients?panel=add&email=${encodeURIComponent(opened.from)}`}>Add as a client</Link>}
               </div>
             )}
@@ -625,6 +626,13 @@ export async function InboxView({ searchParams, client: lock }: { searchParams: 
                   </form>
                 )}
                 {clientPicker(links?.length ? "Save to another client" : "Save to a client", { ...filters, mail: event.id, file: "pick" }, (id) => href({ mail: event.id, file: id }), undefined, sp.file === "pick" && (!!cq || !!sp.cpage))}
+              </div>
+            )}
+            {/* A client's mail the firm's mailbox could not confirm (src/jobs/mail-poll.ts): its papers wait for a person. */}
+            {event?.client_id && (event.delivery as { sender?: string } | null)?.sender === "unverified" && (
+              <div className="ib-confirm">
+                <ShieldAlert size={16} aria-hidden />
+                <span className="grow">Your firm&apos;s mailbox could not confirm that {sender || open.client?.name} sent this email, so any papers in it wait in To check.</span>
               </div>
             )}
             {fileTo && event && (

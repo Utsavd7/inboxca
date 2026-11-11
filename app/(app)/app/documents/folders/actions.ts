@@ -1,6 +1,6 @@
 "use server";
 import { todayInIndia } from "@/src/lib/calendar";
-import { describeFile, documentTypes, lawType, periodChoices } from "@/src/lib/documents";
+import { describeFile, documentTypes, lawType, periodChoices, quarterChoices } from "@/src/lib/documents";
 import { KEPT_OUT_FOLDER, workTypes, type WorkType } from "@/src/lib/drive";
 import { checkFile, quarantine, receive, unsafeText } from "@/src/lib/intake";
 import { parsePath, placeOf } from "@/src/lib/drive-browse";
@@ -40,7 +40,7 @@ export async function fileDrivePaper(_previous: Result | null, form: FormData): 
   const work = String(form.get("work") ?? "");
   const period = form.get("period") === "none" ? "" : String(form.get("period") ?? "");
   const types = [...documentTypes, ...((ctx.membership.settings.document_types ?? []) as string[])];
-  if (!types.includes(type) || !(work in workTypes) || (period && !periodChoices(todayInIndia()).includes(period))) return { error: "Choose the paper type, type of work and period." };
+  if (!types.includes(type) || !(work in workTypes) || (period && !(work === "tds" ? quarterChoices : periodChoices)(todayInIndia()).includes(period))) return { error: "Choose the paper type, type of work and period." };
   if (file.size > MAX_FILING) return { error: "This file is over 100 MB, so InboxCA cannot save it to a client." };
   try {
     const bytes = await ctx.drive!.read(file.id);

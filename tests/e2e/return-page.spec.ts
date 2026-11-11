@@ -100,6 +100,12 @@ test("a GSTR-1 goes from papers in to filed on its own page",async({page,browser
     await expect(now(page)).toContainText("File");await expect(page.getByRole("button",{name:"Download for filing"})).toBeVisible();
     expect(await query(local.dbUrl,"select prepared->>'status' as status from public.documents where firm_id=$1 and prepared->>'status' in ('approved','filed')",[firm.firmId])).toEqual([{status:"approved"}]);
     expect(await query(local.dbUrl,"select status from public.shares where firm_id=$1 and status='waiting'",[firm.firmId])).toEqual([]);
+    // Filed after all, with its real number: the new note is saved beside the old one, which still never goes out.
+    await page.locator("summary",{hasText:"Mark filed"}).click();await page.getByLabel("Acknowledgement number, if known").fill("AA2409260098765");
+    await page.getByRole("button",{name:"Mark filed",exact:true}).click();
+    await expect.poll(async()=>(await query(local.dbUrl,"select status,details->>'ack' as ack from public.tasks where id=$1",[task]))[0],{timeout:30_000}).toEqual({status:"filed",ack:"AA2409260098765"});
+    expect((await query(local.dbUrl,"select name from public.documents where firm_id=$1 and document_type='Filing record' order by received_at",[firm.firmId])).map(row=>row.name)).toEqual([expect.stringMatching(/Filing record - v\d+\.txt$/),expect.stringMatching(/Filing record - v\d+ - AA2409260098765\.txt$/)]);
+    expect(await query(local.dbUrl,"select status from public.shares where firm_id=$1 and status<>'refused'",[firm.firmId])).toEqual([]);
   } finally {
     await Promise.all(others.map(context=>context.close().catch(()=>{})));
     for(const file of (await query(local.dbUrl,"select drive_file_id from public.documents where firm_id=$1",[firm.firmId]))) if(file.drive_file_id) files.push(file.drive_file_id);

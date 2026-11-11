@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { todayInIndia } from "@/src/lib/calendar";
-import { listedTypes, periodChoices, periodName } from "@/src/lib/documents";
+import { listedTypes, periodChoices, periodName, quarterChoices } from "@/src/lib/documents";
 import { workTypes } from "@/src/lib/drive";
 import { parsePath } from "@/src/lib/drive-browse";
 import { Empty, PageHead } from "../../ui";
@@ -92,6 +92,7 @@ async function Loaded({ parts }: { parts: string[] }) {
         types: [...listedTypes, ...((ctx.membership.settings.document_types ?? []) as string[])],
         works: Object.entries(workTypes),
         periods: periodChoices(today).map((key) => [key, periodName(key)]),
+        quarters: quarterChoices(today).map((key) => [key, periodName(key, "tds")]),
       }}
       viewer={!!process.env.FILE_WORKER_URL && !!process.env.FILE_WORKER_SECRET}
       hideInactive={ctx.membership.settings.viewer_hide_inactive === true}

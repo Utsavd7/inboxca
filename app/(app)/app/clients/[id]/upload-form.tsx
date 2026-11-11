@@ -10,7 +10,7 @@ const MAX = 50 * 1024 * 1024;
 
 // One drop zone for one or many files. Each file's type, work and period start from what its
 // name says, by the rules that file mail; the person checks them, and none is left at Other.
-export function UploadForm({ clientId, types, typeWork, works, periods, keep, children }: { clientId: string; types: string[]; typeWork: Record<string, string>; works: [string, string][]; periods: [string, string][]; keep: boolean; children?: React.ReactNode }) {
+export function UploadForm({ clientId, types, typeWork, works, periods, quarters, keep, children }: { clientId: string; types: string[]; typeWork: Record<string, string>; works: [string, string][]; periods: [string, string][]; quarters: [string, string][]; keep: boolean; children?: React.ReactNode }) {
   const input = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [reading, setReading] = useState(false);
@@ -102,7 +102,7 @@ export function UploadForm({ clientId, types, typeWork, works, periods, keep, ch
             <label htmlFor={`upload-period-${at}`}>Period</label>
             <select id={`upload-period-${at}`} name="period" required value={row.period} onChange={(event) => change(at, "period", event.target.value)}>
               <option value="">Choose</option>
-              {periods.map(([value, label]) => (
+              {(row.work === "tds" ? quarters : periods).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>

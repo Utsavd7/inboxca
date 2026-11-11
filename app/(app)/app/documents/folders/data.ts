@@ -3,7 +3,7 @@ import path from "node:path";
 import { queueRead } from "@/src/jobs/read-document";
 import { todayInIndia } from "@/src/lib/calendar";
 import { serverCrypto } from "@/src/lib/crypto";
-import { describeFile, filePeriod, folderFor, gstinFor, listedType, periodChoices, periodName, placeUnderFreeName, receivedLabel, settleVersions } from "@/src/lib/documents";
+import { describeFile, filePeriod, folderFor, gstinFor, listedType, periodChoices, periodName, placeUnderFreeName, quarterChoices, receivedLabel, settleVersions } from "@/src/lib/documents";
 import { safeName, workTypes, type Drive, type DriveEntry, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { openDrive } from "@/src/lib/drive-account";
 import { access, clientFolders, kindOf, placeOf, viewable } from "@/src/lib/drive-browse";
@@ -174,7 +174,7 @@ export async function listing(ctx: Context, parts: string[], cursor?: string): P
         },
       }];
     const guess = describeFile(entry.name, "", null, today);
-    return [{ ...base, guess: { type: guess.type === "Document" ? "" : listedType(guess.type), work: place.work ?? (guess.work === "other" ? "" : guess.work), period: periods.includes(guess.period) ? guess.period : "" } }];
+    return [{ ...base, guess: { type: guess.type === "Document" ? "" : listedType(guess.type), work: place.work ?? (guess.work === "other" ? "" : guess.work), period: (guess.work === "tds" ? quarterChoices(today) : periods).includes(guess.period) ? guess.period : "" } }];
   });
   return {
     path: parts,

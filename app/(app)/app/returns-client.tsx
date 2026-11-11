@@ -28,6 +28,13 @@ export function MenuClose() {
   return null;
 }
 
+// Download for filing says it started and waits a few seconds, so a second click does not download it again.
+export function FilingDownload({id,primary,disabled}:{id:string;primary:boolean;disabled:boolean}) {
+  const [sent,setSent]=useState(false);
+  useEffect(()=>{if(!sent) return;const timer=window.setTimeout(()=>setSent(false),4000);return ()=>window.clearTimeout(timer);},[sent]);
+  return <form action={`/app/files/${id}/filing`} method="post" onSubmit={()=>setSent(true)}><button className={`b ${primary ? "b-primary" : "b-secondary"}`} disabled={disabled || sent} aria-busy={sent || undefined}>{sent ? "Downloading" : "Download for filing"}</button></form>;
+}
+
 // The paper a figure came from, beside the figures. Close hides it (kept loaded) until asked again.
 export function SourcePane({title,children}:{title:React.ReactNode;children:React.ReactNode}) {
   const [open,setOpen]=useState(true);
