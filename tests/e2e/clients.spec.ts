@@ -108,6 +108,10 @@ test("a return is marked filed with its acknowledgement on the calendar", async 
 });
 
 test("Today shows what needs the owner today and the next setup step", async () => {
+  // Adding the client queued the firm's calendar top up, which puts every due date back on its
+  // rule; any worker's sweep may run it. It runs now, before the dates below are moved, so the
+  // late returns stay late for the tests that follow.
+  await runJobs(owner.request, firm.firmId);
   // One return falls due today and two are 4 days late: the client's late returns are one row.
   await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date where id=(select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and code='GSTR3B_M' order by due_on desc limit 1)",[firm.firmId]);
   await query(local.dbUrl,"update public.tasks set due_on=(now() at time zone 'Asia/Kolkata')::date-4 where id in (select id from public.tasks where firm_id=$1 and kind='compliance' and status<>'filed' and code='GSTR1_M' order by due_on desc limit 2)",[firm.firmId]);
