@@ -44,8 +44,11 @@ grant execute on function public.view_only_request() to authenticated;
 create or replace function public.guard_request() returns void
 language plpgsql set search_path = '' as $$
 begin
-  if (select auth.role()) = 'authenticated' and public.view_only_request() then
-    perform set_config('transaction_read_only', 'on', true);
+  -- Two steps, so the second is never tried for a visitor, who may not call it.
+  if (select auth.role()) = 'authenticated' then
+    if public.view_only_request() then
+      perform set_config('transaction_read_only', 'on', true);
+    end if;
   end if;
 end;
 $$;

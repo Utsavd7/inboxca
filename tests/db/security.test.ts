@@ -83,6 +83,10 @@ describe("the database's own guards", () => {
         return wrote.ok ? "writes" : wrote.code;
       };
       expect(await held("active")).toBe("writes");
+      // A visitor's request (the public status page) passes the check untouched.
+      await actAs(db, null);
+      expect((await attempt(db, "select public.guard_request()")).ok).toBe(true);
+      await asOwner(db);
       for (const status of ["closed", "read_only"]) {
         expect(await held(status, { "x-inboxca-app": proof })).toBe("writes");
         expect(await held(status)).toBe("25006");
