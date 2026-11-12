@@ -157,8 +157,10 @@ export async function fileForm(id:string,number:string,paper?:string,file?:File)
     paper=prior?.id;
     if(!paper) {
       const folder=await drive.ensureFolder(preparedFolder(account.settings,document.period_key,document.prepared.form,client.name));
-      const name=`${safeName(client.name,100)} - ${formName(document.prepared.form)} - ${formPeriod(document.period_key,document.prepared.form)} - ${type} - v${document.prepared.version}.${extension}`;
-      const saved=await drive.save(folder,name,bytes);
+      let name=`${safeName(client.name,100)} - ${formName(document.prepared.form)} - ${formPeriod(document.period_key,document.prepared.form)} - ${type} - v${document.prepared.version}.${extension}`;
+      let saved=await drive.save(folder,name,bytes);
+      // Marked filed again after Not filed after all: the new number's note is named by its number.
+      if(saved==="taken" && !uploaded) saved=await drive.save(folder,name=name.replace(/\.txt$/,` - ${safeName(number,80)}.txt`),bytes);
       if(saved==="taken") throw new Error("An acknowledgement with this name is already in the drive. Choose it from Documents.");
       const {data:row,error}=await admin.from("documents").insert({firm_id:membership.firmId,client_id:document.client_id,name,document_type:type,work_type:workOf(document.period_key,document.prepared.form),period_key:document.period_key,size:bytes.length,sha256:checksum,drive_file_id:saved.id,share_policy:null}).select("id").single();
       if(error || !row) {await drive.trash(saved.id);throw new Error("The acknowledgement could not be saved.");}

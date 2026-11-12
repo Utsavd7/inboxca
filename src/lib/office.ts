@@ -203,6 +203,9 @@ export async function askAway(userId: string) {
 let key: Promise<string> | null = null;
 export async function officeProof(userId: string, sessionId: string, seconds = 300) {
   key ??= Promise.resolve(supabaseAdmin().rpc("office_proof_key")).then(({ data }) => String(data ?? ""));
+  const secret = await key;
+  // A read that failed is tried again on the next request, never kept for the server's life.
+  if (!secret) key = null;
   const until = Math.floor(Date.now() / 1000) + seconds;
-  return `${until}.${createHmac("sha256", await key).update(`${userId}:${sessionId}:${until}`).digest("hex")}`;
+  return `${until}.${createHmac("sha256", secret).update(`${userId}:${sessionId}:${until}`).digest("hex")}`;
 }

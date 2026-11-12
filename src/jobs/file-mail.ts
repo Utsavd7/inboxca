@@ -3,7 +3,7 @@ import path from "node:path";
 import type { Json } from "@/src/db/types";
 import { clientReplied, receiveAsked } from "@/src/lib/checklists";
 import { serverCrypto } from "@/src/lib/crypto";
-import { describeFile, filePeriod, folderFor, gstinFor, layoutTyped, placeUnderFreeName, receivedLabel, settleVersions, tdsChallanText, typeByContent } from "@/src/lib/documents";
+import { describeFile, filePeriod, folderFor, gstinFor, layoutTyped, namedMonth, placeUnderFreeName, receivedLabel, settleVersions, tdsChallanText, typeByContent } from "@/src/lib/documents";
 import { emailTemplates } from "@/src/lib/email-templates";
 import { pdfLines, recogniseTaxPdf } from "@/src/lib/tax-papers";
 import type { FolderOrder, Naming } from "@/src/lib/drive";
@@ -56,8 +56,9 @@ export const fileMail: Handler = async (job, { markSending }) => {
     return { retry: "drive_unreachable", patient: true };
   }
   // The receipt saying what arrived is a job of its own, by the firm's setting (Inbox, answered C).
-  // A tax portal's mail gets none: the client did not send it.
-  if (filed.length && !event.reason_code?.startsWith("government_")) {
+  // A tax portal's mail gets none: the client did not send it. Nor does mail its mailbox found
+  // forged: the real client would be told InboxCA received papers they never sent.
+  if (filed.length && !filing.unverified && !event.reason_code?.startsWith("government_")) {
     const { error } = await admin.from("jobs").upsert({ firm_id: firm, kind: "answer_mail", entity_type: "email", entity_id: event.id, idempotency_key: `answer_mail:${event.id}` }, { onConflict: "idempotency_key", ignoreDuplicates: true });
     if (error) return { retry: "receipt_not_queued" };
   }
@@ -65,7 +66,8 @@ export const fileMail: Handler = async (job, { markSending }) => {
   // for a person's Save; any other link gets one reply asking for the file attached or the link
   // opened, and the email waits for the team with that line.
   const links = sharedLinks(read.text);
-  if (!links.length || !event.firms) return { done: true };
+  // Links in forged mail are not opened, and the client is not written to about them.
+  if (!links.length || !event.firms || filing.unverified) return { done: true };
   const delivery = (event.delivery ?? {}) as Record<string, Json | undefined>;
   if (delivery.links === "read" || delivery.links === "asked") return { done: true };
   let unread = false;
@@ -184,6 +186,8 @@ async function filePaper(filing: Filing, file: Paper, hint: string): Promise<Fil
   const again = known.some((document) => document.sha256 === sha256);
   const registration = gstinFor(about.work, filing.gstins);
   const toCheck = !about.sure || again || !!filing.unverified;
+  // No period it is sure of: the one month its name or the email's subject names waits in Check for a person to confirm.
+  const named = about.period ? "" : namedMonth(`${file.name} ${hint}`, event.received_at);
   const folder = await drive.ensureFolder(folderFor(filing.order, client, { ...about, receivedAt: event.received_at, toCheck }));
   const parts = { client, type: about.type, period: filePeriod(about.period), extension: path.extname(file.name) };
   const saved = await placeUnderFreeName(parts, receivedLabel(event.received_at), (name) => drive.save(folder, name, file.bytes), filing.naming);
@@ -205,6 +209,7 @@ async function filePaper(filing: Filing, file: Paper, hint: string): Promise<Fil
     sha256,
     received_at: event.received_at,
     registration_id: registration,
+    ...(named && { details: { month: named, from: namedMonth(file.name, event.received_at) === named ? "file" : "subject" } }),
   });
   if (error) throw new Error("document_not_saved");
   if (!toCheck) await settleVersions(admin, { client_id: event.client_id, work_type: about.work, document_type: about.type, period_key: about.period, registration_id: registration });

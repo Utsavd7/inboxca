@@ -70,10 +70,11 @@ export function InboxKeys() {
       if (event.metaKey || event.ctrlKey || event.altKey || target.closest("input, textarea, select, [contenteditable]") || open.length || document.querySelector("[role=dialog], [role=menu], dialog[open]")) return;
       // With a reply box showing, any other letter typed before clicking into it starts the reply:
       // the box takes it and the rest of the word, so an "e" inside a word never marks the email
-      // done. The shortcut keys pressed on their own still work, unless the box holds words not
-      // sent yet: then every letter goes back into it, so they are never marked done away.
+      // done. The shortcut keys pressed on their own still work (? opens the list of them), unless
+      // the box holds words not sent yet: then every letter goes back into it, so they are never
+      // marked done away.
       const box = document.querySelector<HTMLTextAreaElement>("#reply-text");
-      if (box && box.offsetParent && event.key.length === 1 && /\S/.test(event.key) && (!"jkreh/".includes(event.key) || box.value !== box.defaultValue)) {
+      if (box && box.offsetParent && event.key.length === 1 && /\S/.test(event.key) && (!"jkreh/?".includes(event.key) || (!!box.value.trim() && box.value !== box.defaultValue))) {
         event.preventDefault();
         box.focus();
         box.setRangeText(event.key, box.selectionStart, box.selectionEnd, "end");

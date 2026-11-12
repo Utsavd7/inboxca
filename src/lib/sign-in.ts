@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { ASKED_COOKIE, askedPath } from "./asked-path";
 import { serverKek } from "./crypto";
 import { chosenFirm, officeDeviceAccess } from "./office";
 import { totp } from "./pc-key";
@@ -67,7 +68,15 @@ export async function afterFirstStep(supabase: Awaited<ReturnType<typeof supabas
   const office = await officeDeviceAccess(userId);
   if (!office.approved || office.anywhere) return "/sign-in/two-step";
   await oneSession(supabase, userId, email);
-  return "/app";
+  return landing();
+}
+
+// Where a finished sign in lands: the app page the person asked for while signed out, once, else Today.
+export async function landing() {
+  const jar = await cookies();
+  const asked = askedPath(jar.get(ASKED_COOKIE)?.value);
+  if (jar.has(ASKED_COOKIE)) jar.delete(ASKED_COOKIE);
+  return asked ?? "/app";
 }
 
 // A firm person's passkey (PLAN.md 5.17, 8.5) has its own 2 step factor in Supabase Auth, named

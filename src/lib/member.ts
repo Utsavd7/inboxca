@@ -81,7 +81,8 @@ export const signedInMember = cache(async () => {
   // Read only keeps each person's own view and changes nothing; the owner can still pay.
   const status = data.firms?.status;
   const billing = status === "pending" && billingReady() ? "start" : status === "grace" || status === "read_only" ? status : null;
-  const viewOnlyUntil = office.remoteUntil ?? (billing === "start" || billing === "read_only" ? "billing" : undefined);
+  // A closed firm (5.5.1) keeps only its view and its download until InboxCA deletes it.
+  const viewOnlyUntil = status === "closed" ? "closed" : office.remoteUntil ?? (billing === "start" || billing === "read_only" ? "billing" : undefined);
   const email = String(claims.claims.email ?? "");
   const membership = {
     firmId: data.firm_id, firmName: data.firms?.name ?? "", settings, role: data.role, access, idleMinutes, closing, email,
@@ -120,11 +121,11 @@ export const myQuestions = cache(async () => {
 });
 
 // Why a button is off for someone who may only view, in one line beside it.
-export const viewOnlyWords = (until?: string) => (until ? (until === "billing" ? "Your firm can only view for now." : "This laptop can only view while it is away from the office.") : "");
+export const viewOnlyWords = (until?: string) => (until ? (until === "billing" ? "Your firm can only view for now." : until === "closed" ? "This firm is closed, so it can only view." : "This laptop can only view while it is away from the office.") : "");
 
 // For actions that change anything: a view only device gets no further.
 export async function currentWriter() {
   const member = await currentMember();
-  if (member.membership?.viewOnlyUntil) redirect(`/app?error=${member.membership.viewOnlyUntil === "billing" ? "billing" : "view_only"}`);
+  if (member.membership?.viewOnlyUntil) redirect(`/app?error=${["billing", "closed"].includes(member.membership.viewOnlyUntil) ? member.membership.viewOnlyUntil : "view_only"}`);
   return member;
 }

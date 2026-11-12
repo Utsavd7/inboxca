@@ -74,6 +74,21 @@ export function findPeriod(text: string) {
   return yearFirst ? `${yearFirst[1]}-${yearFirst[2]}` : "";
 }
 
+// The one month a paper's file name or email subject names when it gives no period it is sure of
+// ("October", "Oct 2026", "Oct-26"), for a person to confirm in Check; a month with no year is the
+// latest such month on or before the day the email came. Two months named, or none, give "".
+// "May" counts only with a year, as the word may.
+export function namedMonth(text: string, receivedAt: string) {
+  const found = new Set<string>(), day = new Date(Date.parse(receivedAt) + 19_800_000).toISOString().slice(0, 7);
+  for (const [, name, year] of text.toLowerCase().replace(/[_.]+/g, " ").matchAll(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:[\s'-]*((?:20)?\d\d))?\b/g)) {
+    if (name === "may" && !year) continue;
+    const month = months.indexOf(name.slice(0, 3)) + 1;
+    const at = year ? `20${year.slice(-2)}` : String(Number(day.slice(0, 4)) - (month > Number(day.slice(5)) ? 1 : 0));
+    found.add(`${at}-${String(month).padStart(2, "0")}`);
+  }
+  return found.size === 1 ? [...found][0] : "";
+}
+
 // A TDS paper is for the quarter of its statement, kept as the month the quarter ends, as the
 // calendar's TDS_RET task keeps it ("2026-09" for July to September 2026): named as Q2 of a year
 // ("Q2 2026-27"), as its months ("Jul-Sep 2026") or by a month in it. Anything else is unclear.
@@ -211,6 +226,13 @@ export function periodChoices(today: string) {
   });
   const lastYearEnd = Number(today.slice(5, 7)) >= 4 ? year + 1 : year;
   return [...monthsBack, ...Array.from({ length: 4 }, (_, back) => String(lastYearEnd - back))];
+}
+
+// The quarters a TDS paper may be for, kept as the month each ends (quarterEnd): this financial
+// year's four, then the earlier ones periodChoices' months reach.
+export function quarterChoices(today: string) {
+  const end = Number(today.slice(0, 4)) + (Number(today.slice(5, 7)) >= 4 ? 1 : 0);
+  return [...new Set([`${end}-03`, `${end - 1}-12`, `${end - 1}-09`, ...periodChoices(today).filter((key) => key.length === 7).map(quarterEnd)])];
 }
 
 // "17 Oct 2026", the India date a file arrived.

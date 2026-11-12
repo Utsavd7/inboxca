@@ -51,7 +51,7 @@ export default async function People({ searchParams }: { searchParams: Promise<{
     const count = people?.filter((person) => person[column] === id).length ?? 0;
     return `${count} ${count === 1 ? "person" : "people"}`;
   };
-  const isOwner = membership.role === "owner";
+  const isOwner = membership.role === "owner" && !membership.viewOnlyUntil;
   const shownKinds = kinds.filter(({ kind }) => groupsOf(kind).length);
   const person = isOwner && chosen !== userId ? people?.find((one) => one.user_id === chosen) : undefined;
   // How many passkeys removing them can take too (5.17); only the server reads passkeys.

@@ -191,6 +191,8 @@ test("a paper in mail the firm's mailbox found forged waits To check, never file
   await smtp.sendMail({ envelope: { from: `forger-${tag}@invented.test`, to: office }, raw });
   for (let sweep = 0; sweep < 2; sweep++) await readMail();
   expect(await query(local.dbUrl, "select d.status from public.documents d join public.email_events e on e.id = d.email_event_id where e.firm_id = $1 and e.provider_message_id = $2", [firm.firmId, `<forged-${tag}@invented.test>`])).toEqual([{ status: "to_check" }]);
+  // And the real client is not told that InboxCA received papers they never sent.
+  expect(await query(local.dbUrl, "select j.kind from public.jobs j join public.email_events e on e.id = j.entity_id where e.firm_id = $1 and e.provider_message_id = $2 and j.kind = 'answer_mail'", [firm.firmId, `<forged-${tag}@invented.test>`])).toEqual([]);
 });
 
 test("the team writes a new email to a client, only to the client's known addresses, with a paper and a file", async () => {
@@ -228,7 +230,8 @@ test("the team writes a new email to a client, only to the client's known addres
   expect(written?.text).toContain("We start the audit on Monday.");
   expect(written?.attachments.map((file) => file.filename)).toEqual(["audit_plan.txt"]);
   expect(received.find((message) => message.subject?.startsWith("Purchase bills for Sep 2026 from "))?.text).toContain("/s/");
-  const [{ id: paper }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1", [firm.firmId]);
+  // The paper chosen above, by its name: the firm holds other papers by now.
+  const [{ id: paper }] = await query(local.dbUrl, "select id from public.documents where firm_id = $1 and name = $2", [firm.firmId, `${clientName} - Purchase bills - Sep 2026.pdf`]);
   const [{ details }] = await query(local.dbUrl, "select details from public.activity_log where firm_id = $1 and action = 'email.written' and entity_id = $2", [firm.firmId, clientId]);
   expect(details).toEqual({ to: 1, files: 1, papers: [paper] });
 });

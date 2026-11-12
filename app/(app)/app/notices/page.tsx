@@ -1,4 +1,5 @@
 import "../calendar/calendar.css";
+import "../clients/clients.css";
 import "./notices.css";
 import { Building2, FileWarning, Landmark, Receipt, Scale, Search, type LucideIcon } from "lucide-react";
 import Form from "next/form";
@@ -35,7 +36,7 @@ const statusTones: Record<string, Tone> = { upcoming: "warn", in_progress: "blue
 // Notices the firm's clients received (PLAN.md 5.6), the nearest date first. A date the rules
 // found is only a suggestion until a person confirms it against the notice; until then the
 // firm's own review deadline shows, never as the legal one.
-export default async function Notices({ searchParams }: { searchParams: Promise<{ show?: string; page?: string; add?: string; for?: string; at?: string; client?: string; notice?: string; error?: string; saved?: string }> }) {
+export default async function Notices({ searchParams }: { searchParams: Promise<{ show?: string; q?: string; page?: string; add?: string; for?: string; at?: string; client?: string; notice?: string; error?: string; saved?: string }> }) {
   const { supabase, membership } = await currentMember();
   if (!membership) redirect("/app");
   const params = await searchParams;
@@ -48,6 +49,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
   // Confirming a date and moving a notice on are for the owner, partners and managers.
   const decides = !viewOnly && canManageClients(membership.role);
   const find = params.for?.trim().slice(0, 100) ?? "";
+  const q = params.q?.trim().slice(0, 100) ?? "";
   const at = /^\d{1,6}$/.test(params.at ?? "") ? Number(params.at) : 0;
 
   const href = (next: { show?: Pill; page?: number; add?: boolean; for?: string; at?: number; client?: string; notice?: string } = {}) => {
@@ -55,6 +57,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
     const pill = next.show ?? show;
     const to = next.show ? 1 : (next.page ?? page);
     if (pill !== "open") search.set("show", pill);
+    if (q) search.set("q", q);
     if (to > 1) search.set("page", String(to));
     if (next.add) search.set("add", "1");
     if (next.for) search.set("for", next.for);
@@ -63,9 +66,11 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
     if (next.notice) search.set("notice", next.notice);
     return `/app/notices${search.size ? `?${search}` : ""}`;
   };
-  // The notices each pill shows, for the list and its true count.
+  // The notices each pill shows, for the list and its true count; a search keeps the clients
+  // whose name matches, as Clients finds them.
   const notices = (pill: Pill, select: typeof columns, head = false) => {
-    const query = supabase.from("tasks").select(select, { count: "exact", head }).eq("firm_id", firm).eq("kind", "notice");
+    const all = supabase.from("tasks").select((q ? `${select.replace(", clients(name)", "")}, clients!inner(name)` : select) as typeof columns, { count: "exact", head }).eq("firm_id", firm).eq("kind", "notice");
+    const query = q ? all.ilike("clients.name", `%${q.replace(/[\\%_]/g, "\\$&")}%`) : all;
     if (pill === "open") return query.in("status", ["upcoming", "in_progress"]);
     if (pill === "confirm") return query.in("status", ["upcoming", "in_progress"]).is("details->>action_date", null);
     return pill === "done" ? query.in("status", ["replied", "closed"]) : query;
@@ -105,11 +110,12 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
   const state = (
     <>
       {show !== "open" && <input type="hidden" name="show" value={show} />}
+      {q && <input type="hidden" name="q" value={q} />}
       {page > 1 && <input type="hidden" name="page" value={page} />}
     </>
   );
   const shownTo = (page - 1) * PAGE + (rows?.length ?? 0);
-  const empty = {
+  const empty = q ? [`No notices for “${q}”`, "Try part of the client's name."] : {
     open: ["No open notices", "A notice a client emails is recorded here by itself. Add one by hand if it came another way."],
     confirm: ["Every action date is checked", "A date InboxCA finds in a notice waits here until someone checks it."],
     done: ["Nothing replied or closed yet", "Notices you mark replied or closed move here."],
@@ -138,7 +144,16 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
           )
         }
       />
-      <LinkTabs kind="pills" label="Show" items={(Object.keys(pills) as Pill[]).map((pill) => ({ href: href({ show: pill }), label: pills[pill], count: count[pill], current: show === pill }))} />
+      <div className="clients-bar">
+        <LinkTabs kind="pills" label="Show" items={(Object.keys(pills) as Pill[]).map((pill) => ({ href: href({ show: pill }), label: pills[pill], count: count[pill], current: show === pill }))} />
+        <Form action="/app/notices" className="clients-find" role="search">
+          <span className="search">
+            <Search size={16} aria-hidden />
+            <LiveSearch id="q" name="q" defaultValue={q} placeholder="Client name" aria-label="Find by client name" />
+          </span>
+          {show !== "open" && <input type="hidden" name="show" value={show} />}
+        </Form>
+      </div>
 
       <section className="split cal-list" aria-label="Notices">
         {rows?.length ? (
@@ -198,7 +213,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
             <RowKeys />
           </div>
         ) : (
-          <Empty Icon={FileWarning} kind={show === "confirm" ? "done" : "notice"} title={empty[0]} art={count.all ? undefined : <SetupArt scene="notices" />}>
+          <Empty Icon={FileWarning} kind={show === "confirm" ? "done" : "notice"} title={empty[0]} art={count.all || q ? undefined : <SetupArt scene="notices" />}>
             <span>{empty[1]}</span>
             {!viewOnly && (show === "open" || show === "all") && (
               <Link className="b b-secondary" href={href({ add: true })} scroll={false}>
@@ -207,7 +222,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
             )}
           </Empty>
         )}
-        <nav className="cal-pages" aria-label="Notice pages">
+        {!!total && <nav className="cal-pages" aria-label="Notice pages">
           <span>
             {total ? ((page - 1) * PAGE + 1).toLocaleString("en-IN") : 0} to {shownTo.toLocaleString("en-IN")} of {(total ?? 0).toLocaleString("en-IN")} notices
           </span>
@@ -221,7 +236,7 @@ export default async function Notices({ searchParams }: { searchParams: Promise<
               Next
             </Link>
           )}
-        </nav>
+        </nav>}
       </section>
 
       <Presence>

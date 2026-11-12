@@ -10,7 +10,7 @@ import { sendPapers } from "@/app/(app)/actions";
 import { todayInIndia } from "@/src/lib/calendar";
 import { canManageClients } from "@/src/lib/clients";
 import { serverCrypto } from "@/src/lib/crypto";
-import { documentTypes, folderFor, listedTypes, periodChoices, periodName, workOfType } from "@/src/lib/documents";
+import { documentTypes, folderFor, listedTypes, periodChoices, periodName, quarterChoices, workOfType } from "@/src/lib/documents";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { currentMember } from "@/src/lib/member";
 import { paperOrigins } from "@/src/lib/paper-origin";
@@ -461,6 +461,7 @@ export default async function Documents({ searchParams }: { searchParams: Promis
                 typeWork={Object.fromEntries(documentTypes.map((type) => [type, workOfType(type)]).filter(([, work]) => work !== "other"))}
                 works={Object.entries(workTypes)}
                 periods={periodChoices(todayInIndia()).map((choice) => [choice, periodName(choice)])}
+                quarters={quarterChoices(todayInIndia()).map((choice) => [choice, periodName(choice, "tds")])}
                 keep={canManageClients(membership.role)}
               >
                 {gstins.length > 1 && (

@@ -207,6 +207,7 @@ test("a new owner signs up with Google, and the email code later opens the same 
     const first = totp(secret);
     await page.getByLabel("6 digit code from the app").fill(first);
     await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("link", { name: "Continue to Today" }).click();
     // Payments are on in tests: the new firm opens with its plan and payment step.
     await expect(page).toHaveURL(/\/start$/);
     await expect(page.getByText(`${firmName} opens on InboxCA`)).toBeVisible();

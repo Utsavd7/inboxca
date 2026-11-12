@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
+import { askedPath } from "@/src/lib/asked-path";
 import { totp } from "@/src/lib/pc-key";
 import { factorCode, refusal, sealFactor } from "@/src/lib/sign-in";
 
@@ -25,4 +26,11 @@ it("seals a passkey's factor key for its person only", async () => {
   expect(sealed).not.toContain(secret);
   expect(await factorCode("person-a", sealed)).toBe(totp(secret));
   await expect(factorCode("person-b", sealed)).rejects.toThrow();
+});
+
+// A link kept through sign in opens only a page of the app on this site, never another site.
+it("keeps only this site's own app pages through sign in", () => {
+  expect(askedPath("/app/calendar?view=overdue")).toBe("/app/calendar?view=overdue");
+  for (const bad of ["//evil.test", "/\\evil.test", "https://evil.test", "/app//evil.test", "/app/\\evil.test", "/app/../s/x", "/app/%2e%2e/s/x", "/app/x\nSet-Cookie: a=b", "/app/x\r", "/app", "/s/x", `/app/${"a".repeat(500)}`, undefined])
+    expect(askedPath(bad)).toBeNull();
 });

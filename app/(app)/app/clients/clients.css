@@ -43,10 +43,17 @@
    return does. */
 .clients-page .t td.import-wrap { min-width: 240px; white-space: normal; line-height: 1.35; }
 .clients-page .t td.import-wrap .sub { display: block; }
+/* The problem rows fit the panel: a very long name ends in "...", so the problem stays in
+   view; the whole name is its title. */
+.clients-page .t:has(td.import-name) { min-width: 0; }
+.clients-page .t td.import-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.clients-page .t:has(td.import-name) td.import-wrap { min-width: 0; }
 /* Where a paper came from wraps too, so the status and Open stay on screen. */
 .clients-page .t td:has(> .came-from) { min-width: 240px; white-space: normal; }
 /* A client late and missing papers shows both pills, late first, one over the other. */
 .clients-tags { display: inline-flex; flex-direction: column; align-items: flex-start; gap: var(--s1); }
+/* Many tags end in "..." so the row stays in the Status column; the whole list is its title. */
+.clients-tags .sub { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Copy for a number or a path waits for the pointer on its row, as quick actions do. */
 .clients-table :is(.copy, .paper-open) { transition: opacity var(--fast) var(--out), background var(--fast) var(--out), color var(--fast) var(--out); }
 /* Write and Ask for papers take the status pills' place while a row is pointed at (ui.tsx Row). */
@@ -255,6 +262,7 @@
 .paper-view { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .paper-view:hover { text-decoration: underline; }
 .fields:not(:has(#file-type option[value="Other"]:checked)) > .other-name { display: none; }
+.fields:has(#file-work option[value="tds"]:checked) > .period-month, .fields:not(:has(#file-work option[value="tds"]:checked)) > .period-quarter { display: none; }
 .send-ask { margin-top: var(--s4); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .send-to fieldset { display: grid; gap: var(--s2); border: 0; }
 .send-to > .hint { margin-top: var(--s2); }

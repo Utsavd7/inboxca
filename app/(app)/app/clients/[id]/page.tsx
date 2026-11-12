@@ -19,7 +19,7 @@ import { skipReasons, type Skip } from "@/src/lib/reminders";
 import { activityNames } from "@/src/lib/activity";
 import { type Right } from "@/src/lib/rights";
 import { serverCrypto } from "@/src/lib/crypto";
-import { documentTypes, folderFor, listedType, listedTypes, periodChoices, periodName, quarterEnd, receivedLabel, workOfType } from "@/src/lib/documents";
+import { documentTypes, folderFor, listedType, listedTypes, periodChoices, periodName, quarterChoices, quarterEnd, receivedLabel, workOfType } from "@/src/lib/documents";
 import { paperType } from "@/src/lib/paper-type";
 import { workTypes, type FolderOrder, type WorkType } from "@/src/lib/drive";
 import { authorities, confirmAction, confirmers, noticeStatuses, type NoticeDetails } from "@/src/lib/notices";
@@ -32,6 +32,7 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 import { awake } from "@/src/lib/triage";
 import { workspaceStore } from "@/src/lib/workspace";
 import { AutoSelect } from "../../auto-select";
+import { PanKindHint } from "../pan-kind-hint";
 import { LiveSearch } from "../../live-search";
 import { MenuClose } from "../../returns-client";
 import { LinkTabs } from "../../link-tabs";
@@ -243,7 +244,7 @@ export default async function Client({ params, searchParams }: { params: Promise
   // while papers are asked for (product gaps S6), pointing to the email. InboxCA sends nothing.
   const missingAsk = openAsk && (openAsk.details as unknown as DocumentRequest);
   const whatsapp = phone && whatsappLink(phone, missingAsk ? emailTemplates.whatsapp(client.name, membership.firmName, missingAsk.period, missingAsk.items.filter((item) => !item.received.length)) : "");
-  const manage = canManageClients(membership.role);
+  const manage = canManageClients(membership.role) && !viewOnly;
   // Send reminder now on Work, and Ask again or Stop asking for papers: those who manage clients
   // and those who look after this one.
   const looksAfter = (sub === "work" || files) && !viewOnly && (manage || !!(await supabase.rpc("looks_after", { target_firm: firm, client: client.id })).data);
@@ -293,15 +294,17 @@ export default async function Client({ params, searchParams }: { params: Promise
   const checking = documents.filter((file) => file.status === "to_check");
   const periods = checking.flatMap((file) => (file.period_key ? [`"${file.period_key}"`] : []));
   const versions = supabase.from("documents").select(fileColumns).eq("firm_id", firm).eq("client_id", id).eq("status", "earlier");
-  const [origins, { data: twins }, { data: earlierFiles }, suggested] = await Promise.all([
+  const [origins, { data: twins }, { data: earlierFiles }, [suggested, named] = []] = await Promise.all([
     paperOrigins(supabase, firm, listed.map((file) => ({ ...file, client_id: id, clients: client })), paper?.id),
     checking.length ? supabase.from("documents").select("id, name, sha256, document_type, period_key").eq("firm_id", firm).eq("client_id", id).not("status", "in", "(deleted,earlier)").or([`sha256.in.(${checking.map((file) => file.sha256)})`, ...(periods.length ? [`period_key.in.(${periods})`] : [])].join(",")) : Promise.resolve({ data: [] }),
     paper ? (paper.registration_id ? versions.eq("registration_id", paper.registration_id) : versions.is("registration_id", null)).eq("document_type", paper.document_type).eq("period_key", paper.period_key).order("received_at", { ascending: false }) : Promise.resolve({ data: [] }),
     // A scan to check, which this person sees: its OCR text may suggest its type and period
-    // (src/lib/search.ts). Its details are never given to a person's own reads.
-    paper?.status === "to_check" ? supabaseAdmin().from("documents").select("details").eq("firm_id", firm).eq("id", paper.id).single().then(({ data }) => scanType(firm, paper.id, data?.details)) : null,
+    // (src/lib/search.ts), or the month its name or email named (src/jobs/file-mail.ts). Its
+    // details are never given to a person's own reads.
+    paper?.status === "to_check" ? supabaseAdmin().from("documents").select("details").eq("firm_id", firm).eq("id", paper.id).single().then(async ({ data }) => [await scanType(firm, paper.id, data?.details), (data?.details as { month?: string; from?: string } | null)] as const) : undefined,
   ]);
   const earlier = earlierFiles ?? [];
+  const namedPeriod = !suggested && !paper?.period_key && periodChoices(today).includes(named?.month ?? "") ? named!.month! : "";
   const noticeFile = (namedFiles ?? []).find((file) => file.id === (renamed ?? saved ?? removed ?? restored));
   const sharedFile = live(shared);
   const receivers = contacts.filter((contact) => contact.can_receive_documents);
@@ -487,7 +490,7 @@ export default async function Client({ params, searchParams }: { params: Promise
       <CopyButton text={number} label={kind} />
     </span>
   );
-  const canWrite = (!!email || contacts.length > 0) && !client.archived_at;
+  const canWrite = (!!email || contacts.length > 0) && !client.archived_at && !viewOnly;
   // Details: About's rows, each with its value or nothing, and the names of those empty.
   const aboutRows: [string, React.ReactNode][] = [
     ["Client type", clientKinds[client.kind as ClientKind]],
@@ -969,7 +972,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             {/* What needs attention: returns late or due in the next 30 days, and a date InboxCA
                 still needs to put a company's or a director's returns on the Calendar. */}
             {workRows.length || datesNeeded ? (
-              <Card id="due" title="Due soon" Icon={CalendarClock} kind="week" count={soon.length} countTone={soon.some((row) => row.late) ? "late" : ""}>
+              <Card id="due" title={soon.every((row) => row.late) && soon.length ? "Late" : soon.some((row) => row.late) ? "Late and due soon" : "Due soon"} Icon={CalendarClock} kind="week" count={soon.length} countTone={soon.some((row) => row.late) ? "late" : ""}>
                 {!!soon.length && <WorkRows rows={soon} />}
                 {datesNeeded && (
                   <ul className="app-rows work-dates" aria-label="Dates InboxCA needs">
@@ -1298,6 +1301,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               <select id="client-kind" name="kind" defaultValue={client.kind}>
                 {Object.entries(clientKinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
+              <PanKindHint pan={pan} />
             </div>
             <div>
               <label htmlFor="client-group">Group</label>
@@ -1449,6 +1453,7 @@ export default async function Client({ params, searchParams }: { params: Promise
             typeWork={Object.fromEntries(documentTypes.map((type) => [type, workOfType(type)]).filter(([, work]) => work !== "other"))}
             works={Object.entries(workTypes)}
             periods={periodChoices(today).map((choice) => [choice, periodName(choice)])}
+            quarters={quarterChoices(today).map((choice) => [choice, periodName(choice, "tds")])}
             keep={manage}
           >
             {gstinChoice}
@@ -1469,7 +1474,7 @@ export default async function Client({ params, searchParams }: { params: Promise
               <p className="hint">{paper.status === "to_check" ? `${suggested ? "InboxCA read this scan and filled in what it looks like. " : ""}Check its paper type and period, then choose Save.` : "When you save, InboxCA moves and renames the file in your firm's drive to match."}</p>
               <form action={manageDocument} className="fields">
                 <input type="hidden" name="document" value={paper.id} />
-                <DocumentFields type={suggested?.type ?? paper.document_type} work={suggested ? "income_tax" : paper.work_type} period={suggested?.period ?? paper.period_key} firmTypes={firmTypes} keep={manage} />
+                <DocumentFields type={suggested?.type ?? paper.document_type} work={suggested ? "income_tax" : paper.work_type} period={suggested?.period ?? (paper.period_key || namedPeriod)} from={namedPeriod && (named?.from === "file" ? "From the file name" : "From the email subject")} firmTypes={firmTypes} keep={manage} />
                 <Pending className="b b-primary" name="intent" value="save">Save</Pending>
               </form>
             </>
@@ -1583,7 +1588,7 @@ export default async function Client({ params, searchParams }: { params: Promise
 }
 
 // Type, work and period for a file, filled in when correcting one.
-function DocumentFields({ type = "", work = "other", period = "", firmTypes = [], keep = false }: { type?: string; work?: string; period?: string; firmTypes?: string[]; keep?: boolean }) {
+function DocumentFields({ type = "", work = "other", period = "", from = "", firmTypes = [], keep = false }: { type?: string; work?: string; period?: string; from?: string; firmTypes?: string[]; keep?: boolean }) {
   const known = !type || documentTypes.includes(type) || firmTypes.includes(type);
   return (
     <>
@@ -1617,7 +1622,8 @@ function DocumentFields({ type = "", work = "other", period = "", firmTypes = []
           ))}
         </select>
       </div>
-      <div>
+      {/* Months, or quarters while the work is TDS (clients.css). */}
+      <div className="period-month">
         <label htmlFor="file-period">Period</label>
         <select id="file-period" name="period" defaultValue={period}>
           <option value="">No period</option>
@@ -1628,6 +1634,14 @@ function DocumentFields({ type = "", work = "other", period = "", firmTypes = []
           ))}
         </select>
       </div>
+      <div className="period-quarter">
+        <label htmlFor="file-quarter">Quarter</label>
+        <select id="file-quarter" name="quarter" defaultValue={quarterEnd(period)}>
+          <option value="">No period</option>
+          {quarterChoices(todayInIndia()).map((choice) => <option key={choice} value={choice}>{periodName(choice, "tds")}</option>)}
+        </select>
+      </div>
+      {from && <p className="hint">{from}</p>}
     </>
   );
 }

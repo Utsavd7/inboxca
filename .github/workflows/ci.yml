@@ -65,7 +65,9 @@ jobs:
       - run: npx playwright install chromium
       - run: timeout 240 npx playwright install-deps chromium || echo "::warning::Ubuntu's package servers were not reachable; using the image's own libraries"
       - run: npx playwright test
-      - if: failure()
+      # Kept for a passing run too: a test that failed its first try and passed its second
+      # leaves its page there, the only way to see why it is flaky.
+      - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report

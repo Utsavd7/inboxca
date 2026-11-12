@@ -61,6 +61,42 @@ describe("the database's own guards", () => {
     expect(await names("select p.proname name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('public', 'private') and p.prosecdef and not coalesce(p.proconfig::text like '%search_path=%', false)")).toEqual([]);
   });
 
+  it("holds the people of a closed or view only firm to reading unless the request came through the server", async () => {
+    // Its own connection: a request header set here would stay, empty, on the shared one.
+    const db = await connect();
+    await rollback(db, async () => {
+      const firm = "00000000-0000-4000-8000-0000000000f3", other = "00000000-0000-4000-8000-0000000000f4", session = "00000000-0000-4000-8000-0000000000e3";
+      await db.query("insert into auth.users (id, email) values ($1, 'view-only@example.test')", [OWNER]);
+      await db.query("insert into public.firms (id, name, state_code, status) values ($1, 'Invented View Firm', '27', 'active'), ($2, 'Invented Open Firm', '27', 'active')", [firm, other]);
+      await db.query("insert into public.firm_members (firm_id, user_id, role, status) values ($1, $3, 'owner', 'active'), ($2, $3, 'partner', 'active')", [firm, other, OWNER]);
+      const [{ proof }] = (await db.query("select until || '.' || encode(extensions.hmac('app:' || $1 || ':' || $2 || ':' || until, public.office_proof_key(), 'sha256'), 'hex') proof from (select extract(epoch from now())::bigint + 300 until) one", [OWNER, session])).rows;
+      // What the API's check before a request leaves the transaction as, and whether a write then passes.
+      const held = async (status: string, headers: Record<string, string> = {}) => {
+        await db.query("savepoint held");
+        await db.query("update public.firms set status = $2 where id = $1", [firm, status]);
+        await actAs(db, OWNER, "aal2", session);
+        await db.query("select set_config('request.headers', $1, true)", [JSON.stringify(headers)]);
+        await db.query("select public.guard_request()");
+        const wrote = await attempt(db, "update public.firms set name = name where id = $1", [firm]);
+        await db.query("rollback to savepoint held");
+        await asOwner(db);
+        return wrote.ok ? "writes" : wrote.code;
+      };
+      expect(await held("active")).toBe("writes");
+      // A visitor's request (the public status page) passes the check untouched.
+      await actAs(db, null);
+      expect((await attempt(db, "select public.guard_request()")).ok).toBe(true);
+      await asOwner(db);
+      for (const status of ["closed", "read_only"]) {
+        expect(await held(status, { "x-inboxca-app": proof })).toBe("writes");
+        expect(await held(status)).toBe("25006");
+        // Naming the person's other, open firm does not help, nor does a proof made for someone else's session.
+        expect(await held(status, { "x-inboxca-firm": other })).toBe("25006");
+        expect(await held(status, { "x-inboxca-app": proof.replace(/.$/, (last: string) => (last === "0" ? "1" : "0")) })).toBe("25006");
+      }
+    }).finally(() => db.end());
+  });
+
   it("shows nothing of the firm to a sign in session that has ended, in any role, before its token runs out", () =>
     rollback(db, async () => {
       const firm = "00000000-0000-4000-8000-0000000000f1", session = "00000000-0000-4000-8000-0000000000e1";
@@ -98,6 +134,33 @@ describe("the database's own guards", () => {
         expect((await attempt(db, "select * from private.rate_limits")).ok).toBe(false);
       }
     }));
+
+  // S7: two requests at the same moment with one recovery code; the second waits for the first.
+  it("spends a recovery code once, for the server only, even when two tries come at the same moment", async () => {
+    const other = await connect();
+    const person = "00000000-0000-4000-8000-0000000000a7";
+    const spend = (client: Client) => client.query("select public.spend_recovery_code($1, $2) n", [person, ["code-a"]]);
+    try {
+      await db.query("insert into auth.users(id, email, raw_app_meta_data) values ($1, 'recovery@security.test', $2)", [person, { recovery: ["code-a", "code-b"] }]);
+      await db.query("begin");
+      await db.query("set local role service_role");
+      const first = await spend(db);
+      await other.query("set role service_role");
+      const second = spend(other);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await db.query("commit");
+      expect([first.rows[0].n, (await second).rows[0].n]).toEqual([1, null]);
+      for (const role of [OWNER, person, null])
+        await rollback(db, async () => {
+          await actAs(db, role);
+          expect((await attempt(db, "select public.spend_recovery_code($1, $2)", [person, ["code-b"]])).ok).toBe(false);
+        });
+    } finally {
+      await asOwner(db);
+      await db.query("delete from auth.users where id = $1", [person]);
+      await other.end();
+    }
+  });
 
   it("refuses a raw IP address in the activity log; only a keyed digest is kept", () =>
     rollback(db, async () => {

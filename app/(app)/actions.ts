@@ -17,7 +17,7 @@ import { assignmentRoles, canManageClients, checkClient, exampleClient, importSe
 import { chunks, filterKeys, matchingClients, MOST_MATCHING, readFilter } from "@/app/(app)/app/clients/matching";
 import { unsafeCell } from "@/src/lib/client-sheet";
 import { accountIdentity, numberIdentity, serverCrypto } from "@/src/lib/crypto";
-import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, lawType, listedType, periodChoices, placeUnderFreeName, quarterEnd, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
+import { describeFile, documentTypes, filePeriod, folderFor, gstinFor, lawType, listedType, periodChoices, placeUnderFreeName, quarterChoices, quarterEnd, receivedLabel, settleVersions, workOfType } from "@/src/lib/documents";
 import { DELETED_FOLDER, folderOrders, incomingPath, namings, workTypes, type FolderOrder, type Naming, type WorkType } from "@/src/lib/drive";
 import { DRIVE_COOKIE, openDrive, renewDrive, saveDrive, unwatchDrive } from "@/src/lib/drive-account";
 import { dropboxSignIn, pkce } from "@/src/lib/dropbox";
@@ -1436,8 +1436,10 @@ function documentValues(form: FormData, at = 0) {
   const field = (name: string) => String(form.getAll(name)[at] ?? "");
   const type = field("type") === "Other" ? field("custom").trim() : field("type");
   const work = field("work");
-  const period = field("period") === "none" ? "" : field("period");
-  if (!type || type.length > 80 || !(work in workTypes) || (period && !periodChoices(todayInIndia()).includes(period))) return null;
+  // The check panel's TDS work has its own list of quarters (DocumentFields).
+  const chosen = work === "tds" && form.has("quarter") ? field("quarter") : field("period");
+  const period = chosen === "none" ? "" : chosen;
+  if (!type || type.length > 80 || !(work in workTypes) || (period && !periodChoices(todayInIndia()).includes(period) && !(work === "tds" && quarterChoices(todayInIndia()).includes(period)))) return null;
   return { work_type: work as WorkType, document_type: lawType(type, period), period_key: work === "tds" ? quarterEnd(period) : period };
 }
 
@@ -1636,7 +1638,7 @@ export async function guessPapers(names: string[]) {
   const today = todayInIndia();
   return names.slice(0, 20).map((name) => {
     const { type, work, period } = describeFile(String(name).slice(0, 255), "", null, today);
-    return { type: type === "Document" ? "" : listedType(type), work: work === "other" ? "" : work, period: periodChoices(today).includes(period) ? period : "" };
+    return { type: type === "Document" ? "" : listedType(type), work: work === "other" ? "" : work, period: (work === "tds" ? quarterChoices : periodChoices)(today).includes(period) ? period : "" };
   });
 }
 

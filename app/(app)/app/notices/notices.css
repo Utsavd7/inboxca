@@ -38,3 +38,4 @@
 /* The notice's owner, chosen in its row of facts. */
 .notices-owner { display: flex; align-items: center; gap: var(--s2); }
 .notices-owner select { min-width: 0; flex: 1; }
+.notices .clients-find input[name="q"] { padding-left: var(--s6); }

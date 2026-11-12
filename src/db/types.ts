@@ -1088,6 +1088,9 @@ isOneToOne: false
               "client_id": string,"client_name": string,"counts": Json,"due_on": string,"period_key": string,"register_id": string
             }[]
                            },
+"guard_request":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
 "invite_member":
 { Args: { "new_role": string,"person": string,"target_firm": string }; Returns: boolean
                            },
@@ -1274,6 +1277,9 @@ isOneToOne: false
 "sign_up_firm":
 { Args: { "accepted": Json,"firm_name": string,"owner": string,"state": string }; Returns: string
                            },
+"spend_recovery_code":
+{ Args: { "digests": (string)[],"person": string }; Returns: number
+                           },
 "split_firm_pairs":
 { Args: { "least_clients": number,"least_share": number }; Returns: Json
                            },
@@ -1309,6 +1315,9 @@ isOneToOne: false
                            },
 "user_id_for_email":
 { Args: { "address": string }; Returns: string
+                           },
+"view_only_request":
+{ Args: Record<PropertyKey, never>; Returns: boolean
                            },
 "wait_job":
 { Args: { "error_code": string,"job_id": number,"retry_at": string }; Returns: boolean

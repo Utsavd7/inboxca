@@ -45,6 +45,11 @@ test("a new firm chooses Growth yearly on the site, signs up, signs in with the 
   const secret = (await page.locator(".secret").textContent())!.trim();
   await page.getByLabel("6 digit code from the app").fill(totp(secret));
   await page.getByRole("button", { name: "Continue" }).click();
+  // The owner is offered recovery codes once, so a lost phone does not lock the firm out.
+  await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download recovery codes" }).click()]);
+  const [saved] = await query(local.dbUrl, "select jsonb_array_length(raw_app_meta_data -> 'recovery') n from auth.users where email = $1", [email]);
+  expect(saved.n).toBe(10);
+  await page.getByRole("link", { name: "Continue to Today" }).click();
   // Payments are on in tests, so the plan and payment step comes first, with the site's plan and
   // payment period already chosen.
   await expect(page).toHaveURL(/\/start$/);

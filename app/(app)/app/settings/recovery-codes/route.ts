@@ -1,4 +1,4 @@
-import { currentMember } from "@/src/lib/member";
+import { signedInMember } from "@/src/lib/member";
 import { newRecoveryCodes, recoveryDigest } from "@/src/lib/session";
 import { plainPage } from "@/src/lib/plain-page";
 import { supabaseAdmin } from "@/src/lib/supabase";
@@ -8,7 +8,8 @@ import { supabaseAdmin } from "@/src/lib/supabase";
 export async function POST(request: Request) {
   const origin = new URL(process.env.APP_BASE_URL ?? request.url).origin;
   if (request.headers.get("origin") !== origin) return plainPage(403, "This download could not start. Go back to Settings and try again.", "/app/settings", "Go to Settings");
-  const { userId, membership } = await currentMember();
+  // Before the first payment too: a new owner downloads them right after setting up the 2 step code.
+  const { userId, membership } = await signedInMember();
   if (membership?.role !== "owner") return plainPage(404, "Only the owner has recovery codes.", "/app", "Go to Today");
   const codes = newRecoveryCodes();
   const admin = supabaseAdmin();

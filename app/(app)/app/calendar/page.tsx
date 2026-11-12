@@ -357,7 +357,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
           )}
         </Empty>
       )}
-      <nav className="cal-pages" aria-label="Calendar pages">
+      {!!total && <nav className="cal-pages" aria-label="Calendar pages">
         <span>
           {shownFrom.toLocaleString("en-IN")} to {shownTo.toLocaleString("en-IN")} of {(total ?? 0).toLocaleString("en-IN")} returns
         </span>
@@ -371,7 +371,7 @@ export default async function Calendar({ searchParams }: { searchParams: Promise
             Next
           </Link>
         )}
-      </nav>
+      </nav>}
     </section>
   );
 

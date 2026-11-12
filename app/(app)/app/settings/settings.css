@@ -171,3 +171,5 @@
 .ui input[type="checkbox"].toggle:checked:active::before { transform: translateX(12px); }
 .set-days { display: grid; gap: 4px; justify-items: start; }
 .set-days input { width: 96px; }
+/* Reminders, See the email: the reminder as a client reads it. */
+.set-mail { margin: var(--s2) 0 0; padding: var(--s3); border-radius: var(--r2); background: var(--accent-soft); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
