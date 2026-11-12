@@ -29,13 +29,13 @@ test("the job worker runs a due job and records the result", async ({ request })
       headers: { Authorization: `Bearer ${TEST_WORKER_SECRET}` },
     });
     expect(response.status()).toBe(200);
-    expect((await response.json()).claimed).toBeGreaterThanOrEqual(1);
-    const [job] = await query(
+    // Another worker's sweep may have claimed the job first, so it is the job's own record
+    // that says it ran, not this call's count.
+    await expect.poll(async () => (await query(
       local.dbUrl,
       "select state, last_error_code from public.jobs where idempotency_key = $1",
       [key],
-    );
-    expect(job).toEqual({ state: "failed", last_error_code: "no_handler" });
+    ))[0]).toEqual({ state: "failed", last_error_code: "no_handler" });
   } finally {
     await query(local.dbUrl, "delete from public.firms where id = $1", [firm]);
   }
